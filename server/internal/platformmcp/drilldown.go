@@ -440,7 +440,7 @@ func summaryIdentityParams(target drilldownTarget, start, end int64) telemetryre
 		TimeStart:     start,
 		TimeEnd:       end,
 	}
-	if slug := target.identity.hostedToolsetSlug(); slug != "" {
+	if slug := target.identity.toolsetSlug; slug != "" {
 		params.ToolsetSlug = slug
 		return params
 	}

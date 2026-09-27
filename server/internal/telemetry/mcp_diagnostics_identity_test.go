@@ -151,7 +151,7 @@ func TestGetMCPOutcomeBreakdown_MatchesHookCallsByReportedServerName(t *testing.
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs:       []string{projectID},
 		MCPServerURLSuffixes: []string{"/mcp/acme-chat"},
-		ToolSources:          []string{"plugin_acme-tools_external_acme_chat", "external acme chat"},
+		ToolSources:          []string{"plugin_acme-tools_External_Acme_Chat", "External Acme Chat"},
 		TimeStart:            now.Add(-time.Hour).UnixNano(),
 		TimeEnd:              now.UnixNano(),
 	})
@@ -165,7 +165,7 @@ func TestGetMCPOutcomeBreakdown_MatchesHookCallsByReportedServerName(t *testing.
 	// Reported names alone, without a URL identity, still select the server.
 	rows, err = ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
-		ToolSources:    []string{"plugin_acme-tools_external_acme_chat"},
+		ToolSources:    []string{"plugin_acme-tools_External_Acme_Chat"},
 		TimeStart:      now.Add(-time.Hour).UnixNano(),
 		TimeEnd:        now.UnixNano(),
 	})
@@ -200,7 +200,7 @@ func TestListMCPUsageUsers_ScopesByReportedServerName(t *testing.T) {
 
 	users, err := ti.chClient.ListMCPUsageUsers(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
-		ToolSources:    []string{"plugin_acme-tools_external_acme_chat"},
+		ToolSources:    []string{"plugin_acme-tools_External_Acme_Chat"},
 		TimeStart:      now.Add(-time.Hour).UnixNano(),
 		TimeEnd:        now.UnixNano(),
 		Limit:          10,
@@ -283,7 +283,7 @@ func TestGetActiveCounts_CountsHookObservedUsers(t *testing.T) {
 		TimeEnd:              now.UnixNano(),
 		MCPServerID:          selected,
 		MCPServerURLSuffixes: []string{"/mcp/acme-chat"},
-		ToolSources:          []string{"plugin_acme-tools_external_acme_chat"},
+		ToolSources:          []string{"plugin_acme-tools_External_Acme_Chat"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), counts.ActiveUsersCount)

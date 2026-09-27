@@ -11,9 +11,11 @@
 package servernames
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
@@ -58,8 +60,8 @@ type Resolver struct {
 	// names maps a server id to the name results report it under.
 	names map[string]string
 
-	// reported maps a server id to every lower-cased spelling that uniquely
-	// identifies it, for matching raw telemetry.
+	// reported maps a server id to every spelling, as an agent reports it, that
+	// uniquely identifies it, for matching raw telemetry by exact value.
 	reported map[string][]string
 }
 
@@ -73,15 +75,11 @@ func NewResolver(servers []ConfiguredServer) *Resolver {
 		reported: map[string][]string{},
 	}
 	candidates := map[string][]string{}
-	order := make([]string, 0, len(servers))
 	for _, server := range servers {
 		if server.ID == "" {
 			continue
 		}
-		if _, seen := r.names[server.ID]; !seen {
-			order = append(order, server.ID)
-		}
-		r.names[server.ID] = displayName(server)
+		r.names[server.ID] = conv.Default(server.Name, conv.Default(server.Slug, server.ID))
 		raw := []string{server.ID, server.Slug, server.ToolsetSlug, server.Name}
 		for _, membership := range server.Plugins {
 			raw = append(raw, membership.DisplayName)
@@ -102,22 +100,20 @@ func NewResolver(servers []ConfiguredServer) *Resolver {
 			r.byKey[key] = server.ID
 		}
 	}
-	for _, id := range order {
-		seen := map[string]bool{}
-		for _, name := range candidates[id] {
-			key := normalize(name)
-			if r.byKey[key] != id {
+	for id, names := range candidates {
+		// Each unique name is kept as configured and as Claude Code rewrites it
+		// for a tool prefix, since a hook reports one or the other verbatim.
+		spellings := make([]string, 0, 2*len(names))
+		for _, name := range names {
+			if r.byKey[normalize(name)] != id {
 				continue
 			}
-			for _, spelling := range []string{strings.ToLower(strings.TrimSpace(name)), key} {
-				if spelling == "" || seen[spelling] {
-					continue
-				}
-				seen[spelling] = true
-				r.reported[id] = append(r.reported[id], spelling)
-			}
+			trimmed := strings.TrimSpace(name)
+			spellings = append(spellings, trimmed, toolref.SanitizeClaudeMCPName(trimmed))
 		}
-		sort.Strings(r.reported[id])
+		reported := conv.DedupeNonEmpty(spellings)
+		sort.Strings(reported)
+		r.reported[id] = reported
 	}
 	return r
 }
@@ -145,9 +141,10 @@ func (r *Resolver) Name(id string) string {
 	return id
 }
 
-// ReportedNames returns every spelling, lower-cased, that uniquely identifies
-// the server, for matching raw telemetry case-insensitively. A spelling another
-// server shares is omitted so one call is never attributed to both.
+// ReportedNames returns every spelling, as an agent reports it, that uniquely
+// identifies the server, for matching raw telemetry by exact value so the read
+// can use the index on the reported name. A spelling another server shares is
+// omitted so one call is never attributed to both.
 func (r *Resolver) ReportedNames(id string) []string {
 	if r == nil {
 		return nil
@@ -156,20 +153,7 @@ func (r *Resolver) ReportedNames(id string) []string {
 	if len(names) == 0 {
 		return nil
 	}
-	out := make([]string, len(names))
-	copy(out, names)
-	return out
-}
-
-func displayName(server ConfiguredServer) string {
-	switch {
-	case server.Name != "":
-		return server.Name
-	case server.Slug != "":
-		return server.Slug
-	default:
-		return server.ID
-	}
+	return slices.Clone(names)
 }
 
 // normalize is the comparison form of a reported name: trimmed, rewritten the

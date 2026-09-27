@@ -3,7 +3,6 @@ package repo
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/Masterminds/squirrel"
 )
@@ -57,8 +56,9 @@ type GetMCPOutcomeBreakdownParams struct {
 	// they have.
 	MCPServerIDs []string
 	// ToolSources matches hook-observed calls by the server name the calling
-	// agent reported (gram.tool_call.source), compared case-insensitively. A
-	// plugin-routed server reaches the hook under a derived prefix such as
+	// agent reported (gram.tool_call.source), by exact value; the caller
+	// supplies every spelling a hook reports. A plugin-routed server reaches
+	// the hook under a derived prefix such as
 	// "plugin_<plugin>_<Display_Name>" and no URL, so this is how those calls
 	// are attributed to the configured server.
 	ToolSources []string
@@ -76,7 +76,7 @@ type GetMCPOutcomeBreakdownParams struct {
 // through at least one identity. The per-user readers refuse an unscoped read
 // rather than broadening to every server in the project.
 func (arg GetMCPOutcomeBreakdownParams) selectsServer() bool {
-	return len(arg.ToolsetSlugs) > 0 || len(arg.MCPServerURLSuffixes) > 0 || len(arg.MCPServerIDs) > 0 || len(arg.ToolSources) > 0
+	return arg.selectsDirectLane() || arg.selectsHookLane()
 }
 
 // selectsDirectLane reports whether any identity can match a call that arrived
@@ -124,8 +124,8 @@ type MCPUsageUserToolRow struct {
 
 // GetMCPOutcomeBreakdown counts calls by outcome class and by the client that
 // made them, over two lanes of the same traffic: calls that arrived directly at
-// a hosted MCP server (classified by HTTP status, no client attribution
-// available yet) and calls observed by an agent hook (classified by
+// a hosted or proxied MCP server (classified by HTTP status, no client
+// attribution available yet) and calls observed by an agent hook (classified by
 // result/error, attributed to the reporting client).
 //
 // It returns counts only. No status codes, URLs, arguments, results, or
@@ -345,8 +345,8 @@ func unionSource(directSQL string, directArgs []any, hookSQL string, hookArgs []
 	return "(" + directSQL + " UNION ALL " + hookSQL + ")", args
 }
 
-// mcpOutcomeDirectSource classifies calls that reached a hosted MCP server
-// directly. Diagnostics need call-level attribution: trace_summaries has already
+// mcpOutcomeDirectSource classifies calls that reached a hosted or proxied MCP
+// server directly. Diagnostics need call-level attribution: trace_summaries has already
 // collapsed a trace's server, tool, and user dimensions with any(), so a trace
 // that contains more than one call cannot be filtered truthfully there. The raw
 // read is bounded to the diagnostic window and narrows by server before it
@@ -523,19 +523,11 @@ func hookServerURLMatch(suffixes []string) squirrel.Sqlizer {
 }
 
 // hookToolSourceMatch matches hook-observed rows by the server name the agent
-// reported (gram.tool_call.source), compared case-insensitively.
+// reported (gram.tool_call.source), by exact value: the resolver supplies every
+// spelling a hook reports, so the bare materialized column, and its bloom
+// filter index, does the comparison.
 func hookToolSourceMatch(sources []string) squirrel.Sqlizer {
-	return squirrel.Eq{"lowerUTF8(tool_source)": lowerAll(sources)}
-}
-
-// lowerAll lower-cases every value so a reported server name matches
-// regardless of the casing the agent used.
-func lowerAll(values []string) []string {
-	lowered := make([]string, 0, len(values))
-	for _, value := range values {
-		lowered = append(lowered, strings.ToLower(value))
-	}
-	return lowered
+	return squirrel.Eq{"tool_source": sources}
 }
 
 type GetTelemetryWatermarkParams struct {

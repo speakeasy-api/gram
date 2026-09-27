@@ -221,10 +221,10 @@ func TestServerIdentity_OutcomeParamsNeverBroaden(t *testing.T) {
 	// the toolset slug or the id and the hook lane on the URL or the reported
 	// name, and the outcome tally covers the same calls the summary does.
 	full := serverIdentity{
-		mcpServerID:  "mcp-1",
-		toolsetSlugs: []string{"billing"},
-		urlSuffixes:  []string{"/mcp/billing"},
-		toolSources:  []string{"billing", "plugin_finance_billing"},
+		mcpServerID: "mcp-1",
+		toolsetSlug: "billing",
+		urlSuffixes: []string{"/mcp/billing"},
+		toolSources: []string{"billing", "plugin_finance_billing"},
 	}
 	params = full.outcomeParams("project-1", 1, 2)
 	require.Equal(t, []string{"billing"}, params.ToolsetSlugs)
@@ -243,7 +243,7 @@ func TestSummaryIdentityParams_UsesExactlyOneIdentityFilter(t *testing.T) {
 	t.Parallel()
 
 	hosted := drilldownTarget{
-		identity:  serverIdentity{mcpServerID: "mcp-1", toolsetSlugs: []string{"billing"}},
+		identity:  serverIdentity{mcpServerID: "mcp-1", toolsetSlug: "billing"},
 		projectID: "project-1",
 	}
 	params := summaryIdentityParams(hosted, 1, 2)

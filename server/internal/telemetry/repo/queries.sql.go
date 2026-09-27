@@ -7685,8 +7685,8 @@ type GetActiveCountsParams struct {
 	MCPServerID    string // Optional filter - scopes to calls the gateway proxied to one configured MCP server
 	// MCPServerURLSuffixes and ToolSources scope to the same server as an agent
 	// hook observed it: by the URL the agent called (/mcp/<slug>) or, for a
-	// hook that never resolved a URL, by the server name it reported
-	// (compared case-insensitively). Hook rows carry neither a toolset slug nor
+	// hook that never resolved a URL, by the server name it reported (by exact
+	// value, every spelling supplied). Hook rows carry neither a toolset slug nor
 	// an mcp_server_id, so without these a hook-only server counts no users.
 	MCPServerURLSuffixes []string // Optional filter
 	ToolSources          []string // Optional filter
@@ -7709,11 +7709,14 @@ type ActiveCounts struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams) (*ActiveCounts, error) {
-	var userCountCondition string
+	// Active users are the distinct people, keyed by userKey, with an event
+	// matching eventPredicate in the window.
+	userKey := "if(external_user_id != '', external_user_id, user_id)"
+	var eventPredicate string
 	switch {
 	case arg.SessionMode:
 		// Count users with chat completion messages
-		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion') AND if(external_user_id != '', external_user_id, user_id) != '')"
+		eventPredicate = "toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion')"
 	case arg.selectsHookObserved():
 		// Count users with tool calls the gateway or an agent hook observed. A
 		// hook row records a hooks: URN rather than tools:, and identifies the
@@ -7721,12 +7724,13 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 		// person is keyed the way ListMCPUsageUsers keys them, email first:
 		// the two readers then agree, and someone seen through both lanes
 		// counts once whenever both rows name the same email.
-		hookUserKey := chFirstNonEmpty("user_email", "external_user_id", "user_id", "''")
-		userCountCondition = "uniqExactIf(" + hookUserKey + ", ((event_source != 'hook' AND startsWith(gram_urn, 'tools:')) OR (event_source = 'hook' AND tool_name != '')) AND " + hookUserKey + " != '')"
+		userKey = chFirstNonEmpty("user_email", "external_user_id", "user_id", "''")
+		eventPredicate = "((event_source != 'hook' AND startsWith(gram_urn, 'tools:')) OR (event_source = 'hook' AND tool_name != ''))"
 	default:
 		// Count users with tool calls
-		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), startsWith(gram_urn, 'tools:') AND if(external_user_id != '', external_user_id, user_id) != '')"
+		eventPredicate = "startsWith(gram_urn, 'tools:')"
 	}
+	userCountCondition := "uniqExactIf(" + userKey + ", " + eventPredicate + " AND " + userKey + " != '')"
 
 	sb := sq.Select(
 		"uniqExactIf(tool_source, tool_source != '' AND event_source = 'hook') as active_servers_count",

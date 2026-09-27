@@ -24,32 +24,23 @@ type serverIdentity struct {
 	// never left unscoped.
 	mcpServerID string
 
-	// toolsetSlugs is the hosted toolset the server fronts. It is empty for a
+	// toolsetSlug is the hosted toolset the server fronts. It is empty for a
 	// remote, tunneled, or unproxied server, and for a toolset that more than
 	// one configured server wraps, where the slug cannot single one out.
-	toolsetSlugs []string
+	//
+	// Emptiness matters: the summary reads treat an empty slug as "no filter",
+	// so a caller that passes it through unchecked gets the whole project's
+	// numbers back under one MCP's name. Every use of this value must handle
+	// the empty case rather than forwarding it.
+	toolsetSlug string
 
 	// urlSuffixes is how the server appears in the URL a hook-observed client
 	// called, or empty when the server has no slug.
 	urlSuffixes []string
 
 	// toolSources is every name an agent may have reported the server under
-	// that identifies it alone, lower-cased.
+	// that identifies it alone, spelled as the agent reports it.
 	toolSources []string
-}
-
-// hostedToolsetSlug is the toolset a hosted MCP's traffic is recorded under, or
-// empty for a remote, tunneled, or unproxied server.
-//
-// Emptiness matters: the summary reads treat an empty slug as "no filter", so a
-// caller that passes it through unchecked gets the whole project's numbers back
-// under one MCP's name. Every use of this value must handle the empty case
-// rather than forwarding it.
-func (id serverIdentity) hostedToolsetSlug() string {
-	if len(id.toolsetSlugs) == 0 {
-		return ""
-	}
-	return id.toolsetSlugs[0]
 }
 
 // outcomeParams narrows a call-level read to this server within one project
@@ -57,7 +48,7 @@ func (id serverIdentity) hostedToolsetSlug() string {
 func (id serverIdentity) outcomeParams(projectID string, start, end int64) telemetryrepo.GetMCPOutcomeBreakdownParams {
 	return telemetryrepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs:       []string{projectID},
-		ToolsetSlugs:         id.toolsetSlugs,
+		ToolsetSlugs:         nonEmpty(id.toolsetSlug),
 		MCPServerURLSuffixes: id.urlSuffixes,
 		MCPServerIDs:         []string{id.mcpServerID},
 		ToolSources:          id.toolSources,
@@ -81,7 +72,7 @@ func (id serverIdentity) activeCountsParams(projectID string, start, end int64) 
 		TimeEnd:              end,
 		ExternalUserID:       "",
 		APIKeyID:             "",
-		ToolsetSlug:          id.hostedToolsetSlug(),
+		ToolsetSlug:          id.toolsetSlug,
 		MCPServerID:          id.mcpServerID,
 		MCPServerURLSuffixes: id.urlSuffixes,
 		ToolSources:          id.toolSources,
@@ -90,35 +81,64 @@ func (id serverIdentity) activeCountsParams(projectID string, start, end int64) 
 }
 
 // serverIdentity resolves one configured MCP to every identity its telemetry
-// is recorded under. Both lookups are scoped to the organization's own project,
-// so a caller cannot resolve an MCP it cannot already see.
+// is recorded under, from the one listing of the project's configured servers
+// that also feeds name resolution. The listing is scoped to the organization's
+// own project, so a caller cannot resolve an MCP it cannot already see.
 func (s *DiagnosticsService) serverIdentity(ctx context.Context, organizationID, projectID, mcpID string) (serverIdentity, error) {
-	target, err := s.diagnosticsTarget(ctx, organizationID, projectID, mcpID)
+	parsedMCP, err := uuid.Parse(mcpID)
+	if err != nil {
+		return serverIdentity{}, fmt.Errorf("parse mcp id: %w", err)
+	}
+	id := parsedMCP.String()
+	servers, err := s.listConfiguredServers(ctx, organizationID, projectID)
 	if err != nil {
 		return serverIdentity{}, err
 	}
-	resolver, err := s.serverNameResolver(ctx, organizationID, projectID)
-	if err != nil {
-		return serverIdentity{}, err
+	var target *servernames.ConfiguredServer
+	for i := range servers {
+		if servers[i].ID == id {
+			target = &servers[i]
+			break
+		}
 	}
-	toolsetSlugs := nonEmpty(target.ToolsetSlug)
-	if target.ToolsetMcpCount > 1 {
+	if target == nil {
+		return serverIdentity{}, ErrDiagnosticsTargetNotFound
+	}
+	toolsetSlug := target.ToolsetSlug
+	if toolsetSlug != "" {
 		// Direct telemetry identifies only the toolset. When several configured
 		// MCP wrappers share it, those rows cannot be attributed to one wrapper.
-		toolsetSlugs = nil
+		wrappers := 0
+		for _, server := range servers {
+			if server.ToolsetSlug == toolsetSlug {
+				wrappers++
+			}
+		}
+		if wrappers > 1 {
+			toolsetSlug = ""
+		}
 	}
-	id := target.McpServerID.String()
 	return serverIdentity{
-		mcpServerID:  id,
-		toolsetSlugs: toolsetSlugs,
-		urlSuffixes:  mcpURLSuffixes(target.McpSlug),
-		toolSources:  resolver.ReportedNames(id),
+		mcpServerID: id,
+		toolsetSlug: toolsetSlug,
+		urlSuffixes: mcpURLSuffixes(target.Slug),
+		toolSources: servernames.NewResolver(servers).ReportedNames(id),
 	}, nil
 }
 
 // serverNameResolver indexes every configured server in the project by the
 // names an agent may report it under.
 func (s *DiagnosticsService) serverNameResolver(ctx context.Context, organizationID, projectID string) (*servernames.Resolver, error) {
+	servers, err := s.listConfiguredServers(ctx, organizationID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return servernames.NewResolver(servers), nil
+}
+
+// listConfiguredServers lists the project's live configured servers with every
+// name each can be reported under.
+func (s *DiagnosticsService) listConfiguredServers(ctx context.Context, organizationID, projectID string) ([]servernames.ConfiguredServer, error) {
 	parsedProject, err := uuid.Parse(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("parse project id: %w", err)
@@ -130,7 +150,7 @@ func (s *DiagnosticsService) serverNameResolver(ctx context.Context, organizatio
 	if err != nil {
 		return nil, fmt.Errorf("list mcp server identities: %w", err)
 	}
-	return servernames.NewResolver(configuredServers(rows)), nil
+	return configuredServers(rows), nil
 }
 
 // configuredServers folds the one-row-per-membership listing into one entry
@@ -152,10 +172,7 @@ func configuredServers(rows []platformrepo.ListPlatformMCPServerIdentitiesRow) [
 				Plugins:     nil,
 			})
 		}
-		// A membership whose plugin the query could not join (soft-deleted, or
-		// owned by another project) still carries its display name, but the
-		// plugin slug is empty: the name is not one a live plugin ships the
-		// server under, so it is not an identity of this server.
+		// A server with no membership is listed once with empty plugin columns.
 		if row.PluginSlug == "" {
 			continue
 		}
@@ -228,17 +245,15 @@ func reconcileMetrics(totals outcomeTotals, summary *telemetryrepo.OverviewSumma
 		toolCalls:       totals.Total,
 		failedToolCalls: totals.failures(),
 		avgLatencyMs:    0,
-		observed:        totals.Total > 0,
+		observed:        false,
 	}
-	if summary == nil {
-		return metrics
+	if summary != nil {
+		metrics.avgLatencyMs = summary.AvgLatencyMs
+		if metrics.toolCalls == 0 && summary.TotalToolCalls > 0 {
+			metrics.toolCalls = boundedCount(summary.TotalToolCalls)
+			metrics.failedToolCalls = boundedCount(summary.FailedToolCalls)
+		}
 	}
-	metrics.avgLatencyMs = summary.AvgLatencyMs
-	summaryCalls := boundedCount(summary.TotalToolCalls)
-	if metrics.toolCalls == 0 && summaryCalls > 0 {
-		metrics.toolCalls = summaryCalls
-		metrics.failedToolCalls = boundedCount(summary.FailedToolCalls)
-	}
-	metrics.observed = metrics.toolCalls > 0 || summaryCalls > 0 || summary.AvgLatencyMs > 0
+	metrics.observed = metrics.toolCalls > 0 || metrics.avgLatencyMs > 0
 	return metrics
 }

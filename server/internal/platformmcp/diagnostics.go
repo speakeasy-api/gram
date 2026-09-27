@@ -9,12 +9,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -501,29 +499,6 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		ClientsTruncated:            truncated,
 		Attribution:                 attribution,
 	}, nil
-}
-
-func (s *DiagnosticsService) diagnosticsTarget(ctx context.Context, organizationID, projectID, mcpID string) (platformrepo.GetPlatformMCPDiagnosticsTargetRow, error) {
-	parsedProject, err := uuid.Parse(projectID)
-	if err != nil {
-		return platformrepo.GetPlatformMCPDiagnosticsTargetRow{}, fmt.Errorf("parse project id: %w", err)
-	}
-	parsedMCP, err := uuid.Parse(mcpID)
-	if err != nil {
-		return platformrepo.GetPlatformMCPDiagnosticsTargetRow{}, fmt.Errorf("parse mcp id: %w", err)
-	}
-	row, err := platformrepo.New(s.db).GetPlatformMCPDiagnosticsTarget(ctx, platformrepo.GetPlatformMCPDiagnosticsTargetParams{
-		OrganizationID: organizationID,
-		McpServerID:    parsedMCP,
-		ProjectID:      parsedProject,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return platformrepo.GetPlatformMCPDiagnosticsTargetRow{}, ErrDiagnosticsTargetNotFound
-	}
-	if err != nil {
-		return platformrepo.GetPlatformMCPDiagnosticsTargetRow{}, fmt.Errorf("resolve diagnostics target: %w", err)
-	}
-	return row, nil
 }
 
 // organizationProjectIDs collects the projects the scope comparison spans, and
