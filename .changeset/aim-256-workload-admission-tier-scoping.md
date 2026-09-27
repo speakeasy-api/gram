@@ -1,5 +1,0 @@
----
-"server": patch
----
-
-Tighten issuer resolution and tier scoping on the workload identity trust policy. An admission resolves its issuer at the tier it is written to, so an organization-tier admission can no longer bind a project-tier issuer; where the same issuer URL is registered at both tiers the project row wins, matching how the verification path resolves it. Two rows sharing an issuer URL at the _same_ tier are refused rather than silently resolved, because choosing between them would decide which `jwks_uri` verifies the subject and whether wildcards are permitted for it. Reading and withdrawing a single admission are scoped by project the way the list already was, the admitted-subject list applies the issuer's visibility predicate to its join so an admission cannot surface an issuer the caller cannot otherwise see, and withdrawing one tier keeps the shared agent assignment while the other tier's admission is still live instead of leaving it with no policy. The issuer and JWKS attributes carry `FormatURI`, so a value that is not a URI is rejected by generated clients and by the contract.
