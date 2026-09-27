@@ -11,7 +11,7 @@ func registerUserSearchTools(reg *Registrar, diagnostics *DiagnosticsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "search_users",
 		Title:       "Find People in a Project",
-		Description: "Find the people observed in one project's telemetry whose identity contains a partial email address or user id, over up to 30 days, most recently seen first. Each match is reduced to a masked identity, categorical activity and error evidence, when they were last seen, and a short-lived person reference for get_user_metrics_summary or search_tool_calls. Constraints: the query must be at least 3 characters, raw identities and individual counts are never returned, pages are bounded, and cursors and references expire and are bound to this session and project.",
+		Description: "Find the people observed in one project's telemetry whose identity contains a partial email address or user id, over up to 30 days, most recently seen first. Each match is reduced to a masked identity, categorical activity and error evidence, when they were last seen, and a short-lived person reference for get_user_metrics_summary. Constraints: the query must be at least 3 characters, raw identities and individual counts are never returned, pages are bounded, and cursors and references expire and are bound to this session and project.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchUsersInput) (*mcp.CallToolResult, SearchUsersOutput, error) {
 		principal, err := principalFromToolContext(ctx)

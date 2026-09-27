@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -122,11 +123,6 @@ func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principa
 	if err != nil {
 		return SearchUsersOutput{}, err
 	}
-	// Metered on the sensitive allowance: a page carries masked identities and
-	// person references, so it must not be fundable by the summary budget.
-	if err := s.sensitiveBudget.Allow(ctx, principal); err != nil {
-		return SearchUsersOutput{}, err
-	}
 	search.now = s.now()
 	search.window, err = resolveWindow(input.Window, search.now, userSearchWindowSpec)
 	if err != nil {
@@ -142,6 +138,13 @@ func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principa
 	scope := search.cursorScope()
 	cursorKey, traversed, err := s.decodeUserSearchCursor(input.Cursor, principal, scope, search.now)
 	if err != nil {
+		return SearchUsersOutput{}, err
+	}
+	// Metered on the sensitive allowance: a page carries masked identities and
+	// person references, so it must not be fundable by the summary budget. It
+	// is charged only once the request is valid and authorized, so a malformed
+	// or refused call cannot spend the caller's personal-data allowance.
+	if err := s.sensitiveBudget.Allow(ctx, principal); err != nil {
 		return SearchUsersOutput{}, err
 	}
 	// Charged for the page it may return, before the read rather than after: a
@@ -313,15 +316,18 @@ func (s *DiagnosticsService) userSearchCanonicalOrg(ctx context.Context, princip
 // userSummaryIdentity names the column a search row's group key lives in, so
 // the reference minted for it filters the right column later. Internal
 // grouping keys email-first and falls back to a raw user id only for a person
-// whose rows never carried an email.
+// whose rows never carried an email; that fallback key is one of the raw user
+// ids the summary folded, which is what identifies it, rather than the shape
+// of the text, so a user id that happens to contain an @ is not mistaken for
+// an email.
 func userSummaryIdentity(userType string, row telemetryrepo.UserSummary) (string, string) {
 	if userType == UserTypeExternal {
 		return SubjectIdentityExternal, row.UserID
 	}
-	if strings.Contains(row.UserID, "@") {
-		return SubjectIdentityEmail, row.UserID
+	if slices.Contains(row.RawUserIDs, row.UserID) || !strings.Contains(row.UserID, "@") {
+		return SubjectIdentityUser, row.UserID
 	}
-	return SubjectIdentityUser, row.UserID
+	return SubjectIdentityEmail, row.UserID
 }
 
 func (s *DiagnosticsService) userSearchEnvelope(ctx context.Context, projectID string, now time.Time, window ResolvedWindow, observed bool) (DataEnvelope, error) {
@@ -431,12 +437,6 @@ func (s *DiagnosticsService) GetUserMetricsSummary(ctx context.Context, principa
 	if projectID == "" || strings.TrimSpace(input.UserReference) == "" {
 		return GetUserMetricsSummaryOutput{}, fmt.Errorf("%w: project_id and user_reference are required", ErrUserSearchInvalid)
 	}
-	// Metered on its own allowance: this read reaches personal data, so
-	// exhausting it must not be possible by spending the ordinary diagnostic
-	// budget.
-	if err := s.sensitiveBudget.Allow(ctx, principal); err != nil {
-		return GetUserMetricsSummaryOutput{}, err
-	}
 	now := s.now()
 	window, err := resolveWindow(input.Window, now, userSearchWindowSpec)
 	if err != nil {
@@ -449,16 +449,25 @@ func (s *DiagnosticsService) GetUserMetricsSummary(ctx context.Context, principa
 	// An unknown, expired, cross-generation, or cross-project reference is a
 	// single not-found: distinguishing them would confirm that a reference once
 	// existed, which is itself information about another scope.
-	identityKind, identifier, err := s.resolveProjectUserReference(principal, strings.TrimSpace(input.UserReference), projectID, mcpID, window, now)
+	identityKind, identifier, scopedToMCP, err := s.resolveProjectUserReference(ctx, principal, strings.TrimSpace(input.UserReference), projectID, mcpID, window, now)
 	if err != nil {
 		return GetUserMetricsSummaryOutput{}, err
 	}
 	maskedIdentity := maskSubject(identifier)
+	// Metered on its own allowance: this read reaches personal data, so
+	// exhausting it must not be possible by spending the ordinary diagnostic
+	// budget. It is charged only once the request is valid, authorized, and
+	// names a resolvable person, so a refused call cannot spend it.
+	if err := s.sensitiveBudget.Allow(ctx, principal); err != nil {
+		return GetUserMetricsSummaryOutput{}, err
+	}
 	// Recorded before the answer is composed, and a failure to record refuses
 	// the call: an exact per-person summary that cannot be audited is one that
-	// leaves no trace of who asked about whom.
+	// leaves no trace of who asked about whom. The target is the scope that
+	// actually resolved the reference, so a project-wide reference stays
+	// audited against the project even when an mcp_id was supplied beside it.
 	targetKind, target := "project", projectID
-	if mcpID != "" {
+	if scopedToMCP {
 		targetKind, target = "mcp", mcpID
 	}
 	if err := s.auditor.RecordUsageAttributionRead(ctx, principal, projectID, targetKind, target, maskedIdentity, string(window.Window)); err != nil {
@@ -534,20 +543,30 @@ func (s *DiagnosticsService) GetUserMetricsSummary(ctx context.Context, principa
 
 // resolveProjectUserReference accepts a reference minted by a project-wide
 // tool for this project, or by list_mcp_usage_users when the caller names the
-// same MCP and window that minted it.
-func (s *DiagnosticsService) resolveProjectUserReference(principal Principal, reference, projectID, mcpID string, window ResolvedWindow, now time.Time) (string, string, error) {
+// same MCP and window that minted it. It reports which of the two scopes
+// resolved the reference, so the audit entry names the scope that authorized
+// the read rather than whatever the caller happened to supply.
+func (s *DiagnosticsService) resolveProjectUserReference(ctx context.Context, principal Principal, reference, projectID, mcpID string, window ResolvedWindow, now time.Time) (string, string, bool, error) {
+	scopedToMCP := false
 	subject, err := s.references.DecodeScoped(reference, principal, subjectKindUser, projectUserScope(projectID), now)
 	if err != nil && mcpID != "" {
+		// GetMCP is the authorization boundary for the MCP-scoped reference,
+		// exactly as it is for the drill-down that minted it: a handle must not
+		// outlive the caller's access to the server it was minted against.
+		if _, err := s.reader.GetMCP(ctx, principal, GetMCPInput{ProjectID: projectID, MCPID: mcpID}); err != nil {
+			return "", "", false, fmt.Errorf("resolve user reference mcp: %w", err)
+		}
 		subject, err = s.references.DecodeScoped(reference, principal, subjectKindUser, queryScope(projectID, mcpID, string(window.Window)), now)
+		scopedToMCP = err == nil
 	}
 	if err != nil {
-		return "", "", ErrSubjectReferenceNotFound
+		return "", "", false, ErrSubjectReferenceNotFound
 	}
 	identityKind, identifier, err := parseSubjectIdentity(subject)
 	if err != nil {
-		return "", "", ErrSubjectReferenceNotFound
+		return "", "", false, ErrSubjectReferenceNotFound
 	}
-	return identityKind, identifier, nil
+	return identityKind, identifier, scopedToMCP, nil
 }
 
 // resolveUserIdentity widens one referenced identity to every identity the

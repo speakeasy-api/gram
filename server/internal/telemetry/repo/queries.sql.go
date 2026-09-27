@@ -3387,10 +3387,10 @@ type SearchUsersParams struct {
 	ExternalOrgID       string // optional; scopes to a single account by provider org id
 	GroupBy             string // "user_id" or "external_user_id"
 	UserIDs             []string
-	// IdentityContains keeps only summaries whose group key contains this
-	// text, compared case-insensitively. It is applied to the same expression
-	// the rows are grouped by, so a match is a match on the summary's identity
-	// and never on a folded-away variant. Empty applies no filter.
+	// IdentityContains keeps only summaries whose identity contains this text,
+	// compared case-insensitively: the group key, or under internal grouping
+	// any raw user id folded into the summary. It is applied after grouping so
+	// a matched summary keeps every row it aggregates. Empty applies no filter.
 	IdentityContains string
 	SortOrder        string // "asc" or "desc"
 	Cursor           string // user identifier to paginate from
@@ -3549,9 +3549,6 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	if arg.ExternalOrgID != "" {
 		sb = sb.Where("external_org_id = ?", arg.ExternalOrgID)
 	}
-	if arg.IdentityContains != "" {
-		sb = sb.Where("positionCaseInsensitive("+groupExpr+", ?) > 0", arg.IdentityContains)
-	}
 	if len(arg.UserIDs) > 0 {
 		switch {
 		case arg.GroupBy == "external_user_id":
@@ -3567,6 +3564,20 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	}
 
 	sb = sb.GroupBy(groupExpr)
+
+	// Applied after grouping so a summary stays whole: filtering rows on a
+	// per-row column before aggregation would keep only the rows that carry the
+	// matched identifier and misreport the person's totals. The group key covers
+	// the email-first identity; raw_user_ids covers a person whose rows carry a
+	// user id beside their email, so a partial user id still finds them.
+	if arg.IdentityContains != "" {
+		keyMatch := "positionCaseInsensitive(" + groupExpr + ", ?) > 0"
+		if arg.GroupBy == "external_user_id" {
+			sb = sb.Having(keyMatch, arg.IdentityContains)
+		} else {
+			sb = sb.Having("("+keyMatch+" OR arrayExists(id -> positionCaseInsensitive(id, ?) > 0, raw_user_ids))", arg.IdentityContains, arg.IdentityContains)
+		}
+	}
 
 	// Cursor pagination using last_seen + group column for stable ordering
 	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)", joinClause, joinArgs)
