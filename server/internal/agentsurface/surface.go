@@ -20,10 +20,18 @@ const (
 	SurfaceCodex      Surface = "codex"
 	SurfaceCursor     Surface = "cursor"
 	SurfaceOther      Surface = "other"
+
+	// SurfaceMCPGateway is Gram's own MCP gateway: hosted MCP servers and
+	// gateway endpoints agents connect to directly. It is deliberately absent
+	// from All and from the fold below — no hook_source ever names it, because
+	// its traffic reaches Gram as MCP requests rather than as agent-side hook
+	// reports. Its evidence is assembled from gateway telemetry instead.
+	SurfaceMCPGateway Surface = "mcp_gateway"
 )
 
-// All lists the surfaces in the order the matrix renders them. Unknown is a
-// reporting signal, not a column.
+// All lists the agent surfaces hook_source folds onto, in the order the matrix
+// renders them. Unknown is a reporting signal, not a column, and the gateway
+// is not an agent surface.
 var All = []Surface{
 	SurfaceClaudeCode,
 	SurfaceClaudeChat,
@@ -32,6 +40,11 @@ var All = []Surface{
 	SurfaceCursor,
 	SurfaceOther,
 }
+
+// Columns lists every matrix column in render order. The gateway leads because
+// it is the sanctioned path traffic is meant to take; the agent surfaces that
+// follow are observed wherever the agent happens to run.
+var Columns = append([]Surface{SurfaceMCPGateway}, All...)
 
 // Bare "claude" is absent on purpose: the Claude hook path stamps it for
 // Claude Code, Cowork and Claude Chat alike, so mapping it would invent

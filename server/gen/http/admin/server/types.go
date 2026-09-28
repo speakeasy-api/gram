@@ -13081,13 +13081,19 @@ type SupportMappingResponseBody struct {
 type SupportCoverageCellResponseBody struct {
 	// Capability the cell reports on.
 	Capability string `form:"capability" json:"capability" xml:"capability"`
-	// Consuming surface the cell reports on.
+	// Surface the cell reports on: Gram's own MCP gateway, or a consuming agent
+	// surface.
 	Surface string `form:"surface" json:"surface" xml:"surface"`
-	// Whether evidence was found, absent, or not answerable yet.
+	// Whether evidence was found, absent, not answerable yet, or impossible for
+	// this pair.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Primary measure: sessions, tokens, blocks, attributed sessions or distinct
 	// shadow servers depending on the capability. Zero unless observed.
 	Value int64 `form:"value" json:"value" xml:"value"`
+	// Singular noun the value counts, when the capability's own unit does not
+	// apply. The gateway is measured in tool calls where an agent surface is
+	// measured in sessions. Empty when the capability's default unit stands.
+	Unit string `form:"unit" json:"unit" xml:"unit"`
 	// Short qualifier rendered under the value. Empty when there is nothing to
 	// qualify.
 	Detail string `form:"detail" json:"detail" xml:"detail"`

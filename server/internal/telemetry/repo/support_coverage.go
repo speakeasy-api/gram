@@ -89,6 +89,85 @@ func (q *Queries) ListSurfaceEvidence(ctx context.Context, arg SurfaceEvidencePa
 	return results, nil
 }
 
+// GatewayEvidenceRow is the aggregate traffic Gram's own MCP gateway served in
+// the window. Unlike the agent surfaces, the gateway is measured in tool calls:
+// it serves MCP requests and never sees a chat session.
+type GatewayEvidenceRow struct {
+	ToolCalls       uint64
+	AttributedCalls uint64
+	AgentOnlyCalls  uint64
+	LastSeen        time.Time
+}
+
+// GetGatewayEvidence returns how much traffic reached Gram-hosted MCP servers
+// and gateway endpoints, and how much of it was bound to an identity.
+//
+// A trace counts as gateway traffic when it did not come from an agent-side
+// hook and carries either a toolset slug (a Gram-hosted MCP server) or a meta
+// MCP server id (a gateway endpoint). That mirrors how the tool-usage reads
+// classify hosted_mcp_server and meta_mcp_server, so the two never disagree
+// about what the gateway served.
+//
+// Calls bound to a person are counted separately from calls bound only to a
+// managed agent: an agent id is a runtime actor, not a human, so merging them
+// would let machine traffic read as identity coverage.
+func (q *Queries) GetGatewayEvidence(ctx context.Context, arg SurfaceEvidenceParams) (GatewayEvidenceRow, error) {
+	row := GatewayEvidenceRow{ToolCalls: 0, AttributedCalls: 0, AgentOnlyCalls: 0, LastSeen: time.Time{}}
+	if len(arg.GramProjectIDs) == 0 {
+		return row, nil
+	}
+
+	// trace_summaries is an AggregatingMergeTree, so the per-trace merge must
+	// precede the rollup or one trace spread over several parts counts twice.
+	// Aggregate aliases are prefixed so none shadows the column it derives
+	// from — a collision lets ClickHouse fold the subquery into the outer
+	// aggregate. Each SimpleAggregateFunction column is re-aggregated with the
+	// function it was declared with.
+	const query = `
+		SELECT
+			count() AS tool_calls,
+			countIf(g_has_user) AS attributed_calls,
+			countIf(NOT g_has_user AND g_agent_id != '') AS agent_only_calls,
+			max(g_start_time) AS last_seen_unix_nano
+		FROM (
+			SELECT
+				trace_id,
+				any(event_source) AS g_event_source,
+				max(toolset_slug) AS g_toolset_slug,
+				max(meta_mcp_server_id) AS g_meta_mcp_server_id,
+				max(agent_id) AS g_agent_id,
+				any(user_email) != '' OR max(user_id) != '' OR max(external_user_id) != '' AS g_has_user,
+				min(start_time_unix_nano) AS g_start_time
+			FROM trace_summaries
+			WHERE gram_project_id IN (?)
+			  AND start_time_unix_nano >= ?
+			  AND start_time_unix_nano <= ?
+			GROUP BY trace_id
+			HAVING g_event_source != 'hook'
+			   AND (g_toolset_slug != '' OR g_meta_mcp_server_id != '')
+		)`
+
+	rows, err := q.conn.Query(ctx, query, arg.GramProjectIDs, arg.From.UTC().UnixNano(), arg.To.UTC().UnixNano())
+	if err != nil {
+		return row, fmt.Errorf("querying gateway evidence: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	if rows.Next() {
+		var lastSeenUnixNano int64
+		if err := rows.Scan(&row.ToolCalls, &row.AttributedCalls, &row.AgentOnlyCalls, &lastSeenUnixNano); err != nil {
+			return row, fmt.Errorf("scanning gateway evidence: %w", err)
+		}
+		if lastSeenUnixNano > 0 {
+			row.LastSeen = time.Unix(0, lastSeenUnixNano).UTC()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return row, fmt.Errorf("iterating gateway evidence: %w", err)
+	}
+	return row, nil
+}
+
 // SurfaceShadowRow is one (hook_source, shadow server) pair observed in the
 // window.
 type SurfaceShadowRow struct {

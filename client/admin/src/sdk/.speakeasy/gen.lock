@@ -712,7 +712,7 @@ examples:
           window_days: 30
       responses:
         "200":
-          application/json: {"cells": [{"capability": "blocking", "detail": "<value>", "last_seen": "2025-05-03T07:25:53.248Z", "status": "observed", "surface": "other", "value": 527166}], "from": "2026-06-10T13:59:12.724Z", "to": "2024-07-04T20:01:31.648Z", "unmapped": [{"hook_source": "<value>", "sessions": 947494}], "window_days": 388369}
+          application/json: {"cells": [{"capability": "blocking", "detail": "<value>", "last_seen": "2025-05-03T07:25:53.248Z", "status": "observed", "surface": "other", "unit": "becquerel", "value": 527166}], "from": "2026-06-10T13:59:12.724Z", "to": "2024-07-04T20:01:31.648Z", "unmapped": [{"hook_source": "<value>", "sessions": 947494}], "window_days": 388369}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

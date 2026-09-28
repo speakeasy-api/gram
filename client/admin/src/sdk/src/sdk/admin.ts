@@ -920,7 +920,7 @@ export class Admin extends ClientSDK {
    * getSupportCoverage admin
    *
    * @remarks
-   * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.
+   * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure, across Gram's MCP gateway and each consuming agent surface.
    */
   async getSupportCoverage(
     request: AdminGetSupportCoverageRequest,

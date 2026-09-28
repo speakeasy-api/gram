@@ -56,7 +56,7 @@ export type AdminGetSupportCoverageQueryError =
  * getSupportCoverage admin
  *
  * @remarks
- * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.
+ * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure, across Gram's MCP gateway and each consuming agent surface.
  */
 export function useAdminGetSupportCoverage(
   request: AdminGetSupportCoverageRequest,
@@ -83,7 +83,7 @@ export function useAdminGetSupportCoverage(
  * getSupportCoverage admin
  *
  * @remarks
- * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.
+ * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure, across Gram's MCP gateway and each consuming agent surface.
  */
 export function useAdminGetSupportCoverageSuspense(
   request: AdminGetSupportCoverageRequest,

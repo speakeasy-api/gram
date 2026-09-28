@@ -14,12 +14,16 @@ var errCoverageUnavailable = errors.New("organization support coverage is unavai
 
 // CoverageCell is one capability's evidence on one consuming surface.
 type CoverageCell struct {
-	Capability string  `json:"capability"`
-	Surface    string  `json:"surface"`
-	Status     string  `json:"status"`
-	Value      int64   `json:"value"`
-	Detail     string  `json:"detail,omitempty"`
-	LastSeen   *string `json:"last_seen,omitempty"`
+	Capability string `json:"capability"`
+	Surface    string `json:"surface"`
+	Status     string `json:"status"`
+	Value      int64  `json:"value"`
+	// Unit names what Value counts when the capability's own unit does not
+	// apply, e.g. tool calls on the gateway where an agent surface counts
+	// sessions.
+	Unit     string  `json:"unit,omitempty"`
+	Detail   string  `json:"detail,omitempty"`
+	LastSeen *string `json:"last_seen,omitempty"`
 }
 
 // OrganizationCoverage is the observed coverage matrix for one organization.
@@ -38,7 +42,7 @@ func registerCoverageTools(server *mcp.Server, organizations OrganizationReader,
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_organization_support_coverage",
 		Title:       "What Gram Observes for an Organization",
-		Description: "Report which consuming surfaces (Claude Code, Claude Chat, Cowork, Codex, Cursor, other agents) Gram has evidence for in an exact organization, across session activity, policy enforcement, identity attribution, token usage and shadow MCP. A cell reporting no evidence means nothing was observed, not that the surface is unsupported.",
+		Description: "Report which surfaces Gram has evidence for in an exact organization — its own MCP gateway plus the consuming agent surfaces (Claude Code, Claude Chat, Cowork, Codex, Cursor, other agents) — across session activity, policy enforcement, identity attribution, token usage and shadow MCP. A cell reporting no evidence means nothing was observed, not that the surface is unsupported; a cell reporting 'na' can never report for that pair.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, OrganizationCoverage, error) {
 		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
@@ -60,6 +64,7 @@ func registerCoverageTools(server *mcp.Server, organizations OrganizationReader,
 				Surface:    cell.Surface,
 				Status:     cell.Status,
 				Value:      cell.Value,
+				Unit:       cell.Unit,
 				Detail:     cell.Detail,
 				LastSeen:   cell.LastSeen,
 			})
