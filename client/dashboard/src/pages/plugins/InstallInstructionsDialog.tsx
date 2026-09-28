@@ -469,6 +469,8 @@ function CursorInstallContent({
 }: Pick<ContentProps, "repoOwner" | "repoName" | "pluginName" | "pluginSlug">) {
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
   // Generic plugin ZIPs need a manifest, but do not necessarily contain hooks.
+  // The per-plugin ZIP (generateCursorPluginFlat) names its manifest with the
+  // raw slug; only the team marketplace repo uses the `<slug>-cursor` name.
   const localInstallCommand = pluginSlug
     ? getCursorInstallCommand({
         pluginName: pluginSlug,

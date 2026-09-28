@@ -15,6 +15,8 @@ Evidence labels: **supported** = explicit current vendor contract; **conditional
 
 ## Required corrections by path
 
+> **Pre-correction record.** This table lists the findings as they stood before the corrections landed in this PR. The final PR code already applies these changes; do not file follow-up work from this table without first checking the current files.
+
 Paths below are relative to `client/dashboard/src/` unless stated otherwise. No product files were edited in this investigation.
 
 | Priority | Path / current claim                                                                                                   | Recommended change                                                                                                                                                                                                                                                                                                                                                                                                                  |

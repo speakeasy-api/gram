@@ -796,6 +796,23 @@ func TestGenerateSinglePluginPackageCodex(t *testing.T) {
 	require.Equal(t, meta.Description, meta.Interface.LongDescription)
 }
 
+// The dashboard's Cursor local-install command checks the ZIP manifest name
+// against the raw slug, so the flat package must not use the marketplace's
+// `<slug>-cursor` name.
+func TestGenerateSinglePluginPackageCursorUsesRawSlug(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{Name: "Test", Slug: "test"}
+
+	files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{OrgName: "Test Org"}, "cursor")
+	require.NoError(t, err)
+
+	var manifest struct {
+		Name string `json:"name"`
+	}
+	require.NoError(t, json.Unmarshal(files[".cursor-plugin/plugin.json"], &manifest))
+	require.Equal(t, "test", manifest.Name)
+}
+
 func TestGenerateCodexPluginDescriptions(t *testing.T) {
 	t.Parallel()
 
