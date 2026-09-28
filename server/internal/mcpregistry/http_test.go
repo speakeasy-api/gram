@@ -11,6 +11,8 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/registry_discovery/server"
 	gen "github.com/speakeasy-api/gram/server/gen/registry_discovery"
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 )
@@ -49,13 +51,18 @@ func TestDiscoveryGeneratedTransportEncodedNames(t *testing.T) {
 func TestDiscoveryMountDisabledAndFailClosed(t *testing.T) {
 	t.Parallel()
 
-	ctx, s, _ := newTestService(t)
+	ctx, s, db := newTestService(t)
 	m := goahttp.NewMuxer()
 	require.NoError(t, s.AttachDiscovery(ctx, nil, m, false, nil, nil))
 	w := httptest.NewRecorder()
 	m.ServeHTTP(w, httptest.NewRequest("GET", "/v0.1/servers", nil))
 	require.Equal(t, 404, w.Code)
-	require.Error(t, s.AttachDiscovery(ctx, nil, m, true, nil, nil))
+	require.EqualError(t, s.AttachDiscovery(ctx, nil, m, true, nil, nil), "registry discovery authorization unavailable")
+	_, err := db.Exec(ctx, "DROP TABLE mcp_registry_entries") //nolint:glint // notestingrawsql: drop only this test database table to exercise readiness failure.
+	require.NoError(t, err)
+	// Admission only checks that auth dependencies exist; no request is authenticated here.
+	err = s.AttachDiscovery(ctx, nil, m, true, &auth.Auth{}, &authz.Engine{})
+	require.ErrorContains(t, err, "check registry readiness:")
 	w = httptest.NewRecorder()
 	m.ServeHTTP(w, httptest.NewRequest("GET", "/v0.1/servers", nil))
 	require.Equal(t, 404, w.Code)
