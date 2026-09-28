@@ -17,6 +17,8 @@ import {
   PlugZapIcon,
 } from "lucide-react";
 
+import { McpIcon } from "@/components/ui/mcp-icon";
+
 export const ADMIN_NAV_GROUPS = [
   {
     label: "Account Management",
@@ -51,7 +53,7 @@ export const ADMIN_NAV_GROUPS = [
         to: "/registry",
         label: "Registry",
         keywords: "catalog mcp servers",
-        icon: Grid2X2Icon,
+        icon: McpIcon,
       },
       {
         to: "/integration-coverage",
