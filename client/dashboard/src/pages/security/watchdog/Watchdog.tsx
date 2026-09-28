@@ -332,7 +332,6 @@ function WatchdogContent(): JSX.Element {
               screenshotSrc="/empty-states/watchdog_empty.png"
               screenshotAlt="Watchdog dashboard with ranked AI risk signals"
             />
-            <RiskSetupEmptyState heading="No open signals" />
           </div>
         </Page.Section.Body>
       </Page.Section>
@@ -451,6 +450,12 @@ function WatchdogContent(): JSX.Element {
               </div>
               <SignalsBody
                 isLoading={signalsQuery.isLoading}
+                filtered={
+                  severityFilter.length > 0 ||
+                  categoryFilter.length > 0 ||
+                  dateRange !== "1d" ||
+                  !!customRange
+                }
                 groups={groups}
                 groupMode={groupMode}
                 selectedSignalKey={selectedSignalKey}
@@ -706,6 +711,7 @@ function KPIRow({
 
 function SignalsBody({
   isLoading,
+  filtered,
   groups,
   groupMode,
   selectedSignalKey,
@@ -713,6 +719,7 @@ function SignalsBody({
   onSelect,
 }: {
   isLoading: boolean;
+  filtered: boolean;
   groups: ReturnType<typeof groupSignals>;
   groupMode: SignalGroupMode;
   selectedSignalKey: string | null;
@@ -729,7 +736,9 @@ function SignalsBody({
     );
   }
   if (groups.length === 0) {
-    return <RiskSetupEmptyState heading="No open signals" />;
+    return (
+      <RiskSetupEmptyState heading="No open signals" filtered={filtered} />
+    );
   }
   return (
     <SignalsList

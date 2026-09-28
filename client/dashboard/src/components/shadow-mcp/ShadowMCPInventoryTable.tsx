@@ -91,7 +91,12 @@ function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
 }
 
 function InventoryEmptyState() {
-  return <ShadowAISetupEmptyState heading={"No MCP servers observed yet"} />;
+  return (
+    <ShadowAISetupEmptyState
+      heading="No MCP servers observed yet"
+      description="Shadow AI reveals MCP servers observed in agent traffic or raised in an access request. Install and run the device agent to discover servers on your organization's devices."
+    />
+  );
 }
 
 export function ShadowMCPInventoryTable({

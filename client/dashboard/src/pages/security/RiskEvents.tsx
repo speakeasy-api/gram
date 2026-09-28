@@ -418,7 +418,6 @@ export default function RiskEvents(): JSX.Element {
             screenshotAlt="Risk Events dashboard with policy findings"
             className="border-0"
           />
-          <RiskSetupEmptyState />
         </div>
       </LogWorkbench>
     );
@@ -519,6 +518,18 @@ export default function RiskEvents(): JSX.Element {
         <RiskEventsRows
           error={resultsQuery.error}
           isLoading={isInitialLoading}
+          filtered={
+            !!(
+              policyFilter ||
+              mcpServerFilter ||
+              ruleFilter ||
+              userFilter ||
+              uniqueOnly ||
+              assistantFilter ||
+              from ||
+              to
+            )
+          }
           results={visibleResults}
           policyNameById={policyNameById}
           policyScoreById={policyScoreById}
@@ -598,6 +609,7 @@ function RiskEventsHeader({
 
 function RiskEventsRows({
   error,
+  filtered,
   isLoading,
   results,
   policyNameById,
@@ -609,6 +621,7 @@ function RiskEventsRows({
   onSetupExclusion,
 }: {
   error: Error | null;
+  filtered: boolean;
   isLoading: boolean;
   results: RiskResult[];
   policyNameById: Map<string, string>;
@@ -654,7 +667,7 @@ function RiskEventsRows({
   }
 
   if (results.length === 0) {
-    return <RiskSetupEmptyState />;
+    return <RiskSetupEmptyState filtered={filtered} />;
   }
 
   return (

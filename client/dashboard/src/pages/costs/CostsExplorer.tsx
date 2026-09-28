@@ -1345,7 +1345,6 @@ export function CostsExplorer(): JSX.Element {
               screenshotSrc="/empty-states/cost_empty.png"
               screenshotAlt="Costs dashboard with attributed AI spend"
             />
-            <CostsSetupEmptyState />
           </div>
         </div>
       </>
@@ -1369,7 +1368,16 @@ export function CostsExplorer(): JSX.Element {
             (row.measures.totalChats ?? 0) === 0 &&
             (row.measures.totalToolCalls ?? 0) === 0 &&
             llmTokens(row.measures) === 0,
-        ) && <CostsSetupEmptyState />}
+        ) && (
+          <CostsSetupEmptyState
+            filtered={
+              path.length > 0 ||
+              groupBy === Dimension.SkillName ||
+              dateRange !== "30d" ||
+              !!customRange
+            }
+          />
+        )}
       <EntityProfile
         entity={currentEntity}
         path={path}

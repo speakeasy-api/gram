@@ -508,7 +508,6 @@ export function InsightsAgentsContent(): JSX.Element {
                 screenshotSrc="/empty-states/cost_empty.png"
                 screenshotAlt="Costs dashboard with agent usage data"
               />
-              <CostsSetupEmptyState />
             </div>
           </div>
         </div>
@@ -542,7 +541,16 @@ export function InsightsAgentsContent(): JSX.Element {
             </div>
             {!usersQuery.isPending &&
               !usersQuery.isError &&
-              users.length === 0 && <CostsSetupEmptyState />}
+              users.length === 0 && (
+                <CostsSetupEmptyState
+                  filtered={
+                    clientFilter !== "all" ||
+                    !!accountType ||
+                    dateRange !== "30d" ||
+                    !!customRange
+                  }
+                />
+              )}
             <Page.Toolbar>
               <Page.Toolbar.Filters
                 schema={COST_FILTERS}

@@ -6,17 +6,29 @@ import { Link } from "react-router";
 
 export function RiskSetupEmptyState({
   heading = "No risk events found",
-}: { heading?: string } = {}): JSX.Element {
+  filtered = false,
+}: { heading?: string; filtered?: boolean } = {}): JSX.Element {
   const routes = useRoutes();
+  if (filtered) {
+    return (
+      <InlineEmptyState
+        icon="shield"
+        heading="No risk events match these filters"
+        description="Widen the time range or clear filters to see more findings."
+      />
+    );
+  }
   return (
     <InlineEmptyState
       icon="shield"
       heading={heading}
       description="Risk policies scan AI activity for secrets, sensitive data, and policy violations. Create a risk policy in Guardrails to start detecting risks. If you already have policies, try widening the time range or clearing filters."
       action={
-        <Button asChild>
-          <Link to={routes.policyCenter.href()}>Create risk policy</Link>
-        </Button>
+        <RequireScope scope="org:admin" level="component">
+          <Button asChild>
+            <Link to={routes.policyCenter.href()}>Create risk policy</Link>
+          </Button>
+        </RequireScope>
       }
     />
   );
@@ -24,26 +36,41 @@ export function RiskSetupEmptyState({
 
 export function ShadowAISetupEmptyState({
   heading,
+  description = "Shadow AI reveals AI tools and MCP servers used on your organization's devices. Install and run the device agent to discover them. Results appear after enrolled devices report a scan.",
 }: {
   heading: string;
+  description?: string;
 }): JSX.Element {
   const routes = useOrgRoutes();
   return (
     <InlineEmptyState
       icon="laptop"
       heading={heading}
-      description="Shadow AI reveals AI tools and MCP servers used on your organization's devices. Install and run the device agent to discover them. Results appear after enrolled devices report a scan."
+      description={description}
       action={
-        <Button asChild>
-          <Link to={routes.deviceAgent.href()}>Set up device agent</Link>
-        </Button>
+        <RequireScope scope="org:admin" level="component">
+          <Button asChild>
+            <Link to={routes.deviceAgent.href()}>Set up device agent</Link>
+          </Button>
+        </RequireScope>
       }
     />
   );
 }
 
-export function CostsSetupEmptyState(): JSX.Element {
+export function CostsSetupEmptyState({
+  filtered = false,
+}: { filtered?: boolean } = {}): JSX.Element {
   const routes = useRoutes();
+  if (filtered) {
+    return (
+      <InlineEmptyState
+        icon="chart-column"
+        heading="No cost data matches these filters"
+        description="Widen the time range or clear filters to see more usage."
+      />
+    );
+  }
   return (
     <InlineEmptyState
       icon="chart-column"
