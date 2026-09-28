@@ -130,8 +130,8 @@ describe("AGENT_PLATFORMS", () => {
       const platform = AGENT_PLATFORMS.find((p) => p.id === id)!;
       const [gate, ...orgSteps] = platform.setupSteps;
 
-      expect(platformSteps(platform, null)).toBe(platform.setupSteps);
-      expect(platformSteps(platform, true)).toBe(platform.setupSteps);
+      expect(platformSteps(platform, null)).toEqual(platform.setupSteps);
+      expect(platformSteps(platform, true)).toEqual(platform.setupSteps);
       const personal = platformSteps(platform, false);
       expect(personal[0]).toBe(gate);
       expect(personal.slice(1)).toEqual(gate!.eligibility!.personalSteps);

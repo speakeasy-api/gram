@@ -1,4 +1,5 @@
 import { useFetcher } from "@/contexts/Fetcher";
+import { filenameFromContentDisposition } from "@/lib/download";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -32,10 +33,10 @@ export function useObservabilityPluginDownload(
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? fallbackName;
+      a.download = filenameFromContentDisposition(
+        resp.headers.get("Content-Disposition"),
+        fallbackName,
+      );
       a.click();
       // Revoke on the next task: some browsers kick the blob download off
       // asynchronously and a same-task revoke aborts it.

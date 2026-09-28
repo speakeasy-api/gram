@@ -58,10 +58,13 @@ export function PlatformSetupFlow({
   const requestedKey = useRef(false);
   useEffect(() => {
     if (!platform || heldBack || unanswered || orgBlocked) return;
+    // Personal download steps provision their own key in the ZIP endpoint.
+    if (!platformSteps(platform, eligible).some((step) => step.requiresApiKey))
+      return;
     if (requestedKey.current) return;
     requestedKey.current = true;
     ensure(platform);
-  }, [platform, heldBack, unanswered, orgBlocked, ensure]);
+  }, [platform, eligible, heldBack, unanswered, orgBlocked, ensure]);
 
   if (!platform) return null;
   if (heldBack) {
