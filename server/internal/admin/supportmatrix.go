@@ -21,15 +21,17 @@ import (
 //go:embed supportmatrix/catalog.json
 var supportCatalog []byte
 
-// SeedSupportMatrix inserts missing global catalog entries without replacing
-// operator edits or inferring platform applicability from reference claims.
+// SeedSupportMatrix inserts missing global catalog entries, refreshes the
+// columns the catalog owns on platforms and plans, and retires plans the
+// catalog no longer names. It never replaces operator edits or infers
+// platform applicability from reference claims.
 func SeedSupportMatrix(ctx context.Context, db *pgxpool.Pool) error {
 	err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		q := repo.New(tx)
 		if err := q.LockSupportMatrix(ctx); err != nil {
 			return fmt.Errorf("lock support catalog: %w", err)
 		}
-		for _, seed := range []func(context.Context, []byte) error{q.SeedSupportPlatforms, q.SeedSupportMethods, q.SeedSupportCapabilities, q.SeedSupportReferences} {
+		for _, seed := range []func(context.Context, []byte) error{q.SeedSupportPlatforms, q.SeedSupportPlans, q.RetireSupportPlans, q.SeedSupportMethods, q.SeedSupportCapabilities, q.SeedSupportReferences} {
 			if err := seed(ctx, supportCatalog); err != nil {
 				return fmt.Errorf("seed support catalog: %w", err)
 			}

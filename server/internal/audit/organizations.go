@@ -27,6 +27,7 @@ const (
 	ActionOrganizationProductFeatureDisabled Action = "organization:product_feature_disabled"
 	ActionOrganizationSetupTaskUpdated       Action = "organization:setup_task_updated"
 	ActionOrganizationOnboardingUpdated      Action = "organization:onboarding_updated"
+	ActionOrganizationOnboardingStackUpdated Action = "organization:onboarding_stack_updated"
 
 	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
 
@@ -86,6 +87,46 @@ func (l *Logger) LogOrganizationOnboardingUpdated(ctx context.Context, dbtx repo
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionOrganizationOnboardingUpdated), SubjectID: event.OrganizationID, SubjectType: "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName), SubjectSlug: conv.ToPGTextEmpty(event.OrganizationSlug),
+		Metadata: nil, BeforeSnapshot: before, AfterSnapshot: after,
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationOnboardingV1})
+}
+
+type OrganizationOnboardingStackVendorSnapshot struct {
+	Vendor string  `json:"vendor"`
+	Plan   *string `json:"plan,omitempty"`
+}
+
+type OrganizationOnboardingStackSnapshot struct {
+	Vendors       []OrganizationOnboardingStackVendorSnapshot `json:"vendors"`
+	MdmVendor     *string                                     `json:"mdm_vendor,omitempty"`
+	MdmVendorName *string                                     `json:"mdm_vendor_name,omitempty"`
+}
+
+type LogOrganizationOnboardingStackUpdatedEvent struct {
+	OrganizationID      string
+	Actor               urn.Principal
+	ActorDisplayName    *string
+	OrganizationName    string
+	OrganizationSlug    string
+	StackSnapshotBefore *OrganizationOnboardingStackSnapshot
+	StackSnapshotAfter  *OrganizationOnboardingStackSnapshot
+}
+
+func (l *Logger) LogOrganizationOnboardingStackUpdated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationOnboardingStackUpdatedEvent) error {
+	before, err := marshalAuditPayload(event.StackSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal onboarding stack before snapshot: %w", err)
+	}
+	after, err := marshalAuditPayload(event.StackSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal onboarding stack after snapshot: %w", err)
+	}
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionOrganizationOnboardingStackUpdated), SubjectID: event.OrganizationID, SubjectType: "organization",
 		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName), SubjectSlug: conv.ToPGTextEmpty(event.OrganizationSlug),
 		Metadata: nil, BeforeSnapshot: before, AfterSnapshot: after,
 	}

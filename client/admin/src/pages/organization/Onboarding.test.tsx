@@ -32,18 +32,21 @@ const fixture = {
       title: "Create marketplace",
       description: "Create a marketplace",
       hidden: false,
+      group: false,
     },
     {
       key: "distribute-servers",
       title: "Distribute servers",
       description: "Share servers",
       hidden: true,
+      group: false,
     },
     {
       key: "enable-logging",
       title: "Enable logging",
       description: "Configure logs",
       hidden: false,
+      group: false,
     },
   ],
 };

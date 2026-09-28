@@ -357,7 +357,9 @@ var AdminOnboardingTask = Type("AdminOnboardingTask", func() {
 	Attribute("title", String)
 	Attribute("description", String)
 	Attribute("hidden", Boolean)
-	Required("key", "title", "description", "hidden")
+	Attribute("parent_key", String, "Key of the group this card sits under. Absent for a top-level card or a group.")
+	Attribute("group", Boolean, "True for a group that nests cards. Groups are not selectable: their visibility follows their cards.")
+	Required("key", "title", "description", "hidden", "group")
 })
 
 var AdminOnboardingPreset = Type("AdminOnboardingPreset", func() {
@@ -1317,6 +1319,7 @@ var _ = Service("admin", func() {
 	supportMatrixMethods()
 	supportCoverageMethods()
 	registryDesign()
+	onboardingStackMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
 		Description("Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.")
