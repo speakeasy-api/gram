@@ -2,12 +2,16 @@ package remotesessions
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
+	jose "github.com/go-jose/go-jose/v4"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -157,6 +161,21 @@ func TestClientAssertionUnconfigured_UnusableStoredPublicKey(t *testing.T) {
 
 	_, err := serializeClientAssertion(t.Context(), nil, "projects/p/locations/l/keyRings/r/cryptoKeys/k/cryptoKeyVersions/1", "kid", []byte("not a jwk"), "client", "https://issuer.example.com", time.Now())
 	require.Error(t, err)
+	require.True(t, clientAssertionUnconfigured(&tokenEndpointSigningError{err: fmt.Errorf("sign private_key_jwt client assertion: %w", err)}))
+}
+
+// Building the KMS signer only validates stored key data, so a key version
+// name it rejects is a configuration error, not a retryable signing failure.
+func TestClientAssertionUnconfigured_InvalidStoredKeyVersionName(t *testing.T) {
+	t.Parallel()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	jwk, err := (&jose.JSONWebKey{Key: key.Public(), KeyID: "kid", Algorithm: string(jose.ES256), Use: "sig"}).MarshalJSON()
+	require.NoError(t, err)
+
+	_, err = serializeClientAssertion(t.Context(), nil, "not-a-key-version", "kid", jwk, "client", "https://issuer.example.com", time.Now())
+	require.ErrorContains(t, err, "build client assertion signer")
 	require.True(t, clientAssertionUnconfigured(&tokenEndpointSigningError{err: fmt.Errorf("sign private_key_jwt client assertion: %w", err)}))
 }
 

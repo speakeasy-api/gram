@@ -146,14 +146,14 @@ func serializeClientAssertion(ctx context.Context, kmsClient gcpkms.SigningClien
 		Key:       publicJWK.Key,
 	})
 	if err != nil {
-		return "", fmt.Errorf("build client assertion signer: %w", err)
+		return "", fmt.Errorf("build client assertion signer: %w: %w", err, errClientAssertionKeyUnconfigured)
 	}
 	joseSigner, err := jose.NewSigner(
 		jose.SigningKey{Algorithm: alg, Key: opaque},
 		new(jose.SignerOptions).WithType("client-authentication+jwt"),
 	)
 	if err != nil {
-		return "", fmt.Errorf("configure client assertion signer: %w", err)
+		return "", fmt.Errorf("configure client assertion signer: %w: %w", err, errClientAssertionKeyUnconfigured)
 	}
 
 	assertion, err := jwt.Signed(joseSigner).Claims(jwt.Claims{
