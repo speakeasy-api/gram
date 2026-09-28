@@ -92,9 +92,10 @@ it("bounds pages, sends search and publication filters, resets cursor and shows 
       expect.objectContaining({ query: "demo", cursor: undefined }),
     ),
   );
-  fireEvent.change(screen.getByRole("combobox", { name: "Publication" }), {
-    target: { value: "unpublished" },
+  fireEvent.keyDown(screen.getByRole("combobox", { name: "Publication" }), {
+    key: "ArrowDown",
   });
+  fireEvent.click(await screen.findByRole("option", { name: "Unpublished" }));
   await waitFor(() =>
     expect(list).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -132,4 +133,25 @@ it("shows an alert when a refetch of a cached empty list fails", async () => {
   });
   await screen.findByRole("alert");
   expect(screen.queryByText("No entries found.")).toBeNull();
+});
+
+it("keeps accessible headers and a spanning cell while loading and empty", async () => {
+  list.mockImplementation(() => new Promise(() => {}));
+  const { unmount } = await renderWithApp(<RegistryList />);
+  expect(
+    screen.getAllByRole("columnheader").map((header) => header.textContent),
+  ).toEqual(["Name", "Publication", "Validation", "Actions"]);
+  expect(
+    screen
+      .getByRole("cell", { name: "Loading registry…" })
+      .getAttribute("colspan"),
+  ).toBe("4");
+  unmount();
+  list.mockResolvedValue({ entries: [] });
+  await renderWithApp(<RegistryList />);
+  expect(
+    (
+      await screen.findByRole("cell", { name: "No entries found." })
+    ).getAttribute("colspan"),
+  ).toBe("4");
 });

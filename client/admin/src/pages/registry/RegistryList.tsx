@@ -3,6 +3,21 @@ import { useQuery } from "@tanstack/react-query";
 import { registryEntriesQuery } from "@/lib/gramAdminClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DataTable } from "@/components/data-table";
+import {
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { badgeTone } from "@/lib/badgeTone";
 import { Badge } from "@/components/ui/badge";
 import { RegistryEntrySheet, STAGE_A_NOTICE } from "./RegistryEntrySheet";
 
@@ -27,29 +42,33 @@ export function RegistryList(): JSX.Element {
         <Button onClick={() => setEditor({ id: null })}>New entry</Button>
       </div>
       <p className="text-muted-foreground text-sm">{STAGE_A_NOTICE}</p>
-      <div className="flex gap-4">
+      <div className="flex flex-wrap items-center gap-2">
         <Input
           aria-label="Search registry"
           placeholder="Search registry"
+          className="w-full sm:w-80"
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
             setCursors([undefined]);
           }}
         />
-        <select
-          aria-label="Publication"
-          className="border-input rounded-md border px-3"
+        <Select
           value={publication}
-          onChange={(event) => {
-            setPublication(event.target.value);
+          onValueChange={(value) => {
+            setPublication(value);
             setCursors([undefined]);
           }}
         >
-          <option value="all">All entries</option>
-          <option value="published">Published</option>
-          <option value="unpublished">Unpublished</option>
-        </select>
+          <SelectTrigger aria-label="Publication">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All entries</SelectItem>
+            <SelectItem value="published">Published</SelectItem>
+            <SelectItem value="unpublished">Unpublished</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       {page.error && (
         <div role="alert">
@@ -62,61 +81,92 @@ export function RegistryList(): JSX.Element {
           </Button>
         </div>
       )}
-      {page.isPending ? (
-        <p>Loading registry…</p>
-      ) : (
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="p-3">Name</th>
-              <th>Publication</th>
-              <th>Validation</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {page.data?.entries.map((entry) => (
-              <tr key={entry.id} className="border-b">
-                <td className="p-3">{entry.name}</td>
-                <td>{entry.published ? "Published" : "Unpublished"}</td>
-                <td>
-                  {entry.issues.length > 0 ? (
-                    <Badge variant="destructive">
-                      {entry.issues.length} issues
+      <div className="overflow-x-auto rounded-lg border">
+        <DataTable cellPadding="condensed">
+          <TableHeader className="bg-muted">
+            <TableRow>
+              <TableHead scope="col">Name</TableHead>
+              <TableHead scope="col">Publication</TableHead>
+              <TableHead scope="col">Validation</TableHead>
+              <TableHead scope="col" className="text-right">
+                Actions
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <DataTable.Body>
+            {page.isPending ? (
+              <DataTable.NoResultsMessage
+                colSpan={4}
+                className="text-muted-foreground"
+              >
+                Loading registry…
+              </DataTable.NoResultsMessage>
+            ) : !page.error && page.data?.entries.length === 0 ? (
+              <DataTable.NoResultsMessage
+                colSpan={4}
+                className="text-muted-foreground"
+              >
+                No entries found.
+              </DataTable.NoResultsMessage>
+            ) : (
+              page.data?.entries.map((entry) => (
+                <TableRow key={entry.id}>
+                  <TableCell className="font-medium">{entry.name}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        entry.published ? badgeTone.success : badgeTone.neutral
+                      }
+                    >
+                      {entry.published ? "Published" : "Unpublished"}
                     </Badge>
-                  ) : (
-                    "Valid"
-                  )}
-                </td>
-                <td>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditor({ id: entry.id })}
-                    aria-label={`Edit ${entry.name}`}
-                  >
-                    Edit
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {!page.error && page.data?.entries.length === 0 && (
-        <p>No entries found.</p>
-      )}
-      <div className="flex items-center gap-3">
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        entry.issues.length > 0
+                          ? badgeTone.warning
+                          : badgeTone.success
+                      }
+                    >
+                      {entry.issues.length > 0
+                        ? `${entry.issues.length} issues`
+                        : "Valid"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditor({ id: entry.id })}
+                      aria-label={`Edit ${entry.name}`}
+                    >
+                      Edit
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </DataTable.Body>
+        </DataTable>
+      </div>
+      <div className="flex items-center justify-end gap-2">
         <Button
-          variant="outline"
+          variant="ghost"
+          size="xs"
           disabled={cursors.length === 1 || page.isFetching}
           onClick={() => setCursors((previous) => previous.slice(0, -1))}
         >
           Previous
         </Button>
-        <span>Page {cursors.length}</span>
+        <span className="text-muted-foreground text-sm">
+          Page {cursors.length}
+        </span>
         <Button
-          variant="outline"
+          variant="ghost"
+          size="xs"
           disabled={!page.data?.nextCursor || page.isFetching}
           onClick={() => {
             if (page.data?.nextCursor)
