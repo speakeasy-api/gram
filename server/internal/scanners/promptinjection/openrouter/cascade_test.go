@@ -200,3 +200,73 @@ func TestCascadeTruncatesJevEvidenceButPreservesOpusEvidence(t *testing.T) {
 	require.Less(t, len(seen.Message.Body), len(confirmation.Window.Messages[0].Body))
 	jev.AssertExpectations(t)
 }
+
+func TestCascadeRetriesContextOverflowWithSmallerInput(t *testing.T) {
+	t.Parallel()
+	cascade, client := testCascade(t, 0, safeVerdictJSON)
+	jev := &mockPrefilter{}
+	var firstSize int
+	var retryPayload judgePayload
+	firstCall := jev.On("Evaluate", mock.Anything, "org-a", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			state, ok := args.Get(2).(json.RawMessage)
+			require.True(t, ok)
+			questions, err := json.Marshal(args.Get(3))
+			require.NoError(t, err)
+			firstSize = len(state) + len(questions)
+		}).Return(typesafe.Result{Probabilities: nil, Model: typesafe.Model, InputTokens: 0, OutputTokens: 0, CostUSD: 0}, typesafe.ErrContextLengthExceeded).Once()
+	probabilities := make(map[string]float64)
+	for id := range PrefilterQuestions() {
+		probabilities[id] = 0
+	}
+	jev.On("Evaluate", mock.Anything, "org-a", mock.Anything, mock.Anything).
+		NotBefore(firstCall).
+		Run(func(args mock.Arguments) {
+			state, ok := args.Get(2).(json.RawMessage)
+			require.True(t, ok)
+			questions, err := json.Marshal(args.Get(3))
+			require.NoError(t, err)
+			require.LessOrEqual(t, len(state)+len(questions), firstSize*4/5)
+			require.NoError(t, json.Unmarshal(state, &retryPayload))
+		}).Return(typesafe.Result{Probabilities: probabilities, Model: typesafe.Model, InputTokens: 10, OutputTokens: 1, CostUSD: 0}, nil).Once()
+	cascade.jev = jev
+	results, err := cascade.Classify(t.Context(), req(strings.Repeat("evidence ", 1000)))
+	require.NoError(t, err)
+	require.True(t, results[0].Completed)
+	require.Equal(t, promptinjection.LabelSafe, results[0].Label)
+	require.True(t, retryPayload.Message.BodyTruncated)
+	count, err := cascade.opus.stokenCodec.Count(t.Context(), judgePayloadContent(retryPayload)...)
+	require.NoError(t, err)
+	require.EqualValues(t, count, results[0].STokens)
+	require.Zero(t, client.calls.Load())
+	jev.AssertExpectations(t)
+}
+
+func TestCascadeStopsAfterSecondContextOverflow(t *testing.T) {
+	t.Parallel()
+	cascade, client := testCascade(t, 0, safeVerdictJSON)
+	jev := &mockPrefilter{}
+	jev.On("Evaluate", mock.Anything, "org-a", mock.Anything, mock.Anything).
+		Return(typesafe.Result{Probabilities: nil, Model: typesafe.Model, InputTokens: 0, OutputTokens: 0, CostUSD: 0}, typesafe.ErrContextLengthExceeded).Twice()
+	cascade.jev = jev
+	results, err := cascade.Classify(t.Context(), req(strings.Repeat("evidence ", 1000)))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
+	require.False(t, results[0].Completed)
+	require.Zero(t, client.calls.Load())
+	jev.AssertExpectations(t)
+}
+
+func TestCascadeDoesNotRetryOtherPrefilterErrors(t *testing.T) {
+	t.Parallel()
+	cascade, client := testCascade(t, 0, safeVerdictJSON)
+	jev := &mockPrefilter{}
+	jev.On("Evaluate", mock.Anything, "org-a", mock.Anything, mock.Anything).
+		Return(typesafe.Result{Probabilities: nil, Model: typesafe.Model, InputTokens: 0, OutputTokens: 0, CostUSD: 0}, errors.New("typesafe HTTP status 429")).Once()
+	cascade.jev = jev
+	results, err := cascade.Classify(t.Context(), req(strings.Repeat("evidence ", 1000)))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
+	require.Zero(t, client.calls.Load())
+	jev.AssertExpectations(t)
+}

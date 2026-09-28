@@ -2,6 +2,8 @@ package openrouter
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -89,19 +91,40 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 	ctx, span := c.opus.tracer.Start(ctx, "risk.prompt_injection.cascade")
 	defer span.End()
 	questions := PrefilterQuestions()
-	prepared, content, truncated, err := preparePrefilterPayload(msg, trajectory, questions)
+	prepared, content, truncated, err := preparePrefilterPayload(msg, trajectory, questions, maxPrefilterInputBytes)
 	if err != nil {
 		c.opus.logger.WarnContext(ctx, "PI prefilter evidence unavailable", attr.SlogError(err))
 		return unavailableResult
 	}
-	span.SetAttributes(attribute.Bool("prefilter.input_truncated", truncated), attribute.Int("prefilter.state_bytes", len(prepared)))
-	if ctx.Err() != nil {
-		return unavailableResult
+	// Both attempts share the prefilter deadline; shrinking must not extend
+	// the live request's latency budget.
+	prefilterCtx, cancelPrefilter := context.WithTimeout(ctx, 10*time.Second)
+	defer cancelPrefilter()
+	var result typesafe.Result
+	for attempt := range 2 {
+		if prefilterCtx.Err() != nil {
+			return unavailableResult
+		}
+		span.SetAttributes(attribute.Bool("prefilter.input_truncated", truncated), attribute.Int("prefilter.state_bytes", len(prepared)), attribute.Int("prefilter.attempts", attempt+1))
+		start := time.Now()
+		result, err = c.jev.Evaluate(prefilterCtx, req.OrgID, prepared, questions)
+		outcome := o11y.OutcomeFromErrorWithTimeout(err)
+		c.opus.metrics.RecordPhysicalCall(ctx, req.OrgID, typesafe.Model, "none", outcome, typedFailureReason(err, outcome), time.Since(start))
+		if attempt != 0 || !errors.Is(err, typesafe.ErrContextLengthExceeded) {
+			break
+		}
+		questionJSON, marshalErr := json.Marshal(questions)
+		if marshalErr != nil {
+			return unavailableResult
+		}
+		// Base the reduction on the actual rejected input, not the ceiling:
+		// even a request already below the normal budget must get smaller.
+		retryBudget := (len(prepared) + len(questionJSON)) * 4 / 5
+		prepared, content, truncated, err = preparePrefilterPayload(msg, trajectory, questions, retryBudget)
+		if err != nil {
+			break
+		}
 	}
-	start := time.Now()
-	result, err := c.jev.Evaluate(ctx, req.OrgID, prepared, questions)
-	outcome := o11y.OutcomeFromErrorWithTimeout(err)
-	c.opus.metrics.RecordPhysicalCall(ctx, req.OrgID, typesafe.Model, "none", outcome, typedFailureReason(err, outcome), time.Since(start))
 	if err != nil {
 		span.SetAttributes(attribute.String("prefilter.outcome", "unavailable"))
 		c.opus.logger.WarnContext(ctx, "PI prefilter unavailable", attr.SlogError(err))

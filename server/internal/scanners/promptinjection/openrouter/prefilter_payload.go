@@ -17,7 +17,7 @@ const maxPrefilterInputBytes = 28000
 // preparePrefilterPayload bounds the complete evidence before calling Jev.
 // Truncation can hide an attack in omitted text; it is marked in the evidence.
 // Opus still receives its independently prepared, fuller confirmation evidence.
-func preparePrefilterPayload(msg judgemessage.Message, trajectory judgemessage.Trajectory, questions map[string]typesafe.Question) ([]byte, []string, bool, error) {
+func preparePrefilterPayload(msg judgemessage.Message, trajectory judgemessage.Trajectory, questions map[string]typesafe.Question, maxInputBytes int) ([]byte, []string, bool, error) {
 	payload := judgePayload{Message: judgemessage.RenderPayload(msg), Trajectory: nil}
 	if trajectory.HasContent() {
 		rendered := judgemessage.RenderTrajectory(trajectory)
@@ -27,7 +27,7 @@ func preparePrefilterPayload(msg judgemessage.Message, trajectory judgemessage.T
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("marshal prefilter questions: %w", err)
 	}
-	budget := maxPrefilterInputBytes - len(questionJSON)
+	budget := maxInputBytes - len(questionJSON)
 	fields := prefilterTextFields(&payload)
 	truncated := false
 	for {

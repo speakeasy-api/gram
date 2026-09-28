@@ -18,6 +18,15 @@ question wording, and attribution structure are preserved; shortened tool identi
 are explicitly marked. Cleared-scan token
 accounting uses the evidence actually sent. Truncation is recorded in tracing.
 
+On the exact structured OpenRouter `context_length_exceeded` error, retry Jev
+once with a byte budget 20% below the actual rejected state plus questions.
+Questions stay unchanged; evidence is truncated further. Both attempts share the
+10-second prefilter deadline, and each physical attempt is recorded. A second
+failure returns unavailable. Generic HTTP errors, message text, rate limits, and
+credit/token-budget errors do not trigger this retry. OpenRouter documents this
+code in its [error reference](https://openrouter.ai/docs/api_reference/errors-and-debugging);
+TypeSafe does not document a separate Jev-specific context error schema.
+
 Known limitation: an attack in omitted text can be missed by the prefilter and
 never reach Opus. Chunking or a model-specific tokenizer could improve coverage
 later. Opus evidence remains independently prepared under its existing limits.

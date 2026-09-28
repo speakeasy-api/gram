@@ -31,6 +31,8 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 	results := make([][]scanners.Finding, len(corpus))
 	observations := make([]decisionObservation, len(corpus))
 	missed := make([]bool, len(corpus))
+	confirmations := make([]int, len(corpus))
+	failed := make([]bool, len(corpus))
 	sem := make(chan struct{}, opts.judgeConcurrency)
 	var wg sync.WaitGroup
 	for i, row := range corpus {
@@ -39,7 +41,7 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 			defer func() { <-sem }()
 			start := time.Now()
 			observation := &observations[i]
-			completion := &observedCompletion{CompletionClient: client, observation: observation}
+			completion := &observedCompletion{CompletionClient: client, observation: observation, calls: &confirmations[i]}
 			prefilter := &observedPrefilter{Evaluator: jev, observation: observation}
 			load := func(_ context.Context, _, _ string, target judgemessage.Message) (judgemessage.Window, error) {
 				if row.Window == nil {
@@ -59,6 +61,7 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 			results[i] = result.Findings
 			missed[i] = row.Label == "malicious" && (verdict.Model == typesafe.Model || strings.HasPrefix(verdict.Model, typesafe.Model+"-")) && verdict.Completed && verdict.Label == promptinjection.LabelSafe
 			if err != nil || verdict.Label == promptinjection.LabelUnavailable {
+				failed[i] = true
 				if err == nil {
 					err = promptinjection.ErrNoVerdict
 				}
@@ -73,9 +76,12 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 	}
 	wg.Wait()
 	stats := summarizeEvaluation(observations)
-	for i, observation := range observations {
-		if len(observation.Calls) > 1 {
-			stats.ConfirmationCalls++
+	// A recovered Jev overflow is a failed physical call, not a failed scan.
+	stats.FailOpenEvents = 0
+	for i := range observations {
+		stats.ConfirmationCalls += confirmations[i]
+		if failed[i] {
+			stats.FailOpenEvents++
 		}
 		if missed[i] {
 			stats.PrefilterMissedAttacks++
@@ -102,9 +108,11 @@ func (c *observedPrefilter) Evaluate(ctx context.Context, orgID string, state js
 type observedCompletion struct {
 	openrouter.CompletionClient
 	observation *decisionObservation
+	calls       *int
 }
 
 func (c *observedCompletion) GetCompletion(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+	*c.calls++
 	start := time.Now()
 	result, err := c.CompletionClient.GetCompletion(ctx, req)
 	call := callObservation{Latency: time.Since(start), PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: err}

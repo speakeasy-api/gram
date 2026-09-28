@@ -371,3 +371,50 @@ func TestEvaluateProviderThrottlingReturnsErrorWithoutRetry(t *testing.T) {
 	require.ErrorContains(t, err, "typesafe HTTP status 429")
 	require.EqualValues(t, 1, attempts.Load())
 }
+
+func TestEvaluateRecognizesContextLengthErrorWithoutExposingBody(t *testing.T) {
+	t.Parallel()
+	var attempts atomic.Int32
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":400,"message":"private echoed evidence","metadata":{"error_type":"context_length_exceeded"}}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorIs(t, err, ErrContextLengthExceeded)
+	require.NotContains(t, err.Error(), "private echoed evidence")
+	require.EqualValues(t, 1, attempts.Load(), "the client itself must not retry")
+}
+
+func TestContextLengthErrorRequiresExactStructuredCode(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{
+		`{"error":{"code":"context_length_exceeded"}}`,
+		`{"error":{"code":400,"metadata":{"error_type":"context_length_exceeded"}}}`,
+	} {
+		require.True(t, isContextLengthError([]byte(raw)), raw)
+	}
+	for _, raw := range []string{
+		`{"error":{"code":400,"message":"context_length_exceeded"}}`,
+		`{"error":{"code":400,"metadata":{"error_type":"token_limit_exceeded"}}}`,
+		`{"error":{"metadata":{"error_type":"rate_limit_exceeded"}}}`,
+		`{"error":{"metadata":{"error_type":"max_tokens_exceeded"}}}`,
+		`{"error":{"metadata":{"error_type":"context_length_exceeded_extra"}}}`,
+		`{"error":{"code":"context_length_exceeded","metadata":{"error_type":"invalid_request"}}}`,
+		`{"error":{"code":400}}`,
+		`not json`,
+	} {
+		require.False(t, isContextLengthError([]byte(raw)), raw)
+	}
+}
+
+func TestEvaluateOversizedErrorDoesNotTriggerContextRetry(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":"context_length_exceeded","message":"` + strings.Repeat("x", 64<<10) + `"}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorContains(t, err, "HTTP status 400")
+	require.NotErrorIs(t, err, ErrContextLengthExceeded)
+}

@@ -26,6 +26,10 @@ const Model = "typesafe/jev-1.13"
 
 var ErrUnavailable = errors.New("typesafe is not configured")
 
+// ErrContextLengthExceeded identifies OpenRouter's structured context overflow
+// error without exposing the provider response body or echoed input.
+var ErrContextLengthExceeded = errors.New("typesafe context length exceeded")
+
 // Question defines a single binary semantic condition.
 type Question struct {
 	Instructions string            `json:"instructions"`
@@ -191,6 +195,15 @@ func (c *boundedClient) do(req *http.Request) (*http.Response, error) {
 	originalBody := res.Body
 	defer o11y.NoLogDefer(func() error { return originalBody.Close() })
 	if res.StatusCode != http.StatusOK {
+		if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusUnprocessableEntity {
+			// Never infer overflow from free text, which may echo input. Match
+			// only the exact structured code; keep all provider text private.
+			const maxErrorBytes = 64 << 10
+			raw, readErr := io.ReadAll(io.LimitReader(res.Body, maxErrorBytes+1))
+			if readErr == nil && len(raw) <= maxErrorBytes && isContextLengthError(raw) {
+				return nil, ErrContextLengthExceeded
+			}
+		}
 		return nil, fmt.Errorf("typesafe HTTP status %d", res.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
@@ -216,4 +229,23 @@ func (c *boundedClient) do(req *http.Request) (*http.Response, error) {
 	}
 	res.Body = io.NopCloser(bytes.NewReader(raw))
 	return res, nil
+}
+
+func isContextLengthError(raw []byte) bool {
+	var envelope struct {
+		Error struct {
+			Code     json.RawMessage `json:"code"`
+			Metadata struct {
+				ErrorType string `json:"error_type"`
+			} `json:"metadata"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(raw, &envelope) != nil {
+		return false
+	}
+	if envelope.Error.Metadata.ErrorType != "" {
+		return envelope.Error.Metadata.ErrorType == "context_length_exceeded"
+	}
+	var code string
+	return json.Unmarshal(envelope.Error.Code, &code) == nil && code == "context_length_exceeded"
 }

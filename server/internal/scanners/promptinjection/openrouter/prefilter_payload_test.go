@@ -17,7 +17,7 @@ func TestPrefilterPayloadPreservesSmallEvidence(t *testing.T) {
 	msg := judgemessage.New(message.ToolResponse, "search", "ordinary content")
 	trajectory := judgemessage.Trajectory{PriorUserRequest: "find the answer", RecentUntrustedContent: "previous result"}
 	want, wantContent := prepareJudgePayload(msg, trajectory)
-	got, content, truncated, err := preparePrefilterPayload(msg, trajectory, PrefilterQuestions())
+	got, content, truncated, err := preparePrefilterPayload(msg, trajectory, PrefilterQuestions(), maxPrefilterInputBytes)
 	require.NoError(t, err)
 	require.False(t, truncated)
 	require.Equal(t, want, got)
@@ -35,7 +35,7 @@ func TestPrefilterPayloadBoundsWholeMultiToolEvidence(t *testing.T) {
 	questions := PrefilterQuestions()
 	questionJSON, err := json.Marshal(questions)
 	require.NoError(t, err)
-	prepared, content, truncated, err := preparePrefilterPayload(msg, trajectory, questions)
+	prepared, content, truncated, err := preparePrefilterPayload(msg, trajectory, questions, maxPrefilterInputBytes)
 	require.NoError(t, err)
 	require.True(t, truncated)
 	require.LessOrEqual(t, len(prepared)+len(questionJSON), maxPrefilterInputBytes)
@@ -58,6 +58,6 @@ func TestPrefilterPayloadBoundsWholeMultiToolEvidence(t *testing.T) {
 func TestPrefilterPayloadRejectsOversizedQuestions(t *testing.T) {
 	t.Parallel()
 	questions := map[string]typesafe.Question{"q": {Type: "noul", Instructions: strings.Repeat("x", maxPrefilterInputBytes), Criteria: nil}}
-	_, _, _, err := preparePrefilterPayload(judgemessage.New(message.User, "", "hello"), judgemessage.Trajectory{PriorUserRequest: "", RecentUntrustedContent: ""}, questions)
+	_, _, _, err := preparePrefilterPayload(judgemessage.New(message.User, "", "hello"), judgemessage.Trajectory{PriorUserRequest: "", RecentUntrustedContent: ""}, questions, maxPrefilterInputBytes)
 	require.ErrorContains(t, err, "metadata exceeds input budget")
 }
