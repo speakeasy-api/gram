@@ -20,14 +20,23 @@ question wording, and attribution structure are preserved; shortened tool identi
 are explicitly marked. Cleared-scan token
 accounting uses the evidence actually sent. Truncation is recorded in tracing.
 
-On the exact structured OpenRouter `context_length_exceeded` error, retry Jev
-once with an estimated-token budget 20% below the rejected state plus questions.
-Questions stay unchanged; evidence is truncated further. Both attempts share the
-10-second prefilter deadline, and each physical attempt is recorded. A second
-failure returns unavailable. Generic HTTP errors, message text, rate limits, and
-credit/token-budget errors do not trigger this retry. OpenRouter documents this
-code in its [error reference](https://openrouter.ai/docs/api_reference/errors-and-debugging);
-TypeSafe does not document a separate Jev-specific context error schema.
+On a recognized structured context overflow, retry Jev once with an
+estimated-token budget 20% below the rejected state plus questions. Questions
+stay unchanged; evidence is truncated further. Both attempts share the 10-second
+prefilter deadline, and each physical attempt is recorded. A second failure
+returns unavailable.
+
+Recognized errors are OpenRouter's documented `context_length_exceeded` and the
+Jev Decisions response verified with synthetic inputs on 2026-09-28: HTTP 400,
+`error.code = 400`, with `error.message` containing `HTTP 400: ` followed by
+JSON `{"detail":{"error_type":"max_tokens_exceeded"}}`. This nested Jev input
+error is distinct from a generic OpenRouter output-limit error. The decoder
+parses the complete JSON wrapper; it never matches arbitrary message substrings.
+Generic HTTP errors, rate limits, and credit/token-budget errors do not retry.
+
+The live probe rejected 38,000 repetitions of a synthetic greeting. Reducing
+that input by 20% to 30,400 repetitions succeeded (30,708 reported input tokens).
+These probes verify the transport error shape, not detection accuracy.
 
 Known limitation: an attack in omitted text can be missed by the prefilter and
 never reach Opus. Chunking or a model-specific tokenizer could improve coverage

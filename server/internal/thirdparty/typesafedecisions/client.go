@@ -26,8 +26,8 @@ const Model = "typesafe/jev-1.13"
 
 var ErrUnavailable = errors.New("typesafe is not configured")
 
-// ErrContextLengthExceeded identifies OpenRouter's structured context overflow
-// error without exposing the provider response body or echoed input.
+// ErrContextLengthExceeded identifies structured Jev input overflow errors
+// without exposing the provider response body or echoed input.
 var ErrContextLengthExceeded = errors.New("typesafe context length exceeded")
 
 // Question defines a single binary semantic condition.
@@ -196,8 +196,8 @@ func (c *boundedClient) do(req *http.Request) (*http.Response, error) {
 	defer o11y.NoLogDefer(func() error { return originalBody.Close() })
 	if res.StatusCode != http.StatusOK {
 		if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusUnprocessableEntity {
-			// Never infer overflow from free text, which may echo input. Match
-			// only the exact structured code; keep all provider text private.
+			// Match exact structured errors, including the Jev JSON wrapper
+			// in OpenRouter messages. Never substring-match echoed input.
 			const maxErrorBytes = 64 << 10
 			raw, readErr := io.ReadAll(io.LimitReader(res.Body, maxErrorBytes+1))
 			if readErr == nil && len(raw) <= maxErrorBytes && isContextLengthError(raw) {
@@ -235,6 +235,7 @@ func isContextLengthError(raw []byte) bool {
 	var envelope struct {
 		Error struct {
 			Code     json.RawMessage `json:"code"`
+			Message  string          `json:"message"`
 			Metadata struct {
 				ErrorType string `json:"error_type"`
 			} `json:"metadata"`
@@ -247,5 +248,24 @@ func isContextLengthError(raw []byte) bool {
 		return envelope.Error.Metadata.ErrorType == "context_length_exceeded"
 	}
 	var code string
-	return json.Unmarshal(envelope.Error.Code, &code) == nil && code == "context_length_exceeded"
+	if json.Unmarshal(envelope.Error.Code, &code) == nil && code == "context_length_exceeded" {
+		return true
+	}
+	// Live Decisions responses wrap Jev's input overflow as:
+	// {"code":400,"message":"HTTP 400: {\"detail\":{\"error_type\":\"max_tokens_exceeded\"}}"}
+	// This provider-specific code is distinct from OpenRouter's generic
+	// max_tokens_exceeded (an output limit), which must not trigger a retry.
+	if string(bytes.TrimSpace(envelope.Error.Code)) != "400" {
+		return false
+	}
+	rawDetail, ok := strings.CutPrefix(envelope.Error.Message, "HTTP 400: ")
+	if !ok {
+		return false
+	}
+	var provider struct {
+		Detail struct {
+			ErrorType string `json:"error_type"`
+		} `json:"detail"`
+	}
+	return json.Unmarshal([]byte(rawDetail), &provider) == nil && provider.Detail.ErrorType == "max_tokens_exceeded"
 }

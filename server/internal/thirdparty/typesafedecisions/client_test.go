@@ -402,6 +402,11 @@ func TestContextLengthErrorRequiresExactStructuredCode(t *testing.T) {
 		`{"error":{"metadata":{"error_type":"context_length_exceeded_extra"}}}`,
 		`{"error":{"code":"context_length_exceeded","metadata":{"error_type":"invalid_request"}}}`,
 		`{"error":{"code":400}}`,
+		`{"error":{"code":400,"message":"max_tokens_exceeded"}}`,
+		`{"error":{"code":400,"message":"HTTP 400: {\"detail\":{\"error_type\":\"token_limit_exceeded\"}}"}}`,
+		`{"error":{"code":400,"message":"HTTP 400: {\"detail\":{\"error_type\":\"max_tokens_exceeded_extra\"}}"}}`,
+		`{"error":{"code":400,"message":"HTTP 400: malformed max_tokens_exceeded"}}`,
+		`{"error":{"code":429,"message":"HTTP 400: {\"detail\":{\"error_type\":\"max_tokens_exceeded\"}}"}}`,
 		`not json`,
 	} {
 		require.False(t, isContextLengthError([]byte(raw)), raw)
@@ -417,4 +422,15 @@ func TestEvaluateOversizedErrorDoesNotTriggerContextRetry(t *testing.T) {
 	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 	require.ErrorContains(t, err, "HTTP status 400")
 	require.NotErrorIs(t, err, ErrContextLengthExceeded)
+}
+
+func TestEvaluateRecognizesLiveJevContextOverflow(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		// Exact error shape observed from a synthetic oversized Decisions call.
+		_, _ = w.Write([]byte(`{"error":{"message":"HTTP 400: {\"detail\":{\"error_type\":\"max_tokens_exceeded\"}}","code":400}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorIs(t, err, ErrContextLengthExceeded)
 }
