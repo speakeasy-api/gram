@@ -1,6 +1,6 @@
 ---
-"@gram/server": minor
-"@gram/dashboard": minor
+"server": minor
+"dashboard": minor
 ---
 
 Optionally freeze a gateway connection to reviewed tool definitions. Review changed definitions before using them in Direct or Progressive discovery.
