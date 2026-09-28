@@ -311,16 +311,23 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 
 	prepared, countContent := prepareJudgePayload(msg, trajectory)
 	if window != nil {
+		var trajectoryPayload *judgemessage.TrajectoryPayload
+		if trajectory.HasContent() {
+			rendered := judgemessage.RenderTrajectory(trajectory)
+			trajectoryPayload = &rendered
+		}
 		var err error
 		prepared, err = json.Marshal(struct {
-			Window judgemessage.Window `json:"window"`
-		}{Window: *window})
+			Window     judgemessage.Window             `json:"window"`
+			Trajectory *judgemessage.TrajectoryPayload `json:"trajectory,omitempty"`
+		}{Window: *window, Trajectory: trajectoryPayload})
 		if err != nil {
 			return unavailableResult
 		}
-		countContent = nil
-		for _, evidence := range window.Messages {
-			countContent = append(countContent, judgemessage.STokenContent(evidence)...)
+		for i, evidence := range window.Messages {
+			if i != window.TargetIndex {
+				countContent = append(countContent, judgemessage.STokenContent(evidence)...)
+			}
 		}
 	}
 	decisionCtx, cancel := context.WithTimeout(ctx, c.timeout)
