@@ -134,7 +134,11 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	for _, item := range created.Checklist {
 		switch item.Key {
 		case "public_key_auth":
-			require.Contains(t, item.Details, "Enter this URL: "+created.JwksURL)
+			require.Len(t, item.Details, 3)
+			require.NotEmpty(t, item.Description)
+			for _, detail := range item.Details {
+				require.NotEmpty(t, detail)
+			}
 			require.Nil(t, item.Completed, "nothing observed before the first verification")
 		case "assign_admin_roles":
 			require.Contains(t, item.Description, "multi-factor authentication")

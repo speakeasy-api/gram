@@ -186,10 +186,9 @@ export function ClientIdForm({
           spellCheck={false}
         />
         <FieldDescription id="okta-client-id-help">
-          Found under Applications, in the API Services app&apos;s General tab.
-          Use this app&apos;s client ID, not the single sign-on (SSO) app or AI
-          agent ID. You can save this ID only once. To change it, revoke this
-          connection and connect again.
+          Use the API Services app&apos;s client ID, not the single sign-on
+          (SSO) app or AI agent ID. You can save this ID only once. To change
+          it, revoke this connection and connect again.
         </FieldDescription>
         {showClientIdError && (
           <p

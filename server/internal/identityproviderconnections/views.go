@@ -87,7 +87,7 @@ func buildConnectionView(r connectionRows, agent AgentObservation) *gen.OktaIden
 		missing = missingScopes(granted)
 	}
 
-	checklist := OktaChecklist(r.Okta.ListingMode, r.jwksURL(), ChecklistSignal{
+	checklist := OktaChecklist(r.Okta.ListingMode, ChecklistSignal{
 		Checked:           r.checked() && r.lastError() == nil,
 		ClientIDSubmitted: r.clientIDSubmitted(),
 		DPoPBound:         r.Okta.DpopRequired,

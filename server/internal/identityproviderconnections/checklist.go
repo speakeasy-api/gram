@@ -92,7 +92,7 @@ type AgentAppSignal struct {
 }
 
 const (
-	accessInstruction   = "On the app's Admin roles tab, assign these roles. Okta will ask you to confirm your identity with multi-factor authentication before assigning roles. Speakeasy checks whether it can read apps, users, and groups through the Okta API; it does not check which named admin roles are assigned."
+	accessInstruction   = "On the app's Admin roles tab, assign these roles. Speakeasy checks whether it can read apps, users, and groups through the Okta API; it does not check which named admin roles are assigned. Okta will ask you to confirm your identity with multi-factor authentication first."
 	linkInstruction     = "On User access and authentication, keep Create a new OIDC app linked to this AI agent selected. Okta uses this app only to decide which users the agent may act for; it does not change how your people sign in to Speakeasy."
 	activateInstruction = "Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (under Applications, the Speakeasy Agent app marked Linked AI Agent), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy. Okta issues assertions only for the users assigned here."
 )
@@ -174,6 +174,13 @@ func accessDescription(apiAccess *bool) string {
 	return accessInstruction
 }
 
+func accessDetails(apiAccess *bool) []string {
+	if apiAccess != nil && *apiAccess {
+		return []string{}
+	}
+	return slices.Clone(RequiredOktaAdminRoles)
+}
+
 func linkDescription(app *AgentAppSignal) string {
 	if app != nil && !app.Found {
 		return "The last applications sync found no app with the bound application ID recorded below. Check the ID, then sync applications again. " + linkInstruction
@@ -194,12 +201,11 @@ func activateDescription(app *AgentAppSignal) string {
 	}
 }
 
-// OktaChecklist renders the console steps for a listing mode. jwksURL is
-// substituted into the steps that need it; signal ticks the steps a
-// verification can observe.
-func OktaChecklist(listingMode, jwksURL string, signal ChecklistSignal) []ChecklistItem {
+// OktaChecklist renders the console steps for a listing mode; signal ticks
+// the steps a verification can observe.
+func OktaChecklist(listingMode string, signal ChecklistSignal) []ChecklistItem {
 	done := observe(signal)
-	return slices.Concat(connectItems(listingMode, jwksURL, done), agentItems(signal.Agent.App, done))
+	return slices.Concat(connectItems(listingMode, done), agentItems(signal.Agent.App, done))
 }
 
 func appItem(listingMode string, completed *bool) ChecklistItem {
@@ -225,7 +231,9 @@ func appItem(listingMode string, completed *bool) ChecklistItem {
 	}
 }
 
-func connectItems(listingMode, jwksURL string, done completions) []ChecklistItem {
+// Verified against the live console 2026-09-28: Okta greys out Public key /
+// Private key under Client Credentials until a key URL is saved on Public keys.
+func connectItems(listingMode string, done completions) []ChecklistItem {
 	return []ChecklistItem{
 		appItem(listingMode, done.appCreated),
 		{
@@ -235,8 +243,8 @@ func connectItems(listingMode, jwksURL string, done completions) []ChecklistItem
 			Description: "Add Speakeasy's key URL so Okta can check that connection requests come from Speakeasy. You do not need to create or share a password.",
 			Details: []string{
 				"On the newly created Speakeasy app's General tab, find Public keys and click Edit.",
-				"Choose Use a URL to fetch keys dynamically, enter this URL, and save: " + jwksURL,
-				"Then, in Client Credentials, click Edit, set Client authentication to Public key / Private key, and save. Okta only allows this after the key URL is saved.",
+				"Choose Use a URL to fetch keys dynamically, enter the key URL below, and save.",
+				"Then, in Client Credentials, click Edit, set Client authentication to Public key / Private key, and save. Okta enables that option only once a key URL is saved.",
 			},
 			Completed: done.keyAuth,
 		},
@@ -261,7 +269,7 @@ func connectItems(listingMode, jwksURL string, done completions) []ChecklistItem
 			Group:       ChecklistGroupConnect,
 			Title:       "Allow access to apps, users, and groups",
 			Description: accessDescription(done.apiAccess),
-			Details:     slices.Clone(RequiredOktaAdminRoles),
+			Details:     accessDetails(done.apiAccess),
 			Completed:   done.apiAccess,
 		},
 		{

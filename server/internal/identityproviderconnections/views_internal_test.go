@@ -84,6 +84,7 @@ func TestBuildConnectionView_ChecklistVerification(t *testing.T) {
 					got[item.Key] = item.Completed
 					if item.Key == ChecklistKeyAssignAdminRoles {
 						require.Equal(t, accessDescription(tt.access), item.Description)
+						require.Equal(t, accessDetails(tt.access), item.Details)
 					}
 				}
 				require.Equal(t, want, got)

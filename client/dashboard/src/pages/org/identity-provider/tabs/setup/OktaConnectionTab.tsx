@@ -34,7 +34,6 @@ import {
 } from "../../identityProviderQueries";
 import {
   CHECKLIST_SECTION_ID,
-  CLIENT_ID_SECTION_ID,
   CONNECTION_SECTION_ID,
   scrollToConnectionCard,
 } from "../../tabs";
@@ -171,16 +170,11 @@ function ConnectionCard({
           {step === "submit_client_id" && (
             <NextStepCallout
               title="Next: set up your Okta app"
-              body="Follow the Okta setup checklist, then paste the app's client ID to verify access."
+              body="Follow the Okta setup checklist. Its last step takes the app's client ID and verifies access."
             >
-              <div className="flex flex-wrap gap-3">
-                <a className={SECTION_LINK} href={`#${CHECKLIST_SECTION_ID}`}>
-                  Open setup checklist
-                </a>
-                <a className={SECTION_LINK} href={`#${CLIENT_ID_SECTION_ID}`}>
-                  Enter client ID
-                </a>
-              </div>
+              <a className={SECTION_LINK} href={`#${CHECKLIST_SECTION_ID}`}>
+                Open setup checklist
+              </a>
             </NextStepCallout>
           )}
           {(step === "verify" || step === "repair") && (
