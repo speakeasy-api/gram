@@ -46,16 +46,16 @@ type RiskFindingsService struct {
 	now           func() time.Time
 }
 
-func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) *RiskFindingsService {
+func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) (*RiskFindingsService, error) {
 	codec, err := newRiskCursorCodec(key)
-	if db == nil || findings == nil || organizations == nil || err != nil {
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("create risk findings cursor codec: %w", err)
 	}
-	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}
+	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}, nil
 }
 
 func (s *RiskFindingsService) valid() bool {
-	return s != nil && s.projects != nil && s.organizations != nil && s.policies != nil && s.findings != nil && s.cursor != nil && s.now != nil
+	return s != nil
 }
 
 type ListRiskFindingsInput struct {

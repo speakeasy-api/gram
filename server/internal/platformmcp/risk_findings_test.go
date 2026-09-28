@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -77,6 +78,29 @@ func findingsFixture(t *testing.T) (*RiskFindingsService, *findingReader, *findi
 	codec, err := newRiskCursorCodec("test-key")
 	require.NoError(t, err)
 	return &RiskFindingsService{projects: &findingProjects{project: project}, organizations: riskMutationOrganizationResolver{slug: "org"}, flags: &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, policies: policies, findings: reader, cursor: codec, now: func() time.Time { return riskAnalysisTestNow }}, reader, policies
+}
+
+func TestNewRiskFindingsService(t *testing.T) {
+	t.Parallel()
+	for _, key := range []string{"test-key", ""} {
+		t.Run("key="+key, func(t *testing.T) {
+			t.Parallel()
+			reader := &findingReader{}
+			service, err := NewRiskFindingsService(&pgxpool.Pool{}, reader, &riskMutationFlagProvider{evaluation: feature.EvaluationEnabled}, riskMutationOrganizationResolver{slug: "org"}, key)
+			if key == "" {
+				require.ErrorIs(t, err, ErrRiskCursorInvalid)
+				require.Nil(t, service)
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, service.valid())
+			require.Same(t, reader, service.findings)
+			require.NotNil(t, service.projects)
+			require.NotNil(t, service.policies)
+			require.NotNil(t, service.cursor)
+			require.NotNil(t, service.now)
+		})
+	}
 }
 
 func TestRiskFindingsDefaultsAndGroups(t *testing.T) {
