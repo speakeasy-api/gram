@@ -3,7 +3,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 
-export const MCP_CALLER_IDENTITY_SECTION_ID = "caller-identity";
+const MCP_CALLER_IDENTITY_SECTION_ID = "caller-identity";
 
 export function CallerIdentitySection(): JSX.Element {
   const organization = useOrganization();
