@@ -283,24 +283,28 @@ func (stubUsageSummarySessions) GetActiveUserCountByMessages(context.Context, ch
 	return 0, nil
 }
 
-// recordingToolUsageReader is the target-aware read with canned rows. It
-// records the parameters it was called with so a test can prove the read was
-// scoped to the project and window the caller named.
+// recordingToolUsageReader is the target-aware read with canned rows. Each
+// read's parameters are recorded separately rather than into one field: the
+// two reads must describe the same population of calls, which a single
+// last-write-wins field cannot show. TestGetToolUsageSummaryAttributesToConfiguredServers
+// asserts both, because reaching a successful read needs the project's
+// matchers loaded from a real database.
 type recordingToolUsageReader struct {
-	params telemetryrepo.GetToolUsageSummaryParams
-	totals telemetryrepo.ToolUsageTotalsRow
-	rows   []telemetryrepo.ToolUsageTargetSummaryRow
-	calls  int
+	totalsParams  telemetryrepo.GetToolUsageSummaryParams
+	targetsParams telemetryrepo.GetToolUsageSummaryParams
+	totals        telemetryrepo.ToolUsageTotalsRow
+	rows          []telemetryrepo.ToolUsageTargetSummaryRow
+	calls         int
 }
 
 func (r *recordingToolUsageReader) GetToolUsageTotals(_ context.Context, params telemetryrepo.GetToolUsageSummaryParams) (telemetryrepo.ToolUsageTotalsRow, error) {
-	r.params = params
+	r.totalsParams = params
 	r.calls++
 	return r.totals, nil
 }
 
 func (r *recordingToolUsageReader) GetToolUsageTargets(_ context.Context, params telemetryrepo.GetToolUsageSummaryParams) ([]telemetryrepo.ToolUsageTargetSummaryRow, error) {
-	r.params = params
+	r.targetsParams = params
 	r.calls++
 	return r.rows, nil
 }

@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -82,21 +83,35 @@ func TestGetToolUsageSummaryAttributesToConfiguredServers(t *testing.T) {
 	require.Equal(t, 1, shadow.Targets)
 	require.Empty(t, shadow.TopTargets)
 
-	// The read was scoped to this project and window with its own matchers,
-	// and the totals and the per-target rows describe the same population.
+	// Both reads were scoped to this project and window with its own matchers.
+	// Asserted on each read rather than on one shared field: the totals and the
+	// per-target rows have to describe the same population of calls, or the
+	// shares the result reports are computed against a different denominator
+	// than the buckets they divide.
 	require.Equal(t, 2, toolUsage.calls)
-	require.Equal(t, project.ID.String(), toolUsage.params.GramProjectID)
-	require.Equal(t, fixedNow.Add(-24*time.Hour).UnixNano(), toolUsage.params.TimeStart)
-	require.Equal(t, fixedNow.UnixNano(), toolUsage.params.TimeEnd)
-	require.Empty(t, toolUsage.params.TargetTypes)
-	require.Empty(t, toolUsage.params.Statuses)
-	require.Equal(t, uint64(usageSummaryTargetFetchLimit), toolUsage.params.TargetLimit)
-	require.Equal(t, []telemetryrepo.MCPServerMatcher{{
+	expectedMatchers := []telemetryrepo.MCPServerMatcher{{
 		SourceID:    configured.RemoteMcpServerID.UUID.String(),
 		TargetType:  telemetryrepo.ToolUsageTargetTypeHostedMCP,
 		TargetID:    configured.Slug.String,
 		TargetLabel: configured.Name.String,
-	}}, toolUsage.params.MCPServerMatchers)
+	}}
+	for name, params := range map[string]telemetryrepo.GetToolUsageSummaryParams{
+		"totals":  toolUsage.totalsParams,
+		"targets": toolUsage.targetsParams,
+	} {
+		require.Equal(t, project.ID.String(), params.GramProjectID, name)
+		require.Equal(t, fixedNow.Add(-24*time.Hour).UnixNano(), params.TimeStart, name)
+		require.Equal(t, fixedNow.UnixNano(), params.TimeEnd, name)
+		require.Empty(t, params.TargetTypes, name)
+		require.Empty(t, params.Statuses, name)
+		require.Empty(t, params.Query, name)
+		require.Empty(t, params.Filters, name)
+		require.Empty(t, params.UserFilters, name)
+		// One past the aggregation cap, so an omitted target can be told from a
+		// result that exactly fills it.
+		require.Equal(t, uint64(usageSummaryTargetRowLimit+1), params.TargetLimit, name)
+		require.Equal(t, expectedMatchers, params.MCPServerMatchers, name)
+	}
 
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
@@ -127,4 +142,71 @@ func TestGetToolUsageSummaryRequiresProjectRead(t *testing.T) {
 	_, err = service.GetToolUsageSummary(ctx, principal, GetToolUsageSummaryInput{ProjectID: project.ID.String()})
 	require.Error(t, err)
 	require.Zero(t, toolUsage.calls, "a refused caller never reaches the read")
+}
+
+// TestGetToolUsageSummaryReportsTruncationOnlyWhenATargetWasOmitted pins the
+// difference between a result that exactly fills the aggregation cap and one
+// that left a target out. The read asks for one row past the cap; that sentinel
+// proves the omission and must not be aggregated, or the buckets would count
+// calls the same result reports as missing.
+func TestGetToolUsageSummaryReportsTruncationOnlyWhenATargetWasOmitted(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_tool_usage_truncation")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+
+	// One call each on distinct skills, so every row is its own target and none
+	// of them depends on name resolution.
+	atCap := make([]telemetryrepo.ToolUsageTargetSummaryRow, 0, usageSummaryTargetRowLimit+1)
+	for index := range usageSummaryTargetRowLimit {
+		name := fmt.Sprintf("skill-%04d", index)
+		atCap = append(atCap, usageRow(telemetryrepo.ToolUsageTargetTypeSkill, name, name, 1, 0))
+	}
+	// The sentinel carries a distinctive count, so aggregating it would be
+	// visible in the bucket rather than hiding inside an off-by-one.
+	const sentinelCalls = 1000
+	pastCap := append(append([]telemetryrepo.ToolUsageTargetSummaryRow{}, atCap...),
+		usageRow(telemetryrepo.ToolUsageTargetTypeSkill, "skill-sentinel", "skill-sentinel", sentinelCalls, 0))
+
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+
+	for _, test := range []struct {
+		name      string
+		rows      []telemetryrepo.ToolUsageTargetSummaryRow
+		truncated bool
+	}{
+		{name: "exactly at the cap omits nothing", rows: atCap, truncated: false},
+		{name: "one past the cap omits a target", rows: pastCap, truncated: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			toolUsage := &recordingToolUsageReader{
+				totals: telemetryrepo.ToolUsageTotalsRow{EventCount: usageSummaryTargetRowLimit, SuccessCount: usageSummaryTargetRowLimit},
+				rows:   test.rows,
+			}
+			service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, nil,
+				OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}).
+				WithToolUsageBreakdown(toolUsage)
+
+			scoped := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+			scoped = contextvalues.SetActingSurface(scoped, contextvalues.ActingSurfacePlatformMCP)
+			scoped = authz.GrantsToContext(scoped, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())})
+
+			output, err := service.GetToolUsageSummary(scoped, principal, GetToolUsageSummaryInput{ProjectID: project.ID.String()})
+			require.NoError(t, err)
+
+			require.Equal(t, test.truncated, output.TargetsTruncated)
+			skills := bucketByType(t, output.UsageByTarget, telemetryrepo.ToolUsageTargetTypeSkill)
+			require.Equal(t, usageSummaryTargetRowLimit, skills.Targets, "the sentinel is never counted as a target")
+			require.Equal(t, int64(usageSummaryTargetRowLimit), skills.ToolCalls, "the sentinel's calls are never aggregated")
+
+			encoded, err := json.Marshal(output)
+			require.NoError(t, err)
+			require.NotContains(t, string(encoded), "skill-sentinel", "the sentinel is dropped, not reported")
+		})
+	}
 }

@@ -14,11 +14,16 @@ import (
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
-// usageSummaryTargetFetchLimit bounds how many per-target rows the usage
-// summary reads before folding them onto configured servers and target types.
-// One configured server can be classified under several target ids, so more
-// rows are read than are ever returned; the fold is what the caps apply to.
-const usageSummaryTargetFetchLimit = 500
+// usageSummaryTargetRowLimit bounds how many per-target rows the usage summary
+// aggregates before folding them onto configured servers and target types. One
+// configured server can be classified under several target ids, so more rows
+// are aggregated than are ever returned; the fold is what the per-type caps
+// apply to.
+//
+// The read asks for one row beyond this so an omission can be told from a
+// result that merely fills the cap exactly; that sentinel is dropped before
+// aggregation, so no bucket ever counts it.
+const usageSummaryTargetRowLimit = 500
 
 // maxUsageSummaryTargets bounds the per-target list inside each target type.
 const maxUsageSummaryTargets = 5
@@ -180,6 +185,12 @@ func (s *DiagnosticsService) GetToolUsageSummary(ctx context.Context, principal 
 		return GetToolUsageSummaryOutput{}, fmt.Errorf("read tool usage watermark: %w", err)
 	}
 
+	// The read asked for one row past the cap. Its presence is what proves a
+	// target was left out, and it is dropped here rather than aggregated: a
+	// sentinel counted into a bucket would report calls the result then claims
+	// are missing.
+	rows, truncated := boundedRows(rows, usageSummaryTargetRowLimit)
+
 	toolCalls := boundedCount(totals.EventCount)
 	buckets := attributeUsageByTarget(rows, resolver, configuredServerTargetTypes(resolver, serverMatchers), toolCalls, maxUsageSummaryTargets)
 	return GetToolUsageSummaryOutput{
@@ -190,7 +201,7 @@ func (s *DiagnosticsService) GetToolUsageSummary(ctx context.Context, principal 
 		BlockedToolCalls: boundedCount(totals.BlockedCount),
 		UniqueTools:      boundedCount(totals.UniqueTools),
 		UsageByTarget:    buckets,
-		TargetsTruncated: len(rows) >= usageSummaryTargetFetchLimit,
+		TargetsTruncated: truncated,
 	}, nil
 }
 
@@ -205,7 +216,9 @@ func toolUsageSummaryParams(projectID string, window ResolvedWindow, hosted []te
 		HostedMCPMatchers: hosted,
 		MCPServerMatchers: servers,
 		MetaMCPMatchers:   meta,
-		TargetLimit:       usageSummaryTargetFetchLimit,
+		// One past the aggregation cap: the extra row is the sentinel that
+		// tells an omission from a result that exactly fills the cap.
+		TargetLimit: usageSummaryTargetRowLimit + 1,
 	}
 }
 
