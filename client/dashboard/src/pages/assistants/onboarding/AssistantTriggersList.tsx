@@ -13,6 +13,7 @@ import { useTriggerEvents } from "@gram/client/react-query/triggerEvents.js";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { slackReplyModeLabel } from "./slackCapabilities";
 
 function triggerStatusLabel(status: string): string {
   switch (status) {
@@ -95,6 +96,10 @@ function TriggerRow({
   onToggle: () => void;
   onOpenChat: (chatId: string) => void;
 }): JSX.Element {
+  const replyMode =
+    trigger.definitionSlug === "slack"
+      ? slackReplyModeLabel(trigger.config?.routing)
+      : undefined;
   return (
     <div className="border-border border">
       <button
@@ -116,6 +121,11 @@ function TriggerRow({
               {trigger.definitionSlug}
             </Badge>
           </Stack>
+          {replyMode && (
+            <Text small muted className="pl-5">
+              Replies {replyMode.toLowerCase()}
+            </Text>
+          )}
           {trigger.webhookUrl && (
             <code className="text-muted-foreground truncate pl-5 text-[10px]">
               {trigger.webhookUrl}

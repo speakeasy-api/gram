@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
       }
     | undefined,
   deleteMutate: vi.fn(),
+  healthMutate: vi.fn(),
   ingress: undefined as
     | {
         id: string;
@@ -108,7 +109,7 @@ vi.mock("@gram/client/react-query/networkIngressDeleteIngress.js", () => ({
 vi.mock("@gram/client/react-query/networkIngressCheckHealth.js", () => ({
   useNetworkIngressCheckHealthMutation: () => ({
     isPending: false,
-    mutate: vi.fn(),
+    mutate: state.healthMutate,
   }),
 }));
 vi.mock("@gram/client/react-query/networkIngressGetDeleteImpact.js", () => ({
@@ -137,6 +138,7 @@ beforeEach(() => {
   state.ingressPending = false;
   state.ingressOptions = undefined;
   state.deleteMutate.mockReset();
+  state.healthMutate.mockReset();
   state.ingress = undefined;
 });
 
@@ -240,6 +242,33 @@ describe("PrivateNetworkSection", () => {
       expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
     },
   );
+
+  it("offers retry and support when Tailscale provisioning fails", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "error",
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry provisioning" }));
+    expect(state.healthMutate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
+    });
+    expect(
+      screen
+        .getByRole("link", { name: "Contact support" })
+        .getAttribute("href"),
+    ).toContain("mailto:support@speakeasy.com");
+  });
 
   it("shows and polls pending cleanup instead of clearing the UI", () => {
     state.ingress = {

@@ -264,25 +264,36 @@ func TestStoppedWorktreeDaemon(t *testing.T) {
 	require.NoError(t, stoppedWorktreeDaemon([]byte(`{"id":"worktree/worker","namespace":"worktree","name":"worker","pid":null,"status":"stopped"}`), "worktree", "worker"))
 }
 
-func TestPrimaryCheckoutUnsupported(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0700))
-	_, err := validateConfig(Config{Root: root, ComposeProject: "gram-test", TemporalNamespace: "gram-test"})
-	require.ErrorContains(t, err, "initialized secondary worktrees only")
-	require.ErrorContains(t, err, "run ./zero there")
+//nolint:paralleltest // Exercises the canonical working directory.
+func TestPrimaryCheckoutSupported(t *testing.T) {
+	c := testGuardConfig(t)
+	require.NoError(t, os.Remove(filepath.Join(c.Root, ".git")))
+	require.NoError(t, os.Mkdir(filepath.Join(c.Root, ".git"), 0700))
+	c.ComposeProject = "gram"
+	c.TemporalNamespace = "default"
+	c.TemporalTaskQueue = "main"
+	_, err := validateConfig(c)
+	require.NoError(t, err)
+	require.NoError(t, validateTemporal(c))
+	for _, mutate := range []func(*Config){
+		func(c *Config) { c.ComposeProject = "other" },
+		func(c *Config) { c.TemporalTaskQueue = "other" },
+		func(c *Config) { c.TemporalAddress = "remote.example:7233" },
+	} {
+		bad := c
+		mutate(&bad)
+		require.Error(t, validateTemporal(bad))
+	}
 }
 
-func TestUninitializedWorktreeUnsupported(t *testing.T) {
-	t.Parallel()
-	_, err := validateConfig(Config{Root: t.TempDir()})
-	require.ErrorContains(t, err, "explicit Compose project and matching non-default Temporal namespace")
-}
-
-func TestDefaultTemporalNamespaceUnsupported(t *testing.T) {
-	t.Parallel()
-	_, err := validateConfig(Config{Root: t.TempDir(), ComposeProject: "gram-test", TemporalNamespace: "default"})
-	require.ErrorContains(t, err, "initialized secondary worktrees only")
+//nolint:paralleltest // Exercises the canonical working directory.
+func TestSecondaryDefaultTemporalNamespaceUnsupported(t *testing.T) {
+	c := testGuardConfig(t)
+	c.ComposeProject = "gram"
+	c.TemporalNamespace = "default"
+	_, err := validateConfig(c)
+	require.Error(t, err)
+	require.Error(t, validateTemporal(c))
 }
 
 func TestDatabaseServiceRefused(t *testing.T) {
@@ -402,4 +413,62 @@ func TestResolveRequiresMatchingIDPMembership(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestValidateRequiresCheckoutOwnedTemporal(t *testing.T) {
+	c := testGuardConfig(t)
+	require.NoError(t, os.Remove(filepath.Join(c.Root, ".git")))
+	require.NoError(t, os.Mkdir(filepath.Join(c.Root, ".git"), 0700))
+	c.ComposeProject, c.TemporalNamespace = "gram", "default"
+	c.DockerHost = "unix:///var/run/docker.sock"
+	bin := filepath.Join(c.Root, "bin")
+	require.NoError(t, os.Mkdir(bin, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "docker"), []byte(`#!/bin/sh
+case "$1" in
+ ps) for arg in "$@"; do case "$arg" in label=com.docker.compose.service=*) echo "${arg##*=}";; esac; done ;;
+ inspect) for arg in "$@"; do id="$arg"; done; cat "$id.json" ;;
+ *) exit 1 ;;
+esac
+`), 0700))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeEvidence := func(service, project, root, port, target string) {
+		t.Helper()
+		body := fmt.Sprintf(`{"Running":true,"Labels":{"com.docker.compose.project":%q,"com.docker.compose.service":%q,"com.docker.compose.project.working_dir":%q},"Ports":{%q:[{"HostIP":"127.0.0.1","HostPort":%q}]}}`, project, service, root, target, port)
+		require.NoError(t, os.WriteFile(filepath.Join(c.Root, service+".json"), []byte(body), 0600))
+	}
+	writeEvidence("gram-db", "gram", c.Root, "5439", "5432/tcp")
+	writeEvidence("gram-cache", "gram", c.Root, "6379", "35299/tcp")
+	writeEvidence("gram-temporal", "gram", c.Root, "7233", "7233/tcp")
+	_, err := Validate(t.Context(), c)
+	require.NoError(t, err)
+	for _, tc := range []struct{ project, root, port string }{
+		{"gram-shared", c.Root, "7233"},
+		{"gram", "/other-checkout", "7233"},
+		{"gram", c.Root, "17233"},
+	} {
+		writeEvidence("gram-temporal", tc.project, tc.root, tc.port, "7233/tcp")
+		_, err := Validate(t.Context(), c)
+		require.Error(t, err, "foreign or mismatched Temporal accepted")
+		// The final workflow check must revalidate ownership before any RPC.
+		require.ErrorContains(t, CheckWorkflows(t.Context(), c), "container")
+	}
+	require.NoError(t, os.Remove(filepath.Join(c.Root, "gram-temporal.json")))
+	_, err = Validate(t.Context(), c)
+	require.Error(t, err, "missing Temporal evidence accepted")
+	// Secondary worktrees retain their isolated project and namespace.
+	require.NoError(t, os.Remove(filepath.Join(c.Root, ".git")))
+	require.NoError(t, os.WriteFile(filepath.Join(c.Root, ".git"), nil, 0600))
+	c.ComposeProject, c.TemporalNamespace = "gram-secondary", "gram-secondary"
+	writeEvidence("gram-db", c.ComposeProject, c.Root, "5439", "5432/tcp")
+	writeEvidence("gram-cache", c.ComposeProject, c.Root, "6379", "35299/tcp")
+	writeEvidence("gram-temporal", c.ComposeProject, c.Root, "7233", "7233/tcp")
+	_, err = Validate(t.Context(), c)
+	require.NoError(t, err)
+	writeEvidence("gram-temporal", "gram", c.Root, "7233", "7233/tcp")
+	_, err = Validate(t.Context(), c)
+	require.Error(t, err, "primary Temporal accepted by secondary checkout")
+	require.NoError(t, os.Remove(filepath.Join(c.Root, ".git")))
+	_, err = Validate(t.Context(), c)
+	require.ErrorContains(t, err, "not a Gram repository")
+
 }

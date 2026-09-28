@@ -1653,6 +1653,46 @@ CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
 ON trigger_instances (project_id, target_ref)
 WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
 
+-- trigger_thread_routes records how events on one external conversation (a
+-- trigger correlation id such as a Slack thread) reach a trigger target:
+-- whether the target is subscribed to it, and which of the target's
+-- conversations its events are delivered under.
+CREATE TABLE IF NOT EXISTS trigger_thread_routes (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  target_kind TEXT NOT NULL CHECK (target_kind <> '' AND CHAR_LENGTH(target_kind) <= 60),
+  target_ref TEXT NOT NULL CHECK (target_ref <> '' AND CHAR_LENGTH(target_ref) <= 255),
+  correlation_id TEXT NOT NULL CHECK (correlation_id <> '' AND CHAR_LENGTH(correlation_id) <= 300),
+  -- Correlation id that events on this conversation are delivered under. NULL
+  -- delivers them under correlation_id.
+  route_to_correlation_id TEXT CHECK (route_to_correlation_id <> '' AND CHAR_LENGTH(route_to_correlation_id) <= 300),
+  state TEXT NOT NULL,
+  -- Source-specific position of the newest event on this conversation that was
+  -- delivered to the target (a Slack message ts).
+  last_seen_cursor TEXT CHECK (last_seen_cursor <> '' AND CHAR_LENGTH(last_seen_cursor) <= 64),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT trigger_thread_routes_pkey PRIMARY KEY (id),
+  CONSTRAINT trigger_thread_routes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- Serves the project_id foreign key's cascade, which also reaches soft-deleted
+-- rows that the partial indexes below leave out.
+CREATE INDEX IF NOT EXISTS trigger_thread_routes_project_id_idx
+ON trigger_thread_routes (project_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_thread_routes_target_correlation_id_key
+ON trigger_thread_routes (project_id, target_kind, target_ref, correlation_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS trigger_thread_routes_route_to_correlation_id_idx
+ON trigger_thread_routes (project_id, target_kind, target_ref, route_to_correlation_id)
+WHERE route_to_correlation_id IS NOT NULL AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
@@ -4682,6 +4722,11 @@ ON directory_groups (organization_id);
 CREATE UNIQUE INDEX IF NOT EXISTS directory_groups_workos_directory_group_id_key
 ON directory_groups (workos_directory_group_id);
 
+-- Composite-FK target so tenant-scoped children (directory_role_mappings) can
+-- pin a group reference to their own organization.
+CREATE UNIQUE INDEX IF NOT EXISTS directory_groups_organization_id_id_key
+ON directory_groups (organization_id, id);
+
 CREATE TABLE IF NOT EXISTS directory_users (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -4866,6 +4911,110 @@ WHERE workos_user_id IS NOT NULL AND deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS organization_user_relationships_user_org_active_idx
 ON organization_user_relationships (user_id, organization_id)
 WHERE deleted IS FALSE;
+
+-- Slack directory data belongs to the organization. Disconnecting a workspace
+-- or deactivating a member preserves its source IDs. To hard-delete a parent,
+-- remove its dependent rows first; the required foreign keys prevent deletion.
+CREATE TABLE IF NOT EXISTS slack_directory_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  slack_team_id TEXT NOT NULL,
+  slack_team_name TEXT,
+  -- Store a versioned token bundle encrypted by the application, including
+  -- refresh credentials when present. Clear it on disconnect and exclude it
+  -- from directory API responses.
+  credentials_encrypted TEXT,
+  granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Replace this value on disconnect, reconnect, or replacement authorization
+  -- so an earlier sync cannot write into the new connection state.
+  generation uuid NOT NULL DEFAULT generate_uuidv7(),
+  health TEXT NOT NULL DEFAULT 'pending',
+  disconnected_at timestamptz,
+  last_sync_started_at timestamptz,
+  -- Set these together after publishing a complete directory snapshot. After
+  -- reconnect, require a completed sync whose generation matches the connection.
+  last_full_sync_generation uuid,
+  last_full_sync_succeeded_at timestamptz,
+  last_sync_failed_at timestamptz,
+  -- Store a typed failure code and omit the raw provider response.
+  last_error_code TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT slack_directory_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL
+);
+
+-- Reconnect the same workspace in place; disconnection does not release its key.
+CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_connections_org_team_key
+ON slack_directory_connections (organization_id, slack_team_id);
+
+-- Store verified members of the connected workspace. Seeing an external Slack
+-- Connect user in a shared channel does not establish membership. Full syncs
+-- upsert these rows in place and preserve mapping_revision.
+CREATE TABLE IF NOT EXISTS slack_directory_memberships (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  slack_team_id TEXT NOT NULL,
+  slack_user_id TEXT NOT NULL,
+  display_name TEXT,
+  -- The profile email can change. Use it to suggest matches for an administrator
+  -- to confirm; it cannot identify an account or prove ownership.
+  email TEXT,
+  -- The application validates directory state and member type. Missing provider
+  -- fields stay unknown and cannot establish eligibility for delegation.
+  status TEXT NOT NULL DEFAULT 'unknown',
+  member_type TEXT NOT NULL DEFAULT 'unknown',
+  provider_updated_at timestamptz,
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- Increment under the membership row lock on every mapping change. This
+  -- rejects stale dialogs even if an account was mapped and then unmapped again.
+  mapping_revision bigint NOT NULL DEFAULT 0,
+  mapping_conflict_reason TEXT,
+  mapping_conflict_detected_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT slack_directory_memberships_pkey PRIMARY KEY (id),
+  CONSTRAINT slack_directory_memberships_connection_fkey FOREIGN KEY (organization_id, slack_team_id) REFERENCES slack_directory_connections (organization_id, slack_team_id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_memberships_org_team_user_key
+ON slack_directory_memberships (organization_id, slack_team_id, slack_user_id);
+
+-- Map a Slack member to an existing person in the same organization. Reassign
+-- by revoking the old row and inserting a new one to preserve the previous owner.
+-- created_at records confirmation. Write the actor and reason to the audit log
+-- in the same transaction. A mapping does not grant permissions.
+CREATE TABLE IF NOT EXISTS slack_identity_mappings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  slack_team_id TEXT NOT NULL,
+  slack_user_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  revoked_at timestamptz,
+
+  CONSTRAINT slack_identity_mappings_pkey PRIMARY KEY (id),
+  CONSTRAINT slack_identity_mappings_membership_fkey FOREIGN KEY (organization_id, slack_team_id, slack_user_id) REFERENCES slack_directory_memberships (organization_id, slack_team_id, slack_user_id) ON DELETE SET NULL,
+  CONSTRAINT slack_identity_mappings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
+  -- The relationship's user_id has no FK to users, so check both references.
+  CONSTRAINT slack_identity_mappings_organization_id_user_id_fkey FOREIGN KEY (organization_id, user_id) REFERENCES organization_user_relationships (organization_id, user_id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS slack_identity_mappings_current_key
+ON slack_identity_mappings (organization_id, slack_team_id, slack_user_id)
+WHERE revoked_at IS NULL;
+
+-- History reads and membership FK checks also need revoked rows.
+CREATE INDEX IF NOT EXISTS slack_identity_mappings_membership_history_idx
+ON slack_identity_mappings (organization_id, slack_team_id, slack_user_id, created_at DESC);
+
+-- Supports personal identity lookups and FK checks against users and their
+-- organization relationships.
+CREATE INDEX IF NOT EXISTS slack_identity_mappings_user_org_idx
+ON slack_identity_mappings (user_id, organization_id);
 
 CREATE TABLE IF NOT EXISTS agents (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
@@ -5055,6 +5204,49 @@ WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS organization_role_assignments_org_user_idx
 ON organization_role_assignments (organization_id, user_id)
 WHERE user_id IS NOT NULL;
+
+-- directory_role_mappings grants a role to every member of a directory group,
+-- or to every directory user whose attribute key has a given value. The roles
+-- are added to a user's principals at access-check time, on top of the roles
+-- WorkOS assigns, and are never written back to WorkOS. `source_kind` is
+-- 'group' (directory_group_id set) or 'attribute' (attribute_key and
+-- attribute_value set). Each group or attribute value maps to one role. The
+-- group reference is pinned to the mapping's organization by a composite FK.
+-- Directory sync soft-deletes groups, and a mapping to a soft-deleted group
+-- stops matching; the FK cascade only fires when the organization is removed.
+CREATE TABLE IF NOT EXISTS directory_role_mappings (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  source_kind TEXT NOT NULL,
+  directory_group_id UUID,
+  attribute_key TEXT,
+  attribute_value TEXT,
+  role_urn TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT directory_role_mappings_pkey PRIMARY KEY (id),
+  CONSTRAINT directory_role_mappings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT directory_role_mappings_directory_group_fkey FOREIGN KEY (organization_id, directory_group_id) REFERENCES directory_groups (organization_id, id) ON DELETE CASCADE,
+  -- Structural shape only; which kinds exist is validated in application code.
+  -- An attribute rule needs both key and value, and a row never carries both a
+  -- group and an attribute.
+  CONSTRAINT directory_role_mappings_source_columns_check CHECK (
+    (attribute_key IS NULL) = (attribute_value IS NULL)
+    AND NOT (directory_group_id IS NOT NULL AND attribute_key IS NOT NULL)
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_group_key
+ON directory_role_mappings (organization_id, directory_group_id)
+WHERE deleted IS FALSE AND directory_group_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_attribute_key
+ON directory_role_mappings (organization_id, attribute_key, attribute_value)
+WHERE deleted IS FALSE AND attribute_key IS NOT NULL;
 
 -- agent_role_assignments stores which roles each agent principal holds within an org.
 -- It is the agent counterpart to organization_role_assignments. Agents have no WorkOS

@@ -36,6 +36,7 @@ var (
 	AiScanTargetV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_agent_ai_scan_target_event_v1", "Emitted when an organization changes the Shadow AI scan targets its device agents probe for")
 	AIToolDecisionV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_tool_decision_event_v1", "Emitted when an organization decides whether a detected AI tool may reach its MCP gateway")
 	DeviceIntegrationV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_integration_event_v1", "Emitted when changes to device integration configs are made")
+	DirectoryRoleMappingV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_role_mapping_event_v1", "Emitted when changes to directory role mappings are made")
 	DeploymentV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.deployment_event_v1", "Emitted when changes to deployments are made")
 	EnvironmentV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.environment_event_v1", "Emitted when changes to environments are made")
 	GcpIamCredentialV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_iam_credential_event_v1", "Emitted when changes to GCP IAM external credentials are made")
@@ -136,3 +137,7 @@ type AuditLogCreatedPayloadV1 struct {
 	// Omitted when the call carried no OAuth client.
 	ActingClientID string `json:"acting_client_id,omitzero"`
 }
+
+var SlackDirectoryConnectionV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.slack_directory_connection_event_v1", "An organization Slack workspace authorization changed or its directory was synced.")
+
+var SlackIdentityMappingV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.slack_identity_mapping_event_v1", "An administrator confirmed or removed a Slack identity association.")

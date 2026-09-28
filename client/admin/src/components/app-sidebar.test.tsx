@@ -1,12 +1,12 @@
-import { QueryClient } from "@tanstack/react-query";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { aProject, anOrganization } from "@/test/fixtures";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 
-import { organizationQuery } from "@/lib/adminQueries";
 import { GramAdminError } from "@/lib/gramAdminApi";
-import { routeTree } from "@/routeTree.gen";
-import { anOrganization, aProject } from "@/test/fixtures";
+import { QueryClient } from "@tanstack/react-query";
+import { organizationQuery } from "@/lib/adminQueries";
 import { renderRouteTree } from "@/test/harness";
+import { routeTree } from "@/routeTree.gen";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -204,6 +204,7 @@ describe("AppSidebar", () => {
         links: [
           { label: "Support matrix", href: "/integration-coverage" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
+          { label: "Admin MCP", href: "/mcp-setup" },
         ],
       },
     ]);
@@ -243,9 +244,9 @@ describe("AppSidebar", () => {
     expect(
       await screen.findByRole("link", { name: "All organizations" }),
     ).toBeTruthy();
-    // The record nav replaces the global one. Two navs on screen at once was
-    // the rejected shape.
+    // The record nav replaces the global one, but still offers setup.
     expect(hrefs()).not.toContain("/projects");
+    expect(hrefs()).toContain("/mcp-setup");
   });
 
   it("falls back to the global nav when the record fails to load", async () => {

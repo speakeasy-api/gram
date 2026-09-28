@@ -716,6 +716,65 @@ func (q *Queries) ListActiveDirectoryUserAttributesByEmails(ctx context.Context,
 	return items, nil
 }
 
+const listMappableDirectoryAttributeValues = `-- name: ListMappableDirectoryAttributeValues :many
+SELECT attribute_key, attribute_value, member_count
+FROM (
+  SELECT
+    attribute.key::text AS attribute_key,
+    attribute.value::text AS attribute_value,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint AS member_count,
+    COUNT(*) OVER (PARTITION BY attribute.key) AS values_per_key
+  FROM directory_users AS du
+  CROSS JOIN LATERAL jsonb_each_text(
+    CASE jsonb_typeof(du.attributes)
+      WHEN 'object' THEN du.attributes
+      ELSE '{}'::jsonb
+    END
+  ) AS attribute(key, value)
+  WHERE du.organization_id = $1
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND attribute.value IS NOT NULL
+  GROUP BY attribute.key, attribute.value
+) AS attribute_values
+WHERE values_per_key <= $2::bigint
+ORDER BY attribute_key, attribute_value
+`
+
+type ListMappableDirectoryAttributeValuesParams struct {
+	OrganizationID  string
+	MaxValuesPerKey int64
+}
+
+type ListMappableDirectoryAttributeValuesRow struct {
+	AttributeKey   string
+	AttributeValue string
+	MemberCount    int64
+}
+
+// Attribute values an admin can map to a role. Keys with more than
+// @max_values_per_key distinct values are left out: those hold per-person
+// data (emails, employee ids) that is no use as a mapping source.
+func (q *Queries) ListMappableDirectoryAttributeValues(ctx context.Context, arg ListMappableDirectoryAttributeValuesParams) ([]ListMappableDirectoryAttributeValuesRow, error) {
+	rows, err := q.db.Query(ctx, listMappableDirectoryAttributeValues, arg.OrganizationID, arg.MaxValuesPerKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMappableDirectoryAttributeValuesRow
+	for rows.Next() {
+		var i ListMappableDirectoryAttributeValuesRow
+		if err := rows.Scan(&i.AttributeKey, &i.AttributeValue, &i.MemberCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const openDirectoryUserGroupMembership = `-- name: OpenDirectoryUserGroupMembership :one
 INSERT INTO directory_user_group_memberships (
   directory_user_id,
@@ -959,4 +1018,59 @@ func (q *Queries) UpsertDirectoryUser(ctx context.Context, arg UpsertDirectoryUs
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertListedDirectoryGroup = `-- name: UpsertListedDirectoryGroup :execrows
+INSERT INTO directory_groups (
+  organization_id,
+  workos_directory_group_id,
+  name,
+  attributes,
+  workos_created_at,
+  workos_updated_at
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6
+)
+ON CONFLICT (workos_directory_group_id) DO UPDATE SET
+  name = EXCLUDED.name,
+  attributes = EXCLUDED.attributes,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  updated_at = clock_timestamp()
+WHERE directory_groups.organization_id = EXCLUDED.organization_id
+  AND directory_groups.deleted IS FALSE
+  AND directory_groups.workos_deleted IS FALSE
+  AND directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+`
+
+type UpsertListedDirectoryGroupParams struct {
+	OrganizationID         string
+	WorkosDirectoryGroupID string
+	Name                   string
+	Attributes             []byte
+	WorkosCreatedAt        pgtype.Timestamptz
+	WorkosUpdatedAt        pgtype.Timestamptz
+}
+
+// Saves a group read from a live WorkOS listing. Events stay the source of
+// truth: this never restores a group an event deleted, never overwrites a row
+// with an older snapshot, and leaves the event cursor untouched.
+func (q *Queries) UpsertListedDirectoryGroup(ctx context.Context, arg UpsertListedDirectoryGroupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertListedDirectoryGroup,
+		arg.OrganizationID,
+		arg.WorkosDirectoryGroupID,
+		arg.Name,
+		arg.Attributes,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

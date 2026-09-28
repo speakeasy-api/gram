@@ -104,3 +104,85 @@ func (s *SlackClient) Unfurl(ctx context.Context, accessToken string, input Slac
 
 	return nil
 }
+
+type SlackThreadRepliesInput struct {
+	ChannelID string
+	ThreadTS  string
+
+	// Oldest, when set, limits the result to messages after this timestamp.
+	Oldest string
+
+	// Latest, when set, limits the result to messages before this timestamp.
+	Latest string
+
+	// Limit caps the number of messages returned.
+	Limit int
+}
+
+// SlackThreadMessage is the subset of a conversations.replies message that
+// thread-context consumers read.
+type SlackThreadMessage struct {
+	Ts     string `json:"ts"`
+	User   string `json:"user,omitempty"`
+	BotID  string `json:"bot_id,omitempty"`
+	Text   string `json:"text,omitempty"`
+	Hidden bool   `json:"hidden,omitempty"`
+}
+
+type SlackThreadReplies struct {
+	Messages []SlackThreadMessage
+
+	// HasMore reports that messages matching the bounds were left out because
+	// of Limit.
+	HasMore bool
+}
+
+// ThreadReplies reads messages in a thread via conversations.replies. Slack
+// returns the earliest Limit messages inside the bounds, oldest first, and
+// excludes messages at the bound timestamps.
+func (s *SlackClient) ThreadReplies(ctx context.Context, accessToken string, input SlackThreadRepliesInput) (SlackThreadReplies, error) {
+	payload := map[string]any{
+		"channel": input.ChannelID,
+		"ts":      input.ThreadTS,
+		"limit":   input.Limit,
+	}
+	if input.Oldest != "" {
+		payload["oldest"] = input.Oldest
+	}
+	if input.Latest != "" {
+		payload["latest"] = input.Latest
+	}
+
+	body, err := s.api.CallWithToken(ctx, "conversations.replies", payload, accessToken)
+	if err != nil {
+		return SlackThreadReplies{}, fmt.Errorf("read slack thread replies: %w", err)
+	}
+
+	var decoded struct {
+		Messages []SlackThreadMessage `json:"messages"`
+		HasMore  bool                 `json:"has_more"`
+	}
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return SlackThreadReplies{}, fmt.Errorf("decode slack thread replies: %w", err)
+	}
+	return SlackThreadReplies{Messages: decoded.Messages, HasMore: decoded.HasMore}, nil
+}
+
+// SlackBotIdentity is the bot user and bot a bot token acts as.
+type SlackBotIdentity struct {
+	UserID string `json:"user_id"`
+	BotID  string `json:"bot_id"`
+}
+
+// BotIdentity resolves the bot behind a bot token via auth.test.
+func (s *SlackClient) BotIdentity(ctx context.Context, accessToken string) (SlackBotIdentity, error) {
+	body, err := s.api.CallWithToken(ctx, "auth.test", map[string]any{}, accessToken)
+	if err != nil {
+		return SlackBotIdentity{}, fmt.Errorf("slack auth test: %w", err)
+	}
+	var identity SlackBotIdentity
+	if err := json.Unmarshal(body, &identity); err != nil {
+		return SlackBotIdentity{}, fmt.Errorf("decode slack auth test: %w", err)
+	}
+	return identity, nil
+}
