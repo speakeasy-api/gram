@@ -260,7 +260,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	// either way.
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
-		err = fmt.Errorf("load remote_session_client for refresh: %w", err)
+		err = refreshClientLoadError(err)
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, "", trigger, outcome)
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
@@ -296,6 +296,17 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	result.IssuerURL = issuerURL
 	s.metrics.Record(ctx, issuerURL, trigger, result.Outcome)
 	return result, nil
+}
+
+// refreshClientLoadError wraps a failed load of the client and issuer a
+// refresh must use. A missing row means the client or its issuer was deleted
+// while a session still depends on it, which only an administrator repairs;
+// any other failure is the database answering and may clear on retry.
+func refreshClientLoadError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return newTokenRefreshError("the session's client or identity provider no longer exists; check the issuer's configuration", err, refreshRemedyAdministrator)
+	}
+	return fmt.Errorf("load remote_session_client for refresh: %w", err)
 }
 
 // refreshOutcomeForError maps a failed refresh onto the metric outcome set.
@@ -459,7 +470,7 @@ func (s *RefreshService) refresh(
 	// a client secret or token endpoint rotated meanwhile must reach the POST.
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
-		return zero, nil, nil, fmt.Errorf("load remote_session_client for refresh: %w", err)
+		return zero, nil, nil, refreshClientLoadError(err)
 	}
 
 	updated, tok, refreshErr := s.refreshSessionTokens(ctx, q, client, sess, resource)

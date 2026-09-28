@@ -732,6 +732,9 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// Attachments may be revoked between consent and code exchange.
 		// Recheck before persisting an agent session or issuing its tokens.
 		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); cerr != nil {
+			if errors.Is(cerr, remotesessions.ErrRemoteSessionUnavailable) {
+				return oops.E(oops.CodeUnavailable, cerr, "%s", remoteSessionUnavailableMessage).LogWarn(ctx, logger)
+			}
 			if !errors.Is(cerr, remotesessions.ErrNoValidToken) {
 				return oops.E(oops.CodeUnavailable, cerr, "check agent connections").LogError(ctx, logger)
 			}
@@ -1004,6 +1007,13 @@ func (s *Service) rotateRefreshToken(
 			admittedAgentSessionID = refreshSession.ID
 		}
 	}
+	if lookupErr == nil && refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindUser &&
+		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
+		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) &&
+		s.userRefreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn) {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required")
+		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, remoteSessionReconnectDescription)
+	}
 
 	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{
 		IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: "",
@@ -1202,6 +1212,34 @@ func (s *Service) rotateRefreshToken(
 	}
 
 	return published, writeTokenSuccess(ctx, w, logger, minted.Body)
+}
+
+// userRefreshNeedsUpstreamReconnect reports whether a user's refresh must be
+// refused because a required upstream remote session can only be repaired by
+// the user reconnecting it. The MCP runtime answers such a session with
+// invalid_token; refreshing into a new access token would only replay the same
+// rejection, while refusing the grant sends the client to reauthorize through
+// the consent page that reconnects the upstream. The refresh token is left
+// unconsumed, so it works again once the upstream is reconnected elsewhere.
+//
+// The check reads stored state only. The runtime has already attempted any
+// upstream refresh before it issued invalid_token. The check recognizes cleared
+// grants, expired credentials, and unreadable stored tokens without holding
+// Gram's own refresh on the upstream's latency.
+// Everything else lets the refresh proceed, because many clients read any
+// failed refresh as a sign-out: a grant that is still renewable, a meta MCP
+// endpoint (which degrades a member without a connection rather than rejecting
+// the session), and a failure to run the check at all.
+func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) bool {
+	if endpoint.MetaMcpServerID.Valid {
+		return false
+	}
+	reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	if err != nil {
+		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
+		return false
+	}
+	return reconnect
 }
 
 func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lockOwner string, logger *slog.Logger) {

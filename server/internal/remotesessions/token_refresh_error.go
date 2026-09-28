@@ -33,7 +33,32 @@ type TokenRefreshError struct {
 	code         string
 	upstreamCode string
 	statusCode   int
+	remedy       refreshRemedy
 }
+
+// refreshRemedy names who can repair a refresh failure that Gram raised
+// without an upstream answer to classify. Failures the upstream token endpoint
+// answered are classified from its status and error code instead, so they
+// leave it unset.
+type refreshRemedy string
+
+const (
+	// refreshRemedyUnset marks a failure classified from the upstream's answer.
+	refreshRemedyUnset refreshRemedy = ""
+
+	// refreshRemedyReconnect marks a stored grant Gram can no longer use. Only
+	// the user re-linking the upstream replaces it.
+	refreshRemedyReconnect refreshRemedy = "reconnect"
+
+	// refreshRemedyAdministrator marks a broken issuer or client
+	// configuration. Re-linking goes through the same configuration, so only
+	// an administrator can repair it.
+	refreshRemedyAdministrator refreshRemedy = "administrator"
+
+	// refreshRemedyRetry marks an attempt that lost to a condition that clears
+	// on its own, such as a concurrent rotation or a tunnel that is reconnecting.
+	refreshRemedyRetry refreshRemedy = "retry"
+)
 
 // Error returns the full detail (the public-safe Reason plus the private cause)
 // for logs and error chains. It is deliberately NOT the public boundary: code
@@ -53,8 +78,8 @@ func (e *TokenRefreshError) Unwrap() error { return e.cause }
 // failure did not come from a recognizable OAuth error body.
 func (e *TokenRefreshError) UpstreamCode() string { return e.upstreamCode }
 
-func newTokenRefreshError(reason string, cause error) *TokenRefreshError {
-	return &TokenRefreshError{Reason: reason, cause: cause, code: "", upstreamCode: "", statusCode: 0}
+func newTokenRefreshError(reason string, cause error, remedy refreshRemedy) *TokenRefreshError {
+	return &TokenRefreshError{Reason: reason, cause: cause, code: "", upstreamCode: "", statusCode: 0, remedy: remedy}
 }
 
 // invalidGrant reports whether the upstream answered with RFC 6749 §5.2
@@ -109,6 +134,7 @@ func newTokenRefreshErrorFromSuccessBody(statusCode int, status string, body []b
 		code:         parsed.Code,
 		upstreamCode: upstreamCode,
 		statusCode:   statusCode,
+		remedy:       refreshRemedyUnset,
 	}, true
 }
 
@@ -133,5 +159,6 @@ func newTokenRefreshErrorFromHTTP(statusCode int, status string, body []byte) *T
 		code:         code,
 		upstreamCode: upstreamCode,
 		statusCode:   statusCode,
+		remedy:       refreshRemedyUnset,
 	}
 }
