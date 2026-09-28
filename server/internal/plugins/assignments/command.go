@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -33,6 +34,8 @@ type Input struct {
 }
 
 type Result struct {
+	// Changed reports whether an origin command mutated the audience.
+	Changed            bool
 	Plugin             pluginsrepo.Plugin
 	Assignments        []pluginsrepo.PluginAssignment
 	PrincipalURNs      []string
@@ -223,7 +226,110 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 	}); err != nil {
 		return Result{}, fmt.Errorf("audit plugin assignments set: %w", err)
 	}
+	// A human replacement may intentionally omit the originating role. Persist
+	// the hint with that edit; a later reconciler merges only the missing origin.
+	managed, err := queries.HasCurrentRolePluginAssociation(ctx, pluginsrepo.HasCurrentRolePluginAssociationParams{PluginID: plugin.ID, ProjectID: plugin.ProjectID, OrganizationID: plugin.OrganizationID})
+	if err != nil {
+		return Result{}, fmt.Errorf("check role plugin association: %w", err)
+	}
+	if managed {
+		if err := hints.Emit(ctx, tx, hints.Hint{OrganizationID: plugin.OrganizationID, PluginID: plugin.ID}); err != nil {
+			return Result{}, err
+		}
+	}
 	return Result{Plugin: plugin, Assignments: created, PrincipalURNs: desired, PreviousPrincipals: current}, nil
+}
+
+// AddOrigin adds exactly one role principal without replacing other assignments.
+// The caller must hold the admission project lock, then the plugin lock returned
+// by Lock, in the same transaction. It must commit the mutation and audit together.
+func AddOrigin(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin pluginsrepo.Plugin, input Input, guard Guard) (Result, error) {
+	return mutateOrigin(ctx, tx, logger, plugin, input, guard, true)
+}
+
+// RemoveOrigin removes exactly one role principal, even if its role was deleted.
+// It has the same caller-owned transaction and lock requirements as AddOrigin.
+func RemoveOrigin(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin pluginsrepo.Plugin, input Input, guard Guard) (Result, error) {
+	return mutateOrigin(ctx, tx, logger, plugin, input, guard, false)
+}
+
+func mutateOrigin(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin pluginsrepo.Plugin, input Input, guard Guard, add bool) (Result, error) {
+	if tx == nil || logger == nil || guard == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.PluginID == uuid.Nil || input.Actor.IsZero() || plugin.ID != input.PluginID || plugin.OrganizationID != input.OrganizationID || plugin.ProjectID != input.ProjectID || plugin.Name == "" || plugin.Slug == "" || plugin.Deleted || len(input.PrincipalURNs) != 1 {
+		return Result{}, ErrInvalid
+	}
+	principal, err := urn.ParsePrincipal(input.PrincipalURNs[0])
+	if err != nil || principal.Type != urn.PrincipalTypeRole {
+		return Result{}, fmt.Errorf("%w: origin must be a role principal", ErrInvalid)
+	}
+	kind, id, ok := strings.Cut(principal.ID, ":")
+	if _, err := uuid.Parse(id); !ok || err != nil || (kind != "organization" && kind != "global") {
+		return Result{}, fmt.Errorf("%w: role principal", ErrInvalid)
+	}
+	origin := principal.String()
+	queries := pluginsrepo.New(tx)
+	params := pluginsrepo.ListPluginAssignmentsParams{PluginID: input.PluginID, OrganizationID: input.OrganizationID, ProjectID: input.ProjectID}
+	existing, err := queries.ListPluginAssignments(ctx, params)
+	if err != nil {
+		return Result{}, fmt.Errorf("list existing plugin assignments: %w", err)
+	}
+	current := make([]string, 0, len(existing))
+	desired := make([]string, 0, len(existing)+1)
+	found := false
+	for _, assignment := range existing {
+		canonical := canonicalPrincipal(assignment.PrincipalUrn)
+		current = append(current, canonical)
+		if assignment.PrincipalUrn == origin {
+			found = true
+			if !add {
+				continue
+			}
+		}
+		desired = append(desired, canonical)
+	}
+	if add && !found {
+		// Validate only the newly added role, never stale unrelated assignments.
+		normalized, err := normalizePrincipal(ctx, tx, input.OrganizationID, origin)
+		if err != nil {
+			return Result{}, err
+		}
+		desired = append(desired, normalized.URN)
+	}
+	if err := guard(ctx, tx, plugin, current, desired); err != nil {
+		return Result{}, err
+	}
+	result := Result{Plugin: plugin, Assignments: existing, PrincipalURNs: desired, PreviousPrincipals: current}
+	if add == found {
+		return result, nil
+	}
+	var affected int64
+	if add {
+		affected, err = queries.AddPluginAssignmentOrigin(ctx, pluginsrepo.AddPluginAssignmentOriginParams{
+			PluginID: input.PluginID, OrganizationID: input.OrganizationID, ProjectID: input.ProjectID, PrincipalUrn: origin,
+		})
+	} else {
+		affected, err = queries.RemovePluginAssignmentOrigin(ctx, pluginsrepo.RemovePluginAssignmentOriginParams{
+			PluginID: input.PluginID, OrganizationID: input.OrganizationID, ProjectID: input.ProjectID, PrincipalUrn: origin,
+		})
+	}
+	if err != nil {
+		return Result{}, fmt.Errorf("mutate plugin assignment origin: %w", err)
+	}
+	if affected != 1 {
+		return Result{}, fmt.Errorf("mutate plugin assignment origin: expected one locked assignment change, got %d", affected)
+	}
+	if err := logger.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{
+		OrganizationID: input.OrganizationID, ProjectID: input.ProjectID,
+		Actor: input.Actor, ActorDisplayName: input.ActorDisplayName, ActorSlug: input.ActorSlug,
+		PluginID: plugin.ID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: desired,
+	}); err != nil {
+		return Result{}, fmt.Errorf("audit plugin assignment origin: %w", err)
+	}
+	result.Assignments, err = queries.ListPluginAssignments(ctx, params)
+	if err != nil {
+		return Result{}, fmt.Errorf("list updated plugin assignments: %w", err)
+	}
+	result.Changed = true
+	return result, nil
 }
 
 type principalKind uint8

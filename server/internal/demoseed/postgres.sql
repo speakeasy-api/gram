@@ -377,6 +377,19 @@ BEGIN
   ON CONFLICT (organization_id) DO UPDATE
     SET preset = EXCLUDED.preset, updated_at = clock_timestamp();
 
+  -- Synthetic, default-off settings: no project or marketplace integration is
+  -- needed. Reset only this tenant, including any settings changed by visitors.
+  -- Associations retain history after projects/plugins disappear. Resolve
+  -- tenant ownership through settings before deleting those ownership rows.
+  DELETE FROM role_plugin_associations AS association
+  USING role_provisioning_settings AS setting
+  WHERE association.role_provisioning_setting_id = setting.id
+    AND setting.organization_id = demo_org;
+  DELETE FROM role_provisioning_settings WHERE organization_id = demo_org;
+  DELETE FROM organization_role_provisioning_settings WHERE organization_id = demo_org;
+  INSERT INTO organization_role_provisioning_settings (organization_id, enabled, project_id, version)
+  VALUES (demo_org, FALSE, NULL, 0);
+
   -- Killswitch aggregates retain canonical MCP server keys in immutable
   -- snapshots. Clear every org-scoped aggregate and replay receipt before the
   -- referenced servers/toolsets, including rows created by local visitors.
@@ -3449,6 +3462,13 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray FROM slack_directory_connections WHERE organization_id = demo_org;
   IF stray <> 2 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 2 Slack workspace connections, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM organization_role_provisioning_settings
+  WHERE organization_id = demo_org AND enabled IS FALSE
+    AND project_id IS NULL AND version = 0;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 default-off role provisioning setting, found %', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',

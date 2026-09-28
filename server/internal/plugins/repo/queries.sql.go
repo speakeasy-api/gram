@@ -95,6 +95,37 @@ func (q *Queries) AddPluginAssignment(ctx context.Context, arg AddPluginAssignme
 	return i, err
 }
 
+const addPluginAssignmentOrigin = `-- name: AddPluginAssignmentOrigin :execrows
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
+SELECT p.id, p.organization_id, $1
+FROM plugins p
+WHERE p.id = $2
+  AND p.organization_id = $3
+  AND p.project_id = $4
+  AND p.deleted IS FALSE
+ON CONFLICT (plugin_id, principal_urn) DO NOTHING
+`
+
+type AddPluginAssignmentOriginParams struct {
+	PrincipalUrn   string
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) AddPluginAssignmentOrigin(ctx context.Context, arg AddPluginAssignmentOriginParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addPluginAssignmentOrigin,
+		arg.PrincipalUrn,
+		arg.PluginID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const addPluginServer = `-- name: AddPluginServer :one
 INSERT INTO plugin_servers (plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order)
 VALUES (
@@ -145,6 +176,31 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const clearRolePluginAutomaticName = `-- name: ClearRolePluginAutomaticName :exec
+UPDATE role_plugin_associations a
+SET last_automatic_name = NULL,
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE a.plugin_id = p.id
+  AND a.project_id = p.project_id
+  AND p.id = $1
+  AND p.organization_id = $2
+  AND p.project_id = $3
+  AND p.deleted IS FALSE
+  AND a.last_automatic_name IS NOT NULL
+`
+
+type ClearRolePluginAutomaticNameParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ClearRolePluginAutomaticName(ctx context.Context, arg ClearRolePluginAutomaticNameParams) error {
+	_, err := q.db.Exec(ctx, clearRolePluginAutomaticName, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	return err
 }
 
 const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
@@ -753,6 +809,29 @@ func (q *Queries) GetProspectiveDefaultPlugin(ctx context.Context, arg GetProspe
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const hasCurrentRolePluginAssociation = `-- name: HasCurrentRolePluginAssociation :one
+SELECT EXISTS (
+ SELECT 1 FROM role_plugin_associations a
+ JOIN role_provisioning_settings s ON s.id = a.role_provisioning_setting_id
+ JOIN plugins p ON p.id = a.plugin_id AND p.project_id = a.project_id
+ WHERE p.id = $1 AND p.project_id = $2 AND p.organization_id = $3
+ AND s.organization_id = p.organization_id AND a.is_current AND a.retired_at IS NULL AND p.deleted IS FALSE
+)::boolean
+`
+
+type HasCurrentRolePluginAssociationParams struct {
+	PluginID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) HasCurrentRolePluginAssociation(ctx context.Context, arg HasCurrentRolePluginAssociationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasCurrentRolePluginAssociation, arg.PluginID, arg.ProjectID, arg.OrganizationID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const hasPluginGithubConnectionForProject = `-- name: HasPluginGithubConnectionForProject :one
@@ -2019,6 +2098,38 @@ type RemoveAllPluginAssignmentsParams struct {
 
 func (q *Queries) RemoveAllPluginAssignments(ctx context.Context, arg RemoveAllPluginAssignmentsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, removeAllPluginAssignments, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const removePluginAssignmentOrigin = `-- name: RemovePluginAssignmentOrigin :execrows
+DELETE FROM plugin_assignments pa
+USING plugins p
+WHERE p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.id = $1
+  AND p.organization_id = $2
+  AND p.project_id = $3
+  AND p.deleted IS FALSE
+  AND pa.principal_urn = $4
+`
+
+type RemovePluginAssignmentOriginParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	PrincipalUrn   string
+}
+
+func (q *Queries) RemovePluginAssignmentOrigin(ctx context.Context, arg RemovePluginAssignmentOriginParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removePluginAssignmentOrigin,
+		arg.PluginID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.PrincipalUrn,
+	)
 	if err != nil {
 		return 0, err
 	}

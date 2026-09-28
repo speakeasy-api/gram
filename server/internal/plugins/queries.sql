@@ -1070,3 +1070,46 @@ WHERE sd.project_id = @project_id
   AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 ORDER BY p.slug ASC, s.name ASC;
+
+-- name: AddPluginAssignmentOrigin :execrows
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
+SELECT p.id, p.organization_id, @principal_urn
+FROM plugins p
+WHERE p.id = @plugin_id
+  AND p.organization_id = @organization_id
+  AND p.project_id = @project_id
+  AND p.deleted IS FALSE
+ON CONFLICT (plugin_id, principal_urn) DO NOTHING;
+
+-- name: RemovePluginAssignmentOrigin :execrows
+DELETE FROM plugin_assignments pa
+USING plugins p
+WHERE p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.id = @plugin_id
+  AND p.organization_id = @organization_id
+  AND p.project_id = @project_id
+  AND p.deleted IS FALSE
+  AND pa.principal_urn = @principal_urn;
+
+-- name: ClearRolePluginAutomaticName :exec
+UPDATE role_plugin_associations a
+SET last_automatic_name = NULL,
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE a.plugin_id = p.id
+  AND a.project_id = p.project_id
+  AND p.id = @plugin_id
+  AND p.organization_id = @organization_id
+  AND p.project_id = @project_id
+  AND p.deleted IS FALSE
+  AND a.last_automatic_name IS NOT NULL;
+
+-- name: HasCurrentRolePluginAssociation :one
+SELECT EXISTS (
+ SELECT 1 FROM role_plugin_associations a
+ JOIN role_provisioning_settings s ON s.id = a.role_provisioning_setting_id
+ JOIN plugins p ON p.id = a.plugin_id AND p.project_id = a.project_id
+ WHERE p.id = @plugin_id AND p.project_id = @project_id AND p.organization_id = @organization_id
+ AND s.organization_id = p.organization_id AND a.is_current AND a.retired_at IS NULL AND p.deleted IS FALSE
+)::boolean;

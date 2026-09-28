@@ -628,16 +628,12 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 
 	txRepo := s.repo.WithTx(tx)
 
-	before, err := txRepo.GetPlugin(ctx, repo.GetPluginParams{
-		ID:             pluginID,
-		OrganizationID: ac.ActiveOrganizationID,
-		ProjectID:      *ac.ProjectID,
-	})
+	before, err := pluginassignments.Lock(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pluginassignments.ErrNotFound) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "load plugin").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lock plugin").LogError(ctx, s.logger)
 	}
 
 	plugin, err := txRepo.UpdatePlugin(ctx, repo.UpdatePluginParams{
@@ -657,6 +653,15 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 			return nil, oops.E(oops.CodeConflict, nil, "a plugin with this slug already exists")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update plugin").LogError(ctx, s.logger)
+	}
+
+	// Only a changed display name opts out of future automatic role renames.
+	if before.Name != plugin.Name {
+		if err := txRepo.ClearRolePluginAutomaticName(ctx, repo.ClearRolePluginAutomaticNameParams{
+			PluginID: plugin.ID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "clear automatic plugin name").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := s.audit.LogPluginUpdate(ctx, tx, audit.LogPluginUpdateEvent{

@@ -872,6 +872,19 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-role-provisioning-requested
+    name: gram-plugins-v1-role-provisioning-requested
+    spec:
+      definition: |
+        edition = "2024";
+        message RoleProvisioningRequested {
+          string org_id = 1;
+          string role_urn = 2;
+          string plugin_id = 3;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analysis
     spec:
@@ -2146,6 +2159,16 @@ pubsub:
     name: gram-plugins-v1-publication-scheduler-dlq
     spec:
       messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-role-provisioning-requested
+    name: gram-plugins-v1-role-provisioning-requested
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-plugins-v1-role-provisioning-requested
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
