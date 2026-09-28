@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
+import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { cn } from "@/lib/utils";
 import { useObservabilityPluginDownload } from "./useObservabilityPluginDownload";
@@ -38,7 +39,7 @@ const CLAUDE_CODE_SETTINGS_DOCS_URL =
   "https://code.claude.com/docs/en/settings";
 
 const CLAUDE_PLUGINS_DOCS_URL =
-  "https://support.claude.com/en/articles/13837440-use-plugins-in-claude";
+  "https://claude.com/docs/plugins/overview#find-and-add-a-plugin";
 
 const CURSOR_DASHBOARD_URL = "https://cursor.com/dashboard";
 
@@ -183,6 +184,10 @@ function ClaudeCodeInstallContent({
             <CodeBlock language="bash" className="bg-background">
               {pluginInstallCommand}
             </CodeBlock>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Review the /plugin panel and confirm the installation scope when
+              prompted. Start a new session and verify the plugin is active.
+            </p>
             {!pluginSlug && (
               <p className="text-muted-foreground mt-2 text-xs">
                 Replace{" "}
@@ -201,9 +206,13 @@ function ClaudeCodeInstallContent({
           Roll out to your team via Managed Settings
         </h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          Push the marketplace to every Claude Code installation in your
-          organization through Claude.ai's Managed Settings — no per-user
-          install command required.
+          On Claude Team or Enterprise, an Owner or Primary Owner can use
+          Claude.ai server-managed settings for eligible signed-in sessions.
+          Endpoint-managed policy files and MDM are a separate mechanism, not
+          restricted to this server-managed plan requirement. Server-managed
+          delivery requires a direct connection to api.anthropic.com;
+          third-party providers and a non-default ANTHROPIC_BASE_URL skip the
+          settings fetch.
         </p>
 
         <InstallSteps
@@ -216,15 +225,9 @@ function ClaudeCodeInstallContent({
                   <ExternalTextLink href="https://claude.ai/">
                     claude.ai
                   </ExternalTextLink>{" "}
-                  as an organization admin, navigate to{" "}
+                  as an Owner or Primary Owner, navigate to{" "}
                   <code className="bg-muted px-1 py-0.5 text-xs">
-                    Organization settings → Claude Code
-                  </code>
-                  , then click{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">Manage</code>{" "}
-                  under{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">
-                    Managed Settings
+                    Admin settings → Claude Code → Managed settings
                   </code>
                   .
                 </>
@@ -239,8 +242,8 @@ function ClaudeCodeInstallContent({
                     settings.json
                   </code>{" "}
                   — this registers the marketplace and enables{" "}
-                  {pluginSlug ? "this specific plugin" : "a plugin"} for every
-                  developer in one step:
+                  {pluginSlug ? "this specific plugin" : "a plugin"} for
+                  eligible signed-in sessions:
                 </>
               ),
               code: managedSettingsJson ?? undefined,
@@ -262,11 +265,12 @@ function ClaudeCodeInstallContent({
                     <code className="bg-muted px-1 py-0.5 text-xs">
                       strictKnownMarketplaces
                     </code>{" "}
-                    instead of{" "}
+                    alongside{" "}
                     <code className="bg-muted px-1 py-0.5 text-xs">
                       extraKnownMarketplaces
                     </code>{" "}
-                    to lock the org to this marketplace and reject all others.
+                    to restrict allowed marketplaces. Keep the registration
+                    entry; an allowlist does not register a marketplace.
                   </span>
                 </p>
               ) : (
@@ -278,11 +282,23 @@ function ClaudeCodeInstallContent({
           ]}
         />
 
+        <p className="text-muted-foreground mt-3 text-sm">
+          Settings are fetched at startup or the hourly polling cycle. Start a
+          new session to activate and verify the plugin; running sessions retain
+          loaded versions until /reload-plugins or the next launch. Treat the
+          token-bearing marketplace URL as a secret. Higher-precedence policy
+          can override user settings; a user install is not enforced governance.
+        </p>
+
         <RelatedLinks
           links={[
             {
+              href: "https://code.claude.com/docs/en/server-managed-settings",
+              label: "Server-managed settings requirements",
+            },
+            {
               href: CLAUDE_CODE_SETTINGS_DOCS_URL,
-              label: "Claude Code settings docs",
+              label: "Claude Code settings and precedence",
             },
           ]}
         />
@@ -313,9 +329,10 @@ function ClaudeCoworkInstallContent({
           Roll out to your organization
         </h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          Cowork admins register the underlying GitHub repository as a plugin
-          source on Claude.ai. Members get the marketplace automatically — no
-          per-user install command.
+          On Team or Enterprise, an Owner or Primary Owner registers the private
+          GitHub repository as an organization marketplace. Set installation
+          preferences to control member rollout; importing alone does not
+          require every plugin.
         </p>
 
         <InstallSteps
@@ -328,13 +345,13 @@ function ClaudeCoworkInstallContent({
                   <ExternalTextLink href="https://claude.ai/">
                     claude.ai
                   </ExternalTextLink>{" "}
-                  as an organization admin and navigate to{" "}
+                  as an Owner or Primary Owner and navigate to{" "}
                   <code className="bg-muted px-1 py-0.5 text-xs">
-                    Organization settings → Plugins
+                    Organization settings → Plugins &amp; skills → Marketplaces
                   </code>
                   , then click{" "}
                   <code className="bg-muted px-1 py-0.5 text-xs">
-                    Add plugin
+                    Add plugins → Sync from GitHub
                   </code>
                   .
                 </>
@@ -344,9 +361,9 @@ function ClaudeCoworkInstallContent({
               title: "Add the GitHub source",
               description: (
                 <>
-                  Select{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">GitHub</code>{" "}
-                  as the source and enter your repo:
+                  Enter your private or internal GitHub repository. The importer
+                  needs repository access; members receiving the organization
+                  plugin do not each need a GitHub invitation:
                 </>
               ),
               code: repoSlug,
@@ -356,6 +373,11 @@ function ClaudeCoworkInstallContent({
               title: "Authorize Claude's GitHub App",
               description:
                 "The Claude GitHub App must be installed on this repository so Cowork can sync from it. If the repo doesn't appear in the picker, install the app and retry.",
+            },
+            {
+              title: "Set installation preferences and verify",
+              description:
+                "Choose Required to pre-install the plugin without allowing members to remove it, or Installed by default to allow opting out. Start a new Cowork session and verify expected components. Required installation does not guarantee hook execution or telemetry delivery. Native Cowork monitoring is a separate Team/Enterprise feature.",
             },
           ]}
         />
@@ -370,9 +392,11 @@ function ClaudeCoworkInstallContent({
           Using a personal Claude account
         </h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          On a Pro or Max plan there is no organization to roll out to, and
-          Cowork can't sync a private GitHub marketplace to a personal account.
-          Install the plugin from a file instead.
+          On Pro or Max, add a personal marketplace (including a private GitHub
+          repository) or upload a plugin ZIP. For a private marketplace, connect
+          GitHub and give the Claude GitHub App repository access when prompted.
+          These are personal installations, not organization-required rollout.
+          The ZIP alternative is shown below.
         </p>
 
         <InstallSteps
@@ -395,10 +419,13 @@ function ClaudeCoworkInstallContent({
                 <>
                   In Claude, open{" "}
                   <code className="bg-muted px-1 py-0.5 text-xs">
-                    Customize → Plugins
+                    Customize → Plugins → Add → Upload plugin
                   </code>
-                  , choose the upload option, and select the ZIP. It doesn't
-                  update on its own, so repeat this after each publish.
+                  , then select the ZIP. For updates, download a fresh ZIP after
+                  publishing and upload the replacement with the same plugin
+                  name. Start a new Cowork session and verify the expected
+                  components; a successful upload does not prove hooks execute.
+                  Marketplace installs update from their source instead.
                 </>
               ),
             },
@@ -411,7 +438,14 @@ function ClaudeCoworkInstallContent({
 
         <RelatedLinks
           links={[
-            { href: CLAUDE_PLUGINS_DOCS_URL, label: "Use plugins in Claude" },
+            {
+              href: CLAUDE_PLUGINS_DOCS_URL,
+              label: "Add a marketplace or ZIP",
+            },
+            {
+              href: "https://claude.com/docs/plugins/platform-support",
+              label: "Plugin component support",
+            },
           ]}
         />
       </div>
@@ -434,16 +468,13 @@ function CursorInstallContent({
   pluginSlug,
 }: Pick<ContentProps, "repoOwner" | "repoName" | "pluginName" | "pluginSlug">) {
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
-  // The download is named after the plugin slug (DownloadPluginPackage in
-  // server/internal/plugins/impl.go). Chained so a missing download never
-  // deletes the installed copy; re-runnable after each publish.
-  const slug = pluginSlug ?? "<plugin-slug>";
-  const localInstallCommand = [
-    `test -f ~/Downloads/${slug}.zip &&`,
-    `rm -rf ~/.cursor/plugins/local/${slug} &&`,
-    `mkdir -p ~/.cursor/plugins/local/${slug} &&`,
-    `unzip -q ~/Downloads/${slug}.zip -d ~/.cursor/plugins/local/${slug}`,
-  ].join("\n");
+  // Generic plugin ZIPs need a manifest, but do not necessarily contain hooks.
+  const localInstallCommand = pluginSlug
+    ? getCursorInstallCommand({
+        pluginName: pluginSlug,
+        archiveName: `${pluginSlug}.zip`,
+      })
+    : undefined;
 
   return (
     <div className="min-w-0 space-y-6">
@@ -477,7 +508,8 @@ function CursorInstallContent({
                 <>
                   Navigate to{" "}
                   <code className="bg-muted px-1 py-0.5 text-xs">
-                    Settings → Plugins → Import
+                    Dashboard → Plugins &amp; MCPs → Team Marketplaces → Add
+                    Marketplace → Import from Repo
                   </code>{" "}
                   and paste the repository URL:
                 </>
@@ -503,9 +535,18 @@ function CursorInstallContent({
           ]}
         />
 
+        <p className="text-muted-foreground mt-3 text-sm">
+          Required prevents uninstalling; Default On allows opting out and
+          Default Off requires members to install. For updates, enable Auto
+          Refresh with the Cursor GitHub App installed on the repository, or
+          click Refresh manually. Verify runtime behavior separately from
+          installation.
+        </p>
+
         <RelatedLinks
           links={[
             { href: CURSOR_DASHBOARD_URL, label: "Open Cursor dashboard" },
+            { href: CURSOR_PLUGINS_DOCS_URL, label: "Team marketplace setup" },
           ]}
         />
       </div>
@@ -535,16 +576,14 @@ function CursorInstallContent({
             },
             {
               title: "Unzip it into Cursor's local plugins folder",
-              description: "Run this in a terminal:",
+              description:
+                "Run in Bash on macOS or Linux with unzip and Python 3 installed. Check the ZIP filename and Downloads location first (your browser may add a suffix). This is not a native PowerShell command; Windows hook runtime compatibility must be verified separately.",
               code: localInstallCommand,
               language: "bash",
               children: !pluginSlug ? (
                 <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
-                  Replace{" "}
-                  <code className="bg-muted px-1 py-0.5 text-xs">
-                    &lt;plugin-slug&gt;
-                  </code>{" "}
-                  with the slug of the plugin you want to install.
+                  Open the Install menu on a specific plugin to generate its
+                  validated installation command.
                 </p>
               ) : undefined,
             },
@@ -556,10 +595,16 @@ function CursorInstallContent({
                   <code className="bg-muted px-1 py-0.5 text-xs">
                     Developer: Reload Window
                   </code>{" "}
-                  and check the plugin appears under Customize. If it doesn't,
-                  turn on Allow Local Plugin Imports in Cursor's settings. Local
-                  plugins don't update on their own, so repeat this after each
-                  publish.
+                  and check expected components in the sidebar's Customize. For
+                  a team-managed account, ask an admin to enable Allow Local
+                  Plugin Imports at Dashboard → Settings → Security &amp;
+                  Identity → Marketplace and Plugins (off by default on
+                  Enterprise). An installed marketplace plugin with the same
+                  name takes precedence over the local copy. For updates,
+                  download a fresh ZIP after publishing, replace it with the
+                  command above, then reload. Rerunning the same ZIP does not
+                  fetch updates. Local copies are user-modifiable, not enforced
+                  organization rollout.
                 </>
               ),
             },

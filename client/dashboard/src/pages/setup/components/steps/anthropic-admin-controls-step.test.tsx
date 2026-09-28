@@ -130,7 +130,7 @@ describe("AnthropicAdminControlsStep", () => {
     expect(screen.getByText("Steps for cursor")).toBeTruthy();
   });
 
-  it("calls out that Cowork reports nothing until its toggle is on", () => {
+  it("calls out that Cowork hook delivery needs runtime verification", () => {
     publishStatus.current = {
       data: {
         connected: true,
@@ -143,9 +143,7 @@ describe("AnthropicAdminControlsStep", () => {
 
     expect(screen.getByText("Turn Cowork on before you chat")).toBeTruthy();
     expect(
-      screen.getByText(
-        /switch the Claude Cowork toggle on, then send a message/,
-      ),
+      screen.getByText(/Start a new Cowork session and run a tool/),
     ).toBeTruthy();
   });
 
