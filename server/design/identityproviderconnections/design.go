@@ -19,7 +19,7 @@ var ChecklistItem = Type("IdentityProviderConnectionChecklistItem", func() {
 	})
 	Attribute("title", String, "Short step title.")
 	Attribute("description", String, "What to do in the console, including any value copied from this connection.")
-	Attribute("details", ArrayOf(String), "Sub-steps, in order. Empty when the description says it all.")
+	Attribute("details", ArrayOf(String), "Supporting lines under the description: ordered sub-steps for the public-key step, otherwise notes or the values to enter. Empty when the description says it all.")
 	Attribute("completed", Boolean, "Whether the last verification observed this step done. Omitted for steps the server cannot observe; the administrator tracks those.")
 })
 

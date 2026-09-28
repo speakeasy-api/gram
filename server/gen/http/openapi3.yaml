@@ -89147,7 +89147,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Sub-steps, in order. Empty when the description says it all.
+                    description: 'Supporting lines under the description: ordered sub-steps for the public-key step, otherwise notes or the values to enter. Empty when the description says it all.'
                 group:
                     type: string
                     description: 'Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).'
