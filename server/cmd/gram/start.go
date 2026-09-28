@@ -1748,7 +1748,7 @@ func newStartCommand() *cli.Command {
 					return fmt.Errorf("registry discovery validator: %w", err)
 				}
 				registry := mcpregistry.New(db, validator)
-				if err := registry.AttachDiscovery(ctx, mux, true, auth.New(logger, db, sessionManager, authzEngine), authzEngine); err != nil {
+				if err := registry.AttachDiscovery(ctx, logger, mux, true, auth.New(logger, db, sessionManager, authzEngine), authzEngine); err != nil {
 					return fmt.Errorf("registry discovery readiness: %w", err)
 				}
 			}

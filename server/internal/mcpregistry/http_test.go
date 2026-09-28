@@ -51,11 +51,11 @@ func TestDiscoveryMountDisabledAndFailClosed(t *testing.T) {
 
 	ctx, s, _ := newTestService(t)
 	m := goahttp.NewMuxer()
-	require.NoError(t, s.AttachDiscovery(ctx, m, false, nil, nil))
+	require.NoError(t, s.AttachDiscovery(ctx, nil, m, false, nil, nil))
 	w := httptest.NewRecorder()
 	m.ServeHTTP(w, httptest.NewRequest("GET", "/v0.1/servers", nil))
 	require.Equal(t, 404, w.Code)
-	require.Error(t, s.AttachDiscovery(ctx, m, true, nil, nil))
+	require.Error(t, s.AttachDiscovery(ctx, nil, m, true, nil, nil))
 	w = httptest.NewRecorder()
 	m.ServeHTTP(w, httptest.NewRequest("GET", "/v0.1/servers", nil))
 	require.Equal(t, 404, w.Code)

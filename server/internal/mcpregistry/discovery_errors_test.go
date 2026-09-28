@@ -1,8 +1,11 @@
 package mcpregistry
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/registry_discovery"
@@ -48,4 +51,19 @@ func TestDiscoveryErrorFormatterSanitizesDecoderErrors(t *testing.T) {
 		require.NoError(t, err)
 		require.JSONEq(t, `{"error":"safe discovery message"}`, string(body))
 	}
+}
+
+func TestDiscoveryUnexpectedErrorLogsCauseWithoutLeaking(t *testing.T) {
+	t.Parallel()
+	var logs bytes.Buffer
+	s := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
+	cause := errors.New("PRIVATE_REPOSITORY_FAILURE")
+	err := s.discoveryError(context.Background(), cause)
+	require.ErrorIs(t, err, cause)
+	require.Contains(t, logs.String(), "PRIVATE_REPOSITORY_FAILURE")
+	shared, ok := errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok)
+	wire, marshalErr := json.Marshal(discoveryErrorFormatter(context.Background(), shared.AsGoa(context.Background())))
+	require.NoError(t, marshalErr)
+	require.NotContains(t, string(wire), "PRIVATE_REPOSITORY_FAILURE")
 }

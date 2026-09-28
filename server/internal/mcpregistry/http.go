@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/url"
 
@@ -24,7 +25,7 @@ import (
 var _ gen.Service = (*Service)(nil)
 
 // AttachDiscovery mounts nothing until both persistence and authorization are ready.
-func (s *Service) AttachDiscovery(ctx context.Context, mux goahttp.Muxer, enabled bool, a *auth.Auth, az *authz.Engine) error {
+func (s *Service) AttachDiscovery(ctx context.Context, logger *slog.Logger, mux goahttp.Muxer, enabled bool, a *auth.Auth, az *authz.Engine) error {
 	if !enabled {
 		return nil
 	}
@@ -34,6 +35,7 @@ func (s *Service) AttachDiscovery(ctx context.Context, mux goahttp.Muxer, enable
 	if err := s.Ready(ctx); err != nil {
 		return err
 	}
+	s.logger = logger
 	s.auth = a
 	s.authz = az
 	endpoints := gen.NewEndpoints(s)
@@ -102,7 +104,7 @@ func (s *Service) authorizeDiscovery(ctx context.Context, updated *string) error
 	return nil
 }
 
-func discoveryError(err error) error {
+func (s *Service) discoveryError(ctx context.Context, err error) error {
 	switch {
 	case err == nil:
 		return nil
@@ -111,7 +113,7 @@ func discoveryError(err error) error {
 	case errors.Is(err, ErrInvalidCursor), errors.Is(err, ErrInvalidListOptions):
 		return &gen.RegistryDiscoveryError{Name: "discovery_bad_request", Message: err.Error()}
 	default:
-		return oops.C(oops.CodeUnexpected)
+		return oops.E(oops.CodeUnexpected, err, "registry discovery failed").LogError(ctx, s.logger)
 	}
 }
 
@@ -139,7 +141,7 @@ func (s *Service) DiscoverServers(ctx context.Context, p *gen.DiscoverServersPay
 	}
 	page, err := s.Discover(ctx, DiscoveryOptions{Search: value(p.Search), Version: value(p.Version), IncludeDeleted: p.IncludeDeleted, Cursor: value(p.Cursor), Limit: p.Limit, UpdatedSince: p.UpdatedSince})
 	if err != nil {
-		return nil, discoveryError(err)
+		return nil, s.discoveryError(ctx, err)
 	}
 	return discoveryResult(page), nil
 }
@@ -150,7 +152,7 @@ func (s *Service) DiscoverVersions(ctx context.Context, p *gen.DiscoverVersionsP
 	}
 	row, err := s.LookupDiscoveryVersion(ctx, p.ServerName, "latest", p.IncludeDeleted)
 	if err != nil {
-		return nil, discoveryError(err)
+		return nil, s.discoveryError(ctx, err)
 	}
 	return discoveryResult(DiscoveryPage{Records: []json.RawMessage{row.Data}, NextCursor: ""}), nil
 }
@@ -161,7 +163,7 @@ func (s *Service) DiscoverVersion(ctx context.Context, p *gen.DiscoverVersionPay
 	}
 	row, err := s.LookupDiscoveryVersion(ctx, p.ServerName, p.Version, p.IncludeDeleted)
 	if err != nil {
-		return nil, discoveryError(err)
+		return nil, s.discoveryError(ctx, err)
 	}
 	return row.Data, nil
 }
