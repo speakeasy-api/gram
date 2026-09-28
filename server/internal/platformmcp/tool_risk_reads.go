@@ -149,6 +149,7 @@ type UpdateRiskExclusionToolOutput struct {
 // Every callback has an exported success type that composition code can
 // construct, while the schemas remain owned by this package.
 type RiskMutationHandlers struct {
+	ChangeAudience  mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
 	RemoveSelf      mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
 	Controls        *RiskMutationControls
 	CreatePolicy    mcp.ToolHandlerFor[map[string]any, CreateRiskPolicyToolOutput]
@@ -159,6 +160,7 @@ type RiskMutationHandlers struct {
 
 func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog, catalogAvailable bool, handlers *RiskMutationHandlers) {
 	registerRemoveSelfFromRiskPolicy(reg, catalogAvailable, handlers)
+	registerChangeRiskPolicyAudience(reg, catalogAvailable, handlers)
 	createPolicySchema := fallbackCreateRiskPolicySchema()
 	updatePolicySchema := fallbackUpdateRiskPolicySchema()
 	createExclusionSchema := fallbackCreateRiskExclusionSchema()
@@ -379,11 +381,7 @@ func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 
 func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	patch := closedObject(map[string]*jsonschema.Schema{
-		"audience": closedObject(map[string]*jsonschema.Schema{
-			"type":           {Type: "string", Enum: []any{"everyone", "targeted"}},
-			"principal_urns": {Type: "array", Items: stringSchema("Exact organization user or role principal URN. Positive grants only.", 1, 0), MaxItems: new(100)},
-			"confirm":        {Type: "boolean", Enum: []any{true}},
-		}, []string{"type", "principal_urns", "confirm"}),
+		"audience":                 riskPolicyAudienceReplacementSchema(),
 		"name":                     stringSchema("Policy name.", 1, 100),
 		"enabled":                  {Type: "boolean"},
 		"action":                   catalogEnumSchema(catalog, catalog.Actions),

@@ -17,7 +17,7 @@ func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
 	require.Equal(t, workflow, files["agent-plugins/speakeasy/"+path])
 	text := string(workflow)
 	cursor := 0
-	for _, name := range []string{"list_projects", "list_risk_policies", "get_risk_policy", "remove_self_from_risk_policy", "get_risk_policy", "remove_self_from_risk_policy", "update_risk_policy", "get_risk_policy"} {
+	for _, name := range []string{"list_projects", "list_risk_policies", "get_risk_policy", "remove_self_from_risk_policy", "get_risk_policy", "remove_self_from_risk_policy", "change_risk_policy_audience", "get_risk_policy", "change_risk_policy_audience", "update_risk_policy", "get_risk_policy"} {
 		token := "`" + name + "`"
 		index := strings.Index(text[cursor:], token)
 		require.NotEqual(t, -1, index, "%s must appear in workflow order", name)
@@ -33,6 +33,12 @@ func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
 		"stable `idempotency_key`",
 		"`confirm: true`",
 		"positive user/role grants",
+		"`add_principals`",
+		"`remove_principals`",
+		"Native directory groups are not supported",
+		"Removing a direct user grant does not remove role-derived coverage",
+		"Never use an audience delta to bypass a self-removal refusal",
+		"atomically preserves all audience entries outside the delta",
 		"historical commit, not current state",
 	} {
 		require.Contains(t, text, guardrail)

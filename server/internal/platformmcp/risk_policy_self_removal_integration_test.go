@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -126,7 +127,11 @@ func TestSelfRemovalRiskPolicyTransaction(t *testing.T) {
 		hidden, err := reads.GetPolicy(assistantCtx, assistant, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: id})
 		require.NoError(t, err)
 		require.Nil(t, hidden.Policy.Audience)
-		args["policy_id"] = uuid.NewString()
+		otherProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Other project", Slug: "other-" + uuid.NewString()[:8], OrganizationID: principal.OrganizationID})
+		require.NoError(t, err)
+		seedRegistrationEligibleCohort(t, ctx, conn, otherProject.ID)
+		// Select an existing policy through another real project, not an unknown ID.
+		args["project_slug"] = otherProject.Slug
 		_, _, err = handlers.RemoveSelf(ctx, nil, args)
 		requireRiskMutationRefusal(t, err, "not_found")
 		require.Equal(t, version, read(t, id).Policy.Version)

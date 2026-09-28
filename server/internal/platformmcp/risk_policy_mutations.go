@@ -129,6 +129,7 @@ func newRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, p
 		CreatePolicy:    policyService.createPolicyTool,
 		UpdatePolicy:    policyService.updatePolicyTool,
 		RemoveSelf:      policyService.removeSelfFromPolicyTool,
+		ChangeAudience:  policyService.changePolicyAudienceTool,
 		CreateExclusion: nil,
 		UpdateExclusion: nil,
 	}
@@ -210,17 +211,20 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 }
 
 func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp.CallToolRequest, raw map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
-	return s.mutatePolicyTool(ctx, raw, false)
+	return s.mutatePolicyTool(ctx, raw, operationUpdateRiskPolicy)
 }
 
-func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw map[string]any, removeSelf bool) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
+func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw map[string]any, operation string) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
 	var zero UpdateRiskPolicyToolOutput
 	principal, err := principalFromToolContext(ctx)
 	if err != nil {
 		return nil, zero, err
 	}
 	var input updateRiskPolicyInput
-	operation := operationUpdateRiskPolicy
+	removeSelf := operation == operationRemoveSelfFromRiskPolicy
+	changeAudience := operation == operationChangeRiskPolicyAudience
+	var delta changeRiskPolicyAudienceInput
+	var deltaPrincipals []urn.Principal
 	if removeSelf {
 		if !externalRiskAudiencePrincipal(principal) {
 			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalRefusal("Self removal requires the requesting user's external OAuth connection."))
@@ -233,7 +237,18 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalRefusal("Confirm removal of your own explicit user grant before retrying."))
 		}
 		input = updateRiskPolicyInput{ProjectSlug: selfInput.ProjectSlug, PolicyID: selfInput.PolicyID, ExpectedVersion: selfInput.ExpectedVersion, IdempotencyKey: selfInput.IdempotencyKey}
-		operation = operationRemoveSelfFromRiskPolicy
+	} else if changeAudience {
+		if !externalRiskAudiencePrincipal(principal) {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalRefusal("Audience changes require an external administrator OAuth connection."))
+		}
+		if err := decodeRiskMutationInput(raw, &delta); err != nil {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+		}
+		deltaPrincipals, err = validateRiskPolicyAudienceDelta(delta)
+		if err != nil {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+		}
+		input = updateRiskPolicyInput{ProjectSlug: delta.ProjectSlug, PolicyID: delta.PolicyID, ExpectedVersion: delta.ExpectedVersion, IdempotencyKey: delta.IdempotencyKey}
 	} else if err := decodeRiskMutationInput(raw, &input); err != nil {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
 	}
@@ -246,11 +261,14 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
 	}
 	policyID, err := uuid.Parse(input.PolicyID)
-	if err != nil || input.ExpectedVersion == "" || (!removeSelf && len(input.Patch) == 0) {
+	if err != nil || input.ExpectedVersion == "" || (!removeSelf && !changeAudience && len(input.Patch) == 0) {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](invalidRiskPolicyRequest())
 	}
 	normalizedPatch := map[string]any{"confirmed": true}
-	if !removeSelf {
+	if changeAudience {
+		normalizedPatch["add_principals"] = canonicalStrings(delta.AddPrincipals)
+		normalizedPatch["remove_principals"] = canonicalStrings(delta.RemovePrincipals)
+	} else if !removeSelf {
 		normalizedPatch, err = normalizeRiskPolicyPatchForReceipt(input.Patch)
 		if err != nil {
 			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
@@ -301,6 +319,9 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 		if err != nil {
 			return nil, err
 		}
+		if changeAudience {
+			mutation.AudienceDelta = &policycore.AudienceDelta{Add: deltaPrincipals[:len(delta.AddPrincipals)], Remove: deltaPrincipals[len(delta.AddPrincipals):]}
+		}
 		mutation.ValidateLocked = func(ctx context.Context, tx pgx.Tx, locked policycore.Policy) (policycore.Policy, error) {
 			state, err := riskPolicyVersionState(ctx, tx, locked)
 			if err != nil {
@@ -314,7 +335,13 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 					return policycore.Policy{}, err
 				}
 			}
-			for _, target := range mutation.AudiencePrincipals {
+			if changeAudience {
+				if err := validateRiskPolicyAudienceDeltaTarget(locked.AudienceType, locked.AudiencePrincipalURNs, delta); err != nil {
+					return policycore.Policy{}, err
+				}
+			}
+			// Include removals; validating only the final audience misses them.
+			for _, target := range append(deltaPrincipals, mutation.AudiencePrincipals...) {
 				if err := authz.ValidatePrincipal(ctx, tx, principal.OrganizationID, target); err != nil {
 					if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
 						return policycore.Policy{}, invalidRiskPolicyRequest()
@@ -328,6 +355,12 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 		if err != nil {
 			return nil, mapRiskPolicyMutationError(err)
 		}
+		// Generic writers can insert an unrelated grant without taking policy
+		// locks. Preserve it, but roll back if the post-delta read exceeds the
+		// bounded audience contract. Later writes still require a fresh read.
+		if changeAudience && (len(result.AudiencePrincipalURNs) == 0 || len(result.AudiencePrincipalURNs) > 100) {
+			return nil, riskMutationConflict("The policy audience changed beyond the supported bounds. No policy was changed. Read it again before retrying.")
+		}
 		committed = &result
 		receiptResult, err := s.updateReceiptResult(ctx, tx, project, result.Row, result.AudiencePrincipalURNs)
 		if err != nil {
@@ -335,6 +368,9 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 		}
 		if removeSelf {
 			return RemoveSelfFromRiskPolicyReceiptResult{UpdateRiskPolicyReceiptResult: receiptResult}, nil
+		}
+		if changeAudience {
+			return ChangeRiskPolicyAudienceReceiptResult{UpdateRiskPolicyReceiptResult: receiptResult}, nil
 		}
 		return receiptResult, nil
 	})

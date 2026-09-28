@@ -321,7 +321,7 @@ func TestUnavailableRiskToolRegistrationSurvivesCatalogFailure(t *testing.T) {
 		})
 	})
 	require.Equal(t, 1, buildCalls)
-	require.Len(t, reg.Descriptors(), 8)
+	require.Equal(t, 9, len(reg.Descriptors()))
 
 	create := descriptorByName(t, reg, "create_risk_policy")
 	_, err := create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`))
@@ -362,12 +362,12 @@ func TestRiskToolRegistrationAndStableStubs(t *testing.T) {
 
 	wanted := map[string]ProjectScope{
 		"list_risk_policies": ProjectScopeDefaultable, "get_risk_policy": ProjectScopeDefaultable, "list_risk_exclusions": ProjectScopeDefaultable, "get_risk_analysis_status": ProjectScopeDefaultable,
-		"remove_self_from_risk_policy": ProjectScopeExplicit, "create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
+		"change_risk_policy_audience": ProjectScopeExplicit, "remove_self_from_risk_policy": ProjectScopeExplicit, "create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
 	}
 	require.Len(t, reg.Descriptors(), len(wanted))
 	for _, descriptor := range reg.Descriptors() {
 		require.Equal(t, wanted[descriptor.Name], descriptor.Meta.ProjectScope, descriptor.Name)
-		if descriptor.Name == operationRemoveSelfFromRiskPolicy {
+		if descriptor.Name == operationRemoveSelfFromRiskPolicy || descriptor.Name == "change_risk_policy_audience" {
 			require.Equal(t, []Audience{AudienceExternal}, descriptor.Meta.Audiences)
 		} else {
 			require.ElementsMatch(t, bothAudiences, descriptor.Meta.Audiences, descriptor.Name)

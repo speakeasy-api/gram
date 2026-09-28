@@ -15,6 +15,7 @@ import (
 const (
 	operationCreateRiskPolicy         = "create_risk_policy"
 	operationUpdateRiskPolicy         = "update_risk_policy"
+	operationChangeRiskPolicyAudience = "change_risk_policy_audience"
 	operationRemoveSelfFromRiskPolicy = "remove_self_from_risk_policy"
 	operationCreateRiskExclusion      = "create_risk_exclusion"
 	operationUpdateRiskExclusion      = "update_risk_exclusion"

@@ -79,6 +79,12 @@ func (UpdateRiskPolicyReceiptResult) riskMutationReceiptOperation() string {
 	return operationUpdateRiskPolicy
 }
 
+type ChangeRiskPolicyAudienceReceiptResult struct{ UpdateRiskPolicyReceiptResult }
+
+func (ChangeRiskPolicyAudienceReceiptResult) riskMutationReceiptOperation() string {
+	return operationChangeRiskPolicyAudience
+}
+
 type RemoveSelfFromRiskPolicyReceiptResult struct{ UpdateRiskPolicyReceiptResult }
 
 func (RemoveSelfFromRiskPolicyReceiptResult) riskMutationReceiptOperation() string {
@@ -175,7 +181,7 @@ func riskMutationInputHash(operation string, normalized any) (string, error) {
 
 func riskMutationOperation(operation string) bool {
 	switch operation {
-	case operationRemoveSelfFromRiskPolicy, operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion:
+	case operationChangeRiskPolicyAudience, operationRemoveSelfFromRiskPolicy, operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion:
 		return true
 	default:
 		return false
@@ -199,8 +205,12 @@ func encodeRiskMutationResult(operation string, result RiskMutationReceiptResult
 
 func normalizedRiskMutationReceiptResult(result RiskMutationReceiptResult) (RiskMutationReceiptResult, bool) {
 	switch typed := result.(type) {
-	case RemoveSelfFromRiskPolicyReceiptResult, CreateRiskPolicyReceiptResult, UpdateRiskPolicyReceiptResult, CreateRiskExclusionReceiptResult, UpdateRiskExclusionReceiptResult:
+	case ChangeRiskPolicyAudienceReceiptResult, RemoveSelfFromRiskPolicyReceiptResult, CreateRiskPolicyReceiptResult, UpdateRiskPolicyReceiptResult, CreateRiskExclusionReceiptResult, UpdateRiskExclusionReceiptResult:
 		return typed, true
+	case *ChangeRiskPolicyAudienceReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
 	case *RemoveSelfFromRiskPolicyReceiptResult:
 		if typed != nil {
 			return *typed, true
@@ -227,6 +237,8 @@ func normalizedRiskMutationReceiptResult(result RiskMutationReceiptResult) (Risk
 
 func validRiskMutationReceiptResult(result RiskMutationReceiptResult) bool {
 	switch typed := result.(type) {
+	case ChangeRiskPolicyAudienceReceiptResult:
+		return validRiskMutationReceiptResult(typed.UpdateRiskPolicyReceiptResult)
 	case RemoveSelfFromRiskPolicyReceiptResult:
 		return validRiskMutationReceiptResult(typed.UpdateRiskPolicyReceiptResult)
 	case CreateRiskPolicyReceiptResult:

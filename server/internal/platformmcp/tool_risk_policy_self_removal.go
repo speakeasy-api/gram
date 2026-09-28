@@ -41,7 +41,7 @@ func registerRemoveSelfFromRiskPolicy(reg *Registrar, catalogAvailable bool, han
 }
 
 func (s *riskPolicyMutationService) removeSelfFromPolicyTool(ctx context.Context, _ *mcp.CallToolRequest, raw map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
-	return s.mutatePolicyTool(ctx, raw, true)
+	return s.mutatePolicyTool(ctx, raw, operationRemoveSelfFromRiskPolicy)
 }
 
 func selfRemovalRefusal(message string) error {
