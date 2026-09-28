@@ -3,6 +3,7 @@ package mv
 import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -12,17 +13,19 @@ import (
 // response type.
 func BuildMetaMcpServerView(server repo.MetaMcpServer) *types.MetaMcpServer {
 	return &types.MetaMcpServer{
-		ID:                  server.ID.String(),
-		OrganizationID:      server.OrganizationID,
-		ProjectID:           server.ProjectID.String(),
-		Name:                server.Name,
-		UserSessionIssuerID: conv.FromNullableUUID(server.UserSessionIssuerID),
-		Visibility:          types.MetaMcpServerVisibility(server.Visibility),
-		NetworkAccessMode:   types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
-		Instructions:        conv.FromPGText[string](server.Instructions),
-		CreatedAt:           conv.FromPGTimestamptz(server.CreatedAt),
-		UpdatedAt:           conv.FromPGTimestamptz(server.UpdatedAt),
-		MemberCount:         nil,
+		ID:                    server.ID.String(),
+		OrganizationID:        server.OrganizationID,
+		ProjectID:             server.ProjectID.String(),
+		Name:                  server.Name,
+		UserSessionIssuerID:   conv.FromNullableUUID(server.UserSessionIssuerID),
+		Visibility:            types.MetaMcpServerVisibility(server.Visibility),
+		NetworkAccessMode:     types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
+		Instructions:          conv.FromPGText[string](server.Instructions),
+		DiscoveryModesEnabled: nil,
+		DiscoveryMode:         string(metamcp.ResolveDiscoveryMode(server.DiscoveryMode.String)),
+		CreatedAt:             conv.FromPGTimestamptz(server.CreatedAt),
+		UpdatedAt:             conv.FromPGTimestamptz(server.UpdatedAt),
+		MemberCount:           nil,
 	}
 }
 

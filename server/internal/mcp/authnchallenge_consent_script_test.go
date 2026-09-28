@@ -58,3 +58,44 @@ for (const skew of [-60000, 0, 60000]) {
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "consent script polling: %s", out)
 }
+
+func TestConsentScriptPreservesDiscoveryChoice(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, node, "-e", `
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const source = require('node:fs').readFileSync(0, 'utf8');
+const saved = new Map();
+function render(state) {
+  const select = { value: '', addEventListener: (name, fn) => { select[name] = fn; } };
+  const form = { elements: { state: { value: state } }, querySelector: () => null, addEventListener() {} };
+  vm.runInNewContext(source, {
+    sessionStorage: { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) },
+    document: { body: { hasAttribute: () => false }, querySelectorAll: () => [], querySelector: selector => {
+      if (selector === 'form[data-approve-form]') return form;
+      if (selector === 'select[name="discovery_mode"]') return select;
+      return null;
+    } },
+    window: {},
+  });
+  return select;
+}
+const first = render('challenge-one');
+assert.equal(first.value, '');
+first.value = 'direct'; first.change();
+assert.equal(render('challenge-one').value, 'direct');
+assert.equal(render('challenge-two').value, '');
+const restored = render('challenge-one');
+restored.value = ''; restored.change();
+assert.equal(render('challenge-one').value, '');
+saved.set('gram-consent-discovery-v1:challenge-one', 'unknown');
+assert.equal(render('challenge-one').value, '');
+`)
+	cmd.Stdin = bytes.NewReader(consentScriptData)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "consent discovery persistence: %s", out)
+}

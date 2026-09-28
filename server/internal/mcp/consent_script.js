@@ -70,6 +70,31 @@
     var connectionRevision = 0;
     var activeConnectionAgent = "";
     var savedAgentKey = "gram-consent-agent-v1:" + form.elements.state.value;
+    var discoverySelect = document.querySelector(
+      'select[name="discovery_mode"]',
+    );
+    var discoveryKey = "gram-consent-discovery-v1:" + form.elements.state.value;
+    if (discoverySelect) {
+      try {
+        var savedMode = sessionStorage.getItem(discoveryKey);
+        if (
+          savedMode === "" ||
+          savedMode === "direct" ||
+          savedMode === "progressive"
+        ) {
+          discoverySelect.value = savedMode;
+        }
+      } catch (_) {
+        /* Storage can be unavailable. */
+      }
+      discoverySelect.addEventListener("change", function () {
+        try {
+          sessionStorage.setItem(discoveryKey, discoverySelect.value);
+        } catch (_) {
+          /* The current form still submits the selected mode. */
+        }
+      });
+    }
     // This is UI state only. The server reauthorizes every selection and write.
     // sessionStorage survives a full-page upstream OAuth round trip in this tab.
     try {
@@ -346,6 +371,12 @@
         Array.prototype.forEach.call(selfOnlySections, function (section) {
           section.hidden = authorizingAgent;
         });
+        var discoveryMode = document.querySelector(
+          'select[name="discovery_mode"]',
+        );
+        if (discoveryMode) {
+          discoveryMode.disabled = authorizingAgent;
+        }
         if (subjectDisplay && selected) {
           subjectDisplay.textContent = selectedDisplay;
         }

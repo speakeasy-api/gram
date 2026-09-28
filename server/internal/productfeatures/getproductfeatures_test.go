@@ -88,3 +88,24 @@ func TestProductFeaturesService_SkillCaptureMetadataOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.SkillCaptureMetadataOnly)
 }
+
+func TestGatewayDiscoveryFeatureRequiresStaffAndInvalidatesCachedState(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	request := &gen.GetProductFeaturesPayload{OrganizationID: requestedOrganizationID(ctx)}
+	before, err := ti.service.GetProductFeatures(ctx, request)
+	require.NoError(t, err)
+	require.False(t, before.GatewayDiscoveryModesEnabled)
+	update := &gen.SetProductFeaturePayload{OrganizationID: request.OrganizationID, FeatureName: gen.ProductFeatureName(productfeatures.FeatureGatewayDiscoveryModes), Enabled: true}
+	require.Error(t, ti.service.SetProductFeature(ctx, update), "organization admins cannot self-grant the capability")
+	staffCtx := withPlatformAdmin(t, ctx)
+	require.NoError(t, ti.service.SetProductFeature(staffCtx, update))
+	enabled, err := ti.service.GetProductFeatures(ctx, request)
+	require.NoError(t, err)
+	require.True(t, enabled.GatewayDiscoveryModesEnabled)
+	update.Enabled = false
+	require.NoError(t, ti.service.SetProductFeature(staffCtx, update))
+	disabled, err := ti.service.GetProductFeatures(ctx, request)
+	require.NoError(t, err)
+	require.False(t, disabled.GatewayDiscoveryModesEnabled)
+}

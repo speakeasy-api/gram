@@ -2091,17 +2091,19 @@ func EncodeRemoveMetaMcpMemberError(encoder func(context.Context, http.ResponseW
 // *MetaMcpServerResponseBody from a value of type *types.MetaMcpServer.
 func marshalTypesMetaMcpServerToMetaMcpServerResponseBody(v *types.MetaMcpServer) *MetaMcpServerResponseBody {
 	res := &MetaMcpServerResponseBody{
-		ID:                  v.ID,
-		OrganizationID:      v.OrganizationID,
-		ProjectID:           v.ProjectID,
-		Name:                v.Name,
-		UserSessionIssuerID: v.UserSessionIssuerID,
-		Visibility:          string(v.Visibility),
-		NetworkAccessMode:   string(v.NetworkAccessMode),
-		Instructions:        v.Instructions,
-		CreatedAt:           v.CreatedAt,
-		UpdatedAt:           v.UpdatedAt,
-		MemberCount:         v.MemberCount,
+		ID:                    v.ID,
+		OrganizationID:        v.OrganizationID,
+		ProjectID:             v.ProjectID,
+		Name:                  v.Name,
+		UserSessionIssuerID:   v.UserSessionIssuerID,
+		Visibility:            string(v.Visibility),
+		NetworkAccessMode:     string(v.NetworkAccessMode),
+		Instructions:          v.Instructions,
+		DiscoveryModesEnabled: v.DiscoveryModesEnabled,
+		DiscoveryMode:         v.DiscoveryMode,
+		CreatedAt:             v.CreatedAt,
+		UpdatedAt:             v.UpdatedAt,
+		MemberCount:           v.MemberCount,
 	}
 
 	return res

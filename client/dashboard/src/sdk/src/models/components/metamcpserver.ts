@@ -10,6 +10,18 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * The effective default discovery mode. Unconfigured connections follow this value.
+ */
+export const DiscoveryMode = {
+  Progressive: "progressive",
+  Direct: "direct",
+} as const;
+/**
+ * The effective default discovery mode. Unconfigured connections follow this value.
+ */
+export type DiscoveryMode = ClosedEnum<typeof DiscoveryMode>;
+
+/**
  * The network surfaces through which a Gram-hosted MCP server may be reached.
  */
 export const MetaMcpServerNetworkAccessMode = {
@@ -46,6 +58,14 @@ export type MetaMcpServer = {
    * When the meta MCP server was created
    */
   createdAt: Date;
+  /**
+   * The effective default discovery mode. Unconfigured connections follow this value.
+   */
+  discoveryMode: DiscoveryMode;
+  /**
+   * Whether the organization allows new discovery choices. Read through the gateway without requiring organization feature-management access.
+   */
+  discoveryModesEnabled?: boolean | undefined;
   /**
    * The ID of the meta MCP server
    */
@@ -89,6 +109,10 @@ export type MetaMcpServer = {
 };
 
 /** @internal */
+export const DiscoveryMode$inboundSchema: z.ZodMiniEnum<typeof DiscoveryMode> =
+  z.enum(DiscoveryMode);
+
+/** @internal */
 export const MetaMcpServerNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
   typeof MetaMcpServerNetworkAccessMode
 > = z.enum(MetaMcpServerNetworkAccessMode);
@@ -108,6 +132,8 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    discovery_mode: DiscoveryMode$inboundSchema,
+    discovery_modes_enabled: z.optional(z.boolean()),
     id: z.string(),
     instructions: z.optional(z.string()),
     member_count: z.optional(z.int()),
@@ -125,6 +151,8 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "discovery_mode": "discoveryMode",
+      "discovery_modes_enabled": "discoveryModesEnabled",
       "member_count": "memberCount",
       "network_access_mode": "networkAccessMode",
       "organization_id": "organizationId",

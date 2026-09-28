@@ -193,6 +193,9 @@ type UpdateMetaMcpServerPayload struct {
 	// Limited to 10000 Unicode characters after removing NUL characters and
 	// trimming whitespace.
 	Instructions *string
+	// The default discovery mode for connections without an explicit override.
+	// Omit to preserve the stored default.
+	DiscoveryMode *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

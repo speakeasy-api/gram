@@ -41,6 +41,13 @@ type ProductFeatureDecision =
   | { kind: "omitted"; where: string };
 
 const PRODUCT_FEATURES = {
+  gateway_discovery_modes: {
+    kind: "toggle",
+    enabledKey: "gatewayDiscoveryModesEnabled",
+    label: "Gateway discovery modes",
+    description:
+      "Allows gateway owners and connecting users to choose Direct or Progressive discovery. Disabling this preserves saved choices.",
+  },
   ai_platform_push_integrations: {
     kind: "toggle",
     enabledKey: "aiPlatformPushIntegrationsEnabled",
