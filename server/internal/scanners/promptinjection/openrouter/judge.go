@@ -483,28 +483,28 @@ func systemMessage(prompt string) or.ChatMessages {
 }
 
 func prepareJudgePayload(msg judgemessage.Message, trajectory judgemessage.Trajectory) ([]byte, []string) {
-	rendered := judgemessage.RenderPayload(msg)
-	countContent := judgemessage.STokenContent(rendered)
-	var trajectoryPayload *judgemessage.TrajectoryPayload
+	payload := judgePayload{Message: judgemessage.RenderPayload(msg), Trajectory: nil}
 	if trajectory.HasContent() {
-		renderedTrajectory := judgemessage.RenderTrajectory(trajectory)
-		trajectoryPayload = &renderedTrajectory
-		for _, value := range []string{
-			renderedTrajectory.PriorUserRequest,
-			renderedTrajectory.PriorUserRequestDecoded,
-			renderedTrajectory.RecentUntrustedContent,
-			renderedTrajectory.RecentUntrustedContentDecoded,
-		} {
-			if value != "" {
-				countContent = append(countContent, value)
-			}
-		}
+		rendered := judgemessage.RenderTrajectory(trajectory)
+		payload.Trajectory = &rendered
 	}
-	payload, err := json.Marshal(judgePayload{Message: rendered, Trajectory: trajectoryPayload})
+	prepared, err := json.Marshal(payload)
 	if err != nil {
 		return []byte(msg.Body), []string{msg.Body}
 	}
-	return payload, countContent
+	return prepared, judgePayloadContent(payload)
+}
+
+func judgePayloadContent(payload judgePayload) []string {
+	content := judgemessage.STokenContent(payload.Message)
+	if t := payload.Trajectory; t != nil {
+		for _, value := range []string{t.PriorUserRequest, t.PriorUserRequestDecoded, t.RecentUntrustedContent, t.RecentUntrustedContentDecoded} {
+			if value != "" {
+				content = append(content, value)
+			}
+		}
+	}
+	return content
 }
 
 func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload []byte, userID string) (Verdict, error) {

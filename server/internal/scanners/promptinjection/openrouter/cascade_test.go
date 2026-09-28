@@ -163,3 +163,40 @@ func TestCascadeOversizedWindowDoesNotCallOpus(t *testing.T) {
 	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
 	require.Zero(t, client.calls.Load())
 }
+
+func TestCascadeTruncatesJevEvidenceButPreservesOpusEvidence(t *testing.T) {
+	t.Parallel()
+	cascade, client := testCascade(t, PrefilterThreshold, safeVerdictJSON)
+	msg := judgemessage.New(message.ToolResponse, "search", "HEAD"+strings.Repeat("界<&", 6000)+"TAIL")
+	trajectory := judgemessage.Trajectory{PriorUserRequest: "review the result", RecentUntrustedContent: ""}
+	jev := &mockPrefilter{}
+	probabilities := make(map[string]float64)
+	for id := range PrefilterQuestions() {
+		probabilities[id] = PrefilterThreshold
+	}
+	var seen judgePayload
+	jev.On("Evaluate", mock.Anything, "org-a", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			prepared, ok := args.Get(2).(json.RawMessage)
+			require.True(t, ok)
+			questionJSON, err := json.Marshal(args.Get(3))
+			require.NoError(t, err)
+			require.LessOrEqual(t, len(prepared)+len(questionJSON), maxPrefilterInputBytes)
+			require.NoError(t, json.Unmarshal(prepared, &seen))
+		}).Return(typesafe.Result{Probabilities: probabilities, Model: typesafe.Model, InputTokens: 10, OutputTokens: 1, CostUSD: 0}, nil).Once()
+	cascade.jev = jev
+	request := req("target")
+	request.Messages = []judgemessage.Message{msg}
+	request.Trajectories = []judgemessage.Trajectory{trajectory}
+	results, err := cascade.Classify(t.Context(), request)
+	require.NoError(t, err)
+	require.True(t, results[0].Completed)
+	require.EqualValues(t, 1, client.calls.Load())
+	var confirmation struct {
+		Window judgemessage.Window `json:"window"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(client.lastPrompt()), &confirmation))
+	require.Equal(t, judgemessage.RenderPayload(msg), confirmation.Window.Messages[0])
+	require.Less(t, len(seen.Message.Body), len(confirmation.Window.Messages[0].Body))
+	jev.AssertExpectations(t)
+}

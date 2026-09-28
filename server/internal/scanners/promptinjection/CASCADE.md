@@ -9,6 +9,19 @@ at least 0.50 triggers review. Lower probabilities produce no finding. This matc
 prefilter cutoff; a false negative at this stage cannot be recovered by Opus. These are
 probabilities, not TypeSafe's distinct Choice/Score confidence statistic.
 
+Jev input uses a conservative 28,000-byte budget across serialized state and all
+questions, leaving headroom below the documented 32k-token context limit. No
+public Jev tokenizer is documented; this is a byte-based proxy, not an exact
+provider token count. The largest evidence fields are shortened first, retaining
+head and tail text on UTF-8 boundaries and marking truncation. JSON structure,
+question wording, and attribution structure are preserved; shortened tool identities
+are explicitly marked. Cleared-scan token
+accounting uses the evidence actually sent. Truncation is recorded in tracing.
+
+Known limitation: an attack in omitted text can be missed by the prefilter and
+never reach Opus. Chunking or a model-specific tokenizer could improve coverage
+later. Opus evidence remains independently prepared under its existing limits.
+
 Opus (`anthropic/claude-opus-5.5`) independently reviews the target and at most four
 neighbors without seeing the Jev score. Persisted events use two messages before
 and two after, ordered by creation time and sequence. Live events with a known

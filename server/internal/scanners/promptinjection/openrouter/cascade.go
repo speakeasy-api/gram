@@ -88,12 +88,18 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 	defer cancel()
 	ctx, span := c.opus.tracer.Start(ctx, "risk.prompt_injection.cascade")
 	defer span.End()
-	prepared, content := prepareJudgePayload(msg, trajectory)
+	questions := PrefilterQuestions()
+	prepared, content, truncated, err := preparePrefilterPayload(msg, trajectory, questions)
+	if err != nil {
+		c.opus.logger.WarnContext(ctx, "PI prefilter evidence unavailable", attr.SlogError(err))
+		return unavailableResult
+	}
+	span.SetAttributes(attribute.Bool("prefilter.input_truncated", truncated), attribute.Int("prefilter.state_bytes", len(prepared)))
 	if ctx.Err() != nil {
 		return unavailableResult
 	}
 	start := time.Now()
-	result, err := c.jev.Evaluate(ctx, req.OrgID, prepared, PrefilterQuestions())
+	result, err := c.jev.Evaluate(ctx, req.OrgID, prepared, questions)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	c.opus.metrics.RecordPhysicalCall(ctx, req.OrgID, typesafe.Model, "none", outcome, typedFailureReason(err, outcome), time.Since(start))
 	if err != nil {
