@@ -1051,6 +1051,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		},
 		AudiencePrincipals:   audiencePrincipals,
 		AudienceChanged:      audienceUpdateRequested,
+		AudienceDelta:        nil,
 		AllowedURLs:          shadowMCPAllowedURLs,
 		AllowedURLsSet:       payload.ShadowMcpAllowedUrls != nil,
 		BlockedURLs:          shadowMCPBlockedURLs,
