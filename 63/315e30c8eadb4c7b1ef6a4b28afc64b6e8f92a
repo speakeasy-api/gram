@@ -1,0 +1,94 @@
+server/internal/productfeatures/mutator.go
+  h_9630b74bdac540 10,46-92,115-133,142,148,156,163-164,167-168,170-173,175-177,179,185,197-207,209,231,235,238-241,244
+  h_9630b74bdac540 134,174,178,208
+server/internal/adminmcp/tool_write_feature_test.go
+  h_9630b74bdac540 1-143
+server/internal/admin/supportmatrix.go
+  h_9630b74bdac540 136-172,174-175,177,179-180,183,185,188,192,194,196,200,202
+  h_9630b74bdac540 189-191,193,195,199
+server/internal/adminmcp/oauth_metadata_test.go
+  h_9630b74bdac540 24,30,78,80-86
+server/internal/organizations/onboarding.go
+  h_9630b74bdac540 8,96-106,110-114,116,119,123,127-133
+  h_9630b74bdac540 107-109,126
+server/internal/adminmcp/write_guard.go
+  h_9630b74bdac540 1-177
+server/internal/adminmcp/tool_write_feature.go
+  h_9630b74bdac540 1-292
+server/internal/chatanalysis/settings_persistence.go
+  h_9630b74bdac540 60-63,67-92,126
+  h_9630b74bdac540 64-66
+server/internal/adminmcp/proposal_store_test.go
+  h_9630b74bdac540 1-423
+server/internal/adminmcp/oauth_token.go
+  h_9630b74bdac540 8,171,195
+server/internal/adminmcp/proposal_approval.go
+  h_9630b74bdac540 1-116,121-128,130-211
+  h_9630b74bdac540 117-120,129
+.changeset/admin-mcp-write-guards.md
+  h_9630b74bdac540 1-5
+server/internal/audit/logger_test.go
+  h_9630b74bdac540 83-84,88-89,95-101,104-105,116,160
+  h_9630b74bdac540 94
+server/internal/admin/session_handler_test.go
+  h_9630b74bdac540 208
+server/internal/auditapi/impl.go
+  h_9630b74bdac540 162,323,334-342
+server/internal/adminmcp/proposal_approval_test.go
+  h_9630b74bdac540 1-162
+server/internal/adminmcp/proposal_store.go
+  h_9630b74bdac540 1-831
+server/internal/auditapi/list_test.go
+  h_9630b74bdac540 31,833
+server/cmd/gram/admin.go
+  h_9630b74bdac540 116-125,520-522,524,526,532-536
+  h_9630b74bdac540 523
+server/internal/adminmcp/oauth_token_test.go
+  h_9630b74bdac540 105-123
+server/internal/adminmcp/authenticator_test.go
+  h_9630b74bdac540 71,88
+server/internal/remotesessions/adminhandlers.go
+  h_9630b74bdac540 74-97,150-152,154-157,213-214,344-357,433-435,437-440,516-517
+  h_9630b74bdac540 153,215-216,436,518-519
+server/internal/adminmcp/write_guard_test.go
+  h_9630b74bdac540 1-181
+server/internal/audit/surface_internal_test.go
+  h_9630b74bdac540 109-115,218,222
+  h_9630b74bdac540 108
+server/internal/adminmcp/oauth_authorize.go
+  h_9630b74bdac540 43,79,85,127-131,142,213-214,234,283-287,293
+  h_9630b74bdac540 211-212,288-289
+server/internal/admin/impl.go
+  h_9630b74bdac540 452-453,1200-1263,1267,1271-1276,1282,1286-1290,1314,1316,1327
+  h_9630b74bdac540 1264-1266,1268-1270,1277-1281,1283-1285,1324
+server/internal/adminmcp/oauth.go
+  h_9630b74bdac540 23,27,30-33,54-55,58,60,64,68-74,91-92,101,116
+server/internal/audit/outbox.go
+  h_9630b74bdac540 17-18,22-25,44
+server/internal/audit/queries.sql
+  h_9630b74bdac540 167
+server/internal/auditapi/speakeasy_mask_test.go
+  h_9630b74bdac540 11,49-50,60,91,106
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 29-31,33
+  h_9630b74bdac540 26-28
+server/internal/audit/surface.go
+  h_9630b74bdac540 49-50,60-65,74
+server/internal/adminmcp/authenticator.go
+  h_9630b74bdac540 43,101,110,122
+server/internal/audit/repo/queries.sql.go
+  h_9630b74bdac540 229
+server/internal/database/models.go
+  h_9630b74bdac540 85-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "63315e30c8eadb4c7b1ef6a4b28afc64b6e8f92a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
