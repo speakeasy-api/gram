@@ -45,10 +45,12 @@ func TestTransactionalEndpointWritesRejectCanonicalHostedServers(t *testing.T) {
 	_, err = ti.service.CreateMcpEndpointInTransaction(ctx, tx, mcpendpoints.CreateMcpEndpointInTransactionInput{
 		AuthContext: authCtx, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: authCtx.OrganizationSlug + "-new",
 	})
+	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "hosted MCP endpoints are managed through the toolset")
 	_, _, err = ti.service.UpdateMcpEndpointAddressInTransaction(ctx, tx, mcpendpoints.UpdateMcpEndpointAddressInput{
 		AuthContext: authCtx, EndpointID: endpoint.ID, Slug: authCtx.OrganizationSlug + "-renamed",
 	})
+	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "hosted MCP endpoints are managed through the toolset")
 	stored, err := mcpendpointsrepo.New(tx).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{ID: endpoint.ID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
