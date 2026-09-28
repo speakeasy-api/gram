@@ -145,6 +145,9 @@ func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
 		"organization_id": target.OrganizationID,
 		"iat":             now.Unix(), "exp": expires.Unix(), "jti": uuid.NewString(), "version": 1,
 	}
+	if auth.OrganizationSlug != "" {
+		claims["organization_slug"] = auth.OrganizationSlug
+	}
 	if principalType == "user" && auth.UserID == subject && auth.Email != nil && *auth.Email != "" {
 		claims["email"] = *auth.Email
 	}

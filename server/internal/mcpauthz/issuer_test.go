@@ -47,7 +47,7 @@ func targetForTest() Target {
 
 func tenantContext(t *testing.T, target Target) context.Context {
 	t.Helper()
-	return contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: target.OrganizationID, ProjectID: &target.ProjectID, UserID: "creator-must-not-appear", Email: new("creator@example.invalid")})
+	return contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: target.OrganizationID, OrganizationSlug: "org-test", ProjectID: &target.ProjectID, UserID: "creator-must-not-appear", Email: new("creator@example.invalid")})
 }
 
 type notRevoked struct{}
@@ -91,8 +91,9 @@ func TestAssertionVerifiesWithPublicJWKSAndBindsDestination(t *testing.T) {
 	for key := range claims {
 		keys = append(keys, key)
 	}
-	require.ElementsMatch(t, []string{"iss", "sub", "aud", "organization_id", "iat", "exp", "jti", "version"}, keys)
+	require.ElementsMatch(t, []string{"iss", "sub", "aud", "organization_id", "organization_slug", "iat", "exp", "jti", "version"}, keys)
 	require.Equal(t, target.OrganizationID, claims["organization_id"])
+	require.Equal(t, "org-test", claims["organization_slug"])
 	require.IsType(t, "", claims["aud"])
 	require.Equal(t, time.Minute, standard.Expiry.Time().Sub(standard.IssuedAt.Time()))
 	require.NotContains(t, claims, "email")

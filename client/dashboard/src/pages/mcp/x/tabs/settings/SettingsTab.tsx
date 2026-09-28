@@ -19,6 +19,7 @@ import {
   AgentSetupSection,
   MCP_AGENT_SETUP_SECTION_ID,
 } from "./sections/AgentSetupSection";
+import { CallerIdentitySection } from "./sections/CallerIdentitySection";
 import { GeneralSection } from "./sections/GeneralSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
@@ -185,6 +186,7 @@ export function SettingsTab({
       {tunneledMcpServer ? (
         <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
+          <CallerIdentitySection />
           <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
           <PublicRateLimitsSection
             tunneledMcpServerId={tunneledMcpServer.id}

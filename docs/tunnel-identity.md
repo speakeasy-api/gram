@@ -33,17 +33,18 @@ Tokens use RS256 and the protected header `typ: speakeasy-identity+jwt`. The `ki
 is the public key's RFC 7638 SHA-256 thumbprint. Their lifetime is at most 60
 seconds, capped by the source credential's expiry where available.
 
-| Claim             | Meaning                                                                                                    |
-| ----------------- | ---------------------------------------------------------------------------------------------------------- |
-| `version`         | Contract version, currently `1`.                                                                           |
-| `iss`             | `https://tunnel.speakeasy.com` (AICP).                                                                     |
-| `aud`             | The destination's saved resource identifier, or `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>` when unset. |
-| `sub`             | Typed principal identifier, for example `user:<USER_ID>`. The prefix identifies the principal type.        |
-| `organization_id` | The destination owner's Speakeasy organization ID.                                                         |
-| `email`           | Human user's email from their Gram profile; absent for agents and API keys.                                |
-| `allowed_methods` | Present only during consent discovery; methods Gram permits in that context.                               |
-| `iat`, `exp`      | Issuance and expiry, Unix seconds.                                                                         |
-| `jti`             | Unique assertion identifier for correlation.                                                               |
+| Claim               | Meaning                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `version`           | Contract version, currently `1`.                                                                           |
+| `iss`               | `https://tunnel.speakeasy.com` (AICP).                                                                     |
+| `aud`               | The destination's saved resource identifier, or `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>` when unset. |
+| `sub`               | Typed principal identifier, for example `user:<USER_ID>`. The prefix identifies the principal type.        |
+| `organization_id`   | The destination owner's Speakeasy organization ID.                                                         |
+| `organization_slug` | The organization's current slug, for readability in logs. Slugs can change; never authorize on it.         |
+| `email`             | Human user's email from their Gram profile; absent for agents and API keys.                                |
+| `allowed_methods`   | Present only during consent discovery; methods Gram permits in that context.                               |
+| `iat`, `exp`        | Issuance and expiry, Unix seconds.                                                                         |
+| `jti`               | Unique assertion identifier for correlation.                                                               |
 
 Set the resource identifier in the tunneled source settings to use your server's
 own audience, such as `https://mcp.internal.example.com/mcp`. Gram copies the
@@ -130,7 +131,8 @@ audience. Do one of the following:
   policy, so every request arrives through your tunnel.
 - If your server is reachable any other way, such as from the internet, require
   `organization_id` to match your organization's ID. This rejects assertions
-  minted for another organization that saved the same identifier.
+  minted for another organization that saved the same identifier. The ID is
+  shown under **Caller Identity** in the MCP server's settings.
 
 If your access policy requires these claims, reject a missing or invalid
 assertion. A captured assertion can be reused until it expires, even with a
