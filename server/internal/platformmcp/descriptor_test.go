@@ -399,7 +399,9 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// compatibility deployment. Session recall stays external-only because it
 	// contains user-personal cross-project transcripts. Data exports stay
 	// external-only because creation can send future project data off-platform.
+	// Network ingress status stays with connection-scoped org administration.
 	for _, name := range []string{
+		"get_network_ingress",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
 		"list_plugin_assignments",
