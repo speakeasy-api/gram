@@ -11,7 +11,9 @@ completion, or tool success. Both projections honor the logs feature setting.
 
 Apply the ClickHouse view migration and provision the generated subscription
 before enabling the producer. To populate historical session activity, run the
-bounded replay command with an explicit project and half-open UTC time window:
+bounded replay command with an explicit project and half-open UTC time window.
+Set `GRAM_DATABASE_URL` to the target Postgres connection URL first (or pass
+`--database-url`); the command requires it and does not select a database itself:
 
 ```sh
 gram replay-session-observations --project-id '<PROJECT_ID>' \
@@ -22,7 +24,11 @@ Continue with the returned `--after` cursor until the command reports no remaini
 messages. Replaying the same window is safe for distinct session/message counts;
 it does not re-meter storage or trigger policy evaluation. Run this after the
 subscriber and view changes are deployed, or the old views will discard the new
-row class. The replay excludes deleted chats.
+row class. The replay excludes deleted chats. It reloads current user ownership,
+email, source, and model from Postgres. Provider, hostname, account type, and
+billing mode are only supplied by live ingestion and are not stored on historical
+messages, so replay leaves those dimensions unset. A replay cannot reconstruct
+historical attribution from the currently configured integration.
 
 Platform MCP assessment: no new tool or schema is needed. Existing session recall
 and analytics tools read the same stores and inherit the session evidence. The

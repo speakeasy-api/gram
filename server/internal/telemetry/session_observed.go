@@ -63,21 +63,18 @@ func (h *SessionObservedHandler) HandleBatch(ctx context.Context, messages []*te
 				continue
 			}
 			observed := observations[row.ID]
-			email := row.UserEmail
-			if !strings.Contains(email, "@") {
-				email = observed.GetUserEmail()
-			}
 			var snapshot userInfoSnapshot
 			logs = append(logs, LogParams{
 				Timestamp:          row.CreatedAt.Time,
 				ToolInfo:           ToolInfo{ProjectID: projectID.String(), OrganizationID: row.OrganizationID, URN: "chat:transcript:observed", ID: "", Name: "", DeploymentID: "", FunctionID: nil},
-				UserInfo:           UserInfoByIDAndEmail(row.UserID, email),
+				UserInfo:           UserInfoByIDAndEmail(row.UserID, row.UserEmail),
 				observedTimestamp:  time.Time{},
 				resourceAttributes: nil,
 				userSnapshot:       snapshot,
 				Attributes: map[attr.Key]any{
 					attr.EventSourceKey:              string(EventSourceHook),
 					attr.HookSourceKey:               row.Source.String,
+					attr.HookEventKey:                "session.observed",
 					attr.GenAIConversationIDKey:      row.ChatID.String(),
 					attr.ExternalUserIDKey:           row.ExternalUserID,
 					attr.GenAIResponseModelKey:       row.Model.String,

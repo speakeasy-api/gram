@@ -37,11 +37,13 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 	write.Params.ChatID = chatID
 	write.Params.ProjectID = projectID
 	write.Params.Role = "user"
+	write.Params.UserID = conv.ToPGText("")
+	write.Params.ExternalUserID = conv.ToPGText("provider-person-id")
 	write.Params.Source = conv.ToPGText("claude-chat-web")
 	write.Params.Content = "Summarize the release checklist."
 	write.Params.ExternalMessageID = conv.ToPGText("first-message")
 	write.Params.CreatedAt = conv.ToPGTimestamptz(now)
-	write.UserEmail = "person@example.test"
+	write.UserEmail = "stale@example.test"
 	writes := []chat.ExternalMessageWrite{write}
 	for range 2 {
 		_, err = writer.WriteExternal(ctx, projectID, writes)
@@ -59,6 +61,13 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 		observations = append(observations, observation)
 	}
 	require.Len(t, observations, 1, "retrying transcript storage must not enqueue twice")
+	stored, err := chatrepo.New(ti.conn).GetImportedSessionObservations(ctx, chatrepo.GetImportedSessionObservationsParams{
+		ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, MessageIds: []uuid.UUID{writes[0].Params.ID},
+	})
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	require.Equal(t, "imported-user", stored[0].UserID, "empty message actor must not mask current chat ownership")
+	require.Equal(t, "person@example.test", stored[0].UserEmail, "opaque external user IDs must not become email addresses")
 	handler := telemetry.NewSessionObservedHandler(ti.conn, ti.telemLogger)
 	for range 2 {
 		require.NoError(t, handler.HandleBatch(ctx, observations, nil))
@@ -77,6 +86,9 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 	require.Len(t, aggregates, 1)
 	require.EqualValues(t, 1, aggregates[0].TotalChats)
 	require.Zero(t, aggregates[0].TotalCost)
+	var observedLogs uint64
+	require.NoError(t, ti.chConn.QueryRow(ctx, `SELECT count() FROM telemetry_logs WHERE gram_project_id = ? AND toString(attributes.gram.hook.event) = 'session.observed' AND user_email = ?`, ti.projectID, "person@example.test").Scan(&observedLogs))
+	require.Positive(t, observedLogs, "observations must carry an event marker and current stored email")
 	var sessions, records uint64
 	require.NoError(t, ti.chConn.QueryRow(ctx, `SELECT uniqExact(session_id), uniqExact(record_id) FROM agent_events WHERE organization_id = ? AND project_id = ?`, ti.orgID, ti.projectID).Scan(&sessions, &records))
 	require.EqualValues(t, 1, sessions)

@@ -713,7 +713,6 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 			if _, err := outbox.Publish(ctx, tx, organizationID, outbox.Message{Proto: telemetryv1.SessionObserved_builder{
 				ProjectId:    new(projectID.String()),
 				MessageId:    new(param.ID.String()),
-				UserEmail:    new(write.UserEmail),
 				Provider:     new(write.Provider),
 				HookHostname: new(write.HookHostname),
 				AccountType:  new(write.AccountType),

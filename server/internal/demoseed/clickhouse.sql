@@ -112,7 +112,7 @@ INSERT INTO telemetry_logs
 SELECT
   toUnixTimestamp64Nano(now64(9) - toIntervalMinute(20 - number)),
   toUnixTimestamp64Nano(now64(9)), 'INFO', '',
-  concat('{"gram.event.source":"hook","gram.hook.source":"claude-chat-web",',
+  concat('{"gram.event.source":"hook","gram.hook.source":"claude-chat-web","gram.hook.event":"session.observed",',
     '"gen_ai.conversation.id":"', chat_id, '",',
     '"gram.chat.message.id":"', message_id, '",',
     '"user.id":"user_demo_amara","user.email":"amara@demo.getgram.ai",',

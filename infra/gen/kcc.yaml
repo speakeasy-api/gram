@@ -1326,7 +1326,8 @@ pubsub:
         message SessionObserved {
           string project_id = 1;
           string message_id = 2;
-          string user_email = 3;
+          reserved 3;
+          reserved user_email;
           string provider = 4;
           string hook_hostname = 5;
           string account_type = 6;

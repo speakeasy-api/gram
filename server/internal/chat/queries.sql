@@ -146,12 +146,14 @@ RETURNING id;
 -- capture and delivery is reflected in analytics. Never read transcript text.
 SELECT m.id, m.chat_id, m.created_at, m.source, m.model, c.external_chat_id,
        COALESCE(m.external_user_id, c.external_user_id, '')::text AS external_user_id,
-       COALESCE(m.user_id, c.user_id, '')::text AS user_id,
-       COALESCE(u.email, m.external_user_id, c.external_user_id, '')::text AS user_email,
+       COALESCE(NULLIF(m.user_id, ''), c.user_id, '')::text AS user_id,
+       COALESCE(u.email,
+         CASE WHEN m.external_user_id LIKE '%@%' THEN m.external_user_id END,
+         CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END, '')::text AS user_email,
        c.organization_id
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
-LEFT JOIN users u ON u.id = COALESCE(m.user_id, c.user_id)
+LEFT JOIN users u ON u.id = COALESCE(NULLIF(m.user_id, ''), c.user_id)
 WHERE m.project_id = @project_id
   AND m.id = ANY(@message_ids::uuid[])
   AND c.deleted IS FALSE;
