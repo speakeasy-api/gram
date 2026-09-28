@@ -108,6 +108,28 @@ func TestSetupTaskCatalogDependenciesStayOffTheirOwnLine(t *testing.T) {
 	}
 }
 
+// Prerequisites are declared in code, so a cycle would be a catalog bug that
+// no card could ever escape; the mirror in onboarding_step_dependencies only
+// forbids a step requiring itself.
+func TestSetupTaskCatalogDependenciesHaveNoCycles(t *testing.T) {
+	t.Parallel()
+
+	requires := make(map[string][]string, len(setupTaskCatalog))
+	for _, card := range setupTaskCatalog {
+		requires[card.Key] = card.Prerequisites
+	}
+	var visit func(key string, trail []string)
+	visit = func(key string, trail []string) {
+		require.NotContains(t, trail, key, "dependency cycle %v", append(slices.Clone(trail), key))
+		for _, prerequisite := range requires[key] {
+			visit(prerequisite, append(slices.Clone(trail), key))
+		}
+	}
+	for _, card := range setupTaskCatalog {
+		visit(card.Key, nil)
+	}
+}
+
 func TestSetupTaskCatalogMethodsExistInTheSupportMatrix(t *testing.T) {
 	t.Parallel()
 
