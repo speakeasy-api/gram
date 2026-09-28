@@ -137,7 +137,10 @@ export function useMcpServerCandidates({
               action: {
                 label: "Undo",
                 onClick: () => {
-                  void applyVisibility(server, previous, false);
+                  // applyVisibility toasts its own failure and rethrows, so
+                  // the rejection is consumed here rather than surfacing as
+                  // an unhandled one.
+                  void applyVisibility(server, previous, false).catch(() => {});
                 },
               },
             }

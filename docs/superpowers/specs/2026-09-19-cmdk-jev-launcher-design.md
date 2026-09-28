@@ -15,8 +15,9 @@ to the TypeSafe Jev API via OpenRouter and returns probability distributions. Th
 re-ranks the list from those distributions, shows a green ↵ on the top row
 when the intent is settled, and — new for Gram — lets Jev choose a verb
 per row. Verbs in this version are `open`, `enable`/`disable` an MCP
-server, and `publish` the project's plugin marketplace. Mutating verbs
-always require a second Enter inside the palette.
+server, and `publish` the project's plugin marketplace. Reversible verbs run
+on the first Enter and offer an Undo; only `publish`, which cannot be taken
+back, asks for a second Enter.
 
 Everything expensive or risky stays in code: indexing (the existing SDK
 list hooks), fuzzy prefiltering, ranking maths, and execution. Jev never
@@ -28,7 +29,8 @@ generates text; it only picks among options the code supplies.
   `publish marketplace`, `turn off the jira server` land on the right row.
 - Fuzzy order renders immediately; Jev's answer replaces it when it lands.
   Nothing waits on the network.
-- A wrong Enter on a mutating verb is impossible without a second Enter.
+- A wrong Enter on a reversible verb costs one click to undo; one that cannot
+  be undone is impossible without a second Enter.
 - With no OpenRouter key resolvable for the org, the palette behaves exactly as today.
 
 ## Non-goals (this version)
@@ -387,9 +389,12 @@ observability, not behaviour.
   readiness both rules, People excluded from outgoing slice, cap 13.
 - `useLauncherJudge.test.ts`: sequence guard drops older responses; abort
   on new keystroke; `disabled` latches; error clears judgment.
-- `CommandPalette.test.tsx`: confirm bar appears for `disable`, Esc returns
-  to list with query intact, second Enter calls `run`; `open` rows
-  navigate on first Enter; green ↵ present/absent by readiness.
+- `CommandPalette.test.tsx`: `disable` runs on the first Enter; verb rows sit
+  under the Actions heading; the confirm bar appears for `publish`, Esc
+  returns to the list with the query intact and a second Enter calls `run`;
+  `open` rows navigate on first Enter; green ↵ present/absent by readiness.
+- `candidates/index.test.tsx`: Undo replays the visibility the server actually
+  had, and a failed Undo toasts rather than rejecting unhandled.
 - Existing `ResourceResults.test.tsx` cases migrate to the candidate hooks.
 
 **Manual**
