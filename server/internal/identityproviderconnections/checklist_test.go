@@ -21,7 +21,7 @@ var agentKeys = []string{
 
 func checklist(t *testing.T, signal idpc.ChecklistSignal) map[string]idpc.ChecklistItem {
 	t.Helper()
-	items := idpc.OktaChecklist(idpc.ListingModeCustomApp, checklistJWKSURL, signal)
+	items := idpc.OktaChecklist(idpc.ListingModeCustomApp, signal)
 	byKey := make(map[string]idpc.ChecklistItem, len(items))
 	for _, item := range items {
 		byKey[item.Key] = item
@@ -40,7 +40,7 @@ func TestOktaChecklist_ConnectStepsThenAgentSteps(t *testing.T) {
 		idpc.ListingModeCustomApp: idpc.ChecklistKeyCreateAPIServicesApp,
 		idpc.ListingModeOIN:       idpc.ChecklistKeyAddOINApp,
 	} {
-		items := idpc.OktaChecklist(mode, checklistJWKSURL, idpc.ChecklistSignal{})
+		items := idpc.OktaChecklist(mode, idpc.ChecklistSignal{})
 		keys := make([]string, 0, len(items))
 		for _, item := range items {
 			keys = append(keys, item.Key)
@@ -179,12 +179,12 @@ func TestOktaChecklist_CopyInvariants(t *testing.T) {
 	items := checklist(t, idpc.ChecklistSignal{})
 
 	for key, item := range items {
-		offersKeyURL := strings.Contains(itemText(item), checklistJWKSURL)
-		require.Equal(t, key == idpc.ChecklistKeyPublicKeyAuth, offersKeyURL, "%s: the management JWKS is only offered to the service app", key)
+		require.NotContains(t, itemText(item), checklistJWKSURL, "%s: the management JWKS is offered through the connection, never in step copy", key)
 	}
-	for _, scope := range idpc.RequiredOktaScopes {
-		require.Contains(t, items[idpc.ChecklistKeyGrantScopes].Description, scope)
-	}
+	require.Equal(t, idpc.RequiredOktaScopes, items[idpc.ChecklistKeyGrantScopes].Details)
+	require.Equal(t, idpc.RequiredOktaAdminRoles, items[idpc.ChecklistKeyAssignAdminRoles].Details)
+	verified := checklist(t, idpc.ChecklistSignal{Checked: true, ClientIDSubmitted: true, DPoPBound: true, MissingScopes: []string{}})
+	require.Empty(t, verified[idpc.ChecklistKeyAssignAdminRoles].Details, "roles drop out once access is observed")
 	for _, key := range agentKeys {
 		require.NotContains(t, strings.ToLower(itemText(items[key])), "optional", key)
 	}

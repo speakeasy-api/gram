@@ -364,6 +364,28 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "updateSetupTask")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateSetupTask"}`)
 	})
+
+	Method("submitOnboardingSurvey", func() {
+		Description("Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.")
+
+		Payload(func() {
+			Attribute("use_case", String, "Use case the survey answers resolved to.")
+			Required("use_case")
+			security.SessionPayload()
+		})
+
+		Result(ListSetupTasksResult)
+
+		HTTP(func() {
+			POST("/rpc/organizations.submitOnboardingSurvey")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "submitOnboardingSurvey")
+		Meta("openapi:extension:x-speakeasy-name-override", "submitOnboardingSurvey")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SubmitOnboardingSurvey"}`)
+	})
 })
 
 // OrganizationInvitation is a non-sensitive admin view (no invitation token or accept URL).

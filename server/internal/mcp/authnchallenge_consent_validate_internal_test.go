@@ -41,14 +41,14 @@ func TestClassifyProbe(t *testing.T) {
 		{name: "503", expired: false, rejected: 0, lastStatus: http.StatusServiceUnavailable, err: transport, outcome: remotesessions.ValidationOutcomeUnknown, reason: "linear answered with status 503"},
 		{name: "404", expired: false, rejected: 0, lastStatus: http.StatusNotFound, err: transport, outcome: remotesessions.ValidationOutcomeUnknown, reason: "linear answered with status 404"},
 		{name: "200 that is not a result", expired: false, rejected: 0, lastStatus: http.StatusOK, err: errors.New("decode: <body>"), outcome: remotesessions.ValidationOutcomeUnknown, reason: "Unexpected answer from linear"},
-		{name: "too large", expired: false, rejected: 0, lastStatus: 0, err: errProbeResponseTooLarge, outcome: remotesessions.ValidationOutcomeUnknown, reason: "Unexpected answer from linear"},
+		{name: "too large", expired: false, rejected: 0, lastStatus: 0, err: errMemberResponseTooLarge, outcome: remotesessions.ValidationOutcomeUnknown, reason: "Unexpected answer from linear"},
 	}
 	for _, tc := range cases {
 		ctx := context.Background()
 		if tc.expired {
 			ctx = expired
 		}
-		rt := &memberRoundTripper{build: nil, logger: nil, deadline: time.Time{}, closeFloor: 0, mu: sync.Mutex{}, rejected: tc.rejected, lastStatus: tc.lastStatus}
+		rt := &memberRoundTripper{build: nil, deadline: time.Time{}, closeFloor: 0, mu: sync.Mutex{}, rejected: tc.rejected, lastStatus: tc.lastStatus}
 		outcome, reason := classifyProbe(ctx, rt, tc.err, "linear")
 		require.Equal(t, tc.outcome, outcome, tc.name)
 		require.Equal(t, tc.reason, reason, tc.name)

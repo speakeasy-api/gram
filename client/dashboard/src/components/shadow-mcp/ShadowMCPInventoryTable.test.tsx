@@ -27,6 +27,10 @@ import {
 import { ShadowMCPInventoryTable } from "./ShadowMCPInventoryTable";
 import { testAccessSummary } from "./shadowMCPInventoryTestFixtures";
 
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 const mocks = vi.hoisted(() => ({
   useShadowMCPInventory: vi.fn(),
   decideAccessSheet: vi.fn(),

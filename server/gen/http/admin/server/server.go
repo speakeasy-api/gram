@@ -77,6 +77,7 @@ type Server struct {
 	GetSpendBreakdown                     http.Handler
 	GetSupportMatrix                      http.Handler
 	UpdateSupportMatrix                   http.Handler
+	GetSupportCoverage                    http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -162,6 +163,7 @@ func New(
 			{"GetSpendBreakdown", "GET", "/admin/organization.spendBreakdown"},
 			{"GetSupportMatrix", "GET", "/admin/supportMatrix.get"},
 			{"UpdateSupportMatrix", "POST", "/admin/supportMatrix.update"},
+			{"GetSupportCoverage", "GET", "/admin/supportCoverage.get"},
 		},
 		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -219,6 +221,7 @@ func New(
 		GetSpendBreakdown:                     NewGetSpendBreakdownHandler(e.GetSpendBreakdown, mux, decoder, encoder, errhandler, formatter),
 		GetSupportMatrix:                      NewGetSupportMatrixHandler(e.GetSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
+		GetSupportCoverage:                    NewGetSupportCoverageHandler(e.GetSupportCoverage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -283,6 +286,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSpendBreakdown = m(s.GetSpendBreakdown)
 	s.GetSupportMatrix = m(s.GetSupportMatrix)
 	s.UpdateSupportMatrix = m(s.UpdateSupportMatrix)
+	s.GetSupportCoverage = m(s.GetSupportCoverage)
 }
 
 // MethodNames returns the methods served.
@@ -346,6 +350,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSpendBreakdownHandler(mux, h.GetSpendBreakdown)
 	MountGetSupportMatrixHandler(mux, h.GetSupportMatrix)
 	MountUpdateSupportMatrixHandler(mux, h.UpdateSupportMatrix)
+	MountGetSupportCoverageHandler(mux, h.GetSupportCoverage)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -3354,6 +3359,59 @@ func NewUpdateSupportMatrixHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateSupportMatrix")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSupportCoverageHandler configures the mux to serve the "admin"
+// service "getSupportCoverage" endpoint.
+func MountGetSupportCoverageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/supportCoverage.get", f)
+}
+
+// NewGetSupportCoverageHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getSupportCoverage" endpoint.
+func NewGetSupportCoverageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSupportCoverageRequest(mux, decoder)
+		encodeResponse = EncodeGetSupportCoverageResponse(encoder)
+		encodeError    = EncodeGetSupportCoverageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSupportCoverage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

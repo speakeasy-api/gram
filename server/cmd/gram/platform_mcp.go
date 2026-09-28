@@ -114,9 +114,15 @@ type platformMCPConfig struct {
 	// withholds the drill-down tools while leaving the overview-first entry
 	// points serving.
 	TelemetryDrilldown platformmcp.DrilldownTelemetryReader
+
+	// WorkflowRun delivers shipped-workflow run reports to Speakeasy's own
+	// analytics. Nil registers record_workflow_run as a stub, so the tool
+	// refuses readably rather than vanishing from the catalogue.
+	WorkflowRun platformmcp.WorkflowRunEmitter
 	// RecentToolCalls reads only the bounded Tool Logs summary path.
 	// Nil keeps the tool visible as unavailable rather than returning an empty list.
 	RecentToolCalls platformmcp.RecentToolCallReader
+	NetworkTraffic  platformmcp.MCPNetworkTrafficReader
 	// EventFeed reads the org-scoped OpenTelemetry event feed. Nil keeps the
 	// tool visible as unavailable rather than returning an empty list.
 	EventFeed platformmcp.EventFeedReader
@@ -341,6 +347,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)
+	workflowRun := platformmcp.NewWorkflowRunService(config.Logger, config.WorkflowRun)
 	setupResources, err := platformMCPSetupResources(config)
 	if err != nil {
 		return AssistantSurface{}, err
@@ -386,6 +393,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
+		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
 		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.JWTSigningKey), budgets.RiskFindings)
@@ -428,6 +436,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		distributions,
 		skillAuthoring,
 		diagnostics,
+		workflowRun,
 		pluginInventory,
 		sessionRecall,
 		riskMutations,
@@ -789,6 +798,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)
+	workflowRun := platformmcp.NewWorkflowRunService(config.Logger, config.WorkflowRun)
 	setupResources, err := platformMCPSetupResources(config)
 	if err != nil {
 		return AssistantSurface{}, err
@@ -823,6 +833,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
+		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
 		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.JWTSigningKey), budgets.RiskFindings)
@@ -876,6 +887,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		distributions,
 		skillAuthoring,
 		diagnostics,
+		workflowRun,
 		pluginInventory,
 		sessionRecall,
 		riskMutations,

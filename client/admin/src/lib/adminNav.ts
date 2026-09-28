@@ -12,8 +12,9 @@ import {
   BuildingIcon,
   CalculatorIcon,
   FolderIcon,
-  KeyRoundIcon,
   Grid2X2Icon,
+  KeyRoundIcon,
+  PlugZapIcon,
 } from "lucide-react";
 
 export const ADMIN_NAV_GROUPS = [
@@ -57,6 +58,12 @@ export const ADMIN_NAV_GROUPS = [
         label: "Remote Session Issuers",
         keywords: "oauth identity providers issuers",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/mcp-setup",
+        label: "Admin MCP",
+        keywords: "install connect agents claude codex cursor tailscale",
+        icon: PlugZapIcon,
       },
     ],
   },

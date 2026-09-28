@@ -2077,11 +2077,45 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.Contains(t, string(shim), "bootstrap.sh")
 	require.Contains(t, string(shim), `"x-gram-agent-provider": "opencode"`)
 	require.Contains(t, string(shim), `"x-gram-agent-turn-id": messageID`)
+	require.Contains(t, string(shim), `export default { id: "speakeasy.observability", setup, server: legacy }`)
+	require.Contains(t, string(shim), `ctx.session.hook("model.request"`)
+	require.Contains(t, string(shim), `ev.headers["x-gram-agent-turn-id"] = messageID`)
+	require.NotRegexp(t, `(?m)^export[ \t]+(const|let|var|function|class|type|interface|enum|\{|\*)`, string(shim), "named exports are invoked as a second V1 plugin")
 
 	_, ok = files["speakeasy.json"]
 	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
 	_, ok = files["hooks/bootstrap.sh"]
 	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
+}
+
+// Pins the V2 {id, setup} export and the V1 server() bridge.
+func TestGenerateOpenCodeFeatureLoaderSupportsV1AndV2(t *testing.T) {
+	t.Parallel()
+	p := PluginInfo{
+		Name:    "Engineering Tools",
+		Slug:    "engineering-tools",
+		Servers: []PluginServerInfo{{DisplayName: "widget", MCPURL: "https://app.getgram.ai/mcp/widget"}},
+		Skills:  []PluginSkillInfo{{Name: "triage", Content: "---\nname: triage\ndescription: Triage\n---\nBody\n"}},
+	}
+	files := map[string][]byte{}
+	require.NoError(t, generateOpenCodePluginInDir(files, "", p, GenerateConfig{OrgName: "Acme"}))
+
+	loader := string(files["plugin/engineering-tools.ts"])
+	require.NotContains(t, loader, "__SLUG__")
+	require.Contains(t, loader, `join(dirname(fileURLToPath(import.meta.url)), "..", "engineering-tools")`)
+	require.Contains(t, loader, "export default {")
+	require.Contains(t, loader, `id: "speakeasy.engineering-tools"`)
+	require.Contains(t, loader, "async setup(ctx: any)")
+	require.Contains(t, loader, "ctx.mcp.transform(")
+	require.Contains(t, loader, "ctx.skill.transform(")
+	require.Contains(t, loader, "async server()")
+	require.Contains(t, loader, "config: async (cfg: any)")
+	require.NotRegexp(t, `(?m)^export[ \t]+(const|let|var|function|class|type|interface|enum|\{|\*)`, loader, "named exports are invoked as a second V1 plugin")
+
+	_, ok := files["engineering-tools/mcp.json"]
+	require.True(t, ok, "the loader reads its servers from the sibling mcp.json")
+	_, ok = files["engineering-tools/skills/triage/SKILL.md"]
+	require.True(t, ok, "the loader registers skills from the sibling skills dir")
 }
 
 // The whole OpenClaw hook registration is the index.js shim and plugin
@@ -3145,6 +3179,37 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 	require.NotContains(t, workflow, "claude mcp add")
 	require.NotContains(t, workflow, "claude mcp remove")
+}
+
+// Diagnostics are opt-in field tooling: the packaged instructions must keep the
+// consent, the user-visible section and the "never blocks the import" boundary.
+func TestGeneratePlatformMCPExistingServersDiagnosticsAreOptIn(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-existing-mcp-servers/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, required := range []string{
+		"record_workflow_run",
+		"The trigger is the literal string `with diagnostics`",
+		"never your own initiative",
+		"ask them to repeat the request with `with diagnostics` in it",
+		"**Run diagnostics** section",
+		"the table and the payload carry the same rows and the same reasons",
+		"Proceed only after they agree",
+		"Never send raw discovery output",
+		"carries scheme, host and path only",
+		"Drop the query string and the fragment before writing it",
+		"Diagnostics never gate the import",
+		"`added_unverified`",
+		"Never report a completed add as `blocked`",
+		"omit it unless it is an `https` URL",
+	} {
+		require.Contains(t, workflow, required)
+	}
 }
 
 // These are packaged-instruction regressions, not simulated agent/tool executions.

@@ -32,6 +32,8 @@ export const DEFAULT_CONTEXT_LIMIT = 200_000;
  */
 const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   // Anthropic (1M tier where available, else 200K)
+  "anthropic/claude-opus-5.5": 1_000_000,
+  "anthropic/claude-fable-5.1": 1_000_000,
   "anthropic/claude-opus-5": 1_000_000,
   "anthropic/claude-fable-5": 1_000_000,
   "anthropic/claude-sonnet-5": 1_000_000,
@@ -42,6 +44,9 @@ const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   "anthropic/claude-sonnet-4.6": 1_000_000,
   "anthropic/claude-sonnet-4.5": 1_000_000,
   "anthropic/claude-haiku-4.5": 200_000,
+  "openai/gpt-6-astra": 1_050_000,
+  "openai/gpt-6-sol": 1_050_000,
+  "openai/gpt-6-luna": 1_050_000,
 
   // OpenAI
   "openai/gpt-5.6-sol": 1_050_000,
@@ -57,6 +62,7 @@ const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   "openai/gpt-5": 400_000,
 
   // Google
+  "google/gemini-3.8-flash": 1_048_576,
   "google/gemini-3.5-flash": 1_000_000,
   "google/gemini-3.1-pro-preview": 1_000_000,
   "google/gemini-3.1-flash-lite": 1_000_000,
@@ -64,12 +70,19 @@ const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   // Others
   "deepseek/deepseek-v4-pro": 1_000_000,
   "deepseek/deepseek-v4-flash": 1_000_000,
+  "deepseek/deepseek-v4.1-flash": 1_048_576,
   "deepseek/deepseek-v3.2": 128_000,
   "meta-llama/llama-4-maverick": 1_000_000,
+  "x-ai/grok-4.7": 500_000,
   "x-ai/grok-4.3": 1_000_000,
   "x-ai/grok-4.20": 2_000_000,
+  "qwen/qwen3.8-max-0902": 1_000_000,
+  "qwen/qwen3.8-flash": 1_000_000,
   "qwen/qwen3.7-max": 1_000_000,
   "qwen/qwen3-coder": 256_000,
+  "z-ai/glm-5.3": 1_310_720,
+  "z-ai/glm-5.3-flash": 1_310_720,
+  "moonshotai/kimi-k3": 1_048_576,
   "moonshotai/kimi-k2.6": 256_000,
   "moonshotai/kimi-k2.5": 256_000,
   "mistralai/mistral-medium-3-5": 256_000,

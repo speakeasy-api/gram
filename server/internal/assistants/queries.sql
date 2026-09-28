@@ -79,6 +79,14 @@ WHERE id = @thread_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: ResolveThreadCorrelationByChat :one
+SELECT id, project_id, assistant_id, correlation_id
+FROM assistant_threads
+WHERE chat_id = @chat_id
+  AND assistant_id = @assistant_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: GetAssistantThreadIDByCorrelation :one
 SELECT id
 FROM assistant_threads

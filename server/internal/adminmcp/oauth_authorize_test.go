@@ -97,6 +97,9 @@ func TestStaffOAuthAuthorizationRequiresStaffConsent(t *testing.T) {
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code)
+	policy := response.Header().Get("Content-Security-Policy")
+	require.Contains(t, policy, "form-action 'self' http://localhost:5555;")
+	require.NotContains(t, policy, "http://127.0.0.1")
 	require.Contains(t, response.Body.String(), "Test editor")
 	require.NotContains(t, response.Body.String(), "browser-session")
 	require.Equal(t, "browser-session", verifier.key)
@@ -128,6 +131,39 @@ func TestStaffOAuthAuthorizationRequiresStaffConsent(t *testing.T) {
 	s.ConnectHandler().ServeHTTP(response, request)
 	require.Equal(t, http.StatusUnauthorized, response.Code)
 	require.Equal(t, 1, store.calls)
+}
+
+func TestStaffOAuthAuthorizationConsentPolicyUsesRegisteredCallback(t *testing.T) {
+	t.Parallel()
+	for _, callback := range []struct{ uri, source string }{
+		{uri: "https://editor.example.test/callback", source: "https://editor.example.test"},
+		{uri: "http://127.0.0.1:5555/callback", source: "http://127.0.0.1:5555"},
+		{uri: "com.example.editor:/callback", source: "com.example.editor:"},
+	} {
+		t.Run(callback.uri, func(t *testing.T) {
+			t.Parallel()
+			s, _, _, pkce := staffAuthorizationFixture(t)
+			clients, ok := s.clients.(*recordingStaffClientStore)
+			require.True(t, ok)
+			clients.client.RedirectURIs = []string{callback.uri}
+			request := staffAuthorizeRequest(pkce)
+			query := request.URL.Query()
+			query.Set("redirect_uri", callback.uri)
+			request.URL.RawQuery = query.Encode()
+			response := httptest.NewRecorder()
+			s.AuthorizeHandler().ServeHTTP(response, request)
+			require.Equal(t, http.StatusFound, response.Code)
+			proof := staffBrowserProof(t, response)
+
+			request = httptest.NewRequest(http.MethodGet, response.Header().Get("Location"), nil)
+			request.AddCookie(proof)
+			request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "browser-session"})
+			response = httptest.NewRecorder()
+			s.ConnectHandler().ServeHTTP(response, request)
+			require.Equal(t, http.StatusOK, response.Code)
+			require.Contains(t, response.Header().Get("Content-Security-Policy"), "form-action 'self' "+callback.source+";")
+		})
+	}
 }
 
 func TestStaffOAuthAuthorizationReauthenticatesRevokedBrowserSession(t *testing.T) {

@@ -1121,7 +1121,7 @@ func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.V
 
 // handleSetupCallback is the backend handler that WorkOS's success_url redirects to
 // after portal completion. It authenticates the session, verifies the setup
-// state with WorkOS, and 302-redirects to the appropriate wizard step.
+// state with WorkOS, and redirects to a visible configured wizard task.
 //
 // Query params:
 //   - intent: "domain_verification", "sso", or "dsync"
@@ -1171,6 +1171,12 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		span.SetStatus(codes.Error, "forbidden")
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "setup callback: read org", attr.SlogError(err))
@@ -1182,41 +1188,32 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
 	orgSlug := org.Slug
 
-	// Determine the next step based on what was just completed and what's verified.
-	var nextStepSlug string
-	switch intent {
-	case "domain_verification":
-		// Domain verification lives on the identity provider card. Refresh the
-		// stored domains so the card shows the result; WorkOS may still be
-		// checking DNS, in which case the card stays unverified.
-		nextStepSlug = "identity-provider"
-		if workosOrgID != "" {
-			if _, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains); err != nil {
-				s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
-			}
+	config, err := LoadOnboardingConfiguration(ctx, s.db, org.ID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "setup callback: read onboarding configuration", attr.SlogError(err))
+		span.SetStatus(codes.Error, "read onboarding configuration failed")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	visible := make(map[string]bool, len(config.Tasks))
+	for _, task := range config.Tasks {
+		visible[task.Key] = !task.Hidden
+	}
+	// All identity setup steps belong to the combined card. Refresh domains even
+	// when DNS is still pending, but never navigate to a hidden or absent task.
+	if intent == "domain_verification" && workosOrgID != "" {
+		if _, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains); err != nil {
+			s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
 		}
-	case "sso":
-		if workosOrgID != "" {
-			connections, err := s.orgs.ListConnections(ctx, workosOrgID)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
-			}
-			if workos.HasActiveConnection(connections) {
-				// Directory sync lives on the same card as single sign-on.
-				nextStepSlug = "identity-provider"
-			}
-		}
-	case "dsync":
-		// Directory sync may take time to become "linked" after portal setup.
-		// Completing the portal is sufficient to advance — DSYNC is also skippable.
-		nextStepSlug = "anthropic-observability"
+	}
+	nextTask := ""
+	if visible["identity-provider"] {
+		nextTask = "identity-provider"
 	}
 
 	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
-	if originTask != "" {
-		redirectURL += fmt.Sprintf("?task=%s", originTask)
-	} else if nextStepSlug != "" {
-		redirectURL += fmt.Sprintf("?step=%s", nextStepSlug)
+	if nextTask != "" {
+		redirectURL += fmt.Sprintf("?task=%s", nextTask)
 	}
 
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)

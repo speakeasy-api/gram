@@ -2,6 +2,7 @@ import type { ComponentProps, JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useMatchRoute } from "@tanstack/react-router";
 
+import { DemoOrganizationNavItem } from "@/components/demo-organization-nav-item";
 import { NavUser } from "@/components/nav-user";
 import { RecordNav } from "@/components/record-nav";
 import { SpeakeasyMark } from "@/components/speakeasy-mark";
@@ -81,6 +82,9 @@ export function AppSidebar({
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
+                  {groupLabel === "Platform Management" && (
+                    <DemoOrganizationNavItem />
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

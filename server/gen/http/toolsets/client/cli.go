@@ -146,7 +146,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"abc123\",\n      \"default_environment_slug\": \"aaa\",\n      \"description\": \"abc123\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"aaa\",\n      \"name\": \"abc123\",\n      \"prompt_template_names\": [\n         \"abc123\"\n      ],\n      \"resource_urns\": [\n         \"abc123\"\n      ],\n      \"tool_selection_mode\": \"abc123\",\n      \"tool_urns\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"abc123\",\n      \"default_environment_slug\": \"aaa\",\n      \"description\": \"abc123\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"aaa\",\n      \"name\": \"abc123\",\n      \"network_access_mode\": \"dual\",\n      \"prompt_template_names\": [\n         \"abc123\"\n      ],\n      \"resource_urns\": [\n         \"abc123\"\n      ],\n      \"tool_selection_mode\": \"abc123\",\n      \"tool_urns\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -162,6 +162,11 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 		if body.McpSlug != nil {
 			if utf8.RuneCountInString(*body.McpSlug) > 40 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+			}
+		}
+		if body.NetworkAccessMode != nil {
+			if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 			}
 		}
 		if err != nil {
@@ -212,6 +217,10 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	if body.McpSlug != nil {
 		mcpSlug := types.Slug(*body.McpSlug)
 		v.McpSlug = &mcpSlug
+	}
+	if body.NetworkAccessMode != nil {
+		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
+		v.NetworkAccessMode = &networkAccessMode
 	}
 	if body.PromptTemplateNames != nil {
 		v.PromptTemplateNames = make([]string, len(body.PromptTemplateNames))

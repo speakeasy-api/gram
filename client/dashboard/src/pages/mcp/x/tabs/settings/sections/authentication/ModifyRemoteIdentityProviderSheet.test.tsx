@@ -40,7 +40,7 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: () => ({ data: { mcpServers: [] } }),
   invalidateAllMcpServers: vi.fn(async () => undefined),
 }));
-vi.mock("./useAllRemoteSessionClients", () => ({
+vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
   useAllRemoteSessionClients: () => ({
     items: [
       {
