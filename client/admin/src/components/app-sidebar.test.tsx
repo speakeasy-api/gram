@@ -205,6 +205,10 @@ describe("AppSidebar", () => {
           { label: "Support matrix", href: "/integration-coverage" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
           { label: "Admin MCP", href: "/mcp-setup" },
+          {
+            label: "Demo organization",
+            href: "https://app.getgram.ai/acme-demo/projects/default",
+          },
         ],
       },
     ]);
@@ -247,6 +251,13 @@ describe("AppSidebar", () => {
     // The record nav replaces the global one, but still offers setup.
     expect(hrefs()).not.toContain("/projects");
     expect(hrefs()).toContain("/mcp-setup");
+
+    const demoLink = screen.getByRole("link", { name: "Demo organization" });
+    expect(demoLink.getAttribute("href")).toBe(
+      "https://app.getgram.ai/acme-demo/projects/default",
+    );
+    expect(demoLink.getAttribute("target")).toBe("_blank");
+    expect(demoLink.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
   it("falls back to the global nav when the record fails to load", async () => {

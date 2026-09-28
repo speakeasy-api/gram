@@ -1,4 +1,5 @@
 import type { AriaAttributes, JSX } from "react";
+import { DemoOrganizationNavItem } from "@/components/demo-organization-nav-item";
 import {
   BuildingIcon,
   ChevronLeftIcon,
@@ -333,6 +334,7 @@ export function RecordNav({
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            <DemoOrganizationNavItem />
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
