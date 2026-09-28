@@ -52,6 +52,11 @@ func GetObservabilityOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getObservabilityOverview"
 }
 
+// GetMcpNetworkTrafficTelemetryPath returns the URL path to the telemetry service getMcpNetworkTraffic HTTP endpoint.
+func GetMcpNetworkTrafficTelemetryPath() string {
+	return "/rpc/telemetry.getMcpNetworkTraffic"
+}
+
 // GetMetaMcpServerUsageTelemetryPath returns the URL path to the telemetry service getMetaMcpServerUsage HTTP endpoint.
 func GetMetaMcpServerUsageTelemetryPath() string {
 	return "/rpc/telemetry.getMetaMcpServerUsage"

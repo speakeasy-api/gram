@@ -14,7 +14,7 @@ import { remoteSessionScopeTier } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
-import { ScopeBadge } from "./ScopeBadge";
+import { ScopeBadge } from "@/lib/remote-identity";
 import { issuerDisplayName } from "./issuerDisplay";
 import { ClientsTab } from "./tabs/issuer/ClientsTab";
 import { OverviewTab } from "./tabs/issuer/OverviewTab";

@@ -53,8 +53,8 @@ const DefaultInEffect = Version20250326
 // The remote MCP proxy has no entry here by design: it never answers a
 // version, it relays whatever the client and the upstream negotiate between
 // themselves. Gram's outbound remote-URL verification probe is also absent —
-// that is Gram acting as a client, so the version it sends is a requested one
-// rather than a served one, and it lives with the probe.
+// that is Gram acting as a client, so the versions it requests are chosen by
+// the MCP SDK client it connects with rather than served by Gram.
 var (
 	supportedHostedToolset   = []string{Version20241105, Version20250326, Version20250618, Version20251125}
 	supportedPlatformToolset = []string{Version20241105, Version20250326, Version20250618, Version20251125}

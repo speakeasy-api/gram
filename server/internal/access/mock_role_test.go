@@ -79,6 +79,22 @@ func (m *MockRoleProvider) GetOrgMembership(ctx context.Context, workOSUserID, w
 	return nil, mockErr(args, 1)
 }
 
+func (m *MockRoleProvider) ListDirectories(ctx context.Context, organizationID string) ([]thirdpartyworkos.Directory, error) {
+	args := m.Called(ctx, organizationID)
+	if directories, ok := args.Get(0).([]thirdpartyworkos.Directory); ok {
+		return directories, mockErr(args, 1)
+	}
+	return nil, mockErr(args, 1)
+}
+
+func (m *MockRoleProvider) ListDirectoryGroups(ctx context.Context, directoryID string) ([]thirdpartyworkos.DirectoryGroup, error) {
+	args := m.Called(ctx, directoryID)
+	if groups, ok := args.Get(0).([]thirdpartyworkos.DirectoryGroup); ok {
+		return groups, mockErr(args, 1)
+	}
+	return nil, mockErr(args, 1)
+}
+
 func mockErr(args mock.Arguments, index int) error {
 	err := args.Error(index)
 	if err == nil {

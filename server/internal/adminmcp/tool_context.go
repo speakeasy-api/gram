@@ -16,7 +16,7 @@ type AdminContext struct {
 	Workflows []string `json:"available_workflows"`
 }
 
-func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, usageReadsAvailable bool) {
+func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable bool) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_admin_context",
 		Title:       "Get Staff Admin Context",
@@ -42,6 +42,24 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 		}
 		if usageReadsAvailable {
 			workflows = append(workflows, "inspect current-cycle organization usage estimate")
+		}
+		if coverageReadsAvailable {
+			workflows = append(workflows, "inspect which agent surfaces Gram observes for an organization")
+		}
+		if issuerReadsAvailable {
+			workflows = append(workflows, "inspect global issuers and bounded duplicate/migration preflights")
+		}
+		if matrixReadsAvailable {
+			workflows = append(workflows, "inspect global support matrix facts without operator notes")
+		}
+		if onboardingReadsAvailable {
+			workflows = append(workflows, "inspect organization onboarding task configuration")
+		}
+		if projectMCPReadsAvailable {
+			workflows = append(workflows, "inspect project MCP server inventory without URLs")
+		}
+		if billingDiagnosticsAvailable {
+			workflows = append(workflows, "inspect bounded organization inference key state, spend history and metered usage totals")
 		}
 		return nil, AdminContext{
 			Email:     principal.Email,

@@ -203,12 +203,36 @@ func TestToolEvents_OrdersBrokenToolsFirstAndReportsTruncation(t *testing.T) {
 	require.Len(t, capped, maxDrilldownTools)
 }
 
-func TestDrilldownTarget_UnresolvableAttributionStaysExplicit(t *testing.T) {
+// TestServerIdentity_OutcomeParamsNeverBroaden pins that a server with no slug,
+// no toolset, and no reported names is still scoped by its configured id, so a
+// call-level read can never fall back to the whole project under one MCP's
+// name.
+func TestServerIdentity_OutcomeParamsNeverBroaden(t *testing.T) {
 	t.Parallel()
 
-	params := (drilldownTarget{projectID: "project-1", mcpServerID: "mcp-1"}).outcomeParams()
-	require.Equal(t, []string{"__platform_mcp_unresolvable__"}, params.ToolsetSlugs)
-	require.Equal(t, []string{"/__platform_mcp_unresolvable__"}, params.MCPServerURLSuffixes)
+	params := (drilldownTarget{identity: serverIdentity{mcpServerID: "mcp-1"}, projectID: "project-1"}).outcomeParams()
+	require.Equal(t, []string{"project-1"}, params.GramProjectIDs)
+	require.Equal(t, []string{"mcp-1"}, params.MCPServerIDs)
+	require.Empty(t, params.ToolsetSlugs)
+	require.Empty(t, params.MCPServerURLSuffixes)
+	require.Empty(t, params.ToolSources)
+
+	// Every identity the server has rides along, so the gateway lane matches on
+	// the toolset slug or the id and the hook lane on the URL or the reported
+	// name, and the outcome tally covers the same calls the summary does.
+	full := serverIdentity{
+		mcpServerID: "mcp-1",
+		toolsetSlug: "billing",
+		urlSuffixes: []string{"/mcp/billing"},
+		toolSources: []string{"billing", "plugin_finance_billing"},
+	}
+	params = full.outcomeParams("project-1", 1, 2)
+	require.Equal(t, []string{"billing"}, params.ToolsetSlugs)
+	require.Equal(t, []string{"/mcp/billing"}, params.MCPServerURLSuffixes)
+	require.Equal(t, []string{"mcp-1"}, params.MCPServerIDs)
+	require.Equal(t, []string{"billing", "plugin_finance_billing"}, params.ToolSources)
+	require.Equal(t, int64(1), params.TimeStart)
+	require.Equal(t, int64(2), params.TimeEnd)
 }
 
 // TestSummaryIdentityParams_UsesExactlyOneIdentityFilter pins that the summary
@@ -219,9 +243,8 @@ func TestSummaryIdentityParams_UsesExactlyOneIdentityFilter(t *testing.T) {
 	t.Parallel()
 
 	hosted := drilldownTarget{
-		toolsetSlugs: []string{"billing"},
-		projectID:    "project-1",
-		mcpServerID:  "mcp-1",
+		identity:  serverIdentity{mcpServerID: "mcp-1", toolsetSlug: "billing"},
+		projectID: "project-1",
 	}
 	params := summaryIdentityParams(hosted, 1, 2)
 	require.Equal(t, "billing", params.ToolsetSlug)
@@ -231,8 +254,8 @@ func TestSummaryIdentityParams_UsesExactlyOneIdentityFilter(t *testing.T) {
 	// by its server id instead — never by neither, which would read as "no
 	// filter" and return the whole project.
 	remote := drilldownTarget{
-		projectID:   "project-1",
-		mcpServerID: "mcp-1",
+		identity:  serverIdentity{mcpServerID: "mcp-1"},
+		projectID: "project-1",
 	}
 	params = summaryIdentityParams(remote, 1, 2)
 	require.Empty(t, params.ToolsetSlug)

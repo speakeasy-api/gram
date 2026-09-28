@@ -180,23 +180,17 @@ func TestRouteMetaMemberToken(t *testing.T) {
 
 // close must reach the proxy builder on a live detached context even after
 // the member call's own context is gone (the strand-avoidance contract).
-func TestMemberSessionClose_DetachedContext(t *testing.T) {
+func TestUnobservedMemberSessionClose_DetachedContext(t *testing.T) {
 	t.Parallel()
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	var buildCtxErr error
-	sess := &memberSession{
-		svc:    nil,
-		logger: nil,
-		dial: memberDial{anonymous: false, build: func(ctx context.Context) (*proxy.Proxy, error) {
-			buildCtxErr = ctx.Err()
-			return nil, errors.New("stop before any network work")
-		}},
-		member:    metaMember{slug: "m", remoteServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}},
-		sessionID: "sess-1",
+	build := func(ctx context.Context) (*proxy.Proxy, error) {
+		buildCtxErr = ctx.Err()
+		return nil, errors.New("stop before any network work")
 	}
-	sess.close(canceled)
+	closeUnobservedMemberSession(canceled, nil, build, "sess-1", memberSessionCloseTimeout)
 	require.NoError(t, buildCtxErr, "the session DELETE must not be built on the expired call context")
 }

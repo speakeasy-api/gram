@@ -381,6 +381,102 @@ paths:
       x-speakeasy-name-override: createRole
       x-speakeasy-react-hook:
         name: CreateRole
+  /rpc/access.deleteDirectoryRoleMapping:
+    delete:
+      description: Remove a directory role mapping.
+      operationId: deleteDirectoryRoleMapping
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the mapping to remove.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the mapping to remove.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteDirectoryRoleMapping access
+      tags:
+        - access
+      x-speakeasy-name-override: deleteDirectoryRoleMapping
+      x-speakeasy-react-hook:
+        name: DeleteDirectoryRoleMapping
+        type: mutation
   /rpc/access.deleteRole:
     delete:
       description: Delete a custom role (system roles cannot be deleted).
@@ -1276,6 +1372,96 @@ paths:
       x-speakeasy-name-override: listChallenges
       x-speakeasy-react-hook:
         name: Challenges
+  /rpc/access.listDirectoryRoleMappings:
+    get:
+      description: List the organization's directory groups and attribute values, and the roles mapped to them.
+      operationId: listDirectoryRoleMappings
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDirectoryRoleMappingsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listDirectoryRoleMappings access
+      tags:
+        - access
+      x-speakeasy-name-override: listDirectoryRoleMappings
+      x-speakeasy-react-hook:
+        name: DirectoryRoleMappings
   /rpc/access.listEmployeeAIDetections:
     get:
       description: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.
@@ -2650,6 +2836,103 @@ paths:
       x-speakeasy-react-hook:
         name: SetAIToolDecision
         type: mutation
+  /rpc/access.setDirectoryRoleMapping:
+    post:
+      description: Map a directory group or attribute value to a role, replacing any role it was mapped to before.
+      operationId: setDirectoryRoleMapping
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetDirectoryRoleMappingForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectoryRoleMapping'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: setDirectoryRoleMapping access
+      tags:
+        - access
+      x-speakeasy-name-override: setDirectoryRoleMapping
+      x-speakeasy-react-hook:
+        name: SetDirectoryRoleMapping
+        type: mutation
   /rpc/access.setResourceAudience:
     post:
       description: Replace the rules that name one resource. Organization-wide rules are left untouched.
@@ -2746,6 +3029,97 @@ paths:
       x-speakeasy-name-override: setResourceAudience
       x-speakeasy-react-hook:
         name: SetResourceAudience
+        type: mutation
+  /rpc/access.syncDirectoryGroups:
+    post:
+      description: Fetch the organization's directory groups from WorkOS and save any that are new or changed.
+      operationId: syncDirectoryGroups
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncDirectoryGroupsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: syncDirectoryGroups access
+      tags:
+        - access
+      x-speakeasy-name-override: syncDirectoryGroups
+      x-speakeasy-react-hook:
+        name: SyncDirectoryGroups
         type: mutation
   /rpc/access.updateMemberRoles:
     put:
@@ -38975,6 +39349,94 @@ paths:
       x-speakeasy-name-override: sendInvite
       x-speakeasy-react-hook:
         name: SendInvite
+  /rpc/organizations.submitOnboardingSurvey:
+    post:
+      description: Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.
+      operationId: submitOnboardingSurvey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitOnboardingSurveyRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSetupTasksResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: submitOnboardingSurvey organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: submitOnboardingSurvey
+      x-speakeasy-react-hook:
+        name: SubmitOnboardingSurvey
   /rpc/organizations.updateInviteRole:
     put:
       description: Change the role assigned to a pending WorkOS invitation.
@@ -57834,6 +58296,835 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateSkill
+  /rpc/slackDirectoryConnections.begin:
+    post:
+      operationId: beginSlackDirectoryConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeginSlackDirectoryConnectionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BeginResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/vnd.goa.error:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: begin slackDirectoryConnections
+      tags:
+        - slackDirectoryConnections
+      x-speakeasy-name-override: begin
+      x-speakeasy-react-hook:
+        name: BeginSlackDirectoryConnection
+  /rpc/slackDirectoryConnections.disconnect:
+    post:
+      operationId: disconnectSlackDirectoryConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisconnectSlackDirectoryConnectionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackDirectoryConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/vnd.goa.error:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: disconnect slackDirectoryConnections
+      tags:
+        - slackDirectoryConnections
+      x-speakeasy-name-override: disconnect
+      x-speakeasy-react-hook:
+        name: DisconnectSlackDirectoryConnection
+  /rpc/slackDirectoryConnections.getMember:
+    get:
+      description: Read current Slack profile and mapping before an administrator confirms a selection.
+      operationId: getSlackDirectoryMember
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackDirectoryMember'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/vnd.goa.error:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getMember slackDirectoryConnections
+      tags:
+        - slackDirectoryConnections
+      x-speakeasy-name-override: getMember
+      x-speakeasy-react-hook:
+        name: SlackDirectoryMember
+  /rpc/slackDirectoryConnections.list:
+    get:
+      operationId: listSlackDirectoryConnections
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/vnd.goa.error:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: list slackDirectoryConnections
+      tags:
+        - slackDirectoryConnections
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: SlackDirectoryConnections
+  /rpc/slackDirectoryConnections.listMembers:
+    get:
+      description: Read observed Slack members across the organization or within one workspace. Does not create identity mappings.
+      operationId: listSlackDirectoryMembers
+      parameters:
+        - allowEmptyValue: true
+          description: Filter to a workspace connection.
+          in: query
+          name: connection_id
+          schema:
+            description: Filter to a workspace connection.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Literal case-insensitive name, email or Slack ID search.
+          in: query
+          name: search
+          schema:
+            description: Literal case-insensitive name, email or Slack ID search.
+            maxLength: 200
+            type: string
+        - allowEmptyValue: true
+          description: Filter mapping state.
+          in: query
+          name: mapping_status
+          schema:
+            description: Filter mapping state.
+            enum:
+              - unmapped
+              - mapped
+              - needs_review
+            type: string
+        - allowEmptyValue: true
+          description: Include members deactivated in Slack.
+          in: query
+          name: include_deactivated
+          schema:
+            default: false
+            description: Include members deactivated in Slack.
+            type: boolean
+        - allowEmptyValue: true
+          description: Include bots and apps.
+          in: query
+          name: include_bots
+          schema:
+            default: false
+            description: Include bots and apps.
+            type: boolean
+        - allowEmptyValue: true
+          description: Include guests.
+          in: query
+          name: include_guests
+          schema:
+            default: false
+            description: Include guests.
+            type: boolean
+        - allowEmptyValue: true
+          description: Sort by mapping state at this time, so mapping changes after it do not reorder pages. Pass back the sort_as_of from the first page; defaults to the database's current time.
+          in: query
+          name: sort_as_of
+          schema:
+            description: Sort by mapping state at this time, so mapping changes after it do not reorder pages. Pass back the sort_as_of from the first page; defaults to the database's current time.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: One-based page number. Unmapped members sort first, then members needing review, then mapped members, each alphabetically.
+          in: query
+          name: page
+          schema:
+            default: 1
+            description: One-based page number. Unmapped members sort first, then members needing review, then mapped members, each alphabetically.
+            format: int64
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Maximum returned rows.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Maximum returned rows.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMembersResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/vnd.goa.error:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listMembers slackDirectoryConnections
+      tags:
+        - slackDirectoryConnections
+      x-speakeasy-name-override: listMembers
+      x-speakeasy-react-hook:
+        name: SlackDirectoryMembers
+  /rpc/slackDirectoryConnections.listPersonAccounts:
+    get:
+      description: Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Does not infer associations from email or grant permissions.
+      operationId: listSlackPersonAccounts
+      parameters:
+        - allowEmptyValue: true
+          description: Exact Gram user ID of the active organization person.
+          in: query
+          name: user_id
+          required: true
+          schema:
+            description: Exact Gram user ID of the active organization person.
+            minLength: 1
+            type: string
+        - allowEmptyValue: true
+          description: Continue after the last membership ID.
+          in: query
+          name: cursor
+          schema:
+            description: Continue after the last membership ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPersonAccountsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/vnd.goa.error:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listPersonAccounts slackDirectoryConnections
+      tags:
+        - slackDirectoryConnections
+      x-speakeasy-name-override: listPersonAccounts
+      x-speakeasy-react-hook:
+        name: SlackPersonAccounts
+  /rpc/slackDirectoryConnections.setMapping:
+    post:
+      description: Explicitly confirm, reassign or remove a Slack association. This grants no permissions and does not establish runtime eligibility.
+      operationId: setSlackIdentityMapping
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSlackIdentityMappingRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackDirectoryMember'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/vnd.goa.error:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setMapping slackDirectoryConnections
+      tags:
+        - slackDirectoryConnections
+      x-speakeasy-name-override: setMapping
+      x-speakeasy-react-hook:
+        name: SetSlackIdentityMapping
+  /rpc/slackDirectoryConnections.sync:
+    post:
+      description: Request a complete Slack workspace directory sync. Concurrent requests join the running sync.
+      operationId: syncSlackDirectory
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncSlackDirectoryRequestBody'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponseBody'
+          description: Accepted response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/vnd.goa.error:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: sync slackDirectoryConnections
+      tags:
+        - slackDirectoryConnections
+      x-speakeasy-name-override: sync
+      x-speakeasy-react-hook:
+        name: SyncSlackDirectory
   /rpc/spendrules.archiveRule:
     post:
       description: 'Archive a budget rule. There is no delete: archiving ends the rule''s lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.'
@@ -59124,6 +60415,112 @@ paths:
       x-speakeasy-name-override: getHooksSummary
       x-speakeasy-react-hook:
         name: GetHooksSummary
+        type: query
+  /rpc/telemetry.getMcpNetworkTraffic:
+    post:
+      description: Observed inbound public and private MCP request counts for a server or gateway over a recent window
+      operationId: getMcpNetworkTraffic
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetMcpNetworkTrafficPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMcpNetworkTrafficResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getMcpNetworkTraffic telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getMcpNetworkTraffic
+      x-speakeasy-react-hook:
+        name: GetMcpNetworkTraffic
         type: query
   /rpc/telemetry.getMcpServerActivity:
     post:
@@ -74539,6 +75936,21 @@ components:
         - name
         - created_at
         - updated_at
+    BeginResponseBody:
+      type: object
+      properties:
+        authorization_url:
+          type: string
+          description: Slack authorization URL bound to the current session.
+      required:
+        - authorization_url
+    BeginSlackDirectoryConnectionRequestBody:
+      type: object
+      properties:
+        connection_id:
+          type: string
+          description: Reconnect this workspace.
+          format: uuid
     BillingEmail:
       type: object
       properties:
@@ -78674,6 +80086,82 @@ components:
         - dimension
         - from
         - to
+    DirectoryAttributeOption:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Directory attribute key, e.g. department_name.
+        member_count:
+          type: integer
+          description: Number of directory users with this value.
+          format: int64
+        value:
+          type: string
+          description: Directory attribute value.
+      required:
+        - key
+        - value
+        - member_count
+    DirectoryGroupOption:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Directory group identifier.
+          format: uuid
+        member_count:
+          type: integer
+          description: Number of directory users in the group.
+          format: int64
+        name:
+          type: string
+          description: Directory group name.
+      required:
+        - id
+        - name
+        - member_count
+    DirectoryRoleMapping:
+      type: object
+      properties:
+        attribute_key:
+          type: string
+          description: The directory attribute key. Set when source_kind is attribute.
+        attribute_value:
+          type: string
+          description: The directory attribute value. Set when source_kind is attribute.
+        created_at:
+          type: string
+          format: date-time
+        directory_group_id:
+          type: string
+          description: The mapped directory group. Set when source_kind is group.
+          format: uuid
+        directory_group_name:
+          type: string
+          description: Display name of the mapped directory group.
+        id:
+          type: string
+          description: Unique mapping identifier.
+          format: uuid
+        role_urn:
+          type: string
+          description: Principal URN of the role granted to matching members.
+        source_kind:
+          type: string
+          description: 'What the mapping matches: a directory group or an attribute value.'
+          enum:
+            - group
+            - attribute
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - source_kind
+        - role_urn
+        - created_at
+        - updated_at
     DisableOpenRouterKeyRequestBody:
       type: object
       properties:
@@ -78689,6 +80177,20 @@ components:
       required:
         - organization_id
         - key_type
+    DisconnectSlackDirectoryConnectionRequestBody:
+      type: object
+      properties:
+        generation:
+          type: string
+          description: Generation last read by the administrator.
+          format: uuid
+        id:
+          type: string
+          description: Durable organization workspace connection ID.
+          format: uuid
+      required:
+        - id
+        - generation
     DiscoverProtectedResourceMetadataRequestBody:
       type: object
       properties:
@@ -80655,6 +82157,55 @@ components:
       properties:
         metadata:
           $ref: '#/components/schemas/McpMetadata'
+    GetMcpNetworkTrafficPayload:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: MCP server ID (mutually exclusive with meta_mcp_server_id)
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: Gateway ID (mutually exclusive with mcp_server_id)
+          format: uuid
+        window:
+          type: string
+          description: Recent traffic window
+          enum:
+            - 24h
+            - 7d
+      description: Provide exactly one of mcp_server_id or meta_mcp_server_id, and a recent window.
+      required:
+        - window
+    GetMcpNetworkTrafficResult:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start of the window
+          format: date-time
+        last_private_at:
+          type: string
+          description: Most recent observed private request in the window
+          format: date-time
+        last_public_at:
+          type: string
+          description: Most recent observed public request in the window
+          format: date-time
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpNetworkTrafficPoint'
+          description: Hourly request counts
+        to:
+          type: string
+          description: End of the window
+          format: date-time
+      description: Observed resolved inbound MCP requests, not a guarantee of every client. No observations does not prove a route is unused.
+      required:
+        - from
+        - to
+        - points
     GetMcpServerActivityPayload:
       type: object
       properties:
@@ -83830,6 +85381,28 @@ components:
         - organization_id
         - provider
         - schedules
+    ListDirectoryRoleMappingsResult:
+      type: object
+      properties:
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryAttributeOption'
+          description: Distinct attribute values set on active directory users.
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryGroupOption'
+          description: Active directory groups in the organization.
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryRoleMapping'
+          description: Live directory role mappings.
+      required:
+        - groups
+        - attributes
+        - mappings
     ListDistributionPluginsResult:
       type: object
       properties:
@@ -84211,6 +85784,25 @@ components:
       description: Result type for listing MCP servers
       required:
         - mcp_servers
+    ListMembersResponseBody:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlackDirectoryMember'
+        sort_as_of:
+          type: string
+          description: Time the mapping-state sort used. Pass it back to keep the order stable across pages and edits.
+          format: date-time
+        total:
+          type: integer
+          description: Matching retained membership rows.
+          format: int64
+      required:
+        - members
+        - total
+        - sort_as_of
     ListMembersResult:
       type: object
       properties:
@@ -84349,6 +85941,19 @@ components:
           description: The list of packages
       required:
         - packages
+    ListPersonAccountsResponseBody:
+      type: object
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlackPersonAccount'
+          description: Up to 50 current mappings, one entry per workspace membership.
+        next_cursor:
+          type: string
+          description: Cursor for the next page, when present.
+      required:
+        - accounts
     ListPluginsResult:
       type: object
       properties:
@@ -84453,6 +86058,20 @@ components:
           description: The list of resources
       required:
         - resources
+    ListResponseBody:
+      type: object
+      properties:
+        authorization_configured:
+          type: boolean
+          description: Whether the deployment can start Slack OAuth.
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlackDirectoryConnection'
+          description: Workspace connections in creation order.
+      required:
+        - connections
+        - authorization_configured
     ListRiskEvalReviewsResult:
       type: object
       properties:
@@ -86047,6 +87666,25 @@ components:
         - id
         - created_at
         - updated_at
+    McpNetworkTrafficPoint:
+      type: object
+      properties:
+        bucket_start:
+          type: string
+          description: Start of the UTC hour
+          format: date-time
+        private_requests:
+          type: integer
+          description: Observed private requests
+          format: int64
+        public_requests:
+          type: integer
+          description: Observed public requests
+          format: int64
+      required:
+        - bucket_start
+        - public_requests
+        - private_requests
     McpServer:
       type: object
       properties:
@@ -91465,7 +93103,6 @@ components:
           items:
             type: string
           description: Custom tool names for this server. Omit to follow the policy tool rule.
-          minItems: 1
       required:
         - mcp_server_id
     RiskOverviewCategory:
@@ -93759,6 +95396,33 @@ components:
           minimum: 0
       required:
         - billing_cycle_anchor_day
+    SetDirectoryRoleMappingForm:
+      type: object
+      properties:
+        attribute_key:
+          type: string
+          description: Attribute key to match. Required when source_kind is attribute.
+          minLength: 1
+        attribute_value:
+          type: string
+          description: Attribute value to match. Required when source_kind is attribute.
+          minLength: 1
+        directory_group_id:
+          type: string
+          description: Directory group to map. Required when source_kind is group.
+          format: uuid
+        role_urn:
+          type: string
+          description: Principal URN of the role to grant, from Role.principal_urn.
+        source_kind:
+          type: string
+          description: What the mapping matches.
+          enum:
+            - group
+            - attribute
+      required:
+        - source_kind
+        - role_urn
     SetKeyEnabledRequestBody:
       type: object
       properties:
@@ -94008,6 +95672,30 @@ components:
         - provider
         - schedule
         - enabled
+    SetSlackIdentityMappingRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Membership to change.
+          format: uuid
+        mapping_revision:
+          type: integer
+          description: Mapping revision shown in the review dialog.
+          format: int64
+          minimum: 0
+        observation_token:
+          type: string
+          description: Directory evidence shown in the review dialog.
+          minLength: 1
+        user_id:
+          type: string
+          description: Active same-organization person to confirm. Omit to unmap.
+          minLength: 1
+      required:
+        - id
+        - mapping_revision
+        - observation_token
     SetSourceEnvironmentLinkRequestBody:
       type: object
       properties:
@@ -95538,6 +97226,236 @@ components:
         - skill_version_id
         - metrics
         - trend
+    SlackDirectoryConnection:
+      type: object
+      properties:
+        directory_status:
+          type: string
+          description: Whether a snapshot belongs to the usable current authorization.
+          enum:
+            - never_synced
+            - current
+            - stale
+        disconnected_at:
+          type: string
+          description: When credentials were removed.
+          format: date-time
+        generation:
+          type: string
+          description: Connection generation used to reject stale changes.
+          format: uuid
+        granted_scopes:
+          type: array
+          items:
+            type: string
+          description: Permissions granted by Slack.
+        id:
+          type: string
+          description: Durable organization workspace connection ID.
+          format: uuid
+        last_error_code:
+          type: string
+          description: Bounded authorization failure code, when known.
+        last_full_sync_succeeded_at:
+          type: string
+          description: Last complete directory publication, possibly from an earlier authorization.
+          format: date-time
+        last_sync_failed_at:
+          type: string
+          description: Most recent failed attempt; may precede a successful sync.
+          format: date-time
+        last_sync_started_at:
+          type: string
+          description: Start of the latest attempted sync.
+          format: date-time
+        member_count:
+          type: integer
+          description: Members observed in the last complete snapshot, including guests and bots.
+          format: int64
+        status:
+          type: string
+          description: Authorization status, independent of directory sync.
+          enum:
+            - connected
+            - disconnected
+            - reconnect_required
+        sync_members:
+          type: integer
+          description: Verified members fetched in the current attempt.
+          format: int64
+        sync_pages:
+          type: integer
+          description: Completed pages in the current attempt.
+          format: int64
+        sync_phase:
+          type: string
+          description: Bounded progress phase while syncing.
+        sync_status:
+          type: string
+          description: Latest workflow state. Unknown means progress could not be checked.
+          enum:
+            - idle
+            - queued
+            - running
+            - retrying
+            - failed
+            - unknown
+        updated_at:
+          type: string
+          description: Last connection change timestamp.
+          format: date-time
+        workspace_id:
+          type: string
+          description: Verified Slack workspace ID.
+        workspace_name:
+          type: string
+          description: Workspace display name from Slack.
+      description: An organization Slack workspace authorization. Authorization does not indicate directory sync or invocation protection.
+      required:
+        - id
+        - workspace_id
+        - workspace_name
+        - status
+        - generation
+        - granted_scopes
+        - updated_at
+        - member_count
+        - directory_status
+        - sync_status
+    SlackDirectoryMember:
+      type: object
+      properties:
+        connection_id:
+          type: string
+          description: Connection that observed this workspace member.
+          format: uuid
+        display_name:
+          type: string
+          description: Optional observed display name.
+        email:
+          type: string
+          description: Observed email; never evidence of a confirmed Gram identity.
+        id:
+          type: string
+          description: Durable membership ID.
+          format: uuid
+        last_seen_at:
+          type: string
+          description: Latest published observation.
+          format: date-time
+        mapping:
+          $ref: '#/components/schemas/SlackIdentityMapping'
+        mapping_conflict_detected_at:
+          type: string
+          description: When the finding was first recorded.
+          format: date-time
+        mapping_conflict_reason:
+          type: string
+          description: Sticky directory review finding, cleared only by an admin decision.
+        mapping_revision:
+          type: integer
+          description: Version of admin mapping decisions, independent of directory sync.
+          format: int64
+        mapping_status:
+          type: string
+          description: Mapping state, separate from source state and freshness.
+          enum:
+            - unmapped
+            - mapped
+            - needs_review
+        member_type:
+          type: string
+          description: Observed account type.
+          enum:
+            - person
+            - guest
+            - single_channel_guest
+            - bot
+            - unknown
+        observation_token:
+          type: string
+          description: Opaque token for the directory evidence reviewed by the administrator.
+        observed_in_last_sync:
+          type: boolean
+          description: Whether this row was present in its workspace's last complete snapshot.
+        slack_user_id:
+          type: string
+          description: Slack workspace user ID.
+        status:
+          type: string
+          description: Observed account state.
+          enum:
+            - active
+            - deactivated
+            - invited
+            - unknown
+        workspace_id:
+          type: string
+          description: Verified member workspace.
+        workspace_name:
+          type: string
+          description: Workspace display name.
+      required:
+        - mapping_revision
+        - observation_token
+        - mapping_status
+        - id
+        - connection_id
+        - workspace_id
+        - workspace_name
+        - slack_user_id
+        - status
+        - member_type
+        - last_seen_at
+        - observed_in_last_sync
+    SlackIdentityMapping:
+      type: object
+      properties:
+        active:
+          type: boolean
+          description: Whether the person and organization membership are active.
+        display_name:
+          type: string
+          description: Person's current display name.
+        email:
+          type: string
+          description: Person's current email.
+        id:
+          type: string
+          description: Immutable confirmation ID.
+          format: uuid
+        photo_url:
+          type: string
+          description: Person's avatar URL.
+        user_id:
+          type: string
+          description: Existing organization person ID.
+      required:
+        - id
+        - user_id
+        - display_name
+        - email
+        - active
+    SlackPersonAccount:
+      type: object
+      properties:
+        directory_status:
+          type: string
+          description: Freshness of the workspace snapshot, independent of mapping state.
+          enum:
+            - never_synced
+            - current
+            - stale
+        last_full_sync_succeeded_at:
+          type: string
+          description: Last complete directory publication, possibly from an earlier authorization.
+          format: date-time
+        member:
+          $ref: '#/components/schemas/SlackDirectoryMember'
+      description: An existing admin-confirmed workspace membership for one active organization person. Read-only and grants no permissions. The shared member view includes revision and evidence fields; using them to change a mapping still requires organization administration.
+      required:
+        - member
+        - directory_status
     SourceEnvironmentLink:
       type: object
       properties:
@@ -96074,6 +97992,14 @@ components:
       required:
         - id
         - client_id
+    SubmitOnboardingSurveyRequestBody:
+      type: object
+      properties:
+        use_case:
+          type: string
+          description: Use case the survey answers resolved to.
+      required:
+        - use_case
     SubmitRiskBlockFeedbackRequestBody:
       type: object
       properties:
@@ -96242,6 +98168,15 @@ components:
         - summary
         - impact
         - cached
+    SyncDirectoryGroupsResult:
+      type: object
+      properties:
+        group_count:
+          type: integer
+          description: Number of groups WorkOS returned across the organization's directories.
+          format: int64
+      required:
+        - group_count
     SyncIdentityProviderConnectionApplicationsRequestBody:
       type: object
       properties:
@@ -96251,6 +98186,28 @@ components:
           format: uuid
       required:
         - id
+    SyncResponseBody:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+          description: The durable sync was started or already running.
+      required:
+        - accepted
+    SyncSlackDirectoryRequestBody:
+      type: object
+      properties:
+        generation:
+          type: string
+          description: Generation last read by the administrator.
+          format: uuid
+        id:
+          type: string
+          description: Connection to sync.
+          format: uuid
+      required:
+        - id
+        - generation
     SyncedAgentUser:
       type: object
       properties:
@@ -97780,6 +99737,13 @@ components:
         name:
           type: string
           description: The name of the toolset
+        network_access_mode:
+          type: string
+          description: The network surfaces through which a Gram-hosted MCP server may be reached.
+          enum:
+            - public_only
+            - dual
+            - private_only
         oauth_enablement_metadata:
           $ref: '#/components/schemas/OAuthEnablementMetadata'
         organization_id:
@@ -100197,6 +102161,13 @@ components:
         name:
           type: string
           description: The new name of the toolset
+        network_access_mode:
+          type: string
+          description: 'Where the hosted MCP is accessible: public_only, dual, or private_only'
+          enum:
+            - public_only
+            - dual
+            - private_only
         prompt_template_names:
           type: array
           items:
@@ -101888,6 +103859,8 @@ tags:
     description: Manage organization-wide skill efficacy sampling settings.
   - name: skills
     description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
+  - name: slackDirectoryConnections
+    description: Manage organization-wide Slack workspace authorizations, independently of project runtime installations.
   - name: spendRules
     description: Manage budget rules, view budget events, and preview actor targeting.
   - name: telemetry
