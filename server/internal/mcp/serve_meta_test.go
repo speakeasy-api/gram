@@ -209,14 +209,11 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	served := func(method string) string {
-		params := map[string]any{}
-		if method == "initialize" {
-			params = map[string]any{"protocolVersion": mcpversions.Version20250326}
-		}
-		w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, method, params), "", nil)
+	served := func() string {
+		params := map[string]any{"protocolVersion": mcpversions.Version20250326}
+		w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "initialize", params), "", nil)
 		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, w.Code, "method=%s body=%s", method, w.Body.String())
+		require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 
 		envelope := decodeRPCResponse(t, w)
 		var result struct {
@@ -236,9 +233,7 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 	} {
 		// Exercise setting and resetting the same endpoint sequentially.
 		setInstructions(tc.stored)
-		for _, method := range []string{"initialize"} {
-			require.Equal(t, tc.want, served(method), "case=%s method=%s", tc.name, method)
-		}
+		require.Equal(t, tc.want, served(), "case=%s", tc.name)
 	}
 }
 

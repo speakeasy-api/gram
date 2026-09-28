@@ -96,11 +96,9 @@ func validateMCPRequestEnvelope(ctx context.Context, logger *slog.Logger, p *pre
 
 func validateSupportedProtocolVersion(req *rawRequest, resolution mcpversions.Resolution, supported []string) error {
 	negotiableInitialize := initializeNegotiable(req, resolution)
-	if req.Method == "initialize" && !negotiableInitialize {
-		// A 2026-07-28 or later declaration rules out the handshake, so a
-		// header that disagrees with the `_meta` declaration is a conflict to
-		// report here rather than a supported header that dispatch then
-		// answers as method-not-found.
+	if !negotiableInitialize {
+		// Outside handshake negotiation, declarations must agree before
+		// the resolved revision controls method availability.
 		if metaVersion := mcprequests.DeclaredProtocolVersion("", req.Params); metaVersion != "" && metaVersion != resolution.Declared {
 			return conflictingProtocolVersionError(req.ID, resolution.Declared, metaVersion)
 		}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
@@ -140,12 +141,13 @@ func (failingRow) Scan(...any) error { return errNoDatabaseInTest }
 // write-back: after negotiation the payload's resolution must carry the
 // negotiated revision rather than the provisional entry-time default, because
 // consumers downstream of dispatch read the in-effect revision from there.
-// The failing repositories exercise the documented tolerance of the
+// The failing metadata repository exercises the documented tolerance of the
 // instructions lookup, which must not affect the handshake.
 func TestHandleInitialize_WritesNegotiatedVersionBackIntoPayload(t *testing.T) {
 	t.Parallel()
 
 	store, payload := newClientIdentityFixture(t)
+	payload.toolsetID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	require.Equal(t, mcpversions.DefaultInEffect, payload.protocolVersion.InEffect)
 
 	rawParams, err := json.Marshal(map[string]any{

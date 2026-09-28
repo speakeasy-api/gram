@@ -175,3 +175,38 @@ func TestInitializeDeclaring20260728CannotStartHandshake(t *testing.T) {
 	require.Empty(t, body)
 	require.Equal(t, mcpversions.Version20251125, resolution.InEffect)
 }
+
+func TestRequestDeclarationsMustAgreeBeforeDispatch(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{"server/discover", "tools/list", "ping", "notifications/initialized"} {
+		for _, tc := range []struct {
+			name, header, meta string
+			conflict           bool
+		}{
+			{name: "earlier header", header: mcpversions.Version20251125, meta: mcpversions.Version20260728, conflict: true},
+			{name: "later header", header: mcpversions.Version20260728, meta: mcpversions.Version20251125, conflict: true},
+			{name: "matching", header: mcpversions.Version20260728, meta: mcpversions.Version20260728},
+			{name: "metadata only", meta: mcpversions.Version20260728},
+			{name: "header only", header: mcpversions.Version20260728},
+		} {
+			t.Run(method+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				params, err := json.Marshal(map[string]any{"_meta": map[string]string{"io.modelcontextprotocol/protocolVersion": tc.meta}})
+				require.NoError(t, err)
+				req := &rawRequest{Method: method, ID: mcpjsonrpc.NumberID(1), Params: params}
+				// Exercise the shared hosted/platform gate with discovery enabled,
+				// so unsupported-version rejection cannot mask a conflict.
+				supported := append(mcpversions.SupportedHostedToolset(), mcpversions.Version20260728)
+				resolution := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(tc.header, params), supported)
+				err = validateSupportedProtocolVersion(req, resolution, supported)
+				if !tc.conflict {
+					require.NoError(t, err)
+					return
+				}
+				var rpcErr *oops.MCPError
+				require.ErrorAs(t, err, &rpcErr)
+				require.Equal(t, oops.MCPCodeInvalidRequest, rpcErr.Code)
+			})
+		}
+	}
+}
