@@ -5,12 +5,25 @@ import { CopyValue } from "@/components/CopyValue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function AdminMcpSetup(): JSX.Element {
-  // The admin dashboard and its staff MCP share an origin. Read it from the
-  // browser, never from an untrusted query parameter or a public app URL.
-  const [endpoint] = useState(() => `${window.location.origin}/admin-mcp`);
   const [origin] = useState(() => window.location.origin);
+  if (!origin.startsWith("https://")) {
+    return (
+      <main className="mx-auto w-full max-w-3xl space-y-3 pb-10">
+        <h1 className="text-2xl font-semibold">Connect Admin MCP</h1>
+        <p>
+          Open this page at the private HTTPS Tailscale dashboard address to
+          generate setup instructions. Admin MCP connections cannot use an
+          insecure dashboard origin.
+        </p>
+      </main>
+    );
+  }
+
+  // The admin dashboard and staff MCP share an origin. Never take the URL
+  // from a query parameter or a public app URL.
+  const endpoint = `${origin}/admin-mcp`;
   const cursorConfig = JSON.stringify(
-    { mcpServers: { "gram-admin": { url: endpoint } } },
+    { mcpServers: { "gram-admin": { type: "http", url: endpoint } } },
     null,
     2,
   );

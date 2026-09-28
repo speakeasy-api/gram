@@ -4,10 +4,18 @@ import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { AdminMcpSetup } from "./AdminMcpSetup";
 import { renderWithApp } from "@/test/harness";
 
-afterEach(cleanup);
+const browser = window as typeof window & {
+  happyDOM: { setURL(url: string): void };
+};
+
+afterEach(() => {
+  cleanup();
+  browser.happyDOM.setURL("http://localhost:3000");
+});
 
 describe("Admin MCP setup", () => {
   it("uses the current private dashboard origin for each install option", async () => {
+    browser.happyDOM.setURL("https://admin.example.test/mcp-setup");
     await renderWithApp(<AdminMcpSetup />);
     const endpoint = `${window.location.origin}/admin-mcp`;
 
@@ -32,19 +40,32 @@ describe("Admin MCP setup", () => {
       button: 0,
     });
     expect(
-      screen.getByRole("button", { name: "Copy Cursor configuration" })
-        .previousElementSibling?.textContent,
-    ).toBe(
-      JSON.stringify(
-        { mcpServers: { "gram-admin": { url: endpoint } } },
-        null,
-        2,
+      screen.getByText(
+        JSON.stringify(
+          { mcpServers: { "gram-admin": { type: "http", url: endpoint } } },
+          null,
+          2,
+        ),
+        { normalizer: (text) => text },
       ),
-    );
+    ).toBeTruthy();
 
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Other agents" }), {
       button: 0,
     });
     expect(await screen.findByText(/dynamic client registration/)).toBeTruthy();
+  });
+
+  it("does not generate install instructions over plain HTTP", async () => {
+    browser.happyDOM.setURL("http://localhost:5174/mcp-setup");
+    await renderWithApp(<AdminMcpSetup />);
+
+    expect(
+      screen.getByText(/private HTTPS Tailscale dashboard address/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Copy Admin MCP URL" }),
+    ).toBeNull();
+    expect(screen.queryByText("http://localhost:5174/admin-mcp")).toBeNull();
   });
 });
