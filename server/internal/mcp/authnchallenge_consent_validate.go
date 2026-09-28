@@ -263,6 +263,7 @@ func (s *Service) metaValidationTarget(
 	selectedTokens := map[uuid.UUID]remotesessions.UpstreamToken{
 		client.RemoteSessionIssuerID: entry,
 	}
+	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
 		projectID:    endpoint.ProjectID,
 		metaServerID: endpoint.MetaMcpServerID.UUID,
@@ -277,7 +278,7 @@ func (s *Service) metaValidationTarget(
 		userID:          "",
 		externalUserID:  "",
 		apiKeyID:        "",
-		protocolVersion: mcpversions.Resolution{Declared: "", InEffect: metaMemberUpstreamProtocolVersion},
+		protocolVersion: mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:

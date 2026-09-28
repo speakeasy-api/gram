@@ -138,6 +138,14 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	case http.MethodPost:
+		if strings.Contains(buf.String(), `"server/discover"`) {
+			http.Error(w, "method not found", http.StatusNotFound)
+			return
+		}
+		if strings.Contains(buf.String(), `"notifications/initialized"`) {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
 		if strings.Contains(buf.String(), `"initialize"`) {
 			if g.backendSessionID != "" {
 				w.Header().Set("Mcp-Session-Id", g.backendSessionID)
@@ -152,7 +160,7 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.Contains(buf.String(), `"tools/call"`) {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":"gram-gateway-tools/call","result":{"content":[{"type":"text","text":"pong through the tunnel"}],"isError":false}}`)
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"content":[{"type":"text","text":"pong through the tunnel"}],"isError":false}}`)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
