@@ -1,0 +1,49 @@
+server/internal/audit/logger_test.go
+  h_9630b74bdac540 81,90,100,108,162
+server/internal/adminmcp/oauth_metadata_test.go
+  h_9630b74bdac540 24,30
+server/internal/adminmcp/tool_write_feature_test.go
+  h_9630b74bdac540 110,120
+server/internal/productfeatures/mutator_test.go
+  h_9630b74bdac540 164
+server/internal/admin/converttrial_atomic_test.go
+  h_9630b74bdac540 193
+server/internal/productfeatures/mutator.go
+  h_9630b74bdac540 97-99
+server/internal/adminmcp/tool_write_feature.go
+  h_9630b74bdac540 83,86-87
+  h_9630b74bdac540 88
+server/internal/audit/outbox.go
+  h_9630b74bdac540 18-19,21,31
+server/internal/adminmcp/proposal_store_test.go
+  h_9630b74bdac540 280-307
+server/internal/adminmcp/proposal_store.go
+  h_9630b74bdac540 374-376,378-389,531,533,535-541,545,548-549,730-752,769,800-801
+  h_9630b74bdac540 534,550,802
+server/internal/auditapi/speakeasy_mask_test.go
+  h_9630b74bdac540 66,74,92,98,101-102,105-106,129
+server/internal/adminmcp/oauth.go
+  h_9630b74bdac540 6,34,61
+server/internal/adminmcp/proposal_approval_test.go
+  h_9630b74bdac540 159-165
+server/internal/adminmcp/write_guard_test.go
+  h_9630b74bdac540 57,77,160-199
+server/internal/auditapi/impl.go
+  h_9630b74bdac540 168-170,246-248,251-254,259,264-265
+  h_9630b74bdac540 343-348
+server/internal/adminmcp/write_guard.go
+  h_9630b74bdac540 6,82
+server/cmd/gram/admin.go
+  h_9630b74bdac540 526
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "14fa9902717408763ed20fa37b1976af8e3bbe2a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
