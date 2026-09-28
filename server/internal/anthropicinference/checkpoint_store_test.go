@@ -98,7 +98,7 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 	}
 	require.Equal(t, "allow", (<-firstVerdict).Action)
 	readMarker := func() []byte {
-		marker, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText("anthropic-inference:" + conversationID(config, frame).String())})
+		marker, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText(externalConversationID(config, frame))})
 		require.NoError(t, err)
 		return marker
 	}
@@ -162,7 +162,7 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "deny", verdict.Action)
 		raw, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{
-			ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText("anthropic-inference:" + conversationID(config, frame).String()),
+			ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText(externalConversationID(config, frame)),
 		})
 		require.NoError(t, err)
 		require.Empty(t, raw)
@@ -199,7 +199,7 @@ func TestPostgresCheckpointInvalidation(t *testing.T) {
 		raw, err := json.Marshal(cp)
 		require.NoError(t, err)
 		_, err = chatrepo.New(db).SetInferenceAcceptedCheckpoint(t.Context(), chatrepo.SetInferenceAcceptedCheckpointParams{
-			ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText("anthropic-inference:" + conversationID(config, frame).String()), Checkpoint: raw, ExpectedCheckpoint: expected,
+			ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText(externalConversationID(config, frame)), Checkpoint: raw, ExpectedCheckpoint: expected,
 		})
 		require.NoError(t, err)
 		expected = raw
@@ -333,4 +333,28 @@ func TestPostgresLastKnownGoodPreservesDeniedAttempts(t *testing.T) {
 		content = append(content, row.Content)
 	}
 	require.Contains(t, content, "blocked reply")
+}
+
+func TestPostgresCheckpointSessionlessKey(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	frame.SessionID = ""
+	expectedID := "anthropic-inference:" + conversationID(config, frame).String()
+	require.Equal(t, expectedID, externalConversationID(config, frame))
+	saveFrame(t, store, config, frame, "")
+	checkpoint, err := store.Begin(t.Context(), config, frame, "")
+	require.NoError(t, err)
+	_, err = checkpoint.Load(t.Context())
+	require.NoError(t, err)
+	hashes := [][]byte{contentHash(frame.Messages[0])}
+	require.NoError(t, checkpoint.Accept(t.Context(), hashes))
+	data, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText(expectedID)})
+	require.NoError(t, err)
+	require.NotEmpty(t, data)
+	checkpoint, err = store.Begin(t.Context(), config, frame, "")
+	require.NoError(t, err)
+	actual, err := checkpoint.Load(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, hashes, actual)
 }

@@ -55,9 +55,13 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   text, tool arguments, and tool results. The final assistant response becomes
   visible when a subsequent frame includes it; this pre-inference protocol does
   not deliver a final-response event.
-- Conversation identity is scoped to the project, Anthropic tenant, and actor.
-  Client-asserted session identifiers cannot join another actor's conversation.
-  Missing session identifiers or actor identities fall back to the request identifier.
+- Conversations correlate with other imports on the provider's session ID within
+  the organization. Joining a row also requires the same project and matching
+  actor evidence (the actor-scoped inference ID, signed provider actor ID, or
+  normalized actor email). Missing session identifiers or actor identities remain
+  request-local.
+  Compliance and inference deliveries share the chat row regardless of arrival
+  order. Acceptance checkpoints remain separate from archival deduplication.
 - Archival deduplication is separate from acceptance. Storage uses message hashes
   to align a delivery with the eight newest archived message identities. It tries
   the newest anchor first and scans incoming messages backward, stopping at the
@@ -147,3 +151,30 @@ network failures must not allow inference. Long transcripts
 or conservative rescans that cannot complete within the nine-second budget
 receive a deny verdict. A checkpoint reduces repeated scans; it does not remove
 the deadline or guarantee that every transcript fits within it.
+
+## Existing conversations
+
+Legacy inference rows cannot be correlated offline from their hashed external ID
+alone. A subsequent signed frame adopts the provider ID while retaining the
+original chat ID and references when no competing imported row exists. Already
+existing duplicate pairs require a separate, reviewed consolidation of their
+transcripts and references; this change does not delete or silently reparent
+historical evidence.
+
+Platform MCP assessment: intentionally omit a new tool or contract change.
+`list_my_sessions` and `continue_session` already let authenticated organization
+members on the external MCP endpoint list their own captured sessions and obtain
+a redacted handoff. Managed assistants remain excluded. The target session and
+owner checks, input/output schemas, redaction, lineage and audit behavior stay
+unchanged; deduplicating internal ingestion does not add a user operation.
+`conversation_dedup_test.go` verifies shared identity and actor/project isolation;
+`tool_session_recall_test.go` verifies the existing member/external-only contract,
+refusals and bounded results.
+
+Actor continuity requires overlapping signed evidence. Inference-first rows keep
+one actor key in their deterministic ID and the complementary key in the label
+after receiving a frame with both fields. A compliance-first row with only a
+provider actor ID cannot safely accept an email-only frame. Compliance imports
+can also replace an inference row’s email label with the provider actor ID. When
+no retained evidence matches, the frame remains rejected until a frame supplies
+matching evidence. A shared Gram user is not sufficient.
