@@ -91,15 +91,18 @@ type methodRange struct {
 	Until string
 }
 
-// methods records every client-to-server method a published revision defines
-// in its core protocol, and the revisions that define it. It is a statement
-// about the specification, not about Gram: each surface's dispatch decides
-// which of these it implements and answers the rest as method not found.
+// clientToServerMethods records every client-to-server method a published
+// revision defines in its core protocol, and the revisions that define it. It
+// is a statement about the specification, not about Gram: each surface's
+// dispatch decides which of these it implements and answers the rest as
+// method not found. Server-to-client methods (such as the 2025-11-25
+// `notifications/elicitation/complete`) never reach Gram's MCP servers and do
+// not belong here.
 //
 // Methods that 2026-07-28 moved into an extension (the tasks family) end at
 // that revision here, because the extension is negotiated separately from the
 // protocol revision.
-var methods = map[string]methodRange{
+var clientToServerMethods = map[string]methodRange{
 	MethodCompletionComplete:            {Since: Version20241105, Until: ""},
 	MethodInitialize:                    {Since: Version20241105, Until: Version20260728},
 	MethodLoggingSetLevel:               {Since: Version20241105, Until: Version20260728},
@@ -130,7 +133,7 @@ var methods = map[string]methodRange{
 // the client-to-server method. A method outside this set is either an
 // extension's or one a revision this package does not recognize yet added.
 func KnownMethod(method string) bool {
-	_, ok := methods[method]
+	_, ok := clientToServerMethods[method]
 	return ok
 }
 
@@ -141,6 +144,6 @@ func KnownMethod(method string) bool {
 // Callers deciding what governs a request pass the revision in effect
 // ([Resolution.InEffect]), never the declared one.
 func DefinesMethod(method, revision string) bool {
-	r, ok := methods[method]
+	r, ok := clientToServerMethods[method]
 	return ok && AtLeast(revision, r.Since) && (r.Until == "" || !AtLeast(revision, r.Until))
 }
