@@ -64,9 +64,12 @@ func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]
 	var wg sync.WaitGroup
 	var bucket string
 	var resolveOnce sync.Once
-	resolveBucket := func(ctx context.Context) string {
+	resolveBucket := func() string {
 		resolveOnce.Do(func() {
-			bucket = gramopenrouter.ResolveJudgeRateLimitKey(ctx, c.opus.logger, c.opus.client, req.OrgID, req.ProjectID, billing.ModelUsageSourcePromptInjection, ConfirmationModel)
+			// Bound the shared lookup independently of the first worker deadline.
+			lookupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			bucket = gramopenrouter.ResolveJudgeRateLimitKey(lookupCtx, c.opus.logger, c.opus.client, req.OrgID, req.ProjectID, billing.ModelUsageSourcePromptInjection, ConfirmationModel)
 		})
 		return bucket
 	}
@@ -98,7 +101,7 @@ func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]
 	return results, nil
 }
 
-func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, resolveBucket func(context.Context) string) promptinjection.Result {
+func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, resolveBucket func() string) promptinjection.Result {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second+ConfirmationTimeout)
 	defer cancel()
 	ctx, span := c.opus.tracer.Start(ctx, "risk.prompt_injection.cascade")
@@ -143,7 +146,7 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 		c.opus.logger.WarnContext(ctx, "PI confirmation context unavailable", attr.SlogError(err))
 		return unavailableResult
 	}
-	return c.opus.classifyOne(ctx, req, msg, trajectory, userID, resolveBucket(ctx), &window)
+	return c.opus.classifyOne(ctx, req, msg, trajectory, userID, resolveBucket(), &window)
 }
 
 func injectionProbability(result typesafe.Result) (float64, error) {

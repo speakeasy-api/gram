@@ -1,11 +1,12 @@
 package promptinjection
 
 import (
+	"testing"
+
 	"github.com/google/uuid"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestParentlessPartDoesNotLoadLiveHistory(t *testing.T) {

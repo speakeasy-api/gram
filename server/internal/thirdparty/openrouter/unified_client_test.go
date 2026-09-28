@@ -1619,8 +1619,8 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 }
 
 func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
-	require.Equal(t, "anthropic/claude-opus-5.5", ResolveModel("anthropic/claude-opus-5.5"))
 	t.Parallel()
+	require.Equal(t, "anthropic/claude-opus-5.5", ResolveModel("anthropic/claude-opus-5.5"))
 	require.Equal(t, "anthropic/claude-opus-5", ResolveModel("anthropic/claude-opus-5"))
 }
 

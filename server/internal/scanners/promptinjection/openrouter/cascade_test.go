@@ -6,7 +6,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -190,4 +192,28 @@ func TestCascadeOversizedWindowDoesNotCallOpus(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
 	require.Zero(t, client.calls.Load())
+}
+
+type contextCheckingCompletion struct {
+	*fakeCompletionClient
+	t *testing.T
+}
+
+func (c *contextCheckingCompletion) ResolveKey(ctx context.Context, orgID, projectID string, slot billing.ModelUsageSource, keyType gramopenrouter.KeyType) (gramopenrouter.ResolvedKey, error) {
+	require.NoError(c.t, ctx.Err())
+	deadline, bounded := ctx.Deadline()
+	require.True(c.t, bounded)
+	require.WithinDuration(c.t, time.Now().Add(10*time.Second), deadline, time.Second, "shared lookup has its own deadline, not the worker deadline")
+	return c.fakeCompletionClient.ResolveKey(ctx, orgID, projectID, slot, keyType)
+}
+
+func TestCascadeResolvesBucketWithRequestContext(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	cascade, client := testCascade(t, PrefilterThreshold, safeVerdictJSON)
+	cascade.opus.client = &contextCheckingCompletion{fakeCompletionClient: client, t: t}
+	results, err := cascade.Classify(ctx, req("candidate"))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelSafe, results[0].Label)
+	require.EqualValues(t, 1, client.calls.Load())
 }
