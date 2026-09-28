@@ -67,7 +67,7 @@ runs the same path without a Redis emulator.
 The prefilter span records probability, escalation, token counts, and reported
 provider cost without raw evidence. Physical-call metrics distinguish Jev and
 Opus; Opus keeps the existing verdict/latency metrics. Existing finding APIs,
-administrator/member Platform MCP findings tools, and demo seed rows retain their
+Platform MCP findings tools, and demo seed rows retain their
 contracts; no new tool, permission, or seed shape is needed.
 
 ## Evaluation
@@ -108,3 +108,26 @@ with equivalent evidence, and report errors separately alongside precision,
 overall recall, and in-scope regression recall. Keep additional window fixtures
 as a separate slice, distinguish prior-only live evidence from historical
 lookahead, and recompute escalation and total cost for the deployed configuration.
+
+## Platform MCP assessment
+
+Outcome and resource: inspect stored prompt-injection findings through
+`list_watchdog_findings`. The external actor is an authenticated organization
+administrator; the tool also serves managed assistants under their existing
+project scope. Its bounded, redacted rule-level alerts already represent the
+findings produced by this scanner.
+
+Decision: intentionally omit a Platform MCP tool change. Jev prefiltering and
+Opus confirmation change internal classification, without adding a management
+operation or changing finding schemas, authorization, project selection, or
+redaction. The existing tool and the shipped
+`summarize-critical-watchdog-findings` skill remain applicable; exposing raw
+classification evidence or model controls would add an unnecessary internal
+surface.
+
+Success evidence: `TestCascadeConfirmedInjection` and
+`TestCascadeOpusFailureIsUnavailable` cover confirmed findings and unavailable
+reviews. `TestRiskFindingsMCPInProcess`, `TestRiskFindingsEvidence`, and
+`TestRiskFindingsValidationAndGates` cover the existing MCP result, redaction,
+and access/feature boundaries. No Platform MCP schema or shipped workflow needs
+to change for these internal classifier decisions.
