@@ -17,9 +17,12 @@ import (
 )
 
 const (
-	defaultBaseURL      = "https://api.chatgpt.com/v1/compliance"
-	maxLogFileSize      = 15 * 1024 * 1024
-	maxHTTPErrorMessage = 1000
+	defaultBaseURL = "https://api.chatgpt.com/v1/compliance"
+	maxLogFileSize = 15 * 1024 * 1024
+	// maxHTTPErrorMessage bounds how much of an error response is kept. The
+	// body is persisted as org-visible schedule diagnostics, so it matches the
+	// other provider clients' bound.
+	maxHTTPErrorMessage = 512
 )
 
 var (
@@ -278,11 +281,8 @@ func (e *HTTPError) Error() string {
 }
 
 func newHTTPError(res *http.Response, prefix string) *HTTPError {
-	body, _ := io.ReadAll(io.LimitReader(res.Body, maxHTTPErrorMessage+1))
-	message := strings.TrimSpace(string(body))
-	if len(message) > maxHTTPErrorMessage {
-		message = message[:maxHTTPErrorMessage]
-	}
+	body, _ := io.ReadAll(io.LimitReader(res.Body, maxHTTPErrorMessage))
+	message := strings.TrimSpace(guardian.PrintableBodySnippet(body))
 	return &HTTPError{
 		StatusCode: res.StatusCode,
 		Status:     res.Status,

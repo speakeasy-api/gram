@@ -1,10 +1,15 @@
 package aiintegrations
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -28,6 +33,9 @@ type providerStub struct {
 	server *httptest.Server
 	mu     sync.Mutex
 	routes []string
+	// details keeps each request whole — method, path, query, and body — so
+	// tests can assert the probes stay the cheapest read each feed allows.
+	details []string
 }
 
 type stubRoute struct {
@@ -38,15 +46,24 @@ type stubRoute struct {
 func newProviderStub(t *testing.T, routes map[string]stubRoute) *providerStub {
 	t.Helper()
 
-	stub := &providerStub{server: nil, mu: sync.Mutex{}, routes: nil}
+	stub := &providerStub{server: nil, mu: sync.Mutex{}, routes: nil, details: nil}
 	stub.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		route := r.URL.Path
 		if eventType := r.URL.Query().Get("event_type"); eventType != "" {
 			route += "?event_type=" + eventType
 		}
 
+		detail := r.Method + " " + r.URL.Path
+		if query := r.URL.Query().Encode(); query != "" {
+			detail += "?" + query
+		}
+		if body, err := io.ReadAll(r.Body); err == nil && len(body) > 0 {
+			detail += " " + string(body)
+		}
+
 		stub.mu.Lock()
 		stub.routes = append(stub.routes, route)
+		stub.details = append(stub.details, detail)
 		stub.mu.Unlock()
 
 		response, ok := routes[route]
@@ -69,6 +86,31 @@ func (s *providerStub) requested() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string(nil), s.routes...)
+}
+
+// requestDetails returns every request the stub saw, each as
+// "METHOD path[?sorted query][ body]".
+func (s *providerStub) requestDetails() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.details...)
+}
+
+// requireProbeShape asserts exactly one request reached the stub's path and
+// that it carried every single-record marker.
+func requireProbeShape(t *testing.T, details []string, path string, markers ...string) {
+	t.Helper()
+
+	matched := make([]string, 0, 1)
+	for _, detail := range details {
+		if strings.Contains(detail, path) {
+			matched = append(matched, detail)
+		}
+	}
+	require.Len(t, matched, 1, "expected exactly one %s probe in %v", path, details)
+	for _, marker := range markers {
+		require.Contains(t, matched[0], marker)
+	}
 }
 
 func newTestCredentialVerifier(t *testing.T, baseURL string) *CredentialVerifier {
@@ -215,4 +257,86 @@ func TestProviderRejectedCredentialsMatchesConfigurationRefusals(t *testing.T) {
 
 	_, ok := providerRejectedCredentials(&cursorapi.RateLimitError{Status: "429 Too Many Requests", RetryAfter: 0, Page: 1})
 	require.False(t, ok)
+}
+
+// Each probe exists to collect the provider's verdict, not its data. A save
+// waits on all of them inside a 20s budget, so a probe that widened into a
+// full first-page fetch would make every save pay for a real sync.
+func TestCredentialProbesAskForASingleRecord(t *testing.T) {
+	t.Parallel()
+
+	probeAt := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	since := probeAt.Add(-time.Minute)
+
+	t.Run("cursor asks for one usage event", func(t *testing.T) {
+		t.Parallel()
+
+		stub := newProviderStub(t, nil)
+		verifier := newTestCredentialVerifier(t, stub.server.URL)
+		verifier.now = func() time.Time { return probeAt }
+
+		require.Empty(t, verifier.Verify(t.Context(), Credentials{
+			Provider:               ProviderCursor,
+			APIKey:                 "cursor-key",
+			ExternalOrganizationID: nil,
+		}))
+
+		requireProbeShape(t, stub.requestDetails(), "/teams/filtered-usage-events",
+			`"page":1`,
+			`"pageSize":1`,
+			`"startDate":`+strconv.FormatInt(since.UnixMilli(), 10),
+			`"endDate":`+strconv.FormatInt(probeAt.UnixMilli(), 10),
+		)
+	})
+
+	t.Run("anthropic asks for one activity and one analytics bucket", func(t *testing.T) {
+		t.Parallel()
+
+		stub := newProviderStub(t, nil)
+		verifier := newTestCredentialVerifier(t, stub.server.URL)
+		verifier.now = func() time.Time { return probeAt }
+
+		require.Empty(t, verifier.Verify(t.Context(), Credentials{
+			Provider:               ProviderAnthropicCompliance,
+			APIKey:                 "anthropic-key",
+			ExternalOrganizationID: conv.PtrEmpty(testExternalOrgID),
+		}))
+
+		details := stub.requestDetails()
+		requireProbeShape(t, details, "/v1/compliance/activities",
+			"limit=1",
+			"created_at.gte="+url.QueryEscape(since.Format(time.RFC3339)),
+		)
+		// One bucket, one minute wide, on each report.
+		for _, report := range []string{"user_usage_report", "user_cost_report"} {
+			requireProbeShape(t, details, "/v1/organizations/analytics/"+report,
+				"limit=1",
+				"bucket_width="+anthropicAnalyticsBucketWidth,
+				"starting_at="+url.QueryEscape(since.Format(time.RFC3339)),
+				"ending_at="+url.QueryEscape(probeAt.Format(time.RFC3339)),
+			)
+		}
+	})
+
+	t.Run("chatgpt asks for one log file per feed", func(t *testing.T) {
+		t.Parallel()
+
+		stub := newProviderStub(t, nil)
+		verifier := newTestCredentialVerifier(t, stub.server.URL)
+		verifier.now = func() time.Time { return probeAt }
+
+		require.Empty(t, verifier.Verify(t.Context(), Credentials{
+			Provider:               ProviderChatGPTCompliance,
+			APIKey:                 "chatgpt-key",
+			ExternalOrganizationID: conv.PtrEmpty(testWorkspaceID),
+		}))
+
+		details := stub.requestDetails()
+		for _, eventType := range []string{chatgptConversationEventType, codexCloudEventType} {
+			requireProbeShape(t, details, "event_type="+eventType,
+				"limit=1",
+				"after="+url.QueryEscape(since.Format(time.RFC3339Nano)),
+			)
+		}
+	})
 }

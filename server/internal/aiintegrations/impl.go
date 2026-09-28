@@ -183,6 +183,10 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	if err != nil {
 		return nil, err
 	}
+	// A provider that honors some of its feeds and refuses others (they are
+	// entitled separately) keeps the save. The refusals travel into the upsert
+	// transaction, which pauses just those schedules rather than letting them
+	// rediscover the same answer over AutoPauseAfterRejectedPolls failed polls.
 
 	// Start the watermark one lookback period in the past so the first poll
 	// backfills usage emitted just before the key was configured.
@@ -199,7 +203,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, externalOrganizationID, billingMode, resetPollWatermarkAt)
+	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, externalOrganizationID, billingMode, resetPollWatermarkAt, rejections)
 	if err != nil {
 		return nil, err
 	}
@@ -228,20 +232,6 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit ai integration upsert").LogError(ctx, logger)
-	}
-
-	// A provider that honors some of its feeds and refuses others (they are
-	// entitled separately) keeps the save. Record each refusal and pause that
-	// schedule up front rather than letting it rediscover the same answer over
-	// AutoPauseAfterRejectedPolls failed polls.
-	for _, rejection := range rejections {
-		if err := s.store.PauseScheduleForRejectedCredentials(ctx, cfg.ID, rejection.Schedule, rejection.Err); err != nil {
-			logger.WarnContext(ctx, "failed to pause ai integration schedule with rejected credentials",
-				attr.SlogError(err),
-				attr.SlogAIIntegrationConfigID(cfg.ID.String()),
-				attr.SlogAIIntegrationSyncSchedule(rejection.Schedule),
-			)
-		}
 	}
 
 	if result.CreatedNewGeneration && cfg.Enabled {
