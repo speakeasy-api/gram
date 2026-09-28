@@ -146,8 +146,8 @@ RETURNING id;
 -- the provider's signed actor must also identify the stored owner.
 SELECT id, user_id FROM chats
 WHERE project_id = @project_id AND organization_id = @organization_id
-  AND (external_chat_id = @external_chat_id OR id = @legacy_id)
-  AND (id = @legacy_id
+  AND (external_chat_id = @external_chat_id OR id = @legacy_id OR id = @email_id)
+  AND (id = @legacy_id OR id = @email_id
     OR (external_user_id = @actor_id::text AND @actor_id::text <> '')
     OR (external_user_id = @actor_email::text AND @actor_email::text <> ''))
 ORDER BY (external_chat_id = @external_chat_id) DESC
@@ -163,24 +163,33 @@ ON CONFLICT (organization_id, external_chat_id) WHERE external_chat_id IS NOT NU
 DO UPDATE SET
   user_id = COALESCE(EXCLUDED.user_id, chats.user_id),
   -- A compliance-first row keeps its provider actor ID for later signed
-  -- frames that omit email. Inference-first rows have an actor-scoped ID.
-  external_user_id = CASE WHEN chats.id = EXCLUDED.id
-    THEN COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
+  -- frames that omit email. Inference-first rows retain one actor key in
+  -- their deterministic ID and the complementary key in this label.
+  external_user_id = CASE
+    WHEN chats.id = @email_id THEN COALESCE(NULLIF(@actor_id::text, ''), chats.external_user_id, EXCLUDED.external_user_id)
+    WHEN chats.id = EXCLUDED.id THEN COALESCE(NULLIF(@actor_email::text, ''), chats.external_user_id, EXCLUDED.external_user_id)
     ELSE COALESCE(chats.external_user_id, EXCLUDED.external_user_id) END,
   updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
 WHERE chats.project_id = EXCLUDED.project_id
   AND (chats.id = EXCLUDED.id
-    OR (chats.user_id IS NOT NULL AND chats.user_id = EXCLUDED.user_id)
+    OR chats.id = @email_id
     OR (chats.external_user_id = @actor_id::text AND @actor_id::text <> '')
-    OR (chats.external_user_id = EXCLUDED.external_user_id AND EXCLUDED.external_user_id <> ''))
+    OR (chats.external_user_id = @actor_email::text AND @actor_email::text <> ''))
 RETURNING id;
 
 -- name: AdoptLegacyInferenceConversation :exec
 -- Preserve the existing row ID and all of its references when the next frame
 -- supplies the provider conversation ID that older capture did not retain.
 UPDATE chats SET external_chat_id = @external_chat_id
-WHERE chats.id = @id AND chats.project_id = @project_id AND chats.organization_id = @organization_id
-  AND chats.external_chat_id = @legacy_external_chat_id
+WHERE chats.id = (
+    SELECT legacy.id FROM chats legacy
+    WHERE legacy.project_id = @project_id AND legacy.organization_id = @organization_id
+      AND legacy.id IN (@id, @email_id)
+      AND legacy.external_chat_id = 'anthropic-inference:' || legacy.id::text
+    ORDER BY (legacy.id = @id) DESC
+    LIMIT 1
+  )
+  AND chats.project_id = @project_id AND chats.organization_id = @organization_id
   AND NOT EXISTS (
     SELECT 1 FROM chats other
     WHERE other.organization_id = @organization_id

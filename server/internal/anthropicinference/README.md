@@ -57,8 +57,9 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   not deliver a final-response event.
 - Conversations correlate with other imports on the provider's session ID within
   the organization. Joining a row also requires the same project and matching
-  actor evidence (the actor-scoped inference ID, signed provider actor, or resolved
-  owner). Missing session identifiers or actor identities remain request-local.
+  actor evidence (the actor-scoped inference ID, signed provider actor ID, or
+  normalized actor email). Missing session identifiers or actor identities remain
+  request-local.
   Compliance and inference deliveries share the chat row regardless of arrival
   order. Acceptance checkpoints remain separate from archival deduplication.
 - Archival deduplication is separate from acceptance. Storage uses message hashes
@@ -160,6 +161,20 @@ existing duplicate pairs require a separate, reviewed consolidation of their
 transcripts and references; this change does not delete or silently reparent
 historical evidence.
 
-Platform MCP assessment: existing session recall tools inherit the corrected
-conversation identity. No tool or schema change is needed. Regression tests cover
-shared conversation identity and actor/project isolation.
+Platform MCP assessment: intentionally omit a new tool or contract change.
+`list_my_sessions` and `continue_session` already let authenticated organization
+members on the external MCP endpoint list their own captured sessions and obtain
+a redacted handoff. Managed assistants remain excluded. The target session and
+owner checks, input/output schemas, redaction, lineage and audit behavior stay
+unchanged; deduplicating internal ingestion does not add a user operation.
+`conversation_dedup_test.go` verifies shared identity and actor/project isolation;
+`tool_session_recall_test.go` verifies the existing member/external-only contract,
+refusals and bounded results.
+
+Actor continuity requires overlapping signed evidence. Inference-first rows keep
+one actor key in their deterministic ID and the complementary key in the label
+after receiving a frame with both fields. A compliance-first row with only a
+provider actor ID cannot safely accept an email-only frame. Compliance imports
+can also replace an inference row’s email label with the provider actor ID. When
+no retained evidence matches, the frame remains rejected until a frame supplies
+matching evidence. A shared Gram user is not sufficient.

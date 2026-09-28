@@ -334,3 +334,27 @@ func TestPostgresLastKnownGoodPreservesDeniedAttempts(t *testing.T) {
 	}
 	require.Contains(t, content, "blocked reply")
 }
+
+func TestPostgresCheckpointSessionlessKey(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	frame.SessionID = ""
+	expectedID := "anthropic-inference:" + conversationID(config, frame).String()
+	require.Equal(t, expectedID, externalConversationID(config, frame))
+	saveFrame(t, store, config, frame, "")
+	checkpoint, err := store.Begin(t.Context(), config, frame, "")
+	require.NoError(t, err)
+	_, err = checkpoint.Load(t.Context())
+	require.NoError(t, err)
+	hashes := [][]byte{contentHash(frame.Messages[0])}
+	require.NoError(t, checkpoint.Accept(t.Context(), hashes))
+	data, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText(expectedID)})
+	require.NoError(t, err)
+	require.NotEmpty(t, data)
+	checkpoint, err = store.Begin(t.Context(), config, frame, "")
+	require.NoError(t, err)
+	actual, err := checkpoint.Load(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, hashes, actual)
+}

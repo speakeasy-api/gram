@@ -49,21 +49,28 @@ func (q *Queries) AddUserFeedbackChatResolution(ctx context.Context, arg AddUser
 
 const adoptLegacyInferenceConversation = `-- name: AdoptLegacyInferenceConversation :exec
 UPDATE chats SET external_chat_id = $1
-WHERE chats.id = $2 AND chats.project_id = $3 AND chats.organization_id = $4
-  AND chats.external_chat_id = $5
+WHERE chats.id = (
+    SELECT legacy.id FROM chats legacy
+    WHERE legacy.project_id = $2 AND legacy.organization_id = $3
+      AND legacy.id IN ($4, $5)
+      AND legacy.external_chat_id = 'anthropic-inference:' || legacy.id::text
+    ORDER BY (legacy.id = $4) DESC
+    LIMIT 1
+  )
+  AND chats.project_id = $2 AND chats.organization_id = $3
   AND NOT EXISTS (
     SELECT 1 FROM chats other
-    WHERE other.organization_id = $4
+    WHERE other.organization_id = $3
       AND other.external_chat_id = $1
   )
 `
 
 type AdoptLegacyInferenceConversationParams struct {
-	ExternalChatID       pgtype.Text
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	OrganizationID       string
-	LegacyExternalChatID pgtype.Text
+	ExternalChatID pgtype.Text
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ID             uuid.UUID
+	EmailID        uuid.UUID
 }
 
 // Preserve the existing row ID and all of its references when the next frame
@@ -71,10 +78,10 @@ type AdoptLegacyInferenceConversationParams struct {
 func (q *Queries) AdoptLegacyInferenceConversation(ctx context.Context, arg AdoptLegacyInferenceConversationParams) error {
 	_, err := q.db.Exec(ctx, adoptLegacyInferenceConversation,
 		arg.ExternalChatID,
-		arg.ID,
 		arg.ProjectID,
 		arg.OrganizationID,
-		arg.LegacyExternalChatID,
+		arg.ID,
+		arg.EmailID,
 	)
 	return err
 }
@@ -1182,10 +1189,10 @@ func (q *Queries) GetInferenceAcceptedCheckpoint(ctx context.Context, arg GetInf
 const getInferenceConversation = `-- name: GetInferenceConversation :one
 SELECT id, user_id FROM chats
 WHERE project_id = $1 AND organization_id = $2
-  AND (external_chat_id = $3 OR id = $4)
-  AND (id = $4
-    OR (external_user_id = $5::text AND $5::text <> '')
-    OR (external_user_id = $6::text AND $6::text <> ''))
+  AND (external_chat_id = $3 OR id = $4 OR id = $5)
+  AND (id = $4 OR id = $5
+    OR (external_user_id = $6::text AND $6::text <> '')
+    OR (external_user_id = $7::text AND $7::text <> ''))
 ORDER BY (external_chat_id = $3) DESC
 LIMIT 1
 `
@@ -1195,6 +1202,7 @@ type GetInferenceConversationParams struct {
 	OrganizationID string
 	ExternalChatID pgtype.Text
 	LegacyID       uuid.UUID
+	EmailID        uuid.UUID
 	ActorID        string
 	ActorEmail     string
 }
@@ -1212,6 +1220,7 @@ func (q *Queries) GetInferenceConversation(ctx context.Context, arg GetInference
 		arg.OrganizationID,
 		arg.ExternalChatID,
 		arg.LegacyID,
+		arg.EmailID,
 		arg.ActorID,
 		arg.ActorEmail,
 	)
@@ -4335,16 +4344,18 @@ ON CONFLICT (organization_id, external_chat_id) WHERE external_chat_id IS NOT NU
 DO UPDATE SET
   user_id = COALESCE(EXCLUDED.user_id, chats.user_id),
   -- A compliance-first row keeps its provider actor ID for later signed
-  -- frames that omit email. Inference-first rows have an actor-scoped ID.
-  external_user_id = CASE WHEN chats.id = EXCLUDED.id
-    THEN COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
+  -- frames that omit email. Inference-first rows retain one actor key in
+  -- their deterministic ID and the complementary key in this label.
+  external_user_id = CASE
+    WHEN chats.id = $8 THEN COALESCE(NULLIF($9::text, ''), chats.external_user_id, EXCLUDED.external_user_id)
+    WHEN chats.id = EXCLUDED.id THEN COALESCE(NULLIF($10::text, ''), chats.external_user_id, EXCLUDED.external_user_id)
     ELSE COALESCE(chats.external_user_id, EXCLUDED.external_user_id) END,
   updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
 WHERE chats.project_id = EXCLUDED.project_id
   AND (chats.id = EXCLUDED.id
-    OR (chats.user_id IS NOT NULL AND chats.user_id = EXCLUDED.user_id)
-    OR (chats.external_user_id = $8::text AND $8::text <> '')
-    OR (chats.external_user_id = EXCLUDED.external_user_id AND EXCLUDED.external_user_id <> ''))
+    OR chats.id = $8
+    OR (chats.external_user_id = $9::text AND $9::text <> '')
+    OR (chats.external_user_id = $10::text AND $10::text <> ''))
 RETURNING id
 `
 
@@ -4356,7 +4367,9 @@ type UpsertInferenceConversationParams struct {
 	ExternalUserID pgtype.Text
 	ExternalChatID pgtype.Text
 	ObservedAt     pgtype.Timestamptz
+	EmailID        uuid.UUID
 	ActorID        string
+	ActorEmail     string
 }
 
 func (q *Queries) UpsertInferenceConversation(ctx context.Context, arg UpsertInferenceConversationParams) (uuid.UUID, error) {
@@ -4368,7 +4381,9 @@ func (q *Queries) UpsertInferenceConversation(ctx context.Context, arg UpsertInf
 		arg.ExternalUserID,
 		arg.ExternalChatID,
 		arg.ObservedAt,
+		arg.EmailID,
 		arg.ActorID,
+		arg.ActorEmail,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
