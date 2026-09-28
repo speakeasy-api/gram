@@ -9,12 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
-	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
@@ -24,17 +20,9 @@ import (
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
 
-// scanCascade exercises the production orchestration and payloads. The local
-// Redis emulator isolates benchmark rate limits; the worker pool bounds spend.
+// scanCascade exercises the production orchestration and payloads. The worker
+// pool bounds the number of in-flight cases.
 func scanCascade(ctx context.Context, opts options, key string, corpus []labeledCase) ([][]scanners.Finding, evaluationStats, error) {
-	redisServer, err := miniredis.Run()
-	if err != nil {
-		return nil, evaluationStats{}, fmt.Errorf("start benchmark limiter: %w", err)
-	}
-	defer redisServer.Close()
-	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
-	defer o11y.NoLogDefer(redisClient.Close)
-	limiter := ratelimit.New(ratelimit.NewRedisStore(redisClient), "pi-cascade-benchmark", ratelimit.PerSecond(100000))
 	tracer, meter := tracenoop.NewTracerProvider(), meternoop.NewMeterProvider()
 	logger := slog.New(slog.DiscardHandler)
 	policy := guardian.NewDefaultPolicy(tracer)
@@ -65,7 +53,7 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 				window.Messages[window.TargetIndex] = judgemessage.RenderPayload(target)
 				return window, nil
 			}
-			cascade := piopenrouter.NewCascade(logger, tracer, meter, completion, limiter, prefilter, load)
+			cascade := piopenrouter.NewCascade(logger, tracer, meter, completion, prefilter, load)
 			scanner := promptinjection.NewScanner(logger, cascade.Classify)
 			result, verdict, err := scanner.ScanStrictWithVerdict(ctx, row.Text, benchOrgID, benchProjectID, "", row.judgeMessage(), row.trajectory())
 			results[i] = result.Findings

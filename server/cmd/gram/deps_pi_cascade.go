@@ -7,7 +7,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
-	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -16,7 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func newPICascade(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, policy *guardian.Policy, provisioner openrouter.Provisioner, db repo.DBTX, limiter *ratelimit.Limiter) *piopenrouter.Cascade {
+func newPICascade(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, policy *guardian.Policy, provisioner openrouter.Provisioner, db repo.DBTX) *piopenrouter.Cascade {
 	jev := typesafe.New(policy.PooledClient(), func(ctx context.Context, orgID string) (string, error) {
 		key, err := provisioner.ProvisionAPIKey(ctx, orgID, openrouter.KeyTypeInternal)
 		if err != nil {
@@ -24,5 +23,5 @@ func newPICascade(logger *slog.Logger, tracerProvider trace.TracerProvider, mete
 		}
 		return key, nil
 	})
-	return piopenrouter.NewCascade(logger, tracerProvider, meterProvider, client, limiter, jev, judgemessage.NewWindowLoader(db).Load)
+	return piopenrouter.NewCascade(logger, tracerProvider, meterProvider, client, jev, judgemessage.NewWindowLoader(db).Load)
 }

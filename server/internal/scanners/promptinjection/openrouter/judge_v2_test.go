@@ -17,7 +17,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -171,26 +170,10 @@ func TestTypedPathIsDefaultAndMakesOnePhysicalCall(t *testing.T) {
 	require.Equal(t, VerdictSchema(), request.JSONSchema.Schema)
 }
 
-func TestTypedLimiterStoreFailureStillCallsModel(t *testing.T) {
-	t.Parallel()
-
-	client := &fakeCompletionClient{responder: func(string) string {
-		return `{"directive_kind":"instruction_override","target":"guarded_agent","operational":true,"rationale":"override"}`
-	}}
-	engine := newEngine(t, client)
-	engine.limiter = ratelimit.New(nil, "unavailable", ratelimit.Rate{})
-
-	results, err := engine.Classify(t.Context(), req("current event"))
-	require.NoError(t, err)
-	require.Equal(t, promptinjection.LabelInjection, results[0].Label)
-	require.Equal(t, int64(1), client.calls.Load(), "limiter infrastructure failure is not a throttle")
-}
-
 func TestTypedFailOpenReasonsAreBounded(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "none", typedFailureReason(nil, o11y.OutcomeSuccess))
-	require.Equal(t, "rate_limited", typedFailureReason(errTypedRateLimit, o11y.OutcomeFailure))
 	require.Equal(t, "timeout", typedFailureReason(context.DeadlineExceeded, o11y.OutcomeTimeout))
 	require.Equal(t, "malformed", typedFailureReason(errMalformedVerdict, o11y.OutcomeFailure))
 	require.Equal(t, "canceled", typedFailureReason(context.Canceled, o11y.OutcomeCanceled))
@@ -211,7 +194,7 @@ func TestTypedContextObservabilityIncludesSuppressedVerdict(t *testing.T) {
 	client := &fakeCompletionClient{responder: func(string) string {
 		return `{"directive_kind":"instruction_override","target":"other_context","operational":true,"rationale":"archived directive"}`
 	}}
-	engine := New(testenv.NewLogger(t), tracerProvider, meterProvider, client, testJudgeLimiter(t))
+	engine := New(testenv.NewLogger(t), tracerProvider, meterProvider, client)
 	in := req("both context fields", "prior only", "recent only", "no context")
 	in.Trajectories = []judgemessage.Trajectory{
 		{

@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -112,7 +111,7 @@ Return only JSON with "directive_kind", "target", "operational", and "rationale"
 
 // Engine is the OpenRouter-backed prompt-attack judge. Each message is judged
 // with a strict JSON schema, low temperature, and a hard timeout. Errors and
-// rate-limited calls fail open (SAFE) so a judge outage drops PI findings.
+// provider throttling yield UNAVAILABLE, so an outage cannot become a clean scan.
 type Engine struct {
 	systemPrompt string
 	timeout      time.Duration
@@ -120,7 +119,6 @@ type Engine struct {
 	tracer       trace.Tracer
 	metrics      *metrics
 	client       gramopenrouter.CompletionClient
-	limiter      *ratelimit.Limiter
 	model        string
 	reasoning    string
 	temperature  float64
@@ -142,7 +140,6 @@ var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var (
 	safeResult          = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: Model, Provider: "openrouter"}
-	errTypedRateLimit   = errors.New("typed pi judge rate limited")
 	errMalformedVerdict = errors.New("malformed typed pi verdict")
 )
 
@@ -153,7 +150,7 @@ var unavailableResult = promptinjection.Result{Label: promptinjection.LabelUnava
 
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter) *Engine {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient) *Engine {
 	logger = logger.With(attr.SlogComponent("pi-llm-judge"))
 	strict := true
 	return &Engine{
@@ -163,7 +160,6 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"),
 		metrics:      newMetrics(meterProvider, logger),
 		client:       client,
-		limiter:      limiter,
 		model:        Model,
 		reasoning:    ReasoningEffort,
 		temperature:  defaultTemperature,
@@ -220,10 +216,6 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		)
 	}
 
-	// The rate-limit bucket is identical for every message in the batch, so
-	// resolve the spending key once rather than per message.
-	bucket := gramopenrouter.ResolveJudgeRateLimitKey(ctx, c.logger, c.client, req.OrgID, req.ProjectID, billing.ModelUsageSourcePromptInjection, c.model)
-
 	results := make([]promptinjection.Result, n)
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
@@ -250,7 +242,7 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		go func(i int, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID, bucket, nil)
+			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID, nil)
 		}(i, msg, trajectory, userID)
 	}
 	wg.Wait()
@@ -263,27 +255,8 @@ const maxConfirmationPayloadBytes = 256 << 10
 
 // classifyOne returns UNAVAILABLE for every fail-open path and SAFE only for a
 // judgement that cleared the content.
-func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, bucket string, window *judgemessage.Window) promptinjection.Result {
-	// Bail before spending a rate-limit token (or making the call) on a context
-	// that is already canceled — otherwise a cancellation burst can drain the
-	// org's budget and throttle real requests into fail-open verdicts. (cubic)
+func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, window *judgemessage.Window) promptinjection.Result {
 	if ctx.Err() != nil {
-		return unavailableResult
-	}
-
-	// A Store outage is not a throttle: proceed rather than let limiter infra
-	// silence the scanner.
-	switch res, err := c.limiter.Allow(ctx, bucket); {
-	case err != nil:
-		c.logger.WarnContext(ctx, "pi judge rate limiter unavailable, allowing call",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(req.OrgID),
-		)
-	case !res.Allowed:
-		c.metrics.RecordRateLimited(ctx, req.OrgID, c.model, c.reasoning)
-		c.logger.WarnContext(ctx, "pi judge rate limited; failing open",
-			attr.SlogOrganizationID(req.OrgID),
-		)
 		return unavailableResult
 	}
 
@@ -465,9 +438,6 @@ func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepare
 func typedFailureReason(err error, outcome o11y.Outcome) string {
 	if err == nil {
 		return "none"
-	}
-	if errors.Is(err, errTypedRateLimit) {
-		return "rate_limited"
 	}
 	if outcome == o11y.OutcomeCanceled {
 		return "canceled"

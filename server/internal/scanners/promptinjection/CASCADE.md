@@ -21,11 +21,15 @@ truncated bodies are marked. Tool invocations retain names and arguments; stored
 tool results retain their actor role, but historical rows may lack a tool name.
 
 Only an Opus-confirmed verdict creates a finding. Jev errors, unavailable context,
-malformed responses, rate limits, and Opus errors remain unavailable verdicts,
+malformed responses, provider throttling, and Opus errors remain unavailable verdicts,
 never completed clean scans. Existing delivery and finding persistence handle
 retries; this change adds no topics, workflows, signals, activities, or schedules.
 Additional Temporal actions/month: 0. Provider calls scale with scanned messages,
 plus candidates meeting the threshold.
+
+Concurrent cases are bounded, but PI calls do not use the shared Redis judge
+rate limiter. Provider throttling remains an unavailable result; the benchmark
+runs the same path without a Redis emulator.
 
 The prefilter span records probability, escalation, token counts, and reported
 provider cost without raw evidence. Physical-call metrics distinguish Jev and

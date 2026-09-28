@@ -358,3 +358,16 @@ func TestEvaluatePreservesState(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluateProviderThrottlingReturnsErrorWithoutRetry(t *testing.T) {
+	t.Parallel()
+	var attempts atomic.Int32
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.Header().Set("Retry-After", "60")
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
+	require.ErrorContains(t, err, "typesafe HTTP status 429")
+	require.EqualValues(t, 1, attempts.Load())
+}

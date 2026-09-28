@@ -9,10 +9,8 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
@@ -42,8 +40,8 @@ type Cascade struct {
 	loadWindow func(context.Context, string, string, judgemessage.Message) (judgemessage.Window, error)
 }
 
-func NewCascade(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter, jev typesafe.Evaluator, loadWindow func(context.Context, string, string, judgemessage.Message) (judgemessage.Window, error)) *Cascade {
-	opus := New(logger, tracerProvider, meterProvider, client, limiter)
+func NewCascade(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, jev typesafe.Evaluator, loadWindow func(context.Context, string, string, judgemessage.Message) (judgemessage.Window, error)) *Cascade {
+	opus := New(logger, tracerProvider, meterProvider, client)
 	opus.model = ConfirmationModel
 	opus.systemPrompt = SystemPrompt + "\n" + WindowInstructions
 	opus.timeout = ConfirmationTimeout
@@ -57,17 +55,6 @@ func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]
 	results := make([]promptinjection.Result, len(req.Messages))
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
-	var bucket string
-	var resolveOnce sync.Once
-	resolveBucket := func() string {
-		resolveOnce.Do(func() {
-			// Bound the shared lookup independently of the first worker deadline.
-			lookupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			defer cancel()
-			bucket = gramopenrouter.ResolveJudgeRateLimitKey(lookupCtx, c.opus.logger, c.opus.client, req.OrgID, req.ProjectID, billing.ModelUsageSourcePromptInjection, ConfirmationModel)
-		})
-		return bucket
-	}
 	for i, msg := range req.Messages {
 		if !msg.HasContent() {
 			results[i] = safeResult
@@ -89,30 +76,21 @@ func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]
 			if i < len(req.UserIDs) {
 				userID = req.UserIDs[i]
 			}
-			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID, resolveBucket)
+			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID)
 		})
 	}
 	wg.Wait()
 	return results, nil
 }
 
-func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, resolveBucket func() string) promptinjection.Result {
+func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) promptinjection.Result {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second+ConfirmationTimeout)
 	defer cancel()
 	ctx, span := c.opus.tracer.Start(ctx, "risk.prompt_injection.cascade")
 	defer span.End()
 	prepared, content := prepareJudgePayload(msg, trajectory)
-	// Jev always uses an internal platform key and has its own model capacity.
 	if ctx.Err() != nil {
 		return unavailableResult
-	}
-	jevBucket := gramopenrouter.JudgeRateLimitKey(gramopenrouter.PlatformKey(), typesafe.Model)
-	allow, limitErr := c.opus.limiter.Allow(ctx, jevBucket)
-	if limitErr == nil && !allow.Allowed {
-		return unavailableResult
-	}
-	if limitErr != nil {
-		c.opus.logger.WarnContext(ctx, "Jev limiter unavailable", attr.SlogError(limitErr))
 	}
 	start := time.Now()
 	result, err := c.jev.Evaluate(ctx, req.OrgID, prepared, PrefilterQuestions())
@@ -141,7 +119,7 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 		c.opus.logger.WarnContext(ctx, "PI confirmation context unavailable", attr.SlogError(err))
 		return unavailableResult
 	}
-	return c.opus.classifyOne(ctx, req, msg, trajectory, userID, resolveBucket(), &window)
+	return c.opus.classifyOne(ctx, req, msg, trajectory, userID, &window)
 }
 
 func injectionProbability(result typesafe.Result) (float64, error) {

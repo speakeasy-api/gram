@@ -48,7 +48,7 @@ func newMCPRiskEvaluator(
 		piiScanner = ra.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 	}
 	judgeLimiter := gramopenrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
-	piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completions, guardianPolicy, provisioner, db, judgeLimiter).Classify)
+	piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completions, guardianPolicy, provisioner, db).Classify)
 	promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completions, judgeLimiter).Evaluate)
 	celEngine, err := celenv.New()
 	if err != nil {

@@ -6,14 +6,11 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -39,7 +36,7 @@ func testCascade(t *testing.T, probability float64, response string) (*Cascade, 
 	}
 	jev.On("Evaluate", mock.Anything, "org-a", mock.Anything, mock.Anything).Return(typesafe.Result{Probabilities: probabilities, Model: typesafe.Model, InputTokens: 10, OutputTokens: 1, CostUSD: 0.001}, nil)
 	client := &fakeCompletionClient{responder: func(string) string { return response }}
-	cascade := NewCascade(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t), jev, judgemessage.NewWindowLoader(nil).Load)
+	cascade := NewCascade(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, jev, judgemessage.NewWindowLoader(nil).Load)
 	return cascade, client
 }
 
@@ -127,21 +124,6 @@ func TestCascadeRejectsIncompleteProbabilities(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestCascadeStagesUseSeparateCapacity(t *testing.T) {
-	t.Parallel()
-	cascade, client := testCascade(t, PrefilterThreshold, safeVerdictJSON)
-	bucket := gramopenrouter.JudgeRateLimitKey(gramopenrouter.PlatformKey(), ConfirmationModel)
-	// Leave exactly one confirmation token. Jev must not spend it.
-	admission, err := cascade.opus.limiter.AllowN(t.Context(), bucket, 49)
-	require.NoError(t, err)
-	require.True(t, admission.Allowed)
-	require.Equal(t, 1, admission.Remaining)
-	results, err := cascade.Classify(t.Context(), req("candidate"))
-	require.NoError(t, err)
-	require.Equal(t, promptinjection.LabelSafe, results[0].Label)
-	require.EqualValues(t, 1, client.calls.Load())
-}
-
 func TestCascadeWindowMarksContextPresent(t *testing.T) {
 	t.Parallel()
 	recorder := tracetest.NewSpanRecorder()
@@ -180,28 +162,4 @@ func TestCascadeOversizedWindowDoesNotCallOpus(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
 	require.Zero(t, client.calls.Load())
-}
-
-type contextCheckingCompletion struct {
-	*fakeCompletionClient
-	t *testing.T
-}
-
-func (c *contextCheckingCompletion) ResolveKey(ctx context.Context, orgID, projectID string, slot billing.ModelUsageSource, keyType gramopenrouter.KeyType) (gramopenrouter.ResolvedKey, error) {
-	require.NoError(c.t, ctx.Err())
-	deadline, bounded := ctx.Deadline()
-	require.True(c.t, bounded)
-	require.WithinDuration(c.t, time.Now().Add(10*time.Second), deadline, time.Second, "shared lookup has its own deadline, not the worker deadline")
-	return c.fakeCompletionClient.ResolveKey(ctx, orgID, projectID, slot, keyType)
-}
-
-func TestCascadeResolvesBucketWithRequestContext(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	cascade, client := testCascade(t, PrefilterThreshold, safeVerdictJSON)
-	cascade.opus.client = &contextCheckingCompletion{fakeCompletionClient: client, t: t}
-	results, err := cascade.Classify(ctx, req("candidate"))
-	require.NoError(t, err)
-	require.Equal(t, promptinjection.LabelSafe, results[0].Label)
-	require.EqualValues(t, 1, client.calls.Load())
 }
