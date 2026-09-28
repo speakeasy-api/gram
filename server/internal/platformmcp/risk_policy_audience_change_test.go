@@ -37,6 +37,7 @@ func TestRiskPolicyAudienceDeltaValidation(t *testing.T) {
 		{"too many removals", func(v *changeRiskPolicyAudienceInput) { v.RemovePrincipals = make([]string, 101) }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			v := valid
 			test.change(&v)
 			_, err := validateRiskPolicyAudienceDelta(v)
@@ -56,6 +57,7 @@ func TestRiskPolicyAudienceDeltaValidation(t *testing.T) {
 		{"malformed audience", "targeted", []string{"user:old", "user:all"}, valid},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			require.Error(t, validateRiskPolicyAudienceDeltaTarget(test.kind, test.audience, test.input))
 		})
 	}
@@ -205,7 +207,9 @@ func TestRiskPolicyAudienceChangeRequiresOrgAdmin(t *testing.T) {
 	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: operationChangeRiskPolicyAudience, Arguments: map[string]any{"project_slug": "default", "policy_id": "11111111-1111-4111-8111-111111111111", "expected_version": "version", "idempotency_key": "key", "confirmed": true, "add_principals": []string{"user:new"}, "remove_principals": []string{}}})
 	require.NoError(t, err)
 	require.True(t, result.IsError)
-	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "org:admin")
+	textContent, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, textContent.Text, "org:admin")
 	require.False(t, called)
 }
 

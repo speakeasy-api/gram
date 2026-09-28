@@ -215,6 +215,19 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	require.Equal(t, []string{"user:<USER_ID>"}, output.Policy.Audience.PrincipalURNs)
 	require.NotContains(t, text, scope)
 	require.NotContains(t, text, "custom.rule")
+
+	managed := testRiskPrincipal("user")
+	managed.Surface = SurfaceProjectAssistant
+	managed.ConnectionID = ""
+	managed.Generation = ""
+	managedService := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectSlug: "project"}}}, &stubRiskPolicies{policy: policy}, &stubRiskExclusions{})
+	managedOutput, err := managedService.GetPolicy(t.Context(), managed, GetRiskPolicyInput{ProjectSlug: "project", PolicyID: policy.ID.String()})
+	require.NoError(t, err)
+	require.Nil(t, managedOutput.Policy.Audience)
+	managedJSON, err := json.Marshal(managedOutput)
+	require.NoError(t, err)
+	require.NotContains(t, string(managedJSON), "user:<USER_ID>")
+	require.NotContains(t, string(managedJSON), `"audience"`)
 }
 
 func TestRiskExclusionFingerprintIsProjectScoped(t *testing.T) {
@@ -321,7 +334,7 @@ func TestUnavailableRiskToolRegistrationSurvivesCatalogFailure(t *testing.T) {
 		})
 	})
 	require.Equal(t, 1, buildCalls)
-	require.Equal(t, 9, len(reg.Descriptors()))
+	require.Len(t, reg.Descriptors(), 9)
 
 	create := descriptorByName(t, reg, "create_risk_policy")
 	_, err := create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`))

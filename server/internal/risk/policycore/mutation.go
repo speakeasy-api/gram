@@ -397,7 +397,7 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 	}
 
 	if input.AudienceDelta != nil {
-		grant := authz.ResourceGrant{Resource: authz.Resource{OrganizationID: row.OrganizationID, Scope: authz.ScopeRiskPolicyEvaluate, ResourceID: row.ID.String()}, Selector: authz.NewSelector(authz.ScopeRiskPolicyEvaluate, row.ID.String())}
+		grant := authz.ResourceGrant{Principals: nil, Resource: authz.Resource{OrganizationID: row.OrganizationID, Scope: authz.ScopeRiskPolicyEvaluate, ResourceID: row.ID.String()}, Selector: authz.NewSelector(authz.ScopeRiskPolicyEvaluate, row.ID.String())}
 		if len(input.AudienceDelta.Remove) > 0 {
 			grant.Principals = input.AudienceDelta.Remove
 			if err := authz.RevokeResourceFromPrincipals(ctx, tx, grant); err != nil {

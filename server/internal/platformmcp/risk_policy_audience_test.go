@@ -21,6 +21,7 @@ func TestRiskPolicyAudienceReplacementValidation(t *testing.T) {
 		`{"type":"everyone","principal_urns":[],"confirm":true,"exclude_self":true}`,
 	} {
 		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
 			_, _, err := parseRiskPolicyAudienceReplacement(json.RawMessage(raw))
 			require.Error(t, err)
 		})

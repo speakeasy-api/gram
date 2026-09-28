@@ -41,7 +41,7 @@ func registerChangeRiskPolicyAudience(reg *Registrar, catalogAvailable bool, han
 		{Properties: map[string]*jsonschema.Schema{"add_principals": {MinItems: new(1)}}},
 		{Properties: map[string]*jsonschema.Schema{"remove_principals": {MinItems: new(1)}}},
 	}
-	addTool(reg, &mcp.Tool{Name: operationChangeRiskPolicyAudience, Title: "Change Risk Policy Audience", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationChangeRiskPolicyAudience, handler))
+	addTool(reg, &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: operationChangeRiskPolicyAudience, Title: "Change Risk Policy Audience", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{OpenWorldHint: nil, ReadOnlyHint: false, Title: "", DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{DiscoveryScopes: nil, Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationChangeRiskPolicyAudience, handler))
 }
 
 func (s *riskPolicyMutationService) changePolicyAudienceTool(ctx context.Context, _ *mcp.CallToolRequest, raw map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
@@ -100,10 +100,10 @@ func validateRiskPolicyAudienceDeltaTarget(kind string, audience []string, input
 }
 
 func riskPolicyAudienceReplacementSchema() *jsonschema.Schema {
-	branch := func(kind string, min, max int) *jsonschema.Schema {
+	branch := func(kind string, minimum, maximum int) *jsonschema.Schema {
 		return closedObject(map[string]*jsonschema.Schema{
 			"type":           constSchema(kind),
-			"principal_urns": {Type: "array", Items: stringSchema("Exact organization user or role principal URN. Positive grants only.", 1, 0), MinItems: new(min), MaxItems: new(max)},
+			"principal_urns": {Type: "array", Items: stringSchema("Exact organization user or role principal URN. Positive grants only.", 1, 0), MinItems: new(minimum), MaxItems: new(maximum)},
 			"confirm":        {Type: "boolean", Enum: []any{true}},
 		}, []string{"type", "principal_urns", "confirm"})
 	}

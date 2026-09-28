@@ -1,6 +1,6 @@
 ---
 name: manage-risk-policy-audience
-description: Inspect and safely change who a risk policy targets in an explicit Speakeasy AI Control Plane project, including removing the authenticated requester when the policy supports direct-user removal.
+description: Inspect and safely change who a risk policy targets in an explicit Speakeasy AI Control Plane project, with confirmed administrator audience changes and clear refusals for unavailable self-exclusion.
 ---
 
 # Manage a risk policy audience
@@ -15,9 +15,9 @@ Use the executing client's authenticated Platform MCP connection. Installing thi
 
 ## Remove the authenticated requester
 
-4. For “remove me,” use `remove_self_from_risk_policy` only through the requester's external OAuth connection. The server derives the user from authentication; never supply a user ID or infer identity from an email, a display name, or a managed assistant's attribution.
-5. Explain and confirm the exact project, policy, and removal before writing. This operation supports a targeted, direct-user audience only, with at least one other user remaining. Everyone, role-containing audiences, unsupported grant scopes, and last-user removal are not self-exclusion operations. On a refusal, stop: do not disable the policy, empty its audience, remove a role, edit membership, create a risk exclusion, or reconstruct Everyone as today's member list.
-6. Immediately before the write, refresh `get_risk_policy`. If the target or audience changed, explain the new state and obtain confirmation again. Call `remove_self_from_risk_policy` with the exact `project_slug`, `policy_id`, fresh `expected_version`, `confirmed: true`, and a stable `idempotency_key` for retries of this exact request. Never use general audience replacement to bypass a self-removal refusal.
+For “remove me,” explain that self-removal and effective exclusion are unavailable pending organization-scoped coordination of audience grants. `remove_self_from_risk_policy` remains discoverable to external organization administrators but always refuses before database transactions or receipt replay. Do not claim that deleting a positive user grant proves the requester is no longer covered.
+
+Stop without writing. Do not bypass this refusal with `change_risk_policy_audience`, general audience replacement, policy disablement, role or membership changes, a risk exclusion, or reconstruction of Everyone as today's member list. Never infer a human from managed-assistant attribution. A separately requested administrator change to direct positive grants is a different outcome, not a workaround for self-exclusion.
 
 ## Add or remove direct audience grants
 

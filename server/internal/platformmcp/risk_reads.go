@@ -335,7 +335,12 @@ func (s *RiskReadService) GetPolicy(ctx context.Context, principal Principal, in
 	detail := s.policyDetail(policy.policy, policy.shadowDecisions)
 	detail.Version = version
 	if externalRiskAudiencePrincipal(principal) {
-		detail.Audience = &RiskPolicyAudience{Type: policy.policy.AudienceType, PrincipalURNs: append([]string{}, policy.policy.AudiencePrincipalURNs...)}
+		principals := []string{}
+		if policy.policy.AudienceType != "everyone" {
+			principals = append(principals, policy.policy.AudiencePrincipalURNs...)
+		}
+		// Everyone's internal user:all grant is not a targeted audience identity.
+		detail.Audience = &RiskPolicyAudience{Type: policy.policy.AudienceType, PrincipalURNs: principals}
 	}
 	return GetRiskPolicyOutput{Project: riskProject(project), CatalogVersion: s.catalog.Schema, CatalogFingerprint: s.catalogFingerprint, Policy: detail}, nil
 }
@@ -425,6 +430,7 @@ func (s *RiskReadService) policySummary(policy policycore.Policy, shadowDecision
 func (s *RiskReadService) policyDetail(policy policycore.Policy, shadowDecisions *ShadowPolicyDecisions) RiskPolicyDetail {
 	detectionScopes, _ := s.projectDetectionScopes(policy)
 	detail := RiskPolicyDetail{
+		Audience:               nil,
 		RiskPolicySummary:      s.policySummary(policy, shadowDecisions),
 		Version:                "",
 		PresidioEntities:       allowlisted(policy.PresidioEntities, s.catalog.PresidioEntities),

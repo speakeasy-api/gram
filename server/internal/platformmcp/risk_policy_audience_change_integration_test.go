@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:paralleltest,tparallel // Subtests share a database and mutate organization-wide grants and audit state.
 func TestRiskPolicyAudienceChangeTransaction(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -151,7 +152,9 @@ func TestRiskPolicyAudienceChangeTransaction(t *testing.T) {
 		for i, err := range errors {
 			if err == nil {
 				winners++
-				require.ElementsMatch(t, append([]string{self.String()}, inputs[i]["add_principals"].([]string)...), read(t, id).Audience.PrincipalURNs)
+				added, ok := inputs[i]["add_principals"].([]string)
+				require.True(t, ok)
+				require.ElementsMatch(t, append([]string{self.String()}, added...), read(t, id).Audience.PrincipalURNs)
 			} else {
 				requireRiskMutationRefusal(t, err, "conflict")
 			}

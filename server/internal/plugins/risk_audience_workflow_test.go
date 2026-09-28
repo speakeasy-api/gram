@@ -17,7 +17,7 @@ func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
 	require.Equal(t, workflow, files["agent-plugins/speakeasy/"+path])
 	text := string(workflow)
 	cursor := 0
-	for _, name := range []string{"list_projects", "list_risk_policies", "get_risk_policy", "remove_self_from_risk_policy", "get_risk_policy", "remove_self_from_risk_policy", "change_risk_policy_audience", "get_risk_policy", "change_risk_policy_audience", "update_risk_policy", "get_risk_policy"} {
+	for _, name := range []string{"list_projects", "list_risk_policies", "get_risk_policy", "remove_self_from_risk_policy", "change_risk_policy_audience", "get_risk_policy", "change_risk_policy_audience", "update_risk_policy", "get_risk_policy"} {
 		token := "`" + name + "`"
 		index := strings.Index(text[cursor:], token)
 		require.NotEqual(t, -1, index, "%s must appear in workflow order", name)
@@ -25,9 +25,11 @@ func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
 	}
 	for _, guardrail := range []string{
 		"external OAuth connection",
-		"never supply a user ID",
-		"at least one other user remaining",
-		"Never use general audience replacement to bypass a self-removal refusal",
+		"Stop without writing",
+		"organization-scoped coordination",
+		"always refuses",
+		"Do not bypass this refusal",
+		"before database transactions or receipt replay",
 		"obtain confirmation again",
 		"`confirmed: true`",
 		"stable `idempotency_key`",

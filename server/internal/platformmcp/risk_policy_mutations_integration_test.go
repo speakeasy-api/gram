@@ -412,5 +412,6 @@ func TestRiskPolicyAudienceReplacement(t *testing.T) {
 	restoredRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: created.Policy.ID})
 	require.NoError(t, err)
 	require.Equal(t, "everyone", restoredRead.Policy.Audience.Type)
+	require.Empty(t, restoredRead.Policy.Audience.PrincipalURNs)
 	require.Equal(t, restored.Version, restoredRead.Policy.Version)
 }
