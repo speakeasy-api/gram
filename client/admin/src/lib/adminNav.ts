@@ -51,7 +51,7 @@ export const ADMIN_NAV_GROUPS = [
     items: [
       {
         to: "/registry",
-        label: "Registry",
+        label: "MCP Registry",
         keywords: "catalog mcp servers",
         icon: McpIcon,
       },

@@ -180,7 +180,7 @@ describe("AppSidebar", () => {
   it("renders the existing MCP logo as the decorative Registry icon", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const link = within(sidebar()).getByRole("link", {
-      name: "Registry",
+      name: "MCP Registry",
     });
     const icon = link.querySelector("svg");
     expect(icon?.getAttribute("viewBox")).toBe("0 0 195 195");
@@ -221,7 +221,7 @@ describe("AppSidebar", () => {
       {
         label: "Platform Management",
         links: [
-          { label: "Registry", href: "/registry" },
+          { label: "MCP Registry", href: "/registry" },
           { label: "Support matrix", href: "/integration-coverage" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
           { label: "Admin MCP", href: "/mcp-setup" },
