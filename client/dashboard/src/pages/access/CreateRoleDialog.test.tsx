@@ -215,6 +215,7 @@ describe("agent management rollout", () => {
       renderEditor();
       expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
         enabled: false,
+        throwOnError: false,
       });
       expect(screen.queryByText("Assign Agents")).toBeNull();
     },
@@ -224,6 +225,7 @@ describe("agent management rollout", () => {
     renderEditor();
     expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
       enabled: true,
+      throwOnError: false,
     });
     fireEvent.click(screen.getByText("Assign Agents"));
     expect(

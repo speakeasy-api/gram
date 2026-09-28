@@ -332,48 +332,52 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
-	logger              *slog.Logger
-	db                  *pgxpool.Pool
-	reader              *readmodel.Reader
-	inventory           *platformrepo.Queries
-	inventoryCursor     *inventoryCursorCodec
-	metadataVersionKey  []byte
-	riskReads           *RiskReadService
-	riskAnalysisStatus  *RiskAnalysisStatusService
-	riskFindings        riskFindingsLister
-	dataExports         *DataExportReadService
-	dataExportMutations *dataExportMutationService
-	recentToolCalls     *RecentToolCallReadService
-	eventFeed           *EventFeedReadService
-	authz               *authz.Engine
-	shadowInventory     *ShadowInventoryService
-	shadowDecisions     *ShadowDecisionService
-	shadowAI            *ShadowAIService
-	reviewRequests      MCPReviewRequestService
-	reviewRequestBudget OperationBudget
+	logger                    *slog.Logger
+	db                        *pgxpool.Pool
+	reader                    *readmodel.Reader
+	inventory                 *platformrepo.Queries
+	inventoryCursor           *inventoryCursorCodec
+	metadataVersionKey        []byte
+	riskReads                 *RiskReadService
+	riskAnalysisStatus        *RiskAnalysisStatusService
+	riskFindings              riskFindingsLister
+	dataExports               *DataExportReadService
+	dataExportMutations       *dataExportMutationService
+	recentToolCalls           *RecentToolCallReadService
+	networkTraffic            MCPNetworkTrafficReader
+	networkTrafficLogsEnabled FeatureChecker
+	eventFeed                 *EventFeedReadService
+	authz                     *authz.Engine
+	shadowInventory           *ShadowInventoryService
+	shadowDecisions           *ShadowDecisionService
+	shadowAI                  *ShadowAIService
+	reviewRequests            MCPReviewRequestService
+	reviewRequestBudget       OperationBudget
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
-		logger:              logger.With(attr.SlogComponent("platformmcp")),
-		db:                  db,
-		reader:              readmodel.New(db),
-		inventory:           platformrepo.New(db),
-		inventoryCursor:     nil,
-		metadataVersionKey:  nil,
-		riskReads:           nil,
-		riskAnalysisStatus:  nil,
-		riskFindings:        nil,
-		dataExports:         nil,
-		dataExportMutations: nil,
-		recentToolCalls:     nil,
-		eventFeed:           nil,
-		authz:               nil,
-		shadowInventory:     nil,
-		shadowDecisions:     nil,
-		shadowAI:            nil,
-		reviewRequests:      nil,
-		reviewRequestBudget: OperationBudget{Connection: nil, Organization: nil},
+		logger:                    logger.With(attr.SlogComponent("platformmcp")),
+		db:                        db,
+		reader:                    readmodel.New(db),
+		inventory:                 platformrepo.New(db),
+		inventoryCursor:           nil,
+		metadataVersionKey:        nil,
+		riskReads:                 nil,
+		riskAnalysisStatus:        nil,
+		riskFindings:              nil,
+		dataExports:               nil,
+		dataExportMutations:       nil,
+		recentToolCalls:           nil,
+		networkTraffic:            nil,
+		networkTrafficLogsEnabled: nil,
+		eventFeed:                 nil,
+		authz:                     nil,
+		shadowInventory:           nil,
+		shadowDecisions:           nil,
+		shadowAI:                  nil,
+		reviewRequests:            nil,
+		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 	}
 }
 

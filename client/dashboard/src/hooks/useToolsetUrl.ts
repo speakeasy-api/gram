@@ -78,10 +78,21 @@ function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
   return { mcpUrl, installPageUrl: `${mcpUrl}/install` };
 }
 
+// Slug registered on the Gram origin. Custom-domain endpoints share the slug
+// column but live in another namespace, so using one of those slugs on
+// getServerURL() 404s — including the first-party connect route.
+export function platformEndpointSlug(
+  endpoints: Array<Pick<McpEndpoint, "slug" | "customDomainId">>,
+): string | undefined {
+  return endpoints.find((endpoint) => endpoint.slug && !endpoint.customDomainId)
+    ?.slug;
+}
+
 // useResolvedMcpServerUrl resolves the runtime MCP URL for an mcp_server from
 // its endpoints, preferring a custom-domain endpoint. While the custom domain
 // is still resolving it falls back to the Gram-hosted `/mcp/<slug>` path so
-// callers always have a usable URL once a slug exists.
+// callers always have a usable URL once a slug exists. Listing tools can use
+// that display URL. First-party connect cannot — use platformEndpointSlug.
 export function useResolvedMcpServerUrl(
   endpoints: McpEndpoint[],
   isLoadingEndpoints: boolean,

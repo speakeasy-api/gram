@@ -22,6 +22,7 @@ import {
 } from "@/hooks/usePrivateMcpServerUrls";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useProductTier } from "@/hooks/useProductTier";
+import { useOrgRoutes } from "@/routes";
 import { customDomainMcpEndpointUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 
@@ -51,6 +52,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { NetworkTrafficPanel } from "./NetworkTrafficPanel";
 
 const NETWORK_ACCESS_LABELS: Record<
   UpdateMcpServerFormNetworkAccessMode,
@@ -152,6 +154,7 @@ function NetworkAccessSectionContent({
   canReadIngress: boolean;
 }): JSX.Element {
   const organization = useOrganization();
+  const orgRoutes = useOrgRoutes();
   const enterprise = useProductTier() === "enterprise";
   const queryClient = useQueryClient();
   const currentMode =
@@ -435,6 +438,13 @@ function NetworkAccessSectionContent({
               entitled and its private ingress is online.
             </FieldDescription>
           </Field>
+          {canReadIngress && (
+            <Button asChild variant="secondary" size="sm">
+              <orgRoutes.domains.Link>
+                Configure organization network access
+              </orgRoutes.domains.Link>
+            </Button>
+          )}
           {currentMode !== McpServerNetworkAccessMode.PublicOnly &&
             privateEndpointUrls.length > 0 && (
               <Field>
@@ -459,6 +469,12 @@ function NetworkAccessSectionContent({
                 </FieldDescription>
               </Field>
             )}
+          {currentMode !== McpServerNetworkAccessMode.PublicOnly && (
+            <NetworkTrafficPanel
+              mcpServerId={mcpServer?.id ?? toolset?.id}
+              metaMcpServerId={metaMcpServer?.id}
+            />
+          )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>

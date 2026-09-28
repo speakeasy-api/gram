@@ -54,6 +54,10 @@ var (
 	// such as a linked client of a different provider.
 	ErrIdentityInvalid = errors.New("identity: invalid request")
 
+	// ErrIdentityForbidden marks a write the actor's grants do not reach, such
+	// as registering through a tunnel without platform admin.
+	ErrIdentityForbidden = errors.New("identity: forbidden")
+
 	// ErrIdentityConflict marks a write that no longer fits current state.
 	ErrIdentityConflict = errors.New("identity: conflict")
 
@@ -144,6 +148,10 @@ type IdentityScope struct {
 
 	// ActorDisplayName is the actor's display name, if known.
 	ActorDisplayName *string
+
+	// ActorIsPlatformAdmin gates the registration paths that reach a private
+	// network. mcp:write on one server is not enough to borrow a tunnel.
+	ActorIsPlatformAdmin bool
 }
 
 // IdentityPlan is what a caller wants configured. It holds only the choices
@@ -283,6 +291,9 @@ type ClientCredentials struct {
 
 	// SecretExpiresAt is the provider-reported secret expiry, if any.
 	SecretExpiresAt pgtype.Timestamptz
+
+	// IssuedAt is when the provider says the credential began, if it said.
+	IssuedAt pgtype.Timestamptz
 
 	// TokenEndpointAuthMethod is the client authentication method, if known.
 	TokenEndpointAuthMethod *string
@@ -560,6 +571,12 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 	}
 
 	reg.Method = RegistrationDCR
+	// Registering through a tunnel reaches a private network the project
+	// cannot otherwise address, so it carries the same platform-admin gate the
+	// management path applies when the binding is created.
+	if c.provider.TunneledMcpServerID.Valid && !c.plan.Scope.ActorIsPlatformAdmin {
+		return reg, identityRefusal(ErrIdentityForbidden, nil, "registering through an MCP tunnel requires a platform admin")
+	}
 	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.serverURL, ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(c.provider.TunneledMcpServerID)),
@@ -591,6 +608,7 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 		ClientID:                response.ClientID,
 		ClientSecret:            response.ClientSecret,
 		SecretExpiresAt:         response.ClientSecretExpiresAt,
+		IssuedAt:                response.ClientIDIssuedAt,
 		TokenEndpointAuthMethod: &method,
 		Scope:                   policy.Scope,
 		Audience:                policy.Audience,
@@ -1162,13 +1180,20 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		}
 		secret = conv.ToPGText(encrypted)
 	}
+	// Keep what the provider said it issued: rewriting it to our own clock
+	// loses the only record of when the credential began, which is what a
+	// rotation window is measured against. RFC 7591 makes it optional.
+	clientIDIssuedAt := conv.ToPGTimestamptz(time.Now().UTC())
+	if credentials.IssuedAt.Valid {
+		clientIDIssuedAt = credentials.IssuedAt
+	}
 	client, err := tx.q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:                       conv.ToNullUUID(c.plan.Scope.ProjectID),
 		OrganizationID:                  conv.ToPGTextEmpty(c.plan.Scope.OrganizationID),
 		RemoteSessionIssuerID:           c.provider.ID,
 		ClientID:                        strings.TrimSpace(credentials.ClientID),
 		ClientSecretEncrypted:           secret,
-		ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientIDIssuedAt:                clientIDIssuedAt,
 		ClientSecretExpiresAt:           credentials.SecretExpiresAt,
 		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
 		// Neither is set here; a JWKS is attached afterwards through the

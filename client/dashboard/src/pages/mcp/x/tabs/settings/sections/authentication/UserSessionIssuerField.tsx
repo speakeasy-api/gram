@@ -3,7 +3,7 @@ import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select
 import { Button } from "@/components/ui/Button";
 import { FieldError } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
-import { ScopeBadge } from "@/pages/remote-identity-providers/ScopeBadge";
+import { ScopeBadge } from "@/lib/remote-identity";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";

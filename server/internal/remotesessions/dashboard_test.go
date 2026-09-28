@@ -1045,3 +1045,81 @@ func TestCommitServerIdentityConfigurationReplacesClientForSameProvider(t *testi
 	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, true)
 	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 }
+
+func TestCommitServerIdentityConfigurationPersistsProviderReportedClientIDIssuedAt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "issued-at-target")
+	issuedAt := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "issued-at-client",
+			"client_secret":              "issued-at-secret",
+			"token_endpoint_auth_method": "client_secret_post",
+			"client_id_issued_at":        issuedAt.Unix(),
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+
+	providerID := createServerIdentityProvider(t, ctx, ti, "issued-at-provider", registrationServer.URL, false, []string{"client_secret_post"})
+	payload := autoServerIdentityPayload(targetID, providerID)
+	payload.ClientConfiguration.TokenEndpointAuthMethod = conv.PtrEmpty("client_secret_post")
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+
+	clientID, err := uuid.Parse(result.Client.ID)
+	require.NoError(t, err)
+	stored, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ProjectID:      projectIDFromContext(t, ctx),
+		OrganizationID: activeOrganizationID(t, ctx),
+		ID:             clientID,
+	})
+	require.NoError(t, err)
+	// The provider said when the credential began. Overwriting that with our
+	// own clock loses the only record a rotation window can be measured from.
+	require.True(t, stored.RemoteSessionClient.ClientIDIssuedAt.Valid)
+	require.Equal(t, issuedAt, stored.RemoteSessionClient.ClientIDIssuedAt.Time.UTC())
+}
+
+func TestCommitServerIdentityConfigurationFallsBackToNowWhenProviderOmitsClientIDIssuedAt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "no-issued-at-target")
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "no-issued-at-client",
+			"client_secret":              "no-issued-at-secret",
+			"token_endpoint_auth_method": "client_secret_post",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+
+	providerID := createServerIdentityProvider(t, ctx, ti, "no-issued-at-provider", registrationServer.URL, false, []string{"client_secret_post"})
+	payload := autoServerIdentityPayload(targetID, providerID)
+	payload.ClientConfiguration.TokenEndpointAuthMethod = conv.PtrEmpty("client_secret_post")
+
+	before := time.Now().UTC().Add(-time.Minute)
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, payload)
+	require.NoError(t, err)
+
+	clientID, err := uuid.Parse(result.Client.ID)
+	require.NoError(t, err)
+	stored, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ProjectID:      projectIDFromContext(t, ctx),
+		OrganizationID: activeOrganizationID(t, ctx),
+		ID:             clientID,
+	})
+	require.NoError(t, err)
+	// RFC 7591 makes client_id_issued_at optional, so a row still has to get a
+	// usable timestamp rather than a zero one.
+	require.True(t, stored.RemoteSessionClient.ClientIDIssuedAt.Valid)
+	require.True(t, stored.RemoteSessionClient.ClientIDIssuedAt.Time.UTC().After(before))
+}

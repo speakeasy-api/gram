@@ -35,9 +35,6 @@ const (
 	setupTaskStatusDone            = "done"
 )
 
-// setupDomainCheckTimeout bounds the live WorkOS domain check that
-// ListSetupTasks runs for orgs with no stored verified domains.
-
 type setupTaskDefinition struct {
 	Key           string
 	Title         string
@@ -48,19 +45,30 @@ type setupTaskDefinition struct {
 	HiddenByDefault bool
 }
 
+// setupTaskCatalog lists every setup card in wizard order. To add a card:
+//  1. Add an entry here (usually HiddenByDefault: true).
+//  2. Add its content to SETUP_CARDS in client/dashboard/src/pages/setup/setup-cards.tsx.
+//  3. Add its key to any onboardingPresets entry that should show it.
+//  4. Optionally mark it done from organization facts in projectSetupTasks.
+//
+// Tests on both sides fail if the catalog, SETUP_CARDS, and presets disagree.
 var setupTaskCatalog = []setupTaskDefinition{
-	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: true},
+	// Identity
 	{Key: "identity-provider", Title: "Set up identity provider", Description: "Verify a domain, connect single sign-on, and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false},
+	// Observe
+	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: true},
+	// Distribute
+	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: true},
-	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: true},
+	// Secure
+	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: true},
 }
 
 var validSetupTaskStatuses = []string{
@@ -448,4 +456,27 @@ func setupTaskAuditSnapshot(task *gen.SetupTask) *audit.OrganizationSetupTaskSna
 		Key: task.Key, Title: task.Title, Description: task.Description, Status: task.Status,
 		Assignee: assignee, BlockedBy: task.BlockedBy, Hidden: task.Hidden,
 	}
+}
+
+// SubmitOnboardingSurvey applies the default playbook for the survey's use
+// case through the same path staff use in the admin dashboard. Callers never
+// pick tasks.
+func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.SubmitOnboardingSurveyPayload) (*gen.ListSetupTasksResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	preset := defaultPlaybookForUseCase(payload.UseCase)
+	if preset == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unknown onboarding use case").LogError(ctx, s.logger)
+	}
+	presetKey := preset.Key
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
+	if _, err := SaveOnboardingConfiguration(ctx, s.db, s.audit, ac.ActiveOrganizationID, preset.TaskKeys, &presetKey, actor, ac.Email); err != nil {
+		return nil, fmt.Errorf("save onboarding survey result: %w", err)
+	}
+	return s.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: nil, SessionToken: payload.SessionToken})
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 const (
@@ -27,6 +28,7 @@ type Principal struct {
 	ClientID     string
 	ConnectionID string
 	Scopes       []string
+	staff        *contextvalues.AdminAuthContext
 }
 
 // ErrAuthUnavailable reports that live staff verification could not be completed.
@@ -98,13 +100,22 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	activityReader, _ := reader.(ActivityReader)
 	usageReader, _ := reader.(UsageReader)
 	coverageReader, _ := reader.(CoverageReader)
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil, coverageReader != nil)
+	issuerReader, _ := reader.(IssuerReader)
+	matrixReader, _ := reader.(SupportMatrixReader)
+	onboardingReader, _ := reader.(OnboardingReader)
+	projectMCPReader, _ := reader.(ProjectMCPServerReader)
+	billingDiagnosticsReader, _ := reader.(BillingDiagnosticsReader)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil)
 	registerOrganizationTools(server, reader)
 	registerProjectTools(server, reader, projectReader)
 	registerConfigurationTools(server, reader, configurationReader)
 	registerActivityTools(server, reader, activityReader)
 	registerUsageTools(server, reader, usageReader)
 	registerCoverageTools(server, reader, coverageReader)
+	registerIssuerTools(server, issuerReader)
+	registerSupportMatrixTools(server, matrixReader)
+	registerDiagnosticTools(server, reader, projectReader, onboardingReader, projectMCPReader)
+	registerBillingDiagnosticTools(server, reader, billingDiagnosticsReader)
 	return &Runtime{authenticator: authenticator, server: server, resourceURL: resourceURL}
 }
 
@@ -146,6 +157,9 @@ func (r *Runtime) Handler() http.Handler {
 		}
 
 		ctx := context.WithValue(req.Context(), principalKey{}, principal)
+		if principal.staff != nil {
+			ctx = contextvalues.SetAdminAuthContext(ctx, principal.staff)
+		}
 		req = req.WithContext(ctx)
 		req.Body = http.MaxBytesReader(w, req.Body, MaxBodyBytes)
 		handler.ServeHTTP(noStoreWriter{ResponseWriter: w}, req)

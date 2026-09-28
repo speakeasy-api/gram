@@ -2395,67 +2395,6 @@ func (q *Queries) GetPlatformMCPConnectionSettings(ctx context.Context, arg GetP
 	return i, err
 }
 
-const getPlatformMCPDiagnosticsTarget = `-- name: GetPlatformMCPDiagnosticsTarget :one
-SELECT
-    m.id AS mcp_server_id,
-    m.project_id,
-    COALESCE(m.slug, '') AS mcp_slug,
-    COALESCE(toolset.slug, '') AS toolset_slug,
-    COUNT(*) FILTER (
-      WHERE sibling.id IS NOT NULL
-        AND sibling.deleted IS FALSE
-    )::bigint AS toolset_mcp_count
-FROM mcp_servers AS m
-JOIN projects AS project
-  ON project.id = m.project_id
- AND project.organization_id = $1
- AND project.deleted IS FALSE
-LEFT JOIN toolsets AS toolset
-  ON toolset.id = m.toolset_id
-  AND toolset.project_id = m.project_id
-  AND toolset.organization_id = $1
-  AND toolset.deleted IS FALSE
-LEFT JOIN mcp_servers AS sibling
-  ON sibling.project_id = m.project_id
-  AND sibling.toolset_id = m.toolset_id
-WHERE m.id = $2
-  AND m.project_id = $3
-  AND m.deleted IS FALSE
-GROUP BY m.id, m.project_id, m.slug, toolset.slug
-`
-
-type GetPlatformMCPDiagnosticsTargetParams struct {
-	OrganizationID string
-	McpServerID    uuid.UUID
-	ProjectID      uuid.UUID
-}
-
-type GetPlatformMCPDiagnosticsTargetRow struct {
-	McpServerID     uuid.UUID
-	ProjectID       uuid.UUID
-	McpSlug         string
-	ToolsetSlug     string
-	ToolsetMcpCount int64
-}
-
-// Resolves one configured MCP to the identities its telemetry is recorded
-// under: the toolset slug that calls arriving directly at Gram carry, and the
-// MCP slug that appears in the URL an agent-hook-observed client called.
-// Scoped to the organization's own project, so a caller cannot diagnose an MCP
-// it cannot already see through the inventory.
-func (q *Queries) GetPlatformMCPDiagnosticsTarget(ctx context.Context, arg GetPlatformMCPDiagnosticsTargetParams) (GetPlatformMCPDiagnosticsTargetRow, error) {
-	row := q.db.QueryRow(ctx, getPlatformMCPDiagnosticsTarget, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
-	var i GetPlatformMCPDiagnosticsTargetRow
-	err := row.Scan(
-		&i.McpServerID,
-		&i.ProjectID,
-		&i.McpSlug,
-		&i.ToolsetSlug,
-		&i.ToolsetMcpCount,
-	)
-	return i, err
-}
-
 const getPlatformMCPDistribution = `-- name: GetPlatformMCPDistribution :one
 SELECT distribution.id, distribution.organization_id, distribution.project_id, distribution.registration_id, distribution.default_plugin_id, distribution.plugin_id, distribution.plugin_server_id, distribution.state, distribution.version, distribution.attachment_was_created, distribution.publication_state, distribution.publication_updated_at, distribution.connection_id, distribution.connection_generation, distribution.user_id, distribution.acting_surface, distribution.created_at, distribution.updated_at
 FROM platform_mcp_distributions AS distribution
@@ -6080,6 +6019,123 @@ func (q *Queries) ListPlatformMCPProjects(ctx context.Context, arg ListPlatformM
 	for rows.Next() {
 		var i ListPlatformMCPProjectsRow
 		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPServerIdentities = `-- name: ListPlatformMCPServerIdentities :many
+WITH server AS (
+    SELECT
+        m.id,
+        m.toolset_id,
+        COALESCE(m.name, '')::text AS mcp_name,
+        COALESCE(m.slug, '')::text AS mcp_slug,
+        COALESCE(toolset.slug, '')::text AS toolset_slug
+    FROM mcp_servers AS m
+    JOIN projects AS project
+      ON project.id = m.project_id
+     AND project.organization_id = $1
+     AND project.deleted IS FALSE
+    LEFT JOIN toolsets AS toolset
+      ON toolset.id = m.toolset_id
+     AND toolset.project_id = m.project_id
+     AND toolset.deleted IS FALSE
+    WHERE m.project_id = $2
+      AND m.deleted IS FALSE
+),
+membership AS (
+    SELECT
+        plugin_server.id AS membership_id,
+        plugin_server.mcp_server_id,
+        plugin_server.toolset_id,
+        plugin.slug AS plugin_slug,
+        plugin_server.display_name
+    FROM plugins AS plugin
+    JOIN plugin_servers AS plugin_server
+      ON plugin_server.plugin_id = plugin.id
+     AND plugin_server.deleted IS FALSE
+    WHERE plugin.project_id = $2
+      AND plugin.deleted IS FALSE
+),
+server_membership AS (
+    SELECT
+        membership.mcp_server_id AS server_id,
+        membership.membership_id,
+        membership.plugin_slug,
+        membership.display_name
+    FROM membership
+    WHERE membership.mcp_server_id IS NOT NULL
+    UNION ALL
+    SELECT
+        server.id AS server_id,
+        membership.membership_id,
+        membership.plugin_slug,
+        membership.display_name
+    FROM server
+    JOIN membership
+      ON membership.toolset_id = server.toolset_id
+    WHERE server.toolset_id IS NOT NULL
+)
+SELECT
+    server.id AS mcp_server_id,
+    server.mcp_name,
+    server.mcp_slug,
+    server.toolset_slug,
+    COALESCE(server_membership.plugin_slug, '')::text AS plugin_slug,
+    COALESCE(server_membership.display_name, '')::text AS plugin_display_name
+FROM server
+LEFT JOIN server_membership
+  ON server_membership.server_id = server.id
+ORDER BY server.id, server_membership.membership_id
+`
+
+type ListPlatformMCPServerIdentitiesParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListPlatformMCPServerIdentitiesRow struct {
+	McpServerID       uuid.UUID
+	McpName           string
+	McpSlug           string
+	ToolsetSlug       string
+	PluginSlug        string
+	PluginDisplayName string
+}
+
+// Lists the names an agent hook can report one configured MCP server under,
+// for every live MCP server in one of the organization's projects: its id,
+// slug, name, hosted toolset slug, and each plugin membership's plugin slug and
+// display name (the key the plugin's mcp.json ships it under). One row per
+// (server, membership); a server with no membership yields one row with empty
+// plugin columns. Hosted servers are also reached through memberships attached
+// by toolset, so those memberships are included for the server fronting that
+// toolset. Memberships are gathered from the project's live plugins through the
+// (plugin_id, backend) indexes, one arm per backend kind: a live membership has
+// exactly one backend, so the arms never repeat a row.
+func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListPlatformMCPServerIdentitiesParams) ([]ListPlatformMCPServerIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPServerIdentities, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPServerIdentitiesRow
+	for rows.Next() {
+		var i ListPlatformMCPServerIdentitiesRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.McpName,
+			&i.McpSlug,
+			&i.ToolsetSlug,
+			&i.PluginSlug,
+			&i.PluginDisplayName,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

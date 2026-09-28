@@ -4575,7 +4575,7 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 
 // GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
 // This is used by the chat service to enrich chat overview data with metrics from ClickHouse.
-func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, chatIDs []string) (map[string]repo.ChatMetricsRow, error) {
+func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, chatIDs []string, eventTimeFrom time.Time) (map[string]repo.ChatMetricsRow, error) {
 	if s.chRepo == nil {
 		return make(map[string]repo.ChatMetricsRow), nil
 	}
@@ -4583,6 +4583,7 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 	result, err := s.chRepo.GetChatMetricsByIDs(ctx, repo.GetChatMetricsByIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       chatIDs,
+		EventTimeFrom: eventTimeFrom,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get chat metrics by ids: %w", err)
@@ -4644,7 +4645,7 @@ func (s *Service) ListChatAnalysisVerdicts(ctx context.Context, arg repo.ListCha
 
 // GetClaudeTurnUsageByChatIDs retrieves per-turn Claude Code usage for specific chat IDs.
 // This is used by the chat service to enrich chat detail responses from ClickHouse.
-func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeTurnUsageRow, error) {
+func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string, eventTimeFrom time.Time) (map[string][]repo.ClaudeTurnUsageRow, error) {
 	if s.chRepo == nil {
 		usageByChatID := make(map[string][]repo.ClaudeTurnUsageRow, len(chatIDs))
 		for _, chatID := range chatIDs {
@@ -4656,6 +4657,7 @@ func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID str
 	result, err := s.chRepo.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       chatIDs,
+		EventTimeFrom: eventTimeFrom,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get Claude turn usage by chat ids: %w", err)
@@ -4665,7 +4667,7 @@ func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID str
 
 // GetClaudeToolUsageByChatIDs retrieves per-tool Claude Code input/result byte sizes for specific chat IDs.
 // This is used by the chat service to enrich chat detail rows from ClickHouse.
-func (s *Service) GetClaudeToolUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeToolUsageRow, error) {
+func (s *Service) GetClaudeToolUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string, eventTimeFrom time.Time) (map[string][]repo.ClaudeToolUsageRow, error) {
 	if s.chRepo == nil {
 		usageByChatID := make(map[string][]repo.ClaudeToolUsageRow, len(chatIDs))
 		for _, chatID := range chatIDs {
@@ -4677,6 +4679,7 @@ func (s *Service) GetClaudeToolUsageByChatIDs(ctx context.Context, projectID str
 	result, err := s.chRepo.GetClaudeToolUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       chatIDs,
+		EventTimeFrom: eventTimeFrom,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get Claude tool usage by chat ids: %w", err)

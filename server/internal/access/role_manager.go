@@ -46,6 +46,8 @@ type RoleProvider interface {
 	DeleteRole(ctx context.Context, orgID string, roleSlug string) error
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
+	ListDirectories(ctx context.Context, organizationID string) ([]workos.Directory, error)
+	ListDirectoryGroups(ctx context.Context, directoryID string) ([]workos.DirectoryGroup, error)
 }
 
 // RoleManager owns role reads and writes against local records, then syncs successful writes to WorkOS.
@@ -83,6 +85,10 @@ func (r *RoleManager) ListRoles(ctx context.Context, gramOrgID string) (*gen.Lis
 	if err != nil {
 		return nil, err
 	}
+	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, r.db, gramOrgID, nil)
+	if err != nil {
+		return nil, err
+	}
 
 	roles := make([]*gen.Role, 0, len(rows))
 	for _, row := range rows {
@@ -94,7 +100,7 @@ func (r *RoleManager) ListRoles(ctx context.Context, gramOrgID string) (*gen.Lis
 			Description:  conv.FromPGTextOrEmpty[string](row.WorkosDescription),
 			CreatedAt:    conv.FromPGTimestamptz(row.WorkosCreatedAt),
 			UpdatedAt:    conv.FromPGTimestamptz(row.WorkosUpdatedAt),
-			MemberCount:  int(row.MemberCount),
+			MemberCount:  int(row.MemberCount) + mappedMembers[row.RoleUrn],
 			AgentIDs:     agentIDs[row.RoleUrn],
 		})
 		if err != nil {
@@ -475,6 +481,10 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").LogError(ctx, r.logger)
 		}
+		mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, tx, gramOrgID, []string{updatedRow.RoleUrn})
+		if err != nil {
+			return RoleUpdateResult{}, RoleReconciliation{}, err
+		}
 		updatedRole = localRole{
 			AgentIDs:     currentRole.AgentIDs,
 			ID:           updatedRow.ID.String(),
@@ -484,7 +494,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 			Description:  conv.FromPGTextOrEmpty[string](updatedRow.WorkosDescription),
 			CreatedAt:    conv.FromPGTimestamptz(updatedRow.WorkosCreatedAt),
 			UpdatedAt:    conv.FromPGTimestamptz(updatedRow.WorkosUpdatedAt),
-			MemberCount:  int(updatedRow.MemberCount),
+			MemberCount:  int(updatedRow.MemberCount) + mappedMembers[updatedRow.RoleUrn],
 		}
 
 		name := cloneString(payload.Name)
@@ -1240,6 +1250,10 @@ func (r *RoleManager) getLocalRoleByIDTx(ctx context.Context, dbtx repo.DBTX, gr
 	if err != nil {
 		return localRole{}, err
 	}
+	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, dbtx, gramOrgID, []string{row.RoleUrn})
+	if err != nil {
+		return localRole{}, err
+	}
 
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
 	return localRole{
@@ -1250,7 +1264,7 @@ func (r *RoleManager) getLocalRoleByIDTx(ctx context.Context, dbtx repo.DBTX, gr
 		Description:  conv.FromPGTextOrEmpty[string](row.WorkosDescription),
 		CreatedAt:    conv.FromPGTimestamptz(row.WorkosCreatedAt),
 		UpdatedAt:    conv.FromPGTimestamptz(row.WorkosUpdatedAt),
-		MemberCount:  int(row.MemberCount),
+		MemberCount:  int(row.MemberCount) + mappedMembers[row.RoleUrn],
 		AgentIDs:     agentIDs[row.RoleUrn],
 	}, nil
 }
@@ -1271,6 +1285,10 @@ func (r *RoleManager) getLocalRoleBySlugTx(ctx context.Context, dbtx repo.DBTX, 
 	if err != nil {
 		return localRole{}, err
 	}
+	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, dbtx, gramOrgID, []string{row.RoleUrn})
+	if err != nil {
+		return localRole{}, err
+	}
 
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
 	return localRole{
@@ -1281,7 +1299,7 @@ func (r *RoleManager) getLocalRoleBySlugTx(ctx context.Context, dbtx repo.DBTX, 
 		Description:  conv.FromPGTextOrEmpty[string](row.WorkosDescription),
 		CreatedAt:    conv.FromPGTimestamptz(row.WorkosCreatedAt),
 		UpdatedAt:    conv.FromPGTimestamptz(row.WorkosUpdatedAt),
-		MemberCount:  int(row.MemberCount),
+		MemberCount:  int(row.MemberCount) + mappedMembers[row.RoleUrn],
 		AgentIDs:     agentIDs[row.RoleUrn],
 	}, nil
 }
@@ -1310,6 +1328,26 @@ func (r *RoleManager) agentIDsByRoleTx(ctx context.Context, dbtx repo.DBTX, gram
 	byRole := make(map[string][]string, len(rows))
 	for _, row := range rows {
 		byRole[row.PrincipalUrn] = append(byRole[row.PrincipalUrn], row.AgentID.String())
+	}
+	return byRole, nil
+}
+
+// directoryMappedMemberCountsTx returns, per role principal URN, the members
+// who hold the role only through a directory role mapping. Adding it to the
+// direct assignment count gives everyone who holds the role. A nil roleURNs
+// counts every role; otherwise only the listed ones.
+func (r *RoleManager) directoryMappedMemberCountsTx(ctx context.Context, dbtx repo.DBTX, gramOrgID string, roleURNs []string) (map[string]int, error) {
+	rows, err := repo.New(dbtx).ListDirectoryMappedRoleMemberCounts(ctx, repo.ListDirectoryMappedRoleMemberCountsParams{
+		OrganizationID: gramOrgID,
+		RoleUrns:       roleURNs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count directory mapped role members").LogError(ctx, r.logger)
+	}
+
+	byRole := make(map[string]int, len(rows))
+	for _, row := range rows {
+		byRole[row.RoleUrn] = int(row.MemberCount)
 	}
 	return byRole, nil
 }
