@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
@@ -147,6 +148,16 @@ func TestClientAssertionUnconfigured(t *testing.T) {
 			require.Equal(t, tc.want, clientAssertionUnconfigured(fmt.Errorf("new refresh request: %w", tc.err)))
 		})
 	}
+}
+
+// A stored public key that cannot be used fails every signing attempt the
+// same way, so it takes the administrator remedy rather than a retry.
+func TestClientAssertionUnconfigured_UnusableStoredPublicKey(t *testing.T) {
+	t.Parallel()
+
+	_, err := serializeClientAssertion(t.Context(), nil, "projects/p/locations/l/keyRings/r/cryptoKeys/k/cryptoKeyVersions/1", "kid", []byte("not a jwk"), "client", "https://issuer.example.com", time.Now())
+	require.Error(t, err)
+	require.True(t, clientAssertionUnconfigured(&tokenEndpointSigningError{err: fmt.Errorf("sign private_key_jwt client assertion: %w", err)}))
 }
 
 // An error validateAndRefresh raises itself, such as an unreadable stored

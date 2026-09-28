@@ -733,12 +733,17 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// Recheck before persisting an agent session or issuing its tokens.
 		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); cerr != nil {
 			if errors.Is(cerr, remotesessions.ErrRemoteSessionUnavailable) {
-				return oops.E(oops.CodeUnavailable, cerr, "%s", remoteSessionUnavailableMessage).LogWarn(ctx, logger)
+				return remoteSessionUnavailableError(w, cerr).LogWarn(ctx, logger)
 			}
 			if !errors.Is(cerr, remotesessions.ErrNoValidToken) {
 				return oops.E(oops.CodeUnavailable, cerr, "check agent connections").LogError(ctx, logger)
 			}
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			// Redeeming this code again cannot succeed either way, so the grant
+			// is spent; the description names who can repair the connection.
+			if errors.Is(cerr, remotesessions.ErrRemoteSessionMisconfigured) {
+				return rejectGrant(remoteSessionMisconfiguredDescription)
+			}
 			return rejectGrant("required agent connections are no longer available")
 		}
 		ctx = authorizationCtx

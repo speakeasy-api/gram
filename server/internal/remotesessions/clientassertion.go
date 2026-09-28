@@ -135,11 +135,11 @@ func (s *KMSClientAssertionSigner) SignClientAssertion(ctx context.Context, requ
 func serializeClientAssertion(ctx context.Context, kmsClient gcpkms.SigningClient, resourceName, kid string, publicJWKDocument []byte, clientID, audience string, now time.Time) (string, error) {
 	var publicJWK jose.JSONWebKey
 	if err := publicJWK.UnmarshalJSON(publicJWKDocument); err != nil {
-		return "", fmt.Errorf("decode active client assertion public JWK: %w", err)
+		return "", fmt.Errorf("decode active client assertion public JWK: %w: %w", err, errClientAssertionKeyUnconfigured)
 	}
 	alg, err := gcpkms.ParseSignatureAlgorithm(publicJWK.Algorithm)
 	if err != nil {
-		return "", fmt.Errorf("resolve active client assertion algorithm: %w", err)
+		return "", fmt.Errorf("resolve active client assertion algorithm: %w: %w", err, errClientAssertionKeyUnconfigured)
 	}
 	opaque, err := gcpkms.NewSigner(ctx, kmsClient, resourceName, kid, gcpkms.PublicKey{
 		Algorithm: alg,

@@ -923,8 +923,7 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 		// A 401 would send the user through reauthorization over an outage, so
 		// the client is told to retry the same request instead.
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate deferred: upstream remote session temporarily unavailable", issuerGateReasonRemoteSessionUnavailable)
-		w.Header().Set("Retry-After", strconv.Itoa(int(remoteSessionUnavailableRetryAfter.Seconds())))
-		return nil, oops.E(oops.CodeUnavailable, err, "%s", remoteSessionUnavailableMessage)
+		return nil, remoteSessionUnavailableError(w, err)
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
 		// Reauthorizing goes through the same broken issuer or client
 		// configuration, so the challenge omits invalid_token and names who
@@ -956,6 +955,14 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	default:
 		return tokens, nil
 	}
+}
+
+// remoteSessionUnavailableError sets Retry-After on w and returns the 503 for a
+// required upstream token endpoint that is temporarily unavailable, so every
+// path that hits one tells the client the same thing and paces its retries.
+func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
+	w.Header().Set("Retry-After", strconv.Itoa(int(remoteSessionUnavailableRetryAfter.Seconds())))
+	return oops.E(oops.CodeUnavailable, err, "%s", remoteSessionUnavailableMessage)
 }
 
 // recordRemoteSessionRejection logs and counts an issuer-gate rejection whose

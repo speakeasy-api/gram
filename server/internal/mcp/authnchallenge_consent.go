@@ -815,7 +815,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-				return oops.E(oops.CodeUnavailable, err, "%s", remoteSessionUnavailableMessage).LogWarn(ctx, logger)
+				return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+			}
+			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+				return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
 			}
 			if !errors.Is(err, remotesessions.ErrNoValidToken) {
 				return oops.E(oops.CodeUnavailable, err, "check agent connections").LogError(ctx, logger)

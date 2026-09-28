@@ -337,7 +337,7 @@ func (s *Service) serveConsentProxiedMCP(
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-			return oops.E(oops.CodeUnavailable, err, "%s", remoteSessionUnavailableMessage).LogWarn(ctx, logger)
+			return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
 		}
 		if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
 			return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
