@@ -1,10 +1,11 @@
 package judgemessage
 
 import (
-	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestToolIdentityWithinLimitIsUnchanged(t *testing.T) {
