@@ -2563,6 +2563,31 @@ type RemoteSessionEmaBinding struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
+type RemoteSessionEmaCredential struct {
+	ID                             uuid.UUID
+	OrganizationID                 pgtype.Text
+	ProjectID                      uuid.NullUUID
+	UserSessionIssuerID            uuid.NullUUID
+	RemoteSessionIssuerID          uuid.NullUUID
+	RemoteSessionClientID          uuid.NullUUID
+	Resource                       string
+	SubjectUrn                     string
+	ClientSelection                string
+	RemoteSessionEmaBindingID      uuid.NullUUID
+	EmaBindingGeneration           pgtype.Int8
+	TrustedIssuerSessionID         uuid.NullUUID
+	RequestedScopes                []string
+	GrantedScopes                  []string
+	AccessTokenEncrypted           pgtype.Text
+	AccessExpiresAt                pgtype.Timestamptz
+	DownstreamRefreshTokenObserved bool
+	LastUsedAt                     pgtype.Timestamptz
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+	DeletedAt                      pgtype.Timestamptz
+	Deleted                        bool
+}
+
 type RemoteSessionIssuer struct {
 	ID                                         uuid.UUID
 	ProjectID                                  uuid.NullUUID
