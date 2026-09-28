@@ -9,6 +9,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AdminMcpConnection struct {
+	ID                        uuid.UUID
+	SubjectUrn                string
+	OauthClientID             uuid.UUID
+	AdminSessionIDEnc         string
+	Scopes                    []string
+	ResourceUri               string
+	ActiveGeneration          uuid.UUID
+	AuthorizedAt              pgtype.Timestamptz
+	ReauthorizedAt            pgtype.Timestamptz
+	AuthorizationExpiresAt    pgtype.Timestamptz
+	ReauthorizationRequiredAt pgtype.Timestamptz
+	ReauthorizationReason     pgtype.Text
+	RevokedAt                 pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
 type AdminMcpWriteProposal struct {
 	ID                     uuid.UUID
 	SubjectUrn             string

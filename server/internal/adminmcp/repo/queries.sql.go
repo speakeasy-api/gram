@@ -90,6 +90,23 @@ func (q *Queries) CloseProposal(ctx context.Context, arg CloseProposalParams) (i
 	return result.RowsAffected(), nil
 }
 
+const consumeAuthorizationGrant = `-- name: ConsumeAuthorizationGrant :exec
+UPDATE admin_mcp_authorization_grants
+SET consumed_at = $1,
+    updated_at = $1
+WHERE authorization_code_hash = $2
+`
+
+type ConsumeAuthorizationGrantParams struct {
+	Now                   pgtype.Timestamptz
+	AuthorizationCodeHash string
+}
+
+func (q *Queries) ConsumeAuthorizationGrant(ctx context.Context, arg ConsumeAuthorizationGrantParams) error {
+	_, err := q.db.Exec(ctx, consumeAuthorizationGrant, arg.Now, arg.AuthorizationCodeHash)
+	return err
+}
+
 const countPendingProposals = `-- name: CountPendingProposals :one
 SELECT count(*)
 FROM admin_mcp_write_proposals
@@ -130,6 +147,118 @@ func (q *Queries) CountWriteEventsFixture(ctx context.Context, arg CountWriteEve
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const getActiveStaffAccessSession = `-- name: GetActiveStaffAccessSession :one
+SELECT connection.subject_urn,
+  client.client_id,
+  client.id::text AS client_row_id,
+  connection.id::text AS connection_id,
+  session.connection_generation::text AS session_generation,
+  connection.active_generation::text AS active_generation,
+  connection.resource_uri,
+  connection.scopes,
+  connection.admin_session_id_enc,
+  session.expires_at
+FROM admin_mcp_sessions AS session
+JOIN admin_mcp_connections AS connection
+  ON connection.id = session.connection_id AND connection.oauth_client_id = session.oauth_client_id
+JOIN admin_mcp_oauth_clients AS client ON client.id = connection.oauth_client_id
+WHERE session.jti = $1
+  AND session.revoked_at IS NULL
+  AND session.expires_at > clock_timestamp()
+  AND connection.revoked_at IS NULL
+  AND connection.reauthorization_required_at IS NULL
+  AND connection.authorization_expires_at > clock_timestamp()
+  AND client.revoked_at IS NULL
+`
+
+type GetActiveStaffAccessSessionRow struct {
+	SubjectUrn        string
+	ClientID          string
+	ClientRowID       string
+	ConnectionID      string
+	SessionGeneration string
+	ActiveGeneration  string
+	ResourceUri       string
+	Scopes            []string
+	AdminSessionIDEnc string
+	ExpiresAt         pgtype.Timestamptz
+}
+
+func (q *Queries) GetActiveStaffAccessSession(ctx context.Context, jti string) (GetActiveStaffAccessSessionRow, error) {
+	row := q.db.QueryRow(ctx, getActiveStaffAccessSession, jti)
+	var i GetActiveStaffAccessSessionRow
+	err := row.Scan(
+		&i.SubjectUrn,
+		&i.ClientID,
+		&i.ClientRowID,
+		&i.ConnectionID,
+		&i.SessionGeneration,
+		&i.ActiveGeneration,
+		&i.ResourceUri,
+		&i.Scopes,
+		&i.AdminSessionIDEnc,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getAuthorizationGrant = `-- name: GetAuthorizationGrant :one
+SELECT connection.id, connection.subject_urn, connection.oauth_client_id, connection.admin_session_id_enc, connection.scopes, connection.resource_uri, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at, auth_grant.code_challenge, auth_grant.redirect_uri
+FROM admin_mcp_authorization_grants AS auth_grant
+JOIN admin_mcp_connections AS connection
+  ON connection.id = auth_grant.connection_id AND connection.oauth_client_id = auth_grant.oauth_client_id
+JOIN admin_mcp_oauth_clients AS client ON client.id = auth_grant.oauth_client_id
+WHERE auth_grant.authorization_code_hash = $1
+  AND client.client_id = $2
+  AND auth_grant.consumed_at IS NULL
+  AND auth_grant.revoked_at IS NULL
+  AND auth_grant.expires_at > clock_timestamp()
+  AND connection.revoked_at IS NULL
+  AND connection.reauthorization_required_at IS NULL
+  AND connection.active_generation = auth_grant.connection_generation
+  AND connection.authorization_expires_at > clock_timestamp()
+  AND connection.scopes = auth_grant.scopes
+  AND connection.resource_uri = auth_grant.resource_uri
+  AND client.revoked_at IS NULL
+  AND (client.client_secret_expires_at IS NULL OR client.client_secret_expires_at > clock_timestamp())
+`
+
+type GetAuthorizationGrantParams struct {
+	AuthorizationCodeHash string
+	ClientID              string
+}
+
+type GetAuthorizationGrantRow struct {
+	AdminMcpConnection AdminMcpConnection
+	CodeChallenge      string
+	RedirectUri        string
+}
+
+func (q *Queries) GetAuthorizationGrant(ctx context.Context, arg GetAuthorizationGrantParams) (GetAuthorizationGrantRow, error) {
+	row := q.db.QueryRow(ctx, getAuthorizationGrant, arg.AuthorizationCodeHash, arg.ClientID)
+	var i GetAuthorizationGrantRow
+	err := row.Scan(
+		&i.AdminMcpConnection.ID,
+		&i.AdminMcpConnection.SubjectUrn,
+		&i.AdminMcpConnection.OauthClientID,
+		&i.AdminMcpConnection.AdminSessionIDEnc,
+		&i.AdminMcpConnection.Scopes,
+		&i.AdminMcpConnection.ResourceUri,
+		&i.AdminMcpConnection.ActiveGeneration,
+		&i.AdminMcpConnection.AuthorizedAt,
+		&i.AdminMcpConnection.ReauthorizedAt,
+		&i.AdminMcpConnection.AuthorizationExpiresAt,
+		&i.AdminMcpConnection.ReauthorizationRequiredAt,
+		&i.AdminMcpConnection.ReauthorizationReason,
+		&i.AdminMcpConnection.RevokedAt,
+		&i.AdminMcpConnection.CreatedAt,
+		&i.AdminMcpConnection.UpdatedAt,
+		&i.CodeChallenge,
+		&i.RedirectUri,
+	)
+	return i, err
 }
 
 const getConnectionGenerationFixture = `-- name: GetConnectionGenerationFixture :one
@@ -177,6 +306,34 @@ func (q *Queries) GetLinkedWriteConnection(ctx context.Context, arg GetLinkedWri
 	row := q.db.QueryRow(ctx, getLinkedWriteConnection, arg.ConnectionID, arg.OauthClientID, arg.Generation)
 	var i GetLinkedWriteConnectionRow
 	err := row.Scan(&i.AdminSessionIDEnc, &i.Scopes)
+	return i, err
+}
+
+const getLiveOAuthClient = `-- name: GetLiveOAuthClient :one
+SELECT client_id, client_name, client_secret_hash, redirect_uris, client_secret_expires_at
+FROM admin_mcp_oauth_clients
+WHERE client_id = $1
+  AND revoked_at IS NULL
+`
+
+type GetLiveOAuthClientRow struct {
+	ClientID              string
+	ClientName            string
+	ClientSecretHash      pgtype.Text
+	RedirectUris          []string
+	ClientSecretExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetLiveOAuthClient(ctx context.Context, clientID string) (GetLiveOAuthClientRow, error) {
+	row := q.db.QueryRow(ctx, getLiveOAuthClient, clientID)
+	var i GetLiveOAuthClientRow
+	err := row.Scan(
+		&i.ClientID,
+		&i.ClientName,
+		&i.ClientSecretHash,
+		&i.RedirectUris,
+		&i.ClientSecretExpiresAt,
+	)
 	return i, err
 }
 
@@ -281,6 +438,109 @@ func (q *Queries) GetProposalByKey(ctx context.Context, arg GetProposalByKeyPara
 	return i, err
 }
 
+const getReauthorizationReasonFixture = `-- name: GetReauthorizationReasonFixture :one
+SELECT reauthorization_reason
+FROM admin_mcp_connections
+WHERE id = $1
+`
+
+// Test-only: reads why a connection now requires staff reauthorization.
+func (q *Queries) GetReauthorizationReasonFixture(ctx context.Context, id uuid.UUID) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getReauthorizationReasonFixture, id)
+	var reauthorization_reason pgtype.Text
+	err := row.Scan(&reauthorization_reason)
+	return reauthorization_reason, err
+}
+
+const getRefreshSession = `-- name: GetRefreshSession :one
+SELECT connection.id, connection.subject_urn, connection.oauth_client_id, connection.admin_session_id_enc, connection.scopes, connection.resource_uri, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at, session.rotated_at, session.revoked_at, session.refresh_expires_at
+FROM admin_mcp_sessions AS session
+JOIN admin_mcp_connections AS connection
+  ON connection.id = session.connection_id AND connection.oauth_client_id = session.oauth_client_id
+JOIN admin_mcp_oauth_clients AS client ON client.id = session.oauth_client_id
+WHERE session.refresh_token_hash = $1
+  AND client.client_id = $2
+  AND client.revoked_at IS NULL
+  AND (client.client_secret_expires_at IS NULL OR client.client_secret_expires_at > clock_timestamp())
+  AND connection.revoked_at IS NULL
+  AND connection.active_generation = session.connection_generation
+`
+
+type GetRefreshSessionParams struct {
+	RefreshTokenHash string
+	ClientID         string
+}
+
+type GetRefreshSessionRow struct {
+	AdminMcpConnection AdminMcpConnection
+	RotatedAt          pgtype.Timestamptz
+	RevokedAt          pgtype.Timestamptz
+	RefreshExpiresAt   pgtype.Timestamptz
+}
+
+func (q *Queries) GetRefreshSession(ctx context.Context, arg GetRefreshSessionParams) (GetRefreshSessionRow, error) {
+	row := q.db.QueryRow(ctx, getRefreshSession, arg.RefreshTokenHash, arg.ClientID)
+	var i GetRefreshSessionRow
+	err := row.Scan(
+		&i.AdminMcpConnection.ID,
+		&i.AdminMcpConnection.SubjectUrn,
+		&i.AdminMcpConnection.OauthClientID,
+		&i.AdminMcpConnection.AdminSessionIDEnc,
+		&i.AdminMcpConnection.Scopes,
+		&i.AdminMcpConnection.ResourceUri,
+		&i.AdminMcpConnection.ActiveGeneration,
+		&i.AdminMcpConnection.AuthorizedAt,
+		&i.AdminMcpConnection.ReauthorizedAt,
+		&i.AdminMcpConnection.AuthorizationExpiresAt,
+		&i.AdminMcpConnection.ReauthorizationRequiredAt,
+		&i.AdminMcpConnection.ReauthorizationReason,
+		&i.AdminMcpConnection.RevokedAt,
+		&i.AdminMcpConnection.CreatedAt,
+		&i.AdminMcpConnection.UpdatedAt,
+		&i.RotatedAt,
+		&i.RevokedAt,
+		&i.RefreshExpiresAt,
+	)
+	return i, err
+}
+
+const insertAuthorizationGrant = `-- name: InsertAuthorizationGrant :exec
+INSERT INTO admin_mcp_authorization_grants
+  (authorization_code_hash, oauth_client_id, connection_id, connection_generation,
+   redirect_uri, code_challenge, scopes, resource_uri, expires_at)
+SELECT $1::text, $2::uuid, connection.id, connection.active_generation,
+  $3::text, $4::text, $5::text[], $6::text, $7::timestamptz
+FROM admin_mcp_connections AS connection
+WHERE connection.id = $8
+  AND connection.revoked_at IS NULL
+`
+
+type InsertAuthorizationGrantParams struct {
+	AuthorizationCodeHash string
+	OauthClientID         uuid.UUID
+	RedirectUri           string
+	CodeChallenge         string
+	Scopes                []string
+	ResourceUri           string
+	ExpiresAt             pgtype.Timestamptz
+	ConnectionID          uuid.UUID
+}
+
+// Binds the one-use code to the connection's current generation.
+func (q *Queries) InsertAuthorizationGrant(ctx context.Context, arg InsertAuthorizationGrantParams) error {
+	_, err := q.db.Exec(ctx, insertAuthorizationGrant,
+		arg.AuthorizationCodeHash,
+		arg.OauthClientID,
+		arg.RedirectUri,
+		arg.CodeChallenge,
+		arg.Scopes,
+		arg.ResourceUri,
+		arg.ExpiresAt,
+		arg.ConnectionID,
+	)
+	return err
+}
+
 const insertProposal = `-- name: InsertProposal :one
 INSERT INTO admin_mcp_write_proposals (
   subject_urn, oauth_client_id, connection_id, connection_generation, operation, operation_schema_version,
@@ -371,6 +631,97 @@ func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) 
 	return i, err
 }
 
+const insertStaffSession = `-- name: InsertStaffSession :exec
+INSERT INTO admin_mcp_sessions
+  (id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+`
+
+type InsertStaffSessionParams struct {
+	ID                   uuid.UUID
+	ConnectionID         uuid.UUID
+	OauthClientID        uuid.UUID
+	ConnectionGeneration uuid.UUID
+	Jti                  string
+	RefreshTokenHash     string
+	ExpiresAt            pgtype.Timestamptz
+	RefreshExpiresAt     pgtype.Timestamptz
+}
+
+func (q *Queries) InsertStaffSession(ctx context.Context, arg InsertStaffSessionParams) error {
+	_, err := q.db.Exec(ctx, insertStaffSession,
+		arg.ID,
+		arg.ConnectionID,
+		arg.OauthClientID,
+		arg.ConnectionGeneration,
+		arg.Jti,
+		arg.RefreshTokenHash,
+		arg.ExpiresAt,
+		arg.RefreshExpiresAt,
+	)
+	return err
+}
+
+const lockAuthorizationGrant = `-- name: LockAuthorizationGrant :one
+SELECT connection.id, connection.subject_urn, connection.oauth_client_id, connection.admin_session_id_enc, connection.scopes, connection.resource_uri, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at, auth_grant.code_challenge, auth_grant.redirect_uri
+FROM admin_mcp_authorization_grants AS auth_grant
+JOIN admin_mcp_connections AS connection
+  ON connection.id = auth_grant.connection_id AND connection.oauth_client_id = auth_grant.oauth_client_id
+JOIN admin_mcp_oauth_clients AS client ON client.id = auth_grant.oauth_client_id
+WHERE auth_grant.authorization_code_hash = $1
+  AND client.client_id = $2
+  AND auth_grant.consumed_at IS NULL
+  AND auth_grant.revoked_at IS NULL
+  AND auth_grant.expires_at > clock_timestamp()
+  AND connection.revoked_at IS NULL
+  AND connection.reauthorization_required_at IS NULL
+  AND connection.active_generation = auth_grant.connection_generation
+  AND connection.authorization_expires_at > clock_timestamp()
+  AND connection.scopes = auth_grant.scopes
+  AND connection.resource_uri = auth_grant.resource_uri
+  AND client.revoked_at IS NULL
+  AND (client.client_secret_expires_at IS NULL OR client.client_secret_expires_at > clock_timestamp())
+FOR UPDATE OF auth_grant, connection
+`
+
+type LockAuthorizationGrantParams struct {
+	AuthorizationCodeHash string
+	ClientID              string
+}
+
+type LockAuthorizationGrantRow struct {
+	AdminMcpConnection AdminMcpConnection
+	CodeChallenge      string
+	RedirectUri        string
+}
+
+// Same checks as GetAuthorizationGrant, locking the grant and connection for
+// the one-use code exchange.
+func (q *Queries) LockAuthorizationGrant(ctx context.Context, arg LockAuthorizationGrantParams) (LockAuthorizationGrantRow, error) {
+	row := q.db.QueryRow(ctx, lockAuthorizationGrant, arg.AuthorizationCodeHash, arg.ClientID)
+	var i LockAuthorizationGrantRow
+	err := row.Scan(
+		&i.AdminMcpConnection.ID,
+		&i.AdminMcpConnection.SubjectUrn,
+		&i.AdminMcpConnection.OauthClientID,
+		&i.AdminMcpConnection.AdminSessionIDEnc,
+		&i.AdminMcpConnection.Scopes,
+		&i.AdminMcpConnection.ResourceUri,
+		&i.AdminMcpConnection.ActiveGeneration,
+		&i.AdminMcpConnection.AuthorizedAt,
+		&i.AdminMcpConnection.ReauthorizedAt,
+		&i.AdminMcpConnection.AuthorizationExpiresAt,
+		&i.AdminMcpConnection.ReauthorizationRequiredAt,
+		&i.AdminMcpConnection.ReauthorizationReason,
+		&i.AdminMcpConnection.RevokedAt,
+		&i.AdminMcpConnection.CreatedAt,
+		&i.AdminMcpConnection.UpdatedAt,
+		&i.CodeChallenge,
+		&i.RedirectUri,
+	)
+	return i, err
+}
+
 const lockLiveOAuthClient = `-- name: LockLiveOAuthClient :one
 SELECT id
 FROM admin_mcp_oauth_clients
@@ -388,6 +739,24 @@ func (q *Queries) LockLiveOAuthClient(ctx context.Context, id uuid.UUID) (uuid.U
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const lockOAuthClientForConsent = `-- name: LockOAuthClientForConsent :one
+SELECT id
+FROM admin_mcp_oauth_clients
+WHERE client_id = $1
+  AND revoked_at IS NULL
+  AND (client_secret_expires_at IS NULL OR client_secret_expires_at > clock_timestamp())
+FOR UPDATE
+`
+
+// Consent locks the client row before the connection row. Proposal work takes
+// the same order.
+func (q *Queries) LockOAuthClientForConsent(ctx context.Context, clientID string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOAuthClientForConsent, clientID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockProposal = `-- name: LockProposal :one
@@ -430,6 +799,109 @@ func (q *Queries) LockProposal(ctx context.Context, id uuid.UUID) (AdminMcpWrite
 		&i.ResultPayload,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const lockRefreshSession = `-- name: LockRefreshSession :one
+SELECT connection.id, connection.subject_urn, connection.oauth_client_id, connection.admin_session_id_enc, connection.scopes, connection.resource_uri, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at,
+  session.id AS session_id,
+  session.connection_generation AS session_generation,
+  session.rotated_at,
+  session.revoked_at AS session_revoked_at,
+  session.refresh_expires_at,
+  client.revoked_at AS client_revoked_at,
+  client.client_secret_expires_at
+FROM admin_mcp_sessions AS session
+JOIN admin_mcp_connections AS connection
+  ON connection.id = session.connection_id AND connection.oauth_client_id = session.oauth_client_id
+JOIN admin_mcp_oauth_clients AS client ON client.id = session.oauth_client_id
+WHERE session.refresh_token_hash = $1
+  AND client.client_id = $2
+FOR UPDATE OF session, connection
+`
+
+type LockRefreshSessionParams struct {
+	RefreshTokenHash string
+	ClientID         string
+}
+
+type LockRefreshSessionRow struct {
+	AdminMcpConnection    AdminMcpConnection
+	SessionID             uuid.UUID
+	SessionGeneration     uuid.UUID
+	RotatedAt             pgtype.Timestamptz
+	SessionRevokedAt      pgtype.Timestamptz
+	RefreshExpiresAt      pgtype.Timestamptz
+	ClientRevokedAt       pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) LockRefreshSession(ctx context.Context, arg LockRefreshSessionParams) (LockRefreshSessionRow, error) {
+	row := q.db.QueryRow(ctx, lockRefreshSession, arg.RefreshTokenHash, arg.ClientID)
+	var i LockRefreshSessionRow
+	err := row.Scan(
+		&i.AdminMcpConnection.ID,
+		&i.AdminMcpConnection.SubjectUrn,
+		&i.AdminMcpConnection.OauthClientID,
+		&i.AdminMcpConnection.AdminSessionIDEnc,
+		&i.AdminMcpConnection.Scopes,
+		&i.AdminMcpConnection.ResourceUri,
+		&i.AdminMcpConnection.ActiveGeneration,
+		&i.AdminMcpConnection.AuthorizedAt,
+		&i.AdminMcpConnection.ReauthorizedAt,
+		&i.AdminMcpConnection.AuthorizationExpiresAt,
+		&i.AdminMcpConnection.ReauthorizationRequiredAt,
+		&i.AdminMcpConnection.ReauthorizationReason,
+		&i.AdminMcpConnection.RevokedAt,
+		&i.AdminMcpConnection.CreatedAt,
+		&i.AdminMcpConnection.UpdatedAt,
+		&i.SessionID,
+		&i.SessionGeneration,
+		&i.RotatedAt,
+		&i.SessionRevokedAt,
+		&i.RefreshExpiresAt,
+		&i.ClientRevokedAt,
+		&i.ClientSecretExpiresAt,
+	)
+	return i, err
+}
+
+const lockReusedRefreshSession = `-- name: LockReusedRefreshSession :one
+SELECT connection.id AS connection_id,
+  session.connection_generation,
+  connection.active_generation,
+  session.rotated_at
+FROM admin_mcp_sessions AS session
+JOIN admin_mcp_connections AS connection ON connection.id = session.connection_id
+JOIN admin_mcp_oauth_clients AS client ON client.id = session.oauth_client_id
+WHERE session.refresh_token_hash = $1
+  AND client.client_id = $2
+FOR UPDATE OF connection, session
+`
+
+type LockReusedRefreshSessionParams struct {
+	RefreshTokenHash string
+	ClientID         string
+}
+
+type LockReusedRefreshSessionRow struct {
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	ActiveGeneration     uuid.UUID
+	RotatedAt            pgtype.Timestamptz
+}
+
+// Loads a presented refresh token regardless of liveness so reuse of a rotated
+// token can terminalize the generation that issued it.
+func (q *Queries) LockReusedRefreshSession(ctx context.Context, arg LockReusedRefreshSessionParams) (LockReusedRefreshSessionRow, error) {
+	row := q.db.QueryRow(ctx, lockReusedRefreshSession, arg.RefreshTokenHash, arg.ClientID)
+	var i LockReusedRefreshSessionRow
+	err := row.Scan(
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.ActiveGeneration,
+		&i.RotatedAt,
 	)
 	return i, err
 }
@@ -570,6 +1042,28 @@ func (q *Queries) RecordWriteEvent(ctx context.Context, arg RecordWriteEventPara
 	return err
 }
 
+const registerOAuthClient = `-- name: RegisterOAuthClient :exec
+INSERT INTO admin_mcp_oauth_clients (client_id, client_name, client_secret_hash, redirect_uris)
+VALUES ($1, $2, NULLIF($3::text, ''), $4::text[])
+`
+
+type RegisterOAuthClientParams struct {
+	ClientID         string
+	ClientName       string
+	ClientSecretHash string
+	RedirectUris     []string
+}
+
+func (q *Queries) RegisterOAuthClient(ctx context.Context, arg RegisterOAuthClientParams) error {
+	_, err := q.db.Exec(ctx, registerOAuthClient,
+		arg.ClientID,
+		arg.ClientName,
+		arg.ClientSecretHash,
+		arg.RedirectUris,
+	)
+	return err
+}
+
 const rejectProposal = `-- name: RejectProposal :one
 UPDATE admin_mcp_write_proposals
 SET status = 'rejected',
@@ -636,6 +1130,29 @@ func (q *Queries) RenameOrganizationFixture(ctx context.Context, arg RenameOrgan
 	return result.RowsAffected(), nil
 }
 
+const requireReauthorizationForRefreshReuse = `-- name: RequireReauthorizationForRefreshReuse :exec
+UPDATE admin_mcp_connections
+SET reauthorization_required_at = $1,
+    reauthorization_reason = 'refresh_reuse',
+    updated_at = $1
+WHERE id = $2
+  AND active_generation = $3
+  AND revoked_at IS NULL
+`
+
+type RequireReauthorizationForRefreshReuseParams struct {
+	Now        pgtype.Timestamptz
+	ID         uuid.UUID
+	Generation uuid.UUID
+}
+
+// Terminalizes only the generation that issued the reused token, not a later
+// staff reauthorization that happened while the request waited.
+func (q *Queries) RequireReauthorizationForRefreshReuse(ctx context.Context, arg RequireReauthorizationForRefreshReuseParams) error {
+	_, err := q.db.Exec(ctx, requireReauthorizationForRefreshReuse, arg.Now, arg.ID, arg.Generation)
+	return err
+}
+
 const revokeOAuthClientFixture = `-- name: RevokeOAuthClientFixture :exec
 UPDATE admin_mcp_oauth_clients
 SET revoked_at = clock_timestamp(),
@@ -646,6 +1163,26 @@ WHERE id = $1
 // Test-only: simulates a staff client revoked after a proposal was approved.
 func (q *Queries) RevokeOAuthClientFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, revokeOAuthClientFixture, id)
+	return err
+}
+
+const rotateStaffSession = `-- name: RotateStaffSession :exec
+UPDATE admin_mcp_sessions
+SET rotated_at = $1,
+    revoked_at = $1,
+    replaced_by_session_id = $2,
+    updated_at = $1
+WHERE id = $3
+`
+
+type RotateStaffSessionParams struct {
+	Now                 pgtype.Timestamptz
+	ReplacedBySessionID uuid.NullUUID
+	ID                  uuid.UUID
+}
+
+func (q *Queries) RotateStaffSession(ctx context.Context, arg RotateStaffSessionParams) error {
+	_, err := q.db.Exec(ctx, rotateStaffSession, arg.Now, arg.ReplacedBySessionID, arg.ID)
 	return err
 }
 
@@ -665,4 +1202,47 @@ type SetConnectionScopesFixtureParams struct {
 func (q *Queries) SetConnectionScopesFixture(ctx context.Context, arg SetConnectionScopesFixtureParams) error {
 	_, err := q.db.Exec(ctx, setConnectionScopesFixture, arg.Scopes, arg.ID)
 	return err
+}
+
+const upsertStaffConnection = `-- name: UpsertStaffConnection :one
+INSERT INTO admin_mcp_connections
+  (subject_urn, oauth_client_id, admin_session_id_enc, scopes, resource_uri, authorization_expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (subject_urn, oauth_client_id) WHERE revoked_at IS NULL
+DO UPDATE SET admin_session_id_enc = EXCLUDED.admin_session_id_enc,
+  scopes = EXCLUDED.scopes,
+  resource_uri = EXCLUDED.resource_uri,
+  active_generation = generate_uuidv7(),
+  authorization_expires_at = EXCLUDED.authorization_expires_at,
+  authorized_at = clock_timestamp(),
+  reauthorized_at = clock_timestamp(),
+  reauthorization_required_at = NULL,
+  reauthorization_reason = NULL,
+  updated_at = clock_timestamp()
+RETURNING id
+`
+
+type UpsertStaffConnectionParams struct {
+	SubjectUrn             string
+	OauthClientID          uuid.UUID
+	AdminSessionIDEnc      string
+	Scopes                 []string
+	ResourceUri            string
+	AuthorizationExpiresAt pgtype.Timestamptz
+}
+
+// Reconsent rotates the active generation, invalidating every earlier session
+// and grant for this staff subject and client.
+func (q *Queries) UpsertStaffConnection(ctx context.Context, arg UpsertStaffConnectionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertStaffConnection,
+		arg.SubjectUrn,
+		arg.OauthClientID,
+		arg.AdminSessionIDEnc,
+		arg.Scopes,
+		arg.ResourceUri,
+		arg.AuthorizationExpiresAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }

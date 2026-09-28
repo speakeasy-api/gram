@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -104,27 +105,20 @@ func (a *StaffAuthenticator) Authenticate(ctx context.Context, token string) (Pr
 type postgresStaffAccessStore struct{ db *pgxpool.Pool }
 
 func (s postgresStaffAccessStore) ActiveSession(ctx context.Context, jti string) (staffAccessSession, error) {
-	var result staffAccessSession
-	var connectionID, generation, activeGeneration string
-	err := s.db.QueryRow(ctx, `
-SELECT connection.subject_urn, client.client_id, client.id::text, connection.id::text,
-       session.connection_generation::text, connection.active_generation::text,
-       connection.resource_uri, connection.scopes, connection.admin_session_id_enc, session.expires_at
-FROM admin_mcp_sessions AS session
-JOIN admin_mcp_connections AS connection
-  ON connection.id = session.connection_id AND connection.oauth_client_id = session.oauth_client_id
-JOIN admin_mcp_oauth_clients AS client ON client.id = connection.oauth_client_id
-WHERE session.jti = $1
-  AND session.revoked_at IS NULL AND session.expires_at > clock_timestamp()
-  AND connection.revoked_at IS NULL AND connection.reauthorization_required_at IS NULL
-  AND connection.authorization_expires_at > clock_timestamp()
-  AND client.revoked_at IS NULL
-`, jti).Scan(&result.Subject, &result.ClientID, &result.ClientRowID, &connectionID, &generation, &activeGeneration, &result.ResourceURI, &result.Scopes, &result.AdminSessionEnc, &result.ExpiresAt)
-	result.ConnectionID = connectionID
-	result.Generation = generation
-	result.ActiveGeneration = activeGeneration
+	row, err := repo.New(s.db).GetActiveStaffAccessSession(ctx, jti)
 	if err != nil {
 		return staffAccessSession{}, fmt.Errorf("lookup active staff MCP session: %w", err)
 	}
-	return result, nil
+	return staffAccessSession{
+		Subject:          row.SubjectUrn,
+		ClientID:         row.ClientID,
+		ClientRowID:      row.ClientRowID,
+		ConnectionID:     row.ConnectionID,
+		Generation:       row.SessionGeneration,
+		ActiveGeneration: row.ActiveGeneration,
+		ResourceURI:      row.ResourceUri,
+		Scopes:           row.Scopes,
+		AdminSessionEnc:  row.AdminSessionIDEnc,
+		ExpiresAt:        row.ExpiresAt.Time,
+	}, nil
 }
