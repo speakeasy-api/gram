@@ -157,6 +157,44 @@ func TestResolveAccessTokens_InvalidGrantNeedsReconnect(t *testing.T) {
 	require.True(t, reconnect)
 }
 
+// An unreadable stored access token is an error validateAndRefresh raises
+// itself rather than a RefreshError, so it never clears on retry and must keep
+// the reconnect remedy.
+func TestResolveAccessTokens_UnreadableAccessTokenNeedsReconnect(t *testing.T) {
+	t.Parallel()
+
+	var refreshAttempts atomic.Int32
+	ctx, env := newSyntheticExpiryEnv(t, "unreadable-access-token", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if r.Form.Get("grant_type") == "refresh_token" {
+			refreshAttempts.Add(1)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"live-access","refresh_token":"live-refresh"}`))
+	})
+
+	_, err := env.q.UpdateRemoteSessionTokensIfUnchanged(ctx, repo.UpdateRemoteSessionTokensIfUnchangedParams{
+		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID,
+		ExpectedUpdatedAt: env.session.UpdatedAt, AccessTokenEncrypted: "not-ciphertext",
+		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), RefreshTokenEncrypted: env.session.RefreshTokenEncrypted,
+		Scopes: env.session.Scopes,
+	})
+	require.NoError(t, err)
+
+	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
+	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Zero(t, refreshAttempts.Load(), "a live access token is forwarded without refreshing")
+
+	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.NoError(t, err)
+	require.True(t, reconnect)
+}
+
 func TestRemoteSessionsNeedReconnect_RenewableGrantDoesNotContactUpstream(t *testing.T) {
 	t.Parallel()
 
