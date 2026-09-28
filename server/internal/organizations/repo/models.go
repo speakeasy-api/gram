@@ -10,77 +10,138 @@ import (
 )
 
 type OrganizationInvitation struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	Email          string
-	TokenHash      string
-	InviterUserID  pgtype.Text
-	RoleSlug       pgtype.Text
-	State          string
-	ExpiresAt      pgtype.Timestamptz
-	AcceptedAt     pgtype.Timestamptz
-	RevokedAt      pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	// @access: confidential-pii
+	Email string
+	// @access: secret-restricted
+	TokenHash string
+	// @access: confidential
+	InviterUserID pgtype.Text
+	// @access: confidential
+	RoleSlug pgtype.Text
+	// @access: confidential
+	State string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	AcceptedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type OrganizationMetadatum struct {
-	ID                 string
-	Name               string
-	Slug               string
-	GramAccountType    string
-	WorkosID           pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	SvixAppID          pgtype.Text
-	WebhooksEnabled    pgtype.Bool
-	Whitelisted        bool
+	// @access: confidential
+	ID string
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Slug string
+	// @access: confidential
+	GramAccountType string
+	// @access: confidential
+	WorkosID pgtype.Text
+	// @access: confidential
+	WorkosUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosLastEventID pgtype.Text
+	// @access: confidential
+	SvixAppID pgtype.Text
+	// @access: confidential
+	WebhooksEnabled pgtype.Bool
+	// @access: confidential
+	Whitelisted bool
+	// @access: confidential
 	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	ScimEnabled        pgtype.Bool
-	SsoEnabled         pgtype.Bool
-	VerifiedDomains    []string
-	CreationSource     pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DisabledAt         pgtype.Timestamptz
+	// @access: confidential
+	FreeTrialEndsAt pgtype.Timestamptz
+	// @access: confidential
+	ScimEnabled pgtype.Bool
+	// @access: confidential
+	SsoEnabled pgtype.Bool
+	// @access: opaque-restricted
+	VerifiedDomains []string
+	// @access: confidential
+	CreationSource pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DisabledAt pgtype.Timestamptz
 }
 
 type OrganizationRoleAssignment struct {
-	ID                 uuid.UUID
-	OrganizationID     string
-	WorkosUserID       string
-	UserID             pgtype.Text
-	RoleUrn            string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential-pii
+	WorkosUserID string
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential
+	RoleUrn string
+	// @access: confidential-pii
 	WorkosMembershipID pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
+	// @access: confidential
+	WorkosUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosLastEventID pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
 }
 
 type OrganizationSetupTask struct {
+	// @access: confidential
 	OrganizationID string
-	TaskKey        string
-	Status         string
+	// @access: confidential
+	TaskKey string
+	// @access: confidential
+	Status string
+	// @access: confidential
 	AssigneeUserID pgtype.Text
-	AssigneeEmail  pgtype.Text
-	HiddenAt       pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	// @access: confidential-pii
+	AssigneeEmail pgtype.Text
+	// @access: confidential
+	HiddenAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {
-	ID                 int64
-	OrganizationID     string
-	UserID             pgtype.Text
-	WorkosUserID       pgtype.Text
+	// @access: confidential
+	ID int64
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential-pii
+	WorkosUserID pgtype.Text
+	// @access: confidential-pii
 	WorkosMembershipID pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
-	Deleted            bool
+	// @access: confidential
+	WorkosUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosLastEventID pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

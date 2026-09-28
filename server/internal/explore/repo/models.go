@@ -10,15 +10,26 @@ import (
 )
 
 type Query struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
 	CreatedByUserID pgtype.Text
-	Name            string
-	Dataset         string
-	Spec            []byte
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Dataset string
+	// @access: opaque-restricted
+	Spec []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

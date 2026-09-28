@@ -10,170 +10,303 @@ import (
 )
 
 type Skill struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	Name           string
-	DisplayName    string
-	Summary        pgtype.Text
-	SourceKind     string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	DisplayName string
+	// @access: opaque-restricted
+	Summary pgtype.Text
+	// @access: confidential
+	SourceKind string
+	// @access: confidential
 	Classification string
-	Tags           []string
-	FirstSeenAt    pgtype.Timestamptz
-	LastSeenAt     pgtype.Timestamptz
-	SeenCount      int64
-	ArchivedAt     pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	// @access: opaque-restricted
+	Tags []string
+	// @access: confidential
+	FirstSeenAt pgtype.Timestamptz
+	// @access: confidential
+	LastSeenAt pgtype.Timestamptz
+	// @access: confidential
+	SeenCount int64
+	// @access: confidential
+	ArchivedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SkillDistribution struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	SkillID         uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: confidential
 	PinnedVersionID uuid.NullUUID
-	PluginID        uuid.NullUUID
-	AssistantID     uuid.NullUUID
-	Channel         string
+	// @access: confidential
+	PluginID uuid.NullUUID
+	// @access: confidential
+	AssistantID uuid.NullUUID
+	// @access: confidential
+	Channel string
+	// @access: confidential
 	CreatedByUserID string
-	RevokedAt       pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SkillEditSuggestion struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	SkillID            uuid.UUID
-	BaseVersionID      uuid.UUID
-	Rationale          string
-	Status             string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: confidential
+	BaseVersionID uuid.UUID
+	// @access: opaque-restricted
+	Rationale string
+	// @access: confidential
+	Status string
+	// @access: confidential
 	ScoredSessionCount int64
-	ApprovedByUserID   pgtype.Text
-	ApprovedAt         pgtype.Timestamptz
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
+	// @access: confidential
+	ApprovedByUserID pgtype.Text
+	// @access: confidential
+	ApprovedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SkillEditSuggestionChange struct {
-	ID           uuid.UUID
-	ProjectID    uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	SuggestionID uuid.UUID
+	// @access: opaque-restricted
 	ProposedDiff string
-	Rationale    string
-	Position     int32
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+	// @access: opaque-restricted
+	Rationale string
+	// @access: confidential
+	Position int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SkillEfficacyEvaluation struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	Surface         string
-	SessionID       string
-	ChatID          uuid.UUID
-	SkillID         uuid.UUID
-	SkillVersionID  uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Surface string
+	// @access: opaque-restricted
+	SessionID string
+	// @access: confidential
+	ChatID uuid.UUID
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: confidential
+	SkillVersionID uuid.UUID
+	// @access: confidential
 	CanonicalSha256 string
-	ObservedAt      pgtype.Timestamptz
-	State           string
-	ReservedOn      pgtype.Date
-	ClaimToken      uuid.NullUUID
-	Attempts        int32
-	LastError       pgtype.Text
-	ScoredAt        pgtype.Timestamptz
-	FailedAt        pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	// @access: confidential
+	ObservedAt pgtype.Timestamptz
+	// @access: confidential
+	State string
+	// @access: confidential
+	ReservedOn pgtype.Date
+	// @access: confidential
+	ClaimToken uuid.NullUUID
+	// @access: confidential
+	Attempts int32
+	// @access: opaque-restricted
+	LastError pgtype.Text
+	// @access: confidential
+	ScoredAt pgtype.Timestamptz
+	// @access: confidential
+	FailedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SkillEfficacySetting struct {
-	OrganizationID   string
-	Enabled          bool
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
 	PerSkillDailyCap int32
-	OrgDailyCap      int32
-	NewVersionBurst  int32
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
+	// @access: confidential
+	OrgDailyCap int32
+	// @access: confidential
+	NewVersionBurst int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SkillFeedback struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	SkillID        uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	SkillID uuid.NullUUID
+	// @access: confidential
 	SkillVersionID uuid.NullUUID
-	SkillName      string
-	Source         string
-	Outcome        string
-	Note           pgtype.Text
-	SessionID      pgtype.Text
-	UserID         pgtype.Text
-	UserEmail      pgtype.Text
-	ReviewedAt     pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
+	// @access: confidential
+	SkillName string
+	// @access: confidential
+	Source string
+	// @access: confidential
+	Outcome string
+	// @access: opaque-restricted
+	Note pgtype.Text
+	// @access: opaque-restricted
+	SessionID pgtype.Text
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential-pii
+	UserEmail pgtype.Text
+	// @access: confidential
+	ReviewedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }
 
 type SkillObservation struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	IdempotencyKey     pgtype.Text
-	Provider           string
-	UserID             pgtype.Text
-	UserEmail          pgtype.Text
-	Hostname           pgtype.Text
-	SessionID          pgtype.Text
-	SkillName          string
-	Source             pgtype.Text
-	SourceLevel        pgtype.Text
-	SourcePath         pgtype.Text
-	RawSha256          pgtype.Text
-	SeenAt             pgtype.Timestamptz
-	SkillID            uuid.NullUUID
-	SkillVersionID     uuid.NullUUID
-	ReconciledAt       pgtype.Timestamptz
-	MetricsSyncedAt    pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: opaque-restricted
+	IdempotencyKey pgtype.Text
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential-pii
+	UserEmail pgtype.Text
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: opaque-restricted
+	SessionID pgtype.Text
+	// @access: confidential
+	SkillName string
+	// @access: opaque-restricted
+	Source pgtype.Text
+	// @access: opaque-restricted
+	SourceLevel pgtype.Text
+	// @access: opaque-restricted
+	SourcePath pgtype.Text
+	// @access: confidential
+	RawSha256 pgtype.Text
+	// @access: confidential
+	SeenAt pgtype.Timestamptz
+	// @access: confidential
+	SkillID uuid.NullUUID
+	// @access: confidential
+	SkillVersionID uuid.NullUUID
+	// @access: confidential
+	ReconciledAt pgtype.Timestamptz
+	// @access: confidential
+	MetricsSyncedAt pgtype.Timestamptz
+	// @access: confidential
 	EfficacyEnqueuedAt pgtype.Timestamptz
+	// @access: confidential
 	ReconcileErrorCode pgtype.Text
-	CreatedAt          pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }
 
 type SkillRawHash struct {
-	ProjectID       uuid.UUID
-	RawSha256       string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	RawSha256 string
+	// @access: confidential
 	CanonicalSha256 string
-	CreatedAt       pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }
 
 type SkillShareLink struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	SkillID         uuid.UUID
-	Token           string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: secret-restricted
+	Token string
+	// @access: confidential
 	CreatedByUserID string
-	RevokedAt       pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SkillVersion struct {
-	ID               uuid.UUID
-	SkillID          uuid.UUID
-	Content          string
-	CanonicalSha256  string
-	RawSha256        string
-	Description      pgtype.Text
-	Metadata         []byte
-	SpecValid        bool
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: opaque-restricted
+	Content string
+	// @access: confidential
+	CanonicalSha256 string
+	// @access: confidential
+	RawSha256 string
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: opaque-restricted
+	Metadata []byte
+	// @access: confidential
+	SpecValid bool
+	// @access: opaque-restricted
 	ValidationErrors []byte
-	CreatedAt        pgtype.Timestamptz
-	PromotedAt       pgtype.Timestamptz
-	CreatedByUserID  string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	PromotedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedByUserID string
 }
 
 type SkillVersionOrigin struct {
+	// @access: confidential
 	SkillVersionID uuid.UUID
-	SkillID        uuid.UUID
-	ProjectID      uuid.UUID
-	Origin         string
-	CreatedAt      pgtype.Timestamptz
+	// @access: confidential
+	SkillID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Origin string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }

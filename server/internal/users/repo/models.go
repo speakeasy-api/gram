@@ -9,18 +9,31 @@ import (
 )
 
 type User struct {
-	ID          string
-	Email       string
+	// @access: confidential
+	ID string
+	// @access: confidential-pii
+	Email string
+	// @access: confidential-pii
 	DisplayName string
-	PhotoUrl    pgtype.Text
+	// @access: confidential-pii
+	PhotoUrl pgtype.Text
 	// Maps to the application's platform_admin concept: TRUE marks a Gram/Speakeasy platform admin. Distinct from the org-level admin role.
-	Admin           bool
-	LastLogin       pgtype.Timestamptz
-	WorkosID        pgtype.Text
+	// @access: confidential
+	Admin bool
+	// @access: confidential
+	LastLogin pgtype.Timestamptz
+	// @access: confidential-pii
+	WorkosID pgtype.Text
+	// @access: confidential
 	WorkosCreatedAt pgtype.Timestamptz
+	// @access: confidential
 	WorkosUpdatedAt pgtype.Timestamptz
+	// @access: confidential
 	WorkosDeletedAt pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

@@ -11,17 +11,30 @@ import (
 )
 
 type ToolsetEmbedding struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	ToolsetID      uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ToolsetID uuid.UUID
+	// @access: confidential
 	ToolsetVersion int64
-	EntryKey       string
+	// @access: confidential
+	EntryKey string
+	// @access: confidential
 	EmbeddingModel string
-	Embedding1536  pgvector_go.Vector
-	Payload        []byte
-	Tags           []string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: opaque-restricted
+	Embedding1536 pgvector_go.Vector
+	// @access: opaque-restricted
+	Payload []byte
+	// @access: opaque-restricted
+	Tags []string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

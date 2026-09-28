@@ -10,28 +10,49 @@ import (
 )
 
 type McpEnvironmentConfig struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	McpMetadataID     uuid.UUID
-	VariableName      string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	McpMetadataID uuid.UUID
+	// @access: confidential
+	VariableName string
+	// @access: confidential
 	HeaderDisplayName pgtype.Text
-	ProvidedBy        string
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
+	// @access: opaque-restricted
+	ProvidedBy string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type McpMetadatum struct {
-	ID                        uuid.UUID
-	ToolsetID                 uuid.NullUUID
-	McpServerID               uuid.NullUUID
-	ProjectID                 uuid.UUID
-	ExternalDocumentationUrl  pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolsetID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: restricted
+	ExternalDocumentationUrl pgtype.Text
+	// @access: opaque-restricted
 	ExternalDocumentationText pgtype.Text
-	LogoID                    uuid.NullUUID
-	Instructions              pgtype.Text
-	HeaderDisplayNames        []byte
-	DefaultEnvironmentID      uuid.NullUUID
-	InstallationOverrideUrl   pgtype.Text
-	CreatedAt                 pgtype.Timestamptz
-	UpdatedAt                 pgtype.Timestamptz
+	// @access: confidential
+	LogoID uuid.NullUUID
+	// @access: opaque-restricted
+	Instructions pgtype.Text
+	// @access: opaque-restricted
+	HeaderDisplayNames []byte
+	// @access: confidential
+	DefaultEnvironmentID uuid.NullUUID
+	// @access: restricted
+	InstallationOverrideUrl pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

@@ -12,66 +12,125 @@ import (
 )
 
 type FunctionToolDefinition struct {
-	ID              uuid.UUID
-	ToolUrn         urn.Tool
-	ProjectID       uuid.UUID
-	DeploymentID    uuid.UUID
-	FunctionID      uuid.UUID
-	Runtime         string
-	Name            string
-	Description     string
-	Tags            []string
-	InputSchema     []byte
-	Variables       []byte
-	AuthInput       []byte
-	Meta            []byte
-	ReadOnlyHint    pgtype.Bool
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolUrn urn.Tool
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
+	FunctionID uuid.UUID
+	// @access: confidential
+	Runtime string
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description string
+	// @access: opaque-restricted
+	Tags []string
+	// @access: opaque-restricted
+	InputSchema []byte
+	// @access: opaque-restricted
+	Variables []byte
+	// @access: opaque-restricted
+	AuthInput []byte
+	// @access: opaque-restricted
+	Meta []byte
+	// @access: confidential
+	ReadOnlyHint pgtype.Bool
+	// @access: confidential
 	DestructiveHint pgtype.Bool
-	IdempotentHint  pgtype.Bool
-	OpenWorldHint   pgtype.Bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	IdempotentHint pgtype.Bool
+	// @access: confidential
+	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type HttpToolDefinition struct {
-	ID                  uuid.UUID
-	ToolUrn             urn.Tool
-	ProjectID           uuid.UUID
-	DeploymentID        uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolUrn urn.Tool
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
 	Openapiv3DocumentID uuid.NullUUID
-	Confirm             pgtype.Text
-	ConfirmPrompt       pgtype.Text
-	Summarizer          pgtype.Text
-	Name                string
-	UntruncatedName     pgtype.Text
-	Summary             string
-	Description         string
-	Openapiv3Operation  pgtype.Text
-	Tags                []string
-	XGram               pgtype.Bool
-	OriginalName        pgtype.Text
-	OriginalSummary     pgtype.Text
+	// @access: confidential
+	Confirm pgtype.Text
+	// @access: opaque-restricted
+	ConfirmPrompt pgtype.Text
+	// @access: opaque-restricted
+	Summarizer pgtype.Text
+	// @access: confidential
+	Name string
+	// @access: confidential
+	UntruncatedName pgtype.Text
+	// @access: opaque-restricted
+	Summary string
+	// @access: opaque-restricted
+	Description string
+	// @access: confidential
+	Openapiv3Operation pgtype.Text
+	// @access: opaque-restricted
+	Tags []string
+	// @access: confidential
+	XGram pgtype.Bool
+	// @access: confidential
+	OriginalName pgtype.Text
+	// @access: opaque-restricted
+	OriginalSummary pgtype.Text
+	// @access: opaque-restricted
 	OriginalDescription pgtype.Text
-	ServerEnvVar        string
-	DefaultServerUrl    pgtype.Text
-	Security            []byte
-	HttpMethod          string
-	Path                string
-	SchemaVersion       string
-	Schema              []byte
-	HeaderSettings      []byte
-	QuerySettings       []byte
-	PathSettings        []byte
-	RequestContentType  pgtype.Text
-	ResponseFilter      *models.ResponseFilter
-	ReadOnlyHint        pgtype.Bool
-	DestructiveHint     pgtype.Bool
-	IdempotentHint      pgtype.Bool
-	OpenWorldHint       pgtype.Bool
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
+	// @access: confidential
+	ServerEnvVar string
+	// @access: restricted
+	DefaultServerUrl pgtype.Text
+	// @access: opaque-restricted
+	Security []byte
+	// @access: confidential
+	HttpMethod string
+	// @access: restricted
+	Path string
+	// @access: confidential
+	SchemaVersion string
+	// @access: opaque-restricted
+	Schema []byte
+	// @access: opaque-restricted
+	HeaderSettings []byte
+	// @access: opaque-restricted
+	QuerySettings []byte
+	// @access: opaque-restricted
+	PathSettings []byte
+	// @access: confidential
+	RequestContentType pgtype.Text
+	// @access: opaque-restricted
+	ResponseFilter *models.ResponseFilter
+	// @access: confidential
+	ReadOnlyHint pgtype.Bool
+	// @access: confidential
+	DestructiveHint pgtype.Bool
+	// @access: confidential
+	IdempotentHint pgtype.Bool
+	// @access: confidential
+	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

@@ -10,29 +10,51 @@ import (
 )
 
 type RemoteMcpServer struct {
-	ID            uuid.UUID
-	ProjectID     uuid.UUID
-	Name          pgtype.Text
-	Slug          pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Name pgtype.Text
+	// @access: restricted
+	Slug pgtype.Text
+	// @access: confidential
 	TransportType string
-	Url           string
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	// @access: restricted
+	Url string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type RemoteMcpServerHeader struct {
-	ID                     uuid.UUID
-	RemoteMcpServerID      uuid.UUID
-	Name                   string
-	Description            pgtype.Text
-	IsRequired             bool
-	IsSecret               bool
-	Value                  pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	RemoteMcpServerID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: confidential
+	IsRequired bool
+	// @access: confidential
+	IsSecret bool
+	// @access: secret-restricted
+	Value pgtype.Text
+	// @access: confidential
 	ValueFromRequestHeader pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

@@ -10,25 +10,46 @@ import (
 )
 
 type NetworkIngress struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	Provider               string
-	Hostname               string
-	EndpointNamespaceKind  string
-	CustomDomainID         uuid.NullUUID
-	Enabled                bool
-	IdentityRequired       bool
-	CredentialsEncrypted   pgtype.Text
-	AttestorNamespace      string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Provider string
+	// @access: restricted
+	Hostname string
+	// @access: confidential
+	EndpointNamespaceKind string
+	// @access: confidential
+	CustomDomainID uuid.NullUUID
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
+	IdentityRequired bool
+	// @access: secret-restricted
+	CredentialsEncrypted pgtype.Text
+	// @access: confidential
+	AttestorNamespace string
+	// @access: confidential
 	AttestorServiceAccount string
-	ProviderResources      []byte
-	Status                 string
-	DnsName                pgtype.Text
-	LastError              pgtype.Text
-	HealthCheckedAt        pgtype.Timestamptz
-	ConnectedSince         pgtype.Timestamptz
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	// @access: confidential
+	ProviderResources []byte
+	// @access: confidential
+	Status string
+	// @access: restricted
+	DnsName pgtype.Text
+	// @access: confidential
+	LastError pgtype.Text
+	// @access: confidential
+	HealthCheckedAt pgtype.Timestamptz
+	// @access: confidential
+	ConnectedSince pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

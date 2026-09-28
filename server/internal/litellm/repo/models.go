@@ -10,21 +10,38 @@ import (
 )
 
 type LitellmInstance struct {
-	ID                       uuid.UUID
-	OrganizationID           string
-	ProjectID                uuid.UUID
-	ApiKeyID                 uuid.UUID
-	CreatedByUserID          string
-	Name                     string
-	FailurePosture           string
-	LastGuardrailEventAt     pgtype.Timestamptz
-	LastOtelEventAt          pgtype.Timestamptz
-	LastErrorAt              pgtype.Timestamptz
-	LastErrorKind            pgtype.Text
-	ReportedLitellmVersion   pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ApiKeyID uuid.UUID
+	// @access: confidential
+	CreatedByUserID string
+	// @access: confidential
+	Name string
+	// @access: confidential
+	FailurePosture string
+	// @access: confidential
+	LastGuardrailEventAt pgtype.Timestamptz
+	// @access: confidential
+	LastOtelEventAt pgtype.Timestamptz
+	// @access: confidential
+	LastErrorAt pgtype.Timestamptz
+	// @access: confidential
+	LastErrorKind pgtype.Text
+	// @access: opaque-restricted
+	ReportedLitellmVersion pgtype.Text
+	// @access: confidential
 	ReportedLitellmVersionAt pgtype.Timestamptz
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
-	DeletedAt                pgtype.Timestamptz
-	Deleted                  bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

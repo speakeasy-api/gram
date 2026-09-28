@@ -9,28 +9,49 @@ import (
 )
 
 type AiScanTarget struct {
-	OrganizationID  string
-	ID              string
-	DisplayName     pgtype.Text
-	Category        pgtype.Text
-	BundleIds       []string
-	Binaries        []string
-	ConfigDirs      []string
-	ProcessNames    []string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ID string
+	// @access: confidential
+	DisplayName pgtype.Text
+	// @access: confidential
+	Category pgtype.Text
+	// @access: confidential
+	BundleIds []string
+	// @access: confidential
+	Binaries []string
+	// @access: opaque-restricted
+	ConfigDirs []string
+	// @access: confidential
+	ProcessNames []string
+	// @access: confidential
 	VersionPlistKey pgtype.Text
-	CimdVendorKeys  []string
-	OauthClientIds  []string
+	// @access: confidential
+	CimdVendorKeys []string
+	// @access: restricted
+	OauthClientIds []string
+	// @access: confidential
 	ClientInfoNames []string
-	Status          string
-	Rationale       pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	// @access: confidential
+	Status string
+	// @access: opaque-restricted
+	Rationale pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type DeviceAgentConfiguration struct {
+	// @access: confidential
 	OrganizationID string
-	SchemaVersion  int32
-	Config         []byte
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	// @access: confidential
+	SchemaVersion int32
+	// @access: opaque-restricted
+	Config []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

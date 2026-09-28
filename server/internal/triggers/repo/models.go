@@ -10,34 +10,61 @@ import (
 )
 
 type TriggerInstance struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	ProjectID      uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	DefinitionSlug string
-	Name           string
-	EnvironmentID  uuid.NullUUID
-	TargetKind     string
-	TargetRef      string
-	TargetDisplay  string
-	ConfigJson     []byte
-	Status         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	Name string
+	// @access: confidential
+	EnvironmentID uuid.NullUUID
+	// @access: confidential
+	TargetKind string
+	// @access: confidential
+	TargetRef string
+	// @access: confidential
+	TargetDisplay string
+	// @access: opaque-restricted
+	ConfigJson []byte
+	// @access: confidential
+	Status string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type TriggerThreadRoute struct {
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	TargetKind           string
-	TargetRef            string
-	CorrelationID        string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	TargetKind string
+	// @access: confidential
+	TargetRef string
+	// @access: restricted
+	CorrelationID string
+	// @access: restricted
 	RouteToCorrelationID pgtype.Text
-	State                string
-	LastSeenCursor       pgtype.Text
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	// @access: confidential
+	State string
+	// @access: confidential
+	LastSeenCursor pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

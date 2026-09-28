@@ -12,161 +12,297 @@ import (
 )
 
 type Deployment struct {
-	ID             uuid.UUID
-	Seq            int64
-	UserID         string
-	ProjectID      uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Seq int64
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	OrganizationID string
+	// @access: opaque-restricted
 	IdempotencyKey string
-	ClonedFrom     uuid.NullUUID
-	GithubRepo     pgtype.Text
-	GithubPr       pgtype.Text
-	GithubSha      pgtype.Text
-	ExternalID     pgtype.Text
-	ExternalUrl    pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	// @access: confidential
+	ClonedFrom uuid.NullUUID
+	// @access: confidential-pii
+	GithubRepo pgtype.Text
+	// @access: confidential
+	GithubPr pgtype.Text
+	// @access: confidential
+	GithubSha pgtype.Text
+	// @access: opaque-restricted
+	ExternalID pgtype.Text
+	// @access: restricted
+	ExternalUrl pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type DeploymentsFunction struct {
-	ID                uuid.UUID
-	DeploymentID      uuid.UUID
-	AssetID           uuid.UUID
-	Name              string
-	Slug              string
-	Runtime           string
-	RunnerVersion     pgtype.Text
-	MemoryMib         pgtype.Int4
-	Scale             pgtype.Int4
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
+	AssetID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Slug string
+	// @access: confidential
+	Runtime string
+	// @access: confidential
+	RunnerVersion pgtype.Text
+	// @access: confidential
+	MemoryMib pgtype.Int4
+	// @access: confidential
+	Scale pgtype.Int4
+	// @access: confidential
 	MemoryMibOverride pgtype.Int4
-	ScaleOverride     pgtype.Int4
+	// @access: confidential
+	ScaleOverride pgtype.Int4
 }
 
 type DeploymentsOpenapiv3Asset struct {
-	ID           uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	DeploymentID uuid.UUID
-	AssetID      uuid.UUID
-	Name         string
-	Slug         string
+	// @access: confidential
+	AssetID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Slug string
 }
 
 type FunctionResourceDefinition struct {
-	ID           uuid.UUID
-	ResourceUrn  urn.Resource
-	ProjectID    uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: restricted
+	ResourceUrn urn.Resource
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	DeploymentID uuid.UUID
-	FunctionID   uuid.UUID
-	Runtime      string
-	Name         string
-	Description  string
-	Uri          string
-	Title        pgtype.Text
-	MimeType     pgtype.Text
-	Variables    []byte
-	Meta         []byte
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
+	// @access: confidential
+	FunctionID uuid.UUID
+	// @access: confidential
+	Runtime string
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description string
+	// @access: restricted
+	Uri string
+	// @access: confidential
+	Title pgtype.Text
+	// @access: confidential
+	MimeType pgtype.Text
+	// @access: opaque-restricted
+	Variables []byte
+	// @access: opaque-restricted
+	Meta []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type FunctionToolDefinition struct {
-	ID              uuid.UUID
-	ToolUrn         urn.Tool
-	ProjectID       uuid.UUID
-	DeploymentID    uuid.UUID
-	FunctionID      uuid.UUID
-	Runtime         string
-	Name            string
-	Description     string
-	Tags            []string
-	InputSchema     []byte
-	Variables       []byte
-	AuthInput       []byte
-	Meta            []byte
-	ReadOnlyHint    pgtype.Bool
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolUrn urn.Tool
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
+	FunctionID uuid.UUID
+	// @access: confidential
+	Runtime string
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description string
+	// @access: opaque-restricted
+	Tags []string
+	// @access: opaque-restricted
+	InputSchema []byte
+	// @access: opaque-restricted
+	Variables []byte
+	// @access: opaque-restricted
+	AuthInput []byte
+	// @access: opaque-restricted
+	Meta []byte
+	// @access: confidential
+	ReadOnlyHint pgtype.Bool
+	// @access: confidential
 	DestructiveHint pgtype.Bool
-	IdempotentHint  pgtype.Bool
-	OpenWorldHint   pgtype.Bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	IdempotentHint pgtype.Bool
+	// @access: confidential
+	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type HttpSecurity struct {
-	ID                  uuid.UUID
-	DeploymentID        uuid.UUID
-	ProjectID           uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
 	Openapiv3DocumentID uuid.NullUUID
-	Key                 string
-	Type                pgtype.Text
-	Name                pgtype.Text
-	InPlacement         pgtype.Text
-	Scheme              pgtype.Text
-	BearerFormat        pgtype.Text
-	OauthTypes          []string
-	OauthFlows          []byte
-	EnvVariables        []string
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
+	// @access: confidential
+	Key string
+	// @access: confidential
+	Type pgtype.Text
+	// @access: confidential
+	Name pgtype.Text
+	// @access: confidential
+	InPlacement pgtype.Text
+	// @access: confidential
+	Scheme pgtype.Text
+	// @access: confidential
+	BearerFormat pgtype.Text
+	// @access: confidential
+	OauthTypes []string
+	// @access: opaque-restricted
+	OauthFlows []byte
+	// @access: confidential
+	EnvVariables []string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type HttpToolDefinition struct {
-	ID                  uuid.UUID
-	ToolUrn             urn.Tool
-	ProjectID           uuid.UUID
-	DeploymentID        uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolUrn urn.Tool
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
 	Openapiv3DocumentID uuid.NullUUID
-	Confirm             pgtype.Text
-	ConfirmPrompt       pgtype.Text
-	Summarizer          pgtype.Text
-	Name                string
-	UntruncatedName     pgtype.Text
-	Summary             string
-	Description         string
-	Openapiv3Operation  pgtype.Text
-	Tags                []string
-	XGram               pgtype.Bool
-	OriginalName        pgtype.Text
-	OriginalSummary     pgtype.Text
+	// @access: confidential
+	Confirm pgtype.Text
+	// @access: opaque-restricted
+	ConfirmPrompt pgtype.Text
+	// @access: opaque-restricted
+	Summarizer pgtype.Text
+	// @access: confidential
+	Name string
+	// @access: confidential
+	UntruncatedName pgtype.Text
+	// @access: opaque-restricted
+	Summary string
+	// @access: opaque-restricted
+	Description string
+	// @access: confidential
+	Openapiv3Operation pgtype.Text
+	// @access: opaque-restricted
+	Tags []string
+	// @access: confidential
+	XGram pgtype.Bool
+	// @access: confidential
+	OriginalName pgtype.Text
+	// @access: opaque-restricted
+	OriginalSummary pgtype.Text
+	// @access: opaque-restricted
 	OriginalDescription pgtype.Text
-	ServerEnvVar        string
-	DefaultServerUrl    pgtype.Text
-	Security            []byte
-	HttpMethod          string
-	Path                string
-	SchemaVersion       string
-	Schema              []byte
-	HeaderSettings      []byte
-	QuerySettings       []byte
-	PathSettings        []byte
-	RequestContentType  pgtype.Text
-	ResponseFilter      *models.ResponseFilter
-	ReadOnlyHint        pgtype.Bool
-	DestructiveHint     pgtype.Bool
-	IdempotentHint      pgtype.Bool
-	OpenWorldHint       pgtype.Bool
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
+	// @access: confidential
+	ServerEnvVar string
+	// @access: restricted
+	DefaultServerUrl pgtype.Text
+	// @access: opaque-restricted
+	Security []byte
+	// @access: confidential
+	HttpMethod string
+	// @access: restricted
+	Path string
+	// @access: confidential
+	SchemaVersion string
+	// @access: opaque-restricted
+	Schema []byte
+	// @access: opaque-restricted
+	HeaderSettings []byte
+	// @access: opaque-restricted
+	QuerySettings []byte
+	// @access: opaque-restricted
+	PathSettings []byte
+	// @access: confidential
+	RequestContentType pgtype.Text
+	// @access: opaque-restricted
+	ResponseFilter *models.ResponseFilter
+	// @access: confidential
+	ReadOnlyHint pgtype.Bool
+	// @access: confidential
+	DestructiveHint pgtype.Bool
+	// @access: confidential
+	IdempotentHint pgtype.Bool
+	// @access: confidential
+	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type PackageVersion struct {
-	ID           uuid.UUID
-	PackageID    uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	PackageID uuid.UUID
+	// @access: confidential
 	DeploymentID uuid.UUID
-	Visibility   string
-	Major        int64
-	Minor        int64
-	Patch        int64
-	Prerelease   pgtype.Text
-	Build        pgtype.Text
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
+	// @access: confidential
+	Visibility string
+	// @access: confidential
+	Major int64
+	// @access: confidential
+	Minor int64
+	// @access: confidential
+	Patch int64
+	// @access: confidential
+	Prerelease pgtype.Text
+	// @access: confidential
+	Build pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

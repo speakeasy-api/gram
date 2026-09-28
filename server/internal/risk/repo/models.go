@@ -10,168 +10,306 @@ import (
 )
 
 type RiskCustomDetectionRule struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	RuleID         string
-	Title          string
-	Description    string
-	Regex          pgtype.Text
-	MatchConfig    []byte
-	DetectionExpr  pgtype.Text
-	Severity       string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	RuleID string
+	// @access: confidential
+	Title string
+	// @access: opaque-restricted
+	Description string
+	// @access: opaque-restricted
+	Regex pgtype.Text
+	// @access: opaque-restricted
+	MatchConfig []byte
+	// @access: opaque-restricted
+	DetectionExpr pgtype.Text
+	// @access: confidential
+	Severity string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type RiskExclusion struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	RiskPolicyID   uuid.NullUUID
-	MatchType      string
-	MatchValue     string
-	RuleIDFilter   pgtype.Text
-	SourceFilter   pgtype.Text
-	Enabled        bool
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	RiskPolicyID uuid.NullUUID
+	// @access: confidential
+	MatchType string
+	// @access: secret-restricted
+	MatchValue string
+	// @access: confidential
+	RuleIDFilter pgtype.Text
+	// @access: confidential
+	SourceFilter pgtype.Text
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type RiskPolicy struct {
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
-	OrganizationID       string
-	Enabled              bool
-	Name                 string
-	PolicyType           string
-	Sources              []string
-	PresidioEntities     []string
-	AnalyzerConfig       []byte
-	McpScope             []byte
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
+	Name string
+	// @access: confidential
+	PolicyType string
+	// @access: confidential
+	Sources []string
+	// @access: opaque-restricted
+	PresidioEntities []string
+	// @access: opaque-restricted
+	AnalyzerConfig []byte
+	// @access: opaque-restricted
+	McpScope []byte
+	// @access: opaque-restricted
 	PromptInjectionRules []string
-	DisabledRules        []string
-	CustomRuleIds        []string
-	Action               string
-	AudienceType         string
+	// @access: opaque-restricted
+	DisabledRules []string
+	// @access: confidential
+	CustomRuleIds []string
+	// @access: confidential
+	Action string
+	// @access: confidential
+	AudienceType string
+	// @access: confidential
 	ShadowMcpDisposition pgtype.Text
-	AutoName             bool
-	UserMessage          pgtype.Text
-	Prompt               pgtype.Text
-	ModelConfig          []byte
-	Score                float64
-	Version              int64
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	// @access: confidential
+	AutoName bool
+	// @access: opaque-restricted
+	UserMessage pgtype.Text
+	// @access: opaque-restricted
+	Prompt pgtype.Text
+	// @access: confidential
+	ModelConfig []byte
+	// @access: confidential
+	Score float64
+	// @access: confidential
+	Version int64
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 // Risk-policy bypass request workflow. A block records a request here; an admin approves by granting risk_policy:bypass.
 type RiskPolicyBypassRequest struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	ProjectID      uuid.UUID
-	RiskPolicyID   uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	RiskPolicyID uuid.UUID
 	// Generic target namespace for the bypass request, such as server_url. Empty means the whole policy.
-	TargetKind  pgtype.Text
+	// @access: confidential
+	TargetKind pgtype.Text
+	// @access: restricted
 	TargetLabel pgtype.Text
 	// Stable canonical key for deduplicating bypass requests within the target namespace.
+	// @access: opaque-restricted
 	TargetKey pgtype.Text
 	// Selector dimensions for the target, such as {"server_url":"mcp.example.com"}.
-	TargetDimensions     []byte
-	RequesterUserID      string
-	RequesterEmail       pgtype.Text
-	Note                 pgtype.Text
-	Status               string
-	DecidedBy            pgtype.Text
+	// @access: opaque-restricted
+	TargetDimensions []byte
+	// @access: confidential
+	RequesterUserID string
+	// @access: confidential-pii
+	RequesterEmail pgtype.Text
+	// @access: opaque-restricted
+	Note pgtype.Text
+	// @access: confidential
+	Status string
+	// @access: confidential
+	DecidedBy pgtype.Text
+	// @access: confidential
 	GrantedPrincipalUrns []string
-	DecidedAt            pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	// @access: confidential
+	DecidedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 // Interactive warn/challenge lifecycle for warn-action policies: a warn match records a challenged row; the user self-service acknowledges to proceed on retry. Never stores the raw matched value.
 type RiskPolicyChallenge struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	RiskPolicyID    uuid.UUID
-	UserID          string
-	ToolName        pgtype.Text
-	Status          string
-	PolicyName      pgtype.Text
-	Entity          pgtype.Text
-	RuleID          pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	RiskPolicyID uuid.UUID
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	ToolName pgtype.Text
+	// @access: confidential
+	Status string
+	// @access: confidential
+	PolicyName pgtype.Text
+	// @access: confidential
+	Entity pgtype.Text
+	// @access: confidential
+	RuleID pgtype.Text
+	// @access: confidential
 	CallFingerprint pgtype.Text
-	ChallengedAt    pgtype.Timestamptz
-	AcknowledgedAt  pgtype.Timestamptz
-	ExpiresAt       pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	ChallengedAt pgtype.Timestamptz
+	// @access: confidential
+	AcknowledgedAt pgtype.Timestamptz
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type RiskPolicyEvalReview struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	OrganizationID    string
-	RiskPolicyID      uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	RiskPolicyID uuid.UUID
+	// @access: confidential
 	RiskPolicyVersion int64
-	ChatID            uuid.UUID
-	Verdict           string
-	ReviewedBy        string
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	DeletedAt         pgtype.Timestamptz
-	Deleted           bool
+	// @access: confidential
+	ChatID uuid.UUID
+	// @access: confidential
+	Verdict string
+	// @access: confidential
+	ReviewedBy string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type RiskResult struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	OrganizationID      string
-	RiskPolicyID        uuid.UUID
-	RiskPolicyVersion   int64
-	ChatMessageID       uuid.NullUUID
-	ChatContentPartID   uuid.NullUUID
-	SkillVersionID      uuid.NullUUID
-	Source              string
-	Found               bool
-	RuleID              pgtype.Text
-	Description         pgtype.Text
-	Match               pgtype.Text
-	StartPos            pgtype.Int4
-	EndPos              pgtype.Int4
-	Confidence          pgtype.Float8
-	Tags                []string
-	Spans               []byte
-	DeadLetterReason    pgtype.Text
-	ExcludedAt          pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	RiskPolicyID uuid.UUID
+	// @access: confidential
+	RiskPolicyVersion int64
+	// @access: confidential
+	ChatMessageID uuid.NullUUID
+	// @access: confidential
+	ChatContentPartID uuid.NullUUID
+	// @access: confidential
+	SkillVersionID uuid.NullUUID
+	// @access: confidential
+	Source string
+	// @access: confidential
+	Found bool
+	// @access: confidential
+	RuleID pgtype.Text
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: secret-restricted
+	Match pgtype.Text
+	// @access: confidential
+	StartPos pgtype.Int4
+	// @access: confidential
+	EndPos pgtype.Int4
+	// @access: confidential
+	Confidence pgtype.Float8
+	// @access: confidential
+	Tags []string
+	// @access: secret-restricted
+	Spans []byte
+	// @access: opaque-restricted
+	DeadLetterReason pgtype.Text
+	// @access: confidential
+	ExcludedAt pgtype.Timestamptz
+	// @access: confidential
 	ExcludedExclusionID uuid.NullUUID
-	FalsePositiveAt     pgtype.Timestamptz
+	// @access: confidential
+	FalsePositiveAt pgtype.Timestamptz
+	// @access: opaque-restricted
 	FalsePositiveReason pgtype.Text
-	CreatedAt           pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }
 
 type SessionQuarantine struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	ProjectID      uuid.UUID
-	SessionID      string
-	RiskPolicyID   uuid.NullUUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	SessionID string
+	// @access: confidential
+	RiskPolicyID uuid.NullUUID
+	// @access: confidential
 	RiskPolicyName string
-	UserID         string
-	Reason         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	ReleasedAt     pgtype.Timestamptz
-	ReleasedBy     pgtype.Text
+	// @access: confidential
+	UserID string
+	// @access: opaque-restricted
+	Reason string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	ReleasedAt pgtype.Timestamptz
+	// @access: confidential
+	ReleasedBy pgtype.Text
 }

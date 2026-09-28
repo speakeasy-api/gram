@@ -11,21 +11,38 @@ import (
 )
 
 type PromptTemplate struct {
-	ID            uuid.UUID
-	ToolUrn       urn.Tool
-	ProjectID     uuid.UUID
-	HistoryID     uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolUrn urn.Tool
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	HistoryID uuid.UUID
+	// @access: confidential
 	PredecessorID uuid.NullUUID
-	Name          string
-	Description   pgtype.Text
-	Arguments     []byte
-	Prompt        string
-	Engine        pgtype.Text
-	Kind          pgtype.Text
-	ToolsHint     []string
-	ToolUrnsHint  []string
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: opaque-restricted
+	Arguments []byte
+	// @access: opaque-restricted
+	Prompt string
+	// @access: confidential
+	Engine pgtype.Text
+	// @access: confidential
+	Kind pgtype.Text
+	// @access: opaque-restricted
+	ToolsHint []string
+	// @access: opaque-restricted
+	ToolUrnsHint []string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

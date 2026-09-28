@@ -10,64 +10,111 @@ import (
 )
 
 type Plugin struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Slug string
+	// @access: opaque-restricted
+	Description pgtype.Text
 	// Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).
+	// @access: confidential
 	IsDefault pgtype.Bool
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
+	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
 	DeletedAt pgtype.Timestamptz
-	Deleted   bool
+	// @access: confidential
+	Deleted bool
 }
 
 type PluginAssignment struct {
-	ID             uuid.UUID
-	PluginID       uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	PluginID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	PrincipalUrn   string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	// @access: confidential-pii
+	PrincipalUrn string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type PluginGithubConnection struct {
-	ID                       uuid.UUID
-	ProjectID                uuid.UUID
-	InstallationID           int64
-	RepoOwner                string
-	RepoName                 string
-	MarketplaceToken         pgtype.Text
-	PublishedFingerprint     pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	InstallationID int64
+	// @access: confidential-pii
+	RepoOwner string
+	// @access: confidential
+	RepoName string
+	// @access: secret-restricted
+	MarketplaceToken pgtype.Text
+	// @access: confidential
+	PublishedFingerprint pgtype.Text
+	// @access: confidential
 	PublishedMcpFingerprints []byte
-	PublishedHooksVersion    pgtype.Text
-	PublishedHooksConfig     []byte
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
+	// @access: confidential
+	PublishedHooksVersion pgtype.Text
+	// @access: confidential
+	PublishedHooksConfig []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type PluginServer struct {
-	ID              uuid.UUID
-	PluginID        uuid.UUID
-	ProjectID       uuid.NullUUID
-	ToolsetID       uuid.NullUUID
-	McpServerID     uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	PluginID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	ToolsetID uuid.NullUUID
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
 	MetaMcpServerID uuid.NullUUID
-	DisplayName     string
-	Policy          string
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	DisplayName string
+	// @access: confidential
+	Policy string
+	// @access: confidential
+	SortOrder int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type ProjectMarketplaceSetting struct {
-	ProjectID            uuid.UUID
-	MarketplaceName      pgtype.Text
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	MarketplaceName pgtype.Text
+	// @access: confidential
 	ObservabilityEnabled pgtype.Bool
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

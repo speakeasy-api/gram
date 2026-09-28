@@ -10,35 +10,63 @@ import (
 )
 
 type Package struct {
-	ID              uuid.UUID
-	Name            string
-	Title           pgtype.Text
-	Summary         pgtype.Text
-	DescriptionRaw  pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Title pgtype.Text
+	// @access: opaque-restricted
+	Summary pgtype.Text
+	// @access: opaque-restricted
+	DescriptionRaw pgtype.Text
+	// @access: opaque-restricted
 	DescriptionHtml pgtype.Text
-	Url             pgtype.Text
-	Keywords        []string
-	ImageAssetID    uuid.NullUUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: restricted
+	Url pgtype.Text
+	// @access: opaque-restricted
+	Keywords []string
+	// @access: confidential
+	ImageAssetID uuid.NullUUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type PackageVersion struct {
-	ID           uuid.UUID
-	PackageID    uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	PackageID uuid.UUID
+	// @access: confidential
 	DeploymentID uuid.UUID
-	Visibility   string
-	Major        int64
-	Minor        int64
-	Patch        int64
-	Prerelease   pgtype.Text
-	Build        pgtype.Text
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
+	// @access: confidential
+	Visibility string
+	// @access: confidential
+	Major int64
+	// @access: confidential
+	Minor int64
+	// @access: confidential
+	Patch int64
+	// @access: confidential
+	Prerelease pgtype.Text
+	// @access: confidential
+	Build pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

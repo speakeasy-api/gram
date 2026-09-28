@@ -10,68 +10,123 @@ import (
 )
 
 type DeviceOwner struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	Provider       string
-	DeviceID       string
-	LinkedUserID   pgtype.Text
-	FirstSeenAt    pgtype.Timestamptz
-	LastSeenAt     pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	Provider string
+	// @access: confidential-pii
+	DeviceID string
+	// @access: confidential
+	LinkedUserID pgtype.Text
+	// @access: confidential
+	FirstSeenAt pgtype.Timestamptz
+	// @access: confidential
+	LastSeenAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type HooksServerNameOverride struct {
-	ID            uuid.UUID
-	ProjectID     uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	RawServerName string
-	DisplayName   string
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
+	// @access: confidential
+	DisplayName string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type SkillObservation struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	IdempotencyKey     pgtype.Text
-	Provider           string
-	UserID             pgtype.Text
-	UserEmail          pgtype.Text
-	Hostname           pgtype.Text
-	SessionID          pgtype.Text
-	SkillName          string
-	Source             pgtype.Text
-	SourceLevel        pgtype.Text
-	SourcePath         pgtype.Text
-	RawSha256          pgtype.Text
-	SeenAt             pgtype.Timestamptz
-	SkillID            uuid.NullUUID
-	SkillVersionID     uuid.NullUUID
-	ReconciledAt       pgtype.Timestamptz
-	MetricsSyncedAt    pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: opaque-restricted
+	IdempotencyKey pgtype.Text
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential-pii
+	UserEmail pgtype.Text
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: opaque-restricted
+	SessionID pgtype.Text
+	// @access: confidential
+	SkillName string
+	// @access: opaque-restricted
+	Source pgtype.Text
+	// @access: opaque-restricted
+	SourceLevel pgtype.Text
+	// @access: opaque-restricted
+	SourcePath pgtype.Text
+	// @access: confidential
+	RawSha256 pgtype.Text
+	// @access: confidential
+	SeenAt pgtype.Timestamptz
+	// @access: confidential
+	SkillID uuid.NullUUID
+	// @access: confidential
+	SkillVersionID uuid.NullUUID
+	// @access: confidential
+	ReconciledAt pgtype.Timestamptz
+	// @access: confidential
+	MetricsSyncedAt pgtype.Timestamptz
+	// @access: confidential
 	EfficacyEnqueuedAt pgtype.Timestamptz
+	// @access: confidential
 	ReconcileErrorCode pgtype.Text
-	CreatedAt          pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }
 
 type UserAccount struct {
-	ID                  uuid.UUID
-	OrganizationID      string
-	UserID              pgtype.Text
-	Provider            string
-	ExternalOrgID       pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential
+	Provider string
+	// @access: confidential-pii
+	ExternalOrgID pgtype.Text
+	// @access: confidential-pii
 	ExternalAccountUuid string
-	ExternalAccountID   pgtype.Text
-	Email               pgtype.Text
-	AccountType         pgtype.Text
-	BillingMode         pgtype.Text
-	PlanType            pgtype.Text
-	FirstSeenAt         pgtype.Timestamptz
-	LastSeenAt          pgtype.Timestamptz
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
+	// @access: confidential-pii
+	ExternalAccountID pgtype.Text
+	// @access: confidential-pii
+	Email pgtype.Text
+	// @access: confidential
+	AccountType pgtype.Text
+	// @access: confidential
+	BillingMode pgtype.Text
+	// @access: confidential
+	PlanType pgtype.Text
+	// @access: confidential
+	FirstSeenAt pgtype.Timestamptz
+	// @access: confidential
+	LastSeenAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

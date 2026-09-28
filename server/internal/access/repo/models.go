@@ -11,67 +11,116 @@ import (
 
 // Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
 type AuthzChallengeResolution struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
 	// UUID of the denied challenge in the ClickHouse authz_challenges table.
+	// @access: opaque-restricted
 	ChallengeID string
 	// The principal that was denied, copied from the challenge for query convenience.
+	// @access: opaque-restricted
 	PrincipalUrn string
-	Scope        string
+	// @access: opaque-restricted
+	Scope string
+	// @access: opaque-restricted
 	ResourceKind string
-	ResourceID   string
+	// @access: opaque-restricted
+	ResourceID string
 	// How the challenge was resolved: role_assigned, dismissed.
+	// @access: confidential
 	ResolutionType string
 	// When resolution_type=role_assigned, the role slug that was assigned to the principal.
+	// @access: confidential
 	RoleSlug pgtype.Text
 	// URN of the admin who resolved the challenge.
+	// @access: confidential
 	ResolvedBy string
-	CreatedAt  pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }
 
 type GlobalRole struct {
-	ID                uuid.UUID
-	WorkosSlug        string
-	WorkosName        string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	WorkosSlug string
+	// @access: confidential
+	WorkosName string
+	// @access: opaque-restricted
 	WorkosDescription pgtype.Text
-	WorkosCreatedAt   pgtype.Timestamptz
-	WorkosUpdatedAt   pgtype.Timestamptz
-	WorkosDeletedAt   pgtype.Timestamptz
-	WorkosDeleted     bool
+	// @access: confidential
+	WorkosCreatedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosDeletedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosDeleted bool
+	// @access: confidential
 	WorkosLastEventID pgtype.Text
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	DeletedAt         pgtype.Timestamptz
-	Deleted           bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type OrganizationRole struct {
-	ID                uuid.UUID
-	OrganizationID    string
-	WorkosSlug        string
-	WorkosName        string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	WorkosSlug string
+	// @access: confidential
+	WorkosName string
+	// @access: opaque-restricted
 	WorkosDescription pgtype.Text
-	WorkosCreatedAt   pgtype.Timestamptz
-	WorkosUpdatedAt   pgtype.Timestamptz
-	WorkosDeletedAt   pgtype.Timestamptz
-	WorkosDeleted     bool
+	// @access: confidential
+	WorkosCreatedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosDeletedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosDeleted bool
+	// @access: confidential
 	WorkosLastEventID pgtype.Text
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	DeletedAt         pgtype.Timestamptz
-	Deleted           bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type OrganizationRoleAssignment struct {
-	ID                 uuid.UUID
-	OrganizationID     string
-	WorkosUserID       string
-	UserID             pgtype.Text
-	RoleUrn            string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential-pii
+	WorkosUserID string
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential
+	RoleUrn string
+	// @access: confidential-pii
 	WorkosMembershipID pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
+	// @access: confidential
+	WorkosUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	WorkosLastEventID pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
 }
