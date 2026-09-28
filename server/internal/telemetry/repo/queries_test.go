@@ -308,6 +308,31 @@ func TestArrayDimFilter_MixedCombinesWithOr(t *testing.T) {
 // configured remote or tunneled server, which carries no toolset slug, is
 // matched by the target id its matcher stamps under both target types it can be
 // classified as, while the hosted toolset selector stays hosted-only.
+// TestToolUsageTraceTargetFilter_ConfiguredServerSelectorsOmitShadowRows pins
+// that the selectors an mcp_id-scoped search builds from a configured server
+// never reach the shadow target type. A shadow row's target id is the name the
+// calling app reported, so matching one by a configured server's own slug would
+// attribute an unrelated same-named server's calls to it.
+func TestToolUsageTraceTargetFilter_ConfiguredServerSelectorsOmitShadowRows(t *testing.T) {
+	t.Parallel()
+
+	filter := toolUsageTraceTargetFilter(ListToolUsageTracesParams{
+		HostedToolsetSlugs: []string{"billing-toolset"},
+		MCPServerTargetIDs: []string{"billing", "00000000-0000-0000-0000-000000000004"},
+		ShadowServerNames:  nil,
+	})
+	require.NotNil(t, filter)
+	sql, args, err := filter.ToSql()
+	require.NoError(t, err)
+	require.NotContains(t, args, ToolUsageTargetTypeShadowMCP,
+		"a configured server's selectors must never match the shadow target type")
+	require.Equal(t, "((target_type = ? AND target_id IN (?)) OR (target_type IN (?,?) AND target_id IN (?,?)))", sql)
+	require.Equal(t, []any{
+		ToolUsageTargetTypeHostedMCP, "billing-toolset",
+		ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP, "billing", "00000000-0000-0000-0000-000000000004",
+	}, args)
+}
+
 func TestToolUsageTraceTargetFilter_MatchesConfiguredServersByTargetType(t *testing.T) {
 	t.Parallel()
 

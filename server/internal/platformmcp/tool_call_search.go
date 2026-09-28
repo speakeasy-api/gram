@@ -131,7 +131,7 @@ type SearchToolCallsInput struct {
 	ToolNameContains string                    `json:"tool_name_contains,omitempty" jsonschema:"case-sensitive text the tool name must contain"`
 	ErrorContains    string                    `json:"error_contains,omitempty" jsonschema:"case-sensitive text the recorded error message must contain; only calls that failed with an error message can match"`
 	Outcome          string                    `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, failure, blocked, or pending"`
-	MCPID            string                    `json:"mcp_id,omitempty" jsonschema:"optional configured MCP ID, as returned by find_mcp or get_mcp, to narrow to one server"`
+	MCPID            string                    `json:"mcp_id,omitempty" jsonschema:"optional configured MCP ID, as returned by find_mcp or get_mcp, to narrow to one server; matches only calls the platform tied to that server, never calls an app merely reported under a matching name"`
 	UserReference    string                    `json:"user_reference,omitempty" jsonschema:"optional person reference from a previous search_tool_calls row in this project, or from list_mcp_usage_users when the same mcp_id and window are supplied"`
 	Attributes       []ToolCallAttributeFilter `json:"attributes,omitempty" jsonschema:"optional attribute filters, at most 5, combined with AND; discover keys with list_attribute_keys"`
 	Limit            int                       `json:"limit,omitempty" jsonschema:"maximum calls to return; defaults to 20 and is capped at 50"`
@@ -161,9 +161,12 @@ type SearchToolCallsOutput struct {
 	Calls      []ToolCallMatch `json:"calls"`
 	NextCursor string          `json:"next_cursor,omitempty"`
 	// AttributionUnavailable states that the configured MCP named by mcp_id
-	// has no identity its telemetry is recorded under, so nothing could be
-	// attributed to it. It is reported beside the empty page rather than left
-	// for a caller to mistake for an idle server.
+	// has no identity its telemetry is reliably recorded under, so nothing
+	// could be attributed to it. It is reported beside the empty page rather
+	// than left for a caller to mistake for an idle server. Calls a client
+	// merely reported under this server's name are never counted as such an
+	// identity, so a server known only that way reports unavailable instead of
+	// being handed another server's history.
 	AttributionUnavailable bool `json:"attribution_unavailable,omitempty"`
 }
 
@@ -272,7 +275,10 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		TargetTypes:        nil,
 		HostedToolsetSlugs: server.toolsetSlugs,
 		MCPServerTargetIDs: server.targetIDs,
-		ShadowServerNames:  server.reportedNames,
+		// Never set from a configured server: a shadow row is named by the
+		// calling app, so selecting one by name would fold an unrelated
+		// same-named server's calls into this server's history.
+		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        userFilters,
 		HookSources:        nil,
@@ -478,6 +484,11 @@ func toolCallSearchUserScope(projectID string) string {
 // toolCallServerIdentities is every identity one configured MCP server's calls
 // are recorded under in the Tool Logs query, grouped by the target type the
 // query classifies them as, so each is matched only where it can occur.
+//
+// Every identity here is one Gram itself stamped: a matcher loaded from this
+// project's configured servers, or the toolset a call arrived at. The name the
+// calling app reported is deliberately not among them — see
+// serverIdentitiesForToolCallSearch.
 type toolCallServerIdentities struct {
 	// targetIDs match proxied calls to a remote or tunneled server, which the
 	// matcher folds onto the server slug (or its id when it has none) under the
@@ -486,42 +497,46 @@ type toolCallServerIdentities struct {
 	// toolsetSlugs match calls that arrived at a hosted toolset directly, and
 	// hook-observed calls whose URL resolved to it.
 	toolsetSlugs []string
-	// reportedNames match hook-observed calls no URL resolved, which the query
-	// classifies as shadow under the name the calling app reported.
-	reportedNames []string
 }
 
 func (i toolCallServerIdentities) empty() bool {
-	return len(i.targetIDs) == 0 && len(i.toolsetSlugs) == 0 && len(i.reportedNames) == 0
+	return len(i.targetIDs) == 0 && len(i.toolsetSlugs) == 0
 }
 
 // toolCallSearchServer resolves mcp_id to the identities its telemetry is
 // recorded under. GetMCP is the authorization boundary: it fails closed for an
-// MCP this principal cannot see. An empty result means the server has no
-// resolvable identity, which the caller reports rather than widening to the
-// whole project.
+// MCP this principal cannot see, and its result is deliberately not carried
+// into the identities. An empty result means the server has no reliable
+// identity, which the caller reports rather than widening to the whole project.
 func (s *DiagnosticsService) toolCallSearchServer(ctx context.Context, principal Principal, search toolCallSearch) (toolCallServerIdentities, error) {
 	if s.db == nil {
 		return toolCallServerIdentities{}, ErrUnavailable
 	}
-	mcp, err := s.reader.GetMCP(ctx, principal, GetMCPInput{ProjectID: search.projectID, MCPID: search.mcpID})
-	if err != nil {
+	if _, err := s.reader.GetMCP(ctx, principal, GetMCPInput{ProjectID: search.projectID, MCPID: search.mcpID}); err != nil {
 		return toolCallServerIdentities{}, fmt.Errorf("resolve tool call search mcp: %w", err)
 	}
 	target, err := s.diagnosticsTarget(ctx, principal.OrganizationID, search.projectID, search.mcpID)
 	if err != nil {
 		return toolCallServerIdentities{}, err
 	}
-	return serverIdentitiesForToolCallSearch(target, mcp), nil
+	return serverIdentitiesForToolCallSearch(target), nil
 }
 
 // serverIdentitiesForToolCallSearch derives the identities from the configured
-// server's diagnostics row and inventory entry. It is the one seam that decides
-// what a configured server is recorded as: the plugin-routed names calling
-// apps derive from plugin membership are not known here, so a hook-observed
-// call under such a name is not attributed until that resolution exists.
-func serverIdentitiesForToolCallSearch(target platformrepo.GetPlatformMCPDiagnosticsTargetRow, mcp MCP) toolCallServerIdentities {
-	identities := toolCallServerIdentities{targetIDs: nil, toolsetSlugs: nil, reportedNames: nil}
+// server's diagnostics row. It is the one seam that decides what a configured
+// server is recorded as, and it admits only identities Gram itself stamped.
+//
+// The configured server's slug and display name are not among them. A shadow
+// row's target id is the name the calling app reported, which nothing verifies:
+// folding it in would attribute a personal server that happens to share the
+// name to the corporate one, so an mcp_id-scoped search returns only calls a
+// matcher or a toolset already tied to this server. Hook-observed calls whose
+// URL resolved to this server are unaffected, because the query classifies
+// those under the toolset slug rather than as shadow. Attributing the rest
+// waits on telemetry carrying a reliable link, such as the plugin-routed names
+// calling apps derive from plugin membership, which are not known here.
+func serverIdentitiesForToolCallSearch(target platformrepo.GetPlatformMCPDiagnosticsTargetRow) toolCallServerIdentities {
+	identities := toolCallServerIdentities{targetIDs: nil, toolsetSlugs: nil}
 	// The matcher stamps the server slug as the target id, falling back to the
 	// server id when the slug is empty; both are carried so either spelling
 	// matches.
@@ -534,7 +549,6 @@ func serverIdentitiesForToolCallSearch(target platformrepo.GetPlatformMCPDiagnos
 	if target.ToolsetMcpCount <= 1 {
 		identities.toolsetSlugs = appendUnique(identities.toolsetSlugs, target.ToolsetSlug)
 	}
-	identities.reportedNames = appendUnique(identities.reportedNames, mcp.Slug, mcp.Name)
 	return identities
 }
 

@@ -332,6 +332,9 @@ func TestSearchToolCalls_ForwardsFiltersToTheToolLogsQuery(t *testing.T) {
 		{Path: "@region", Op: "eq", Values: []string{"eu"}},
 	}, reader.traceParams.Filters)
 	require.Empty(t, reader.traceParams.HostedToolsetSlugs)
+	require.Empty(t, reader.traceParams.MCPServerTargetIDs)
+	// No search ever selects a shadow row by the name a calling app reported.
+	require.Empty(t, reader.traceParams.ShadowServerNames)
 	require.Empty(t, reader.traceParams.UserFilters)
 	require.Zero(t, reader.traceParams.CursorTimeUnixNano)
 	require.Empty(t, reader.traceParams.CursorID)
@@ -485,9 +488,9 @@ func TestListAttributeKeys_SplitsCustomFromFilterableSystemKeys(t *testing.T) {
 }
 
 // TestServerIdentitiesForToolCallSearch_RemoteServerWithoutToolsetSlug pins that
-// a configured remote server, which has no toolset slug, is still matched: by
+// a configured remote server, which has no toolset slug, is still matched by
 // the slug and id its matcher stamps as the target id under the hosted or
-// tunneled type, and by the names a calling app may have reported.
+// tunneled type.
 func TestServerIdentitiesForToolCallSearch_RemoteServerWithoutToolsetSlug(t *testing.T) {
 	t.Parallel()
 
@@ -498,12 +501,11 @@ func TestServerIdentitiesForToolCallSearch_RemoteServerWithoutToolsetSlug(t *tes
 		McpSlug:         "billing",
 		ToolsetSlug:     "",
 		ToolsetMcpCount: 0,
-	}, MCP{ID: serverID.String(), Slug: "billing", Name: "Billing"})
+	})
 
 	require.False(t, identities.empty())
 	require.Equal(t, []string{"billing", serverID.String()}, identities.targetIDs)
 	require.Empty(t, identities.toolsetSlugs)
-	require.Equal(t, []string{"billing", "Billing"}, identities.reportedNames)
 
 	// A server with no slug is still matched by its id.
 	unnamed := serverIdentitiesForToolCallSearch(platformrepo.GetPlatformMCPDiagnosticsTargetRow{
@@ -512,9 +514,51 @@ func TestServerIdentitiesForToolCallSearch_RemoteServerWithoutToolsetSlug(t *tes
 		McpSlug:         "",
 		ToolsetSlug:     "",
 		ToolsetMcpCount: 0,
-	}, MCP{ID: serverID.String(), Slug: "", Name: ""})
+	})
 	require.Equal(t, []string{serverID.String()}, unnamed.targetIDs)
-	require.Empty(t, unnamed.reportedNames)
+}
+
+// TestServerIdentitiesForToolCallSearch_OmitsClientReportedNames pins the rule
+// that keeps one configured server's history its own: a shadow row is named by
+// the calling app, so a personal server someone happens to call "billing" must
+// not surface in the corporate "billing" server's history. The identities
+// therefore carry no shadow selector at all, and the only spellings they do
+// carry are matched under target types a client cannot choose.
+func TestServerIdentitiesForToolCallSearch_OmitsClientReportedNames(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
+	identities := serverIdentitiesForToolCallSearch(platformrepo.GetPlatformMCPDiagnosticsTargetRow{
+		McpServerID:     serverID,
+		ProjectID:       uuid.MustParse(toolCallSearchTestProject),
+		McpSlug:         "billing",
+		ToolsetSlug:     "billing-toolset",
+		ToolsetMcpCount: 1,
+	})
+
+	// Every selector the search can build from a configured server, so a new
+	// one cannot be added without this assertion being revisited.
+	params := telemetryrepo.ListToolUsageTracesParams{
+		HostedToolsetSlugs: identities.toolsetSlugs,
+		MCPServerTargetIDs: identities.targetIDs,
+		ShadowServerNames:  nil,
+	}
+	require.Equal(t, []string{"billing-toolset"}, params.HostedToolsetSlugs)
+	require.Equal(t, []string{"billing", serverID.String()}, params.MCPServerTargetIDs)
+	require.Empty(t, params.ShadowServerNames,
+		"a configured server must never select shadow rows by a client-reported name")
+
+	// A server known only by a name a client reported has no reliable identity
+	// at all, so the search reports attribution unavailable rather than handing
+	// back whatever else answers to that name.
+	nameOnly := serverIdentitiesForToolCallSearch(platformrepo.GetPlatformMCPDiagnosticsTargetRow{
+		McpServerID:     uuid.Nil,
+		ProjectID:       uuid.MustParse(toolCallSearchTestProject),
+		McpSlug:         "",
+		ToolsetSlug:     "",
+		ToolsetMcpCount: 0,
+	})
+	require.True(t, nameOnly.empty())
 }
 
 // TestServerIdentitiesForToolCallSearch_HostedToolsetSlugIsHostedOnly pins that
@@ -531,12 +575,12 @@ func TestServerIdentitiesForToolCallSearch_HostedToolsetSlugIsHostedOnly(t *test
 		ToolsetSlug:     "payments-toolset",
 		ToolsetMcpCount: 1,
 	}
-	identities := serverIdentitiesForToolCallSearch(row, MCP{ID: serverID.String(), Slug: "payments", Name: "Payments"})
+	identities := serverIdentitiesForToolCallSearch(row)
 	require.Equal(t, []string{"payments-toolset"}, identities.toolsetSlugs)
 	require.Equal(t, []string{"payments", serverID.String()}, identities.targetIDs)
 
 	row.ToolsetMcpCount = 2
-	shared := serverIdentitiesForToolCallSearch(row, MCP{ID: serverID.String(), Slug: "payments", Name: "Payments"})
+	shared := serverIdentitiesForToolCallSearch(row)
 	require.Empty(t, shared.toolsetSlugs, "a toolset shared by several wrappers cannot be attributed to one")
 	require.False(t, shared.empty())
 }
