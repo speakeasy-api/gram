@@ -453,7 +453,7 @@ function WatchdogContent(): JSX.Element {
                 filtered={
                   severityFilter.length > 0 ||
                   categoryFilter.length > 0 ||
-                  dateRange !== "1d" ||
+                  ["15m", "1h", "4h"].includes(dateRange) ||
                   !!customRange
                 }
                 groups={groups}

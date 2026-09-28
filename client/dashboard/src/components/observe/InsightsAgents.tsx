@@ -546,7 +546,7 @@ export function InsightsAgentsContent(): JSX.Element {
                   filtered={
                     clientFilter !== "all" ||
                     !!accountType ||
-                    dateRange !== "30d" ||
+                    (dateRange !== "30d" && dateRange !== "90d") ||
                     !!customRange
                   }
                 />

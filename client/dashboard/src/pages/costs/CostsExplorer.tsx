@@ -1372,8 +1372,7 @@ export function CostsExplorer(): JSX.Element {
           <CostsSetupEmptyState
             filtered={
               path.length > 0 ||
-              groupBy === Dimension.SkillName ||
-              dateRange !== "30d" ||
+              (dateRange !== "30d" && dateRange !== "90d") ||
               !!customRange
             }
           />
