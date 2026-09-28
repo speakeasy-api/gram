@@ -1,0 +1,22 @@
+server/internal/plugins/platform_mcp_skills/add-existing-mcp-servers/SKILL.md
+  h_9630b74bdac540 95-100
+server/internal/platformmcp/tool_network_ingress.go
+  h_9630b74bdac540 9,11,17,38-42,44,55,126,136-140,179-184,188
+  h_9630b74bdac540 141-142
+server/internal/plugins/generate_test.go
+  h_9630b74bdac540 3227-3231,3251,3253
+server/internal/platformmcp/tool_network_ingress_test.go
+  h_9630b74bdac540 5,10,55-99
+  h_9630b74bdac540 100-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ff66c51100abfc6b0f961b4d17ab2c445da545f",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
