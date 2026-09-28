@@ -1,3 +1,4 @@
+//nolint:exhaustruct // Hosted policy, endpoint, and audit literals omit optional fields intentionally.
 package toolsets
 
 import (

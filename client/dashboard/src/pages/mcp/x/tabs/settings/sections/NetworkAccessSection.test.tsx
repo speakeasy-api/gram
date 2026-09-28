@@ -407,6 +407,13 @@ describe("NetworkAccessSection", () => {
   it("shows an error toast when a hosted toolset update fails", () => {
     render(<NetworkAccessSection toolset={hostedToolset} />);
 
+    fireEvent.click(
+      screen.getByRole("combobox", { name: "Network access mode" }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Public and private/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(testState.mutateToolset).toHaveBeenCalled();
+
     testState.toolsetMutationOptions?.onError?.(
       new Error("Toolset update failed"),
     );
