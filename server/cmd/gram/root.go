@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 
 	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/urfave/cli/v2"
@@ -50,6 +51,7 @@ func newApp() *cli.App {
 			newStreamsCommand(),
 			newDemoSeedCommand(),
 			newAdminSeedCommand(),
+			newAccountStateCommand(),
 			newVersionCommand(),
 		},
 		Before: func(c *cli.Context) error {
@@ -69,9 +71,12 @@ func newApp() *cli.App {
 			)
 
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
-			_, err := memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(nil))
-			if err != nil {
-				logger.ErrorContext(c.Context, "automemlimit", attr.SlogError(err))
+			// Cgroups are Linux-only. Keep all real Linux errors visible.
+			if runtime.GOOS == "linux" {
+				_, err := memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(nil))
+				if err != nil {
+					logger.ErrorContext(c.Context, "automemlimit", attr.SlogError(err))
+				}
 			}
 
 			c.Context = PushLogger(c.Context, logger)

@@ -21,7 +21,6 @@ import {
 } from "./sections/AgentSetupSection";
 import { BrandingSection } from "./sections/BrandingSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
-import { HeadersSection } from "./sections/HeadersSection";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
 import {
   MCP_PUBLIC_ACCESS_SECTION_ID,
@@ -38,6 +37,7 @@ import {
   RemoteSourceNameSection,
   TunneledSourceNameSection,
 } from "./sections/SourceNameSection";
+import { RemoteMcpSessionsSection } from "./sections/RemoteMcpSessionsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
 import {
   MCP_TUNNEL_KEY_SECTION_ID,
@@ -97,6 +97,7 @@ export function SettingsTab({
   // row feeds the danger zone alone, so a deep link never waits on it.
   const hasSourceSections =
     !!mcpServer.remoteMcpServerId || !!mcpServer.tunneledMcpServerId;
+  const remoteMcpServerId = mcpServer.remoteMcpServerId;
 
   // The source rows behind this server. Each section edits the source
   // directly, so they are fetched once here rather than per section.
@@ -138,6 +139,42 @@ export function SettingsTab({
     deleteTarget = { kind: "unproxied", source: unproxiedMcpServer };
   }
 
+  if (remoteMcpServerId) {
+    return (
+      <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
+        <BrandingSection
+          mcpServer={mcpServer}
+          title="Display"
+          description="Customize how this Remote MCP server appears in the dashboard and on its installation page."
+        />
+        {remoteMcpServer ? (
+          <Fragment key={remoteMcpServer.id}>
+            <RemoteSourceNameSection remoteMcpServer={remoteMcpServer} />
+            <UpstreamUrlSection remoteMcpServer={remoteMcpServer} />
+          </Fragment>
+        ) : null}
+        {/* Upstream headers live inside Identity's Custom Headers disclosure
+            they are governed by the identity choice, not a peer of it. */}
+        <AuthenticationSection mcpServer={mcpServer} />
+        <ServerUrlSection
+          backend={{ mcpServerId: mcpServer.id }}
+          endpoints={endpoints}
+          isLoadingEndpoints={isLoadingEndpoints}
+          mcpServer={mcpServer}
+        />
+        <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
+        <RemoteMcpSessionsSection mcpServer={mcpServer} />
+        <ToolFilteringSection mcpServer={mcpServer} />
+        <DangerZoneSection
+          mcpServer={mcpServer}
+          endpoints={endpoints}
+          deleteTarget={deleteTarget}
+          sourceUnavailable={sourceUnavailable}
+        />
+      </div>
+    );
+  }
+
   // The source-backed sections are keyed by the source row so their drafts
   // remount when the route moves to a server backed by a different source;
   // this tree stays mounted across that navigation, and a draft or late save
@@ -145,12 +182,6 @@ export function SettingsTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <BrandingSection mcpServer={mcpServer} />
-      {remoteMcpServer ? (
-        <Fragment key={remoteMcpServer.id}>
-          <RemoteSourceNameSection remoteMcpServer={remoteMcpServer} />
-          <UpstreamUrlSection remoteMcpServer={remoteMcpServer} />
-        </Fragment>
-      ) : null}
       {tunneledMcpServer ? (
         <TunneledSourceNameSection
           key={tunneledMcpServer.id}
@@ -169,13 +200,6 @@ export function SettingsTab({
         </>
       )}
       <AuthenticationSection mcpServer={mcpServer} />
-      {mcpServer.remoteMcpServerId ? (
-        <HeadersSection
-          remoteMcpServerId={mcpServer.remoteMcpServerId}
-          mcpServerId={mcpServer.id}
-          projectId={mcpServer.projectId}
-        />
-      ) : null}
       {tunneledMcpServer ? (
         <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />

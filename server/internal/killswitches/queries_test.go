@@ -1,4 +1,4 @@
-//nolint:glint,paralleltest // Integration fixtures intentionally create private rows with raw SQL in one isolated database.
+//nolint:paralleltest // Integration fixtures share one isolated database.
 package killswitches
 
 import (
@@ -11,8 +11,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 )
 
@@ -25,7 +27,7 @@ type capturingEvaluationDB struct {
 func (db *capturingEvaluationDB) QueryRow(ctx context.Context, query string, args ...any) pgx.Row {
 	db.query = query
 	db.args = args
-	return db.DBTX.QueryRow(ctx, query, args...)
+	return db.DBTX.QueryRow(ctx, query, args...) //nolint:glint // notestingrawsql: wrapper forwards the SQLc-generated evaluation query while capturing it for EXPLAIN
 }
 
 type evaluationFixture struct {
@@ -50,8 +52,9 @@ type evaluationFixture struct {
 func TestEvaluateCurrentPrescriptionsIntegration(t *testing.T) {
 	conn, organizationID := newLifecycleDatabase(t, "killswitch_evaluator")
 	queries := repo.New(conn)
-	var databaseNow time.Time
-	require.NoError(t, conn.QueryRow(t.Context(), "SELECT clock_timestamp()").Scan(&databaseNow))
+	clock, err := queries.GetKillswitchDatabaseTime(t.Context())
+	require.NoError(t, err)
+	databaseNow := clock.Time
 	past := databaseNow.Add(-time.Hour)
 	older := databaseNow.Add(-2 * time.Hour)
 	future := databaseNow.Add(time.Hour)
@@ -85,7 +88,7 @@ func TestEvaluateCurrentPrescriptionsIntegration(t *testing.T) {
 
 	insert(evaluationFixture{ID: evaluationUUID(1), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:interval", Version: 1, State: "active", Scope: "selected", StartsAt: future, ExpiresAt: nil, ActivatedAt: &activated, ExternalNote: "Scheduled.", Resources: []string{"tool:interval"}})
 	insert(evaluationFixture{ID: evaluationUUID(2), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:interval", Version: 1, State: "active", Scope: "selected", StartsAt: older, ExpiresAt: &databaseNow, ActivatedAt: &activated, ExternalNote: "Expired exactly.", Resources: []string{"tool:interval"}})
-	_, err := evaluate([]string{"user"}, []string{"user:interval"}, []string{"block-tools"}, "tool:interval")
+	_, err = evaluate([]string{"user"}, []string{"user:interval"}, []string{"block-tools"}, "tool:interval")
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
 	insert(evaluationFixture{ID: evaluationUUID(3), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:dynamic", Version: 1, State: "active", Scope: "all", StartsAt: past, ExpiresAt: &activeUntil, ActivatedAt: &activated, ExternalNote: "Dynamic all."})
@@ -194,18 +197,21 @@ func TestEvaluateCurrentPrescriptionsRepresentativePlan(t *testing.T) {
 	conn, organizationID := newLifecycleDatabase(t, "killswitch_evaluator_plan")
 	otherOrganizationID := "org_" + uuid.NewString()
 	insertOrganization(t, conn, otherOrganizationID)
+	//nolint:glint // notestingrawsql: bulk-generates plan fixtures with INSERT ... SELECT so the planner sees realistic row counts
 	_, err := conn.Exec(t.Context(), `
 		INSERT INTO killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
 		SELECT $1, 'block-tools', 'user', 'user:plan', 'tool', 1
 		FROM generate_series(1, 256)
 	`, organizationID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: bulk-generates plan fixtures with INSERT ... SELECT so the planner sees realistic row counts
 	_, err = conn.Exec(t.Context(), `
 		INSERT INTO killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
 		SELECT $1, 'block-tools', 'user', 'user:noise', 'tool', 1
 		FROM generate_series(1, 4096)
 	`, otherOrganizationID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: bulk-generates plan fixtures with INSERT ... SELECT so the planner sees realistic row counts
 	_, err = conn.Exec(t.Context(), `
 		INSERT INTO killswitch_prescription_versions (
 		  organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
@@ -217,6 +223,7 @@ func TestEvaluateCurrentPrescriptionsRepresentativePlan(t *testing.T) {
 		WHERE organization_id IN ($1, $2) AND principal_key IN ('user:plan', 'user:noise')
 	`, organizationID, otherOrganizationID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: bulk-generates plan fixtures with INSERT ... SELECT so the planner sees realistic row counts
 	_, err = conn.Exec(t.Context(), `
 		INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
 		SELECT organization_id, id, 1,
@@ -225,6 +232,7 @@ func TestEvaluateCurrentPrescriptionsRepresentativePlan(t *testing.T) {
 		WHERE organization_id IN ($1, $2) AND principal_key IN ('user:plan', 'user:noise')
 	`, organizationID, otherOrganizationID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: ANALYZE refreshes planner statistics before the plan assertion; SQLc cannot express it
 	_, err = conn.Exec(t.Context(), "ANALYZE killswitch_prescriptions, killswitch_prescription_versions, killswitch_prescription_version_resources")
 	require.NoError(t, err)
 
@@ -242,6 +250,7 @@ func TestEvaluateCurrentPrescriptionsRepresentativePlan(t *testing.T) {
 	if newline := strings.IndexByte(query, '\n'); newline >= 0 && strings.HasPrefix(query, "--") {
 		query = query[newline+1:]
 	}
+	//nolint:glint // notestingrawsql: EXPLAINs the captured SQLc-generated query
 	rows, err := conn.Query(t.Context(), "EXPLAIN (ANALYZE, BUFFERS) "+query, capture.args...)
 	require.NoError(t, err)
 	defer rows.Close()
@@ -291,6 +300,7 @@ func TestKillswitchEvaluationIntervalUsesExactDatabaseTimeBoundaries(t *testing.
 	require.Contains(t, capture.query, "version.expires_at > evaluation_clock.database_now")
 
 	var startsAtBoundaryMatches, expiresAtBoundaryMatches bool
+	//nolint:glint // notestingrawsql: compares boundary predicates against a single database clock reading
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		WITH evaluation_clock AS MATERIALIZED (
 		  SELECT clock_timestamp() AS database_now
@@ -310,6 +320,7 @@ func TestKillswitchEvaluationIntervalUsesExactDatabaseTimeBoundaries(t *testing.
 
 func insertEvaluationFixture(t *testing.T, conn repo.DBTX, fixture evaluationFixture) {
 	t.Helper()
+	//nolint:glint // notestingrawsql: inserts evaluation fixtures with explicit ids and timestamps that production lifecycle writes do not accept
 	_, err := conn.Exec(t.Context(), `
 		INSERT INTO killswitch_prescriptions (id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -320,23 +331,24 @@ func insertEvaluationFixture(t *testing.T, conn repo.DBTX, fixture evaluationFix
 
 func insertEvaluationVersion(t *testing.T, conn repo.DBTX, fixture evaluationFixture) {
 	t.Helper()
-	var startsAt any = fixture.StartsAt
+	startsAt := conv.ToPGTimestamptz(fixture.StartsAt)
 	if fixture.Immediate {
-		startsAt = nil
+		startsAt = pgtype.Timestamptz{}
 	}
-	_, err := conn.Exec(t.Context(), `
-		INSERT INTO killswitch_prescription_versions (
-		  organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'private fixture note', $9)
-	`, fixture.OrganizationID, fixture.ID, fixture.Version, fixture.State, fixture.Scope, startsAt, fixture.ExpiresAt, fixture.ActivatedAt, fixture.ExternalNote)
+	queries := repo.New(conn)
+	inserted, err := queries.CreateKillswitchPrescriptionVersion(t.Context(), repo.CreateKillswitchPrescriptionVersionParams{
+		OrganizationID: fixture.OrganizationID, PrescriptionID: fixture.ID, Version: fixture.Version,
+		State: fixture.State, ResourceScope: fixture.Scope, StartsAt: startsAt,
+		ExpiresAt: conv.PtrToPGTimestamptz(fixture.ExpiresAt), ActivatedAt: conv.PtrToPGTimestamptz(fixture.ActivatedAt),
+		InternalNote: "private fixture note", ExternalNote: fixture.ExternalNote,
+	})
 	require.NoError(t, err)
-	for _, resource := range fixture.Resources {
-		_, err = conn.Exec(t.Context(), `
-			INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
-			VALUES ($1, $2, $3, $4)
-		`, fixture.OrganizationID, fixture.ID, fixture.Version, resource)
-		require.NoError(t, err)
-	}
+	require.Equal(t, int64(1), inserted)
+	inserted, err = queries.CreateKillswitchPrescriptionVersionResources(t.Context(), repo.CreateKillswitchPrescriptionVersionResourcesParams{
+		OrganizationID: fixture.OrganizationID, PrescriptionID: fixture.ID, Version: fixture.Version, ResourceKeys: fixture.Resources,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(len(fixture.Resources)), inserted)
 }
 
 func evaluationUUID(value int) uuid.UUID {

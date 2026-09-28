@@ -72,7 +72,7 @@ func TestStaffOAuthStoreSingleUseGrantAndRefresh(t *testing.T) {
 	require.ErrorIs(t, err, errStaffGrant)
 
 	var reason string
-	require.NoError(t, db.QueryRow(ctx, `SELECT reauthorization_reason FROM admin_mcp_connections WHERE id = $1`, connection.ID).Scan(&reason)) //nolint:glint // Assert the terminal database state of this transaction directly.
+	require.NoError(t, db.QueryRow(ctx, `SELECT reauthorization_reason FROM admin_mcp_connections WHERE id = $1`, connection.ID).Scan(&reason)) //nolint:glint // notestingrawsql: Assert the terminal database state of this transaction directly.
 	require.Equal(t, "refresh_reuse", reason)
 }
 

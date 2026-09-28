@@ -4503,6 +4503,110 @@ func (q *Queries) GetRemoteSessionIssuerByID(ctx context.Context, arg GetRemoteS
 	return i, err
 }
 
+const getRemoteSessionIssuerByIDForConfigurationCommit = `-- name: GetRemoteSessionIssuerByIDForConfigurationCommit :one
+SELECT id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND (
+    project_id = $2
+    OR ($3::boolean AND project_id IS NULL AND organization_id = $4)
+    OR ($5::boolean AND project_id IS NULL AND organization_id IS NULL)
+  )
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetRemoteSessionIssuerByIDForConfigurationCommitParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.NullUUID
+	IncludeOrganizational bool
+	OrganizationID        pgtype.Text
+	IncludeGlobal         bool
+}
+
+// GetRemoteSessionIssuerByID holding a row lock until the transaction ends,
+// for the atomic dashboard commit in dashboard.go. That handler reads the
+// provider once before the transaction to learn the capabilities it registers
+// against, performs the upstream registration, then re-reads here to confirm
+// the provider still matches what it registered for.
+//
+// Only the lock makes that confirmation authoritative. UpdateRemoteSessionIssuer
+// takes no advisory lock, so without FOR UPDATE a concurrent edit can commit
+// between the re-read and the client insert, and the credentials are persisted
+// against configuration that no longer exists -- a client registered at the old
+// registration_endpoint, or a CIMD client created after CIMD support was
+// switched off. Registration has already finished by the time this is taken, so
+// no lock is held across an upstream HTTP call.
+//
+// Scoping matches GetRemoteSessionIssuerByID rather than the ProjectOwned
+// variant: the commit may select an inherited organization-level or global
+// provider, and locking only project-owned rows would leave exactly those
+// unprotected.
+func (q *Queries) GetRemoteSessionIssuerByIDForConfigurationCommit(ctx context.Context, arg GetRemoteSessionIssuerByIDForConfigurationCommitParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionIssuerByIDForConfigurationCommit,
+		arg.ID,
+		arg.ProjectID,
+		arg.IncludeOrganizational,
+		arg.OrganizationID,
+		arg.IncludeGlobal,
+	)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RevocationEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.Jwks,
+		&i.JwksFetchedAt,
+		&i.JwksLastError,
+		&i.JwksLastErrorAt,
+		&i.JwksCacheExpiresAt,
+		&i.JwksEtag,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.AuthorizationGrantProfilesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.CodeChallengeMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.UserinfoEndpoint,
+		&i.IntrospectionEndpoint,
+		&i.IntrospectionEndpointAuthMethodsSupported,
+		&i.IDTokenSigningAlgValuesSupported,
+		&i.ClaimsSupported,
+		&i.BackchannelLogoutSupported,
+		&i.AuthorizationResponseIssParameterSupported,
+		&i.ScopeOverride,
+		&i.ResourceIndicatorSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.MetadataLastErrorUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getRemoteSessionIssuerByIDForUpdate = `-- name: GetRemoteSessionIssuerByIDForUpdate :one
 SELECT id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
@@ -5426,7 +5530,7 @@ func (q *Queries) GetTunneledMcpServerBinding(ctx context.Context, arg GetTunnel
 }
 
 const getUserSessionIssuerForProject = `-- name: GetUserSessionIssuerForProject :one
-SELECT id
+SELECT id, project_id
 FROM user_session_issuers
 WHERE id = $1
   AND (project_id = $2::uuid OR (project_id IS NULL AND organization_id = $3::text))
@@ -5439,11 +5543,53 @@ type GetUserSessionIssuerForProjectParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUserSessionIssuerForProjectParams) (uuid.UUID, error) {
+type GetUserSessionIssuerForProjectRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUserSessionIssuerForProjectParams) (GetUserSessionIssuerForProjectRow, error) {
 	row := q.db.QueryRow(ctx, getUserSessionIssuerForProject, arg.ID, arg.ProjectID, arg.OrganizationID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i GetUserSessionIssuerForProjectRow
+	err := row.Scan(&i.ID, &i.ProjectID)
+	return i, err
+}
+
+const hasLivePrincipalRemoteSessionBindingsForClientBinding = `-- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
+SELECT EXISTS (
+  SELECT 1
+  FROM principal_remote_session_bindings
+  WHERE project_id = $1
+    AND organization_id = $2
+    AND remote_session_client_id = $3
+    AND user_session_issuer_id = $4
+    AND revoked_at IS NULL
+)
+`
+
+type HasLivePrincipalRemoteSessionBindingsForClientBindingParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+// Report whether any unrevoked agent attachment goes through a client's binding
+// to a user session issuer, which deleting that binding would cascade-delete.
+// Only the caller's project can hold them: the caller refuses an
+// organization-wide binding, and any other binding has a project-owned client
+// or user session issuer, which pins every attachment through it to that
+// project.
+func (q *Queries) HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx context.Context, arg HasLivePrincipalRemoteSessionBindingsForClientBindingParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasLivePrincipalRemoteSessionBindingsForClientBinding,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const insertTrustedDelegationObservationFixture = `-- name: InsertTrustedDelegationObservationFixture :exec
@@ -8543,6 +8689,28 @@ func (q *Queries) LockRemoteSessionClientForSessionWrite(ctx context.Context, id
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const lockRemoteSessionClientUserSessionIssuerLink = `-- name: LockRemoteSessionClientUserSessionIssuerLink :exec
+SELECT 1
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1
+  AND user_session_issuer_id = $2
+FOR UPDATE
+`
+
+type LockRemoteSessionClientUserSessionIssuerLinkParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+// Lock the join-table row an agent attachment's foreign key check reads, before
+// the caller checks for attachments that deleting the row would cascade to. A
+// concurrent attachment either commits first, and the check sees it, or waits
+// for this transaction to end.
+func (q *Queries) LockRemoteSessionClientUserSessionIssuerLink(ctx context.Context, arg LockRemoteSessionClientUserSessionIssuerLinkParams) error {
+	_, err := q.db.Exec(ctx, lockRemoteSessionClientUserSessionIssuerLink, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
 }
 
 const lockRemoteSessionClientsBoundToOrganizationUserSessionIssuer = `-- name: LockRemoteSessionClientsBoundToOrganizationUserSessionIssuer :many

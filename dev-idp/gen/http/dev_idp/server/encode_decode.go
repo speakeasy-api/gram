@@ -180,3 +180,19 @@ func marshalDevidpWorkosCurrentUserToWorkosCurrentUserResponseBody(v *devidp.Wor
 
 	return res
 }
+
+// marshalDevidpCurrentUserProvenanceToCurrentUserProvenanceResponseBody builds
+// a value of type *CurrentUserProvenanceResponseBody from a value of type
+// *devidp.CurrentUserProvenance.
+func marshalDevidpCurrentUserProvenanceToCurrentUserProvenanceResponseBody(v *devidp.CurrentUserProvenance) *CurrentUserProvenanceResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &CurrentUserProvenanceResponseBody{
+		Backend:      v.Backend,
+		WorktreeRoot: v.WorktreeRoot,
+		DatabasePath: v.DatabasePath,
+	}
+
+	return res
+}

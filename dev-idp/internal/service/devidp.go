@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"os"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
+	devidpworkos "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
 	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
 
@@ -33,18 +35,23 @@ func isLocalMode(mode string) bool {
 
 // DevIdpService is the dev-idp /rpc/devIdp.* implementation.
 type DevIdpService struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *sql.DB
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *sql.DB
+	backend      devidpworkos.Backend
+	worktreeRoot string
 }
 
 var _ gen.Service = (*DevIdpService)(nil)
 
-func NewDevIdpService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *DevIdpService {
+func NewDevIdpService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB, backend devidpworkos.Backend) *DevIdpService {
+	cwd, _ := os.Getwd()
 	return &DevIdpService{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/service/devidp"),
-		logger: logger.With(slog.String("component", "devidp.devIdp")),
-		db:     db,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/service/devidp"),
+		logger:       logger.With(slog.String("component", "devidp.devIdp")),
+		db:           db,
+		backend:      backend,
+		worktreeRoot: discoverWorktreeRoot(cwd),
 	}
 }
 
@@ -59,7 +66,12 @@ func AttachDevIdp(mux goahttp.Muxer, service *DevIdpService) {
 }
 
 func (s *DevIdpService) GetCurrentUser(ctx context.Context, p *gen.GetCurrentUserPayload) (*gen.CurrentUser, error) {
-	queries := repo.New(s.db)
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "acquire currentUser connection").Log(ctx, s.logger)
+	}
+	defer func() { _ = conn.Close() }()
+	queries := repo.New(conn)
 
 	row, err := queries.GetCurrentUser(ctx, p.Mode)
 	switch {
@@ -69,7 +81,14 @@ func (s *DevIdpService) GetCurrentUser(ctx context.Context, p *gen.GetCurrentUse
 		return nil, oops.E(oops.CodeUnexpected, err, "read currentUser").Log(ctx, s.logger)
 	}
 
-	return s.buildCurrentUserView(ctx, queries, row.Mode, row.SubjectRef)
+	view, err := s.buildCurrentUserView(ctx, queries, row.Mode, row.SubjectRef)
+	if err != nil {
+		return nil, err
+	}
+	if s.backend == devidpworkos.BackendLocal && p.Mode == modeOAuth21 {
+		view.Provenance = s.currentUserProvenance(ctx, conn)
+	}
+	return view, nil
 }
 
 func (s *DevIdpService) SetCurrentUser(ctx context.Context, p *gen.SetCurrentUserPayload) (*gen.CurrentUser, error) {
@@ -142,8 +161,9 @@ func (s *DevIdpService) subjectRefForSet(ctx context.Context, p *gen.SetCurrentU
 func (s *DevIdpService) buildCurrentUserView(ctx context.Context, queries *repo.Queries, mode, subjectRef string) (*gen.CurrentUser, error) {
 	if mode == modeWorkos {
 		return &gen.CurrentUser{
-			Mode: mode,
-			User: nil,
+			Mode:       mode,
+			Provenance: nil,
+			User:       nil,
 			Workos: &gen.WorkosCurrentUser{
 				WorkosSub:         subjectRef,
 				Email:             nil,
@@ -169,7 +189,8 @@ func (s *DevIdpService) buildCurrentUserView(ctx context.Context, queries *repo.
 	}
 
 	return &gen.CurrentUser{
-		Mode: mode,
+		Mode:       mode,
+		Provenance: nil,
 		User: &gen.User{
 			ID:           user.ID.String(),
 			Email:        user.Email,

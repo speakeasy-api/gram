@@ -78,6 +78,7 @@ type Service struct {
 	revoker                  *remotesessions.UpstreamRevoker
 	networkAccessEligibility networkaccess.EligibilityChecker
 	distributionAdmission    *admission.Guard
+	publicationRequests      plugins.PublicationRequests
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -113,7 +114,13 @@ func NewService(
 		revoker:                  revoker,
 		networkAccessEligibility: networkAccessEligibility,
 		distributionAdmission:    admission.NewGuard(nil, nil),
+		publicationRequests:      plugins.PublicationRequests{Enabled: false},
 	}
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -360,6 +367,10 @@ func vendorFaviconURL(scheme, host string) string {
 		"https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=%s&size=128",
 		url.QueryEscape(scheme+"://"+host),
 	)
+}
+
+func isCanonicalHostedWrapper(server repo.McpServer) bool {
+	return server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID
 }
 
 // grantResourceID is the RBAC resource id for an mcp_servers row: the backing
@@ -651,6 +662,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err != nil {
 		return nil, err
 	}
+	if isCanonicalHostedWrapper(unlocked) || (ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID) {
+		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
+	}
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
 	if err != nil {
 		if payload.NetworkAccessMode == nil {
@@ -696,6 +710,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
+	if isCanonicalHostedWrapper(existing) {
+		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
+	}
 	// Authorization keys on the row as it exists, not the backing the payload
 	// may switch it to.
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(existing.ID, existing.ToolsetID), authCtx.ProjectID.String())); err != nil {
@@ -850,6 +867,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue MCP server publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -998,8 +1018,12 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if _, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+	preexisting, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger)
+	if err != nil {
 		return err
+	}
+	if isCanonicalHostedWrapper(preexisting) {
+		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1038,6 +1062,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
 
+	if isCanonicalHostedWrapper(locked) {
+		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
+	}
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(locked.ID, locked.ToolsetID), authCtx.ProjectID.String())); err != nil {
 		return err
 	}
@@ -1153,6 +1180,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			ServerID:         pluginServer.ID,
 			ToolsetURN:       nil,
 			McpServerURN:     &deletedServerURN,
+			MetaMcpServerURN: nil,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "log mcp server plugin detachment").LogError(ctx, logger)
 		}
@@ -1243,6 +1271,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "log mcp server deletion").LogError(ctx, logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue MCP server publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}

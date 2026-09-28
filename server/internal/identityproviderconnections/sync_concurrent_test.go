@@ -2,7 +2,6 @@ package identityproviderconnections_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	apprepo "github.com/speakeasy-api/gram/server/internal/oktaapplications/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
 
@@ -93,15 +93,7 @@ func TestApplicationsSync_WaitingApplyReadsCommittedWatermark(t *testing.T) {
 func waitForLockWait(t *testing.T, ctx context.Context, si *serviceInstance, queryName string) {
 	t.Helper()
 	require.Eventually(t, func() bool {
-		var waiting bool
-		err := si.conn.conn.QueryRow( //nolint:glint // notestingrawsql: pg_stat_activity is a PostgreSQL test synchronization primitive unavailable to SQLc generation
-			ctx, fmt.Sprintf(`
-			SELECT EXISTS (
-				SELECT 1 FROM pg_stat_activity
-				WHERE datname = current_database()
-				  AND query LIKE '-- name: %s %%'
-				  AND wait_event_type = 'Lock'
-			)`, queryName)).Scan(&waiting)
+		waiting, err := testrepo.New(si.conn.conn).IsQueryBlockedOnLockFixture(ctx, "-- name: "+queryName+" %")
 		require.NoError(t, err)
 		return waiting
 	}, 5*time.Second, 10*time.Millisecond)

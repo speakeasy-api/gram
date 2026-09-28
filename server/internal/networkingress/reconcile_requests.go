@@ -15,6 +15,12 @@ type ReconcileRequester interface {
 	Enqueue(context.Context, pgx.Tx, string, uuid.UUID) error
 }
 
+// PublicationRequester atomically records an organization publication hint.
+// Implementations must not commit the transaction or perform external work.
+type PublicationRequester interface {
+	Organization(context.Context, pgx.Tx, string, string) error
+}
+
 // OutboxRequester routes lifecycle wakes to the environment's authoritative queue.
 type OutboxRequester struct {
 	queue string

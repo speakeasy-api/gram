@@ -447,7 +447,7 @@ func handleToolsCall(
 	if plan.Kind == gateway.ToolKindExternalMCP {
 		toolName = descriptor.URN.Name
 	}
-	scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+	decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfaceHostedMCP,
 		Method:         mcpriskscan.MethodToolsCall,
 		OrganizationID: descriptor.OrganizationID,
@@ -460,6 +460,11 @@ func handleToolsCall(
 		PromptName:     "",
 		ChatID:         payload.chatID,
 	}, mcpriskscan.BorrowPayload(params.Arguments)))
+	if decision.Denied() {
+		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
+	}
 	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {

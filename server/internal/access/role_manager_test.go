@@ -309,7 +309,7 @@ type memberAssignmentRaceTx struct {
 
 func (tx *memberAssignmentRaceTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	tx.once.Do(tx.beforeLock)
-	return tx.Tx.QueryRow(ctx, sql, args...) //nolint:glint // forwards SQLc SQL while synchronizing a membership-change regression
+	return tx.Tx.QueryRow(ctx, sql, args...) //nolint:glint // notestingrawsql: forwards SQLc SQL while synchronizing a membership-change regression
 }
 
 func TestRoleManager_BulkAssignmentRevalidatesLockedMembership(t *testing.T) {

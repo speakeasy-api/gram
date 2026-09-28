@@ -3,11 +3,11 @@ package access
 import (
 	"context"
 	"testing"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -16,9 +16,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // The version a save must carry: the fingerprint of the rules as they stand.
@@ -940,22 +945,55 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	// The two servers share one upstream session. A policy-only removal must
 	// not invoke credential revocation or erase the other server's connection.
 	otherServerID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
-	issuerID, remoteIssuerID, clientID, sessionID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	//nolint:glint // notestingrawsql: shared upstream session fixture
-	_, err = ti.conn.Exec(ctx, `INSERT INTO user_session_issuers (id, organization_id, slug, authn_challenge_mode, session_duration) VALUES ($1,$2,$3,'interactive','1 hour')`, issuerID, authCtx.ActiveOrganizationID, issuerID.String())
+	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                         "shared-" + uuid.NewString(),
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TrustedRemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: shared upstream session fixture
-	_, err = ti.conn.Exec(ctx, `INSERT INTO remote_session_issuers (id, organization_id, slug, issuer) VALUES ($1,$2,$3,'https://idp.example.test')`, remoteIssuerID, authCtx.ActiveOrganizationID, remoteIssuerID.String())
+	remoteIssuer, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "remote-" + uuid.NewString(),
+		Issuer:                            "https://idp.example.test",
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{},
+		ResponseTypesSupported:            []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+	})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: shared upstream session fixture
-	_, err = ti.conn.Exec(ctx, `INSERT INTO remote_session_clients (id, organization_id, remote_session_issuer_id, client_id) VALUES ($1,$2,$3,'fixture')`, clientID, authCtx.ActiveOrganizationID, remoteIssuerID)
+	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID:              "fixture",
+	})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: shared upstream session fixture; ciphertext is never decrypted
-	_, err = ti.conn.Exec(ctx, `INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, refresh_token_encrypted) VALUES ($1,$2,$3,$4,'fixture-not-a-token','fixture-refresh')`, sessionID, principal.String(), issuerID, clientID)
+	// The ciphertext is never decrypted.
+	session, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn:            urn.NewAgentSubject(agent.ID),
+		UserSessionIssuerID:   issuer.ID,
+		RemoteSessionClientID: client.ID,
+		AccessTokenEncrypted:  "fixture-not-a-token",
+		RefreshTokenEncrypted: conv.ToPGText("fixture-refresh"),
+		Scopes:                []string{},
+	})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: two servers deliberately share one issuer
-	_, err = ti.conn.Exec(ctx, `UPDATE toolsets SET user_session_issuer_id = $1 WHERE organization_id = $2 AND id IN ($3,$4)`, issuerID, authCtx.ActiveOrganizationID, serverID, otherServerID)
-	require.NoError(t, err)
+	sessionID := session.ID
+	// The two servers deliberately share one issuer.
+	for _, toolsetID := range []string{serverID, otherServerID} {
+		toolset, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndOrganization(ctx, toolsetsrepo.GetToolsetByIDAndOrganizationParams{
+			ID: uuid.MustParse(toolsetID), OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		require.NoError(t, err)
+		_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+			UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, Slug: toolset.Slug, ProjectID: toolset.ProjectID,
+		})
+		require.NoError(t, err)
+	}
 	var beforeSession, afterSession string
 	//nolint:glint // notestingrawsql: capture the shared credential without logging it
 	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&beforeSession)

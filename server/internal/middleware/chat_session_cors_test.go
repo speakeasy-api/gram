@@ -254,7 +254,7 @@ func TestChatSessionsCORS_ElementsSurvivesMCPSecurity(t *testing.T) {
 	})
 
 	validator := stubChatSessionValidator{audience: []string{elementsOrigin}, invalidToken: false, err: nil}
-	handler := CORSMiddleware("prod", gramOrigin, validator)(newMCPSecurity(t)(inner))
+	handler := CORSMiddleware("prod", gramOrigin, nil, validator)(newMCPSecurity(t)(inner))
 
 	req := elementsMCPRequest()
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
@@ -278,7 +278,7 @@ func TestChatSessionsCORS_HostileOriginBlockedThroughFullChain(t *testing.T) {
 	})
 
 	validator := stubChatSessionValidator{audience: nil, invalidToken: false, err: nil}
-	handler := CORSMiddleware("prod", gramOrigin, validator)(newMCPSecurity(t)(inner))
+	handler := CORSMiddleware("prod", gramOrigin, nil, validator)(newMCPSecurity(t)(inner))
 
 	req := httptest.NewRequest(http.MethodPost, "https://app.getgram.ai/mcp/petstore", strings.NewReader("{}"))
 	req.Header.Set("Content-Type", "application/json")

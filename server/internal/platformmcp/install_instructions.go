@@ -47,7 +47,7 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 		return GetMyInstallInstructionsOutput{}, ErrPluginProjectNotFound
 	}
 	if strings.TrimSpace(input.Plugin) != "" {
-		plugin, err := s.GetAssignedPlugin(ctx, principal, GetPluginInput{ProjectID: projectID.String(), Plugin: input.Plugin})
+		plugin, err := s.GetAssignedPlugin(ctx, principal, GetPluginInput{ProjectID: projectID.String(), Plugin: input.Plugin, MembershipLimit: 0, MembershipCursor: ""})
 		if err != nil {
 			return GetMyInstallInstructionsOutput{}, err
 		}

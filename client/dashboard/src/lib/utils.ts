@@ -96,14 +96,33 @@ export function mcpConnectionUrl(
   }
 }
 
+// Whether GET /<runtimePath>/<slug>/connect/first-party would resolve.
+// The handler 404s unless the server is issuer-gated, is not a public tunnel
+// (those serve anonymously and expose no OAuth surface), and the slug is a
+// platform-namespace endpoint. A custom-domain slug is a different address
+// and must not be passed as platformSlug.
+export function supportsFirstPartyConnect(server: {
+  userSessionIssuerId?: string;
+  tunneledMcpServerId?: string;
+  visibility?: string;
+  platformSlug?: string;
+}): boolean {
+  if (!server.userSessionIssuerId) return false;
+  if (server.tunneledMcpServerId && server.visibility === "public")
+    return false;
+  return !!server.platformSlug;
+}
+
 // firstPartyConnectUrl derives the runtime first-party connect entry point
 // (`/<runtimePath>/<slug>/connect/first-party`) for a display MCP URL. It's
 // always built on the Gram server origin (getServerURL), never the display
 // URL's origin: a custom-domain endpoint's display URL is
 // `https://<customer-domain>/mcp/<slug>`, but the connect page is a Gram auth
 // surface — the IDP callback, routes, and any session live on the Gram origin,
-// not the customer's MCP domain. Opened as a top-level new tab; the IDP flow is
-// state-based so no dev proxy is needed.
+// not the customer's MCP domain. Pass a platform-namespace URL
+// (`${getServerURL()}/mcp/<platform slug>`); a custom-domain display URL's
+// slug is not looked up on that host. Opened as a top-level new tab; the IDP
+// flow is state-based so no dev proxy is needed.
 //
 // `runtimePath` selects the surface the connect route is mounted on: the
 // experimental remote-MCP surface (`x/mcp`, the default) or the toolset surface

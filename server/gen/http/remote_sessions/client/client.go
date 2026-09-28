@@ -29,6 +29,10 @@ type Client struct {
 	// detachBinding endpoint.
 	DetachBindingDoer goahttp.Doer
 
+	// CommitServerIdentityConfiguration Doer is the HTTP client used to make
+	// requests to the commitServerIdentityConfiguration endpoint.
+	CommitServerIdentityConfigurationDoer goahttp.Doer
+
 	// ListRemoteSessions Doer is the HTTP client used to make requests to the
 	// listRemoteSessions endpoint.
 	ListRemoteSessionsDoer goahttp.Doer
@@ -58,16 +62,17 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListBindingsDoer:        doer,
-		AttachBindingDoer:       doer,
-		DetachBindingDoer:       doer,
-		ListRemoteSessionsDoer:  doer,
-		RevokeRemoteSessionDoer: doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		ListBindingsDoer:                      doer,
+		AttachBindingDoer:                     doer,
+		DetachBindingDoer:                     doer,
+		CommitServerIdentityConfigurationDoer: doer,
+		ListRemoteSessionsDoer:                doer,
+		RevokeRemoteSessionDoer:               doer,
+		RestoreResponseBody:                   restoreBody,
+		scheme:                                scheme,
+		host:                                  host,
+		decoder:                               dec,
+		encoder:                               enc,
 	}
 }
 
@@ -138,6 +143,31 @@ func (c *Client) DetachBinding() goa.Endpoint {
 		resp, err := c.DetachBindingDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteSessions", "detachBinding", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CommitServerIdentityConfiguration returns an endpoint that makes HTTP
+// requests to the remoteSessions service commitServerIdentityConfiguration
+// server.
+func (c *Client) CommitServerIdentityConfiguration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCommitServerIdentityConfigurationRequest(c.encoder)
+		decodeResponse = DecodeCommitServerIdentityConfigurationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCommitServerIdentityConfigurationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CommitServerIdentityConfigurationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "commitServerIdentityConfiguration", err)
 		}
 		return decodeResponse(resp)
 	}

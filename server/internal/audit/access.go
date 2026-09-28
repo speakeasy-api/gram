@@ -28,7 +28,7 @@ type LogAccessRoleCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RoleID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
+	RoleID   string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
 	RoleName string
 	RoleSlug string
 }
@@ -67,7 +67,7 @@ type LogAccessRoleUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RoleID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
+	RoleID   string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
 	RoleName string
 	RoleSlug string
 
@@ -119,7 +119,7 @@ type LogAccessRoleDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RoleID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
+	RoleID   string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
 	RoleName string
 	RoleSlug string
 }
@@ -157,7 +157,7 @@ type LogAccessMemberRoleUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	MemberID    string //nolint:glint // TODO(AGE-1954): discuss URN treatment for RBAC member identifiers; pending team discussion
+	MemberID    string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC member identifiers; pending team discussion
 	MemberName  string
 	MemberEmail string
 
@@ -208,8 +208,8 @@ type LogAccessChallengeResolveEvent struct {
 	Actor            urn.Principal
 	ActorDisplayName *string
 
-	ChallengeID    string //nolint:glint // TODO(AGE-1954): discuss URN treatment for challenge identifiers; pending team discussion
-	PrincipalURN   string //nolint:glint // TODO(AGE-1954): principal URN comes as pre-formatted string from challenge payload
+	ChallengeID    string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for challenge identifiers; pending team discussion
+	PrincipalURN   string //nolint:glint // auditeventurntyping: TODO(AGE-1954): principal URN comes as pre-formatted string from challenge payload
 	Scope          string
 	ResolutionType string
 	RoleSlug       *string

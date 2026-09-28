@@ -47,6 +47,10 @@ export const ListRoleGrantScope = {
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadBlockedRead: "workload:blocked_read",
+  WorkloadWrite: "workload:write",
+  WorkloadBlockedWrite: "workload:blocked_write",
   OrgDeviceAgentSync: "org:device_agent_sync",
   OrgHooksIngest: "org:hooks_ingest",
 } as const;
@@ -89,6 +93,10 @@ export const SubScopes = {
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadBlockedRead: "workload:blocked_read",
+  WorkloadWrite: "workload:write",
+  WorkloadBlockedWrite: "workload:blocked_write",
   OrgDeviceAgentSync: "org:device_agent_sync",
   OrgHooksIngest: "org:hooks_ingest",
 } as const;

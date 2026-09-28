@@ -20,7 +20,11 @@ import (
 )
 
 var staffGrantTypes = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
-var staffAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic}
+
+// staffAuthMethods covers confidential clients (HTTP Basic) and public PKCE
+// clients such as desktop MCP apps. A client's stored secret decides which
+// one the token endpoint enforces, so a confidential client cannot downgrade.
+var staffAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodNone}
 
 type staffOAuthClient struct {
 	ID              string
@@ -124,17 +128,21 @@ func (s *StaffOAuthClients) RegisterHandler() http.Handler {
 			return
 		}
 		client := staffOAuthClient{ID: "client_" + uuid.NewString(), Name: request.ClientName, RedirectURIs: request.RedirectURIs, SecretHash: "", SecretExpiresAt: nil}
-		secret, err := staffOpaqueToken()
-		if err != nil {
-			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
-			return
+		var secret string
+		if request.TokenEndpointAuthMethod != oauthwire.AuthMethodNone {
+			secret, err = staffOpaqueToken()
+			if err != nil {
+				staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
+				return
+			}
+			var hash []byte
+			hash, err = bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+			if err != nil {
+				staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
+				return
+			}
+			client.SecretHash = string(hash)
 		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
-		if err != nil {
-			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
-			return
-		}
-		client.SecretHash = string(hash)
 		if err := s.store.RegisterClient(r.Context(), client); err != nil {
 			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not register client")
 			return

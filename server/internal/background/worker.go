@@ -31,7 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	activitiespkg "github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -76,18 +77,20 @@ type WorkerOptions struct {
 	// TunnelHTTPClient carries back-channel OAuth calls for remote session
 	// clients bound to an MCP tunnel. Nil means tunnel-bound refreshes fail
 	// closed with a configuration error.
-	TunnelHTTPClient    *tunnelrouting.HTTPClient
-	DB                  *pgxpool.Pool
-	EncryptionClient    *encryption.Client
-	FeatureProvider     feature.Provider
-	AssetStorage        assets.BlobStore
-	SlackClient         *slack_client.SlackClient
-	ChatMessageWriter   *chat.ChatMessageWriter
-	ChatClient          *chat.Client
-	OpenRouter          openrouter.Provisioner
-	OpenRouterSpend     openrouter.SpendClient
-	K8sClient           *k8s.KubernetesClients
-	ExpectedTargetCNAME string
+	TunnelHTTPClient *tunnelrouting.HTTPClient
+	DB               *pgxpool.Pool
+	EncryptionClient *encryption.Client
+	FeatureProvider  feature.Provider
+	AssetStorage     assets.BlobStore
+	SlackClient      *slack_client.SlackClient
+	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
+	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
+	ChatMessageWriter            *chat.ChatMessageWriter
+	ChatClient                   *chat.Client
+	OpenRouter                   openrouter.Provisioner
+	OpenRouterSpend              openrouter.SpendClient
+	K8sClient                    *k8s.KubernetesClients
+	ExpectedTargetCNAME          string
 	// ExpectedARecords are the static ingress IPs apex custom domains point A
 	// records at; used alongside ExpectedTargetCNAME for verification/health.
 	ExpectedARecords []netip.Addr
@@ -121,7 +124,7 @@ type WorkerOptions struct {
 	BuiltinPresets    *presetlib.Library
 	ShadowMCPClient   *shadowmcp.Client
 	AuditLogger       *audit.Logger
-	WorkOSClient      activities.WorkOSClient
+	WorkOSClient      activitiespkg.WorkOSClient
 	ProductFeatures   *productfeatures.Client
 	PluginPublisher   *plugins.Service
 	Publishers        *Publishers
@@ -135,6 +138,9 @@ type WorkerOptions struct {
 
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
+
+	// TrialFixtureHandler is installed exclusively by local worker wiring.
+	TrialFixtureHandler func(context.Context, string) (bool, error)
 
 	// RiskFingerprinter matches exact-value exclusions against the tenant
 	// fingerprints stored on ClickHouse findings during the retroactive
@@ -187,6 +193,7 @@ func ForDeploymentProcessing(
 		AuditLogger:                  auditLogger,
 		RemoteSessionAssertionSigner: nil,
 		SlackClient:                  nil,
+		SlackDirectoryTokenRefresher: nil,
 		ChatMessageWriter:            nil,
 		ChatClient:                   nil,
 		OpenRouter:                   nil,
@@ -236,6 +243,7 @@ func ForDeploymentProcessing(
 			Outbox:                  topics.NewNoopPublisher(),
 		},
 		TrialEmailsService:        nil,
+		TrialFixtureHandler:       nil,
 		RiskFingerprinter:         risk.Fingerprinter{},
 		DisableRiskRetroReconcile: false,
 		LLMAnalyzerEnabled:        false,
@@ -274,6 +282,7 @@ func NewTemporalWorker(
 		FeatureProvider:              nil,
 		AssetStorage:                 nil,
 		SlackClient:                  nil,
+		SlackDirectoryTokenRefresher: nil,
 		ChatMessageWriter:            nil,
 		ChatClient:                   nil,
 		OpenRouter:                   nil,
@@ -314,6 +323,7 @@ func NewTemporalWorker(
 		PluginPublisher:              nil,
 		Publishers:                   nil,
 		TrialEmailsService:           nil,
+		TrialFixtureHandler:          nil,
 		RiskFingerprinter:            risk.Fingerprinter{},
 		DisableRiskRetroReconcile:    false,
 		LLMAnalyzerEnabled:           false,
@@ -328,6 +338,7 @@ func NewTemporalWorker(
 			FeatureProvider:              conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                 conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                  conv.Default(o.SlackClient, opts.SlackClient),
+			SlackDirectoryTokenRefresher: conv.Default(o.SlackDirectoryTokenRefresher, opts.SlackDirectoryTokenRefresher),
 			ChatMessageWriter:            conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
 			OpenRouter:                   conv.Default(o.OpenRouter, opts.OpenRouter),
 			OpenRouterSpend:              conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
@@ -368,9 +379,15 @@ func NewTemporalWorker(
 			PluginPublisher:              conv.Default(o.PluginPublisher, opts.PluginPublisher),
 			Publishers:                   conv.Default(o.Publishers, opts.Publishers),
 			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
-			RiskFingerprinter:            defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
-			DisableRiskRetroReconcile:    conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
-			LLMAnalyzerEnabled:           conv.Default(o.LLMAnalyzerEnabled, opts.LLMAnalyzerEnabled),
+			TrialFixtureHandler: func() func(context.Context, string) (bool, error) {
+				if o.TrialFixtureHandler != nil {
+					return o.TrialFixtureHandler
+				}
+				return opts.TrialFixtureHandler
+			}(),
+			RiskFingerprinter:         defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
+			DisableRiskRetroReconcile: conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
+			LLMAnalyzerEnabled:        conv.Default(o.LLMAnalyzerEnabled, opts.LLMAnalyzerEnabled),
 		}
 	}
 
@@ -472,6 +489,7 @@ func NewTemporalWorker(
 		judgeRateLimiter,
 		opts.BuiltinPresets,
 		opts.TrialEmailsService,
+		opts.TrialFixtureHandler,
 		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
@@ -647,6 +665,13 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
+	temporalWorker.RegisterWorkflow(SlackDirectorySyncWorkflow)
+	temporalWorker.RegisterWorkflow(SlackDirectorySweepWorkflow)
+	if opts.DB != nil && opts.EncryptionClient != nil && opts.GuardianPolicy != nil {
+		slackDirectory := newSlackDirectoryActivities(opts.DB, opts.EncryptionClient, opts.GuardianPolicy.PooledClient(), opts.SlackDirectoryTokenRefresher)
+		temporalWorker.RegisterActivity(slackDirectory.SyncSlackDirectory)
+		temporalWorker.RegisterActivity(slackDirectory.ListDueSlackDirectories)
+	}
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
@@ -765,6 +790,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddOpenRouterDailySpendSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add openrouter daily spend schedule", attr.SlogError(err))
+	}
+
+	if err := AddSlackDirectorySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add Slack directory sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddDeviceIntegrationSyncCoordinatorSchedule(ctx, env); err != nil {

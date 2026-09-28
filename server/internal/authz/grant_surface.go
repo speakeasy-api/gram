@@ -48,6 +48,10 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeAgentWrite:              GrantSurfaceAccess,
 	ScopeAgentAuthorize:          GrantSurfaceAccess,
 	ScopeAgentTransfer:           GrantSurfaceAccess,
+	ScopeWorkloadRead:            GrantSurfaceAccess,
+	ScopeWorkloadBlockedRead:     GrantSurfaceAccess,
+	ScopeWorkloadWrite:           GrantSurfaceAccess,
+	ScopeWorkloadBlockedWrite:    GrantSurfaceAccess,
 	ScopeOrgDeviceAgentSync:      GrantSurfaceAccess,
 	ScopeOrgHooksIngest:          GrantSurfaceAccess,
 }

@@ -37,6 +37,22 @@ type Client struct {
 	// endpoint.
 	DeleteRoleDoer goahttp.Doer
 
+	// ListDirectoryRoleMappings Doer is the HTTP client used to make requests to
+	// the listDirectoryRoleMappings endpoint.
+	ListDirectoryRoleMappingsDoer goahttp.Doer
+
+	// SyncDirectoryGroups Doer is the HTTP client used to make requests to the
+	// syncDirectoryGroups endpoint.
+	SyncDirectoryGroupsDoer goahttp.Doer
+
+	// SetDirectoryRoleMapping Doer is the HTTP client used to make requests to the
+	// setDirectoryRoleMapping endpoint.
+	SetDirectoryRoleMappingDoer goahttp.Doer
+
+	// DeleteDirectoryRoleMapping Doer is the HTTP client used to make requests to
+	// the deleteDirectoryRoleMapping endpoint.
+	DeleteDirectoryRoleMappingDoer goahttp.Doer
+
 	// ListScopes Doer is the HTTP client used to make requests to the listScopes
 	// endpoint.
 	ListScopesDoer goahttp.Doer
@@ -150,6 +166,10 @@ func NewClient(
 		CreateRoleDoer:                           doer,
 		UpdateRoleDoer:                           doer,
 		DeleteRoleDoer:                           doer,
+		ListDirectoryRoleMappingsDoer:            doer,
+		SyncDirectoryGroupsDoer:                  doer,
+		SetDirectoryRoleMappingDoer:              doer,
+		DeleteDirectoryRoleMappingDoer:           doer,
 		ListScopesDoer:                           doer,
 		ListMembersDoer:                          doer,
 		ListGrantsDoer:                           doer,
@@ -295,6 +315,102 @@ func (c *Client) DeleteRole() goa.Endpoint {
 		resp, err := c.DeleteRoleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "deleteRole", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDirectoryRoleMappings returns an endpoint that makes HTTP requests to
+// the access service listDirectoryRoleMappings server.
+func (c *Client) ListDirectoryRoleMappings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDirectoryRoleMappingsRequest(c.encoder)
+		decodeResponse = DecodeListDirectoryRoleMappingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDirectoryRoleMappingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDirectoryRoleMappingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listDirectoryRoleMappings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SyncDirectoryGroups returns an endpoint that makes HTTP requests to the
+// access service syncDirectoryGroups server.
+func (c *Client) SyncDirectoryGroups() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSyncDirectoryGroupsRequest(c.encoder)
+		decodeResponse = DecodeSyncDirectoryGroupsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSyncDirectoryGroupsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SyncDirectoryGroupsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "syncDirectoryGroups", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetDirectoryRoleMapping returns an endpoint that makes HTTP requests to the
+// access service setDirectoryRoleMapping server.
+func (c *Client) SetDirectoryRoleMapping() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetDirectoryRoleMappingRequest(c.encoder)
+		decodeResponse = DecodeSetDirectoryRoleMappingResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetDirectoryRoleMappingRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetDirectoryRoleMappingDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "setDirectoryRoleMapping", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteDirectoryRoleMapping returns an endpoint that makes HTTP requests to
+// the access service deleteDirectoryRoleMapping server.
+func (c *Client) DeleteDirectoryRoleMapping() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteDirectoryRoleMappingRequest(c.encoder)
+		decodeResponse = DecodeDeleteDirectoryRoleMappingResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteDirectoryRoleMappingRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteDirectoryRoleMappingDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "deleteDirectoryRoleMapping", err)
 		}
 		return decodeResponse(resp)
 	}

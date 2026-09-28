@@ -1,4 +1,4 @@
-// Package mcpriskscan observes mediated MCP operations without changing their outcomes.
+// Package mcpriskscan evaluates mediated MCP operations before execution.
 package mcpriskscan
 
 import (
@@ -27,14 +27,25 @@ func (f ObserverFunc) Observe(ctx context.Context, subject Subject) {
 }
 
 // Evaluator is the final scan boundary held by mediation seams. It enforces the
-// Subject's single-owner, once-per-phase claim before invoking an Observer.
+// Subject's single-owner, once-per-phase claim, owns the policy decision, and
+// fans the claimed subject out to observation-only consumers.
 type Evaluator struct {
+	policy    *policyEvaluator
 	observers []Observer
+	metrics   scanMetrics
 }
 
 // NewEvaluator wraps observers with ownership and duplicate protection.
 func NewEvaluator(observers ...Observer) *Evaluator {
-	return &Evaluator{observers: observers}
+	return &Evaluator{
+		policy:    nil,
+		observers: observers,
+		metrics: scanMetrics{
+			scans:       nil,
+			duration:    nil,
+			flagDropped: nil,
+		},
+	}
 }
 
 // PrependObserver composes test or instrumentation observation without
@@ -43,38 +54,63 @@ func PrependObserver(observer Observer, next *Evaluator) *Evaluator {
 	if next == nil {
 		return NewEvaluator(observer)
 	}
-	observers := make([]Observer, 0, len(next.observers)+1)
-	observers = append(observers, observer)
-	observers = append(observers, next.observers...)
-	return NewEvaluator(observers...)
+	clone := *next
+	clone.observers = make([]Observer, 0, len(next.observers)+1)
+	clone.observers = append(clone.observers, observer)
+	clone.observers = append(clone.observers, next.observers...)
+	return &clone
+}
+
+// Drain waits for detached flag evaluations after request admission has stopped.
+func (e *Evaluator) Drain(ctx context.Context) error {
+	if e == nil || e.policy == nil {
+		return nil
+	}
+	return e.policy.drain(ctx)
 }
 
 // Scan synchronously evaluates an authoritative subject at most once.
-func (e *Evaluator) Scan(ctx context.Context, subject Subject) {
+func (e *Evaluator) Scan(ctx context.Context, subject Subject) Decision {
 	if e == nil || !subject.claimEvaluation() {
-		return
+		return Allow()
+	}
+
+	start := time.Now()
+	decision := Allow()
+	if e.policy != nil {
+		decision = e.policy.evaluate(ctx, subject)
 	}
 	for _, observer := range e.observers {
 		if observer != nil {
 			observer.Observe(ctx, subject)
 		}
 	}
+	e.metrics.record(ctx, subject.Event, decision.metricDecision(), time.Since(start))
+	return decision
+}
+
+type scanMetrics struct {
+	scans       metric.Int64Counter
+	duration    metric.Float64Histogram
+	flagDropped metric.Int64Counter
 }
 
 type noop struct {
-	tracer   trace.Tracer
-	scans    metric.Int64Counter
-	duration metric.Float64Histogram
+	tracer trace.Tracer
 }
 
 // NewNoop returns an Evaluator that records reachability and the scan cost baseline,
 // without evaluating policies, recording findings, or gating calls.
 func NewNoop(tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *Evaluator {
+	return newInstrumentedEvaluator(nil, tracerProvider, meterProvider, logger)
+}
+
+func newInstrumentedEvaluator(policy *policyEvaluator, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *Evaluator {
 	const scope = "github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	meter := meterProvider.Meter(scope)
 	scans, err := meter.Int64Counter(
 		"mcp.risk.scan",
-		metric.WithDescription("MCP risk scans by endpoint surface and MCP method"),
+		metric.WithDescription("MCP risk scans by endpoint surface, MCP method, and decision"),
 		metric.WithUnit("{scan}"),
 	)
 	if err != nil {
@@ -89,16 +125,27 @@ func NewNoop(tracerProvider trace.TracerProvider, meterProvider metric.MeterProv
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName("mcp.risk.scan.duration"), attr.SlogError(err))
 	}
-	return NewEvaluator(&noop{
-		tracer:   tracerProvider.Tracer(scope),
-		scans:    scans,
-		duration: duration,
-	})
+	flagDropped, err := meter.Int64Counter(
+		"mcp.risk.scan.flag_dropped",
+		metric.WithDescription("MCP flag-policy evaluations dropped before execution"),
+		metric.WithUnit("{evaluation}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName("mcp.risk.scan.flag_dropped"), attr.SlogError(err))
+	}
+	return &Evaluator{
+		policy:    policy,
+		observers: []Observer{&noop{tracer: tracerProvider.Tracer(scope)}},
+		metrics: scanMetrics{
+			scans:       scans,
+			duration:    duration,
+			flagDropped: flagDropped,
+		},
+	}
 }
 
 func (n *noop) Observe(ctx context.Context, subject Subject) {
 	event := subject.Event
-	start := time.Now()
 	surface := attribute.String("gram.mcp.risk.scan.surface", event.Surface)
 	method := attribute.String("gram.mcp.risk.scan.method", event.Method)
 	phase := attribute.String("gram.mcp.risk.scan.phase", event.Phase())
@@ -122,16 +169,27 @@ func (n *noop) Observe(ctx context.Context, subject Subject) {
 		attr.UserID(event.Principal().UserID()),
 	))
 	span.End()
+}
 
-	// Count every scan, independent of trace sampling. Only the closed endpoint
-	// surface and MCP method dimensions belong on metrics; phase and identifiers do not.
-	opts := metric.WithAttributes(surface, method)
-	if n.scans != nil {
-		n.scans.Add(ctx, 1, opts)
+func (m scanMetrics) record(ctx context.Context, event Event, decision string, elapsed time.Duration) {
+	surface := attribute.String("gram.mcp.risk.scan.surface", event.Surface)
+	method := attribute.String("gram.mcp.risk.scan.method", event.Method)
+	outcome := attribute.String("gram.mcp.risk.scan.decision", decision)
+	opts := metric.WithAttributes(surface, method, outcome)
+	if m.scans != nil {
+		m.scans.Add(ctx, 1, opts)
 	}
-	if n.duration != nil {
-		// The near-zero no-op duration is the instrumentation floor against
-		// which real evaluation cost is measured, never upstream execution time.
-		n.duration.Record(ctx, time.Since(start).Seconds(), opts)
+	if m.duration != nil {
+		m.duration.Record(ctx, elapsed.Seconds(), opts)
 	}
+}
+
+func (m scanMetrics) recordFlagDrop(ctx context.Context, event Event) {
+	if m.flagDropped == nil {
+		return
+	}
+	m.flagDropped.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("gram.mcp.risk.scan.surface", event.Surface),
+		attribute.String("gram.mcp.risk.scan.method", event.Method),
+	))
 }

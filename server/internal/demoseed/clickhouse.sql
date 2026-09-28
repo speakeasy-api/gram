@@ -75,6 +75,8 @@ DELETE FROM attribute_keys WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM shadow_mcp_inventory_urls WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
+DELETE FROM mcp_network_traffic_hourly_summaries WHERE gram_project_id IN
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM ai_detections WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM ai_scan_receipts WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM authz_challenges WHERE organization_id = 'org_gram_demo_workspace';
@@ -2419,6 +2421,47 @@ WHERE t < turns
   -- Codex has no decision events, and a rejected Claude call has no result.
   AND NOT (kind = 'decision' AND NOT on_claude)
   AND NOT (kind = 'result' AND on_claude AND rejected);
+
+-- Dedicated source events for the inbound MCP HTTP traffic summary. Keep both
+-- server kinds and surfaces represented, with synthetic IDs matching existing
+-- demo MCP server and gateway fixtures.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  'Inbound MCP HTTP request',
+  lower(hex(MD5(concat('gram-demo-mcp-network-', server_kind, '-', surface)))),
+  concat(
+    '{"gram.event.urn":"urn:telemetry:gram_service:log:mcp_network_request"',
+    ',"gram.network.surface":"', surface, '"',
+    if(server_kind = 'mcp', concat(',"gram.mcp_server.id":"', server_id, '"'),
+       concat(',"gram.meta_mcp_server.id":"', server_id, '"')),
+    ',"gram.project.id":"', toString(proj), '"}') ,
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  'mcp_network_request',
+  'gram-mcp-gateway'
+FROM (
+  SELECT
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    server_kind,
+    surface,
+    server_id,
+    toUnixTimestamp64Nano(now64(9) - toIntervalDay(1) + toIntervalHour(8 + number)) AS nano
+  FROM numbers(4)
+  ARRAY JOIN
+    ['mcp', 'mcp', 'meta', 'meta'] AS server_kind,
+    ['public', 'private', 'public', 'private'] AS surface,
+    [
+      concat(substring(lower(hex(MD5('gram-demo-mcpserver-support'))), 1, 8), '-', substring(lower(hex(MD5('gram-demo-mcpserver-support'))), 9, 4), '-5', substring(lower(hex(MD5('gram-demo-mcpserver-support'))), 14, 3), '-8', substring(lower(hex(MD5('gram-demo-mcpserver-support'))), 18, 3), '-', substring(lower(hex(MD5('gram-demo-mcpserver-support'))), 21, 12)),
+      concat(substring(lower(hex(MD5('gram-demo-mcpserver-ops'))), 1, 8), '-', substring(lower(hex(MD5('gram-demo-mcpserver-ops'))), 9, 4), '-5', substring(lower(hex(MD5('gram-demo-mcpserver-ops'))), 14, 3), '-8', substring(lower(hex(MD5('gram-demo-mcpserver-ops'))), 18, 3), '-', substring(lower(hex(MD5('gram-demo-mcpserver-ops'))), 21, 12)),
+      concat(substring(lower(hex(MD5('gram-demo-metamcp-1'))), 1, 8), '-', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 9, 4), '-5', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 14, 3), '-8', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 18, 3), '-', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 21, 12)),
+      concat(substring(lower(hex(MD5('gram-demo-metamcp-1'))), 1, 8), '-', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 9, 4), '-5', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 14, 3), '-8', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 18, 3), '-', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 21, 12))
+    ] AS server_id
+);
 
 -- Postflight: the Explore datasets have sessions and tool calls to collapse,
 -- every demo user and both harnesses are represented, and cost is only ever

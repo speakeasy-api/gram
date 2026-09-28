@@ -40,6 +40,9 @@ describe("useVerifyRemoteMcpUrl", () => {
       });
 
       expect(hook.result.current.result?.verified).toBe(verified);
+      expect(hook.result.current.result?.outcome).toBe(
+        verified ? outcome : undefined,
+      );
       expect(mocks.probe).toHaveBeenCalledWith({
         request: {
           probeURLForm: { url: "https://mcp.example.com/mcp" },

@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -298,7 +299,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
 		logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
-			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
+			Location:      fmt.Sprintf("%s?signin_error=%s", s.platformHostURL(ctx, s.cfg.SignInRedirectURL), err.Error()),
 			SessionToken:  "",
 			SessionCookie: "",
 		}, nil
@@ -1401,7 +1402,7 @@ func (s *Service) persistProvisionedOrganization(
 func (s *Service) redirectSignupError(ctx context.Context, payload *gen.CallbackPayload, err error) (*gen.CallbackResult, error) {
 	s.logger.ErrorContext(ctx, "signup provisioning failed", attr.SlogError(err), attr.SlogReason(string(authErrInit)))
 
-	base := strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	base := strings.TrimRight(s.platformHostURL(ctx, s.cfg.SignInRedirectURL), "/")
 	location := fmt.Sprintf("%s/sign-up?signin_error=%s", base, authErrInit)
 	// Keep the destination on the retry: /sign-up threads ?redirect= back
 	// through the next login attempt, so a signup that arrived with one (e.g.
@@ -1668,12 +1669,30 @@ func (s *Service) validateAuthNonce(ctx context.Context, payload *gen.CallbackPa
 // user back to after authentication. Must match what Login passes to
 // BuildAuthorizationURL.
 func (s *Service) buildCallbackURL(ctx context.Context) string {
-	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
+	returnAddress := s.platformHostURL(ctx, strings.TrimRight(s.cfg.GramServerURL, "/"))
 	if s.cfg.Environment == "local" {
 		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
 	}
 
 	return returnAddress + "/rpc/auth.callback"
+}
+
+// platformHostURL returns the base URL of the extra platform host (see
+// GRAM_PLATFORM_HOSTS) the request arrived on, and fallback for every other
+// request. Login cookies are host-only, so a login started on such a host has
+// to call back and land on that same host. Only hosts the custom-domains
+// middleware classified as platform qualify, never the raw Host header, and
+// the configured server host keeps using fallback, so its behaviour and the
+// local site URL override are unchanged.
+func (s *Service) platformHostURL(ctx context.Context, fallback string) string {
+	origin, ok := requestorigin.FromContext(ctx)
+	if !ok || origin.Surface != requestorigin.SurfacePlatform || origin.BaseURL == "" {
+		return fallback
+	}
+	if origin.BaseURL == strings.TrimRight(s.cfg.GramServerURL, "/") {
+		return fallback
+	}
+	return origin.BaseURL
 }
 
 // callbackRedirectURL determines the redirect location after authentication.
@@ -1694,7 +1713,7 @@ func (s *Service) callbackRedirectURL(
 		return location
 	}
 
-	return s.cfg.SignInRedirectURL
+	return s.platformHostURL(ctx, s.cfg.SignInRedirectURL)
 }
 
 // destinationFromState extracts the sanitized post-login destination carried

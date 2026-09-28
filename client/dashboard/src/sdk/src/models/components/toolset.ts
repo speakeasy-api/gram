@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -38,6 +39,21 @@ import {
 } from "./servervariable.js";
 import { Tool, Tool$inboundSchema } from "./tool.js";
 import { ToolsetOrigin, ToolsetOrigin$inboundSchema } from "./toolsetorigin.js";
+
+/**
+ * The network surfaces through which a Gram-hosted MCP server may be reached.
+ */
+export const ToolsetNetworkAccessMode = {
+  PublicOnly: "public_only",
+  Dual: "dual",
+  PrivateOnly: "private_only",
+} as const;
+/**
+ * The network surfaces through which a Gram-hosted MCP server may be reached.
+ */
+export type ToolsetNetworkAccessMode = ClosedEnum<
+  typeof ToolsetNetworkAccessMode
+>;
 
 export type Toolset = {
   /**
@@ -89,6 +105,10 @@ export type Toolset = {
    * The name of the toolset
    */
   name: string;
+  /**
+   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   */
+  networkAccessMode?: ToolsetNetworkAccessMode | undefined;
   oauthEnablementMetadata: OAuthEnablementMetadata;
   /**
    * The organization ID this toolset belongs to
@@ -158,6 +178,11 @@ export type Toolset = {
 };
 
 /** @internal */
+export const ToolsetNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
+  typeof ToolsetNetworkAccessMode
+> = z.enum(ToolsetNetworkAccessMode);
+
+/** @internal */
 export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
   z.object({
     account_type: z.string(),
@@ -180,6 +205,7 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
     mcp_is_public: z.optional(z.boolean()),
     mcp_slug: z.optional(z.string()),
     name: z.string(),
+    network_access_mode: z.optional(ToolsetNetworkAccessMode$inboundSchema),
     oauth_enablement_metadata: OAuthEnablementMetadata$inboundSchema,
     organization_id: z.string(),
     origin: z.optional(ToolsetOrigin$inboundSchema),
@@ -214,6 +240,7 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       "mcp_enabled": "mcpEnabled",
       "mcp_is_public": "mcpIsPublic",
       "mcp_slug": "mcpSlug",
+      "network_access_mode": "networkAccessMode",
       "oauth_enablement_metadata": "oauthEnablementMetadata",
       "organization_id": "organizationId",
       "project_id": "projectId",

@@ -319,6 +319,25 @@ func TestRecordMCPRequestDuration_ClampsMethodLabel(t *testing.T) {
 	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, "mcp.request.duration"),
 		attr.McpMethod(mcprequests.MethodOther),
 		attr.McpURL("mcp.example.com/mcp/demo"),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+}
+
+func TestRecordMCPRequestDuration_TracksPrivateTraffic(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{
+		Surface: requestorigin.SurfacePrivateNetwork,
+		BaseURL: "https://private.example",
+	})
+	m.RecordMCPRequestDuration(ctx, "tools/call", "mcp.example.com/mcp/demo", 100*time.Millisecond)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, "mcp.request.duration"),
+		attr.McpURL("mcp.example.com/mcp/demo"),
+		attr.NetworkSurface(NetworkSurfacePrivate),
 	)
 }
 

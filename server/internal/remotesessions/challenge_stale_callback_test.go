@@ -194,14 +194,12 @@ func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteSweepsTheStoredGrant(t 
 	spy := &revocationSpy{}
 	ctx, fx := seedRemoteLoginInFlight(t, "cb-race", spy)
 
-	tx, err := fx.ti.conn.Begin(ctx) //nolint:glint // the raw-SQL rule catches tx.Exec with a query string; this transaction only ever runs SQLc-generated methods, and it exists to replay an issuer delete around the live callback
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	tx := testenv.BeginTx(t, ctx, fx.ti.conn)
 
 	// The issuer delete's first lock, taken while the user is still at the
 	// provider and held for the whole callback.
 	txIssuers := usersessionsrepo.New(tx)
-	_, err = txIssuers.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
+	_, err := txIssuers.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
 		ID:        fx.userIssuer,
 		ProjectID: fx.projectID,
 	})

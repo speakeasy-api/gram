@@ -4,6 +4,22 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * Where the hosted MCP is accessible: public_only, dual, or private_only
+ */
+export const UpdateToolsetRequestBodyNetworkAccessMode = {
+  PublicOnly: "public_only",
+  Dual: "dual",
+  PrivateOnly: "private_only",
+} as const;
+/**
+ * Where the hosted MCP is accessible: public_only, dual, or private_only
+ */
+export type UpdateToolsetRequestBodyNetworkAccessMode = ClosedEnum<
+  typeof UpdateToolsetRequestBodyNetworkAccessMode
+>;
 
 export type UpdateToolsetRequestBody = {
   /**
@@ -35,6 +51,10 @@ export type UpdateToolsetRequestBody = {
    */
   name?: string | undefined;
   /**
+   * Where the hosted MCP is accessible: public_only, dual, or private_only
+   */
+  networkAccessMode?: UpdateToolsetRequestBodyNetworkAccessMode | undefined;
+  /**
    * List of prompt template names to include (note: for actual prompts, not tools)
    */
   promptTemplateNames?: Array<string> | undefined;
@@ -53,6 +73,12 @@ export type UpdateToolsetRequestBody = {
 };
 
 /** @internal */
+export const UpdateToolsetRequestBodyNetworkAccessMode$outboundSchema:
+  z.ZodMiniEnum<typeof UpdateToolsetRequestBodyNetworkAccessMode> = z.enum(
+    UpdateToolsetRequestBodyNetworkAccessMode,
+  );
+
+/** @internal */
 export type UpdateToolsetRequestBody$Outbound = {
   custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
@@ -61,6 +87,7 @@ export type UpdateToolsetRequestBody$Outbound = {
   mcp_is_public?: boolean | undefined;
   mcp_slug?: string | undefined;
   name?: string | undefined;
+  network_access_mode?: string | undefined;
   prompt_template_names?: Array<string> | undefined;
   resource_urns?: Array<string> | undefined;
   tool_selection_mode?: string | undefined;
@@ -80,6 +107,9 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodMiniType<
     mcpIsPublic: z.optional(z.boolean()),
     mcpSlug: z.optional(z.string()),
     name: z.optional(z.string()),
+    networkAccessMode: z.optional(
+      UpdateToolsetRequestBodyNetworkAccessMode$outboundSchema,
+    ),
     promptTemplateNames: z.optional(z.array(z.string())),
     resourceUrns: z.optional(z.array(z.string())),
     toolSelectionMode: z.optional(z.string()),
@@ -92,6 +122,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodMiniType<
       mcpEnabled: "mcp_enabled",
       mcpIsPublic: "mcp_is_public",
       mcpSlug: "mcp_slug",
+      networkAccessMode: "network_access_mode",
       promptTemplateNames: "prompt_template_names",
       resourceUrns: "resource_urns",
       toolSelectionMode: "tool_selection_mode",

@@ -31,6 +31,7 @@ linters:
     - gocritic
     - gosec
     - glint
+    - glintnolint
     - govet
     - iface
     - importas
@@ -250,6 +251,11 @@ linters:
               codes: []
             rpc-endpoint-format:
               disabled: false
+      glintnolint:
+        type: module
+        description: Requires //nolint:glint directives to sit on the offending line and name the suppressed glint analyzer.
+        original-url: github.com/speakeasy-api/gram/glint
+        settings: {}
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate

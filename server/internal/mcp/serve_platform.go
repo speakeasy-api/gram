@@ -477,7 +477,7 @@ func (s *Service) callPlatformToolsetTool(
 		})
 	}()
 
-	s.scanEvaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+	decision := s.scanEvaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfacePlatformMCP,
 		Method:         mcpriskscan.MethodToolsCall,
 		OrganizationID: descriptor.OrganizationID,
@@ -491,6 +491,11 @@ func (s *Service) callPlatformToolsetTool(
 		// The header only: the assistant thread id fallback above is not a chat.
 		ChatID: chatIDHeader,
 	}, mcpriskscan.BorrowPayload(requestBodyBytes)))
+	if decision.Denied() {
+		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
+	}
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
 		failure := platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
 		recordToolCallErrorStatus(ctx, rw, failure)
