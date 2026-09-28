@@ -98,12 +98,17 @@ type UndistributeSkillToolInput struct {
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key, at most 128 characters; reuse only to retry this exact revocation"`
 }
 
-type GetSkillInsightsToolInput struct {
+type ListSkillInsightsToolInput struct {
 	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug whose skills to rank"`
-	SkillID     string `json:"skill_id,omitempty" jsonschema:"optional skill ID returned by list_skills; set it to compare that one skill's versions instead of ranking the project's skills"`
-	Window      string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h, 7d, or 30d (default); this tool looks back at most 30d"`
-	SortBy      string `json:"sort_by,omitempty" jsonschema:"rank skills by estimated_minutes_saved (default), efficacy, activations, or session_cost"`
-	Limit       int    `json:"limit,omitempty" jsonschema:"maximum skills to return; defaults to 10 and is capped at 20"`
+	Window      string `json:"window,omitempty" jsonschema:"how far back to look: 1h, 24h, 7d, or 30d (default and maximum)"`
+	SortBy      string `json:"sort_by,omitempty" jsonschema:"order the skills by estimated_minutes_saved (default), efficacy, activations, or session_cost"`
+	Limit       int    `json:"limit,omitempty" jsonschema:"how many skills to return; defaults to 10 and is capped at 20"`
+}
+
+type CompareSkillVersionsToolInput struct {
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
+	SkillID     string `json:"skill_id" jsonschema:"the skill whose versions to compare, by ID as returned by list_skills"`
+	Window      string `json:"window,omitempty" jsonschema:"how far back to look: 1h, 24h, 7d, or 30d (default and maximum)"`
 }
 
 type skillsRefusalResult struct {
@@ -111,30 +116,54 @@ type skillsRefusalResult struct {
 	Message string `json:"message"`
 }
 
-// skillInsightsToolMeta is shared by the live tool and its stub, so the tool
-// keeps one audience and authority whichever one a deployment serves. Session
-// cost is organization spend, so like query_skill_usage it is an administrator
-// read even though the skills it names are member-readable.
+// skillInsightsToolMeta is shared by the live insight tools and their stubs, so
+// a tool keeps one audience and authority whichever one a deployment serves.
+// Session cost is organization spend, so like query_skill_usage these are
+// administrator reads even though the skills they name are member-readable.
 var skillInsightsToolMeta = ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
 
-func registerSkillInsightsTool(reg *Registrar, skills *SkillsService) {
+// Ranking a project's skills and comparing one skill's versions are two
+// questions with two answers, so they are two tools with fixed shapes rather
+// than one tool whose result changes with its arguments.
+func registerSkillInsightsTools(reg *Registrar, skills *SkillsService) {
 	if !skills.insightsValid() {
-		addTool(reg, &mcp.Tool{
-			Name:        "get_skill_insights",
-			Title:       "Skill Insights",
-			Description: "Rank a project's skills, or compare one skill's versions, by activations, sampled efficacy, full-session cost, and estimated time saved. This is not switched on for your organization yet.",
-			Annotations: readOnlyAnnotations(),
-		}, skillInsightsToolMeta, unavailableTool("skill_insights"))
+		for _, tool := range []struct {
+			name        string
+			title       string
+			description string
+		}{
+			{"list_skill_insights", "Skill Insights", "See which of a project's skills are paying off. This is not switched on for your organization yet."},
+			{"compare_skill_versions", "Compare Skill Versions", "See whether a newer version of a skill is doing better than the ones before it. This is not switched on for your organization yet."},
+		} {
+			addTool(reg, &mcp.Tool{
+				Name:        tool.name,
+				Title:       tool.title,
+				Description: tool.description,
+				Annotations: readOnlyAnnotations(),
+			}, skillInsightsToolMeta, unavailableTool("skill_insights"))
+		}
 		return
 	}
+
 	addTool(reg, &mcp.Tool{
-		Name:        "get_skill_insights",
+		Name:        "list_skill_insights",
 		Title:       "Skill Insights",
-		Description: "Rank a project's skills, or compare one skill's versions with skill_id, by activations, sampled efficacy, full-session cost, and estimated time saved over the last 30 days by default. Costs are full-session: the whole session's model cost is attributed to every skill activated in it, so figures are not additive across skills. Efficacy and savings cover sampled scored sessions only; a skill without scores has unknown efficacy, not zero, and each saved-turns or saved-minutes average is over the scored sessions that carried an estimate, whose count is returned beside it. Skills are named by registry ID; no person or session is identified.",
+		Description: "See which of a project's skills are paying off. For each skill: how often it was used, how many sessions used it, what those sessions cost, and, for sessions that were scored, how well it did and how much time it saved. Covers the last 30 days unless you ask for a shorter window, and orders by time saved unless you ask for another order. Two things to know when reading the numbers: a session's whole cost counts against every skill used in that session, so costs do not add up across skills; and scores come from a sample of sessions, so a skill with no scores is unmeasured rather than bad. To see how one skill's versions compare with each other, use compare_skill_versions.",
 		Annotations: readOnlyAnnotations(),
-	}, skillInsightsToolMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSkillInsightsToolInput) (*mcp.CallToolResult, GetSkillInsightsOutput, error) {
-		return skillsToolCall(ctx, func(principal Principal) (GetSkillInsightsOutput, error) {
-			return skills.GetSkillInsights(ctx, principal, GetSkillInsightsInput(input))
+	}, skillInsightsToolMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillInsightsToolInput) (*mcp.CallToolResult, ListSkillInsightsOutput, error) {
+		return skillsToolCall(ctx, func(principal Principal) (ListSkillInsightsOutput, error) {
+			return skills.ListSkillInsights(ctx, principal, ListSkillInsightsInput(input))
+		})
+	})
+
+	addTool(reg, &mcp.Tool{
+		Name:        "compare_skill_versions",
+		Title:       "Compare Skill Versions",
+		Description: "See whether a newer version of one skill is doing better than the versions before it. Name the skill and get the same numbers list_skill_insights gives — uses, sessions, cost, score, time saved — broken down per version, newest first, including versions nobody used. Covers the last 30 days unless you ask for a shorter window. A session's whole cost counts against every version used in that session, so costs do not add up across versions, and scores come from a sample of sessions, so a version with no scores is unmeasured rather than bad.",
+		Annotations: readOnlyAnnotations(),
+	}, skillInsightsToolMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input CompareSkillVersionsToolInput) (*mcp.CallToolResult, CompareSkillVersionsOutput, error) {
+		return skillsToolCall(ctx, func(principal Principal) (CompareSkillVersionsOutput, error) {
+			return skills.CompareSkillVersions(ctx, principal, CompareSkillVersionsInput(input))
 		})
 	})
 }
@@ -276,7 +305,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		})
 	})
 
-	registerSkillInsightsTool(reg, skills)
+	registerSkillInsightsTools(reg, skills)
 }
 
 // registerUnavailableSkillsTools declares the same tools the live registration
@@ -320,7 +349,7 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 		}
 		addTool(reg, manifest, ToolMeta{Authorization: tool.authority, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("skills"))
 	}
-	registerSkillInsightsTool(reg, nil)
+	registerSkillInsightsTools(reg, nil)
 }
 
 // skillsToolCall runs one skill call and turns a refusal into a structured

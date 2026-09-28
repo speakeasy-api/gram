@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Add the `get_skill_insights` Platform MCP tool, which ranks a project's skills or compares one skill's versions by activations, sampled efficacy, full-session cost, and estimated time saved. Deployments without ClickHouse keep the tool registered as a stub.
+Add two Platform MCP tools for skill insights: `list_skill_insights` ranks a project's skills by activations, sampled efficacy, session cost, and estimated time saved, and `compare_skill_versions` breaks those same numbers down across one skill's versions. Deployments without ClickHouse keep both tools registered as stubs.

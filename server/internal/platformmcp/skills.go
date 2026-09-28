@@ -184,8 +184,8 @@ type SkillsService struct {
 	gate     CatalogRegistrationGateChecker
 	budget   OperationBudget
 
-	// insights and insightsBudget back get_skill_insights. Both are attached by
-	// WithInsights; a nil reader keeps the tool registered as a stub.
+	// insights and insightsBudget back the skill insight tools. Both are attached by
+	// WithInsights; a nil reader keeps those tools registered as stubs.
 	insights       SkillInsightsReader
 	insightsBudget OperationBudget
 

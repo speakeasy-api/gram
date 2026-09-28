@@ -86,9 +86,9 @@ type platformMCPConfig struct {
 	PublicationRequests    plugins.PublicationRequests
 	TemporalEnv            *tenv.Environment
 	Skills                 platformmcp.SkillsManagement
-	// SkillInsights is the ClickHouse read behind get_skill_insights. Nil, which
-	// is what a deployment without ClickHouse passes, keeps the tool registered
-	// as a stub rather than answering with empty insights.
+	// SkillInsights is the ClickHouse read behind the skill insight tools.
+	// Startup always supplies it; a nil reader keeps the tools registered as
+	// stubs rather than answering with empty insights.
 	SkillInsights            platformmcp.SkillInsightsReader
 	RiskPolicyApprovals      policycore.ApprovalCoordinator
 	RiskPolicySignaler       policycore.PolicySignaler

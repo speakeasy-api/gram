@@ -486,7 +486,7 @@ type skillsVerticalFixture struct {
 	session           *mcp.ClientSession
 	marketingPluginID uuid.UUID
 
-	// insights stands in for ClickHouse behind get_skill_insights. The two
+	// insights stands in for ClickHouse behind the insight tools. The two
 	// counters are the connection and organization buckets of the diagnostics
 	// budget it is metered on: an OperationBudget charges both buckets on every
 	// permitted call from a connection-bearing principal, so they are counted
@@ -700,7 +700,7 @@ func (f *skillsVerticalFixture) insightsLaneCharges() (int, int) {
 }
 
 // createInsightsSkillVersion records one immutable version so the registry has
-// something real for get_skill_insights to resolve.
+// something real for the insight tools to resolve.
 func createInsightsSkillVersion(t *testing.T, ctx context.Context, conn *pgxpool.Pool, fixture *skillsVerticalFixture, skillID uuid.UUID, body string) skillsrepo.SkillVersion {
 	t.Helper()
 
@@ -720,10 +720,10 @@ func createInsightsSkillVersion(t *testing.T, ctx context.Context, conn *pgxpool
 	return version
 }
 
-// get_skill_insights resolves which skills to report through the registry under
-// the caller's real grants and then reads ClickHouse for exactly those IDs.
-// This drives both modes through the endpoint as an organization admin against
-// a real skill and checks the ClickHouse read was scoped to what the registry
+// The insight tools resolve which skills to report through the registry under
+// the caller's real grants and then read ClickHouse for exactly those IDs. This
+// drives both tools through the endpoint as an organization admin against a
+// real skill and checks the ClickHouse read was scoped to what the registry
 // returned.
 func TestPlatformMCPSkillInsightsRankAndCompareUnderRealGrants(t *testing.T) {
 	t.Parallel()
@@ -745,44 +745,43 @@ func TestPlatformMCPSkillInsightsRankAndCompareUnderRealGrants(t *testing.T) {
 		ScoredSessions: 1, ScoreSum: 0.8, EstimatedMinutesSavedSum: 12, EstimatedMinutesSamples: 1,
 	}})
 
-	ranked := callSkillsTool[GetSkillInsightsOutput](t, ctx, fixture.session, "get_skill_insights", map[string]any{
+	ranked := callSkillsTool[ListSkillInsightsOutput](t, ctx, fixture.session, "list_skill_insights", map[string]any{
 		"project_slug": fixture.project.Slug,
 	})
-	require.Equal(t, SkillInsightsModeRankSkills, ranked.Mode)
 	require.Len(t, ranked.Skills, 1)
 	require.Equal(t, skill.ID.String(), ranked.Skills[0].ID)
+	require.Equal(t, "measured", ranked.Skills[0].Name)
 	require.EqualValues(t, 3, ranked.Skills[0].Metrics.Activations)
 	require.NotNil(t, ranked.Skills[0].Metrics.Efficacy)
 	require.EqualValues(t, 1, ranked.Skills[0].Metrics.Efficacy.EstimatedMinutesSavedSamples)
-	require.Len(t, ranked.Skills[0].Versions, 1, "ranking lists the versions that were active")
-	require.Equal(t, newer.ID.String(), ranked.Skills[0].Versions[0].ID)
-	require.NotEmpty(t, ranked.Skills[0].Versions[0].CreatedAt, "creation time comes from the registry")
 	params := fixture.insights.LastParams()
 	require.NotNil(t, params)
 	require.Equal(t, fixture.principal.OrganizationID, params.OrganizationID)
 	require.Equal(t, fixture.project.ID.String(), params.ProjectID)
 	require.Equal(t, []string{skill.ID.String()}, params.SkillIDs)
 
-	compared := callSkillsTool[GetSkillInsightsOutput](t, ctx, fixture.session, "get_skill_insights", map[string]any{
+	compared := callSkillsTool[CompareSkillVersionsOutput](t, ctx, fixture.session, "compare_skill_versions", map[string]any{
 		"project_slug": fixture.project.Slug,
 		"skill_id":     skill.ID.String(),
 	})
-	require.Equal(t, SkillInsightsModeCompareVersions, compared.Mode)
-	require.Len(t, compared.Skills, 1)
-	require.Len(t, compared.Skills[0].Versions, 2, "comparison lists every registry version, active or not")
+	require.Equal(t, skill.ID.String(), compared.SkillID)
+	require.Equal(t, "measured", compared.SkillName)
+	// The skill's own figures are the same whichever tool reported them.
+	require.Equal(t, ranked.Skills[0].Metrics.Activations, compared.Metrics.Activations)
+	require.Len(t, compared.Versions, 2, "comparison lists every registry version, used or not")
 	byID := map[string]SkillVersionInsight{}
-	for _, version := range compared.Skills[0].Versions {
+	for _, version := range compared.Versions {
 		byID[version.ID] = version
 	}
 	require.EqualValues(t, 3, byID[newer.ID.String()].Metrics.Activations)
 	require.Zero(t, byID[older.ID.String()].Metrics.Activations)
-	require.NotEmpty(t, byID[older.ID.String()].CreatedAt)
+	require.NotEmpty(t, byID[older.ID.String()].CreatedAt, "creation time comes from the registry")
 	connectionCharges, organizationCharges := fixture.insightsLaneCharges()
 	require.Equal(t, 2, connectionCharges, "each read charges the diagnostics lane's connection bucket once")
 	require.Equal(t, 2, organizationCharges, "each read charges the diagnostics lane's organization bucket once")
 }
 
-// A caller's grants decide what get_skill_insights may read. A member holding
+// A caller's grants decide what the insight tools may read. A member holding
 // no role reaches the handler and is refused by the skills service's own RBAC,
 // so ClickHouse is never read; a member holding only skill:read is turned back
 // at the organization-admin gate before the handler spends anything at all.
@@ -791,7 +790,7 @@ func TestPlatformMCPSkillInsightsRefuseCallersWithoutTheRightGrants(t *testing.T
 
 	ctx := t.Context()
 	ungranted := newSkillsVerticalFixture(t, ctx, "platform_mcp_skill_insights_ungranted", skillsVerticalOptions{capabilityEnabled: true})
-	refusal := callSkillsRefusal(t, ctx, ungranted.session, "get_skill_insights", map[string]any{
+	refusal := callSkillsRefusal(t, ctx, ungranted.session, "list_skill_insights", map[string]any{
 		"project_slug": ungranted.project.Slug,
 	})
 	require.Equal(t, "forbidden", refusal.Code)
@@ -804,8 +803,9 @@ func TestPlatformMCPSkillInsightsRefuseCallersWithoutTheRightGrants(t *testing.T
 	require.Equal(t, 1, organizationCharges, "the refused call charged the organization bucket once")
 
 	readerOnly := newSkillsVerticalFixture(t, ctx, "platform_mcp_skill_insights_reader", skillsVerticalOptions{capabilityEnabled: true, grantSkillRead: true})
-	refusal = callSkillsRefusal(t, ctx, readerOnly.session, "get_skill_insights", map[string]any{
+	refusal = callSkillsRefusal(t, ctx, readerOnly.session, "compare_skill_versions", map[string]any{
 		"project_slug": readerOnly.project.Slug,
+		"skill_id":     uuid.NewString(),
 	})
 	require.Equal(t, "permission_denied", refusal.Code)
 	require.Nil(t, readerOnly.insights.LastParams())
