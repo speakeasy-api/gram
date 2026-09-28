@@ -46,6 +46,17 @@ CREATE TABLE IF NOT EXISTS projects (
   CONSTRAINT projects_pkey PRIMARY KEY (id)
 );
 
+COMMENT ON COLUMN projects.id IS '@access: confidential';
+COMMENT ON COLUMN projects.name IS '@access: confidential';
+COMMENT ON COLUMN projects.slug IS '@access: confidential';
+COMMENT ON COLUMN projects.organization_id IS '@access: confidential';
+COMMENT ON COLUMN projects.logo_asset_id IS '@access: confidential';
+COMMENT ON COLUMN projects.functions_runner_version IS '@access: confidential';
+COMMENT ON COLUMN projects.created_at IS '@access: confidential';
+COMMENT ON COLUMN projects.updated_at IS '@access: confidential';
+COMMENT ON COLUMN projects.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN projects.deleted IS '@access: confidential';
+
 CREATE TABLE IF NOT EXISTS organization_metadata (
   id TEXT NOT NULL,
   name TEXT NOT NULL,
@@ -75,6 +86,26 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   CONSTRAINT organization_metadata_pkey PRIMARY KEY (id)
 );
 
+COMMENT ON COLUMN organization_metadata.id IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.name IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.slug IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.gram_account_type IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.workos_id IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.workos_updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.workos_last_event_id IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.svix_app_id IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.webhooks_enabled IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.whitelisted IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.free_trial_started_at IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.free_trial_ends_at IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.scim_enabled IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.sso_enabled IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.verified_domains IS '@access: opaque-restricted';
+COMMENT ON COLUMN organization_metadata.creation_source IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_metadata.disabled_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
@@ -90,6 +121,12 @@ CREATE TABLE IF NOT EXISTS organization_onboarding (
   CONSTRAINT organization_onboarding_pkey PRIMARY KEY (id),
   CONSTRAINT organization_onboarding_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN organization_onboarding.id IS '@access: confidential';
+COMMENT ON COLUMN organization_onboarding.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_onboarding.preset IS '@access: confidential';
+COMMENT ON COLUMN organization_onboarding.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_onboarding.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_onboarding_organization_id_key
 ON organization_onboarding (organization_id);
@@ -119,6 +156,14 @@ CREATE TABLE IF NOT EXISTS trials (
   CONSTRAINT trials_pkey PRIMARY KEY (organization_id),
   CONSTRAINT trials_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN trials.organization_id IS '@access: confidential';
+COMMENT ON COLUMN trials.tier IS '@access: confidential';
+COMMENT ON COLUMN trials.ends_at IS '@access: confidential';
+COMMENT ON COLUMN trials.converted_at IS '@access: confidential';
+COMMENT ON COLUMN trials.demoted_at IS '@access: confidential';
+COMMENT ON COLUMN trials.created_at IS '@access: confidential';
+COMMENT ON COLUMN trials.updated_at IS '@access: confidential';
 
 -- Matches ListExpiredTrials: a row leaves the index as soon as it converts or
 -- demotes, so the hourly sweep stays proportional to live trials.
@@ -175,6 +220,22 @@ CREATE TABLE IF NOT EXISTS billing_metadata (
   CONSTRAINT billing_metadata_billing_cycle_anchor_day_check CHECK (billing_cycle_anchor_day >= 1 AND billing_cycle_anchor_day <= 31)
 );
 
+COMMENT ON COLUMN billing_metadata.id IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.organization_id IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.stripe_customer_id IS '@access: restricted';
+COMMENT ON COLUMN billing_metadata.stripe_subscription_id IS '@access: restricted';
+COMMENT ON COLUMN billing_metadata.stripe_billing_cycle_anchor IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.stripe_checkout_idempotency_key IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.stripe_checkout_billing_cycle_anchor IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.stripe_checkout_trial_end IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.stripe_checkout_expires_at IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.stripe_checkout_session_id IS '@access: restricted';
+COMMENT ON COLUMN billing_metadata.tum_monthly_token_limit IS '@access: restricted';
+COMMENT ON COLUMN billing_metadata.alert_email IS '@access: confidential-pii';
+COMMENT ON COLUMN billing_metadata.billing_cycle_anchor_day IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.created_at IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_organization_id_key
 ON billing_metadata (organization_id);
 
@@ -186,7 +247,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_stripe_checkout_session_id_ke
 ON billing_metadata (stripe_checkout_session_id)
 WHERE stripe_checkout_session_id IS NOT NULL;
 
-COMMENT ON COLUMN billing_metadata.tunneled_mcp_server_limit IS 'Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.';
+COMMENT ON COLUMN billing_metadata.tunneled_mcp_server_limit IS 'Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.
+@access: restricted';
 
 -- Durable completion receipts for accepted Stripe webhooks. A row commits
 -- atomically with the handler's database effects.
@@ -200,6 +262,12 @@ CREATE TABLE IF NOT EXISTS stripe_webhook_receipts (
 
   CONSTRAINT stripe_webhook_receipts_pkey PRIMARY KEY (stripe_event_id)
 );
+
+COMMENT ON COLUMN stripe_webhook_receipts.stripe_event_id IS '@access: restricted';
+COMMENT ON COLUMN stripe_webhook_receipts.organization_id IS '@access: confidential';
+COMMENT ON COLUMN stripe_webhook_receipts.event_type IS '@access: confidential';
+COMMENT ON COLUMN stripe_webhook_receipts.created_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_webhook_receipts.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS stripe_webhook_receipts_organization_id_idx
 ON stripe_webhook_receipts (organization_id);
@@ -243,6 +311,17 @@ CREATE TABLE IF NOT EXISTS billing_cycle_usage (
   CONSTRAINT billing_cycle_usage_billed_tum_tokens_check CHECK (billed_tum_tokens IS NULL OR billed_tum_tokens >= 0),
   CONSTRAINT billing_cycle_usage_billed_frozen_at_check CHECK (billed_frozen_at IS NULL OR billed_tum_tokens IS NOT NULL)
 );
+
+COMMENT ON COLUMN billing_cycle_usage.id IS '@access: confidential';
+COMMENT ON COLUMN billing_cycle_usage.organization_id IS '@access: confidential';
+COMMENT ON COLUMN billing_cycle_usage.cycle_start IS '@access: confidential';
+COMMENT ON COLUMN billing_cycle_usage.cycle_end IS '@access: confidential';
+COMMENT ON COLUMN billing_cycle_usage.tum_tokens IS '@access: confidential';
+COMMENT ON COLUMN billing_cycle_usage.billed_tum_tokens IS '@access: confidential';
+COMMENT ON COLUMN billing_cycle_usage.billed_frozen_at IS '@access: confidential';
+COMMENT ON COLUMN billing_cycle_usage.finalized_at IS '@access: confidential';
+COMMENT ON COLUMN billing_cycle_usage.created_at IS '@access: confidential';
+COMMENT ON COLUMN billing_cycle_usage.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS billing_cycle_usage_organization_id_cycle_start_key
 ON billing_cycle_usage (organization_id, cycle_start);
@@ -301,6 +380,26 @@ CREATE TABLE IF NOT EXISTS stripe_meter_reports (
   )
 );
 
+COMMENT ON COLUMN stripe_meter_reports.id IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.organization_id IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.billing_cycle_usage_id IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.cycle_start IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.cycle_end IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.seq IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.stripe_customer_id IS '@access: restricted';
+COMMENT ON COLUMN stripe_meter_reports.stripe_meter_event_name IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.stripe_identifier IS '@access: restricted';
+COMMENT ON COLUMN stripe_meter_reports.delta_tokens IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.event_timestamp IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.delivery_state IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.first_attempted_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.last_attempted_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.confirmed_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.ambiguous_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.reconciled_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.created_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_meter_reports.updated_at IS '@access: confidential';
+
 -- Retained during the migration-first rollout so the deployed writer, which
 -- does not populate cycle_end yet, keeps its existing uniqueness guarantee.
 CREATE UNIQUE INDEX IF NOT EXISTS stripe_meter_reports_organization_id_cycle_start_seq_key
@@ -341,6 +440,14 @@ CREATE TABLE IF NOT EXISTS openrouter_spend_daily (
   CONSTRAINT openrouter_spend_daily_spend_usd_check CHECK (spend_usd >= 0)
 );
 
+COMMENT ON COLUMN openrouter_spend_daily.id IS '@access: confidential';
+COMMENT ON COLUMN openrouter_spend_daily.organization_id IS '@access: confidential';
+COMMENT ON COLUMN openrouter_spend_daily.key_type IS '@access: confidential';
+COMMENT ON COLUMN openrouter_spend_daily.day IS '@access: confidential';
+COMMENT ON COLUMN openrouter_spend_daily.spend_usd IS '@access: confidential';
+COMMENT ON COLUMN openrouter_spend_daily.created_at IS '@access: confidential';
+COMMENT ON COLUMN openrouter_spend_daily.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS openrouter_spend_daily_organization_id_key_type_day_key
 ON openrouter_spend_daily (organization_id, key_type, day);
 
@@ -365,6 +472,17 @@ CREATE TABLE IF NOT EXISTS stripe_invoices (
   CONSTRAINT stripe_invoices_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
   CONSTRAINT stripe_invoices_service_period_bounds_check CHECK (service_period_end > service_period_start)
 );
+
+COMMENT ON COLUMN stripe_invoices.stripe_invoice_id IS '@access: restricted';
+COMMENT ON COLUMN stripe_invoices.organization_id IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoices.stripe_customer_id IS '@access: restricted';
+COMMENT ON COLUMN stripe_invoices.stripe_subscription_id IS '@access: restricted';
+COMMENT ON COLUMN stripe_invoices.service_period_start IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoices.service_period_end IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoices.invoice_state IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoices.finalized_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoices.created_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoices.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS stripe_invoices_organization_id_service_period_start_idx
 ON stripe_invoices (organization_id, service_period_start)
@@ -428,6 +546,32 @@ CREATE TABLE IF NOT EXISTS stripe_invoice_allocations (
   CONSTRAINT stripe_invoice_allocations_source_snapshot_usd_check CHECK (source_snapshot_usd IS NULL OR source_snapshot_usd >= 0)
 );
 
+COMMENT ON COLUMN stripe_invoice_allocations.id IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.organization_id IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.source_kind IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.source_key IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.seq IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.source_day IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.source_period_start IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.source_period_end IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.source_snapshot_usd IS '@access: restricted';
+COMMENT ON COLUMN stripe_invoice_allocations.delta_tokens IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.original_tum_unit_price_usd IS '@access: restricted';
+COMMENT ON COLUMN stripe_invoice_allocations.amount_usd IS '@access: restricted';
+COMMENT ON COLUMN stripe_invoice_allocations.original_invoice_id IS '@access: restricted';
+COMMENT ON COLUMN stripe_invoice_allocations.destination_invoice_id IS '@access: restricted';
+COMMENT ON COLUMN stripe_invoice_allocations.stripe_invoice_item_id IS '@access: restricted';
+COMMENT ON COLUMN stripe_invoice_allocations.stripe_credit_note_id IS '@access: restricted';
+COMMENT ON COLUMN stripe_invoice_allocations.idempotency_key IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.delivery_state IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.first_attempted_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.last_attempted_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.confirmed_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.ambiguous_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.reconciled_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.created_at IS '@access: confidential';
+COMMENT ON COLUMN stripe_invoice_allocations.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS stripe_invoice_allocations_idempotency_key_key
 ON stripe_invoice_allocations (idempotency_key);
 
@@ -464,6 +608,12 @@ CREATE TABLE IF NOT EXISTS workos_user_syncs (
   CONSTRAINT workos_user_syncs_pkey PRIMARY KEY (id)
 );
 
+COMMENT ON COLUMN workos_user_syncs.id IS '@access: confidential';
+COMMENT ON COLUMN workos_user_syncs.workos_user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN workos_user_syncs.last_event_id IS '@access: confidential';
+COMMENT ON COLUMN workos_user_syncs.created_at IS '@access: confidential';
+COMMENT ON COLUMN workos_user_syncs.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS workos_user_syncs_workos_user_id_key
 ON workos_user_syncs (workos_user_id)
 WHERE workos_user_id IS NOT NULL;
@@ -479,6 +629,12 @@ CREATE TABLE IF NOT EXISTS workos_organization_syncs (
 
   CONSTRAINT workos_organization_syncs_pkey PRIMARY KEY (id)
 );
+
+COMMENT ON COLUMN workos_organization_syncs.id IS '@access: confidential';
+COMMENT ON COLUMN workos_organization_syncs.workos_organization_id IS '@access: confidential';
+COMMENT ON COLUMN workos_organization_syncs.last_event_id IS '@access: confidential';
+COMMENT ON COLUMN workos_organization_syncs.created_at IS '@access: confidential';
+COMMENT ON COLUMN workos_organization_syncs.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS workos_organization_syncs_workos_organization_id_key
 ON workos_organization_syncs (workos_organization_id);
@@ -507,6 +663,21 @@ CREATE TABLE IF NOT EXISTS deployments (
   CONSTRAINT deployments_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE RESTRICT
 );
 
+COMMENT ON COLUMN deployments.id IS '@access: confidential';
+COMMENT ON COLUMN deployments.seq IS '@access: confidential';
+COMMENT ON COLUMN deployments.user_id IS '@access: confidential';
+COMMENT ON COLUMN deployments.project_id IS '@access: confidential';
+COMMENT ON COLUMN deployments.organization_id IS '@access: confidential';
+COMMENT ON COLUMN deployments.idempotency_key IS '@access: opaque-restricted';
+COMMENT ON COLUMN deployments.cloned_from IS '@access: confidential';
+COMMENT ON COLUMN deployments.github_repo IS '@access: confidential-pii';
+COMMENT ON COLUMN deployments.github_pr IS '@access: confidential';
+COMMENT ON COLUMN deployments.github_sha IS '@access: confidential';
+COMMENT ON COLUMN deployments.external_id IS '@access: opaque-restricted';
+COMMENT ON COLUMN deployments.external_url IS '@access: restricted';
+COMMENT ON COLUMN deployments.created_at IS '@access: confidential';
+COMMENT ON COLUMN deployments.updated_at IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS deployments_project_id_seq_idx ON deployments(project_id, seq DESC);
 
 CREATE TABLE IF NOT EXISTS deployment_statuses (
@@ -522,6 +693,13 @@ CREATE TABLE IF NOT EXISTS deployment_statuses (
   CONSTRAINT deployment_statuses_pkey PRIMARY KEY (id),
   CONSTRAINT deployment_statuses_seq_key UNIQUE (seq)
 );
+
+COMMENT ON COLUMN deployment_statuses.id IS '@access: confidential';
+COMMENT ON COLUMN deployment_statuses.seq IS '@access: confidential';
+COMMENT ON COLUMN deployment_statuses.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN deployment_statuses.status IS '@access: confidential';
+COMMENT ON COLUMN deployment_statuses.created_at IS '@access: confidential';
+COMMENT ON COLUMN deployment_statuses.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS deployment_statuses_deployment_id_seq_idx ON deployment_statuses(deployment_id, seq DESC);
 
@@ -544,6 +722,17 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
   CONSTRAINT deployment_logs_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL,
   CONSTRAINT deployment_logs_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN deployment_logs.id IS '@access: confidential';
+COMMENT ON COLUMN deployment_logs.seq IS '@access: confidential';
+COMMENT ON COLUMN deployment_logs.event IS '@access: confidential';
+COMMENT ON COLUMN deployment_logs.message IS '@access: opaque-restricted';
+COMMENT ON COLUMN deployment_logs.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN deployment_logs.project_id IS '@access: confidential';
+COMMENT ON COLUMN deployment_logs.attachment_id IS '@access: confidential';
+COMMENT ON COLUMN deployment_logs.attachment_type IS '@access: confidential';
+COMMENT ON COLUMN deployment_logs.created_at IS '@access: confidential';
+COMMENT ON COLUMN deployment_logs.updated_at IS '@access: confidential';
 
 -- Assets are uploaded blobs (OpenAPI documents, function bundles, chat
 -- attachments, images) tracked at one of three ownership tiers, mirroring the
@@ -577,6 +766,20 @@ CREATE TABLE IF NOT EXISTS assets (
   CONSTRAINT assets_project_id_sha256_key UNIQUE (project_id, sha256),
   CONSTRAINT assets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN assets.id IS '@access: confidential';
+COMMENT ON COLUMN assets.project_id IS '@access: confidential';
+COMMENT ON COLUMN assets.organization_id IS '@access: confidential';
+COMMENT ON COLUMN assets.name IS '@access: confidential';
+COMMENT ON COLUMN assets.url IS '@access: confidential';
+COMMENT ON COLUMN assets.kind IS '@access: confidential';
+COMMENT ON COLUMN assets.content_type IS '@access: confidential';
+COMMENT ON COLUMN assets.content_length IS '@access: confidential';
+COMMENT ON COLUMN assets.sha256 IS '@access: confidential';
+COMMENT ON COLUMN assets.created_at IS '@access: confidential';
+COMMENT ON COLUMN assets.updated_at IS '@access: confidential';
+COMMENT ON COLUMN assets.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN assets.deleted IS '@access: confidential';
 
 -- Content-addressed dedupe for the organization and platform tiers.
 --
@@ -625,6 +828,21 @@ CREATE TABLE IF NOT EXISTS skills (
   CONSTRAINT skills_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN skills.id IS '@access: confidential';
+COMMENT ON COLUMN skills.project_id IS '@access: confidential';
+COMMENT ON COLUMN skills.name IS '@access: confidential';
+COMMENT ON COLUMN skills.display_name IS '@access: confidential';
+COMMENT ON COLUMN skills.summary IS '@access: opaque-restricted';
+COMMENT ON COLUMN skills.source_kind IS '@access: confidential';
+COMMENT ON COLUMN skills.classification IS '@access: confidential';
+COMMENT ON COLUMN skills.tags IS '@access: opaque-restricted';
+COMMENT ON COLUMN skills.first_seen_at IS '@access: confidential';
+COMMENT ON COLUMN skills.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN skills.seen_count IS '@access: confidential';
+COMMENT ON COLUMN skills.archived_at IS '@access: confidential';
+COMMENT ON COLUMN skills.created_at IS '@access: confidential';
+COMMENT ON COLUMN skills.updated_at IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_id_key ON skills (project_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
@@ -652,6 +870,19 @@ CREATE TABLE IF NOT EXISTS skill_versions (
   CONSTRAINT skill_versions_content_size_check CHECK (octet_length(content) <= 65536)
 );
 
+COMMENT ON COLUMN skill_versions.id IS '@access: confidential';
+COMMENT ON COLUMN skill_versions.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_versions.content IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_versions.canonical_sha256 IS '@access: confidential';
+COMMENT ON COLUMN skill_versions.raw_sha256 IS '@access: confidential';
+COMMENT ON COLUMN skill_versions.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_versions.metadata IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_versions.spec_valid IS '@access: confidential';
+COMMENT ON COLUMN skill_versions.validation_errors IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_versions.created_at IS '@access: confidential';
+COMMENT ON COLUMN skill_versions.promoted_at IS '@access: confidential';
+COMMENT ON COLUMN skill_versions.created_by_user_id IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
@@ -667,6 +898,10 @@ CREATE TABLE IF NOT EXISTS skill_version_lineages (
   CONSTRAINT skill_version_lineages_skill_id_derived_from_version_id_fkey FOREIGN KEY (skill_id, derived_from_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN skill_version_lineages.skill_version_id IS '@access: confidential';
+COMMENT ON COLUMN skill_version_lineages.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_version_lineages.derived_from_version_id IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS skill_version_lineages_skill_id_derived_from_version_id_idx ON skill_version_lineages (skill_id, derived_from_version_id);
 
 CREATE TABLE IF NOT EXISTS skill_version_origins (
@@ -680,6 +915,12 @@ CREATE TABLE IF NOT EXISTS skill_version_origins (
   CONSTRAINT skill_version_origins_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE,
   CONSTRAINT skill_version_origins_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN skill_version_origins.skill_version_id IS '@access: confidential';
+COMMENT ON COLUMN skill_version_origins.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_version_origins.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_version_origins.origin IS '@access: confidential';
+COMMENT ON COLUMN skill_version_origins.created_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS skill_version_origins_project_id_skill_id_idx
 ON skill_version_origins (project_id, skill_id);
@@ -708,6 +949,20 @@ CREATE TABLE IF NOT EXISTS skill_feedback (
   CONSTRAINT skill_feedback_note_size_check CHECK (note <> '' AND CHAR_LENGTH(note) <= 4000),
   CONSTRAINT skill_feedback_skill_id_skill_version_id_check CHECK (skill_version_id IS NULL OR skill_id IS NOT NULL)
 );
+
+COMMENT ON COLUMN skill_feedback.id IS '@access: confidential';
+COMMENT ON COLUMN skill_feedback.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_feedback.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_feedback.skill_version_id IS '@access: confidential';
+COMMENT ON COLUMN skill_feedback.skill_name IS '@access: confidential';
+COMMENT ON COLUMN skill_feedback.source IS '@access: confidential';
+COMMENT ON COLUMN skill_feedback.outcome IS '@access: confidential';
+COMMENT ON COLUMN skill_feedback.note IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_feedback.session_id IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_feedback.user_id IS '@access: confidential';
+COMMENT ON COLUMN skill_feedback.user_email IS '@access: confidential-pii';
+COMMENT ON COLUMN skill_feedback.reviewed_at IS '@access: confidential';
+COMMENT ON COLUMN skill_feedback.created_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS skill_feedback_project_id_skill_name_created_at_id_idx
 ON skill_feedback (project_id, skill_name, created_at DESC, id DESC);
@@ -744,6 +999,18 @@ CREATE TABLE IF NOT EXISTS skill_edit_suggestions (
   CONSTRAINT skill_edit_suggestions_skill_id_base_version_id_fkey FOREIGN KEY (skill_id, base_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION
 );
 
+COMMENT ON COLUMN skill_edit_suggestions.id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestions.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestions.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestions.base_version_id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestions.rationale IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_edit_suggestions.status IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestions.scored_session_count IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestions.approved_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestions.approved_at IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestions.created_at IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestions.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS skill_edit_suggestions_skill_id_open_key
 ON skill_edit_suggestions (skill_id)
 WHERE status = 'open';
@@ -776,6 +1043,15 @@ CREATE TABLE IF NOT EXISTS skill_edit_suggestion_changes (
   CONSTRAINT skill_edit_suggestion_changes_proposed_diff_size_check CHECK (octet_length(proposed_diff) <= 131072)
 );
 
+COMMENT ON COLUMN skill_edit_suggestion_changes.id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestion_changes.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestion_changes.suggestion_id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestion_changes.proposed_diff IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_edit_suggestion_changes.rationale IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_edit_suggestion_changes.position IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestion_changes.created_at IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestion_changes.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS skill_edit_suggestion_changes_project_id_id_key ON skill_edit_suggestion_changes (project_id, id);
 
 CREATE INDEX IF NOT EXISTS skill_edit_suggestion_changes_suggestion_position_idx ON skill_edit_suggestion_changes (project_id, suggestion_id, position);
@@ -791,6 +1067,11 @@ CREATE TABLE IF NOT EXISTS skill_edit_suggestion_feedback (
   CONSTRAINT skill_edit_suggestion_feedback_project_id_change_id_fkey FOREIGN KEY (project_id, change_id) REFERENCES skill_edit_suggestion_changes (project_id, id) ON DELETE CASCADE,
   CONSTRAINT skill_edit_suggestion_feedback_project_id_feedback_id_fkey FOREIGN KEY (project_id, feedback_id) REFERENCES skill_feedback (project_id, id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN skill_edit_suggestion_feedback.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestion_feedback.change_id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestion_feedback.feedback_id IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestion_feedback.created_at IS '@access: confidential';
 CREATE INDEX IF NOT EXISTS skill_edit_suggestion_feedback_project_id_feedback_id_idx
 ON skill_edit_suggestion_feedback (project_id, feedback_id);
 
@@ -823,6 +1104,28 @@ CREATE TABLE IF NOT EXISTS skill_observations (
   CONSTRAINT skill_observations_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION,
   CONSTRAINT skill_observations_skill_id_skill_version_id_check CHECK (skill_version_id IS NULL OR skill_id IS NOT NULL)
 );
+
+COMMENT ON COLUMN skill_observations.id IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.idempotency_key IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_observations.provider IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.user_id IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.user_email IS '@access: confidential-pii';
+COMMENT ON COLUMN skill_observations.hostname IS '@access: confidential-pii';
+COMMENT ON COLUMN skill_observations.session_id IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_observations.skill_name IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.source IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_observations.source_level IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_observations.source_path IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_observations.raw_sha256 IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.seen_at IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.skill_version_id IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.reconciled_at IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.metrics_synced_at IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.efficacy_enqueued_at IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.reconcile_error_code IS '@access: confidential';
+COMMENT ON COLUMN skill_observations.created_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_observations_project_id_idempotency_key_key
 ON skill_observations (project_id, idempotency_key)
@@ -869,6 +1172,11 @@ CREATE TABLE IF NOT EXISTS skill_raw_hashes (
   CONSTRAINT skill_raw_hashes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN skill_raw_hashes.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_raw_hashes.raw_sha256 IS '@access: confidential';
+COMMENT ON COLUMN skill_raw_hashes.canonical_sha256 IS '@access: confidential';
+COMMENT ON COLUMN skill_raw_hashes.created_at IS '@access: confidential';
+
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
 -- Admins create plugins and assign them to roles for distribution.
 CREATE TABLE IF NOT EXISTS plugins (
@@ -890,6 +1198,17 @@ CREATE TABLE IF NOT EXISTS plugins (
   CONSTRAINT plugins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN plugins.id IS '@access: confidential';
+COMMENT ON COLUMN plugins.organization_id IS '@access: confidential';
+COMMENT ON COLUMN plugins.project_id IS '@access: confidential';
+COMMENT ON COLUMN plugins.name IS '@access: confidential';
+COMMENT ON COLUMN plugins.slug IS '@access: confidential';
+COMMENT ON COLUMN plugins.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN plugins.created_at IS '@access: confidential';
+COMMENT ON COLUMN plugins.updated_at IS '@access: confidential';
+COMMENT ON COLUMN plugins.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN plugins.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
   ON plugins (organization_id, project_id, slug)
   WHERE deleted IS FALSE;
@@ -905,7 +1224,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_is_default_key
   ON plugins (project_id)
   WHERE is_default IS TRUE AND deleted IS FALSE;
 
-COMMENT ON COLUMN plugins.is_default IS 'Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).';
+COMMENT ON COLUMN plugins.is_default IS 'Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).
+@access: confidential';
 
 CREATE TABLE IF NOT EXISTS skill_sync_receipts (
   project_id uuid NOT NULL,
@@ -927,6 +1247,17 @@ CREATE TABLE IF NOT EXISTS skill_sync_receipts (
   CONSTRAINT skill_sync_receipts_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id)
 );
 
+COMMENT ON COLUMN skill_sync_receipts.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_sync_receipts.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_sync_receipts.skill_version_id IS '@access: confidential';
+COMMENT ON COLUMN skill_sync_receipts.user_id IS '@access: confidential';
+COMMENT ON COLUMN skill_sync_receipts.hostname IS '@access: confidential-pii';
+COMMENT ON COLUMN skill_sync_receipts.provider IS '@access: confidential';
+COMMENT ON COLUMN skill_sync_receipts.status IS '@access: restricted';
+COMMENT ON COLUMN skill_sync_receipts.synced_at IS '@access: confidential';
+COMMENT ON COLUMN skill_sync_receipts.created_at IS '@access: confidential';
+COMMENT ON COLUMN skill_sync_receipts.updated_at IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_skill_id_skill_version_id_idx ON skill_sync_receipts (skill_id, skill_version_id);
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_skill_version_id_idx ON skill_sync_receipts (project_id, skill_version_id);
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_user_id_hostname_provider_idx ON skill_sync_receipts (project_id, user_id, hostname, provider, skill_id);
@@ -945,6 +1276,14 @@ CREATE TABLE IF NOT EXISTS skill_efficacy_settings (
   CONSTRAINT skill_efficacy_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT skill_efficacy_settings_caps_check CHECK (per_skill_daily_cap >= 0 AND org_daily_cap >= 0 AND new_version_burst >= 0)
 );
+
+COMMENT ON COLUMN skill_efficacy_settings.organization_id IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_settings.enabled IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_settings.per_skill_daily_cap IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_settings.org_daily_cap IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_settings.new_version_burst IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_settings.created_at IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_settings.updated_at IS '@access: confidential';
 
 CREATE TABLE IF NOT EXISTS skill_efficacy_evaluations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -975,6 +1314,26 @@ CREATE TABLE IF NOT EXISTS skill_efficacy_evaluations (
   CONSTRAINT skill_efficacy_evaluations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
   CONSTRAINT skill_efficacy_evaluations_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION
 );
+
+COMMENT ON COLUMN skill_efficacy_evaluations.id IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.organization_id IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.surface IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.session_id IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_efficacy_evaluations.chat_id IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.skill_version_id IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.canonical_sha256 IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.observed_at IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.state IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.reserved_on IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.claim_token IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.attempts IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.last_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN skill_efficacy_evaluations.scored_at IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.failed_at IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.created_at IS '@access: confidential';
+COMMENT ON COLUMN skill_efficacy_evaluations.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_efficacy_evaluations_scoring_unit_key
 ON skill_efficacy_evaluations (project_id, session_id, skill_version_id, surface);
@@ -1034,6 +1393,22 @@ CREATE TABLE IF NOT EXISTS packages (
   CONSTRAINT packages_image_asset_id_fkey FOREIGN KEY (image_asset_id) REFERENCES assets (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN packages.id IS '@access: confidential';
+COMMENT ON COLUMN packages.name IS '@access: confidential';
+COMMENT ON COLUMN packages.title IS '@access: confidential';
+COMMENT ON COLUMN packages.summary IS '@access: opaque-restricted';
+COMMENT ON COLUMN packages.description_raw IS '@access: opaque-restricted';
+COMMENT ON COLUMN packages.description_html IS '@access: opaque-restricted';
+COMMENT ON COLUMN packages.url IS '@access: restricted';
+COMMENT ON COLUMN packages.keywords IS '@access: opaque-restricted';
+COMMENT ON COLUMN packages.image_asset_id IS '@access: confidential';
+COMMENT ON COLUMN packages.organization_id IS '@access: confidential';
+COMMENT ON COLUMN packages.project_id IS '@access: confidential';
+COMMENT ON COLUMN packages.created_at IS '@access: confidential';
+COMMENT ON COLUMN packages.updated_at IS '@access: confidential';
+COMMENT ON COLUMN packages.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN packages.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS packages_name_idx ON packages (name);
 
 -- package name must be unique within an organization
@@ -1067,6 +1442,20 @@ CREATE TABLE IF NOT EXISTS package_versions (
   CONSTRAINT package_versions_package_id_fkey FOREIGN KEY (package_id) REFERENCES packages (id) ON DELETE CASCADE,
   CONSTRAINT package_versions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN package_versions.id IS '@access: confidential';
+COMMENT ON COLUMN package_versions.package_id IS '@access: confidential';
+COMMENT ON COLUMN package_versions.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN package_versions.visibility IS '@access: confidential';
+COMMENT ON COLUMN package_versions.major IS '@access: confidential';
+COMMENT ON COLUMN package_versions.minor IS '@access: confidential';
+COMMENT ON COLUMN package_versions.patch IS '@access: confidential';
+COMMENT ON COLUMN package_versions.prerelease IS '@access: confidential';
+COMMENT ON COLUMN package_versions.build IS '@access: confidential';
+COMMENT ON COLUMN package_versions.created_at IS '@access: confidential';
+COMMENT ON COLUMN package_versions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN package_versions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN package_versions.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS package_versions_package_id_semver_key
 ON package_versions (package_id DESC, major DESC, minor DESC, patch DESC, prerelease, build)
@@ -1103,6 +1492,24 @@ CREATE TABLE IF NOT EXISTS api_keys (
   CONSTRAINT api_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN api_keys.id IS '@access: confidential';
+COMMENT ON COLUMN api_keys.organization_id IS '@access: confidential';
+COMMENT ON COLUMN api_keys.project_id IS '@access: confidential';
+COMMENT ON COLUMN api_keys.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN api_keys.name IS '@access: confidential';
+COMMENT ON COLUMN api_keys.key_prefix IS '@access: secret-restricted';
+COMMENT ON COLUMN api_keys.key_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN api_keys.scopes IS '@access: confidential';
+COMMENT ON COLUMN api_keys.subject_urn IS '@access: confidential';
+COMMENT ON COLUMN api_keys.delegated_grants IS '@access: opaque-restricted';
+COMMENT ON COLUMN api_keys.delegated_grants_version IS '@access: confidential';
+COMMENT ON COLUMN api_keys.expires_at IS '@access: confidential';
+COMMENT ON COLUMN api_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN api_keys.updated_at IS '@access: confidential';
+COMMENT ON COLUMN api_keys.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN api_keys.deleted IS '@access: confidential';
+COMMENT ON COLUMN api_keys.last_accessed_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_name_key
 ON api_keys (organization_id, name)
 WHERE deleted IS FALSE;
@@ -1137,6 +1544,24 @@ CREATE TABLE IF NOT EXISTS litellm_instances (
   CONSTRAINT litellm_instances_api_key_tenant_fkey FOREIGN KEY (organization_id, project_id, api_key_id) REFERENCES api_keys (organization_id, project_id, id) ON DELETE RESTRICT
 );
 
+COMMENT ON COLUMN litellm_instances.id IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.organization_id IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.project_id IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.api_key_id IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.name IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.failure_posture IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.last_guardrail_event_at IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.last_otel_event_at IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.last_error_at IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.last_error_kind IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.reported_litellm_version IS '@access: opaque-restricted';
+COMMENT ON COLUMN litellm_instances.reported_litellm_version_at IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.created_at IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.updated_at IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN litellm_instances.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS litellm_instances_project_id_name_key
 ON litellm_instances (project_id, name)
 WHERE deleted IS FALSE;
@@ -1163,6 +1588,14 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
   CONSTRAINT device_agent_syncs_org_email_key UNIQUE (organization_id, email),
   CONSTRAINT device_agent_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN device_agent_syncs.id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_syncs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_syncs.email IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_syncs.first_seen_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_syncs.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_syncs.created_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_syncs.updated_at IS '@access: confidential';
 
 -- Serves the device-integration coverage join, which matches MDM-reported
 -- device emails against agent heartbeats case-insensitively (the raw-column
@@ -1222,6 +1655,16 @@ CREATE TABLE IF NOT EXISTS device_agent_environment_syncs (
   CONSTRAINT device_agent_environment_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN device_agent_environment_syncs.id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_environment_syncs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_environment_syncs.email IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_environment_syncs.environment IS '@access: confidential';
+COMMENT ON COLUMN device_agent_environment_syncs.hostname IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_environment_syncs.first_seen_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_environment_syncs.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_environment_syncs.created_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_environment_syncs.updated_at IS '@access: confidential';
+
 -- The dedup key, an expression index for the same reason the sibling device
 -- table uses one: every reader compares LOWER(email), and a raw-column key
 -- would let 'Dev@acme.com' and 'dev@acme.com' hold two rows for one identity.
@@ -1262,6 +1705,16 @@ CREATE TABLE IF NOT EXISTS device_agent_device_syncs (
   CONSTRAINT device_agent_device_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN device_agent_device_syncs.id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_device_syncs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_device_syncs.serial_number IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_device_syncs.email IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_device_syncs.hostname IS '@access: confidential-pii';
+COMMENT ON COLUMN device_agent_device_syncs.first_seen_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_device_syncs.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_device_syncs.created_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_device_syncs.updated_at IS '@access: confidential';
+
 -- The dedup key, and deliberately an EXPRESSION index rather than a
 -- UNIQUE (organization_id, serial_number) table constraint: vendors and agent
 -- read-paths disagree on serial casing (macOS ioreg vs Windows WMI, and any
@@ -1296,6 +1749,12 @@ CREATE TABLE IF NOT EXISTS device_agent_configurations (
   CONSTRAINT device_agent_configurations_pkey PRIMARY KEY (organization_id),
   CONSTRAINT device_agent_configurations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN device_agent_configurations.organization_id IS '@access: confidential';
+COMMENT ON COLUMN device_agent_configurations.schema_version IS '@access: confidential';
+COMMENT ON COLUMN device_agent_configurations.config IS '@access: opaque-restricted';
+COMMENT ON COLUMN device_agent_configurations.created_at IS '@access: confidential';
+COMMENT ON COLUMN device_agent_configurations.updated_at IS '@access: confidential';
 
 -- ai_scan_targets is an organization's overlay on the Shadow AI scan target
 -- catalog its device agents probe for. A row is whatever the organization has
@@ -1354,6 +1813,23 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
   CONSTRAINT ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN ai_scan_targets.organization_id IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.id IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.display_name IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.category IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.bundle_ids IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.binaries IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.config_dirs IS '@access: opaque-restricted';
+COMMENT ON COLUMN ai_scan_targets.process_names IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.version_plist_key IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.cimd_vendor_keys IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.oauth_client_ids IS '@access: restricted';
+COMMENT ON COLUMN ai_scan_targets.client_info_names IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.status IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.rationale IS '@access: opaque-restricted';
+COMMENT ON COLUMN ai_scan_targets.created_at IS '@access: confidential';
+COMMENT ON COLUMN ai_scan_targets.updated_at IS '@access: confidential';
+
 
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1367,6 +1843,12 @@ CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   CONSTRAINT deployments_openapiv3_documents_asset_id_fkey FOREIGN key (asset_id) REFERENCES assets (id) ON DELETE CASCADE,
   CONSTRAINT deployments_openapiv3_documents_deployment_id_slug_key UNIQUE (deployment_id, slug)
 );
+
+COMMENT ON COLUMN deployments_openapiv3_assets.id IS '@access: confidential';
+COMMENT ON COLUMN deployments_openapiv3_assets.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN deployments_openapiv3_assets.asset_id IS '@access: confidential';
+COMMENT ON COLUMN deployments_openapiv3_assets.name IS '@access: confidential';
+COMMENT ON COLUMN deployments_openapiv3_assets.slug IS '@access: confidential';
 
 CREATE TABLE IF NOT EXISTS deployments_packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1382,6 +1864,11 @@ CREATE TABLE IF NOT EXISTS deployments_packages (
   -- a single deployment cannot have duplicate packages
   CONSTRAINT deployments_packages_deployment_id_package_id_key UNIQUE (deployment_id, package_id)
 );
+
+COMMENT ON COLUMN deployments_packages.id IS '@access: confidential';
+COMMENT ON COLUMN deployments_packages.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN deployments_packages.package_id IS '@access: confidential';
+COMMENT ON COLUMN deployments_packages.version_id IS '@access: confidential';
 
 CREATE TABLE IF NOT EXISTS http_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1439,6 +1926,45 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   CONSTRAINT http_tool_definitions_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN http_tool_definitions.id IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.tool_urn IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.project_id IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.openapiv3_document_id IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.confirm IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.confirm_prompt IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.summarizer IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.name IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.untruncated_name IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.summary IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.openapiv3_operation IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.tags IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.x_gram IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.original_name IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.original_summary IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.original_description IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.server_env_var IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.default_server_url IS '@access: restricted';
+COMMENT ON COLUMN http_tool_definitions.security IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.http_method IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.path IS '@access: restricted';
+COMMENT ON COLUMN http_tool_definitions.schema_version IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.schema IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.header_settings IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.query_settings IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.path_settings IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.request_content_type IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.response_filter IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_tool_definitions.read_only_hint IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.destructive_hint IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.idempotent_hint IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.open_world_hint IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.created_at IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN http_tool_definitions.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS http_tool_definitions_name_idx ON http_tool_definitions (name);
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_deleted_id_idx ON http_tool_definitions(deployment_id, deleted, id DESC) WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_tool_urn_idx ON http_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
@@ -1467,6 +1993,18 @@ CREATE TABLE IF NOT EXISTS deployments_functions (
   CONSTRAINT deployments_functions_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN deployments_functions.id IS '@access: confidential';
+COMMENT ON COLUMN deployments_functions.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN deployments_functions.asset_id IS '@access: confidential';
+COMMENT ON COLUMN deployments_functions.name IS '@access: confidential';
+COMMENT ON COLUMN deployments_functions.slug IS '@access: confidential';
+COMMENT ON COLUMN deployments_functions.runtime IS '@access: confidential';
+COMMENT ON COLUMN deployments_functions.runner_version IS '@access: confidential';
+COMMENT ON COLUMN deployments_functions.memory_mib IS '@access: confidential';
+COMMENT ON COLUMN deployments_functions.scale IS '@access: confidential';
+COMMENT ON COLUMN deployments_functions.memory_mib_override IS '@access: confidential';
+COMMENT ON COLUMN deployments_functions.scale_override IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS deployments_functions_deployment_id_slug_key ON deployments_functions (deployment_id, slug);
 
 CREATE TABLE IF NOT EXISTS functions_access (
@@ -1489,6 +2027,18 @@ CREATE TABLE IF NOT EXISTS functions_access (
   CONSTRAINT functions_access_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
   CONSTRAINT functions_access_function_id_fkey FOREIGN KEY (function_id) REFERENCES deployments_functions (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN functions_access.id IS '@access: confidential';
+COMMENT ON COLUMN functions_access.seq IS '@access: confidential';
+COMMENT ON COLUMN functions_access.project_id IS '@access: confidential';
+COMMENT ON COLUMN functions_access.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN functions_access.function_id IS '@access: confidential';
+COMMENT ON COLUMN functions_access.encryption_key IS '@access: secret-restricted';
+COMMENT ON COLUMN functions_access.bearer_format IS '@access: confidential';
+COMMENT ON COLUMN functions_access.created_at IS '@access: confidential';
+COMMENT ON COLUMN functions_access.updated_at IS '@access: confidential';
+COMMENT ON COLUMN functions_access.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN functions_access.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS functions_access_project_deployment_function_seq_key ON functions_access (project_id, deployment_id, function_id, seq DESC) WHERE deleted IS FALSE;
 
@@ -1528,6 +2078,28 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   CONSTRAINT function_tool_definitions_function_id_fkey FOREIGN KEY (function_id) REFERENCES deployments_functions (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN function_tool_definitions.id IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.tool_urn IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.project_id IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.function_id IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.runtime IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.name IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN function_tool_definitions.tags IS '@access: opaque-restricted';
+COMMENT ON COLUMN function_tool_definitions.input_schema IS '@access: opaque-restricted';
+COMMENT ON COLUMN function_tool_definitions.variables IS '@access: opaque-restricted';
+COMMENT ON COLUMN function_tool_definitions.auth_input IS '@access: opaque-restricted';
+COMMENT ON COLUMN function_tool_definitions.meta IS '@access: opaque-restricted';
+COMMENT ON COLUMN function_tool_definitions.read_only_hint IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.destructive_hint IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.idempotent_hint IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.open_world_hint IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.created_at IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN function_tool_definitions.deleted IS '@access: confidential';
+
 CREATE TABLE IF NOT EXISTS function_resource_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   resource_urn TEXT NOT NULL,
@@ -1556,6 +2128,24 @@ CREATE TABLE IF NOT EXISTS function_resource_definitions (
   CONSTRAINT function_resource_definitions_function_id_fkey FOREIGN KEY (function_id) REFERENCES deployments_functions (id) ON DELETE CASCADE,
   CONSTRAINT function_resource_definitions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN function_resource_definitions.id IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.resource_urn IS '@access: restricted';
+COMMENT ON COLUMN function_resource_definitions.project_id IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.function_id IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.runtime IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.name IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN function_resource_definitions.uri IS '@access: restricted';
+COMMENT ON COLUMN function_resource_definitions.title IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.mime_type IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.variables IS '@access: opaque-restricted';
+COMMENT ON COLUMN function_resource_definitions.meta IS '@access: opaque-restricted';
+COMMENT ON COLUMN function_resource_definitions.created_at IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN function_resource_definitions.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS function_resource_definitions_deployment_id_tool_urn_key ON function_resource_definitions (deployment_id, resource_urn) WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS function_resource_definitions_function_id_idx ON function_resource_definitions (function_id) WHERE deleted IS FALSE;
@@ -1592,6 +2182,24 @@ CREATE TABLE IF NOT EXISTS fly_apps (
   CONSTRAINT fly_apps_access_id_fkey FOREIGN KEY (access_id) REFERENCES functions_access (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN fly_apps.id IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.seq IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.project_id IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.function_id IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.access_id IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.fly_org_id IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.fly_org_slug IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.app_name IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.app_url IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.runner_version IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.primary_region IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.status IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.reaped_at IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.reap_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN fly_apps.created_at IS '@access: confidential';
+COMMENT ON COLUMN fly_apps.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS fly_apps_project_deployment_function_active_key ON fly_apps (project_id, deployment_id, function_id) WHERE reaped_at IS NULL;
 CREATE INDEX IF NOT EXISTS fly_apps_reaper_idx ON fly_apps (project_id, created_at DESC) WHERE status = 'ready' AND reaped_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS fly_apps_seq_key ON fly_apps (seq DESC);
@@ -1613,6 +2221,17 @@ CREATE TABLE IF NOT EXISTS environments (
   CONSTRAINT environments_pkey PRIMARY KEY (id),
   CONSTRAINT environments_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN environments.id IS '@access: confidential';
+COMMENT ON COLUMN environments.organization_id IS '@access: confidential';
+COMMENT ON COLUMN environments.project_id IS '@access: confidential';
+COMMENT ON COLUMN environments.name IS '@access: confidential';
+COMMENT ON COLUMN environments.slug IS '@access: confidential';
+COMMENT ON COLUMN environments.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN environments.created_at IS '@access: confidential';
+COMMENT ON COLUMN environments.updated_at IS '@access: confidential';
+COMMENT ON COLUMN environments.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN environments.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS environments_project_id_slug_key
 ON environments (project_id, slug)
@@ -1640,6 +2259,22 @@ CREATE TABLE IF NOT EXISTS trigger_instances (
   CONSTRAINT trigger_instances_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT trigger_instances_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN trigger_instances.id IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.organization_id IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.project_id IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.definition_slug IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.name IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.environment_id IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.target_kind IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.target_ref IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.target_display IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.config_json IS '@access: opaque-restricted';
+COMMENT ON COLUMN trigger_instances.status IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.created_at IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.updated_at IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN trigger_instances.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS trigger_instances_project_id_idx
 ON trigger_instances (project_id, created_at DESC)
@@ -1680,6 +2315,19 @@ CREATE TABLE IF NOT EXISTS trigger_thread_routes (
   CONSTRAINT trigger_thread_routes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN trigger_thread_routes.id IS '@access: confidential';
+COMMENT ON COLUMN trigger_thread_routes.project_id IS '@access: confidential';
+COMMENT ON COLUMN trigger_thread_routes.target_kind IS '@access: confidential';
+COMMENT ON COLUMN trigger_thread_routes.target_ref IS '@access: confidential';
+COMMENT ON COLUMN trigger_thread_routes.correlation_id IS '@access: restricted';
+COMMENT ON COLUMN trigger_thread_routes.route_to_correlation_id IS '@access: restricted';
+COMMENT ON COLUMN trigger_thread_routes.state IS '@access: confidential';
+COMMENT ON COLUMN trigger_thread_routes.last_seen_cursor IS '@access: confidential';
+COMMENT ON COLUMN trigger_thread_routes.created_at IS '@access: confidential';
+COMMENT ON COLUMN trigger_thread_routes.updated_at IS '@access: confidential';
+COMMENT ON COLUMN trigger_thread_routes.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN trigger_thread_routes.deleted IS '@access: confidential';
+
 -- Serves the project_id foreign key's cascade, which also reaches soft-deleted
 -- rows that the partial indexes below leave out.
 CREATE INDEX IF NOT EXISTS trigger_thread_routes_project_id_idx
@@ -1705,6 +2353,13 @@ CREATE TABLE IF NOT EXISTS environment_entries (
   CONSTRAINT environments_entries_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN environment_entries.name IS '@access: confidential';
+COMMENT ON COLUMN environment_entries.value IS '@access: secret-restricted';
+COMMENT ON COLUMN environment_entries.is_secret IS '@access: confidential';
+COMMENT ON COLUMN environment_entries.environment_id IS '@access: confidential';
+COMMENT ON COLUMN environment_entries.created_at IS '@access: confidential';
+COMMENT ON COLUMN environment_entries.updated_at IS '@access: confidential';
+
 CREATE TABLE IF NOT EXISTS source_environments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   source_kind TEXT NOT NULL,
@@ -1719,6 +2374,14 @@ CREATE TABLE IF NOT EXISTS source_environments (
   CONSTRAINT source_environments_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE CASCADE,
   CONSTRAINT source_environments_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN source_environments.id IS '@access: confidential';
+COMMENT ON COLUMN source_environments.source_kind IS '@access: confidential';
+COMMENT ON COLUMN source_environments.source_slug IS '@access: confidential';
+COMMENT ON COLUMN source_environments.project_id IS '@access: confidential';
+COMMENT ON COLUMN source_environments.environment_id IS '@access: confidential';
+COMMENT ON COLUMN source_environments.created_at IS '@access: confidential';
+COMMENT ON COLUMN source_environments.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS source_environments_source_kind_source_slug_idx ON source_environments (project_id, source_kind, source_slug);
 
@@ -1758,6 +2421,27 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   CONSTRAINT custom_domains_pkey PRIMARY KEY (id)
 
 );
+
+COMMENT ON COLUMN custom_domains.id IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.organization_id IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.domain IS '@access: restricted';
+COMMENT ON COLUMN custom_domains.verified IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.activated IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.ingress_name IS '@access: restricted';
+COMMENT ON COLUMN custom_domains.cert_secret_name IS '@access: restricted';
+COMMENT ON COLUMN custom_domains.provisioner_kind IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.ip_allowlist IS '@access: opaque-restricted';
+COMMENT ON COLUMN custom_domains.openai_apps_challenge_token IS '@access: secret-restricted';
+COMMENT ON COLUMN custom_domains.health_status IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.health_issue IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.health_checked_at IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.unhealthy_since IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.certificate_expires_at IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.consecutive_failures IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.created_at IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.updated_at IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_domain_key
 ON custom_domains (domain)
@@ -1805,6 +2489,28 @@ CREATE TABLE IF NOT EXISTS network_ingresses (
   CONSTRAINT network_ingresses_pkey PRIMARY KEY (id),
   CONSTRAINT network_ingresses_organization_id_custom_domain_id_fkey FOREIGN KEY (organization_id, custom_domain_id) REFERENCES custom_domains (organization_id, id) ON DELETE NO ACTION
 );
+
+COMMENT ON COLUMN network_ingresses.id IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.organization_id IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.provider IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.hostname IS '@access: restricted';
+COMMENT ON COLUMN network_ingresses.endpoint_namespace_kind IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.custom_domain_id IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.enabled IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.identity_required IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.credentials_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN network_ingresses.attestor_namespace IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.attestor_service_account IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.provider_resources IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.status IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.dns_name IS '@access: restricted';
+COMMENT ON COLUMN network_ingresses.last_error IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.health_checked_at IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.connected_since IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.created_at IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.updated_at IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN network_ingresses.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS network_ingresses_organization_id_key
 ON network_ingresses (organization_id)
@@ -1854,6 +2560,16 @@ CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
   )
 );
 
+COMMENT ON COLUMN external_oauth_server_metadata.id IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_server_metadata.project_id IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_server_metadata.slug IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_server_metadata.metadata IS '@access: opaque-restricted';
+COMMENT ON COLUMN external_oauth_server_metadata.authorization_server_issuer IS '@access: restricted';
+COMMENT ON COLUMN external_oauth_server_metadata.created_at IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_server_metadata.updated_at IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_server_metadata.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_server_metadata.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS external_oauth_server_metadata_project_slug_key
 ON external_oauth_server_metadata (project_id, slug)
 WHERE deleted IS FALSE;
@@ -1874,6 +2590,15 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_servers (
   CONSTRAINT oauth_proxy_servers_pkey PRIMARY KEY (id),
   CONSTRAINT oauth_proxy_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN oauth_proxy_servers.id IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_servers.project_id IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_servers.slug IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_servers.audience IS '@access: restricted';
+COMMENT ON COLUMN oauth_proxy_servers.created_at IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_servers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_servers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_servers.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS oauth_proxy_servers_project_slug_key
 ON oauth_proxy_servers (project_id, slug)
@@ -1913,6 +2638,26 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_providers (
   CONSTRAINT oauth_proxy_providers_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN oauth_proxy_providers.id IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.project_id IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.oauth_proxy_server_id IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.slug IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.provider_type IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.authorization_endpoint IS '@access: restricted';
+COMMENT ON COLUMN oauth_proxy_providers.token_endpoint IS '@access: restricted';
+COMMENT ON COLUMN oauth_proxy_providers.registration_endpoint IS '@access: restricted';
+COMMENT ON COLUMN oauth_proxy_providers.scopes_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN oauth_proxy_providers.response_types_supported IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.response_modes_supported IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.grant_types_supported IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.token_endpoint_auth_methods_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN oauth_proxy_providers.security_key_names IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.secrets IS '@access: secret-restricted';
+COMMENT ON COLUMN oauth_proxy_providers.created_at IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_providers.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS oauth_proxy_providers_project_slug_key
 ON oauth_proxy_providers (project_id, slug)
 WHERE deleted IS FALSE;
@@ -1944,6 +2689,16 @@ CREATE TABLE IF NOT EXISTS external_credentials (
   CONSTRAINT external_credentials_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN external_credentials.id IS '@access: confidential';
+COMMENT ON COLUMN external_credentials.organization_id IS '@access: confidential';
+COMMENT ON COLUMN external_credentials.project_id IS '@access: confidential';
+COMMENT ON COLUMN external_credentials.provider IS '@access: confidential';
+COMMENT ON COLUMN external_credentials.name IS '@access: confidential';
+COMMENT ON COLUMN external_credentials.created_at IS '@access: confidential';
+COMMENT ON COLUMN external_credentials.updated_at IS '@access: confidential';
+COMMENT ON COLUMN external_credentials.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN external_credentials.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS external_credentials_organization_id_idx
 ON external_credentials (organization_id)
 WHERE deleted IS FALSE;
@@ -1964,6 +2719,16 @@ CREATE TABLE IF NOT EXISTS aws_iam_credentials (
   CONSTRAINT aws_iam_credentials_auth_exclusive_check CHECK (num_nonnulls(external_id, oidc_audience) <= 1),
   CONSTRAINT aws_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN aws_iam_credentials.external_credential_id IS '@access: confidential';
+COMMENT ON COLUMN aws_iam_credentials.external_credentials_provider IS '@access: confidential';
+COMMENT ON COLUMN aws_iam_credentials.assume_role_arn IS '@access: restricted';
+COMMENT ON COLUMN aws_iam_credentials.external_id IS '@access: secret-restricted';
+COMMENT ON COLUMN aws_iam_credentials.oidc_audience IS '@access: restricted';
+COMMENT ON COLUMN aws_iam_credentials.oidc_subject IS '@access: restricted';
+COMMENT ON COLUMN aws_iam_credentials.sts_region IS '@access: confidential';
+COMMENT ON COLUMN aws_iam_credentials.created_at IS '@access: confidential';
+COMMENT ON COLUMN aws_iam_credentials.updated_at IS '@access: confidential';
 
 -- GCP credential: ambient | impersonation | WIF (mode derived); keyless, no SA-JSON
 CREATE TABLE IF NOT EXISTS gcp_iam_credentials (
@@ -1986,6 +2751,16 @@ CREATE TABLE IF NOT EXISTS gcp_iam_credentials (
   CONSTRAINT gcp_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN gcp_iam_credentials.external_credential_id IS '@access: confidential';
+COMMENT ON COLUMN gcp_iam_credentials.external_credentials_provider IS '@access: confidential';
+COMMENT ON COLUMN gcp_iam_credentials.impersonate_service_account IS '@access: restricted';
+COMMENT ON COLUMN gcp_iam_credentials.wif_pool_id IS '@access: restricted';
+COMMENT ON COLUMN gcp_iam_credentials.wif_provider_id IS '@access: restricted';
+COMMENT ON COLUMN gcp_iam_credentials.wif_project_number IS '@access: restricted';
+COMMENT ON COLUMN gcp_iam_credentials.skip_project_verification IS '@access: confidential';
+COMMENT ON COLUMN gcp_iam_credentials.created_at IS '@access: confidential';
+COMMENT ON COLUMN gcp_iam_credentials.updated_at IS '@access: confidential';
+
 -- Org-scoped connection to a customer identity provider (Okta first; Entra
 -- later). Class Table Inheritance with `provider` as the discriminator:
 -- subtype: okta_identity_provider_connections (below remote_session_clients).
@@ -2007,6 +2782,17 @@ CREATE TABLE IF NOT EXISTS identity_provider_connections (
   CONSTRAINT identity_provider_connections_status_check CHECK (status IN ('pending', 'verified', 'degraded', 'revoked')),
   CONSTRAINT identity_provider_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN identity_provider_connections.id IS '@access: confidential';
+COMMENT ON COLUMN identity_provider_connections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN identity_provider_connections.provider IS '@access: confidential';
+COMMENT ON COLUMN identity_provider_connections.status IS '@access: confidential';
+COMMENT ON COLUMN identity_provider_connections.last_verified_at IS '@access: confidential';
+COMMENT ON COLUMN identity_provider_connections.last_error IS '@access: confidential';
+COMMENT ON COLUMN identity_provider_connections.created_at IS '@access: confidential';
+COMMENT ON COLUMN identity_provider_connections.updated_at IS '@access: confidential';
+COMMENT ON COLUMN identity_provider_connections.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN identity_provider_connections.deleted IS '@access: confidential';
 
 -- One live connection per org per provider.
 CREATE UNIQUE INDEX IF NOT EXISTS identity_provider_connections_organization_id_provider_key
@@ -2065,6 +2851,20 @@ CREATE TABLE IF NOT EXISTS external_keys (
   )
 );
 
+COMMENT ON COLUMN external_keys.id IS '@access: confidential';
+COMMENT ON COLUMN external_keys.organization_id IS '@access: confidential';
+COMMENT ON COLUMN external_keys.project_id IS '@access: confidential';
+COMMENT ON COLUMN external_keys.external_credential_id IS '@access: confidential';
+COMMENT ON COLUMN external_keys.provider IS '@access: confidential';
+COMMENT ON COLUMN external_keys.algorithm IS '@access: confidential';
+COMMENT ON COLUMN external_keys.name IS '@access: confidential';
+COMMENT ON COLUMN external_keys.customer_grant_reference IS '@access: restricted';
+COMMENT ON COLUMN external_keys.identity_provider_connection_id IS '@access: confidential';
+COMMENT ON COLUMN external_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN external_keys.updated_at IS '@access: confidential';
+COMMENT ON COLUMN external_keys.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN external_keys.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS external_keys_identity_provider_connection_idx
 ON external_keys (organization_id, identity_provider_connection_id)
 WHERE identity_provider_connection_id IS NOT NULL;
@@ -2093,6 +2893,12 @@ CREATE TABLE IF NOT EXISTS aws_kms_keys (
   CONSTRAINT aws_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN aws_kms_keys.external_key_id IS '@access: confidential';
+COMMENT ON COLUMN aws_kms_keys.external_keys_provider IS '@access: confidential';
+COMMENT ON COLUMN aws_kms_keys.key_arn IS '@access: restricted';
+COMMENT ON COLUMN aws_kms_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN aws_kms_keys.updated_at IS '@access: confidential';
+
 CREATE TABLE IF NOT EXISTS gcp_kms_keys (
   external_key_id uuid NOT NULL,
   external_keys_provider TEXT NOT NULL DEFAULT 'gcp_kms',
@@ -2103,6 +2909,12 @@ CREATE TABLE IF NOT EXISTS gcp_kms_keys (
   CONSTRAINT gcp_kms_keys_external_keys_provider_check CHECK (external_keys_provider = 'gcp_kms'),
   CONSTRAINT gcp_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN gcp_kms_keys.external_key_id IS '@access: confidential';
+COMMENT ON COLUMN gcp_kms_keys.external_keys_provider IS '@access: confidential';
+COMMENT ON COLUMN gcp_kms_keys.resource_name IS '@access: restricted';
+COMMENT ON COLUMN gcp_kms_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN gcp_kms_keys.updated_at IS '@access: confidential';
 
 -- JSON Web Key Set (JWKS): the published collection of public keys for an
 -- issuer. Individual keys are external key based (e.g. KMS keys) and hold
@@ -2130,6 +2942,17 @@ CREATE TABLE IF NOT EXISTS json_web_key_sets (
   -- No NOT NULL CHECK needed here: organization_id is NOT NULL on this table.
   CONSTRAINT json_web_key_sets_identity_provider_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id)
 );
+
+COMMENT ON COLUMN json_web_key_sets.id IS '@access: confidential';
+COMMENT ON COLUMN json_web_key_sets.organization_id IS '@access: confidential';
+COMMENT ON COLUMN json_web_key_sets.project_id IS '@access: confidential';
+COMMENT ON COLUMN json_web_key_sets.external_key_id IS '@access: confidential';
+COMMENT ON COLUMN json_web_key_sets.name IS '@access: confidential';
+COMMENT ON COLUMN json_web_key_sets.identity_provider_connection_id IS '@access: confidential';
+COMMENT ON COLUMN json_web_key_sets.created_at IS '@access: confidential';
+COMMENT ON COLUMN json_web_key_sets.updated_at IS '@access: confidential';
+COMMENT ON COLUMN json_web_key_sets.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN json_web_key_sets.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS json_web_key_sets_identity_provider_connection_idx
 ON json_web_key_sets (organization_id, identity_provider_connection_id)
@@ -2177,6 +3000,23 @@ CREATE TABLE IF NOT EXISTS json_web_keys (
   CONSTRAINT json_web_keys_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id),
   CONSTRAINT json_web_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN json_web_keys.id IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.organization_id IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.project_id IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.json_web_key_set_id IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.external_key_id IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.external_key_version IS '@access: restricted';
+COMMENT ON COLUMN json_web_keys.state IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.kid IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.public_jwk IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.activated_at IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.retired_at IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.updated_at IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN json_web_keys.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS json_web_keys_one_active_idx
 ON json_web_keys (json_web_key_set_id)
@@ -2252,6 +3092,9 @@ CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
   CONSTRAINT tunneled_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN tunneled_mcp_servers.public_request_rate_per_second IS '@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.public_request_burst IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS tunneled_mcp_servers_project_id_idx
 ON tunneled_mcp_servers (project_id)
 WHERE deleted IS FALSE;
@@ -2265,20 +3108,34 @@ ON tunneled_mcp_servers (key_hash)
 WHERE deleted IS FALSE;
 
 COMMENT ON TABLE tunneled_mcp_servers IS 'Customer-hosted MCP server sources that connect to Gram through outbound tunnels.';
-COMMENT ON COLUMN tunneled_mcp_servers.id IS 'Stable UUID for the tunneled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.';
-COMMENT ON COLUMN tunneled_mcp_servers.project_id IS 'Project that owns this tunneled MCP source. All management queries are scoped by project_id.';
-COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the tunneled MCP source.';
-COMMENT ON COLUMN tunneled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.';
-COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.';
-COMMENT ON COLUMN tunneled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.';
-COMMENT ON COLUMN tunneled_mcp_servers.allow_public IS 'Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.';
-COMMENT ON COLUMN tunneled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.';
-COMMENT ON COLUMN tunneled_mcp_servers.resource_identifier IS 'RFC 9728 protected-resource identifier of the tunneled server, recorded as the RFC 8707 resource on grants and used only for exact-match credential routing. Names a host inside the customer''s private network — never dialed by Gram.';
-COMMENT ON COLUMN tunneled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.';
-COMMENT ON COLUMN tunneled_mcp_servers.created_at IS 'Time when the tunneled MCP source was created.';
-COMMENT ON COLUMN tunneled_mcp_servers.updated_at IS 'Time when the durable tunneled MCP source record was last updated.';
-COMMENT ON COLUMN tunneled_mcp_servers.deleted_at IS 'Soft-delete timestamp for the tunneled MCP source. NULL means the source is active.';
-COMMENT ON COLUMN tunneled_mcp_servers.deleted IS 'Generated soft-delete flag derived from deleted_at and used by partial indexes.';
+COMMENT ON COLUMN tunneled_mcp_servers.id IS 'Stable UUID for the tunneled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
+@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.project_id IS 'Project that owns this tunneled MCP source. All management queries are scoped by project_id.
+@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the tunneled MCP source.
+@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.
+@access: secret-restricted';
+COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.
+@access: secret-restricted';
+COMMENT ON COLUMN tunneled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.
+@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.allow_public IS 'Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.
+@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.
+@access: opaque-restricted';
+COMMENT ON COLUMN tunneled_mcp_servers.resource_identifier IS 'RFC 9728 protected-resource identifier of the tunneled server, recorded as the RFC 8707 resource on grants and used only for exact-match credential routing. Names a host inside the customer''s private network — never dialed by Gram.
+@access: restricted';
+COMMENT ON COLUMN tunneled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.
+@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.created_at IS 'Time when the tunneled MCP source was created.
+@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.updated_at IS 'Time when the durable tunneled MCP source record was last updated.
+@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.deleted_at IS 'Soft-delete timestamp for the tunneled MCP source. NULL means the source is active.
+@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.deleted IS 'Generated soft-delete flag derived from deleted_at and used by partial indexes.
+@access: confidential';
 
 -- Remote Session Issuers are references to external authorization servers
 -- that will mint tokens that can be passed on behalf of a Gram session to an
@@ -2413,6 +3270,58 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   CONSTRAINT remote_session_issuers_logo_asset_id_fkey FOREIGN KEY (logo_asset_id) REFERENCES assets (id) ON DELETE SET NULL,
   CONSTRAINT remote_session_issuers_tunneled_mcp_server_id_fkey FOREIGN KEY (tunneled_mcp_server_id) REFERENCES tunneled_mcp_servers (id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN remote_session_issuers.id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.project_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.organization_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.slug IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.issuer IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.authorization_endpoint IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.token_endpoint IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.revocation_endpoint IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.registration_endpoint IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.jwks_uri IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.jwks IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.jwks_fetched_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.jwks_last_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.jwks_last_error_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.jwks_cache_expires_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.jwks_etag IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.service_documentation IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.op_policy_uri IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.op_tos_uri IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.scopes_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.grant_types_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.authorization_grant_profiles_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.response_types_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.token_endpoint_auth_methods_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.code_challenge_methods_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.client_id_metadata_document_supported IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.userinfo_endpoint IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.introspection_endpoint IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.introspection_endpoint_auth_methods_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.id_token_signing_alg_values_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.claims_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.backchannel_logout_supported IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.authorization_response_iss_parameter_supported IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.scope_override IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.resource_indicator_supported IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.oidc IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.passthrough IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.tunneled_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.name IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.logo_asset_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.client_setup_documentation_url IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.metadata IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.metadata_fetched_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.metadata_last_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_issuers.metadata_last_error_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.metadata_last_error_url IS '@access: restricted';
+COMMENT ON COLUMN remote_session_issuers.created_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
 ON remote_session_issuers (project_id, slug)
@@ -2591,6 +3500,35 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   )
 );
 
+COMMENT ON COLUMN remote_session_clients.id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.project_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.organization_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.remote_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.client_id IS '@access: restricted';
+COMMENT ON COLUMN remote_session_clients.client_secret_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_session_clients.client_id_issued_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.client_secret_expires_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.token_endpoint_auth_method IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.json_web_key_set_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.scope IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_clients.grant_types IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_clients.audience IS '@access: restricted';
+COMMENT ON COLUMN remote_session_clients.token_endpoint_auth_audience_format IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.client_id_metadata_uri IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.legacy_callback_url IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.resource_identifier IS '@access: restricted';
+COMMENT ON COLUMN remote_session_clients.resource_name IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_clients.resource_documentation IS '@access: restricted';
+COMMENT ON COLUMN remote_session_clients.resource_policy_uri IS '@access: restricted';
+COMMENT ON COLUMN remote_session_clients.resource_tos_uri IS '@access: restricted';
+COMMENT ON COLUMN remote_session_clients.upstream_rejected_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.identity_provider_connection_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.updated_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.deleted IS '@access: confidential';
+
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_attachment_scope_key
 ON remote_session_clients (id, attachment_scope);
@@ -2668,6 +3606,29 @@ CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
   CONSTRAINT okta_identity_provider_connections_client_issuer_scope_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id, attachment_scope) REFERENCES remote_session_clients (id, remote_session_issuer_id, attachment_scope)
 );
 
+COMMENT ON COLUMN okta_identity_provider_connections.identity_provider_connection_id IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.identity_provider_connections_provider IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.org_url IS '@access: restricted';
+COMMENT ON COLUMN okta_identity_provider_connections.issuer_url IS '@access: restricted';
+COMMENT ON COLUMN okta_identity_provider_connections.issuer_url_override_reason IS '@access: opaque-restricted';
+COMMENT ON COLUMN okta_identity_provider_connections.ownership_claimed IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.remote_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.dpop_required IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.granted_scopes IS '@access: opaque-restricted';
+COMMENT ON COLUMN okta_identity_provider_connections.observed_admin_roles IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.listing_mode IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.agent_id IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.agent_app_id IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.applications_synced_at IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.applications_sync_requested_at IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.created_at IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.updated_at IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN okta_identity_provider_connections.deleted IS '@access: confidential';
+
 -- Pending connections do not reserve an issuer. Proven claims are exclusive
 -- unless a platform admin records an override reason.
 CREATE UNIQUE INDEX IF NOT EXISTS okta_identity_provider_connections_issuer_url_key
@@ -2718,6 +3679,23 @@ CREATE TABLE IF NOT EXISTS okta_applications (
   CONSTRAINT okta_applications_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN okta_applications.id IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.organization_id IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.identity_provider_connection_id IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.okta_app_id IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.label IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.name IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.sign_on_mode IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.status IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.features IS '@access: opaque-restricted';
+COMMENT ON COLUMN okta_applications.okta_created_at IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.okta_last_updated_at IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.first_seen_at IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.removed_at IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.created_at IS '@access: confidential';
+COMMENT ON COLUMN okta_applications.updated_at IS '@access: confidential';
+
 -- User and group assignments observed on each snapshotted application.
 -- principal_kind is user or group; okta_principal_id is the Okta user or
 -- group id. Same soft-remove and revocation rules as okta_applications.
@@ -2745,6 +3723,19 @@ CREATE TABLE IF NOT EXISTS okta_application_assignments (
   CONSTRAINT okta_application_assignments_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_app_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN okta_application_assignments.id IS '@access: confidential';
+COMMENT ON COLUMN okta_application_assignments.organization_id IS '@access: confidential';
+COMMENT ON COLUMN okta_application_assignments.identity_provider_connection_id IS '@access: confidential';
+COMMENT ON COLUMN okta_application_assignments.okta_app_id IS '@access: confidential';
+COMMENT ON COLUMN okta_application_assignments.principal_kind IS '@access: confidential';
+COMMENT ON COLUMN okta_application_assignments.okta_principal_id IS '@access: confidential-pii';
+COMMENT ON COLUMN okta_application_assignments.assignment_scope IS '@access: confidential';
+COMMENT ON COLUMN okta_application_assignments.first_seen_at IS '@access: confidential';
+COMMENT ON COLUMN okta_application_assignments.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN okta_application_assignments.removed_at IS '@access: confidential';
+COMMENT ON COLUMN okta_application_assignments.created_at IS '@access: confidential';
+COMMENT ON COLUMN okta_application_assignments.updated_at IS '@access: confidential';
+
 -- One row per reconcile run, including empty runs. Counts are the deltas the
 -- run applied; skipped_app_ids lists Okta-internal apps left out of the
 -- snapshot; truncated marks a run that hit the page or app cap.
@@ -2771,6 +3762,23 @@ CREATE TABLE IF NOT EXISTS okta_application_reconcile_runs (
   CONSTRAINT okta_application_reconcile_runs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT okta_application_reconcile_runs_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES okta_identity_provider_connections (organization_id, identity_provider_connection_id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN okta_application_reconcile_runs.id IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.identity_provider_connection_id IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.status IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.started_at IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.finished_at IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.applications_seen IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.applications_added IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.applications_removed IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.assignments_added IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.assignments_removed IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.skipped_app_ids IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.truncated IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.error IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.created_at IS '@access: confidential';
+COMMENT ON COLUMN okta_application_reconcile_runs.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS okta_application_reconcile_runs_connection_started_at_idx
 ON okta_application_reconcile_runs (organization_id, identity_provider_connection_id, started_at DESC);
@@ -2818,6 +3826,23 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   CONSTRAINT user_session_issuers_trusted_remote_session_client_id_fkey
     FOREIGN KEY (trusted_remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN user_session_issuers.id IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.project_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.organization_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.slug IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.authn_challenge_mode IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.session_duration IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.classification IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.client_id_metadata_admission_mode IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.trusted_remote_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.trusted_remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.use_authentication_host IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuers.deleted IS '@access: confidential';
 
 
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_attachment_scope_key
@@ -2931,6 +3956,28 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   )
 );
 
+COMMENT ON COLUMN user_session_clients.id IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.project_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.organization_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.client_id IS '@access: restricted';
+COMMENT ON COLUMN user_session_clients.client_secret_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN user_session_clients.client_name IS '@access: opaque-restricted';
+COMMENT ON COLUMN user_session_clients.redirect_uris IS '@access: opaque-restricted';
+COMMENT ON COLUMN user_session_clients.client_id_issued_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.client_secret_expires_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.client_id_metadata_uri IS '@access: restricted';
+COMMENT ON COLUMN user_session_clients.client_id_metadata_fetched_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.client_id_metadata_cache_expires_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.client_id_metadata_etag IS '@access: opaque-restricted';
+COMMENT ON COLUMN user_session_clients.token_endpoint_auth_method IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.client_jwks IS '@access: opaque-restricted';
+COMMENT ON COLUMN user_session_clients.client_jwks_uri IS '@access: restricted';
+COMMENT ON COLUMN user_session_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.updated_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_clients.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS user_session_clients_organization_id_idx
 ON user_session_clients (organization_id);
 
@@ -2965,6 +4012,16 @@ CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
   CONSTRAINT user_session_issuer_cimd_clients_user_session_issuer_id_fkey
     FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN user_session_issuer_cimd_clients.id IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuer_cimd_clients.project_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuer_cimd_clients.organization_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuer_cimd_clients.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuer_cimd_clients.client_id_metadata_uri IS '@access: restricted';
+COMMENT ON COLUMN user_session_issuer_cimd_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuer_cimd_clients.updated_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuer_cimd_clients.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_issuer_cimd_clients.deleted IS '@access: confidential';
 
 -- Also serves the issuer-scoped admission lookup (leading column, equality).
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_issuer_uri_key
@@ -3007,6 +4064,18 @@ CREATE TABLE IF NOT EXISTS user_session_consents (
   CONSTRAINT user_session_consents_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_consents_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN user_session_consents.id IS '@access: confidential';
+COMMENT ON COLUMN user_session_consents.project_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_consents.organization_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_consents.subject_urn IS '@access: confidential';
+COMMENT ON COLUMN user_session_consents.user_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN user_session_consents.remote_set_hash IS '@access: confidential';
+COMMENT ON COLUMN user_session_consents.consented_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consents.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consents.updated_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consents.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN user_session_consents.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS user_session_consents_organization_id_idx
 ON user_session_consents (organization_id);
@@ -3059,6 +4128,26 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN user_sessions.id IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.project_id IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.user_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.subject_urn IS '@access: restricted';
+COMMENT ON COLUMN user_sessions.authorizer_user_id IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.delegated_grants IS '@access: opaque-restricted';
+COMMENT ON COLUMN user_sessions.delegated_grants_version IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.jti IS '@access: secret-restricted';
+COMMENT ON COLUMN user_sessions.refresh_token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN user_sessions.refresh_expires_at IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.expires_at IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.tool_selection IS '@access: opaque-restricted';
+COMMENT ON COLUMN user_sessions.last_used_at IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS user_sessions_organization_id_idx
 ON user_sessions (organization_id);
@@ -3156,6 +4245,20 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- reject. Unenforced when project_id is NULL, which is the organization tier.
   CONSTRAINT workload_issuers_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN workload_issuers.id IS '@access: confidential';
+COMMENT ON COLUMN workload_issuers.organization_id IS '@access: confidential';
+COMMENT ON COLUMN workload_issuers.project_id IS '@access: confidential';
+COMMENT ON COLUMN workload_issuers.name IS '@access: confidential';
+COMMENT ON COLUMN workload_issuers.tags IS '@access: opaque-restricted';
+COMMENT ON COLUMN workload_issuers.issuer IS '@access: restricted';
+COMMENT ON COLUMN workload_issuers.jwks_uri IS '@access: restricted';
+COMMENT ON COLUMN workload_issuers.allow_wildcard_admission IS '@access: confidential';
+COMMENT ON COLUMN workload_issuers.metadata IS '@access: opaque-restricted';
+COMMENT ON COLUMN workload_issuers.created_at IS '@access: confidential';
+COMMENT ON COLUMN workload_issuers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN workload_issuers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN workload_issuers.deleted IS '@access: confidential';
 
 -- Exists to be a composite foreign-key target, not for lookup: the admitted
 -- workload table pins its tenancy through it, so a row in one organization
@@ -3289,6 +4392,18 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   CONSTRAINT workload_identity_admissions_workload_issuer_fkey FOREIGN KEY (organization_id, workload_issuer_id) REFERENCES workload_issuers (organization_id, id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN workload_identity_admissions.id IS '@access: confidential';
+COMMENT ON COLUMN workload_identity_admissions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN workload_identity_admissions.project_id IS '@access: confidential';
+COMMENT ON COLUMN workload_identity_admissions.workload_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN workload_identity_admissions.subject IS '@access: restricted';
+COMMENT ON COLUMN workload_identity_admissions.match_kind IS '@access: confidential';
+COMMENT ON COLUMN workload_identity_admissions.name IS '@access: confidential';
+COMMENT ON COLUMN workload_identity_admissions.created_at IS '@access: confidential';
+COMMENT ON COLUMN workload_identity_admissions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN workload_identity_admissions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN workload_identity_admissions.deleted IS '@access: confidential';
+
 -- Serves the exact arm of the admission lookup, which compares subject with no
 -- expression around the column so this index stays usable. The wildcard arm
 -- cannot use it — it asks whether a stored stem leads the parameter,
@@ -3334,6 +4449,10 @@ CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
   CONSTRAINT remote_session_client_user_session_issuers_client_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE,
   CONSTRAINT remote_session_client_user_session_issuers_issuer_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN remote_session_client_user_session_issuers.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_client_user_session_issuers.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_client_user_session_issuers.created_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
 ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
@@ -3394,6 +4513,33 @@ CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
   CONSTRAINT trusted_issuer_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
   CONSTRAINT trusted_issuer_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN trusted_issuer_sessions.id IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.project_id IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.subject_urn IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.identity_assertion_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.identity_assertion_expires_at IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.refresh_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.refresh_expires_at IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.last_refresh_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.offline_access_refused_at IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.offline_access_request_config_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.credential_generation IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.refresh_claim_id IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.upstream_subject_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.nonce_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.credential_config_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.observation_status IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.observed_at IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.credential_obtained_at IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.last_refresh_succeeded_at IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.retry_after IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.created_at IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN trusted_issuer_sessions.deleted IS '@access: confidential';
 
 -- Non-partial indexes support FK actions on live and soft-deleted rows alike.
 CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_remote_session_client_id_idx
@@ -3498,6 +4644,34 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   CONSTRAINT remote_sessions_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN remote_sessions.id IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.grant_generation IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.subject_urn IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.access_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_sessions.access_expires_at IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.refresh_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_sessions.authorization_expires_at IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.refresh_expires_at IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.scopes IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_sessions.resource IS '@access: restricted';
+COMMENT ON COLUMN remote_sessions.auto_refresh IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.last_refresh_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.last_used_at IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.upstream_subject IS '@access: confidential-pii';
+COMMENT ON COLUMN remote_sessions.upstream_email IS '@access: confidential-pii';
+COMMENT ON COLUMN remote_sessions.upstream_display_name IS '@access: confidential-pii';
+COMMENT ON COLUMN remote_sessions.identity_source IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.enrichment IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_sessions.last_validated_at IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.validation_status IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.validation_reason IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_sessions.created_at IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_client_issuer_id_key
 ON remote_sessions (remote_session_client_id, user_session_issuer_id, id);
 
@@ -3539,6 +4713,15 @@ CREATE TABLE IF NOT EXISTS tool_variations_groups (
   CONSTRAINT tool_variations_groups_pkey PRIMARY KEY (id),
   CONSTRAINT tool_variations_groups_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN tool_variations_groups.id IS '@access: confidential';
+COMMENT ON COLUMN tool_variations_groups.project_id IS '@access: confidential';
+COMMENT ON COLUMN tool_variations_groups.name IS '@access: confidential';
+COMMENT ON COLUMN tool_variations_groups.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN tool_variations_groups.created_at IS '@access: confidential';
+COMMENT ON COLUMN tool_variations_groups.updated_at IS '@access: confidential';
+COMMENT ON COLUMN tool_variations_groups.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN tool_variations_groups.deleted IS '@access: confidential';
 
 CREATE TABLE IF NOT EXISTS toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -3585,6 +4768,27 @@ CREATE TABLE IF NOT EXISTS toolsets (
   CONSTRAINT toolsets_oauth_exclusivity CHECK ((external_oauth_server_id IS NULL) != (oauth_proxy_server_id IS NULL) OR (external_oauth_server_id IS NULL AND oauth_proxy_server_id IS NULL))
 );
 
+COMMENT ON COLUMN toolsets.id IS '@access: confidential';
+COMMENT ON COLUMN toolsets.organization_id IS '@access: confidential';
+COMMENT ON COLUMN toolsets.project_id IS '@access: confidential';
+COMMENT ON COLUMN toolsets.name IS '@access: confidential';
+COMMENT ON COLUMN toolsets.slug IS '@access: confidential';
+COMMENT ON COLUMN toolsets.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN toolsets.default_environment_slug IS '@access: confidential';
+COMMENT ON COLUMN toolsets.mcp_slug IS '@access: confidential';
+COMMENT ON COLUMN toolsets.mcp_is_public IS '@access: confidential';
+COMMENT ON COLUMN toolsets.mcp_enabled IS '@access: confidential';
+COMMENT ON COLUMN toolsets.tool_selection_mode IS '@access: confidential';
+COMMENT ON COLUMN toolsets.custom_domain_id IS '@access: confidential';
+COMMENT ON COLUMN toolsets.external_oauth_server_id IS '@access: confidential';
+COMMENT ON COLUMN toolsets.oauth_proxy_server_id IS '@access: confidential';
+COMMENT ON COLUMN toolsets.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN toolsets.tool_variations_group_id IS '@access: confidential';
+COMMENT ON COLUMN toolsets.created_at IS '@access: confidential';
+COMMENT ON COLUMN toolsets.updated_at IS '@access: confidential';
+COMMENT ON COLUMN toolsets.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN toolsets.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
 ON toolsets (project_id, slug)
 WHERE deleted IS FALSE;
@@ -3616,6 +4820,17 @@ CREATE TABLE IF NOT EXISTS toolset_versions (
   CONSTRAINT toolset_versions_version_toolset_id_key UNIQUE (version, toolset_id)
 );
 
+COMMENT ON COLUMN toolset_versions.id IS '@access: confidential';
+COMMENT ON COLUMN toolset_versions.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_versions.version IS '@access: confidential';
+COMMENT ON COLUMN toolset_versions.tool_urns IS '@access: confidential';
+COMMENT ON COLUMN toolset_versions.resource_urns IS '@access: opaque-restricted';
+COMMENT ON COLUMN toolset_versions.predecessor_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_versions.created_at IS '@access: confidential';
+COMMENT ON COLUMN toolset_versions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN toolset_versions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN toolset_versions.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS toolset_versions_toolset_id_version_idx ON toolset_versions (toolset_id, version DESC);
 
 CREATE TABLE IF NOT EXISTS toolset_environments (
@@ -3632,6 +4847,13 @@ CREATE TABLE IF NOT EXISTS toolset_environments (
   CONSTRAINT toolset_environments_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE CASCADE,
   CONSTRAINT toolset_environments_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN toolset_environments.id IS '@access: confidential';
+COMMENT ON COLUMN toolset_environments.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_environments.project_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_environments.environment_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_environments.created_at IS '@access: confidential';
+COMMENT ON COLUMN toolset_environments.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS toolset_environments_toolset_id_idx ON toolset_environments (toolset_id);
 
@@ -3663,6 +4885,24 @@ CREATE TABLE IF NOT EXISTS http_security (
   CONSTRAINT http_security_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT http_security_openapiv3_document_id_fkey FOREIGN key (openapiv3_document_id) REFERENCES deployments_openapiv3_assets (id) ON DELETE RESTRICT
 );
+
+COMMENT ON COLUMN http_security.id IS '@access: confidential';
+COMMENT ON COLUMN http_security.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN http_security.project_id IS '@access: confidential';
+COMMENT ON COLUMN http_security.openapiv3_document_id IS '@access: confidential';
+COMMENT ON COLUMN http_security.key IS '@access: confidential';
+COMMENT ON COLUMN http_security.type IS '@access: confidential';
+COMMENT ON COLUMN http_security.name IS '@access: confidential';
+COMMENT ON COLUMN http_security.in_placement IS '@access: confidential';
+COMMENT ON COLUMN http_security.scheme IS '@access: confidential';
+COMMENT ON COLUMN http_security.bearer_format IS '@access: confidential';
+COMMENT ON COLUMN http_security.oauth_types IS '@access: confidential';
+COMMENT ON COLUMN http_security.oauth_flows IS '@access: opaque-restricted';
+COMMENT ON COLUMN http_security.env_variables IS '@access: confidential';
+COMMENT ON COLUMN http_security.created_at IS '@access: confidential';
+COMMENT ON COLUMN http_security.updated_at IS '@access: confidential';
+COMMENT ON COLUMN http_security.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN http_security.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS http_security_deleted_idx
 ON http_security (deleted);
@@ -3704,6 +4944,19 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
 
   CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id, key_type)
 );
+
+COMMENT ON COLUMN openrouter_api_keys.organization_id IS '@access: confidential';
+COMMENT ON COLUMN openrouter_api_keys.key_type IS '@access: confidential';
+COMMENT ON COLUMN openrouter_api_keys.key IS '@access: secret-restricted';
+COMMENT ON COLUMN openrouter_api_keys.key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN openrouter_api_keys.key_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN openrouter_api_keys.monthly_credits IS '@access: restricted';
+COMMENT ON COLUMN openrouter_api_keys.disabled IS '@access: confidential';
+COMMENT ON COLUMN openrouter_api_keys.disable_causes IS '@access: confidential';
+COMMENT ON COLUMN openrouter_api_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN openrouter_api_keys.updated_at IS '@access: confidential';
+COMMENT ON COLUMN openrouter_api_keys.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN openrouter_api_keys.deleted IS '@access: confidential';
 
 
 -- Create the chats table to track individual chat conversations
@@ -3763,6 +5016,26 @@ CREATE TABLE IF NOT EXISTS chats (
   CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN chats.id IS '@access: confidential';
+COMMENT ON COLUMN chats.project_id IS '@access: confidential';
+COMMENT ON COLUMN chats.organization_id IS '@access: confidential';
+COMMENT ON COLUMN chats.user_id IS '@access: confidential';
+COMMENT ON COLUMN chats.external_user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN chats.external_chat_id IS '@access: confidential';
+COMMENT ON COLUMN chats.title IS '@access: opaque-restricted';
+COMMENT ON COLUMN chats.title_manually_set IS '@access: confidential';
+COMMENT ON COLUMN chats.pinned_at IS '@access: confidential';
+COMMENT ON COLUMN chats.summary IS '@access: opaque-restricted';
+COMMENT ON COLUMN chats.summary_generated_at IS '@access: confidential';
+COMMENT ON COLUMN chats.inference_accepted_checkpoint IS '@access: confidential';
+COMMENT ON COLUMN chats.user_account_id IS '@access: confidential';
+COMMENT ON COLUMN chats.litellm_proxied IS '@access: confidential';
+COMMENT ON COLUMN chats.cwd IS '@access: opaque-restricted';
+COMMENT ON COLUMN chats.created_at IS '@access: confidential';
+COMMENT ON COLUMN chats.updated_at IS '@access: confidential';
+COMMENT ON COLUMN chats.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN chats.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS chats_org_external_chat_id_key
 ON chats (organization_id, external_chat_id)
 WHERE external_chat_id IS NOT NULL;
@@ -3803,6 +5076,21 @@ CREATE TABLE IF NOT EXISTS assistants (
   CONSTRAINT assistants_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN assistants.id IS '@access: confidential';
+COMMENT ON COLUMN assistants.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistants.organization_id IS '@access: confidential';
+COMMENT ON COLUMN assistants.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN assistants.name IS '@access: confidential';
+COMMENT ON COLUMN assistants.model IS '@access: confidential';
+COMMENT ON COLUMN assistants.instructions IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistants.warm_ttl_seconds IS '@access: confidential';
+COMMENT ON COLUMN assistants.max_concurrency IS '@access: confidential';
+COMMENT ON COLUMN assistants.status IS '@access: confidential';
+COMMENT ON COLUMN assistants.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistants.updated_at IS '@access: confidential';
+COMMENT ON COLUMN assistants.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN assistants.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
@@ -3832,6 +5120,18 @@ CREATE TABLE IF NOT EXISTS skill_distributions (
   CONSTRAINT skill_distributions_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id)
 );
 
+COMMENT ON COLUMN skill_distributions.id IS '@access: confidential';
+COMMENT ON COLUMN skill_distributions.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_distributions.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_distributions.pinned_version_id IS '@access: confidential';
+COMMENT ON COLUMN skill_distributions.plugin_id IS '@access: confidential';
+COMMENT ON COLUMN skill_distributions.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN skill_distributions.channel IS '@access: confidential';
+COMMENT ON COLUMN skill_distributions.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN skill_distributions.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN skill_distributions.created_at IS '@access: confidential';
+COMMENT ON COLUMN skill_distributions.updated_at IS '@access: confidential';
+
 -- Active distributions target either a plugin or an assistant. NULLS NOT
 -- DISTINCT preserves one active row per complete target tuple.
 CREATE UNIQUE INDEX IF NOT EXISTS skill_distributions_active_target_key
@@ -3859,6 +5159,15 @@ CREATE TABLE IF NOT EXISTS skill_share_links (
   CONSTRAINT skill_share_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT skill_share_links_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN skill_share_links.id IS '@access: confidential';
+COMMENT ON COLUMN skill_share_links.project_id IS '@access: confidential';
+COMMENT ON COLUMN skill_share_links.skill_id IS '@access: confidential';
+COMMENT ON COLUMN skill_share_links.token IS '@access: secret-restricted';
+COMMENT ON COLUMN skill_share_links.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN skill_share_links.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN skill_share_links.created_at IS '@access: confidential';
+COMMENT ON COLUMN skill_share_links.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_share_links_token_key ON skill_share_links (token);
 
@@ -3888,6 +5197,11 @@ CREATE TABLE IF NOT EXISTS project_managed_assistants (
   CONSTRAINT project_managed_assistants_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN project_managed_assistants.project_id IS '@access: confidential';
+COMMENT ON COLUMN project_managed_assistants.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN project_managed_assistants.created_at IS '@access: confidential';
+COMMENT ON COLUMN project_managed_assistants.updated_at IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS project_managed_assistants_assistant_id_idx ON project_managed_assistants (assistant_id);
 
 -- assistant_dashboard_messages is the user-visible conversation log for a
@@ -3914,6 +5228,15 @@ CREATE TABLE IF NOT EXISTS assistant_dashboard_messages (
   CONSTRAINT assistant_dashboard_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN assistant_dashboard_messages.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_dashboard_messages.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_dashboard_messages.chat_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_dashboard_messages.user_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_dashboard_messages.role IS '@access: confidential';
+COMMENT ON COLUMN assistant_dashboard_messages.content IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_dashboard_messages.seq IS '@access: confidential';
+COMMENT ON COLUMN assistant_dashboard_messages.created_at IS '@access: confidential';
+
 -- (chat_id, seq) is the stable cursor for incremental polling.
 CREATE INDEX IF NOT EXISTS assistant_dashboard_messages_chat_id_seq_idx ON assistant_dashboard_messages (chat_id, seq);
 
@@ -3934,6 +5257,14 @@ CREATE TABLE IF NOT EXISTS assistant_toolsets (
   CONSTRAINT assistant_toolsets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT assistant_toolsets_assistant_id_toolset_id_key UNIQUE (assistant_id, toolset_id)
 );
+
+COMMENT ON COLUMN assistant_toolsets.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_toolsets.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_toolsets.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_toolsets.environment_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_toolsets.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_toolsets.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_toolsets.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS assistant_toolsets_assistant_id_idx ON assistant_toolsets (assistant_id);
 CREATE INDEX IF NOT EXISTS assistant_toolsets_toolset_id_idx ON assistant_toolsets (toolset_id);
@@ -3960,6 +5291,20 @@ CREATE TABLE IF NOT EXISTS assistant_threads (
   CONSTRAINT assistant_threads_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT assistant_threads_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN assistant_threads.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_threads.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_threads.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_threads.correlation_id IS '@access: restricted';
+COMMENT ON COLUMN assistant_threads.chat_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_threads.source_kind IS '@access: confidential';
+COMMENT ON COLUMN assistant_threads.source_ref_json IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_threads.skill_set_snapshot IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_threads.last_event_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_threads.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_threads.updated_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_threads.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_threads.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_threads_project_id_assistant_id_correlation_id_key
 ON assistant_threads (project_id, assistant_id, correlation_id)
@@ -3999,6 +5344,24 @@ CREATE TABLE IF NOT EXISTS assistant_runtimes (
   CONSTRAINT assistant_runtimes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN assistant_runtimes.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.assistant_thread_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.backend IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.state IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.warm_until IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.lease_owner IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.last_heartbeat_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.backend_metadata_json IS '@access: restricted';
+COMMENT ON COLUMN assistant_runtimes.ended_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.runtime_version IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.updated_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.deleted IS '@access: confidential';
+COMMENT ON COLUMN assistant_runtimes.ended IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_runtimes_assistant_thread_id_active_key
 ON assistant_runtimes (assistant_thread_id)
 WHERE deleted IS FALSE AND ended IS FALSE AND runtime_version = 1;
@@ -4037,6 +5400,24 @@ CREATE TABLE IF NOT EXISTS assistant_thread_events (
   CONSTRAINT assistant_thread_events_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT assistant_thread_events_trigger_instance_id_fkey FOREIGN KEY (trigger_instance_id) REFERENCES trigger_instances(id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN assistant_thread_events.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.assistant_thread_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.trigger_instance_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.event_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.correlation_id IS '@access: restricted';
+COMMENT ON COLUMN assistant_thread_events.status IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.normalized_payload_json IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_thread_events.source_payload_json IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_thread_events.attempts IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.last_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_thread_events.processed_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.updated_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_thread_events.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_thread_events_project_id_assistant_id_event_id_key
 ON assistant_thread_events (project_id, assistant_id, event_id)
@@ -4142,6 +5523,40 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   autovacuum_vacuum_cost_limit = 2000
 );
 
+COMMENT ON COLUMN chat_messages.id IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.seq IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.chat_id IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.project_id IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.role IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.content IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.content_raw IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.content_asset_url IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.model IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.message_id IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.finish_reason IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.tool_calls IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.prompt_tokens IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.completion_tokens IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.total_tokens IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.storage_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.user_id IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.external_user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN chat_messages.external_message_id IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.origin IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.user_agent IS '@access: confidential-pii';
+COMMENT ON COLUMN chat_messages.ip_address IS '@access: confidential-pii';
+COMMENT ON COLUMN chat_messages.source IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.tool_call_id IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.tool_urn IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.tool_outcome IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.tool_outcome_notes IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.tool_call_summaries IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.content_hash IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.generation IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
@@ -4229,6 +5644,22 @@ CREATE TABLE IF NOT EXISTS chat_content_parts (
   CONSTRAINT chat_content_parts_parent_chat_message_id_fkey FOREIGN KEY (parent_chat_message_id) REFERENCES chat_messages (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN chat_content_parts.id IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.chat_id IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.project_id IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.kind IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.content_asset_url IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.external_id IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.parent_chat_message_id IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.version IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.source IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.metadata IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_content_parts.risk_analyzed_at IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.created_at IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.updated_at IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN chat_content_parts.deleted IS '@access: confidential';
+
 -- Unanalyzed sweep, mirroring chat_messages_risk_analyzed_at_null_idx.
 CREATE INDEX IF NOT EXISTS chat_content_parts_risk_analyzed_at_null_idx
 ON chat_content_parts (project_id, id) WHERE risk_analyzed_at IS NULL;
@@ -4260,6 +5691,13 @@ CREATE TABLE IF NOT EXISTS chat_analysis_settings (
   CONSTRAINT chat_analysis_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT chat_analysis_settings_daily_cap_check CHECK (daily_cap >= 0)
 );
+
+COMMENT ON COLUMN chat_analysis_settings.organization_id IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_settings.judge IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_settings.enabled IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_settings.daily_cap IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_settings.created_at IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_settings.updated_at IS '@access: confidential';
 
 -- Durable queue for the chat analysis pipeline: one row per (chat, judge)
 -- scoring unit. Mirrors skill_efficacy_evaluations — pending rows are reserved
@@ -4294,6 +5732,21 @@ CREATE TABLE IF NOT EXISTS chat_analysis_evaluations (
   CONSTRAINT chat_analysis_evaluations_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN chat_analysis_evaluations.id IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.organization_id IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.project_id IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.chat_id IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.session_id IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.judge IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.observed_at IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.state IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.reserved_on IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.attempts IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.last_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_analysis_evaluations.scored_at IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.created_at IS '@access: confidential';
+COMMENT ON COLUMN chat_analysis_evaluations.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS chat_analysis_evaluations_scoring_unit_key
 ON chat_analysis_evaluations (project_id, chat_id, judge);
 
@@ -4324,6 +5777,15 @@ CREATE TABLE IF NOT EXISTS chat_resolutions (
   CONSTRAINT chat_resolutions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN chat_resolutions.id IS '@access: confidential';
+COMMENT ON COLUMN chat_resolutions.project_id IS '@access: confidential';
+COMMENT ON COLUMN chat_resolutions.chat_id IS '@access: confidential';
+COMMENT ON COLUMN chat_resolutions.user_goal IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_resolutions.resolution IS '@access: confidential';
+COMMENT ON COLUMN chat_resolutions.resolution_notes IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_resolutions.score IS '@access: confidential';
+COMMENT ON COLUMN chat_resolutions.created_at IS '@access: confidential';
+
 CREATE TABLE IF NOT EXISTS chat_user_feedback (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -4344,6 +5806,15 @@ CREATE TABLE IF NOT EXISTS chat_user_feedback (
   CONSTRAINT chat_resolution_user_feedback_chat_resolution_id_fkey FOREIGN KEY (chat_resolution_id) REFERENCES chat_resolutions(id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN chat_user_feedback.id IS '@access: confidential';
+COMMENT ON COLUMN chat_user_feedback.project_id IS '@access: confidential';
+COMMENT ON COLUMN chat_user_feedback.chat_id IS '@access: confidential';
+COMMENT ON COLUMN chat_user_feedback.message_id IS '@access: confidential';
+COMMENT ON COLUMN chat_user_feedback.user_resolution IS '@access: confidential';
+COMMENT ON COLUMN chat_user_feedback.user_resolution_notes IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_user_feedback.chat_resolution_id IS '@access: confidential';
+COMMENT ON COLUMN chat_user_feedback.created_at IS '@access: confidential';
+
 CREATE TABLE IF NOT EXISTS chat_resolution_messages (
   chat_resolution_id uuid NOT NULL,
   message_id uuid NOT NULL,
@@ -4352,6 +5823,9 @@ CREATE TABLE IF NOT EXISTS chat_resolution_messages (
   CONSTRAINT chat_resolution_messages_chat_resolution_id_fkey FOREIGN KEY (chat_resolution_id) REFERENCES chat_resolutions(id) ON DELETE CASCADE,
   CONSTRAINT chat_resolution_messages_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN chat_resolution_messages.chat_resolution_id IS '@access: confidential';
+COMMENT ON COLUMN chat_resolution_messages.message_id IS '@access: confidential';
 
 CREATE TABLE IF NOT EXISTS slack_apps (
   -- Column order optimized for alignment (PG110)
@@ -4377,6 +5851,25 @@ CREATE TABLE IF NOT EXISTS slack_apps (
   CONSTRAINT slack_apps_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN slack_apps.created_at IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.updated_at IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.slack_team_name IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.slack_bot_user_id IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.slack_client_secret IS '@access: secret-restricted';
+COMMENT ON COLUMN slack_apps.slack_signing_secret IS '@access: secret-restricted';
+COMMENT ON COLUMN slack_apps.slack_team_id IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.organization_id IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.slack_bot_token IS '@access: secret-restricted';
+COMMENT ON COLUMN slack_apps.slack_client_id IS '@access: restricted';
+COMMENT ON COLUMN slack_apps.system_prompt IS '@access: opaque-restricted';
+COMMENT ON COLUMN slack_apps.name IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.status IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.icon_asset_id IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.project_id IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.id IS '@access: confidential';
+COMMENT ON COLUMN slack_apps.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS slack_apps_project_name_key
   ON slack_apps (project_id, name) WHERE deleted IS FALSE;
 
@@ -4394,6 +5887,11 @@ CREATE TABLE IF NOT EXISTS slack_app_toolsets (
   CONSTRAINT slack_app_toolsets_slack_app_id_toolset_id_key UNIQUE (slack_app_id, toolset_id)
 );
 
+COMMENT ON COLUMN slack_app_toolsets.id IS '@access: confidential';
+COMMENT ON COLUMN slack_app_toolsets.slack_app_id IS '@access: confidential';
+COMMENT ON COLUMN slack_app_toolsets.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN slack_app_toolsets.created_at IS '@access: confidential';
+
 CREATE TABLE IF NOT EXISTS slack_registrations (
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   slack_app_id uuid NOT NULL,
@@ -4407,6 +5905,13 @@ CREATE TABLE IF NOT EXISTS slack_registrations (
   CONSTRAINT slack_registrations_slack_app_id_slack_account_id_key UNIQUE (slack_app_id, slack_account_id)
 );
 
+COMMENT ON COLUMN slack_registrations.id IS '@access: confidential';
+COMMENT ON COLUMN slack_registrations.slack_app_id IS '@access: confidential';
+COMMENT ON COLUMN slack_registrations.slack_account_id IS '@access: confidential-pii';
+COMMENT ON COLUMN slack_registrations.user_id IS '@access: confidential';
+COMMENT ON COLUMN slack_registrations.created_at IS '@access: confidential';
+COMMENT ON COLUMN slack_registrations.updated_at IS '@access: confidential';
+
 CREATE TABLE IF NOT EXISTS project_tool_variations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -4416,6 +5921,10 @@ CREATE TABLE IF NOT EXISTS project_tool_variations (
   CONSTRAINT project_tool_variations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT project_tool_variations_group_id_fkey FOREIGN KEY (group_id) REFERENCES tool_variations_groups (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN project_tool_variations.id IS '@access: confidential';
+COMMENT ON COLUMN project_tool_variations.project_id IS '@access: confidential';
+COMMENT ON COLUMN project_tool_variations.group_id IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS project_tool_variations_project_id_key
 ON project_tool_variations (project_id);
@@ -4451,6 +5960,27 @@ CREATE TABLE IF NOT EXISTS tool_variations (
   CONSTRAINT tool_variations_group_id_fkey FOREIGN KEY (group_id) REFERENCES tool_variations_groups (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN tool_variations.id IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.group_id IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.src_tool_urn IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.src_tool_name IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.confirm IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.confirm_prompt IS '@access: opaque-restricted';
+COMMENT ON COLUMN tool_variations.name IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.summary IS '@access: opaque-restricted';
+COMMENT ON COLUMN tool_variations.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN tool_variations.tags IS '@access: opaque-restricted';
+COMMENT ON COLUMN tool_variations.summarizer IS '@access: opaque-restricted';
+COMMENT ON COLUMN tool_variations.title IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.read_only_hint IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.destructive_hint IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.idempotent_hint IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.open_world_hint IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.created_at IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.updated_at IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN tool_variations.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS tool_variations_scoped_src_tool_urn_key
 ON tool_variations (group_id, src_tool_urn)
 WHERE deleted IS FALSE;
@@ -4485,6 +6015,24 @@ CREATE TABLE IF NOT EXISTS prompt_templates (
   CONSTRAINT prompt_templates_predecessor_id_fkey FOREIGN KEY (predecessor_id) REFERENCES prompt_templates (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN prompt_templates.id IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.tool_urn IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.project_id IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.history_id IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.predecessor_id IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.name IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN prompt_templates.arguments IS '@access: opaque-restricted';
+COMMENT ON COLUMN prompt_templates.prompt IS '@access: opaque-restricted';
+COMMENT ON COLUMN prompt_templates.engine IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.kind IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.tools_hint IS '@access: opaque-restricted';
+COMMENT ON COLUMN prompt_templates.tool_urns_hint IS '@access: opaque-restricted';
+COMMENT ON COLUMN prompt_templates.created_at IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.updated_at IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN prompt_templates.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS prompt_templates_project_id_name_key
 ON prompt_templates (project_id, name, predecessor_id) NULLS NOT DISTINCT
 WHERE deleted IS FALSE;
@@ -4512,6 +6060,13 @@ CREATE TABLE IF NOT EXISTS toolset_prompts (
   CONSTRAINT toolset_prompts_prompt_template_id_fkey FOREIGN KEY (prompt_template_id) REFERENCES prompt_templates (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN toolset_prompts.id IS '@access: confidential';
+COMMENT ON COLUMN toolset_prompts.project_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_prompts.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_prompts.prompt_history_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_prompts.prompt_template_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_prompts.prompt_name IS '@access: confidential';
+
 -- Ensure a toolset can only have one prompt template per name
 CREATE UNIQUE INDEX IF NOT EXISTS toolset_prompts_toolset_id_prompt_name_key
 ON toolset_prompts (toolset_id, prompt_name);
@@ -4534,6 +6089,19 @@ CREATE TABLE IF NOT EXISTS users (
 
   CONSTRAINT users_pkey PRIMARY KEY (id)
 );
+
+COMMENT ON COLUMN users.id IS '@access: confidential';
+COMMENT ON COLUMN users.email IS '@access: confidential-pii';
+COMMENT ON COLUMN users.display_name IS '@access: confidential-pii';
+COMMENT ON COLUMN users.photo_url IS '@access: confidential-pii';
+COMMENT ON COLUMN users.last_login IS '@access: confidential';
+COMMENT ON COLUMN users.workos_id IS '@access: confidential-pii';
+COMMENT ON COLUMN users.workos_created_at IS '@access: confidential';
+COMMENT ON COLUMN users.workos_updated_at IS '@access: confidential';
+COMMENT ON COLUMN users.workos_deleted_at IS '@access: confidential';
+COMMENT ON COLUMN users.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN users.created_at IS '@access: confidential';
+COMMENT ON COLUMN users.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
 ON users (email);
@@ -4607,6 +6175,24 @@ CREATE TABLE IF NOT EXISTS user_accounts (
   CONSTRAINT user_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN user_accounts.id IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.organization_id IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.user_id IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.provider IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.external_org_id IS '@access: confidential-pii';
+COMMENT ON COLUMN user_accounts.external_account_uuid IS '@access: confidential-pii';
+COMMENT ON COLUMN user_accounts.external_account_id IS '@access: confidential-pii';
+COMMENT ON COLUMN user_accounts.email IS '@access: confidential-pii';
+COMMENT ON COLUMN user_accounts.account_type IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.billing_mode IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.plan_type IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.first_seen_at IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.updated_at IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN user_accounts.deleted IS '@access: confidential';
+
 -- Partial unique index so a soft-deleted account doesn't block re-enrolling the
 -- same external account (a plain UNIQUE constraint would still cover deleted rows).
 CREATE UNIQUE INDEX IF NOT EXISTS user_accounts_org_provider_external_account_uuid_key
@@ -4654,6 +6240,18 @@ CREATE TABLE IF NOT EXISTS device_owners (
   CONSTRAINT device_owners_linked_user_id_fkey FOREIGN KEY (linked_user_id) REFERENCES users (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN device_owners.id IS '@access: confidential';
+COMMENT ON COLUMN device_owners.organization_id IS '@access: confidential';
+COMMENT ON COLUMN device_owners.provider IS '@access: confidential';
+COMMENT ON COLUMN device_owners.device_id IS '@access: confidential-pii';
+COMMENT ON COLUMN device_owners.linked_user_id IS '@access: confidential';
+COMMENT ON COLUMN device_owners.first_seen_at IS '@access: confidential';
+COMMENT ON COLUMN device_owners.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN device_owners.created_at IS '@access: confidential';
+COMMENT ON COLUMN device_owners.updated_at IS '@access: confidential';
+COMMENT ON COLUMN device_owners.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN device_owners.deleted IS '@access: confidential';
+
 -- Partial unique index so a soft-deleted device row doesn't block re-creating the
 -- same (org, provider, device) mapping (a plain UNIQUE would still cover deleted rows).
 CREATE UNIQUE INDEX IF NOT EXISTS device_owners_organization_id_provider_device_id_key
@@ -4670,7 +6268,8 @@ ON device_owners (organization_id);
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
 
-COMMENT ON COLUMN users.admin IS 'Maps to the application''s platform_admin concept: TRUE marks a Gram/Speakeasy platform admin. Distinct from the org-level admin role.';
+COMMENT ON COLUMN users.admin IS 'Maps to the application''s platform_admin concept: TRUE marks a Gram/Speakeasy platform admin. Distinct from the org-level admin role.
+@access: confidential';
 
 CREATE TABLE IF NOT EXISTS organization_setup_tasks (
   organization_id TEXT NOT NULL,
@@ -4688,6 +6287,15 @@ CREATE TABLE IF NOT EXISTS organization_setup_tasks (
   CONSTRAINT organization_setup_tasks_assignee_user_id_fkey FOREIGN KEY (assignee_user_id) REFERENCES users (id) ON DELETE SET NULL,
   CONSTRAINT organization_setup_tasks_assignee_check CHECK (assignee_user_id IS NULL OR assignee_email IS NULL)
 );
+
+COMMENT ON COLUMN organization_setup_tasks.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_setup_tasks.task_key IS '@access: confidential';
+COMMENT ON COLUMN organization_setup_tasks.status IS '@access: confidential';
+COMMENT ON COLUMN organization_setup_tasks.assignee_user_id IS '@access: confidential';
+COMMENT ON COLUMN organization_setup_tasks.assignee_email IS '@access: confidential-pii';
+COMMENT ON COLUMN organization_setup_tasks.hidden_at IS '@access: confidential';
+COMMENT ON COLUMN organization_setup_tasks.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_setup_tasks.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS organization_setup_tasks_assignee_user_id_idx
 ON organization_setup_tasks (assignee_user_id)
@@ -4715,6 +6323,21 @@ CREATE TABLE IF NOT EXISTS directory_groups (
   CONSTRAINT directory_groups_pkey PRIMARY KEY (id),
   CONSTRAINT directory_groups_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN directory_groups.id IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.organization_id IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.workos_directory_group_id IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.name IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.attributes IS '@access: opaque-restricted';
+COMMENT ON COLUMN directory_groups.created_at IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.updated_at IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.deleted IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.workos_created_at IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.workos_updated_at IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.workos_deleted_at IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.workos_deleted IS '@access: confidential';
+COMMENT ON COLUMN directory_groups.workos_last_event_id IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS directory_groups_organization_id_idx
 ON directory_groups (organization_id);
@@ -4750,6 +6373,22 @@ CREATE TABLE IF NOT EXISTS directory_users (
   CONSTRAINT directory_users_pkey PRIMARY KEY (id),
   CONSTRAINT directory_users_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN directory_users.id IS '@access: confidential';
+COMMENT ON COLUMN directory_users.organization_id IS '@access: confidential';
+COMMENT ON COLUMN directory_users.user_id IS '@access: confidential';
+COMMENT ON COLUMN directory_users.workos_directory_user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN directory_users.email IS '@access: confidential-pii';
+COMMENT ON COLUMN directory_users.attributes IS '@access: opaque-restricted';
+COMMENT ON COLUMN directory_users.created_at IS '@access: confidential';
+COMMENT ON COLUMN directory_users.updated_at IS '@access: confidential';
+COMMENT ON COLUMN directory_users.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN directory_users.deleted IS '@access: confidential';
+COMMENT ON COLUMN directory_users.workos_created_at IS '@access: confidential';
+COMMENT ON COLUMN directory_users.workos_updated_at IS '@access: confidential';
+COMMENT ON COLUMN directory_users.workos_deleted_at IS '@access: confidential';
+COMMENT ON COLUMN directory_users.workos_deleted IS '@access: confidential';
+COMMENT ON COLUMN directory_users.workos_last_event_id IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS directory_users_organization_id_idx
 ON directory_users (organization_id);
@@ -4789,6 +6428,17 @@ CREATE TABLE IF NOT EXISTS directory_user_group_memberships (
   CONSTRAINT directory_user_group_memberships_directory_group_id_fkey FOREIGN KEY (directory_group_id) REFERENCES directory_groups (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN directory_user_group_memberships.id IS '@access: confidential';
+COMMENT ON COLUMN directory_user_group_memberships.directory_user_id IS '@access: confidential';
+COMMENT ON COLUMN directory_user_group_memberships.directory_group_id IS '@access: confidential';
+COMMENT ON COLUMN directory_user_group_memberships.workos_directory_user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN directory_user_group_memberships.workos_directory_group_id IS '@access: confidential';
+COMMENT ON COLUMN directory_user_group_memberships.created_at IS '@access: confidential';
+COMMENT ON COLUMN directory_user_group_memberships.updated_at IS '@access: confidential';
+COMMENT ON COLUMN directory_user_group_memberships.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN directory_user_group_memberships.deleted IS '@access: confidential';
+COMMENT ON COLUMN directory_user_group_memberships.workos_created_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS directory_user_group_memberships_current_key
 ON directory_user_group_memberships (directory_user_id, directory_group_id)
 WHERE deleted IS FALSE;
@@ -4818,6 +6468,20 @@ CREATE TABLE IF NOT EXISTS global_roles (
   CONSTRAINT global_roles_pkey PRIMARY KEY (id)
 );
 
+COMMENT ON COLUMN global_roles.id IS '@access: confidential';
+COMMENT ON COLUMN global_roles.workos_slug IS '@access: confidential';
+COMMENT ON COLUMN global_roles.workos_name IS '@access: confidential';
+COMMENT ON COLUMN global_roles.workos_description IS '@access: opaque-restricted';
+COMMENT ON COLUMN global_roles.workos_created_at IS '@access: confidential';
+COMMENT ON COLUMN global_roles.workos_updated_at IS '@access: confidential';
+COMMENT ON COLUMN global_roles.workos_deleted_at IS '@access: confidential';
+COMMENT ON COLUMN global_roles.workos_deleted IS '@access: confidential';
+COMMENT ON COLUMN global_roles.workos_last_event_id IS '@access: confidential';
+COMMENT ON COLUMN global_roles.created_at IS '@access: confidential';
+COMMENT ON COLUMN global_roles.updated_at IS '@access: confidential';
+COMMENT ON COLUMN global_roles.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN global_roles.deleted IS '@access: confidential';
+
 -- Slug is immutable in WorkOS, making it a safe unique key for environment-level roles.
 CREATE UNIQUE INDEX IF NOT EXISTS global_roles_workos_slug_key
 ON global_roles (workos_slug);
@@ -4844,6 +6508,21 @@ CREATE TABLE IF NOT EXISTS organization_roles (
   CONSTRAINT organization_roles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN organization_roles.id IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.workos_slug IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.workos_name IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.workos_description IS '@access: opaque-restricted';
+COMMENT ON COLUMN organization_roles.workos_created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.workos_updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.workos_deleted_at IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.workos_deleted IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.workos_last_event_id IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN organization_roles.deleted IS '@access: confidential';
+
 -- Slug is immutable in WorkOS ("Can't be edited after creation"), making it a safe unique key.
 CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_workos_slug_key
 ON organization_roles (organization_id, workos_slug);
@@ -4861,6 +6540,13 @@ CREATE TABLE IF NOT EXISTS deployment_tags (
   CONSTRAINT deployment_tags_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT deployment_tags_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN deployment_tags.created_at IS '@access: confidential';
+COMMENT ON COLUMN deployment_tags.updated_at IS '@access: confidential';
+COMMENT ON COLUMN deployment_tags.name IS '@access: confidential';
+COMMENT ON COLUMN deployment_tags.id IS '@access: confidential';
+COMMENT ON COLUMN deployment_tags.project_id IS '@access: confidential';
+COMMENT ON COLUMN deployment_tags.deployment_id IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS deployment_tags_project_id_name_key
 ON deployment_tags (project_id, name);
@@ -4881,6 +6567,13 @@ CREATE TABLE IF NOT EXISTS deployment_tag_history (
   CONSTRAINT deployment_tag_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES users (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN deployment_tag_history.changed_at IS '@access: confidential';
+COMMENT ON COLUMN deployment_tag_history.changed_by IS '@access: confidential';
+COMMENT ON COLUMN deployment_tag_history.id IS '@access: confidential';
+COMMENT ON COLUMN deployment_tag_history.tag_id IS '@access: confidential';
+COMMENT ON COLUMN deployment_tag_history.previous_deployment_id IS '@access: confidential';
+COMMENT ON COLUMN deployment_tag_history.new_deployment_id IS '@access: confidential';
+
 CREATE TABLE IF NOT EXISTS organization_user_relationships (
   id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
   organization_id TEXT NOT NULL,
@@ -4899,6 +6592,18 @@ CREATE TABLE IF NOT EXISTS organization_user_relationships (
   CONSTRAINT organization_user_relationships_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
   CONSTRAINT organization_user_relationships_organization_id_user_id_key UNIQUE (organization_id, user_id)
 );
+
+COMMENT ON COLUMN organization_user_relationships.id IS '@access: confidential';
+COMMENT ON COLUMN organization_user_relationships.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_user_relationships.user_id IS '@access: confidential';
+COMMENT ON COLUMN organization_user_relationships.workos_user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN organization_user_relationships.workos_membership_id IS '@access: confidential-pii';
+COMMENT ON COLUMN organization_user_relationships.workos_updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_user_relationships.workos_last_event_id IS '@access: confidential';
+COMMENT ON COLUMN organization_user_relationships.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_user_relationships.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_user_relationships.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN organization_user_relationships.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_user_relationships_workos_membership_id_key
 ON organization_user_relationships (workos_membership_id)
@@ -4945,6 +6650,23 @@ CREATE TABLE IF NOT EXISTS slack_directory_connections (
   CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN slack_directory_connections.id IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.slack_team_id IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.slack_team_name IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.credentials_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN slack_directory_connections.granted_scopes IS '@access: opaque-restricted';
+COMMENT ON COLUMN slack_directory_connections.generation IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.health IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.disconnected_at IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.last_sync_started_at IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.last_full_sync_generation IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.last_full_sync_succeeded_at IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.last_sync_failed_at IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.last_error_code IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.created_at IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.updated_at IS '@access: confidential';
+
 -- Reconnect the same workspace in place; disconnection does not release its key.
 CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_connections_org_team_key
 ON slack_directory_connections (organization_id, slack_team_id);
@@ -4979,6 +6701,22 @@ CREATE TABLE IF NOT EXISTS slack_directory_memberships (
   CONSTRAINT slack_directory_memberships_connection_fkey FOREIGN KEY (organization_id, slack_team_id) REFERENCES slack_directory_connections (organization_id, slack_team_id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN slack_directory_memberships.id IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.organization_id IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.slack_team_id IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.slack_user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN slack_directory_memberships.display_name IS '@access: confidential-pii';
+COMMENT ON COLUMN slack_directory_memberships.email IS '@access: confidential-pii';
+COMMENT ON COLUMN slack_directory_memberships.status IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.member_type IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.provider_updated_at IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.mapping_revision IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.mapping_conflict_reason IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.mapping_conflict_detected_at IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.created_at IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_memberships.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_memberships_org_team_user_key
 ON slack_directory_memberships (organization_id, slack_team_id, slack_user_id);
 
@@ -5002,6 +6740,15 @@ CREATE TABLE IF NOT EXISTS slack_identity_mappings (
   -- The relationship's user_id has no FK to users, so check both references.
   CONSTRAINT slack_identity_mappings_organization_id_user_id_fkey FOREIGN KEY (organization_id, user_id) REFERENCES organization_user_relationships (organization_id, user_id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN slack_identity_mappings.id IS '@access: confidential';
+COMMENT ON COLUMN slack_identity_mappings.organization_id IS '@access: confidential';
+COMMENT ON COLUMN slack_identity_mappings.slack_team_id IS '@access: confidential';
+COMMENT ON COLUMN slack_identity_mappings.slack_user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN slack_identity_mappings.user_id IS '@access: confidential';
+COMMENT ON COLUMN slack_identity_mappings.created_at IS '@access: confidential';
+COMMENT ON COLUMN slack_identity_mappings.updated_at IS '@access: confidential';
+COMMENT ON COLUMN slack_identity_mappings.revoked_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS slack_identity_mappings_current_key
 ON slack_identity_mappings (organization_id, slack_team_id, slack_user_id)
@@ -5052,6 +6799,20 @@ CREATE TABLE IF NOT EXISTS agents (
   CONSTRAINT agents_lifecycle_state_check CHECK (revoked_at IS NULL OR suspended_at IS NULL),
   CONSTRAINT agents_owner_reassignment_state_check CHECK ((owner_reassignment_required_at IS NULL) = (owner_reassignment_reason IS NULL))
 );
+
+COMMENT ON COLUMN agents.id IS '@access: confidential';
+COMMENT ON COLUMN agents.organization_id IS '@access: confidential';
+COMMENT ON COLUMN agents.owner_user_id IS '@access: confidential';
+COMMENT ON COLUMN agents.project_id IS '@access: confidential';
+COMMENT ON COLUMN agents.name IS '@access: confidential';
+COMMENT ON COLUMN agents.suspended_at IS '@access: confidential';
+COMMENT ON COLUMN agents.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN agents.owner_reassignment_required_at IS '@access: confidential';
+COMMENT ON COLUMN agents.owner_reassignment_reason IS '@access: confidential';
+COMMENT ON COLUMN agents.created_at IS '@access: confidential';
+COMMENT ON COLUMN agents.updated_at IS '@access: confidential';
+COMMENT ON COLUMN agents.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN agents.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS agents_organization_id_id_key
 ON agents (organization_id, id);
@@ -5116,6 +6877,21 @@ CREATE TABLE IF NOT EXISTS principal_remote_session_bindings (
   )
 );
 
+COMMENT ON COLUMN principal_remote_session_bindings.id IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.project_id IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.organization_id IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.principal_id IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.remote_session_id IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.issuer_attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.client_attachment_scope IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.grant_generation IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.attached_by_subject_id IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.created_at IS '@access: confidential';
+COMMENT ON COLUMN principal_remote_session_bindings.updated_at IS '@access: confidential';
+
 -- Capture scope without changing the attachment insert API. The composite
 -- foreign keys, not this lookup's snapshot, enforce concurrent parent changes.
 CREATE OR REPLACE FUNCTION set_principal_remote_session_binding_scopes()
@@ -5165,6 +6941,19 @@ CREATE TABLE IF NOT EXISTS organization_invitations (
   CONSTRAINT organization_invitations_inviter_user_id_fkey FOREIGN KEY (inviter_user_id) REFERENCES users (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN organization_invitations.id IS '@access: confidential';
+COMMENT ON COLUMN organization_invitations.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_invitations.email IS '@access: confidential-pii';
+COMMENT ON COLUMN organization_invitations.token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN organization_invitations.inviter_user_id IS '@access: confidential';
+COMMENT ON COLUMN organization_invitations.role_slug IS '@access: confidential';
+COMMENT ON COLUMN organization_invitations.state IS '@access: confidential';
+COMMENT ON COLUMN organization_invitations.expires_at IS '@access: confidential';
+COMMENT ON COLUMN organization_invitations.accepted_at IS '@access: confidential';
+COMMENT ON COLUMN organization_invitations.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN organization_invitations.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_invitations.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS organization_invitations_token_hash_key
 ON organization_invitations (token_hash);
 
@@ -5196,6 +6985,18 @@ CREATE TABLE IF NOT EXISTS organization_role_assignments (
   CONSTRAINT organization_role_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT organization_role_assignments_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN organization_role_assignments.id IS '@access: confidential';
+COMMENT ON COLUMN organization_role_assignments.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_role_assignments.workos_user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN organization_role_assignments.user_id IS '@access: confidential';
+COMMENT ON COLUMN organization_role_assignments.role_urn IS '@access: confidential';
+COMMENT ON COLUMN organization_role_assignments.workos_membership_id IS '@access: confidential-pii';
+COMMENT ON COLUMN organization_role_assignments.workos_updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_role_assignments.workos_last_event_id IS '@access: confidential';
+COMMENT ON COLUMN organization_role_assignments.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_role_assignments.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_role_assignments.deleted_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_role_assignments_org_workos_user_role_key
 ON organization_role_assignments (organization_id, workos_user_id, role_urn)
@@ -5240,6 +7041,18 @@ CREATE TABLE IF NOT EXISTS directory_role_mappings (
   )
 );
 
+COMMENT ON COLUMN directory_role_mappings.id IS '@access: confidential';
+COMMENT ON COLUMN directory_role_mappings.organization_id IS '@access: confidential';
+COMMENT ON COLUMN directory_role_mappings.source_kind IS '@access: confidential';
+COMMENT ON COLUMN directory_role_mappings.directory_group_id IS '@access: confidential';
+COMMENT ON COLUMN directory_role_mappings.attribute_key IS '@access: opaque-restricted';
+COMMENT ON COLUMN directory_role_mappings.attribute_value IS '@access: opaque-restricted';
+COMMENT ON COLUMN directory_role_mappings.role_urn IS '@access: confidential';
+COMMENT ON COLUMN directory_role_mappings.created_at IS '@access: confidential';
+COMMENT ON COLUMN directory_role_mappings.updated_at IS '@access: confidential';
+COMMENT ON COLUMN directory_role_mappings.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN directory_role_mappings.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_group_key
 ON directory_role_mappings (organization_id, directory_group_id)
 WHERE deleted IS FALSE AND directory_group_id IS NOT NULL;
@@ -5267,6 +7080,14 @@ CREATE TABLE IF NOT EXISTS agent_role_assignments (
   CONSTRAINT agent_role_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT agent_role_assignments_agent_tenant_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN agent_role_assignments.id IS '@access: confidential';
+COMMENT ON COLUMN agent_role_assignments.organization_id IS '@access: confidential';
+COMMENT ON COLUMN agent_role_assignments.agent_id IS '@access: confidential';
+COMMENT ON COLUMN agent_role_assignments.role_urn IS '@access: confidential';
+COMMENT ON COLUMN agent_role_assignments.created_at IS '@access: confidential';
+COMMENT ON COLUMN agent_role_assignments.updated_at IS '@access: confidential';
+COMMENT ON COLUMN agent_role_assignments.deleted_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS agent_role_assignments_org_agent_role_key
 ON agent_role_assignments (organization_id, agent_id, role_urn)
@@ -5321,6 +7142,17 @@ CREATE TABLE IF NOT EXISTS workload_agent_assignments (
   CONSTRAINT workload_agent_assignments_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN workload_agent_assignments.id IS '@access: confidential';
+COMMENT ON COLUMN workload_agent_assignments.organization_id IS '@access: confidential';
+COMMENT ON COLUMN workload_agent_assignments.workload_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN workload_agent_assignments.subject IS '@access: restricted';
+COMMENT ON COLUMN workload_agent_assignments.match_kind IS '@access: confidential';
+COMMENT ON COLUMN workload_agent_assignments.agent_id IS '@access: confidential';
+COMMENT ON COLUMN workload_agent_assignments.created_at IS '@access: confidential';
+COMMENT ON COLUMN workload_agent_assignments.updated_at IS '@access: confidential';
+COMMENT ON COLUMN workload_agent_assignments.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN workload_agent_assignments.deleted IS '@access: confidential';
+
 -- One live assignment per (principal or wildcard, kind). Also serves looking up a
 -- workload's agent.
 --
@@ -5365,6 +7197,20 @@ CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (
   CONSTRAINT oauth_proxy_client_info_pkey PRIMARY KEY (client_id)
 );
 
+COMMENT ON COLUMN oauth_proxy_client_info.mcp_slug IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_client_info.client_id IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_client_info.client_secret IS '@access: secret-restricted';
+COMMENT ON COLUMN oauth_proxy_client_info.client_secret_expires_at IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_client_info.client_name IS '@access: opaque-restricted';
+COMMENT ON COLUMN oauth_proxy_client_info.redirect_uris IS '@access: opaque-restricted';
+COMMENT ON COLUMN oauth_proxy_client_info.grant_types IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_client_info.response_types IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_client_info.scope IS '@access: opaque-restricted';
+COMMENT ON COLUMN oauth_proxy_client_info.token_endpoint_auth_method IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_client_info.application_type IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_client_info.created_at IS '@access: confidential';
+COMMENT ON COLUMN oauth_proxy_client_info.updated_at IS '@access: confidential';
+
 -- Table storing organization feature flags with soft deletes for disabled features
 CREATE TABLE IF NOT EXISTS organization_features (
   id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
@@ -5379,6 +7225,14 @@ CREATE TABLE IF NOT EXISTS organization_features (
 
   CONSTRAINT organization_features_pkey PRIMARY KEY (id)
 );
+
+COMMENT ON COLUMN organization_features.id IS '@access: confidential';
+COMMENT ON COLUMN organization_features.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_features.feature_name IS '@access: confidential';
+COMMENT ON COLUMN organization_features.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_features.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_features.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN organization_features.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_features_organization_id_feature_name_key
 ON organization_features (organization_id, feature_name)
@@ -5405,6 +7259,20 @@ CREATE TABLE IF NOT EXISTS toolset_embeddings (
   CONSTRAINT toolset_embeddings_pkey PRIMARY KEY (id),
   CONSTRAINT toolset_embeddings_project_id FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN toolset_embeddings.id IS '@access: confidential';
+COMMENT ON COLUMN toolset_embeddings.project_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_embeddings.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_embeddings.toolset_version IS '@access: confidential';
+COMMENT ON COLUMN toolset_embeddings.entry_key IS '@access: confidential';
+COMMENT ON COLUMN toolset_embeddings.embedding_model IS '@access: confidential';
+COMMENT ON COLUMN toolset_embeddings.embedding_1536 IS '@access: opaque-restricted';
+COMMENT ON COLUMN toolset_embeddings.payload IS '@access: opaque-restricted';
+COMMENT ON COLUMN toolset_embeddings.tags IS '@access: opaque-restricted';
+COMMENT ON COLUMN toolset_embeddings.created_at IS '@access: confidential';
+COMMENT ON COLUMN toolset_embeddings.updated_at IS '@access: confidential';
+COMMENT ON COLUMN toolset_embeddings.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN toolset_embeddings.deleted IS '@access: confidential';
 
 -- Unique constraint on toolset_id + + toolset_version + entry_key for non-deleted records
 CREATE UNIQUE INDEX IF NOT EXISTS toolset_embeddings_toolset_entry_key
@@ -5450,6 +7318,24 @@ CREATE TABLE IF NOT EXISTS assistant_memories (
     FOREIGN KEY (supersedes_id) REFERENCES assistant_memories(id) ON DELETE SET NULL,
   CONSTRAINT assistant_memories_content_size_check CHECK (octet_length(content) <= 8192)
 );
+
+COMMENT ON COLUMN assistant_memories.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.organization_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.content IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_memories.embedding IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_memories.supersedes_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.superseded_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.valid_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.tags IS '@access: opaque-restricted';
+COMMENT ON COLUMN assistant_memories.origin_thread_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.origin_chat_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.updated_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.last_access IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_memories.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS assistant_memories_embedding_hnsw
   ON assistant_memories USING hnsw (embedding halfvec_cosine_ops)
@@ -5499,6 +7385,28 @@ CREATE TABLE IF NOT EXISTS business_memories (
   CONSTRAINT business_memories_body_size_check CHECK (octet_length(body) <= 8192)
 );
 
+COMMENT ON COLUMN business_memories.id IS '@access: confidential';
+COMMENT ON COLUMN business_memories.project_id IS '@access: confidential';
+COMMENT ON COLUMN business_memories.organization_id IS '@access: confidential';
+COMMENT ON COLUMN business_memories.body IS '@access: opaque-restricted';
+COMMENT ON COLUMN business_memories.memory_type IS '@access: confidential';
+COMMENT ON COLUMN business_memories.structural_scope IS '@access: confidential';
+COMMENT ON COLUMN business_memories.content_scope IS '@access: opaque-restricted';
+COMMENT ON COLUMN business_memories.embedding IS '@access: opaque-restricted';
+COMMENT ON COLUMN business_memories.embedding_model IS '@access: confidential';
+COMMENT ON COLUMN business_memories.extraction_model IS '@access: confidential';
+COMMENT ON COLUMN business_memories.source_evaluation_id IS '@access: confidential';
+COMMENT ON COLUMN business_memories.source_candidate_index IS '@access: confidential';
+COMMENT ON COLUMN business_memories.source_chat_id IS '@access: confidential';
+COMMENT ON COLUMN business_memories.source_turn IS '@access: confidential';
+COMMENT ON COLUMN business_memories.source_author_id IS '@access: confidential-pii';
+COMMENT ON COLUMN business_memories.extracted_at IS '@access: confidential';
+COMMENT ON COLUMN business_memories.lifecycle_state IS '@access: confidential';
+COMMENT ON COLUMN business_memories.created_at IS '@access: confidential';
+COMMENT ON COLUMN business_memories.updated_at IS '@access: confidential';
+COMMENT ON COLUMN business_memories.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN business_memories.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS business_memories_source_candidate_key
   ON business_memories (source_evaluation_id, source_candidate_index);
 
@@ -5533,6 +7441,15 @@ CREATE TABLE IF NOT EXISTS agent_executions (
   CONSTRAINT agent_executions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN agent_executions.id IS '@access: confidential';
+COMMENT ON COLUMN agent_executions.project_id IS '@access: confidential';
+COMMENT ON COLUMN agent_executions.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN agent_executions.status IS '@access: confidential';
+COMMENT ON COLUMN agent_executions.started_at IS '@access: confidential';
+COMMENT ON COLUMN agent_executions.completed_at IS '@access: confidential';
+COMMENT ON COLUMN agent_executions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN agent_executions.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS agent_executions_project_id_started_at_idx
 ON agent_executions (project_id, started_at)
 WHERE deleted IS FALSE;
@@ -5552,6 +7469,12 @@ CREATE TABLE IF NOT EXISTS mcp_registry_entries (
     )
   )
 );
+
+COMMENT ON COLUMN mcp_registry_entries.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_registry_entries.data IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_registry_entries.published IS '@access: confidential';
+COMMENT ON COLUMN mcp_registry_entries.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_registry_entries.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_registry_entries_name_key
   ON mcp_registry_entries ((data #>> '{server,name}'));
@@ -5580,6 +7503,21 @@ CREATE TABLE IF NOT EXISTS mcp_registries (
   CONSTRAINT mcp_registries_pkey PRIMARY KEY (id)
 );
 
+COMMENT ON COLUMN mcp_registries.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.name IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.url IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.source_type IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.auth_profile IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.enabled IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.certification_state IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.certification_version IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.priority IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.source_key IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_registries.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_registries_url_key
   ON mcp_registries (url)
   WHERE deleted IS FALSE;
@@ -5603,6 +7541,15 @@ CREATE TABLE IF NOT EXISTS toolset_origins (
   CONSTRAINT toolset_origins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT toolset_origins_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN toolset_origins.id IS '@access: confidential';
+COMMENT ON COLUMN toolset_origins.organization_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_origins.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN toolset_origins.origin_registry_specifier IS '@access: confidential';
+COMMENT ON COLUMN toolset_origins.created_at IS '@access: confidential';
+COMMENT ON COLUMN toolset_origins.updated_at IS '@access: confidential';
+COMMENT ON COLUMN toolset_origins.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN toolset_origins.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS toolset_origins_toolset_id_key
 ON toolset_origins (toolset_id)
@@ -5630,6 +7577,17 @@ CREATE TABLE IF NOT EXISTS organization_mcp_collections (
   CONSTRAINT organization_mcp_collections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN organization_mcp_collections.id IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collections.name IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collections.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN organization_mcp_collections.slug IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collections.visibility IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collections.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collections.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collections.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collections.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collections_slug_organization_id_key
   ON organization_mcp_collections (slug, organization_id)
   WHERE deleted IS FALSE;
@@ -5648,6 +7606,14 @@ CREATE TABLE IF NOT EXISTS organization_mcp_collection_registries (
   CONSTRAINT organization_mcp_collection_registries_pkey PRIMARY KEY (id),
   CONSTRAINT organization_mcp_collection_registries_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES organization_mcp_collections (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN organization_mcp_collection_registries.id IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_registries.collection_id IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_registries.namespace IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_registries.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_registries.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_registries.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_registries.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_registries_namespace_key
   ON organization_mcp_collection_registries (namespace)
@@ -5677,6 +7643,19 @@ CREATE TABLE IF NOT EXISTS external_mcp_attachments (
   CONSTRAINT external_mcp_attachments_registry_id_fkey FOREIGN KEY (registry_id) REFERENCES mcp_registries(id) ON DELETE CASCADE,
   CONSTRAINT external_mcp_attachments_collection_registry_id_fkey FOREIGN KEY (organization_mcp_collection_registry_id) REFERENCES organization_mcp_collection_registries(id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN external_mcp_attachments.id IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_attachments.deployment_id IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_attachments.registry_id IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_attachments.organization_mcp_collection_registry_id IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_attachments.name IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_attachments.slug IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_attachments.registry_server_specifier IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_attachments.selected_remotes IS '@access: opaque-restricted';
+COMMENT ON COLUMN external_mcp_attachments.created_at IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_attachments.updated_at IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_attachments.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_attachments.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS external_mcp_attachments_deployment_id_idx
 ON external_mcp_attachments (deployment_id)
@@ -5728,6 +7707,32 @@ CREATE TABLE IF NOT EXISTS external_mcp_tool_definitions (
   CONSTRAINT external_mcp_tool_definitions_external_mcp_attachment_id_fkey FOREIGN KEY (external_mcp_attachment_id) REFERENCES external_mcp_attachments(id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN external_mcp_tool_definitions.id IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.external_mcp_attachment_id IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.tool_urn IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.remote_url IS '@access: restricted';
+COMMENT ON COLUMN external_mcp_tool_definitions.transport_type IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.requires_oauth IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.type IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.name IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN external_mcp_tool_definitions.schema IS '@access: opaque-restricted';
+COMMENT ON COLUMN external_mcp_tool_definitions.oauth_version IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.oauth_authorization_endpoint IS '@access: restricted';
+COMMENT ON COLUMN external_mcp_tool_definitions.oauth_token_endpoint IS '@access: restricted';
+COMMENT ON COLUMN external_mcp_tool_definitions.oauth_registration_endpoint IS '@access: restricted';
+COMMENT ON COLUMN external_mcp_tool_definitions.oauth_scopes_supported IS '@access: opaque-restricted';
+COMMENT ON COLUMN external_mcp_tool_definitions.header_definitions IS '@access: opaque-restricted';
+COMMENT ON COLUMN external_mcp_tool_definitions.title IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.read_only_hint IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.destructive_hint IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.idempotent_hint IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.open_world_hint IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.created_at IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN external_mcp_tool_definitions.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_external_mcp_attachment_id_idx
 ON external_mcp_tool_definitions (external_mcp_attachment_id)
 WHERE deleted IS FALSE;
@@ -5751,6 +7756,15 @@ CREATE TABLE IF NOT EXISTS project_allowed_origins (
   CONSTRAINT project_allowed_origins_pkey PRIMARY KEY (id),
   CONSTRAINT project_allowed_origins_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN project_allowed_origins.id IS '@access: confidential';
+COMMENT ON COLUMN project_allowed_origins.project_id IS '@access: confidential';
+COMMENT ON COLUMN project_allowed_origins.origin IS '@access: restricted';
+COMMENT ON COLUMN project_allowed_origins.status IS '@access: confidential';
+COMMENT ON COLUMN project_allowed_origins.created_at IS '@access: confidential';
+COMMENT ON COLUMN project_allowed_origins.updated_at IS '@access: confidential';
+COMMENT ON COLUMN project_allowed_origins.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN project_allowed_origins.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS project_allowed_origins_project_id_origin_key
 ON project_allowed_origins (project_id, origin)
@@ -5783,6 +7797,19 @@ CREATE TABLE IF NOT EXISTS external_oauth_client_registrations (
   CONSTRAINT external_oauth_client_registrations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
   CONSTRAINT external_oauth_client_registrations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN external_oauth_client_registrations.id IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_client_registrations.organization_id IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_client_registrations.project_id IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_client_registrations.oauth_server_issuer IS '@access: restricted';
+COMMENT ON COLUMN external_oauth_client_registrations.client_id IS '@access: restricted';
+COMMENT ON COLUMN external_oauth_client_registrations.client_secret_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN external_oauth_client_registrations.client_id_issued_at IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_client_registrations.client_secret_expires_at IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_client_registrations.created_at IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_client_registrations.updated_at IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_client_registrations.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN external_oauth_client_registrations.deleted IS '@access: confidential';
 
 -- Unique constraint: one client registration per org per OAuth issuer
 CREATE UNIQUE INDEX IF NOT EXISTS external_oauth_client_registrations_org_issuer_key
@@ -5830,6 +7857,24 @@ CREATE TABLE IF NOT EXISTS user_oauth_tokens (
   CONSTRAINT user_oauth_tokens_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN user_oauth_tokens.id IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.user_id IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.organization_id IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.project_id IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.client_registration_id IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.oauth_server_issuer IS '@access: restricted';
+COMMENT ON COLUMN user_oauth_tokens.access_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN user_oauth_tokens.refresh_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN user_oauth_tokens.token_type IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.expires_at IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.scopes IS '@access: opaque-restricted';
+COMMENT ON COLUMN user_oauth_tokens.provider_name IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.created_at IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.updated_at IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN user_oauth_tokens.deleted IS '@access: confidential';
+
 -- Unique constraint: one token per user per org per OAuth issuer
 CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
 ON user_oauth_tokens (user_id, organization_id, toolset_id)
@@ -5848,6 +7893,13 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
 
   CONSTRAINT hooks_overrides_unique_raw UNIQUE (project_id, raw_server_name)
 );
+
+COMMENT ON COLUMN hooks_server_name_overrides.id IS '@access: confidential';
+COMMENT ON COLUMN hooks_server_name_overrides.project_id IS '@access: confidential';
+COMMENT ON COLUMN hooks_server_name_overrides.raw_server_name IS '@access: confidential';
+COMMENT ON COLUMN hooks_server_name_overrides.display_name IS '@access: confidential';
+COMMENT ON COLUMN hooks_server_name_overrides.created_at IS '@access: confidential';
+COMMENT ON COLUMN hooks_server_name_overrides.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);
 
@@ -5869,6 +7921,17 @@ CREATE TABLE IF NOT EXISTS otel_forwarding_configs (
 
   CONSTRAINT otel_forwarding_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN otel_forwarding_configs.created_at IS '@access: confidential';
+COMMENT ON COLUMN otel_forwarding_configs.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN otel_forwarding_configs.updated_at IS '@access: confidential';
+COMMENT ON COLUMN otel_forwarding_configs.endpoint_url IS '@access: restricted';
+COMMENT ON COLUMN otel_forwarding_configs.headers_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN otel_forwarding_configs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN otel_forwarding_configs.project_id IS '@access: confidential';
+COMMENT ON COLUMN otel_forwarding_configs.enabled IS '@access: confidential';
+COMMENT ON COLUMN otel_forwarding_configs.id IS '@access: confidential';
+COMMENT ON COLUMN otel_forwarding_configs.deleted IS '@access: confidential';
 
 -- Only one org-wide row per org
 CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_key
@@ -5902,6 +7965,18 @@ CREATE TABLE IF NOT EXISTS otel_destinations (
   CONSTRAINT otel_destinations_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN otel_destinations.id IS '@access: confidential';
+COMMENT ON COLUMN otel_destinations.organization_id IS '@access: confidential';
+COMMENT ON COLUMN otel_destinations.project_id IS '@access: confidential';
+COMMENT ON COLUMN otel_destinations.name IS '@access: confidential';
+COMMENT ON COLUMN otel_destinations.endpoint_url IS '@access: restricted';
+COMMENT ON COLUMN otel_destinations.headers_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN otel_destinations.sensitive_data IS '@access: confidential';
+COMMENT ON COLUMN otel_destinations.created_at IS '@access: confidential';
+COMMENT ON COLUMN otel_destinations.updated_at IS '@access: confidential';
+COMMENT ON COLUMN otel_destinations.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN otel_destinations.deleted IS '@access: confidential';
+
 -- Supports tenant-pinned references from export routes. This cannot be a
 -- partial index because PostgreSQL requires a non-partial unique key as the
 -- target of a foreign key.
@@ -5932,6 +8007,17 @@ CREATE TABLE IF NOT EXISTS data_export_routes (
   CONSTRAINT data_export_routes_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT data_export_routes_destination_tenant_fkey FOREIGN KEY (organization_id, project_id, otel_destination_id) REFERENCES otel_destinations (organization_id, project_id, id) ON DELETE RESTRICT
 );
+
+COMMENT ON COLUMN data_export_routes.id IS '@access: confidential';
+COMMENT ON COLUMN data_export_routes.organization_id IS '@access: confidential';
+COMMENT ON COLUMN data_export_routes.project_id IS '@access: confidential';
+COMMENT ON COLUMN data_export_routes.data_source IS '@access: confidential';
+COMMENT ON COLUMN data_export_routes.enabled IS '@access: confidential';
+COMMENT ON COLUMN data_export_routes.otel_destination_id IS '@access: confidential';
+COMMENT ON COLUMN data_export_routes.created_at IS '@access: confidential';
+COMMENT ON COLUMN data_export_routes.updated_at IS '@access: confidential';
+COMMENT ON COLUMN data_export_routes.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN data_export_routes.deleted IS '@access: confidential';
 
 -- Each project can configure at most one non-deleted route per data source.
 -- Disabled routes still reserve the source until they are deleted.
@@ -5969,6 +8055,19 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   CONSTRAINT ai_integration_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN ai_integration_configs.created_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.updated_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.provider IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.project_id IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.external_organization_id IS '@access: restricted';
+COMMENT ON COLUMN ai_integration_configs.api_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN ai_integration_configs.enabled IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.billing_mode IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.id IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
   ON ai_integration_configs (organization_id, provider)
   WHERE deleted IS FALSE;
@@ -5985,6 +8084,13 @@ CREATE TABLE IF NOT EXISTS ai_integration_config_chats (
   CONSTRAINT ai_integration_config_chats_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE,
   CONSTRAINT ai_integration_config_chats_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN ai_integration_config_chats.id IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_config_chats.ai_integration_config_id IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_config_chats.chat_id IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_config_chats.last_cursor_id IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_config_chats.created_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_config_chats.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_config_chats_chat_id_key
   ON ai_integration_config_chats (chat_id);
@@ -6023,6 +8129,23 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN ai_integration_syncs.created_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.updated_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.ai_integration_config_id IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.schedule IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.kind IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.poll_watermark_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.poll_checkpoint IS '@access: opaque-restricted';
+COMMENT ON COLUMN ai_integration_syncs.last_cursor_id IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.next_poll_after IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.last_poll_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN ai_integration_syncs.last_poll_failed_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.last_poll_success_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.consecutive_failures IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.auto_paused_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.disabled_at IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_syncs.id IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_schedule_key
   ON ai_integration_syncs (ai_integration_config_id, schedule) NULLS NOT DISTINCT;
 
@@ -6045,14 +8168,25 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   CONSTRAINT principal_grants_effect_check CHECK (effect IS NULL OR effect IN ('allow', 'deny'))
 );
 
+COMMENT ON COLUMN principal_grants.id IS '@access: confidential';
+COMMENT ON COLUMN principal_grants.created_at IS '@access: confidential';
+COMMENT ON COLUMN principal_grants.updated_at IS '@access: confidential';
+
 COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.';
-COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this grant belongs to. Grants are always org-scoped.';
-COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.';
-COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
-COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
-COMMENT ON COLUMN principal_grants.effect IS 'Whether this grant allows or denies the scope. NULL = allow for backward compatibility.';
-COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' = unrestricted. Nullable, scheduled for removal.';
-COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.';
+COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this grant belongs to. Grants are always org-scoped.
+@access: confidential';
+COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.
+@access: confidential-pii';
+COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".
+@access: confidential';
+COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.
+@access: confidential';
+COMMENT ON COLUMN principal_grants.effect IS 'Whether this grant allows or denies the scope. NULL = allow for backward compatibility.
+@access: confidential';
+COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' = unrestricted. Nullable, scheduled for removal.
+@access: confidential';
+COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.
+@access: opaque-restricted';
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
 ON principal_grants (organization_id, principal_urn, scope, selectors);
@@ -6126,6 +8260,26 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   -- are later deleted.
 );
 
+COMMENT ON COLUMN audit_logs.id IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.seq IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.project_id IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.actor_id IS '@access: restricted';
+COMMENT ON COLUMN audit_logs.actor_type IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.actor_display_name IS '@access: confidential-pii';
+COMMENT ON COLUMN audit_logs.actor_slug IS '@access: confidential-pii';
+COMMENT ON COLUMN audit_logs.action IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.subject_id IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.subject_type IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.subject_display_name IS '@access: opaque-restricted';
+COMMENT ON COLUMN audit_logs.subject_slug IS '@access: confidential-pii';
+COMMENT ON COLUMN audit_logs.before_snapshot IS '@access: opaque-restricted';
+COMMENT ON COLUMN audit_logs.after_snapshot IS '@access: opaque-restricted';
+COMMENT ON COLUMN audit_logs.metadata IS '@access: opaque-restricted';
+COMMENT ON COLUMN audit_logs.acting_surface IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.acting_client_id IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.created_at IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_seq_idx
 ON audit_logs (organization_id, seq DESC);
 
@@ -6156,6 +8310,17 @@ CREATE TABLE IF NOT EXISTS remote_mcp_servers (
   CONSTRAINT remote_mcp_servers_pkey PRIMARY KEY (id),
   CONSTRAINT remote_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN remote_mcp_servers.id IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_servers.project_id IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_servers.name IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_servers.slug IS '@access: restricted';
+COMMENT ON COLUMN remote_mcp_servers.transport_type IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_servers.url IS '@access: restricted';
+COMMENT ON COLUMN remote_mcp_servers.created_at IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_servers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_servers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_servers.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS remote_mcp_servers_project_id_idx
 ON remote_mcp_servers (project_id)
@@ -6193,6 +8358,19 @@ CREATE TABLE IF NOT EXISTS remote_mcp_server_headers (
   CONSTRAINT remote_mcp_server_headers_value_source_check CHECK ((value IS NULL) != (value_from_request_header IS NULL))
 );
 
+COMMENT ON COLUMN remote_mcp_server_headers.id IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_server_headers.remote_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_server_headers.name IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_server_headers.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_mcp_server_headers.is_required IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_server_headers.is_secret IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_server_headers.value IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_mcp_server_headers.value_from_request_header IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_server_headers.created_at IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_server_headers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_server_headers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN remote_mcp_server_headers.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_idx
 ON remote_mcp_server_headers (remote_mcp_server_id)
 WHERE deleted IS FALSE;
@@ -6226,6 +8404,19 @@ CREATE TABLE IF NOT EXISTS tunneled_mcp_server_headers (
   CONSTRAINT tunneled_mcp_server_headers_value_source_check CHECK ((value IS NULL) != (value_from_request_header IS NULL))
 );
 
+COMMENT ON COLUMN tunneled_mcp_server_headers.id IS '@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_server_headers.tunneled_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_server_headers.name IS '@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_server_headers.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN tunneled_mcp_server_headers.is_required IS '@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_server_headers.is_secret IS '@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_server_headers.value IS '@access: secret-restricted';
+COMMENT ON COLUMN tunneled_mcp_server_headers.value_from_request_header IS '@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_server_headers.created_at IS '@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_server_headers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_server_headers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_server_headers.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS tunneled_mcp_server_headers_tunneled_mcp_server_id_idx
 ON tunneled_mcp_server_headers (tunneled_mcp_server_id)
 WHERE deleted IS FALSE;
@@ -6254,6 +8445,17 @@ CREATE TABLE IF NOT EXISTS unproxied_mcp_servers (
   CONSTRAINT unproxied_mcp_servers_pkey PRIMARY KEY (id),
   CONSTRAINT unproxied_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN unproxied_mcp_servers.id IS '@access: confidential';
+COMMENT ON COLUMN unproxied_mcp_servers.project_id IS '@access: confidential';
+COMMENT ON COLUMN unproxied_mcp_servers.name IS '@access: confidential';
+COMMENT ON COLUMN unproxied_mcp_servers.slug IS '@access: restricted';
+COMMENT ON COLUMN unproxied_mcp_servers.url IS '@access: restricted';
+COMMENT ON COLUMN unproxied_mcp_servers.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN unproxied_mcp_servers.created_at IS '@access: confidential';
+COMMENT ON COLUMN unproxied_mcp_servers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN unproxied_mcp_servers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN unproxied_mcp_servers.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS unproxied_mcp_servers_project_id_idx
 ON unproxied_mcp_servers (project_id)
@@ -6312,6 +8514,24 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1)
 );
 
+COMMENT ON COLUMN mcp_servers.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.name IS '@access: restricted';
+COMMENT ON COLUMN mcp_servers.slug IS '@access: restricted';
+COMMENT ON COLUMN mcp_servers.environment_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.remote_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.remote_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.unproxied_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.tool_variations_group_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.visibility IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.network_access_mode IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
 ON mcp_servers (project_id)
 WHERE deleted IS FALSE;
@@ -6340,7 +8560,8 @@ CREATE INDEX IF NOT EXISTS mcp_servers_tunneled_mcp_server_id_idx
 ON mcp_servers (tunneled_mcp_server_id)
 WHERE tunneled_mcp_server_id IS NOT NULL;
 
-COMMENT ON COLUMN mcp_servers.tunneled_mcp_server_id IS 'Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.';
+COMMENT ON COLUMN mcp_servers.tunneled_mcp_server_id IS 'Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
+@access: confidential';
 
 CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
 ON mcp_servers (toolset_id)
@@ -6384,6 +8605,19 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
   CONSTRAINT meta_mcp_servers_organization_id_user_session_issuer_id_fkey FOREIGN KEY (organization_id, user_session_issuer_id) REFERENCES user_session_issuers (organization_id, id) ON DELETE RESTRICT
 );
 
+COMMENT ON COLUMN meta_mcp_servers.id IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_servers.organization_id IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_servers.project_id IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_servers.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_servers.name IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_servers.instructions IS '@access: opaque-restricted';
+COMMENT ON COLUMN meta_mcp_servers.visibility IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_servers.network_access_mode IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_servers.created_at IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_servers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_servers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_servers.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS meta_mcp_servers_project_id_idx
 ON meta_mcp_servers (project_id)
 WHERE deleted IS FALSE;
@@ -6408,6 +8642,16 @@ CREATE TABLE IF NOT EXISTS meta_mcp_server_members (
   CONSTRAINT meta_mcp_server_members_project_id_meta_mcp_server_id_fkey FOREIGN KEY (project_id, meta_mcp_server_id) REFERENCES meta_mcp_servers (project_id, id) ON DELETE CASCADE,
   CONSTRAINT meta_mcp_server_members_project_id_mcp_server_id_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN meta_mcp_server_members.id IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_server_members.project_id IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_server_members.meta_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_server_members.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_server_members.sort_order IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_server_members.created_at IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_server_members.updated_at IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_server_members.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN meta_mcp_server_members.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS meta_mcp_server_members_meta_mcp_server_id_idx
 ON meta_mcp_server_members (meta_mcp_server_id, sort_order, created_at, id)
@@ -6441,6 +8685,17 @@ CREATE TABLE IF NOT EXISTS organization_mcp_collection_server_attachments (
   -- Exactly one backend must be set: either a toolset or an mcp_server.
   CONSTRAINT organization_mcp_collection_server_attachments_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
 );
+
+COMMENT ON COLUMN organization_mcp_collection_server_attachments.published_at IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_server_attachments.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_server_attachments.updated_at IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_server_attachments.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_server_attachments.published_by IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_server_attachments.id IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_server_attachments.collection_id IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_server_attachments.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_server_attachments.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN organization_mcp_collection_server_attachments.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_mcp_collection_server_attachments_collection_toolset_key
   ON organization_mcp_collection_server_attachments (collection_id, toolset_id)
@@ -6476,6 +8731,20 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   CONSTRAINT mcp_metadata_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
 );
 
+COMMENT ON COLUMN mcp_metadata.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_metadata.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_metadata.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_metadata.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_metadata.external_documentation_url IS '@access: restricted';
+COMMENT ON COLUMN mcp_metadata.external_documentation_text IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_metadata.logo_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_metadata.instructions IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_metadata.header_display_names IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_metadata.default_environment_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_metadata.installation_override_url IS '@access: restricted';
+COMMENT ON COLUMN mcp_metadata.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_metadata.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_metadata_toolset_id_key
 ON mcp_metadata (toolset_id)
 WHERE toolset_id IS NOT NULL;
@@ -6500,6 +8769,15 @@ CREATE TABLE IF NOT EXISTS mcp_environment_configs (
   CONSTRAINT mcp_environment_configs_mcp_metadata_id_fkey FOREIGN KEY (mcp_metadata_id) REFERENCES mcp_metadata (id) ON DELETE CASCADE,
   CONSTRAINT mcp_environment_configs_mcp_metadata_id_variable_name_key UNIQUE (mcp_metadata_id, variable_name)
 );
+
+COMMENT ON COLUMN mcp_environment_configs.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_environment_configs.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_environment_configs.mcp_metadata_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_environment_configs.variable_name IS '@access: confidential';
+COMMENT ON COLUMN mcp_environment_configs.header_display_name IS '@access: confidential';
+COMMENT ON COLUMN mcp_environment_configs.provided_by IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_environment_configs.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_environment_configs.updated_at IS '@access: confidential';
 
 -- MCP Endpoints: addressable slugs for an MCP or Meta MCP server. A NULL custom_domain_id
 -- represents a Gram-hosted endpoint (resolved by slug alone); a non-NULL
@@ -6528,6 +8806,18 @@ CREATE TABLE IF NOT EXISTS mcp_endpoints (
   CONSTRAINT mcp_endpoints_backend_exclusivity_check CHECK (num_nonnulls(mcp_server_id, meta_mcp_server_id) = 1),
   CONSTRAINT mcp_endpoints_domain_root_requires_custom_domain_check CHECK (is_domain_root IS NOT TRUE OR custom_domain_id IS NOT NULL)
 );
+
+COMMENT ON COLUMN mcp_endpoints.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_endpoints.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_endpoints.custom_domain_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_endpoints.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_endpoints.meta_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_endpoints.slug IS '@access: confidential';
+COMMENT ON COLUMN mcp_endpoints.is_domain_root IS '@access: confidential';
+COMMENT ON COLUMN mcp_endpoints.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_endpoints.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_endpoints.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_endpoints.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS mcp_endpoints_project_id_idx
 ON mcp_endpoints (project_id)
@@ -6586,6 +8876,14 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
   CONSTRAINT assistant_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT assistant_mcp_servers_assistant_id_mcp_server_id_key UNIQUE (assistant_id, mcp_server_id)
 );
+
+COMMENT ON COLUMN assistant_mcp_servers.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_servers.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_servers.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_servers.environment_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_servers.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_servers.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_servers.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
@@ -6663,6 +8961,22 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   CONSTRAINT assistant_mcp_oauth_clients_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN assistant_mcp_oauth_clients.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.oauth_server_issuer IS '@access: restricted';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.redirect_uri IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.client_id IS '@access: restricted';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.client_secret_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.client_secret_expires_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.client_id_metadata_uri IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.registration_owner IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.registration_started_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.updated_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_mcp_oauth_clients_project_assistant_issuer_key
 ON assistant_mcp_oauth_clients (project_id, assistant_id, oauth_server_issuer)
 WHERE deleted IS FALSE;
@@ -6694,6 +9008,20 @@ CREATE TABLE IF NOT EXISTS mcp_server_tool_metadata (
   CONSTRAINT mcp_server_tool_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT mcp_server_tool_metadata_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN mcp_server_tool_metadata.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.tool_name IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.title IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.read_only_hint IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.destructive_hint IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.idempotent_hint IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.open_world_hint IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_tool_metadata.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS mcp_server_tool_metadata_project_id_idx
 ON mcp_server_tool_metadata (project_id)
@@ -6744,6 +9072,20 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   )
 );
 
+COMMENT ON COLUMN plugin_servers.id IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.plugin_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.project_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.toolset_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.meta_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.display_name IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.policy IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.sort_order IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.created_at IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.updated_at IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN plugin_servers.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_id_key
   ON plugin_servers (plugin_id, id);
 
@@ -6781,6 +9123,13 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
   CONSTRAINT plugin_assignments_plugin_id_fkey FOREIGN KEY (plugin_id) REFERENCES plugins (id) ON DELETE CASCADE,
   CONSTRAINT plugin_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN plugin_assignments.id IS '@access: confidential';
+COMMENT ON COLUMN plugin_assignments.plugin_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_assignments.organization_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_assignments.principal_urn IS '@access: confidential-pii';
+COMMENT ON COLUMN plugin_assignments.created_at IS '@access: confidential';
+COMMENT ON COLUMN plugin_assignments.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
   ON plugin_assignments (plugin_id, principal_urn);
@@ -6842,6 +9191,19 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN plugin_github_connections.id IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.project_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.installation_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.repo_owner IS '@access: confidential-pii';
+COMMENT ON COLUMN plugin_github_connections.repo_name IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.published_fingerprint IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.published_mcp_fingerprints IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.published_hooks_version IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.published_hooks_config IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.created_at IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
   ON plugin_github_connections (project_id);
 
@@ -6881,6 +9243,12 @@ CREATE TABLE IF NOT EXISTS project_marketplace_settings (
   CONSTRAINT project_marketplace_settings_pkey PRIMARY KEY (project_id),
   CONSTRAINT project_marketplace_settings_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN project_marketplace_settings.project_id IS '@access: confidential';
+COMMENT ON COLUMN project_marketplace_settings.marketplace_name IS '@access: confidential';
+COMMENT ON COLUMN project_marketplace_settings.observability_enabled IS '@access: confidential';
+COMMENT ON COLUMN project_marketplace_settings.created_at IS '@access: confidential';
+COMMENT ON COLUMN project_marketplace_settings.updated_at IS '@access: confidential';
 
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
@@ -6949,6 +9317,33 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN risk_policies.id IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.project_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.organization_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.enabled IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.name IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.policy_type IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.sources IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.presidio_entities IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policies.analyzer_config IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policies.mcp_scope IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policies.prompt_injection_rules IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policies.disabled_rules IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policies.custom_rule_ids IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.action IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.audience_type IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.shadow_mcp_disposition IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.auto_name IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.user_message IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policies.prompt IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policies.model_config IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.score IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.version IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.created_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.updated_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policies.deleted IS '@access: confidential';
+
 CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
 ON risk_policies (project_id)
 WHERE deleted IS FALSE;
@@ -6985,6 +9380,19 @@ CREATE TABLE IF NOT EXISTS session_quarantines (
   CONSTRAINT session_quarantines_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE,
   CONSTRAINT session_quarantines_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN session_quarantines.id IS '@access: confidential';
+COMMENT ON COLUMN session_quarantines.organization_id IS '@access: confidential';
+COMMENT ON COLUMN session_quarantines.project_id IS '@access: confidential';
+COMMENT ON COLUMN session_quarantines.session_id IS '@access: confidential';
+COMMENT ON COLUMN session_quarantines.risk_policy_id IS '@access: confidential';
+COMMENT ON COLUMN session_quarantines.risk_policy_name IS '@access: confidential';
+COMMENT ON COLUMN session_quarantines.user_id IS '@access: confidential';
+COMMENT ON COLUMN session_quarantines.reason IS '@access: opaque-restricted';
+COMMENT ON COLUMN session_quarantines.created_at IS '@access: confidential';
+COMMENT ON COLUMN session_quarantines.updated_at IS '@access: confidential';
+COMMENT ON COLUMN session_quarantines.released_at IS '@access: confidential';
+COMMENT ON COLUMN session_quarantines.released_by IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS session_quarantines_active_session_key
 ON session_quarantines (organization_id, project_id, session_id)
@@ -7032,6 +9440,21 @@ CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (
   CONSTRAINT risk_custom_detection_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN risk_custom_detection_rules.id IS '@access: confidential';
+COMMENT ON COLUMN risk_custom_detection_rules.project_id IS '@access: confidential';
+COMMENT ON COLUMN risk_custom_detection_rules.organization_id IS '@access: confidential';
+COMMENT ON COLUMN risk_custom_detection_rules.rule_id IS '@access: confidential';
+COMMENT ON COLUMN risk_custom_detection_rules.title IS '@access: confidential';
+COMMENT ON COLUMN risk_custom_detection_rules.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_custom_detection_rules.regex IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_custom_detection_rules.match_config IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_custom_detection_rules.detection_expr IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_custom_detection_rules.severity IS '@access: confidential';
+COMMENT ON COLUMN risk_custom_detection_rules.created_at IS '@access: confidential';
+COMMENT ON COLUMN risk_custom_detection_rules.updated_at IS '@access: confidential';
+COMMENT ON COLUMN risk_custom_detection_rules.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN risk_custom_detection_rules.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS risk_custom_detection_rules_project_rule_id_key
 ON risk_custom_detection_rules (project_id, rule_id)
 WHERE deleted IS FALSE;
@@ -7072,6 +9495,20 @@ CREATE TABLE IF NOT EXISTS risk_exclusions (
   CONSTRAINT risk_exclusions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
   CONSTRAINT risk_exclusions_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN risk_exclusions.id IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.project_id IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.risk_policy_id IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.match_type IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.match_value IS '@access: secret-restricted';
+COMMENT ON COLUMN risk_exclusions.rule_id_filter IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.source_filter IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.enabled IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.created_at IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN risk_exclusions.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS risk_exclusions_project_policy_idx
 ON risk_exclusions (project_id, risk_policy_id)
@@ -7158,6 +9595,31 @@ CREATE TABLE IF NOT EXISTS risk_results (
   autovacuum_vacuum_insert_threshold = 250000,
   autovacuum_vacuum_cost_limit = 2000
 );
+
+COMMENT ON COLUMN risk_results.id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.project_id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.organization_id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.risk_policy_id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.risk_policy_version IS '@access: confidential';
+COMMENT ON COLUMN risk_results.chat_message_id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.chat_content_part_id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.skill_version_id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.source IS '@access: confidential';
+COMMENT ON COLUMN risk_results.found IS '@access: confidential';
+COMMENT ON COLUMN risk_results.rule_id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_results.match IS '@access: secret-restricted';
+COMMENT ON COLUMN risk_results.start_pos IS '@access: confidential';
+COMMENT ON COLUMN risk_results.end_pos IS '@access: confidential';
+COMMENT ON COLUMN risk_results.confidence IS '@access: confidential';
+COMMENT ON COLUMN risk_results.tags IS '@access: confidential';
+COMMENT ON COLUMN risk_results.spans IS '@access: secret-restricted';
+COMMENT ON COLUMN risk_results.dead_letter_reason IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_results.excluded_at IS '@access: confidential';
+COMMENT ON COLUMN risk_results.excluded_exclusion_id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.false_positive_at IS '@access: confidential';
+COMMENT ON COLUMN risk_results.false_positive_reason IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_results.created_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS risk_results_project_policy_version_message_idx
 ON risk_results (project_id, risk_policy_id, risk_policy_version, chat_message_id);
@@ -7264,6 +9726,19 @@ CREATE TABLE IF NOT EXISTS risk_policy_eval_reviews (
   CONSTRAINT risk_policy_eval_reviews_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN risk_policy_eval_reviews.id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.project_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.organization_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.risk_policy_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.risk_policy_version IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.chat_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.verdict IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.reviewed_by IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.created_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.updated_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_eval_reviews.deleted IS '@access: confidential';
+
 -- One active verdict per reviewer per session per policy.
 CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_eval_reviews_policy_chat_reviewer_key
 ON risk_policy_eval_reviews (project_id, risk_policy_id, chat_id, reviewed_by)
@@ -7290,12 +9765,24 @@ CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
   CONSTRAINT authz_challenge_resolutions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN authz_challenge_resolutions.id IS '@access: confidential';
+COMMENT ON COLUMN authz_challenge_resolutions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN authz_challenge_resolutions.scope IS '@access: opaque-restricted';
+COMMENT ON COLUMN authz_challenge_resolutions.resource_kind IS '@access: opaque-restricted';
+COMMENT ON COLUMN authz_challenge_resolutions.resource_id IS '@access: opaque-restricted';
+COMMENT ON COLUMN authz_challenge_resolutions.created_at IS '@access: confidential';
+
 COMMENT ON TABLE authz_challenge_resolutions IS 'Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).';
-COMMENT ON COLUMN authz_challenge_resolutions.challenge_id IS 'UUID of the denied challenge in the ClickHouse authz_challenges table.';
-COMMENT ON COLUMN authz_challenge_resolutions.principal_urn IS 'The principal that was denied, copied from the challenge for query convenience.';
-COMMENT ON COLUMN authz_challenge_resolutions.resolution_type IS 'How the challenge was resolved: role_assigned, dismissed.';
-COMMENT ON COLUMN authz_challenge_resolutions.role_slug IS 'When resolution_type=role_assigned, the role slug that was assigned to the principal.';
-COMMENT ON COLUMN authz_challenge_resolutions.resolved_by IS 'URN of the admin who resolved the challenge.';
+COMMENT ON COLUMN authz_challenge_resolutions.challenge_id IS 'UUID of the denied challenge in the ClickHouse authz_challenges table.
+@access: opaque-restricted';
+COMMENT ON COLUMN authz_challenge_resolutions.principal_urn IS 'The principal that was denied, copied from the challenge for query convenience.
+@access: opaque-restricted';
+COMMENT ON COLUMN authz_challenge_resolutions.resolution_type IS 'How the challenge was resolved: role_assigned, dismissed.
+@access: confidential';
+COMMENT ON COLUMN authz_challenge_resolutions.role_slug IS 'When resolution_type=role_assigned, the role slug that was assigned to the principal.
+@access: confidential';
+COMMENT ON COLUMN authz_challenge_resolutions.resolved_by IS 'URN of the admin who resolved the challenge.
+@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS authz_challenge_resolutions_org_challenge_key
 ON authz_challenge_resolutions (organization_id, challenge_id);
@@ -7335,10 +9822,30 @@ CREATE TABLE IF NOT EXISTS risk_policy_bypass_requests (
   CONSTRAINT risk_policy_bypass_requests_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN risk_policy_bypass_requests.id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.organization_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.project_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.risk_policy_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.target_label IS '@access: restricted';
+COMMENT ON COLUMN risk_policy_bypass_requests.requester_user_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.requester_email IS '@access: confidential-pii';
+COMMENT ON COLUMN risk_policy_bypass_requests.note IS '@access: opaque-restricted';
+COMMENT ON COLUMN risk_policy_bypass_requests.status IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.decided_by IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.granted_principal_urns IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.decided_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.created_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.updated_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.deleted IS '@access: confidential';
+
 COMMENT ON TABLE risk_policy_bypass_requests IS 'Risk-policy bypass request workflow. A block records a request here; an admin approves by granting risk_policy:bypass.';
-COMMENT ON COLUMN risk_policy_bypass_requests.target_kind IS 'Generic target namespace for the bypass request, such as server_url. Empty means the whole policy.';
-COMMENT ON COLUMN risk_policy_bypass_requests.target_key IS 'Stable canonical key for deduplicating bypass requests within the target namespace.';
-COMMENT ON COLUMN risk_policy_bypass_requests.target_dimensions IS 'Selector dimensions for the target, such as {"server_url":"mcp.example.com"}.';
+COMMENT ON COLUMN risk_policy_bypass_requests.target_kind IS 'Generic target namespace for the bypass request, such as server_url. Empty means the whole policy.
+@access: confidential';
+COMMENT ON COLUMN risk_policy_bypass_requests.target_key IS 'Stable canonical key for deduplicating bypass requests within the target namespace.
+@access: opaque-restricted';
+COMMENT ON COLUMN risk_policy_bypass_requests.target_dimensions IS 'Selector dimensions for the target, such as {"server_url":"mcp.example.com"}.
+@access: opaque-restricted';
 
 CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_bypass_requests_current_key
 ON risk_policy_bypass_requests (project_id, requester_user_id, risk_policy_id, target_kind, target_key) NULLS NOT DISTINCT
@@ -7389,6 +9896,25 @@ CREATE TABLE IF NOT EXISTS risk_policy_challenges (
   CONSTRAINT risk_policy_challenges_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT risk_policy_challenges_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN risk_policy_challenges.id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.organization_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.project_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.risk_policy_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.user_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.tool_name IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.status IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.policy_name IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.entity IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.rule_id IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.call_fingerprint IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.challenged_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.acknowledged_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.expires_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.created_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.updated_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN risk_policy_challenges.deleted IS '@access: confidential';
 
 COMMENT ON TABLE risk_policy_challenges IS 'Interactive warn/challenge lifecycle for warn-action policies: a warn match records a challenged row; the user self-service acknowledges to proceed on retry. Never stores the raw matched value.';
 
@@ -7497,9 +10023,29 @@ CREATE TABLE IF NOT EXISTS mcp_approval_requests (
   CONSTRAINT mcp_approval_requests_bypass_request_id_fkey FOREIGN KEY (risk_policy_bypass_request_id) REFERENCES risk_policy_bypass_requests (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN mcp_approval_requests.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.target_kind IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.target_raw IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_approval_requests.target_key IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_approval_requests.risk_policy_bypass_request_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.status IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.current_evidence IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_approval_requests.evidence_version IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.evidence_collected_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.evidence_changed_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.notified_change_fingerprint IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_requests.deleted IS '@access: confidential';
+
 COMMENT ON TABLE mcp_approval_requests IS 'One review per MCP server per project. Re-requests reopen the same row so decisions accumulate as history, giving "have we decided on this before?" for free.';
-COMMENT ON COLUMN mcp_approval_requests.artifact_ref IS 'Resolved immutable artifact identity. NULL means unidentified, which must surface as unknown rather than as an absence of findings.';
-COMMENT ON COLUMN mcp_approval_requests.version_pinned IS 'False for a floating invocation such as an unpinned npx command, where anything scanned may not be what runs.';
+COMMENT ON COLUMN mcp_approval_requests.artifact_ref IS 'Resolved immutable artifact identity. NULL means unidentified, which must surface as unknown rather than as an absence of findings.
+@access: restricted';
+COMMENT ON COLUMN mcp_approval_requests.version_pinned IS 'False for a floating invocation such as an unpinned npx command, where anything scanned may not be what runs.
+@access: confidential';
 
 -- Foreign-key target that lets every child pin itself to the same project as
 -- the request it belongs to. Without it a child row could name one project
@@ -7538,6 +10084,19 @@ CREATE TABLE IF NOT EXISTS mcp_approval_request_requesters (
   -- agree, so the mismatch is made unrepresentable here rather than assumed.
   CONSTRAINT mcp_approval_request_requesters_request_id_fkey FOREIGN KEY (mcp_approval_request_id, project_id) REFERENCES mcp_approval_requests (id, project_id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN mcp_approval_request_requesters.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_request_requesters.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_request_requesters.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_request_requesters.mcp_approval_request_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_request_requesters.user_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_request_requesters.user_email IS '@access: confidential-pii';
+COMMENT ON COLUMN mcp_approval_request_requesters.note IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_approval_request_requesters.requested_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_request_requesters.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_request_requesters.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_request_requesters.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_request_requesters.deleted IS '@access: confidential';
 
 COMMENT ON TABLE mcp_approval_request_requesters IS 'Who asked for a server and why. Separate from the request so demand is visible without duplicating reviews.';
 
@@ -7591,6 +10150,25 @@ CREATE TABLE IF NOT EXISTS mcp_research_reports (
   -- belongs to another.
   CONSTRAINT mcp_research_reports_request_id_fkey FOREIGN KEY (mcp_approval_request_id, project_id) REFERENCES mcp_approval_requests (id, project_id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN mcp_research_reports.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.mcp_approval_request_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.status IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.report IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_research_reports.report_version IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.tool_calls IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_research_reports.model IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.prompt_version IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.requested_by IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.started_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.completed_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.error IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_research_reports.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_research_reports.deleted IS '@access: confidential';
 
 COMMENT ON TABLE mcp_research_reports IS 'Research-agent output for an approval request. Findings are gathered and cited, never adjudicated — the admin decides.';
 
@@ -7670,8 +10248,25 @@ CREATE TABLE IF NOT EXISTS mcp_approval_decisions (
   CONSTRAINT mcp_approval_decisions_research_report_fkey FOREIGN KEY (mcp_research_report_id, mcp_approval_request_id) REFERENCES mcp_research_reports (id, mcp_approval_request_id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN mcp_approval_decisions.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.mcp_approval_request_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.decision IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.decided_by IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.rationale IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_approval_decisions.evidence_snapshot IS '@access: opaque-restricted';
+COMMENT ON COLUMN mcp_approval_decisions.evidence_version IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.mcp_research_report_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.decided_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.updated_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_approval_decisions.deleted IS '@access: confidential';
+
 COMMENT ON TABLE mcp_approval_decisions IS 'Append-only approve/deny history with the rationale and the evidence it rested on.';
-COMMENT ON COLUMN mcp_approval_decisions.granted_principal_urns IS 'Resolved blast radius of the approval. Empty for a denial.';
+COMMENT ON COLUMN mcp_approval_decisions.granted_principal_urns IS 'Resolved blast radius of the approval. Empty for a denial.
+@access: confidential';
 
 -- Dedupes reviews for the same server. target_key is only canonical within its
 -- namespace, so target_kind is part of the key: a stdio command and a URL that
@@ -7794,9 +10389,28 @@ CREATE TABLE IF NOT EXISTS tool_call_blocks (
   CONSTRAINT tool_call_blocks_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages (id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN tool_call_blocks.id IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.organization_id IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.project_id IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.provider IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.tool_name IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.risk_policy_id IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.chat_id IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.chat_message_id IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.user_id IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.feedback IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.feedback_user_id IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.feedback_at IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.created_at IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.updated_at IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN tool_call_blocks.deleted IS '@access: confidential';
+
 COMMENT ON TABLE tool_call_blocks IS 'Durable record of a blocked tool call or prompt. One row per hook-time block decision, carrying the exact reason shown to the agent. Backs the durable /blocks/:id page and its thumbs feedback. The risk_results / risk_policies foreign keys are nullable enrichment links — the page renders from this row alone.';
-COMMENT ON COLUMN tool_call_blocks.reason IS 'The exact agent-facing reason captured at block time, independent of any later risk_results mutation.';
-COMMENT ON COLUMN tool_call_blocks.risk_result_id IS 'Optional link to the risk_results finding for this block, backfilled when one is recorded.';
+COMMENT ON COLUMN tool_call_blocks.reason IS 'The exact agent-facing reason captured at block time, independent of any later risk_results mutation.
+@access: opaque-restricted';
+COMMENT ON COLUMN tool_call_blocks.risk_result_id IS 'Optional link to the risk_results finding for this block, backfilled when one is recorded.
+@access: confidential';
 
 CREATE INDEX IF NOT EXISTS tool_call_blocks_project_created_idx
 ON tool_call_blocks (project_id, created_at DESC)
@@ -7820,6 +10434,13 @@ CREATE TABLE IF NOT EXISTS outbox (
   CONSTRAINT outbox_pkey PRIMARY KEY (id),
   CONSTRAINT outbox_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN outbox.id IS '@access: confidential';
+COMMENT ON COLUMN outbox.public_id IS '@access: confidential';
+COMMENT ON COLUMN outbox.organization_id IS '@access: confidential';
+COMMENT ON COLUMN outbox.event_type IS '@access: confidential';
+COMMENT ON COLUMN outbox.payload IS '@access: opaque-restricted';
+COMMENT ON COLUMN outbox.created_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS outbox_public_id_key
 ON outbox (public_id);
@@ -7852,6 +10473,17 @@ CREATE TABLE IF NOT EXISTS outbox_relays (
   autovacuum_vacuum_scale_factor = 0.05,
   autovacuum_analyze_scale_factor = 0.05
 );
+
+COMMENT ON COLUMN outbox_relays.outbox_id IS '@access: confidential';
+COMMENT ON COLUMN outbox_relays.processed_at IS '@access: confidential';
+COMMENT ON COLUMN outbox_relays.noop IS '@access: confidential';
+COMMENT ON COLUMN outbox_relays.dead_lettered IS '@access: confidential';
+COMMENT ON COLUMN outbox_relays.svix_message_id IS '@access: confidential';
+COMMENT ON COLUMN outbox_relays.attempts IS '@access: confidential';
+COMMENT ON COLUMN outbox_relays.last_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN outbox_relays.retry_after IS '@access: confidential';
+COMMENT ON COLUMN outbox_relays.created_at IS '@access: confidential';
+COMMENT ON COLUMN outbox_relays.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS outbox_relays_pending_idx
 ON outbox_relays (outbox_id)
@@ -7896,15 +10528,29 @@ CREATE TABLE IF NOT EXISTS publish_outbox (
   autovacuum_vacuum_insert_scale_factor = 0.05
 );
 
+COMMENT ON COLUMN publish_outbox.id IS '@access: confidential';
+COMMENT ON COLUMN publish_outbox.last_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN publish_outbox.retry_after IS '@access: confidential';
+COMMENT ON COLUMN publish_outbox.created_at IS '@access: confidential';
+COMMENT ON COLUMN publish_outbox.updated_at IS '@access: confidential';
+
 COMMENT ON TABLE publish_outbox IS 'Transactional outbox of pending Pub/Sub publishes. Rows are deleted once published, so the table is near-empty in steady state; permanent failures move to publish_outbox_dead_letters.';
-COMMENT ON COLUMN publish_outbox.public_id IS 'Stable id a producer can put inside its own message body. Deliberately unindexed: nothing looks a row up by it, so an index here would buy nothing and cost a uniqueness check on the caller''s transaction. Collisions are prevented by minting uuidv7, not by the database.';
-COMMENT ON COLUMN publish_outbox.organization_id IS 'Owning organization, carried through to the published message. Deliberately not a foreign key: the check would take a KEY SHARE lock on the organization row for every enqueue, and a stream of those against one busy org generates multixacts on a row that other writers update. Rows live seconds and the relay never joins to the organization, so an org deleted mid-flight leaves rows that publish and then delete themselves. Nothing downstream may reference the organization either: publish_outbox_dead_letters drops its foreign key for the same reason, since a row that outlived its organization still has to be able to reach it.';
-COMMENT ON COLUMN publish_outbox.topic IS 'Proto full name of the topic-declaring message, e.g. "gram.webhooks.v1.Event". Resolved through the outbox topic registry at publish time.';
-COMMENT ON COLUMN publish_outbox.message IS 'proto.Marshal of that message, published verbatim. Topic proto changes must stay additive: a row marshaled by one binary may be published after the topic schema has rolled forward.';
-COMMENT ON COLUMN publish_outbox.attributes IS 'Pub/Sub message attributes. Carries the producer traceparent so the trace survives the database hop. content-type and schema are derived at publish time and cannot be overridden from here.';
-COMMENT ON COLUMN publish_outbox.attempts IS 'Incremented when a row is claimed, not when it fails, so it counts deliveries attempted — the number dead-lettering acts on.';
-COMMENT ON COLUMN publish_outbox.locked_until IS 'Claim lease held by the draining relay. Deliberately absent from every index predicate: predicate columns are HOT-blocking, so indexing this would force a new index tuple on every claim.';
-COMMENT ON COLUMN publish_outbox.lease_token IS 'Identifies the claim currently holding the row, minted by the drainer. Settlement matches on it so a drain that outlived its lease cannot delete, dead-letter or release a row another drainer has since claimed. NULL means unclaimed. Unindexed, like locked_until, so claiming stays a HOT update.';
+COMMENT ON COLUMN publish_outbox.public_id IS 'Stable id a producer can put inside its own message body. Deliberately unindexed: nothing looks a row up by it, so an index here would buy nothing and cost a uniqueness check on the caller''s transaction. Collisions are prevented by minting uuidv7, not by the database.
+@access: confidential';
+COMMENT ON COLUMN publish_outbox.organization_id IS 'Owning organization, carried through to the published message. Deliberately not a foreign key: the check would take a KEY SHARE lock on the organization row for every enqueue, and a stream of those against one busy org generates multixacts on a row that other writers update. Rows live seconds and the relay never joins to the organization, so an org deleted mid-flight leaves rows that publish and then delete themselves. Nothing downstream may reference the organization either: publish_outbox_dead_letters drops its foreign key for the same reason, since a row that outlived its organization still has to be able to reach it.
+@access: confidential';
+COMMENT ON COLUMN publish_outbox.topic IS 'Proto full name of the topic-declaring message, e.g. "gram.webhooks.v1.Event". Resolved through the outbox topic registry at publish time.
+@access: confidential';
+COMMENT ON COLUMN publish_outbox.message IS 'proto.Marshal of that message, published verbatim. Topic proto changes must stay additive: a row marshaled by one binary may be published after the topic schema has rolled forward.
+@access: opaque-restricted';
+COMMENT ON COLUMN publish_outbox.attributes IS 'Pub/Sub message attributes. Carries the producer traceparent so the trace survives the database hop. content-type and schema are derived at publish time and cannot be overridden from here.
+@access: opaque-restricted';
+COMMENT ON COLUMN publish_outbox.attempts IS 'Incremented when a row is claimed, not when it fails, so it counts deliveries attempted — the number dead-lettering acts on.
+@access: confidential';
+COMMENT ON COLUMN publish_outbox.locked_until IS 'Claim lease held by the draining relay. Deliberately absent from every index predicate: predicate columns are HOT-blocking, so indexing this would force a new index tuple on every claim.
+@access: confidential';
+COMMENT ON COLUMN publish_outbox.lease_token IS 'Identifies the claim currently holding the row, minted by the drainer. Settlement matches on it so a drain that outlived its lease cannot delete, dead-letter or release a row another drainer has since claimed. NULL means unclaimed. Unindexed, like locked_until, so claiming stays a HOT update.
+@access: confidential';
 
 -- The primary key is deliberately the only index on this table: every index
 -- here is maintained inside whatever transaction happened to enqueue the
@@ -7942,7 +10588,18 @@ CREATE TABLE IF NOT EXISTS publish_outbox_dead_letters (
   CONSTRAINT publish_outbox_dead_letters_pkey PRIMARY KEY (id)
 );
 
-COMMENT ON COLUMN publish_outbox_dead_letters.enqueued_at IS 'created_at of the originating publish_outbox row, preserved so the delay before giving up stays visible after the row moves.';
+COMMENT ON COLUMN publish_outbox_dead_letters.id IS '@access: confidential';
+COMMENT ON COLUMN publish_outbox_dead_letters.public_id IS '@access: confidential';
+COMMENT ON COLUMN publish_outbox_dead_letters.organization_id IS '@access: confidential';
+COMMENT ON COLUMN publish_outbox_dead_letters.topic IS '@access: confidential';
+COMMENT ON COLUMN publish_outbox_dead_letters.message IS '@access: opaque-restricted';
+COMMENT ON COLUMN publish_outbox_dead_letters.attributes IS '@access: opaque-restricted';
+COMMENT ON COLUMN publish_outbox_dead_letters.attempts IS '@access: confidential';
+COMMENT ON COLUMN publish_outbox_dead_letters.last_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN publish_outbox_dead_letters.created_at IS '@access: confidential';
+
+COMMENT ON COLUMN publish_outbox_dead_letters.enqueued_at IS 'created_at of the originating publish_outbox row, preserved so the delay before giving up stays visible after the row moves.
+@access: confidential';
 
 CREATE INDEX IF NOT EXISTS publish_outbox_dead_letters_created_at_idx
 ON publish_outbox_dead_letters (created_at);
@@ -7967,6 +10624,18 @@ CREATE TABLE IF NOT EXISTS model_provider_keys (
   CONSTRAINT model_provider_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT model_provider_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN model_provider_keys.id IS '@access: confidential';
+COMMENT ON COLUMN model_provider_keys.organization_id IS '@access: confidential';
+COMMENT ON COLUMN model_provider_keys.project_id IS '@access: confidential';
+COMMENT ON COLUMN model_provider_keys.slot IS '@access: confidential';
+COMMENT ON COLUMN model_provider_keys.provider IS '@access: confidential';
+COMMENT ON COLUMN model_provider_keys.api_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN model_provider_keys.enabled IS '@access: confidential';
+COMMENT ON COLUMN model_provider_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN model_provider_keys.updated_at IS '@access: confidential';
+COMMENT ON COLUMN model_provider_keys.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN model_provider_keys.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS model_provider_keys_project_id_slot_key
   ON model_provider_keys (project_id, slot)
@@ -8059,6 +10728,25 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   CONSTRAINT spend_rules_organization_id_superseded_by_fkey FOREIGN KEY (organization_id, superseded_by) REFERENCES spend_rules (organization_id, id)
 );
 
+COMMENT ON COLUMN spend_rules.id IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.organization_id IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.name IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.slug IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.description IS '@access: opaque-restricted';
+COMMENT ON COLUMN spend_rules.target_expr IS '@access: opaque-restricted';
+COMMENT ON COLUMN spend_rules.limit_usd_cents IS '@access: restricted';
+COMMENT ON COLUMN spend_rules.rule_expr IS '@access: opaque-restricted';
+COMMENT ON COLUMN spend_rules.window_kind IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.warn_at_pct IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.action IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.enabled IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.version IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.created_at IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.updated_at IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.archived_at IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.archived IS '@access: confidential';
+COMMENT ON COLUMN spend_rules.superseded_by IS '@access: confidential';
+
 -- URNs are unique because every (slug, version) pair maps to exactly one row.
 CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_slug_version_key
 ON spend_rules (organization_id, slug, version);
@@ -8110,6 +10798,20 @@ CREATE TABLE IF NOT EXISTS spend_rule_events (
   CONSTRAINT spend_rule_events_organization_id_spend_rule_id_fkey FOREIGN KEY (organization_id, spend_rule_id) REFERENCES spend_rules (organization_id, id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN spend_rule_events.id IS '@access: confidential';
+COMMENT ON COLUMN spend_rule_events.organization_id IS '@access: confidential';
+COMMENT ON COLUMN spend_rule_events.spend_rule_id IS '@access: confidential';
+COMMENT ON COLUMN spend_rule_events.rule_urn IS '@access: confidential';
+COMMENT ON COLUMN spend_rule_events.event_type IS '@access: confidential';
+COMMENT ON COLUMN spend_rule_events.user_id IS '@access: confidential';
+COMMENT ON COLUMN spend_rule_events.email IS '@access: confidential-pii';
+COMMENT ON COLUMN spend_rule_events.display_name IS '@access: confidential-pii';
+COMMENT ON COLUMN spend_rule_events.spend_usd_cents IS '@access: restricted';
+COMMENT ON COLUMN spend_rule_events.limit_usd_cents IS '@access: restricted';
+COMMENT ON COLUMN spend_rule_events.window_start IS '@access: confidential';
+COMMENT ON COLUMN spend_rule_events.window_end IS '@access: confidential';
+COMMENT ON COLUMN spend_rule_events.created_at IS '@access: confidential';
+
 -- spend_rule_id identifies one immutable rule version, so (rule row, actor,
 -- window, type) is the natural idempotency key for evaluator writes.
 CREATE UNIQUE INDEX IF NOT EXISTS spend_rule_events_dedupe_key
@@ -8157,6 +10859,17 @@ CREATE TABLE IF NOT EXISTS device_integration_configs (
   CONSTRAINT device_integration_configs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN device_integration_configs.id IS '@access: confidential';
+COMMENT ON COLUMN device_integration_configs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN device_integration_configs.provider IS '@access: confidential';
+COMMENT ON COLUMN device_integration_configs.credentials_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN device_integration_configs.settings IS '@access: opaque-restricted';
+COMMENT ON COLUMN device_integration_configs.enabled IS '@access: confidential';
+COMMENT ON COLUMN device_integration_configs.created_at IS '@access: confidential';
+COMMENT ON COLUMN device_integration_configs.updated_at IS '@access: confidential';
+COMMENT ON COLUMN device_integration_configs.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN device_integration_configs.deleted IS '@access: confidential';
+
 -- Partial unique index so a soft-deleted config doesn't block reconnecting
 -- the same provider (a plain UNIQUE would still cover deleted rows).
 CREATE UNIQUE INDEX IF NOT EXISTS device_integration_configs_organization_id_provider_key
@@ -8203,6 +10916,13 @@ CREATE TABLE IF NOT EXISTS device_integration_schedules (
   CONSTRAINT device_integration_schedules_pkey PRIMARY KEY (id),
   CONSTRAINT device_integration_schedules_device_integration_config_id_fkey FOREIGN KEY (device_integration_config_id) REFERENCES device_integration_configs (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN device_integration_schedules.id IS '@access: confidential';
+COMMENT ON COLUMN device_integration_schedules.device_integration_config_id IS '@access: confidential';
+COMMENT ON COLUMN device_integration_schedules.schedule IS '@access: confidential';
+COMMENT ON COLUMN device_integration_schedules.disabled_at IS '@access: confidential';
+COMMENT ON COLUMN device_integration_schedules.created_at IS '@access: confidential';
+COMMENT ON COLUMN device_integration_schedules.updated_at IS '@access: confidential';
 
 -- One schedule row per (config, schedule); the leading config_id column
 -- also backs the config FK's ON DELETE CASCADE.
@@ -8252,6 +10972,20 @@ CREATE TABLE IF NOT EXISTS device_integration_syncs (
   CONSTRAINT device_integration_syncs_pkey PRIMARY KEY (id),
   CONSTRAINT device_integration_syncs_device_integration_schedule_id_fkey FOREIGN KEY (device_integration_schedule_id) REFERENCES device_integration_schedules (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN device_integration_syncs.id IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.device_integration_schedule_id IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.poll_watermark_at IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.next_poll_after IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.last_poll_success_at IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.last_poll_failed_at IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.last_poll_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN device_integration_syncs.consecutive_failures IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.consecutive_auth_rejections IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.last_push_digest IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.auto_paused_at IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.created_at IS '@access: confidential';
+COMMENT ON COLUMN device_integration_syncs.updated_at IS '@access: confidential';
 
 -- Exactly one sync row per schedule; also backs the schedule FK's
 -- ON DELETE CASCADE.
@@ -8328,6 +11062,24 @@ CREATE TABLE IF NOT EXISTS mdm_devices (
   CONSTRAINT mdm_devices_organization_id_device_integration_config_id_fkey FOREIGN KEY (organization_id, device_integration_config_id) REFERENCES device_integration_configs (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT mdm_devices_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN mdm_devices.id IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.device_integration_config_id IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.external_id IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.serial_number IS '@access: confidential-pii';
+COMMENT ON COLUMN mdm_devices.hostname IS '@access: confidential-pii';
+COMMENT ON COLUMN mdm_devices.os_name IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.os_version IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.user_email IS '@access: confidential-pii';
+COMMENT ON COLUMN mdm_devices.user_id IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.mdm_last_check_in_at IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.raw IS '@access: opaque-restricted';
+COMMENT ON COLUMN mdm_devices.first_seen_at IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.missing_since IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.created_at IS '@access: confidential';
+COMMENT ON COLUMN mdm_devices.updated_at IS '@access: confidential';
 
 -- Upsert key for inventory reconciliation; the leading config_id column also
 -- backs the config FK's ON DELETE CASCADE.
@@ -8426,6 +11178,21 @@ CREATE TABLE IF NOT EXISTS platform_mcp_oauth_clients (
   )
 );
 
+COMMENT ON COLUMN platform_mcp_oauth_clients.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_oauth_clients.client_id IS '@access: restricted';
+COMMENT ON COLUMN platform_mcp_oauth_clients.client_secret_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN platform_mcp_oauth_clients.client_name IS '@access: opaque-restricted';
+COMMENT ON COLUMN platform_mcp_oauth_clients.redirect_uris IS '@access: opaque-restricted';
+COMMENT ON COLUMN platform_mcp_oauth_clients.client_id_issued_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_oauth_clients.client_secret_expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_oauth_clients.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_oauth_clients.client_id_metadata_uri IS '@access: restricted';
+COMMENT ON COLUMN platform_mcp_oauth_clients.client_id_metadata_fetched_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_oauth_clients.client_id_metadata_cache_expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_oauth_clients.client_id_metadata_etag IS '@access: opaque-restricted';
+COMMENT ON COLUMN platform_mcp_oauth_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_oauth_clients.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_oauth_clients_client_id_key
 ON platform_mcp_oauth_clients (client_id);
 
@@ -8475,6 +11242,20 @@ CREATE TABLE IF NOT EXISTS platform_mcp_connections (
     FOREIGN KEY (oauth_client_id) REFERENCES platform_mcp_oauth_clients (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN platform_mcp_connections.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.subject_urn IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.oauth_client_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.active_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.authorized_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.reauthorized_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.authorization_expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.reauthorization_required_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.reauthorization_reason IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_connections_live_organization_subject_client_key
 ON platform_mcp_connections (organization_id, subject_urn, oauth_client_id)
 WHERE revoked_at IS NULL;
@@ -8519,6 +11300,20 @@ CREATE TABLE IF NOT EXISTS platform_mcp_authorization_grants (
     REFERENCES platform_mcp_connections (organization_id, id, oauth_client_id)
     ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN platform_mcp_authorization_grants.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_authorization_grants.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_authorization_grants.authorization_code_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN platform_mcp_authorization_grants.oauth_client_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_authorization_grants.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_authorization_grants.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_authorization_grants.redirect_uri IS '@access: restricted';
+COMMENT ON COLUMN platform_mcp_authorization_grants.code_challenge IS '@access: secret-restricted';
+COMMENT ON COLUMN platform_mcp_authorization_grants.expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_authorization_grants.consumed_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_authorization_grants.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_authorization_grants.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_authorization_grants.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_authorization_grants_authorization_code_hash_key
 ON platform_mcp_authorization_grants (authorization_code_hash);
@@ -8566,6 +11361,21 @@ CREATE TABLE IF NOT EXISTS platform_mcp_sessions (
     REFERENCES platform_mcp_sessions (id, connection_id, oauth_client_id, connection_generation)
     ON DELETE NO ACTION
 );
+
+COMMENT ON COLUMN platform_mcp_sessions.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.oauth_client_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.jti IS '@access: secret-restricted';
+COMMENT ON COLUMN platform_mcp_sessions.refresh_token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN platform_mcp_sessions.expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.refresh_expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.rotated_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.replaced_by_session_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_sessions.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_sessions_jti_key
 ON platform_mcp_sessions (jti);
@@ -8624,6 +11434,21 @@ CREATE TABLE IF NOT EXISTS admin_mcp_oauth_clients (
   )
 );
 
+COMMENT ON COLUMN admin_mcp_oauth_clients.id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_oauth_clients.client_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_oauth_clients.client_secret_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN admin_mcp_oauth_clients.client_name IS '@access: opaque-restricted';
+COMMENT ON COLUMN admin_mcp_oauth_clients.redirect_uris IS '@access: opaque-restricted';
+COMMENT ON COLUMN admin_mcp_oauth_clients.client_id_issued_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_oauth_clients.client_secret_expires_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_oauth_clients.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_oauth_clients.client_id_metadata_uri IS '@access: restricted';
+COMMENT ON COLUMN admin_mcp_oauth_clients.client_id_metadata_fetched_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_oauth_clients.client_id_metadata_cache_expires_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_oauth_clients.client_id_metadata_etag IS '@access: restricted';
+COMMENT ON COLUMN admin_mcp_oauth_clients.created_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_oauth_clients.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_oauth_clients_client_id_key
 ON admin_mcp_oauth_clients (client_id);
 
@@ -8667,6 +11492,22 @@ CREATE TABLE IF NOT EXISTS admin_mcp_connections (
     FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN admin_mcp_connections.id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.subject_urn IS '@access: confidential-pii';
+COMMENT ON COLUMN admin_mcp_connections.oauth_client_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.admin_session_id_enc IS '@access: secret-restricted';
+COMMENT ON COLUMN admin_mcp_connections.scopes IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.resource_uri IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.active_generation IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.authorized_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.reauthorized_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.authorization_expires_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.reauthorization_required_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.reauthorization_reason IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.created_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_connections.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_connections_live_subject_client_key
 ON admin_mcp_connections (subject_urn, oauth_client_id)
 WHERE revoked_at IS NULL;
@@ -8709,6 +11550,21 @@ CREATE TABLE IF NOT EXISTS admin_mcp_authorization_grants (
     REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN admin_mcp_authorization_grants.id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_authorization_grants.authorization_code_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN admin_mcp_authorization_grants.oauth_client_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_authorization_grants.connection_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_authorization_grants.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_authorization_grants.redirect_uri IS '@access: restricted';
+COMMENT ON COLUMN admin_mcp_authorization_grants.code_challenge IS '@access: secret-restricted';
+COMMENT ON COLUMN admin_mcp_authorization_grants.scopes IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_authorization_grants.resource_uri IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_authorization_grants.expires_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_authorization_grants.consumed_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_authorization_grants.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_authorization_grants.created_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_authorization_grants.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_authorization_grants_code_hash_key
 ON admin_mcp_authorization_grants (authorization_code_hash);
 
@@ -8747,6 +11603,20 @@ CREATE TABLE IF NOT EXISTS admin_mcp_sessions (
     REFERENCES admin_mcp_sessions (id, connection_id, oauth_client_id, connection_generation)
     ON DELETE NO ACTION
 );
+
+COMMENT ON COLUMN admin_mcp_sessions.id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_sessions.connection_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_sessions.oauth_client_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_sessions.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_sessions.jti IS '@access: secret-restricted';
+COMMENT ON COLUMN admin_mcp_sessions.refresh_token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN admin_mcp_sessions.expires_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_sessions.refresh_expires_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_sessions.rotated_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_sessions.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_sessions.replaced_by_session_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_sessions.created_at IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_sessions.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_jti_key
 ON admin_mcp_sessions (jti);
@@ -8820,6 +11690,19 @@ CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
     milestone <> 'repeat_day_value' OR product_day IS NOT NULL
   )
 );
+
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.milestone IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.user_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.acting_surface IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.mcp_key IS '@access: restricted';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.attempt_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.product_day IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_milestones.created_at IS '@access: confidential';
 
 -- Authorization, connection, read/write, and cohort-block evidence are once per
 -- Platform connection generation. Other milestone types use the target/attempt
@@ -8944,6 +11827,30 @@ CREATE TABLE IF NOT EXISTS platform_mcp_catalog_registrations (
     FOREIGN KEY (project_id, mcp_endpoint_id) REFERENCES mcp_endpoints (project_id, id) ON DELETE NO ACTION
 );
 
+COMMENT ON COLUMN platform_mcp_catalog_registrations.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.source_kind IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.catalog_provider IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.catalog_reference IS '@access: restricted';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.status IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.remote_mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.remote_mcp_server_owned IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.user_session_issuer_owned IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.mcp_server_owned IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.mcp_endpoint_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.mcp_endpoint_owned IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.user_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.acting_surface IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.updated_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_catalog_registrations.deleted IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_active_identity_key
 ON platform_mcp_catalog_registrations (organization_id, project_id, source_kind, catalog_provider, catalog_reference)
 WHERE deleted IS FALSE;
@@ -9018,6 +11925,24 @@ CREATE TABLE IF NOT EXISTS platform_mcp_operation_receipts (
     FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE NO ACTION
 );
 
+COMMENT ON COLUMN platform_mcp_operation_receipts.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.registration_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.user_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.acting_surface IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.operation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.idempotency_key IS '@access: opaque-restricted';
+COMMENT ON COLUMN platform_mcp_operation_receipts.input_hash IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.status IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.result_code IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.result_payload IS '@access: opaque-restricted';
+COMMENT ON COLUMN platform_mcp_operation_receipts.expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_operation_receipts.updated_at IS '@access: confidential';
+
 -- Superseded by platform_mcp_operation_receipts_user_operation_key. Kept for
 -- the expand phase so receipts written by the current code keep their
 -- uniqueness guarantee; drop it once every writer populates user_id.
@@ -9081,6 +12006,23 @@ CREATE TABLE IF NOT EXISTS platform_mcp_setup_handoffs (
   CONSTRAINT platform_mcp_setup_handoffs_project_registration_fkey
     FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN platform_mcp_setup_handoffs.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.registration_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.user_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.acting_surface IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.provider_key IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.intent IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.handoff_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.redeemed_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.invalidated_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_setup_handoffs.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_handoff_hash_key
 ON platform_mcp_setup_handoffs (handoff_hash);
@@ -9148,6 +12090,22 @@ CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
   CONSTRAINT platform_mcp_readiness_project_registration_fkey
     FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN platform_mcp_readiness.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.registration_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.user_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.acting_surface IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.provider_authorization_fingerprint IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.state IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.evidence_code IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.checked_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_readiness.updated_at IS '@access: confidential';
 
 -- NULLS NOT DISTINCT so readiness evidence stays one row per registration and
 -- fingerprint for a connection-less writer too. Otherwise the upsert never
@@ -9220,6 +12178,18 @@ CREATE TABLE IF NOT EXISTS session_handoff_links (
     FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN session_handoff_links.id IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.project_id IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.organization_id IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.session_id IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.token IS '@access: secret-restricted';
+COMMENT ON COLUMN session_handoff_links.blob_url IS '@access: secret-restricted';
+COMMENT ON COLUMN session_handoff_links.created_by_email IS '@access: confidential-pii';
+COMMENT ON COLUMN session_handoff_links.expires_at IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.consumed_at IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.created_at IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.updated_at IS '@access: confidential';
+
 CREATE UNIQUE INDEX IF NOT EXISTS session_handoff_links_token_key ON session_handoff_links (token);
 
 -- Serves both cascade paths: an organization delete scans by the leading
@@ -9271,6 +12241,22 @@ CREATE TABLE IF NOT EXISTS chat_session_links (
     FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN chat_session_links.id IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.project_id IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.organization_id IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.parent_chat_id IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.child_chat_id IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.parent_session_id IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.child_session_id IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.kind IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.target_harness IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.source_surface IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.actor_email IS '@access: confidential-pii';
+COMMENT ON COLUMN chat_session_links.device_serial IS '@access: confidential-pii';
+COMMENT ON COLUMN chat_session_links.device_hostname IS '@access: confidential-pii';
+COMMENT ON COLUMN chat_session_links.created_at IS '@access: confidential';
+COMMENT ON COLUMN chat_session_links.updated_at IS '@access: confidential';
+
 -- The Agent Sessions detail panel fetches edges for a chat from either end.
 CREATE INDEX IF NOT EXISTS chat_session_links_project_parent_idx
 ON chat_session_links (project_id, parent_chat_id);
@@ -9320,6 +12306,23 @@ CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_workflows (
   CONSTRAINT platform_mcp_onboarding_workflows_selected_target_check CHECK ((selected_project_id IS NULL) = (selected_registration_id IS NULL)),
   CONSTRAINT platform_mcp_onboarding_workflows_connection_generation_check CHECK ((connection_id IS NULL) = (connection_generation IS NULL))
 );
+
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.initiating_subject_urn IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.source_surface IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.client_family IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.agent_configuration_copied_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.selected_project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.selected_registration_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.status IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.correlation_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.closed_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_onboarding_workflows.updated_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_workflows_organization_id_id_key ON platform_mcp_onboarding_workflows (organization_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_workflows_active_subject_key ON platform_mcp_onboarding_workflows (organization_id, initiating_subject_urn) WHERE status = 'active';
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_onboarding_workflows_correlation_id_key ON platform_mcp_onboarding_workflows (correlation_id);
@@ -9367,6 +12370,25 @@ CREATE TABLE IF NOT EXISTS platform_mcp_distributions (
   CONSTRAINT platform_mcp_distributions_default_plugin_plugin_server_fkey FOREIGN KEY (default_plugin_id, plugin_server_id) REFERENCES plugin_servers (plugin_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_distributions_organization_connection_fkey FOREIGN KEY (organization_id, connection_id) REFERENCES platform_mcp_connections (organization_id, id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN platform_mcp_distributions.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.registration_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.default_plugin_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.plugin_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.plugin_server_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.state IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.version IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.attachment_was_created IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.publication_state IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.publication_updated_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.user_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.acting_surface IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_distributions.updated_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_distributions_identity_key ON platform_mcp_distributions (organization_id, project_id, registration_id, default_plugin_id);
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_distributions_project_registration_id_key ON platform_mcp_distributions (project_id, registration_id, id);
 CREATE INDEX IF NOT EXISTS platform_mcp_distributions_project_default_plugin_idx ON platform_mcp_distributions (project_id, default_plugin_id);
@@ -9399,6 +12421,19 @@ CREATE TABLE IF NOT EXISTS platform_mcp_selected_use_evidence (
   CONSTRAINT platform_mcp_selected_use_evidence_project_registration_distribution_fkey FOREIGN KEY (project_id, registration_id, distribution_id) REFERENCES platform_mcp_distributions (project_id, registration_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_selected_use_evidence_organization_workflow_fkey FOREIGN KEY (organization_id, workflow_id) REFERENCES platform_mcp_onboarding_workflows (organization_id, id) ON DELETE NO ACTION
 );
+
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.registration_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.distribution_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.distribution_version IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.workflow_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.tool_name IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.tool_category IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.request_reference IS '@access: restricted';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.succeeded_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_selected_use_evidence.created_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_selected_use_evidence_distribution_version_key ON platform_mcp_selected_use_evidence (distribution_id, distribution_version);
 CREATE INDEX IF NOT EXISTS platform_mcp_selected_use_evidence_project_registration_idx ON platform_mcp_selected_use_evidence (project_id, registration_id);
 CREATE INDEX IF NOT EXISTS platform_mcp_selected_use_evidence_project_registration_distribution_idx ON platform_mcp_selected_use_evidence (project_id, registration_id, distribution_id);
@@ -9445,6 +12480,31 @@ CREATE TABLE IF NOT EXISTS platform_mcp_feedback (
   CONSTRAINT platform_mcp_feedback_organization_workflow_fkey FOREIGN KEY (organization_id, workflow_id) REFERENCES platform_mcp_onboarding_workflows (organization_id, id) ON DELETE NO ACTION,
   CONSTRAINT platform_mcp_feedback_connection_generation_check CHECK ((connection_id IS NULL) = (connection_generation IS NULL))
 );
+
+COMMENT ON COLUMN platform_mcp_feedback.id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.organization_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.subject_urn IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.connection_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.connection_generation IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.project_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.workflow_id IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.request_reference IS '@access: restricted';
+COMMENT ON COLUMN platform_mcp_feedback.category IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.idempotency_key IS '@access: opaque-restricted';
+COMMENT ON COLUMN platform_mcp_feedback.input_hash IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.rating IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.success IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.tool_name IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.failure_category IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.note IS '@access: opaque-restricted';
+COMMENT ON COLUMN platform_mcp_feedback.delivery_state IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.delivery_attempts IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.last_delivery_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.delivered_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.dead_lettered_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.expires_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_feedback.updated_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_feedback_organization_subject_idempotency_key_idx ON platform_mcp_feedback (organization_id, subject_urn, idempotency_key);
 CREATE INDEX IF NOT EXISTS platform_mcp_feedback_organization_created_at_idx ON platform_mcp_feedback (organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS platform_mcp_feedback_organization_subject_created_at_idx ON platform_mcp_feedback (organization_id, subject_urn, created_at DESC);
@@ -9470,6 +12530,16 @@ CREATE TABLE IF NOT EXISTS killswitch_prescriptions (
   CONSTRAINT killswitch_prescriptions_current_version_check CHECK (current_version > 0),
   CONSTRAINT killswitch_prescriptions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN killswitch_prescriptions.id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescriptions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescriptions.definition_key IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescriptions.principal_kind IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescriptions.principal_key IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescriptions.resource_kind IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescriptions.current_version IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescriptions.created_at IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescriptions.updated_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS killswitch_prescriptions_organization_id_id_key ON killswitch_prescriptions (organization_id, id);
 CREATE INDEX IF NOT EXISTS killswitch_prescriptions_evaluator_idx ON killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, id);
 -- Customer list pages use fixed contract dimensions and descending keyset order.
@@ -9498,6 +12568,19 @@ CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
   CONSTRAINT killswitch_prescription_versions_external_note_check CHECK (char_length(external_note) BETWEEN 1 AND 500),
   CONSTRAINT killswitch_prescription_versions_internal_note_check CHECK (char_length(internal_note) BETWEEN 1 AND 4000)
 );
+
+COMMENT ON COLUMN killswitch_prescription_versions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_versions.prescription_id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_versions.version IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_versions.state IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_versions.resource_scope IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_versions.starts_at IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_versions.expires_at IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_versions.activated_at IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_versions.superseded_at IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_versions.internal_note IS '@access: opaque-restricted';
+COMMENT ON COLUMN killswitch_prescription_versions.external_note IS '@access: opaque-restricted';
+COMMENT ON COLUMN killswitch_prescription_versions.created_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS killswitch_prescription_versions_org_prescription_version_key ON killswitch_prescription_versions (organization_id, prescription_id, version);
 -- Privileged cross-organization expiry discovery: the maintenance sweep scans due
 -- versions globally ordered by expires_at, prescription_id, and version, so the index
@@ -9513,6 +12596,11 @@ CREATE TABLE IF NOT EXISTS killswitch_prescription_version_resources (
   CONSTRAINT killswitch_prescription_version_resources_version_fkey FOREIGN KEY (organization_id, prescription_id, version) REFERENCES killswitch_prescription_versions (organization_id, prescription_id, version) ON DELETE CASCADE,
   CONSTRAINT killswitch_prescription_version_resources_resource_key_check CHECK (resource_key <> '')
 );
+
+COMMENT ON COLUMN killswitch_prescription_version_resources.organization_id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_version_resources.prescription_id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_version_resources.version IS '@access: confidential';
+COMMENT ON COLUMN killswitch_prescription_version_resources.resource_key IS '@access: confidential';
 CREATE INDEX IF NOT EXISTS killswitch_prescription_version_resources_lookup_idx ON killswitch_prescription_version_resources (organization_id, resource_key, prescription_id, version);
 
 CREATE TABLE IF NOT EXISTS killswitch_expiry_events (
@@ -9523,6 +12611,11 @@ CREATE TABLE IF NOT EXISTS killswitch_expiry_events (
   CONSTRAINT killswitch_expiry_events_pkey PRIMARY KEY (prescription_id, version),
   CONSTRAINT killswitch_expiry_events_prescription_version_fkey FOREIGN KEY (organization_id, prescription_id, version) REFERENCES killswitch_prescription_versions (organization_id, prescription_id, version) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN killswitch_expiry_events.organization_id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_expiry_events.prescription_id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_expiry_events.version IS '@access: confidential';
+COMMENT ON COLUMN killswitch_expiry_events.recorded_at IS '@access: confidential';
 
 CREATE TABLE IF NOT EXISTS killswitch_operations (
   organization_id TEXT NOT NULL,
@@ -9543,6 +12636,17 @@ CREATE TABLE IF NOT EXISTS killswitch_operations (
   CONSTRAINT killswitch_operations_status_check CHECK (status IN ('pending', 'completed')),
   CONSTRAINT killswitch_operations_completed_response_check CHECK ((status = 'pending' AND response IS NULL) OR (status = 'completed' AND response IS NOT NULL))
 );
+
+COMMENT ON COLUMN killswitch_operations.organization_id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_operations.operation_id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_operations.actor_user_id IS '@access: confidential';
+COMMENT ON COLUMN killswitch_operations.operation IS '@access: confidential';
+COMMENT ON COLUMN killswitch_operations.request_hash IS '@access: confidential';
+COMMENT ON COLUMN killswitch_operations.status IS '@access: confidential';
+COMMENT ON COLUMN killswitch_operations.response IS '@access: confidential';
+COMMENT ON COLUMN killswitch_operations.expires_at IS '@access: confidential';
+COMMENT ON COLUMN killswitch_operations.created_at IS '@access: confidential';
+COMMENT ON COLUMN killswitch_operations.updated_at IS '@access: confidential';
 CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_operations (expires_at);
 
 -- Purpose-specific downstream registrations; interactive attachments remain separate.
@@ -9589,6 +12693,16 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
   CONSTRAINT okta_resource_connections_okta_application_fkey FOREIGN KEY (organization_id, identity_provider_connection_id, okta_application_id) REFERENCES okta_applications (organization_id, identity_provider_connection_id, okta_app_id) ON DELETE CASCADE
 );
 
+COMMENT ON COLUMN okta_resource_connections.id IS '@access: confidential';
+COMMENT ON COLUMN okta_resource_connections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN okta_resource_connections.identity_provider_connection_id IS '@access: confidential';
+COMMENT ON COLUMN okta_resource_connections.remote_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN okta_resource_connections.resource IS '@access: restricted';
+COMMENT ON COLUMN okta_resource_connections.audience IS '@access: restricted';
+COMMENT ON COLUMN okta_resource_connections.okta_application_id IS '@access: confidential';
+COMMENT ON COLUMN okta_resource_connections.created_at IS '@access: confidential';
+COMMENT ON COLUMN okta_resource_connections.updated_at IS '@access: confidential';
+
 -- Serves the cascade from remote_session_issuers; the connection cascade is
 -- served by the unique key.
 CREATE INDEX IF NOT EXISTS okta_resource_connections_remote_session_issuer_idx
@@ -9622,6 +12736,22 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
   FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL
 );
+
+COMMENT ON COLUMN remote_session_ema_bindings.id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.project_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.organization_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.remote_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.resource IS '@access: restricted';
+COMMENT ON COLUMN remote_session_ema_bindings.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.generation IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.state IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.grant_source IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.requested_scopes IS '@access: opaque-restricted';
+COMMENT ON COLUMN remote_session_ema_bindings.claim_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.claimed_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.created_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_bindings.updated_at IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_resource_key ON remote_session_ema_bindings
   (project_id, user_session_issuer_id, remote_session_issuer_id, resource);
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_claim_key ON remote_session_ema_bindings (claim_id) WHERE claim_id IS NOT NULL;
@@ -9647,6 +12777,18 @@ CREATE TABLE IF NOT EXISTS support_matrix_platforms (
   deleted_at timestamptz,
   CONSTRAINT support_matrix_platforms_pkey PRIMARY KEY (id)
 );
+
+COMMENT ON COLUMN support_matrix_platforms.id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_platforms.slug IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_platforms.name IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_platforms.vendor IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_platforms.family IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_platforms.surface IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_platforms.description IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_platforms.sort_order IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_platforms.created_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_platforms.updated_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_platforms.deleted_at IS '@access: confidential';
 COMMENT ON TABLE support_matrix_platforms IS 'Global admin support catalog of upstream product surfaces, independent of customer installations.';
 CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_platforms_slug_key ON support_matrix_platforms (slug);
 
@@ -9663,6 +12805,17 @@ CREATE TABLE IF NOT EXISTS support_matrix_integration_methods (
   deleted_at timestamptz,
   CONSTRAINT support_matrix_integration_methods_pkey PRIMARY KEY (id)
 );
+
+COMMENT ON COLUMN support_matrix_integration_methods.id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_integration_methods.slug IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_integration_methods.name IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_integration_methods.vendor IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_integration_methods.description IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_integration_methods.plan_notes IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_integration_methods.sort_order IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_integration_methods.created_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_integration_methods.updated_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_integration_methods.deleted_at IS '@access: confidential';
 COMMENT ON TABLE support_matrix_integration_methods IS 'Integration methods available for assessing support; plan_notes preserve method-level eligibility claims.';
 CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_integration_methods_slug_key ON support_matrix_integration_methods (slug);
 
@@ -9678,6 +12831,16 @@ CREATE TABLE IF NOT EXISTS support_matrix_capabilities (
   deleted_at timestamptz,
   CONSTRAINT support_matrix_capabilities_pkey PRIMARY KEY (id)
 );
+
+COMMENT ON COLUMN support_matrix_capabilities.id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_capabilities.slug IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_capabilities.name IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_capabilities.category IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_capabilities.description IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_capabilities.sort_order IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_capabilities.created_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_capabilities.updated_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_capabilities.deleted_at IS '@access: confidential';
 COMMENT ON TABLE support_matrix_capabilities IS 'Individual capabilities grouped by category; categories are not blanket support claims.';
 CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_capabilities_slug_key ON support_matrix_capabilities (slug);
 
@@ -9697,6 +12860,17 @@ CREATE TABLE IF NOT EXISTS support_matrix_method_capabilities (
   deleted_at timestamptz,
   CONSTRAINT support_matrix_method_capabilities_pkey PRIMARY KEY (id)
 );
+
+COMMENT ON COLUMN support_matrix_method_capabilities.id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_capabilities.integration_method_id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_capabilities.capability_id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_capabilities.notes IS '@access: opaque-restricted';
+COMMENT ON COLUMN support_matrix_method_capabilities.needs_verification IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_capabilities.source_url IS '@access: opaque-restricted';
+COMMENT ON COLUMN support_matrix_method_capabilities.verified_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_capabilities.created_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_capabilities.updated_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_capabilities.deleted_at IS '@access: confidential';
 COMMENT ON TABLE support_matrix_method_capabilities IS 'Method-level reference claims. These do not establish support for any specific platform.';
 CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_method_capabilities_method_capability_key ON support_matrix_method_capabilities (integration_method_id, capability_id);
 CREATE INDEX IF NOT EXISTS support_matrix_method_capabilities_capability_id_idx ON support_matrix_method_capabilities (capability_id);
@@ -9716,6 +12890,14 @@ CREATE TABLE IF NOT EXISTS support_matrix_method_platforms (
   deleted_at timestamptz,
   CONSTRAINT support_matrix_method_platforms_pkey PRIMARY KEY (id)
 );
+
+COMMENT ON COLUMN support_matrix_method_platforms.id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_platforms.integration_method_id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_platforms.platform_id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_platforms.conditions IS '@access: opaque-restricted';
+COMMENT ON COLUMN support_matrix_method_platforms.created_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_platforms.updated_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_method_platforms.deleted_at IS '@access: confidential';
 COMMENT ON TABLE support_matrix_method_platforms IS 'Applicability of a method to a platform, assessed separately from its capability coverage. Missing rows are unknown.';
 CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_method_platforms_method_platform_key ON support_matrix_method_platforms (integration_method_id, platform_id);
 CREATE INDEX IF NOT EXISTS support_matrix_method_platforms_platform_id_idx ON support_matrix_method_platforms (platform_id);
@@ -9739,18 +12921,37 @@ CREATE TABLE IF NOT EXISTS support_matrix_coverage (
   deleted_at timestamptz,
   CONSTRAINT support_matrix_coverage_pkey PRIMARY KEY (id)
 );
+
+COMMENT ON COLUMN support_matrix_coverage.id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_coverage.method_platform_id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_coverage.capability_id IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_coverage.notes IS '@access: opaque-restricted';
+COMMENT ON COLUMN support_matrix_coverage.needs_verification IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_coverage.source_url IS '@access: opaque-restricted';
+COMMENT ON COLUMN support_matrix_coverage.verified_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_coverage.conditions IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_coverage.created_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_coverage.updated_at IS '@access: confidential';
+COMMENT ON COLUMN support_matrix_coverage.deleted_at IS '@access: confidential';
 COMMENT ON TABLE support_matrix_coverage IS 'Explicit method-platform-capability coverage. Missing rows are unknown; applicability must also be established before claiming support.';
 CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_coverage_mapping_capability_key ON support_matrix_coverage (method_platform_id, capability_id);
 CREATE INDEX IF NOT EXISTS support_matrix_coverage_capability_id_idx ON support_matrix_coverage (capability_id);
 
-COMMENT ON COLUMN support_matrix_method_capabilities.status IS 'Application-validated: supported, partial, unimplemented, impossible, na, unknown. Partial coverage requires explanatory notes.';
+COMMENT ON COLUMN support_matrix_method_capabilities.status IS 'Application-validated: supported, partial, unimplemented, impossible, na, unknown. Partial coverage requires explanatory notes.
+@access: confidential';
 
-COMMENT ON COLUMN support_matrix_coverage.status IS 'Application-validated: supported, partial, unimplemented, impossible, na, unknown. Partial coverage requires explanatory notes.';
-COMMENT ON COLUMN support_matrix_method_platforms.applicability IS 'Application-validated: unknown, applicable, na. Applicability alone never implies capability coverage.';
-COMMENT ON COLUMN support_matrix_method_platforms.operating_systems IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.';
-COMMENT ON COLUMN support_matrix_method_platforms.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
-COMMENT ON COLUMN support_matrix_coverage.operating_systems IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.';
-COMMENT ON COLUMN support_matrix_coverage.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
+COMMENT ON COLUMN support_matrix_coverage.status IS 'Application-validated: supported, partial, unimplemented, impossible, na, unknown. Partial coverage requires explanatory notes.
+@access: confidential';
+COMMENT ON COLUMN support_matrix_method_platforms.applicability IS 'Application-validated: unknown, applicable, na. Applicability alone never implies capability coverage.
+@access: confidential';
+COMMENT ON COLUMN support_matrix_method_platforms.operating_systems IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.
+@access: opaque-restricted';
+COMMENT ON COLUMN support_matrix_method_platforms.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.
+@access: opaque-restricted';
+COMMENT ON COLUMN support_matrix_coverage.operating_systems IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.
+@access: opaque-restricted';
+COMMENT ON COLUMN support_matrix_coverage.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.
+@access: opaque-restricted';
 -- Queries are Explore's one server-side object: a named, saved question
 -- against a catalog dataset, kept with the builder state it was built with.
 -- Columns are what the server reasons about (scope, listing, impact checks);
@@ -9775,6 +12976,18 @@ CREATE TABLE IF NOT EXISTS queries (
   CONSTRAINT queries_pkey PRIMARY KEY (id),
   CONSTRAINT queries_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+
+COMMENT ON COLUMN queries.id IS '@access: confidential';
+COMMENT ON COLUMN queries.project_id IS '@access: confidential';
+COMMENT ON COLUMN queries.organization_id IS '@access: confidential';
+COMMENT ON COLUMN queries.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN queries.name IS '@access: confidential';
+COMMENT ON COLUMN queries.dataset IS '@access: confidential';
+COMMENT ON COLUMN queries.spec IS '@access: opaque-restricted';
+COMMENT ON COLUMN queries.created_at IS '@access: confidential';
+COMMENT ON COLUMN queries.updated_at IS '@access: confidential';
+COMMENT ON COLUMN queries.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN queries.deleted IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS queries_project_id_updated_at_idx
 ON queries (project_id, updated_at DESC) WHERE deleted IS FALSE;
