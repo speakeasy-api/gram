@@ -236,7 +236,7 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	for _, name := range []string{
 		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
 		"request_mcp_review", "get_my_mcp_review_request",
-		"get_project_overview", "get_mcp_diagnostics", "list_recent_tool_calls",
+		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls",
 		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata",
@@ -424,6 +424,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"find_mcp",
 		"get_mcp",
 		"list_recent_tool_calls",
+		"get_tool_usage_summary",
 		"list_organization_events",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
@@ -448,6 +449,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"update_risk_policy",
 		"create_risk_exclusion",
 		"update_risk_exclusion",
+		"list_access_members",
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}

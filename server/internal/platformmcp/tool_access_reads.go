@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -29,9 +31,10 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_access_members",
 		Title:       "Find Organization Members for MCP Access",
-		Description: "Find organization members by an explicit identity query of at least three characters or a role reference. Returns masked identities, role names, and short-lived opaque member references only when at least five people match; smaller result sets are withheld rather than enumerated.",
+		Description: "Find organization members by an explicit identity query of at least three characters (part of a name, email, or role name). External clients may instead filter by a role reference from list_access_roles; that option is not available to the project assistant, which has no list_access_roles and must use the identity query. Identities are masked (for example a***@e***) and are never returned in full, so confirm a match from the query and the returned role names rather than expecting a display name. Results are enumerated only when at least five people match; smaller cohorts are withheld and reported only as a suppressed count. Each member carries a short-lived opaque reference and version bound to this surface and session: they identify nobody on their own and are consumed only by assign_mcp_access_role, which is available to external clients, before they expire.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAccessMembersInput) (*mcp.CallToolResult, ListAccessMembersOutput, error) {
+		InputSchema: listAccessMembersInputSchema(),
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAccessMembersInput) (*mcp.CallToolResult, ListAccessMembersOutput, error) {
 		return principalToolCall(ctx, accessReadToolResult, func(principal Principal) (ListAccessMembersOutput, error) {
 			return accessReads.ListMembers(ctx, principal, input)
 		})
@@ -50,23 +53,47 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 }
 
 func registerUnavailableAccessReadTools(reg *Registrar) {
+	// Each stub declares the same audiences as its live registration, so an
+	// audience sees one stable catalogue whether or not the service is wired.
+	// list_access_members also carries its live input schema: the assistant
+	// advertises that schema to a model, which must see one contract either way.
 	for _, tool := range []struct {
 		name         string
 		title        string
 		description  string
+		audiences    []Audience
 		projectScope ProjectScope
+		inputSchema  *jsonschema.Schema
 	}{
-		{"list_access_roles", "List MCP Access Roles", "List MCP access roles. This is not switched on for your organization yet.", ProjectScopeNone},
-		{"list_access_members", "Find Organization Members for MCP Access", "Find organization members for MCP access. This is not switched on for your organization yet.", ProjectScopeNone},
-		{"get_mcp_access", "Inspect Access to One MCP Server", "Inspect access to one MCP server. This is not switched on for your organization yet.", ProjectScopeExplicit},
+		{"list_access_roles", "List MCP Access Roles", "List MCP access roles. This is not switched on for your organization yet.", externalOnly, ProjectScopeNone, nil},
+		{"list_access_members", "Find Organization Members for MCP Access", "Find organization members for MCP access. This is not switched on for your organization yet.", bothAudiences, ProjectScopeNone, listAccessMembersInputSchema()},
+		{"get_mcp_access", "Inspect Access to One MCP Server", "Inspect access to one MCP server. This is not switched on for your organization yet.", externalOnly, ProjectScopeExplicit, nil},
 	} {
-		addTool(reg, &mcp.Tool{
+		stub := &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: tool.projectScope}, unavailableTool("mcp_access_reads"))
+		}
+		// The SDK's InputSchema field is untyped, so a nil *jsonschema.Schema
+		// stored in it would read as a present-but-empty schema and panic; only
+		// a declared schema is assigned, the rest stay inferred.
+		if tool.inputSchema != nil {
+			stub.InputSchema = tool.inputSchema
+		}
+		addTool(reg, stub, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: tool.audiences, ProjectScope: tool.projectScope}, unavailableTool("mcp_access_reads"))
 	}
+}
+
+// listAccessMembersInputSchema is the one input contract both the live tool
+// and its unavailable stub advertise. It is inferred from the typed input, as
+// the live registration would infer it on its own.
+func listAccessMembersInputSchema() *jsonschema.Schema {
+	schema, err := jsonschema.For[ListAccessMembersInput](nil)
+	if err != nil {
+		panic(fmt.Sprintf("platformmcp: infer list_access_members input schema: %v", err))
+	}
+	return schema
 }
 
 func accessReadToolResult(err error) (*mcp.CallToolResult, bool) {

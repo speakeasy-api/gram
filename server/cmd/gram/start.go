@@ -1750,8 +1750,10 @@ func newStartCommand() *cli.Command {
 				riskAnalysisDescriber = riskSignaler
 			}
 			var riskFindings platformmcp.RiskFindingsReader
+			var toolUsage platformmcp.ToolUsageBreakdownReader
 			if chDB != nil {
 				riskFindings = riskchrepo.New(chDB)
+				toolUsage = telemetryrepo.New(chDB)
 			}
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				Logger:                  logger,
@@ -1791,6 +1793,7 @@ func newStartCommand() *cli.Command {
 				RiskAnalysisDescriber:   riskAnalysisDescriber,
 				RiskFindings:            riskFindings,
 				Telemetry:               telemetryrepo.New(chDB),
+				ToolUsage:               toolUsage,
 				TelemetryDrilldown:      telemetryrepo.New(chDB),
 				WorkflowRun:             posthogClient,
 				CanonicalIdentity:       telemSvc,

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
 func projectPolicy() TargetPolicy {
@@ -204,4 +205,40 @@ func TestOnlyAdmittedDescriptorsAreComposed(t *testing.T) {
 	require.Equal(t, []string{"list_projects", "get_platform_context"}, names)
 
 	require.Empty(t, Tools(nil, nil), "an empty admission list composes no tools")
+}
+
+// The assistant resolves people's names through list_access_members, which
+// took over from the managed toolset's organization user lookup. Composing from
+// the real catalogue proves the admission end to end: the descriptor is in the
+// assistant audience, it is not project scoped so its schema is served
+// verbatim, and the other access reads stay external-only.
+func TestComposedAssistantToolsetIncludesListAccessMembers(t *testing.T) {
+	t.Parallel()
+
+	runtime := platformmcp.NewRuntimeWithLifecycle(nil, nil, nil, nil, "", "", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, platformmcp.CatalogDescriptor{})
+	tools := ExternalTools(runtime.AssistantTools(), nil)
+
+	composed := map[string]platformtools.ExternalTool{}
+	for _, tool := range tools {
+		composed[tool.Executor.Descriptor().Name] = tool
+	}
+	require.NotContains(t, composed, "list_access_roles")
+	require.NotContains(t, composed, "get_mcp_access")
+
+	members, ok := composed["list_access_members"]
+	require.True(t, ok, "list_access_members must be composed for the assistant")
+	descriptor := members.Executor.Descriptor()
+	require.True(t, descriptor.Managed)
+	require.NotNil(t, descriptor.Annotations)
+	require.NotNil(t, descriptor.Annotations.ReadOnlyHint)
+	require.True(t, *descriptor.Annotations.ReadOnlyHint)
+
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
+	require.Contains(t, schema.Properties, "query")
+	require.Contains(t, schema.Properties, "role_reference")
+	require.NotContains(t, schema.Properties, "project_id")
+	require.NotContains(t, schema.Properties, "project_slug")
 }
