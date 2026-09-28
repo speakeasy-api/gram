@@ -1,0 +1,939 @@
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 25,55,157,441-447,472-477
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 56-68,90-97,384-423,425-426,467-475,542-546
+  h_9630b74bdac540 98-99,424,427-428,476-477
+.agents/skills/pull-request/SKILL.md
+  h_9630b74bdac540 36,38-66
+.changeset/inspect-connect-not-found.md
+  h_9630b74bdac540 5
+.changeset/mcp-network-traffic-graph.md
+  h_9630b74bdac540 6-8
+.changeset/platform-mcp-diagnostics-server-attribution.md
+  h_9630b74bdac540 5
+.changeset/platform-mcp-open-output-schemas.md
+  h_9630b74bdac540 5
+.mise-tasks/git/workstatus.sh
+  h_9630b74bdac540 61-69,79-84
+.mise-tasks/git/worktui.mts
+  h_9630b74bdac540 20,221-246,259-262,265,267,271,276-277
+.speakeasy/openapi-hooks.yaml
+  h_9630b74bdac540 888-889
+.speakeasy/out.admin.openapi.yaml
+  h_9630b74bdac540 5077-5078,5085,6600
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 384-479,1375,1377-1378,1381-1383,1385,1399,1456-1457,1459,1462,1464-1465,1467-1468,1471-1474,1476-1478,1487-1493,1499,1556-1557,1559,1562,1564-1565,1567-1568,1571-1573,1575,1589,1646,1649,1652,1654-1655,1657-1658,1661-1664,1666,1680,1739,1742,1744-1745,1747-1748,1769,1829,1832,1834-1835,1837-1838,1840-1857,1877-1967,2839-2935,3033-3123,39352-39439,58299,58301,58314,58318-58321,58377-58382,58384,58386,58388-58389,58391-58392,58394,58407,58414,58470,58472,58475,58477,58479,58481-58482,58484-58485,58487-58488,58509,58565-58570,58572,58574,58576-58577,58579-58580,58582,58596,58652-58657,58659,58661,58663,58666-58667,58669-58670,58673,58675,58677,58681,58683,58685-58693,58695-58697,58700,58702,58704-58729,58732,58734,58736-58737,58742-58744,58746-58751,58764,58820-58825,58827,58829,58831-58832,58834-58835,58837-58838,58841-58844,58846-58847,58850-58852,58854-58855,58858,58860,58862,58869,58925-58930,58932,58934,58936-58937,58939-58940,58942-58943,58956,58963,59019-59024,59026,59028,59030-59031,59033-59037,59050,59053,59057-59058,59113-59118,59120,59122,59124-59125,59127-59128,59130-59131,59158,59223,59225-59231,59233-59234,59261,59268,59330,59332-59334,59336-59341,59369,59431,59433-59435,59437-59441,59443-59451,59478,59540,59542-59544,59546-59550,59578,59640,59642-59644,59646-59650,59653-59655,59657-59658,59661-59663,59665-59668,59671-59673,59675,59677-59686,59713,59775,59777-59779,59781-59885,59912,59919,59981,59983-59985,59987-59992,60019,60026,60088,60090-60092,60094-60096,60098-60099,60122-60128,60133,60140,60201,60203,60206-60207,60209-60210,60237,60244,60306,60309,60311,60313,60315-60316,60343,60350,60412,60415,60417,60419,60421-60422,60449,60456,60518,60521,60523,60525,60527-60528,60555,60562,60624,60627,60629,60631,60633-60634,60661,60668,60730,60733,60735,60737,60739-60740,60767,60774,60836,60839,60841,60843,60845-60846,60873,60880,60942,60945,60947,60949,60951-61058,61092,61154,61157,61159,61161,61163-61164,61198,61260,61263,61265,61267,61269-61270,61297,61304,61366,61369,61371,61373,61375-61376,61403,61410,61472,61475,61477,61479,61481-61482,61509,61516,61578,61581,61583,61585,61587-61588,61615,61622,61684,61687,61689,61691,61693-61694,61721,61728,61790,61793,61795,61797,61799-61800,61827,61834,61896,61899,61901,61903,61905-61906,61933,61940,62002,62005,62007,62009,62011-62012,62039,62046,62108,62111,62113,62115,62117-62118,62120-62126,62134-62140,62145,62152,62209-62212,62214,62217,62219,62221,62223-62224,62251,62258,62320,62323,62325,62327,62329-62330,62332-62338,62346-62352,62357,62364,62421-62424,62426,62429,62431,62433,62435-62436,62438-62444,62452-62458,62463,62470,62527-62530,62532,62535,62537,62539,62541-62542,62569,62576,62638,62641,62643,62645,62647-62648,62675,62682,62744,62747,62749-62751,62753-62754,62781,62788,62850,62853,62855-62857,62859-62860,62887,62894,62956,62959,62961,62963,62965-62966,62993,63000,63059-63060,63062,63064-63065,63067-63072,63081-63086,63088-63093,63149,63151,63153-63154,63156-63161,63184-63189,63195,63254-63255,63257,63259-63260,63262-63267,63276-63357,63359,63361,63363,63365-63370,63376,63433,63435,63437-63438,63440-63442,63444-63445,63472,63479,63538-63539,63541,63543-63544,63546,63548,63550-63551,63578,63585,63644-63645,63647,63649-63650,63652-63653,63655-63656,63683,63690,63749-63750,63752,63754-63755,63757-63758,63760-63761,63770-63783,63788,63795,63853-63855,63857,63859-63867,63870-63872,63874,63890-63895,63901,63960-63961,63963,63965-63966,63968-63972,63975,63977,63979,63982-63984,63986,63995-64001,64010-64011,64072,64074-64075,64077-64078,64080-64081,64084,64086,64088,64091-64093,64095,64104-64110,64123,64184-64185,64187,64189-64190,64192-64196,64199-64201,64203,64224,64283,64286,64288-64289,64291-64292,64294-64295,64298-64301,64303,64312-64318,64330,64337,64398-64399,64401,64403-64404,64406-64411,64414-64416,64418,64434-64439,64441-64446,64506-64507,64509,64511-64512,64514-64519,64522-64524,64526,64542-64547,64553,64615,64617-64618,64620-64624,64633-64638,64644,64703,64705-64707,64709-64710,64712-64759,64768,64770,64772,64779,64836-64837,64839,64841-64842,64844-64848,64851,64881-64886,64892,64954,64957,64959-64960,64962-64963,64966,65001,65063,65066,65068-65069,65071-65072,65075,65162,65165,65168,65170-65171,65173-65174,65201,65270,65273,65275-65279,65282,65313-65314,65375,65378,65380-65384,65387,65484,65487,65489-65493,65521,65583,65586,65588-65592,65601-65707,65720,65779-65780,65782,65784-65785,65787-65791,65794,65796,65799-65801,65810-65816,65826-65829,65888-65889,65891,65893-65894,65896-65900,65903,65905,65908-65910,65919-65925,65938,65997-65998,66000,66002-66003,66005-66009,66012-66015,66017-66019,66022,66024,66026,66029,66031,66033,66042-66047,66053,66112-66113,66115,66117-66118,66120-66124,66127,66129,66132-66134,66143-66149,66157-66162,66168,66227-66228,66230,66232-66233,66235-66236,66238-66239,66242,66244,66247-66249,66258-66264,66272-66277,66283,66342-66343,66345,66347-66348,66350-66351,66353-66354,66357,66359,66362-66364,66373-66379,66387-66392,66398,66457-66458,66460,66462-66463,66465-66466,66468-66469,66489,66556,66559,66561-66565,66568-66571,66573-66574,66577,66579,66581,66651,66653-66654,66656-66660,66663,66668,66687-66690,66750,66752-66753,66755-66756,66758-66759,66780,66840,66842-66843,66845-66846,66848-66849,66870,66930,66932-66933,66935-66936,66938-66939,66942-66945,66947-66948,66951-66962,66964,66966,66980,67040,67042-67043,67045-67046,67048-67049,67052-67055,67057-67058,67061,67063,67065,67079,67139,67141-67142,67144-67145,67147-67148,67151-67154,67156-67157,67160,67162,67164,67178,67238,67240-67241,67243-67244,67246-67343,67370,67377,67439,67441,67444-67445,67447-67448,67451,67456-67457,67543,67545,67548-67549,67551-67552,67555,67558,67560,67589,67651,67653,67656-67657,67659-67660,67662-67670,67697,67759,67761-67762,67764-67765,67767-67768,67796,67858,67860-67861,67863-67864,67866-67867,67876-67895,67901,67958-67961,67963,67965-67966,67968-67969,67971-67972,67981-68000,68006,68063-68066,68068,68070-68071,68073-68074,68076-68077,68086-68105,68111,68168-68171,68173,68175-68176,68178-68182,68184-68191,68199-68212,68271-68274,68276,68278-68279,68281-68285,68287-68301,68309-68322,68328,68385-68388,68390,68392-68393,68395-68399,68408-68421,68427,68484-68487,68489,68491-68492,68494-68495,68497-68498,68500-68508,68516-68529,68535,68592-68595,68597,68599-68600,68602-68606,68620,68679,68682,68684-68688,68702,68761,68764,68766-68770,68784,68843,68846,68848-68852,68866,68925,68928,68930-68934,68948,69007,69010,69012-69016,69030,69089,69092,69094-69095,69097-69098,69112,69171,69174,69176-69177,69179-69180,69194-69196,69255,69258,69260-69264,69266-69298,69311,69370,69373,69375-69379,69393-70066,75939-75953,80089-80164,80180-80193,82160-82208,85384-85405,85787-85805,85944-85956,86061-86074,87669-87687,95392-95418,95668-95691,97222-97451,97988-97995,98164-98172,98182-98203,103849-103850
+client/admin/CHANGELOG.md
+  h_9630b74bdac540 3-19
+client/admin/package.json
+  h_9630b74bdac540 4
+client/admin/src/lib/gramAdminClient.test.ts
+  h_9630b74bdac540 165,188-192
+client/admin/src/pages/organization/Onboarding.test.tsx
+  h_9630b74bdac540 20,25,130
+client/admin/src/pages/organization/Onboarding.tsx
+  h_9630b74bdac540 105,133
+client/admin/src/sdk/src/models/components/adminonboardingconfiguration.ts
+  h_9630b74bdac540 24,36
+client/admin/src/sdk/src/models/components/adminonboardingpreset.ts
+  h_9630b74bdac540 12-13,23-24
+client/admin/src/sdk/src/models/components/setorganizationonboardingrequestbody.ts
+  h_9630b74bdac540 11,13,34
+client/dashboard/CHANGELOG.md
+  h_9630b74bdac540 3-34
+client/dashboard/package.json
+  h_9630b74bdac540 4
+client/dashboard/src/components/app-layout.test.tsx
+  h_9630b74bdac540 146-167
+client/dashboard/src/components/detail/settings-section.tsx
+  h_9630b74bdac540 157-161
+client/dashboard/src/components/mcp-plugin-permissions.test.tsx
+  h_9630b74bdac540 109,122-137
+client/dashboard/src/components/mcp-server-x-sidebar-nav.test.tsx
+  h_9630b74bdac540 1-155
+client/dashboard/src/components/mcp-server-x-sidebar-nav.tsx
+  h_9630b74bdac540 24-27,33-40,43,49,55,62-67,69-282,383-387,392-417,592-611,613,616-633,675-681,683-685,687,694,697,707-709
+client/dashboard/src/components/nav-menu.tsx
+  h_9630b74bdac540 282
+client/dashboard/src/components/org-sidebar.test.tsx
+  h_9630b74bdac540 6,12-13,23-26,35-66,76-78,140-141,203-229
+client/dashboard/src/components/page-templates/tabbed-page.tsx
+  h_9630b74bdac540 8,68-74,98,100-104,109
+client/dashboard/src/components/ui/Combobox/index.tsx
+  h_9630b74bdac540 9,19,30-31,118-122,124-125,127-159
+client/dashboard/src/components/ui/HoverCard/index.tsx
+  h_9630b74bdac540 14-28
+client/dashboard/src/components/ui/Input/index.tsx
+  h_9630b74bdac540 37-46,63,73-87,176,191
+client/dashboard/src/components/ui/MoreActions/index.test.tsx
+  h_9630b74bdac540 15-47
+client/dashboard/src/components/ui/MoreActions/index.tsx
+  h_9630b74bdac540 6,11,131-161
+client/dashboard/src/components/ui/RadioCard/index.stories.tsx
+  h_9630b74bdac540 4-5,37-91
+client/dashboard/src/components/ui/RadioCard/index.test.tsx
+  h_9630b74bdac540 414-439
+client/dashboard/src/components/ui/RadioCard/index.tsx
+  h_9630b74bdac540 6-13,21,44-48,51,66,70,79,104,122-123,170-176,182-185,194-195
+client/dashboard/src/components/ui/Text/index.tsx
+  h_9630b74bdac540 16,27-28,88-89
+client/dashboard/src/contexts/AuthProvider.test.tsx
+  h_9630b74bdac540 199-218
+client/dashboard/src/elements/lib/contextCompaction.ts
+  h_9630b74bdac540 35-36,47-49,65,73,76,79-80,83-85
+client/dashboard/src/elements/lib/models.ts
+  h_9630b74bdac540 4-5,16-18,30,34,39,42-43,46,48
+client/dashboard/src/hooks/useCanSetUpOrg.ts
+  h_9630b74bdac540 1,11,16
+client/dashboard/src/hooks/useToolsetUrl.test.ts
+  h_9630b74bdac540 1-21
+client/dashboard/src/hooks/useToolsetUrl.ts
+  h_9630b74bdac540 81-90,94-95
+client/dashboard/src/lib/audit-actions.ts
+  h_9630b74bdac540 11-17,76-77,304-317,499-503
+client/dashboard/src/lib/featureFlags.ts
+  h_9630b74bdac540 16-18
+client/dashboard/src/lib/models.ts
+  h_9630b74bdac540 11-20,55-57,69,73,78,81-82,85,87
+client/dashboard/src/lib/remote-identity/README.md
+  h_9630b74bdac540 1-193
+client/dashboard/src/lib/remote-identity/components/CredentialFields.tsx
+  h_9630b74bdac540 1-158
+client/dashboard/src/lib/remote-identity/components/IdentityExplainer.tsx
+  h_9630b74bdac540 1-211
+client/dashboard/src/lib/remote-identity/components/IdentityModeCards.tsx
+  h_9630b74bdac540 1-46
+client/dashboard/src/lib/remote-identity/components/ProviderLink.tsx
+  h_9630b74bdac540 5
+client/dashboard/src/lib/remote-identity/components/ProviderRow.tsx
+  h_9630b74bdac540 1-17,19-34,36-62,64,66-87,89-98,100-110,112-120,122-150,152-209,212-283,285-306,308-335,337-359,361,363-388,390-502
+client/dashboard/src/lib/remote-identity/components/ScopeBadge.tsx
+  h_9630b74bdac540 2,9,25
+client/dashboard/src/lib/remote-identity/drafts/draft.test.ts
+  h_9630b74bdac540 1-51
+client/dashboard/src/lib/remote-identity/drafts/draft.ts
+  h_9630b74bdac540 1-59
+client/dashboard/src/lib/remote-identity/drafts/headerDrafts.ts
+  h_9630b74bdac540 1-260
+client/dashboard/src/lib/remote-identity/drafts/useCredentialDraft.ts
+  h_9630b74bdac540 1-263
+client/dashboard/src/lib/remote-identity/drafts/useHeaderDrafts.test.tsx
+  h_9630b74bdac540 1-223
+client/dashboard/src/lib/remote-identity/drafts/useHeaderDrafts.ts
+  h_9630b74bdac540 1-259
+client/dashboard/src/lib/remote-identity/drafts/useIdentityDraft.ts
+  h_9630b74bdac540 1-525
+client/dashboard/src/lib/remote-identity/index.ts
+  h_9630b74bdac540 1-54
+client/dashboard/src/lib/remote-identity/model/credential.test.ts
+  h_9630b74bdac540 1-140
+client/dashboard/src/lib/remote-identity/model/credential.ts
+  h_9630b74bdac540 1-162
+client/dashboard/src/lib/remote-identity/model/headers.ts
+  h_9630b74bdac540 1-87
+client/dashboard/src/lib/remote-identity/model/identity.test.ts
+  h_9630b74bdac540 1-104
+client/dashboard/src/lib/remote-identity/model/identity.ts
+  h_9630b74bdac540 1-27
+client/dashboard/src/lib/remote-identity/model/provider.test.ts
+  h_9630b74bdac540 1-110
+client/dashboard/src/lib/remote-identity/model/provider.ts
+  h_9630b74bdac540 1-98
+client/dashboard/src/lib/remote-identity/model/secret.test.ts
+  h_9630b74bdac540 1-69
+client/dashboard/src/lib/remote-identity/model/secret.ts
+  h_9630b74bdac540 1-51
+client/dashboard/src/lib/remote-identity/queries/useAllRemoteSessionClients.ts
+  h_9630b74bdac540 23-28,50
+client/dashboard/src/lib/remote-identity/queries/useClientSessions.ts
+  h_9630b74bdac540 1-25
+client/dashboard/src/lib/remote-identity/queries/useProtectedResourceMetadata.ts
+  h_9630b74bdac540 20
+client/dashboard/src/lib/remote-identity/queries/useUpstreamProbe.test.tsx
+  h_9630b74bdac540 1-5,7-12,14-19,21-24,27-36,38-78
+client/dashboard/src/lib/remote-identity/queries/useUpstreamProbe.ts
+  h_9630b74bdac540 1-51
+client/dashboard/src/lib/utils.test.ts
+  h_9630b74bdac540 2-58
+client/dashboard/src/lib/utils.ts
+  h_9630b74bdac540 99-115,122-125
+client/dashboard/src/pages/access/CreateRoleDialog.test.tsx
+  h_9630b74bdac540 218,228
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  h_9630b74bdac540 135-141,151-152,158,191-195,198,814-835,837-839,842-849,852-899,902,904-909,911-917,920,922-925,927-956,959-960,962-964,969,1107-1111
+client/dashboard/src/pages/access/RoleEditorPage.tsx
+  h_9630b74bdac540 6,8-14,20-22,26,31-35,39-51,83-84,86,88
+client/dashboard/src/pages/access/RolePermissionsSection.tsx
+  h_9630b74bdac540 26,69-70,85-102,107-119,121,125-131,143-154,182,184,187-227,229,232-248,250-256
+client/dashboard/src/pages/assistants/onboarding/systemPrompt.ts
+  h_9630b74bdac540 48-51,55-59
+client/dashboard/src/pages/catalog/AddServerDialog.test.tsx
+  h_9630b74bdac540 1-13,15,17-22,25,28,32-39,41-55,57-70,72,74-94,96-121,123-129,131-139,141-157
+client/dashboard/src/pages/catalog/AddServerDialog.tsx
+  h_9630b74bdac540 3-4,7,9,45,708-711,721-723,736,738-744,791-795,838-929,1352-1355,1370,1389-1400
+client/dashboard/src/pages/catalog/useRemoteMcpInstallWorkflow.test.ts
+  h_9630b74bdac540 7,10-13,28,33-40,178-180,182-192,389,414-428,448-476,478,485,502-504,508-509,526-528,573-714,888-893
+client/dashboard/src/pages/catalog/useRemoteMcpInstallWorkflow.ts
+  h_9630b74bdac540 1,15-19,61-62,119-121,185-186,200-201,217-218,279,364,456-461,538-539,569-571,599,606-620,644-645,714,718-724,726,732-733,755-756,760,817-818,820,824-827
+client/dashboard/src/pages/identities/IdentityDevices.tsx
+  h_9630b74bdac540 1,191,196-197
+client/dashboard/src/pages/identities/IdentityWorkIdentities.cache.test.tsx
+  h_9630b74bdac540 1-114
+client/dashboard/src/pages/identities/IdentityWorkIdentities.test.tsx
+  h_9630b74bdac540 1-272
+client/dashboard/src/pages/identities/IdentityWorkIdentities.tsx
+  h_9630b74bdac540 1-6,8-42,44-48,52-78,80-89,91-162,166-167,169,171,173-199
+client/dashboard/src/pages/mcp/add/GatewayCreationFlows.test.tsx
+  h_9630b74bdac540 28-30,47-50,55-63,136,151
+client/dashboard/src/pages/mcp/x/MCPServerAvailabilityToggle.test.tsx
+  h_9630b74bdac540 1-191
+client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx
+  h_9630b74bdac540 6-12,36,86-96,198,290-291,302,309,330,333,351-352,405-503
+client/dashboard/src/pages/mcp/x/tabs/InspectTab.tsx
+  h_9630b74bdac540 1-4,47-49
+client/dashboard/src/pages/mcp/x/tabs/RemoteMcpToolsSection.test.tsx
+  h_9630b74bdac540 1-123
+client/dashboard/src/pages/mcp/x/tabs/RemoteMcpToolsSection.tsx
+  h_9630b74bdac540 18-24,67-74,83,85-86,159-161,163,178-183,190-193,196-201,240-245,292-293,307-308,317-318,328,332-345,559-580
+client/dashboard/src/pages/mcp/x/tabs/settings/SettingsTab.test.tsx
+  h_9630b74bdac540 1-167
+client/dashboard/src/pages/mcp/x/tabs/settings/SettingsTab.tsx
+  h_9630b74bdac540 40,100,142-177
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/BrandingSection.tsx
+  h_9630b74bdac540 35-36,39-40,146-147
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/HeadersSection.test.tsx
+  h_9630b74bdac540 1-202
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/HeadersSection.tsx
+  h_9630b74bdac540 2-3,13-15,18-24,26-29,32-43,46-58,61-63,66-89,91-93,95-102,104,106-111,114-138,140-162,164-174,176-188,190-217,219,221,223-233,235-254,260-265,270-277,281-283,286-292,295-353,355-357,359-405,410-460
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkTrafficChart.tsx
+  h_9630b74bdac540 1-239
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkTrafficPanel.tsx
+  h_9630b74bdac540 1-86
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/RemoteMcpSessionsSection.test.tsx
+  h_9630b74bdac540 1,3-4,6-8,11-23,26-34,36-47,51-57,59,61-62,65-66,69-72
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/RemoteMcpSessionsSection.tsx
+  h_9630b74bdac540 1-75
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet.test.tsx
+  h_9630b74bdac540 1-161
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet.tsx
+  h_9630b74bdac540 33-34,65,234,271-316,344,562-563
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection.test.tsx
+  h_9630b74bdac540 8-9,14-15,47,52-56,59-63,86,154-155,157-160,175,199,218,241,265,274-276,284-291
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection.tsx
+  h_9630b74bdac540 13,25-27,31-44,56,62-64,66-70,113-131,232,243,248-249,252
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSetupActions.test.tsx
+  h_9630b74bdac540 1,18-19,25-26
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSetupActions.tsx
+  h_9630b74bdac540 16-18
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice.test.tsx
+  h_9630b74bdac540 1-122
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice.tsx
+  h_9630b74bdac540 1-121
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/ModifyRemoteIdentityProviderSheet.test.tsx
+  h_9630b74bdac540 43
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/ModifyRemoteIdentityProviderSheet.tsx
+  h_9630b74bdac540 46
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField.tsx
+  h_9630b74bdac540 5-6
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/RemoteMcpIdentitySection.test.tsx
+  h_9630b74bdac540 1,9-13,16-24,26-33,36-55,58-62,65-66,69-72,75-78,81-82,85-87,89-91,94-95,98-100,102,106-107,110-111,114-115,118-120,123-128,130-135,139-144,147-183,187-219,222-249,252-255,257-264,266-268,271-287,289-309,314-315,317-325,327-328,332-351,353-364,367-378,381-392,394-395,397-399,401-433,435-439,441-542,544-550,552,554-556,563-592,594-595,597-601,604-632,634-642,644-704,707-716,718-719,722-761,764-785,787-788,791-809,811,813-820,823-828,831,833-842,844-855,857-858,861-875,878-881,883-884,886,888-889,892,894-904,906,909-912
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/RemoteMcpIdentitySection.tsx
+  h_9630b74bdac540 1-589
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/UserIdentitySessionControls.tsx
+  h_9630b74bdac540 1-46
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/UserSessionIssuerField.tsx
+  h_9630b74bdac540 6
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/authTarget.ts
+  h_9630b74bdac540 25-26,55,95,128
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/issuerFormUtils.test.ts
+  h_9630b74bdac540 5,58-80
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/issuerFormUtils.ts
+  h_9630b74bdac540 192,203
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/sourceInvalidation.ts
+  h_9630b74bdac540 13
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/useCatalogHeaderSuggestions.ts
+  h_9630b74bdac540 1-39
+client/dashboard/src/pages/org/OrgIdentity.test.tsx
+  h_9630b74bdac540 18,37-44,51-56,81,83,165,169,335-355,391-447
+client/dashboard/src/pages/org/OrgIdentity.tsx
+  h_9630b74bdac540 1,22,25,52-55,105-106,111-114,146,157-161,168-170,188-194,198-201,210,212-218,235-236,265-290,292,294-295,300,320-324,328-337,358-360,378-381,409,472-474,493-513
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 24,112,141,246-272
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 147-151,234-263,310-321
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.tsx
+  h_9630b74bdac540 1-725
+client/dashboard/src/pages/org/identity-provider/directoryMappingFlow.test.ts
+  h_9630b74bdac540 1-71
+client/dashboard/src/pages/org/identity-provider/directoryMappingFlow.ts
+  h_9630b74bdac540 1-138
+client/dashboard/src/pages/org/identity-provider/tabs.ts
+  h_9630b74bdac540 1-5
+client/dashboard/src/pages/org/slack-workspaces/MappingStatus.tsx
+  h_9630b74bdac540 2,4-41,44,48-53
+client/dashboard/src/pages/org/slack-workspaces/SlackDirectory.test.tsx
+  h_9630b74bdac540 1-446
+client/dashboard/src/pages/org/slack-workspaces/SlackDirectory.tsx
+  h_9630b74bdac540 1-9,11,19,21-32,34-106,108-127,129-135,137-213,215-237,239-357,359-363,365-366,369-371,377-380,382,384-396
+client/dashboard/src/pages/org/slack-workspaces/SlackDirectorySelection.test.tsx
+  h_9630b74bdac540 1-91
+client/dashboard/src/pages/org/slack-workspaces/SlackPersonnelPicker.test.tsx
+  h_9630b74bdac540 1-223
+client/dashboard/src/pages/org/slack-workspaces/SlackPersonnelPicker.tsx
+  h_9630b74bdac540 1-186
+client/dashboard/src/pages/org/slack-workspaces/SlackSyncStatus.tsx
+  h_9630b74bdac540 2-14,16-31,34-55,57-102,106-146
+client/dashboard/src/pages/org/slack-workspaces/SlackWorkspaces.test.tsx
+  h_9630b74bdac540 1,9-14,17-22,24-27,29-30,32-54,56-59,62-64,66-69,71-72,74-114,116-120,123-133,135-137,139-143,145-160,164-173,176-233,235-244,246-249,251-258,260-276,278-287,289-291,294-296,298-304,306-308,310-319,321-341
+client/dashboard/src/pages/org/slack-workspaces/SlackWorkspaces.tsx
+  h_9630b74bdac540 1-4,7-8,10-12,14,16-25,27-33,35-49,51-56,58-68,71,74,78,80-97,99-140,142-143,145-148,151-155,158-164,167-195,197-227,229-326,328
+client/dashboard/src/pages/org/slack-workspaces/mappingFindings.ts
+  h_9630b74bdac540 1-35
+client/dashboard/src/pages/org/slack-workspaces/memberLabels.ts
+  h_9630b74bdac540 1-14
+client/dashboard/src/pages/org/slack-workspaces/syncView.ts
+  h_9630b74bdac540 1-5
+client/dashboard/src/pages/playground/PlaygroundProxiedChat.tsx
+  h_9630b74bdac540 49,53-62
+client/dashboard/src/pages/playground/useProxiedMcpConnection.ts
+  h_9630b74bdac540 99-104
+client/dashboard/src/pages/remote-identity-providers/RemoteIdentityProviderDetail.tsx
+  h_9630b74bdac540 17
+client/dashboard/src/pages/remote-identity-providers/RemoteSessionClientDetail.tsx
+  h_9630b74bdac540 16
+client/dashboard/src/pages/security/PolicyDetail.scope-rows.test.tsx
+  h_9630b74bdac540 2,24-31,138-144,303,309-384,539-572
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  h_9630b74bdac540 31-32,992,1160,1168,1170,1172-1176,1180-1191,4092
+client/dashboard/src/pages/security/PolicyMCPScopePicker.tsx
+  h_9630b74bdac540 264,270-274
+client/dashboard/src/pages/setup/SetupTaskRedirect.test.tsx
+  h_9630b74bdac540 1-37
+client/dashboard/src/pages/setup/SetupTaskRedirect.tsx
+  h_9630b74bdac540 2-3,5-15
+client/dashboard/src/pages/setup/SetupWizard.test.tsx
+  h_9630b74bdac540 34,88-90,163-202,217,329,456,461-462
+client/dashboard/src/pages/setup/SetupWizard.tsx
+  h_9630b74bdac540 29,36-38,142-143,194,212,219-223,274-277,326-333,343,345-346,366-373,387
+client/dashboard/src/pages/setup/components/setup-container.ts
+  h_9630b74bdac540 1
+client/dashboard/src/pages/setup/components/setup-shell.tsx
+  h_9630b74bdac540 6,12
+client/dashboard/src/pages/setup/components/setup-task-content.test.tsx
+  h_9630b74bdac540 2-3,6-22,24-72,74-119,122-151
+client/dashboard/src/pages/setup/components/setup-task-content.tsx
+  h_9630b74bdac540 1-4,7-14,18-19,23-45,49-56
+client/dashboard/src/pages/setup/components/steps/identity-provider-step.test.tsx
+  h_9630b74bdac540 9-11,83-136
+client/dashboard/src/pages/setup/setup-cards.test.tsx
+  h_9630b74bdac540 1-2,4,6-25,28-33,40
+client/dashboard/src/pages/setup/setup-cards.tsx
+  h_9630b74bdac540 1-105,108-111,113,116,118-119,122
+client/dashboard/src/pages/sources/remote-mcp/CreateRemoteMcp.tsx
+  h_9630b74bdac540 6-10,16-17,19-20,32-35,51,53-56,65-68,75-79,100-112,145-168,170-174,325-344,364-371
+client/dashboard/src/pages/sources/remote-mcp/configureCreatedIdentity.test.ts
+  h_9630b74bdac540 4-13,16-35,37-43,45-50,52-60,62-66,68,71-72,82,85-88,90-91,94-95,97-103,108-109,113-114,116-118,120-121,125-127,129,132-135,137,141,143-151,157-158,162-169,173-175,177,180-183,185-186,189-190,192-194,196,199-202,204,207-208,210-212,214,217-219,221,223-239,241,244-249,251-259,261-263,266-271,273-275,277,280-283,287,289,291,298,302-305
+client/dashboard/src/pages/sources/remote-mcp/configureCreatedIdentity.ts
+  h_9630b74bdac540 1-4,6-11,13-15,17,19,23-25,30,34-35,38-40,42,45-64,66,70-71,74-87,90-100,102,104-107,113-117,122-124,126-130,135-141,144-149,153-164,167-189,191-192,194-197,201-205,207-208,212-223,228-234,236,239-285,288-298,301,303-307,309,311-312,318-321,323-351,353-361,363,393-396,405-415,417-425
+client/dashboard/src/pages/sources/remote-mcp/hooks.ts
+  h_9630b74bdac540 6,27-30,37-38,44,60-61,75,79-80,84-85,99,102,114-117
+client/dashboard/src/pages/sources/remote-mcp/useVerifyRemoteMcpUrl.test.ts
+  h_9630b74bdac540 43-45
+client/dashboard/src/pages/sources/remote-mcp/useVerifyRemoteMcpUrl.ts
+  h_9630b74bdac540 7,75-79,85
+client/dashboard/src/pages/team/Team.tsx
+  h_9630b74bdac540 77,321,324,548
+client/dashboard/src/routes.tsx
+  h_9630b74bdac540 168-170,1586-1587,1592
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_9630b74bdac540 38,47,62,64,440,619-626,639,869-870,1001-1003,1005,1078-1079,1234,1260,1271,1281,1360,1603,1617,1667-1670,1686,1696,1699-1700,1913,2005,2053,2122,2174,2265,2349-2351,2491,2503,2516,2524,2526,2698,2795,2848-2849,2852,2921-2922,3457,3466,3503-3510,3529,3533,3535,3758,4091-4101,4113-4122,5224-5233,5800-5810,6675-6685,7285-7296,8444-8452,9403-9439,11056-11066,11193-11203,11339-11349,11423-11431,11443-11453
+client/dashboard/src/sdk/src/funcs/accessDeleteDirectoryRoleMapping.ts
+  h_9630b74bdac540 1-208
+client/dashboard/src/sdk/src/funcs/accessListDirectoryRoleMappings.ts
+  h_9630b74bdac540 1-211
+client/dashboard/src/sdk/src/funcs/accessSetDirectoryRoleMapping.ts
+  h_9630b74bdac540 1-210
+client/dashboard/src/sdk/src/funcs/accessSyncDirectoryGroups.ts
+  h_9630b74bdac540 1-208
+client/dashboard/src/sdk/src/funcs/organizationsSubmitOnboardingSurvey.ts
+  h_9630b74bdac540 1-199
+client/dashboard/src/sdk/src/funcs/slackDirectoryConnectionsBegin.ts
+  h_9630b74bdac540 1-199
+client/dashboard/src/sdk/src/funcs/slackDirectoryConnectionsDisconnect.ts
+  h_9630b74bdac540 1-199
+client/dashboard/src/sdk/src/funcs/slackDirectoryConnectionsGetMember.ts
+  h_9630b74bdac540 1-201
+client/dashboard/src/sdk/src/funcs/slackDirectoryConnectionsList.ts
+  h_9630b74bdac540 1-197
+client/dashboard/src/sdk/src/funcs/slackDirectoryConnectionsListMembers.ts
+  h_9630b74bdac540 1-213
+client/dashboard/src/sdk/src/funcs/slackDirectoryConnectionsListPersonAccounts.ts
+  h_9630b74bdac540 1-204
+client/dashboard/src/sdk/src/funcs/slackDirectoryConnectionsSetMapping.ts
+  h_9630b74bdac540 1-199
+client/dashboard/src/sdk/src/funcs/slackDirectoryConnectionsSync.ts
+  h_9630b74bdac540 1-199
+client/dashboard/src/sdk/src/funcs/telemetryGetMcpNetworkTraffic.ts
+  h_9630b74bdac540 1-224
+client/dashboard/src/sdk/src/models/components/beginresponsebody.ts
+  h_9630b74bdac540 1-41
+client/dashboard/src/sdk/src/models/components/beginslackdirectoryconnectionrequestbody.ts
+  h_9630b74bdac540 1-45
+client/dashboard/src/sdk/src/models/components/directoryattributeoption.ts
+  h_9630b74bdac540 1-51
+client/dashboard/src/sdk/src/models/components/directorygroupoption.ts
+  h_9630b74bdac540 1-51
+client/dashboard/src/sdk/src/models/components/directoryrolemapping.ts
+  h_9630b74bdac540 1-105
+client/dashboard/src/sdk/src/models/components/disconnectslackdirectoryconnectionrequestbody.ts
+  h_9630b74bdac540 1-43
+client/dashboard/src/sdk/src/models/components/getmcpnetworktrafficpayload.ts
+  h_9630b74bdac540 1-77
+client/dashboard/src/sdk/src/models/components/getmcpnetworktrafficresult.ts
+  h_9630b74bdac540 1-3,5-76
+client/dashboard/src/sdk/src/models/components/listdirectoryrolemappingsresult.ts
+  h_9630b74bdac540 1-55
+client/dashboard/src/sdk/src/models/components/listmembersresponsebody.ts
+  h_9630b74bdac540 1-55
+client/dashboard/src/sdk/src/models/components/listpersonaccountsresponsebody.ts
+  h_9630b74bdac540 1-50
+client/dashboard/src/sdk/src/models/components/listresponsebody.ts
+  h_9630b74bdac540 1-50
+client/dashboard/src/sdk/src/models/components/mcpnetworktrafficpoint.ts
+  h_9630b74bdac540 1-56
+client/dashboard/src/sdk/src/models/components/setdirectoryrolemappingform.ts
+  h_9630b74bdac540 1-92
+client/dashboard/src/sdk/src/models/components/setslackidentitymappingrequestbody.ts
+  h_9630b74bdac540 1-63
+client/dashboard/src/sdk/src/models/components/setsourceenvironmentlinkrequestbody.ts
+  h_9630b74bdac540 12,19-21,31,39-42,58
+client/dashboard/src/sdk/src/models/components/slackdirectoryconnection.ts
+  h_9630b74bdac540 1-213
+client/dashboard/src/sdk/src/models/components/slackdirectorymember.ts
+  h_9630b74bdac540 1-197
+client/dashboard/src/sdk/src/models/components/slackidentitymapping.ts
+  h_9630b74bdac540 1-68
+client/dashboard/src/sdk/src/models/components/slackpersonaccount.ts
+  h_9630b74bdac540 1-79
+client/dashboard/src/sdk/src/models/components/submitonboardingsurveyrequestbody.ts
+  h_9630b74bdac540 1-43
+client/dashboard/src/sdk/src/models/components/syncdirectorygroupsresult.ts
+  h_9630b74bdac540 1-41
+client/dashboard/src/sdk/src/models/components/syncresponsebody.ts
+  h_9630b74bdac540 1-33
+client/dashboard/src/sdk/src/models/components/syncslackdirectoryrequestbody.ts
+  h_9630b74bdac540 1-41
+client/dashboard/src/sdk/src/models/operations/beginslackdirectoryconnection.ts
+  h_9630b74bdac540 1-91
+client/dashboard/src/sdk/src/models/operations/deletedirectoryrolemapping.ts
+  h_9630b74bdac540 1-94
+client/dashboard/src/sdk/src/models/operations/disconnectslackdirectoryconnection.ts
+  h_9630b74bdac540 1-94
+client/dashboard/src/sdk/src/models/operations/getmcpnetworktraffic.ts
+  h_9630b74bdac540 1-184
+client/dashboard/src/sdk/src/models/operations/getslackdirectorymember.ts
+  h_9630b74bdac540 1-80
+client/dashboard/src/sdk/src/models/operations/listdirectoryrolemappings.ts
+  h_9630b74bdac540 1-88
+client/dashboard/src/sdk/src/models/operations/listslackdirectoryconnections.ts
+  h_9630b74bdac540 1-78
+client/dashboard/src/sdk/src/models/operations/listslackdirectorymembers.ts
+  h_9630b74bdac540 1-155
+client/dashboard/src/sdk/src/models/operations/listslackpersonaccounts.ts
+  h_9630b74bdac540 1-90
+client/dashboard/src/sdk/src/models/operations/setdirectoryrolemapping.ts
+  h_9630b74bdac540 1-97
+client/dashboard/src/sdk/src/models/operations/setslackidentitymapping.ts
+  h_9630b74bdac540 1-88
+client/dashboard/src/sdk/src/models/operations/submitonboardingsurvey.ts
+  h_9630b74bdac540 1-87
+client/dashboard/src/sdk/src/models/operations/syncdirectorygroups.ts
+  h_9630b74bdac540 1-86
+client/dashboard/src/sdk/src/models/operations/syncslackdirectory.ts
+  h_9630b74bdac540 1-82
+client/dashboard/src/sdk/src/react-query/beginSlackDirectoryConnection.ts
+  h_9630b74bdac540 1-3,5-114
+client/dashboard/src/sdk/src/react-query/deleteDirectoryRoleMapping.ts
+  h_9630b74bdac540 1-116
+client/dashboard/src/sdk/src/react-query/directoryRoleMappings.core.ts
+  h_9630b74bdac540 1-86
+client/dashboard/src/sdk/src/react-query/directoryRoleMappings.ts
+  h_9630b74bdac540 1-160
+client/dashboard/src/sdk/src/react-query/disconnectSlackDirectoryConnection.ts
+  h_9630b74bdac540 1-115
+client/dashboard/src/sdk/src/react-query/getMcpNetworkTraffic.core.ts
+  h_9630b74bdac540 1-88
+client/dashboard/src/sdk/src/react-query/getMcpNetworkTraffic.ts
+  h_9630b74bdac540 1-162
+client/dashboard/src/sdk/src/react-query/setDirectoryRoleMapping.ts
+  h_9630b74bdac540 1-117
+client/dashboard/src/sdk/src/react-query/setSlackIdentityMapping.ts
+  h_9630b74bdac540 1-117
+client/dashboard/src/sdk/src/react-query/slackDirectoryConnections.core.ts
+  h_9630b74bdac540 1-82
+client/dashboard/src/sdk/src/react-query/slackDirectoryConnections.ts
+  h_9630b74bdac540 1-146
+client/dashboard/src/sdk/src/react-query/slackDirectoryMember.core.ts
+  h_9630b74bdac540 1-83
+client/dashboard/src/sdk/src/react-query/slackDirectoryMember.ts
+  h_9630b74bdac540 1-152
+client/dashboard/src/sdk/src/react-query/slackDirectoryMembers.core.ts
+  h_9630b74bdac540 1-108
+client/dashboard/src/sdk/src/react-query/slackDirectoryMembers.ts
+  h_9630b74bdac540 1-177
+client/dashboard/src/sdk/src/react-query/slackPersonAccounts.core.ts
+  h_9630b74bdac540 1-93
+client/dashboard/src/sdk/src/react-query/slackPersonAccounts.ts
+  h_9630b74bdac540 1-163
+client/dashboard/src/sdk/src/react-query/submitOnboardingSurvey.ts
+  h_9630b74bdac540 1-117
+client/dashboard/src/sdk/src/react-query/syncDirectoryGroups.ts
+  h_9630b74bdac540 1-117
+client/dashboard/src/sdk/src/react-query/syncSlackDirectory.ts
+  h_9630b74bdac540 1-117
+client/dashboard/src/sdk/src/sdk/access.ts
+  h_9630b74bdac540 6,15,30,32,38,44,59,64-67,100-103,160-163,168-171,206-224,377-395,662-680,700-718
+client/dashboard/src/sdk/src/sdk/organizations.ts
+  h_9630b74bdac540 18,86-89,352-370
+client/dashboard/src/sdk/src/sdk/sdk.ts
+  h_9630b74bdac540 75,462-468
+client/dashboard/src/sdk/src/sdk/slackdirectoryconnections.ts
+  h_9630b74bdac540 1-198
+client/dashboard/src/sdk/src/sdk/telemetry.ts
+  h_9630b74bdac540 8,45,90-93,279-297
+docs/rbac.md
+  h_9630b74bdac540 586-587
+docs/slack-directory-connections.md
+  h_9630b74bdac540 1-73
+seed/demo/PAGES.md
+  h_9630b74bdac540 48,52,56,157-164,227-236
+seed/demo/verify.md
+  h_9630b74bdac540 38-44,174-194,321-328,330,344,368,404,421,450,472-487
+server/CHANGELOG.md
+  h_9630b74bdac540 3-55
+server/clickhouse/local/golang_migrate/20260925223533_mcp-network-traffic.down.sql
+  h_9630b74bdac540 1-4
+server/clickhouse/local/golang_migrate/20260925223533_mcp-network-traffic.up.sql
+  h_9630b74bdac540 1-13
+server/clickhouse/local/golang_migrate/atlas.sum
+  h_9630b74bdac540 1,117
+server/clickhouse/migrations/20260925223526_mcp-network-traffic.sql
+  h_9630b74bdac540 1-13
+server/clickhouse/migrations/atlas.sum
+  h_9630b74bdac540 1,122
+server/clickhouse/schema.sql
+  h_9630b74bdac540 1572-1601
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 125,396,836
+server/cmd/gram/start.go
+  h_9630b74bdac540 157,376-378,1481-1487,1798,1985-1989,1998
+server/cmd/gram/worker.go
+  h_9630b74bdac540 62,181-182,823-827,836
+server/database/schema.sql
+  h_9630b74bdac540 1656-1695
+server/database/sqlc.yaml
+  h_9630b74bdac540 984-993
+server/design/access/design.go
+  h_9630b74bdac540 151-258,1715-1788
+server/design/admin/design.go
+  h_9630b74bdac540 320-321,323,328,1118
+server/design/gram.go
+  h_9630b74bdac540 4
+server/design/organizations/design.go
+  h_9630b74bdac540 367-388
+server/design/shared/risk.go
+  h_9630b74bdac540 138
+server/design/slackdirectoryconnections/design.go
+  h_9630b74bdac540 1-250
+server/design/telemetry/design.go
+  h_9630b74bdac540 281-309,2978-3018
+server/gen/access/client.go
+  h_9630b74bdac540 23-26,52,59-62,194-281
+server/gen/access/endpoints.go
+  h_9630b74bdac540 24-27,62-65,98-101,301-440
+server/gen/access/service.go
+  h_9630b74bdac540 29-39,153,434-442,452-490,629-646,989-1005,1182-1195
+server/gen/admin/service.go
+  h_9630b74bdac540 401,1436-1437
+server/gen/http/access/client/cli.go
+  h_9630b74bdac540 255-385
+server/gen/http/access/client/client.go
+  h_9630b74bdac540 40-55,169-172,323-418
+server/gen/http/access/client/encode_decode.go
+  h_9630b74bdac540 1193-2126,7515-7559
+server/gen/http/access/client/paths.go
+  h_9630b74bdac540 35-54
+server/gen/http/access/client/types.go
+  h_9630b74bdac540 53-67,239-277,1407-1410,1426-1429,1445-1448,1464-1467,1483-1486,1502-1505,1521-1524,1540-1543,1559-1562,1578-1581,1597-1600,1616-1618,1634-1637,1653-1655,1671-1673,1689-1692,1708-1710,1726-1727,1729,1745-1748,1764-1767,1783-1786,1802-1805,1821-1824,1840-1843,1859-1862,1878-1881,1897-1900,1916-1919,1935-1938,1954-1957,1973-1976,1992-1995,2011-2014,2030-2033,2049-2052,2068-2071,2087-2090,2106-2109,2125-2128,2144-2147,2163-2165,2181-2183,2199-2201,2217-2219,2235-2237,2253-2255,2271-2273,2289-2291,2307-2309,2325-2327,2343-2345,2361-2363,2379-2381,2397-2399,2415-2417,2433-2435,2451-2453,2469-2472,2488-2490,2506-2508,2524-2526,2542-2544,2560-2562,2578-2580,2596-2598,2614-2616,2632-2634,2650-2652,2668-2670,2686-2688,2704-2707,2723-2725,2741-2743,2759-2761,2777-2779,2795-2798,2814-2816,2832-2835,2851-2853,2869-2872,2888-2891,2907-2910,2926-2929,2945-2948,2964-2967,2983-2986,3002-3005,3021-3024,3040-3043,3059-3062,3078-3081,3097-3100,3116-3119,3135-3138,3154-3157,3173-3176,3192-3195,3211-3214,3230-3233,3249-3252,3268-3271,3287-3290,3306-3309,3325-3328,3344-3347,3363-3366,3382-3385,3401-3404,3420-3423,3439-3442,3458-3461,3477-3478,3480,3496-3499,3515-3516,3518,3534-3535,3537,3553-3556,3572-3573,3575,3591-3594,3610-3613,3629-3632,3648-3651,3667-3670,3686-3689,3705-3708,3724-3727,3743-3746,3762-3765,3781-3784,3800-3803,3819-3822,3838-3841,3857-3860,3876-3879,3895-3898,3914-3917,3933-3936,3952-3955,3971-3974,3990-3993,4009-4012,4028-4030,4046-4048,4064-4066,4082-4084,4100-4102,4118-4119,4121,4137-4139,4155-4156,4158,4174-4176,4192-4194,4210-4211,4213,4229-4232,4248-4249,4251,4267-4270,4286-4289,4305-4308,4324-4327,4343-4346,4362-4363,4365,4381-4382,4384,4400-4401,4403,4419-4422,4438-4439,4441,4457-4459,4475-4477,4493-4494,4496,4512-4514,4530-4531,4533,4549-4550,4552,4568-4569,4571,4587-4590,4606-4608,4624-4626,4642-4644,4660-4662,4678-4679,4681,4697-4699,4715-4716,4718,4734-4736,4752-4755,4771-4774,4790-4793,4809-4812,4828-4830,4846-4848,4864-4865,4867,4883-4885,4901-4902,4904,4920-4923,4939-4942,4958-4959,4961,4977-4979,4995-4996,4998,5014-5016,5032-5034,5050-5051,5053,5069-5071,5087-5088,5090,5106-5107,5109,5125-5128,5144-5147,5163-5165,5181-5184,5200-5202,5218-5220,5236-5237,5239,5255-5257,5273-5274,5276,5292-5295,5311-5314,5330-5332,5348-5350,5366-5368,5384-5386,5402-5404,5420-5421,5423,5439-5441,5457-5458,5460,5476-5478,5494-5496,5512-5515,5517-5527,5530-5545,5548-5563,5566-5581,5584-6317,6323-7760,7763-7775,7778-7790,7793-7805,7808-7820,7823-7835,7838-7850,7853-7865,7868-7880,7883-7912,7915-7927,7930-7942,7945-7957,7960-7972,7975-7987,7990-8002,8005-8017,8020-8032,8035-8047,8050-8062,8065-8069,8071-8084,8086-8099,8101-8114,8116-8117,8120-8129,8131-8144,8146-8159,8161-8174,8176-8189,8191-8192,8195-8204,8206-8219,8221-8222,8225-8237,8239-8240,8243-8252,8254-8267,8269-8270,8273-8282,8284-8285,8288-8297,8299-8312,8314-8315,8318-8327,8329-8330,8333-8342,8344-8357,8359-8360,8363-8387,8393-8395,8408-8410,8423-8425,8438-8440,8453-8455,8468-8470,8483-8485,8498-8500,8513-8515,8528-8530,8543-8548,8550,8553,8559-8561,8574-8576,8589-8591,8604-8606,8619-8621,8634,8636,8649-8651,8664,8666,8679-8681,8694,8696,8709-8714,8716,8719,8725,8727,8740-8742,8755,8757,8770-8772,8785,8787,8800,8802,8815,8817,8830-8832,8845,8847,8860,8862,8875-8879,8885,8891,8893,8906,8908,8921,8923,8936,8938,8951,8953,8966,8968,8981,8983,8996,8998,9011,9013,9026,9028,9041-9069,9082-9084,9097-9099,9112-9114,9127-9129,9142-9144,9157-9159,9172-9174,9187-9189,9202-9204,9217-9224,9226,9229,9235-9237,9250-9252,9265-9267,9280-9282,9295-9297,9310-9312,9325-9327,9340-9342,9355-9357,9370-9372,9385-9422,9428-9430,9443-9445,9458-9460,9473-9475,9488-9490,9503-9505,9518-9520,9533-9535,9548-9550,9563-9565,9578-9580,9593-9595,9608-9610,9623-9625,9638-9640,9653-9655,9668-9670,9683-9686,9699-9701,9714-9716,9729-9733,9735-9739,9741,9747-9749,9762-9764,9777-9779,9792-9794,9807-9809,9822-9824,9837-9839,9852-9854,9867-9869,9882-9884,9897-9900,9916-9918,9931-9933,9946-9948,9961-9963,9976-9978,9991-9994,10007-10009,10022-10025,10038-10040,10053-10055,10068-10074,10097-10099,10112-10114,10127-10129,10142-10144,10157-10159,10172-10174,10187-10189,10202-10204,10217-10219,10232-10234,10247-10265,10278-10280,10293-10295,10308-10310,10323-10325,10338-10340,10353-10355,10368-10370,10383-10385,10398-10400,10413-10418,10420,10423,10429-10431,10444-10446,10459-10461,10474-10476,10489-10491,10504-10506,10519-10521,10534-10536,10549-10551,10564-10566,10573,10575-10585,10587,10590,10596-10598,10611-10613,10626-10628,10641-10643,10656-10658,10671-10673,10686-10688,10701-10703,10716-10718,10731-10733,10746-10750,10752,10757-10759,10772-10774,10787-10789,10802-10804,10817-10819,10832-10834,10847-10849,10862-10864,10877-10879,10892-10894,10907-10914,10916,10919,10925-10927,10940-10942,10955-10957,10970,10972,10985,10987,11000-11002,11015-11017,11030-11032,11045-11047,11060-11062,11075-11082,11084,11087,11093-11095,11108-11110,11123-11125,11138-11140,11153-11155,11168-11170,11183-11185,11198-11200,11213-11215,11228-11230,11243-11248,11250,11253,11259-11261,11274-11276,11289-11291,11304,11306,11319,11321,11334-11336,11349,11351,11364-11366,11379-11381,11394-11396,11409-11413,11419-11421,11434-11436,11449-11451,11464-11466,11479-11481,11494-11496,11509-11511,11524-11526,11539-11541,11554-11556,11569-11573,11575-11576,11578,11581,11587-11589,11602-11604,11617-11619,11632-11634,11647-11649,11662-11664,11677-11679,11692-11694,11707-11709,11722-11724,11737-11741,11743-11744,11746,11749,11755-11757,11770-11772,11785-11787,11800,11802,11815,11817,11830-11832,11845,11847,11860-11862,11875-11877,11890-11892,11905-11910,11912,11915,11921-11923,11936,11938,11951,11953,11966,11968,11981,11983,11996-11998,12011-12013,12026-12028,12041,12043,12056-12058,12071-12081,12083-12089,12095-12097,12110-12112,12125-12127,12140-12142,12155-12157,12170-12172,12185-12194,12200-12202,12215-12217,12230-12232,12241-12441,12444-12448,12450,12453-12457,12459-12488,12491-12495,12497-12504,12507-12511,12513-12520,12523-12527,12529-12536,12539-12543,12545-12563,12566-12570,12572-12579,12582-12648,12650-12652,12655,12658-12662,12664-12669,12671,12674-12678,12680-12685,12687,12690-12694,12696-12697,12699-12700,12702-12725,12728-12732,12734-12741,12744-12748,12750-12757,12760-12764,12766-12781,12784-12795,12798,12801-12805,12807-12817,12820-12824,12826-12836,12839-12843,12845-12852,12855-12859,12861,12864-12868,12870-12880,12883-12887,12889-12899,12902-12906,12908-12915,12918-12922,12924-12941,12944-12960,12962-12965,12968-12972,12974-12989,12992-12996,12998-12999,13001-13013,13016-13020,13022-13037,13040-13044,13046-13061,13064-13068,13070-13085,13088-13107,13109-13110,13112-13133,13136-13149,13151-13152,13154-13157,13160-13164,13166-13181,13184-13188,13190-13205,13208-13212,13214-13229,13232-13236,13238-13253,13256-13260,13262-13275,13280-13285,13289-13296,13298-13306,13310-13311,13313-13314,13316-13317,13319-13320,13322-13323,13325-13332,13334-13335,13337-13341,13343-13344,13346-13347,13352-13354,13358-13359,13361-13362,13364-13365,13367-13368,13370-13371,13373-13380,13382-13383,13385-13386,13388-13389,13391-13395,13400-13405,13409-13419,13421-13426,13430-13431,13433-13434,13436-13437,13439-13440,13442-13443,13445-13452,13454-13455,13457-13458,13460-13461,13463-13467,13472-13476,13478-13479,13481-13482,13484-13485,13487-13488,13490-13491,13496-13501,13505-13515,13517-13522,13526-13527,13529-13530,13532-13533,13535-13539,13544-13548,13550-13563,13568-13572,13574-13575,13577-13578,13580-13581,13583-13584,13586-13587,13589-13596,13598-13599,13601-13602,13604-13605,13607-13608,13610-13611,13613-13620,13622-13623,13625-13626,13628-13629,13631-13632,13634-13635,13640-13644,13646-13647,13649-13650,13652-13659,13664-13668,13670-13671,13673-13674,13676-13677,13679-13680,13682-13683,13688-13692,13694-13695,13697-13704,13706-13707,13712-13716,13718-13719,13721-13722,13724-13731,13736-13740,13742-13743,13745-13746,13748-13749,13751-13752,13754-13755,13760-13764,13766-13767,13769-13770,13772-13773,13775-13779,13784-13803,13808-13812,13814-13815,13817-13827,13832-13836,13838-13839,13841-13851,13856-13860,13862-13875,13880-13887,13889-13890,13892-13893,13895-13899,13904-13906,13928-13930,13952-13954,13976-13978,14000-14002,14024-14026,14048-14050,14072-14074,14096-14098,14120-14122,14144-14146,14168-14170,14192-14194,14216-14218,14240-14242,14264-14267,14289-14291,14313-14316,14338-14340,14362-14364,14386-14388,14410-14412,14434-14436,14458-14460,14482-14484,14506-14508,14530-14532,14554-14556,14578-14580,14602-14604,14626-14628,14650-14652,14674-14676,14698-14700,14722-14724,14746-14749,14771-14773,14795-14798,14820-14822,14844-14846,14868-14870,14892-14894,14916-14918,14940-14942,14964-14966,14988-14991,15013-15015,15037-15040,15062-15064,15086-15088,20555-20625
+server/gen/http/access/server/encode_decode.go
+  h_9630b74bdac540 1104-1950,6984-7028
+server/gen/http/access/server/paths.go
+  h_9630b74bdac540 35-54
+server/gen/http/access/server/server.go
+  h_9630b74bdac540 27-30,87-90,119-122,158-161,196-199,475-689
+server/gen/http/access/server/types.go
+  h_9630b74bdac540 55-69,241-279,1409-1412,1428-1431,1447-1450,1466-1469,1485-1488,1504-1507,1523-1526,1542-1545,1561-1564,1580-1583,1599-1602,1618-1620,1636-1639,1655-1657,1673-1675,1691-1694,1710-1712,1728-1729,1731,1747-1750,1766-1769,1785-1788,1804-1807,1823-1826,1842-1845,1861-1864,1880-1883,1899-1902,1918-1921,1937-1940,1956-1959,1975-1978,1994-1997,2013-2016,2032-2035,2051-2054,2070-2073,2089-2092,2108-2111,2127-2130,2146-2149,2165-2167,2183-2185,2201-2203,2219-2221,2237-2239,2255-2257,2273-2275,2291-2293,2309-2311,2327-2329,2345-2347,2363-2365,2381-2383,2399-2401,2417-2419,2435-2437,2453-2455,2471-2474,2490-2492,2508-2510,2526-2528,2544-2546,2562-2564,2580-2582,2598-2600,2616-2618,2634-2636,2652-2654,2670-2672,2688-2690,2706-2709,2725-2727,2743-2745,2761-2763,2779-2781,2797-2800,2816-2818,2834-2837,2853-2855,2871-2874,2890-2893,2909-2912,2928-2931,2947-2950,2966-2969,2985-2988,3004-3007,3023-3026,3042-3045,3061-3064,3080-3083,3099-3102,3118-3121,3137-3140,3156-3159,3175-3178,3194-3197,3213-3216,3232-3235,3251-3254,3270-3273,3289-3292,3308-3311,3327-3330,3346-3349,3365-3368,3384-3387,3403-3406,3422-3425,3441-3444,3460-3463,3479-3480,3482,3498-3501,3517-3518,3520,3536-3537,3539,3555-3558,3574-3575,3577,3593-3596,3612-3615,3631-3634,3650-3653,3669-3672,3688-3691,3707-3710,3726-3729,3745-3748,3764-3767,3783-3786,3802-3805,3821-3824,3840-3843,3859-3862,3878-3881,3897-3900,3916-3919,3935-3938,3954-3957,3973-3976,3992-3995,4011-4014,4030-4032,4048-4050,4066-4068,4084-4086,4102-4104,4120-4121,4123,4139-4141,4157-4158,4160,4176-4178,4194-4196,4212-4213,4215,4231-4234,4250-4251,4253,4269-4272,4288-4291,4307-4310,4326-4329,4345-4348,4364-4365,4367,4383-4384,4386,4402-4403,4405,4421-4424,4440-4441,4443,4459-4461,4477-4479,4495-4496,4498,4514-4516,4532-4533,4535,4551-4552,4554,4570-4571,4573,4589-4592,4608-4610,4626-4628,4644-4646,4662-4664,4680-4681,4683,4699-4701,4717-4718,4720,4736-4738,4754-4757,4773-4776,4792-4795,4811-4814,4830-4832,4848-4850,4866-4867,4869,4885-4887,4903-4904,4906,4922-4925,4941-4944,4960-4961,4963,4979-4981,4997-4998,5000,5016-5018,5034-5036,5052-5053,5055,5071-5073,5089-5090,5092,5108-5109,5111,5127-5130,5146-5149,5165-5167,5183-5186,5202-5204,5220-5222,5238-5239,5241,5257-5259,5275-5276,5278,5294-5297,5313-5316,5332-5334,5350-5352,5368-5370,5386-5388,5404-5406,5422-5423,5425,5441-5443,5459-5460,5462,5478-5480,5496-5498,5514-5517,5519-5529,5532-5547,5550-5565,5568-5583,5586-5589,5591-5601,5604-5620,5623-5638,5641-5657,5660-5665,5667-5675,5678-5693,5696-5712,5715-5731,5734-5750,5753-5768,5771-5786,5789-5805,5808-5813,5815-7315,7318-7327,7330-7348,7351-7369,7372-7388,7391-7397,7400-7418,7421-7439,7442-7448,7450,7453,7456,7461-7467,7469,7472,7475,7477-7484,7486-7487,7492-7501,7503-7515,7517-7669,7674-7683,7688-7697,7702-7711,7716-7725,7730-7739,7744-7753,7758-7767,7769-7781,7783-7795,7800-7809,7814-7823,7828-7837,7842-7851,7856-7865,7870-7879,7881-7893,7898-7907,7909-7921,7926-7935,7937-7949,7954-7963,7968-7977,7982-7991,7996-8005,8010-8019,8024-8033,8038-8047,8052-8055,8066-8069,8080-8083,8094-8097,8108-8111,8122-8125,8136-8139,8150-8153,8164-8167,8178-8181,8192-8196,8207-8211,8222-8226,8237-8241,8252-8256,8267-8271,8282-8286,8297-8301,8312-8316,8327-8331,8342-8346,8357-8361,8372-8376,8387-8391,8402-8406,8417-8421,8432-8435,8446-8450,8461-8465,8476-8480,8491-8495,8506-8510,8521-8525,8536-8540,8551-8555,8566-8570,8581-8585,8596-8600,8611-8615,8626-8630,8641-8645,8656-8660,8671-8675,8686-8690,8701-8705,8716-8720,8731-8735,8746-8750,8761-8765,8776-8780,12106-12152,12499-12528
+server/gen/http/admin/client/cli.go
+  h_9630b74bdac540 1143
+server/gen/http/admin/client/encode_decode.go
+  h_9630b74bdac540 14005-14006
+server/gen/http/admin/client/types.go
+  h_9630b74bdac540 146-147,12766,39872-39874
+server/gen/http/admin/server/encode_decode.go
+  h_9630b74bdac540 12462-12463
+server/gen/http/admin/server/types.go
+  h_9630b74bdac540 146-147,12774
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 88,118,161,185,187,304-321,2002-2005,3371-3412,3526-3531,4573-4576,4976,5262-5271,5293,5675-5676,5792-5803,6915-6917,7726-7753,7814-7816,8545-8556,9683-9685,10505-10532,10594-10596,11519-11522,11657-11740,19082,19393-19412,23456,23574,25404-25597,25848,26097-26120,29140
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 5221-5315,6203-6291,7652-7747,7844-7933,43795-43881,62564,62566,62575-62659,62661,62663,62665,62671-63415,63585-63685,63688-63689,63691-63692,63694-63695,63697-63705,63732,63793,63796,63799-63800,63802-63803,63831,63892,63895-63896,63898-63899,63901-63902,63904-63938,63965,64026,64029,64032-64033,64035-64036,64039-64041,64043,64046-64048,64050,64053-64055,64057,64059-64136,64158-64163,64169,64230,64233-64234,64236-64241,64264-64269,64275,64336,64340,64342-64344,64346-64347,64371,64373,64375,64381,64388,64449-64450,64452-64454,64456-64457,64484,64491,64552,64555-64559,64561-64562,64589,64596,64657,64660,64662,64664,64666-64667,64694,64701,64762,64765,64767,78748-78749,78756,80909-80923,85297-85372,85397-85410,87476-87524,90907-90928,91319-91337,91476-91488,91605-91618,93244-93262,101155-101181,101314,101530-101553,103180-103409,103962-103969,104366-104374,104384-104405,110377-110378
+server/gen/http/organizations/client/cli.go
+  h_9630b74bdac540 400-424
+server/gen/http/organizations/client/client.go
+  h_9630b74bdac540 83-86,124,517-540
+server/gen/http/organizations/client/encode_decode.go
+  h_9630b74bdac540 3691-3925
+server/gen/http/organizations/client/paths.go
+  h_9630b74bdac540 89-93
+server/gen/http/organizations/client/types.go
+  h_9630b74bdac540 76-82,248-254,3253-3442,3653-3662,6253-6261,6263,6265-6266,6269-6278,6280-6293,6295-6478,6702-6717,10555-10795
+server/gen/http/organizations/server/encode_decode.go
+  h_9630b74bdac540 3239-3451
+server/gen/http/organizations/server/paths.go
+  h_9630b74bdac540 89-93
+server/gen/http/organizations/server/server.go
+  h_9630b74bdac540 38,84,102,127,151,1009-1062
+server/gen/http/organizations/server/types.go
+  h_9630b74bdac540 73-79,245-251,3250-3439,3785-3804,6113-6262,6441-6451,6527-6535
+server/gen/http/risk/client/cli.go
+  h_9630b74bdac540 29,315
+server/gen/http/slack_directory_connections/client/cli.go
+  h_9630b74bdac540 1-359
+server/gen/http/slack_directory_connections/client/client.go
+  h_9630b74bdac540 1-276
+server/gen/http/slack_directory_connections/client/encode_decode.go
+  h_9630b74bdac540 1-2120
+server/gen/http/slack_directory_connections/client/paths.go
+  h_9630b74bdac540 1-48
+server/gen/http/slack_directory_connections/client/types.go
+  h_9630b74bdac540 1-6085
+server/gen/http/slack_directory_connections/server/encode_decode.go
+  h_9630b74bdac540 1-1988
+server/gen/http/slack_directory_connections/server/paths.go
+  h_9630b74bdac540 1-48
+server/gen/http/slack_directory_connections/server/server.go
+  h_9630b74bdac540 1-537
+server/gen/http/slack_directory_connections/server/types.go
+  h_9630b74bdac540 1-3594
+server/gen/http/telemetry/client/cli.go
+  h_9630b74bdac540 590-642
+server/gen/http/telemetry/client/client.go
+  h_9630b74bdac540 56-59,192,443-466
+server/gen/http/telemetry/client/encode_decode.go
+  h_9630b74bdac540 2207-2449,9337-9349
+server/gen/http/telemetry/client/paths.go
+  h_9630b74bdac540 55-59
+server/gen/http/telemetry/client/types.go
+  h_9630b74bdac540 193-203,898-912,2838-3027,8402-8412,9398-9408,11991-12164,12177-12179,12192-12194,12207-12209,12222-12224,16901-16934,19757-19996,26934-26951
+server/gen/http/telemetry/server/encode_decode.go
+  h_9630b74bdac540 2167-2403,8984-8996
+server/gen/http/telemetry/server/paths.go
+  h_9630b74bdac540 55-59
+server/gen/http/telemetry/server/server.go
+  h_9630b74bdac540 31,96,133,177,220,734-786
+server/gen/http/telemetry/server/types.go
+  h_9630b74bdac540 193-203,898-912,2838-3027,8297-8307,9379-9402,11451-11600,15678-15692,17146-17165
+server/gen/organizations/client.go
+  h_9630b74bdac540 34,38,56,406-428
+server/gen/organizations/endpoints.go
+  h_9630b74bdac540 35,59,82,453-475
+server/gen/organizations/service.go
+  h_9630b74bdac540 62-65,88,381-388
+server/gen/slack_directory_connections/client.go
+  h_9630b74bdac540 1-230
+server/gen/slack_directory_connections/endpoints.go
+  h_9630b74bdac540 1-241
+server/gen/slack_directory_connections/service.go
+  h_9630b74bdac540 1-361
+server/gen/telemetry/client.go
+  h_9630b74bdac540 27,57,68,301-323
+server/gen/telemetry/endpoints.go
+  h_9630b74bdac540 28,71,112,684-742
+server/gen/telemetry/service.go
+  h_9630b74bdac540 39-41,143,308-336,1393-1401
+server/internal/access/directory_role_mappings.go
+  h_9630b74bdac540 1-412
+server/internal/access/directory_role_mappings_test.go
+  h_9630b74bdac540 1-550
+server/internal/access/mock_role_test.go
+  h_9630b74bdac540 80-95
+server/internal/access/queries.sql
+  h_9630b74bdac540 1227-1497
+server/internal/access/repo/queries.sql.go
+  h_9630b74bdac540 100-121,293-313,432-467,495-531,1596-1754,2388-2510,2543-2555,2997-3096
+server/internal/access/role_manager.go
+  h_9630b74bdac540 49-50,88-91,103,484-487,497,1253-1256,1267,1288-1291,1302,1335-1354
+server/internal/admin/onboarding.go
+  h_9630b74bdac540 23-24
+server/internal/adminmcp/authenticator.go
+  h_9630b74bdac540 100
+server/internal/adminmcp/authenticator_test.go
+  h_9630b74bdac540 88
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 15,31,103-108,115-118,160-162
+server/internal/adminmcp/tool_billing_diagnostics.go
+  h_9630b74bdac540 1-180
+server/internal/adminmcp/tool_billing_diagnostics_test.go
+  h_9630b74bdac540 1-145
+server/internal/adminmcp/tool_context.go
+  h_9630b74bdac540 19,49-63
+server/internal/adminmcp/tool_diagnostics.go
+  h_9630b74bdac540 1-165
+server/internal/adminmcp/tool_diagnostics_test.go
+  h_9630b74bdac540 1-191
+server/internal/adminmcp/tool_issuers.go
+  h_9630b74bdac540 1-292
+server/internal/adminmcp/tool_issuers_test.go
+  h_9630b74bdac540 1-207
+server/internal/adminmcp/tool_support_matrix.go
+  h_9630b74bdac540 1-184
+server/internal/adminmcp/tool_support_matrix_test.go
+  h_9630b74bdac540 1-210
+server/internal/audit/directoryrolemappings.go
+  h_9630b74bdac540 1-118
+server/internal/audit/events.go
+  h_9630b74bdac540 32,67-68
+server/internal/audit/slackdirectoryconnections.go
+  h_9630b74bdac540 1-65
+server/internal/audit/slackidentitymappings.go
+  h_9630b74bdac540 1-47
+server/internal/authz/principal.go
+  h_9630b74bdac540 95-97,105-106
+server/internal/background/slack_directory_sync.go
+  h_9630b74bdac540 1-253
+server/internal/background/slack_directory_sync_test.go
+  h_9630b74bdac540 1-113
+server/internal/background/worker.go
+  h_9630b74bdac540 62,80-93,196,285,341,668-674,795-798
+server/internal/chat/enrich_internal_test.go
+  h_9630b74bdac540 1-49
+server/internal/chat/impl.go
+  h_9630b74bdac540 403,623-639,641,1396-1419,3057,3074,3094,3101,3169,3174-3197,3246-3326
+server/internal/chat/queries.sql
+  h_9630b74bdac540 1012-1022
+server/internal/chat/queries_scoping_test.go
+  h_9630b74bdac540 5,34-70
+server/internal/chat/repo/queries.sql.go
+  h_9630b74bdac540 1237-1260
+server/internal/database/models.go
+  h_9630b74bdac540 3462-3476
+server/internal/demoseed/clickhouse.sql
+  h_9630b74bdac540 78-79,2425-2465
+server/internal/demoseed/postgres.sql
+  h_9630b74bdac540 549,703-753,756,790-806,1354-1398,2577,3202-3231,3403-3421
+server/internal/directory/queries.sql
+  h_9630b74bdac540 394-420,434-463
+server/internal/directory/repo/queries.sql.go
+  h_9630b74bdac540 719-777,1022-1076
+server/internal/hooks/mcp_match.go
+  h_9630b74bdac540 70
+server/internal/mcp/mcpmetrics/metrics.go
+  h_9630b74bdac540 145,433-435,444
+server/internal/mcp/mcpmetrics/metrics_test.go
+  h_9630b74bdac540 322-340
+server/internal/mcp/network_traffic.go
+  h_9630b74bdac540 1-93
+server/internal/mcp/network_traffic_test.go
+  h_9630b74bdac540 1-33
+server/internal/mcp/serve_meta.go
+  h_9630b74bdac540 68-72,90-92
+server/internal/mcp/serveendpoint.go
+  h_9630b74bdac540 185
+server/internal/mv/slackdirectoryconnection.go
+  h_9630b74bdac540 1,3-36
+server/internal/mv/slackdirectorymember.go
+  h_9630b74bdac540 1-33
+server/internal/organizations/impl.go
+  h_9630b74bdac540 1124,1174-1179,1191-1206,1208-1211,1215-1216
+server/internal/organizations/listsetuptasks_test.go
+  h_9630b74bdac540 61
+server/internal/organizations/onboarding.go
+  h_9630b74bdac540 18-60,62,89,98
+server/internal/organizations/onboarding_catalog_test.go
+  h_9630b74bdac540 1-51
+server/internal/organizations/setup_tasks.go
+  h_9630b74bdac540 48-54,56,58-59,65-66,69-71,460-482
+server/internal/organizations/setupcallback_test.go
+  h_9630b74bdac540 4,9-11,16,22,25-27,29-36,38-118,128,130,132,140-185
+server/internal/organizations/submitonboardingsurvey_test.go
+  h_9630b74bdac540 1-57
+server/internal/outbox/events/audit_log.go
+  h_9630b74bdac540 39,140-143
+server/internal/outbox/events/catalog_gen.go
+  h_9630b74bdac540 32,80-81
+server/internal/outbox/events/catalog_gen.yaml
+  h_9630b74bdac540 1341-1398,3955-4070
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 335-355,360-380
+server/internal/platformmcp/descriptor.go
+  h_9630b74bdac540 110-113,435,514-516,534,538-585
+server/internal/platformmcp/diagnostics.go
+  h_9630b74bdac540 31-36,187-196,275,280-287,293-294,296,302-304,313-328,333-350,435,446,454-455
+server/internal/platformmcp/diagnostics_test.go
+  h_9630b74bdac540 86,94
+server/internal/platformmcp/drilldown.go
+  h_9630b74bdac540 62-65,89,94-97,101,103,418,424,443,447,473-475,491-495,504-505,513-521,574-575
+server/internal/platformmcp/drilldown_test.go
+  h_9630b74bdac540 206-210,213-235,246-247,257-258
+server/internal/platformmcp/output_schema_test.go
+  h_9630b74bdac540 1-289
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 2687-2749,2751-2760
+server/internal/platformmcp/repo/queries.sql.go
+  h_9630b74bdac540 6032-6148
+server/internal/platformmcp/server_identity.go
+  h_9630b74bdac540 1-259
+server/internal/platformmcp/server_identity_test.go
+  h_9630b74bdac540 1-188
+server/internal/platformmcp/servernames/servernames.go
+  h_9630b74bdac540 1-170
+server/internal/platformmcp/servernames/servernames_test.go
+  h_9630b74bdac540 1-218
+server/internal/platformmcp/tool_diagnostics.go
+  h_9630b74bdac540 14
+server/internal/platformmcp/tool_network_traffic.go
+  h_9630b74bdac540 1-171
+server/internal/platformmcp/tool_network_traffic_test.go
+  h_9630b74bdac540 1-97
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 124-126,129-131,251-255,274
+server/internal/platformmcp/usage_attribution_test.go
+  h_9630b74bdac540 88-89,92
+server/internal/plugins/generate.go
+  h_9630b74bdac540 389,1602,1618,1623,1633-1634,1636,1639,1648,1658-1672,1674-1694,1779-1837,1839-1841,1843-1968,1972-1973,3321-3324,3382-3383,3385-3386,3391-3406,3408-3438,3440-3463,3466
+server/internal/plugins/generate_test.go
+  h_9630b74bdac540 2080-2083,2091-2120
+server/internal/plugins/platform_mcp_private_access_skill_test.go
+  h_9630b74bdac540 1-22
+server/internal/plugins/platform_mcp_skills/configure-private-mcp-access/SKILL.md
+  h_9630b74bdac540 14
+server/internal/remotemcp/proxy/headers.go
+  h_9630b74bdac540 163-172,195-198
+server/internal/remotemcp/proxy/headers_internal_test.go
+  h_9630b74bdac540 9-10,33-109
+server/internal/remotesessions/dashboard.go
+  h_9630b74bdac540 212-217,237-238,299-300
+server/internal/remotesessions/dashboard_test.go
+  h_9630b74bdac540 1048-1125
+server/internal/remotesessions/identitycommit.go
+  h_9630b74bdac540 57-60,151-154,295-297,574-579,611,1183-1189,1196
+server/internal/slackdirectoryconnections/callback_test.go
+  h_9630b74bdac540 1-34
+server/internal/slackdirectoryconnections/directory.go
+  h_9630b74bdac540 1-116
+server/internal/slackdirectoryconnections/directory_provider.go
+  h_9630b74bdac540 1-244
+server/internal/slackdirectoryconnections/directory_provider_test.go
+  h_9630b74bdac540 1-163
+server/internal/slackdirectoryconnections/directory_test.go
+  h_9630b74bdac540 1-204
+server/internal/slackdirectoryconnections/directory_view_test.go
+  h_9630b74bdac540 1-182
+server/internal/slackdirectoryconnections/export_test.go
+  h_9630b74bdac540 1-13
+server/internal/slackdirectoryconnections/impl.go
+  h_9630b74bdac540 1-419
+server/internal/slackdirectoryconnections/lifecycle_test.go
+  h_9630b74bdac540 1-293
+server/internal/slackdirectoryconnections/mapping.go
+  h_9630b74bdac540 1-197
+server/internal/slackdirectoryconnections/mapping_test.go
+  h_9630b74bdac540 1-483
+server/internal/slackdirectoryconnections/person_accounts.go
+  h_9630b74bdac540 1,3-90
+server/internal/slackdirectoryconnections/person_accounts_test.go
+  h_9630b74bdac540 1-290
+server/internal/slackdirectoryconnections/provider.go
+  h_9630b74bdac540 1-208
+server/internal/slackdirectoryconnections/provider_test.go
+  h_9630b74bdac540 1-141
+server/internal/slackdirectoryconnections/queries.sql
+  h_9630b74bdac540 1-296
+server/internal/slackdirectoryconnections/repo/db.go
+  h_9630b74bdac540 1-32
+server/internal/slackdirectoryconnections/repo/models.go
+  h_9630b74bdac540 1-58
+server/internal/slackdirectoryconnections/repo/queries.sql.go
+  h_9630b74bdac540 1-1332
+server/internal/slackdirectoryconnections/setup_test.go
+  h_9630b74bdac540 1-133
+server/internal/slackdirectoryconnections/sync.go
+  h_9630b74bdac540 1-306
+server/internal/slackdirectoryconnections/sync_test.go
+  h_9630b74bdac540 1-307
+server/internal/slackdirectoryconnections/token_refresh_test.go
+  h_9630b74bdac540 1-240
+server/internal/telemetry/chat_metrics_test.go
+  h_9630b74bdac540 34,46-74,135-167
+server/internal/telemetry/claude_turn_usage_test.go
+  h_9630b74bdac540 49,87,120,143,150-179,204
+server/internal/telemetry/impl.go
+  h_9630b74bdac540 4578,4586,4648,4660,4670,4682
+server/internal/telemetry/mcp_diagnostics_identity_test.go
+  h_9630b74bdac540 1-319
+server/internal/telemetry/mcp_network_traffic.go
+  h_9630b74bdac540 1-172
+server/internal/telemetry/mcp_network_traffic_internal_test.go
+  h_9630b74bdac540 1-53
+server/internal/telemetry/mcp_network_traffic_test.go
+  h_9630b74bdac540 1-114
+server/internal/telemetry/overview/clickhouse.go
+  h_9630b74bdac540 123-132
+server/internal/telemetry/repo/mcp_diagnostics.go
+  h_9630b74bdac540 53-64,75-93,127-128,192,257,348-349,373-390,392-395,459-475,478-481,511-532
+server/internal/telemetry/repo/mcp_network_traffic.go
+  h_9630b74bdac540 1-70
+server/internal/telemetry/repo/queries.sql.go
+  h_9630b74bdac540 9,2996-2999,3012-3015,3021-3063,3075-3076,3078-3086,3119-3122,3197-3200,3262-3263,3265-3267,7685-7699,7712-7717,7719-7729,7731,7733,7750-7754,7756-7768
+server/internal/telemetry/shadow_mcp_inventory_test.go
+  h_9630b74bdac540 22-35,42,109,156,208,263,291,357,401,467,511,565,604,652,715,748,807,935,1073
+server/internal/thirdparty/openrouter/openrouter.go
+  h_9630b74bdac540 146-147,158-160,172,177,182,185-186,189,191
+server/internal/thirdparty/workos/connection.go
+  h_9630b74bdac540 147-197
+server/internal/thirdparty/workos/stub.go
+  h_9630b74bdac540 26,64,371-384
+server/internal/toolref/toolref.go
+  h_9630b74bdac540 71-127
+server/internal/toolref/toolref_test.go
+  h_9630b74bdac540 64-98
+server/internal/urn/directory_role_mapping.go
+  h_9630b74bdac540 1-159
+server/internal/urn/directory_role_mapping_test.go
+  h_9630b74bdac540 1-67
+server/internal/urn/slack_directory_connection.go
+  h_9630b74bdac540 1-141
+server/internal/urn/slack_directory_connection_test.go
+  h_9630b74bdac540 1-67
+server/internal/urn/slack_directory_membership.go
+  h_9630b74bdac540 1-141
+server/internal/urn/slack_directory_membership_test.go
+  h_9630b74bdac540 1-64
+server/migrations/20260927185929_trigger-thread-routes.sql
+  h_9630b74bdac540 1-28
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,439
+server/package.json
+  h_9630b74bdac540 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f782dd0b5e02cb03479bba33f77753c6f7b4ce8",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
