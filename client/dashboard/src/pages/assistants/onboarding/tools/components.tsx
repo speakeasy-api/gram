@@ -491,7 +491,9 @@ export function ProposeNameComponent({
 
   const isPending = isExecuting(status);
   const settled = !isPending;
-  const r = result as { ok?: boolean; name?: string } | undefined;
+  const r = result as
+    | { ok?: boolean; cancelled?: boolean; name?: string }
+    | undefined;
 
   useEffect(() => {
     if (!isPending) return;
@@ -503,7 +505,7 @@ export function ProposeNameComponent({
     };
   }, [draft, toolCallId, isPending]);
 
-  if (settled && r?.ok) {
+  if (settled && r?.ok && !r.cancelled) {
     return (
       <ToolCard
         title="Name set"
@@ -611,7 +613,7 @@ export function ProposePersonalityComponent({
 
   const isPending = isExecuting(status);
   const settled = !isPending;
-  const r = result as { ok?: boolean } | undefined;
+  const r = result as { ok?: boolean; cancelled?: boolean } | undefined;
 
   useEffect(() => {
     if (!isPending) return;
@@ -623,7 +625,7 @@ export function ProposePersonalityComponent({
     };
   }, [draft, toolCallId, isPending]);
 
-  if (settled && r?.ok) {
+  if (settled && r?.ok && !r.cancelled) {
     return (
       <ToolCard
         title="Personality set"
@@ -1051,6 +1053,16 @@ export function ProposeSlackSetupComponent({
   const r = result as SlackSetupResult | undefined;
   useCancelPendingOnUnmount(toolCallId, isPending);
 
+  if (!isPending && r?.cancelled) {
+    return (
+      <ToolCard title="Slack setup — skipped">
+        <Text small muted>
+          You can come back to this anytime — just ask me to set up Slack.
+        </Text>
+      </ToolCard>
+    );
+  }
+
   if (!isPending && r?.ok) {
     return (
       <ToolCard
@@ -1060,16 +1072,6 @@ export function ProposeSlackSetupComponent({
       >
         <Text small muted>
           {`Created a Slack toolset for ${assistantName} and wired up its triggers.`}
-        </Text>
-      </ToolCard>
-    );
-  }
-
-  if (!isPending && r?.cancelled) {
-    return (
-      <ToolCard title="Slack setup — skipped">
-        <Text small muted>
-          You can come back to this anytime — just ask me to set up Slack.
         </Text>
       </ToolCard>
     );
@@ -1195,6 +1197,16 @@ export function ChooseSlackReplyModeComponent({
   const r = result as ChooseSlackReplyModeResult | undefined;
   useCancelPendingOnUnmount(toolCallId, isPending);
 
+  if (!isPending && r?.cancelled) {
+    return (
+      <ToolCard title="Slack replies — unchanged">
+        <Text small muted>
+          Nothing changed. Ask me anytime to change when it replies.
+        </Text>
+      </ToolCard>
+    );
+  }
+
   if (!isPending && r?.ok) {
     return (
       <ToolCard
@@ -1204,16 +1216,6 @@ export function ChooseSlackReplyModeComponent({
       >
         <Text small muted>
           {`${assistantName} replies ${(slackReplyModeLabel(r.reply_mode) ?? "").toLowerCase()}.`}
-        </Text>
-      </ToolCard>
-    );
-  }
-
-  if (!isPending && r?.cancelled) {
-    return (
-      <ToolCard title="Slack replies — unchanged">
-        <Text small muted>
-          Nothing changed. Ask me anytime to change when it replies.
         </Text>
       </ToolCard>
     );
