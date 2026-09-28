@@ -99,6 +99,11 @@ type platformMCPConfig struct {
 	// answer from. Nil disables them rather than serving an empty answer, which
 	// a caller would read as "nothing is wrong".
 	Telemetry platformmcp.DiagnosticsTelemetryReader
+	// ToolUsage is the target-aware tool usage read behind
+	// get_tool_usage_summary: the same pipeline the dashboard Insights board
+	// and the managed platform_get_tool_usage_summary tool read. Nil keeps the
+	// tool visible as unavailable rather than serving an empty breakdown.
+	ToolUsage platformmcp.ToolUsageBreakdownReader
 	// SessionCapture resolves the organization's metrics mode, which decides
 	// what a project overview's active-user count measures. Shared with the
 	// telemetry service so both surfaces answer from the same source.
@@ -401,6 +406,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
+		WithToolUsageBreakdown(config.ToolUsage).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
@@ -855,6 +861,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
+		WithToolUsageBreakdown(config.ToolUsage).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
