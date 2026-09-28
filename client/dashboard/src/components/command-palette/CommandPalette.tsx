@@ -502,7 +502,9 @@ export function CommandPalette(): JSX.Element {
       setMode({ mode: "confirm", row });
       return;
     }
-    void row.candidate.run(row.verb);
+    // `run` toasts its own failure, so the rejection is consumed rather than
+    // surfacing as an unhandled one after the palette has closed.
+    void Promise.resolve(row.candidate.run(row.verb)).catch(() => {});
     closeAndReset();
   };
 

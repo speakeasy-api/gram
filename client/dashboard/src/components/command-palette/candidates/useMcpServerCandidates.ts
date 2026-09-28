@@ -126,7 +126,10 @@ export function useMcpServerCandidates({
         );
         throw error;
       }
-      await invalidateMcpServerQueries(queryClient);
+      // The toast comes before the cache refresh, and never waits on it: the
+      // update has already landed, so a sibling query that is slow to refetch
+      // or fails outright must not delay or swallow the only confirmation the
+      // user gets — which is also the only place Undo is offered.
       // Undo restores the visibility the server actually had, which is not
       // always the opposite verb: disabling a public server and undoing it
       // must put it back to public, not to private.
@@ -146,6 +149,7 @@ export function useMcpServerCandidates({
             }
           : undefined,
       );
+      void invalidateMcpServerQueries(queryClient).catch(() => {});
     };
 
     const setVisibility = (server: McpServer, verb: Verb) =>
