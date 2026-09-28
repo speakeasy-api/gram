@@ -1,3 +1,4 @@
+import { ShadowAISetupEmptyState } from "@/components/setup-empty-state";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import {
   defineFilters,
@@ -83,17 +84,7 @@ function AIToolStatusCell({ detection }: { detection: AIDetection }) {
 }
 
 function AIToolsEmptyState({ noun }: { noun: string }) {
-  return (
-    <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-      <Text variant="body" className="font-medium">
-        No {noun} detected yet
-      </Text>
-      <Text muted small className="max-w-md">
-        Tools appear here once enrolled devices report a scan. Check back after
-        the device agent’s first run.
-      </Text>
-    </div>
-  );
+  return <ShadowAISetupEmptyState heading={`No ${noun} detected yet`} />;
 }
 
 export function AIToolsTable({

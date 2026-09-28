@@ -1,3 +1,4 @@
+import { RiskSetupEmptyState } from "@/components/setup-empty-state";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import {
   StatTile,
@@ -331,6 +332,7 @@ function WatchdogContent(): JSX.Element {
               screenshotSrc="/empty-states/watchdog_empty.png"
               screenshotAlt="Watchdog dashboard with ranked AI risk signals"
             />
+            <RiskSetupEmptyState heading="No open signals" />
           </div>
         </Page.Section.Body>
       </Page.Section>
@@ -727,15 +729,7 @@ function SignalsBody({
     );
   }
   if (groups.length === 0) {
-    return (
-      <div className="bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-8 py-16 text-center">
-        <Text className="font-medium">No open signals</Text>
-        <Text small muted className="mt-1 max-w-md">
-          No live findings match this window and filter. Widen the time range or
-          clear the severity filter.
-        </Text>
-      </div>
-    );
+    return <RiskSetupEmptyState heading="No open signals" />;
   }
   return (
     <SignalsList

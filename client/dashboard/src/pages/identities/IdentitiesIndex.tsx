@@ -1,3 +1,4 @@
+import { IdentitySyncCallout } from "@/components/setup-empty-state";
 import {
   buildEmployees,
   type Employee,
@@ -700,6 +701,11 @@ function IdentitiesIndexContent(): JSX.Element {
         {/* The section stacks its body children at 8px, which reads as one
             block: the tiles, the controls and the table are three things. */}
         <div className="flex flex-col gap-4">
+          {!rosterLoading &&
+            !rosterFailed &&
+            identities.filter(
+              (identity) => identityKindOf(identity) === "person",
+            ).length <= 1 && <IdentitySyncCallout />}
           <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
             {rosterLoading ? (
               <>

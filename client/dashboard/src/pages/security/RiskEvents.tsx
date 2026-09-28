@@ -1,3 +1,4 @@
+import { RiskSetupEmptyState } from "@/components/setup-empty-state";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForUserKey } from "@/lib/identity-urn";
@@ -417,6 +418,7 @@ export default function RiskEvents(): JSX.Element {
             screenshotAlt="Risk Events dashboard with policy findings"
             className="border-0"
           />
+          <RiskSetupEmptyState />
         </div>
       </LogWorkbench>
     );
@@ -652,19 +654,7 @@ function RiskEventsRows({
   }
 
   if (results.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="bg-muted flex size-12 items-center justify-center">
-          <Icon name="inbox" className="text-muted-foreground size-6" />
-        </div>
-        <span className="text-foreground font-medium">
-          No risk events found
-        </span>
-        <span className="text-muted-foreground max-w-sm text-sm">
-          Findings will appear here as messages are analyzed.
-        </span>
-      </div>
-    );
+    return <RiskSetupEmptyState />;
   }
 
   return (
