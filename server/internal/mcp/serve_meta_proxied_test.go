@@ -317,8 +317,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_DropsCallerMetaUpstream(t *testing
 		seen++
 		body, isString := v.(string)
 		require.True(t, isString)
-		require.NotContains(t, body, `"_meta"`,
-			"no upstream request may carry a _meta object")
+		require.NotContains(t, body, "claudecode/toolUseId", "caller metadata must not leak")
+		require.NotContains(t, body, "toolu_regression", "caller metadata must not leak")
+		require.NotContains(t, body, "progressToken", "caller progress token must not leak")
 		return true
 	})
 	require.Positive(t, seen, "the upstream recorder must have observed requests")
