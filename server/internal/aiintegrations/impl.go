@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -39,6 +40,7 @@ type Service struct {
 	authz        *authz.Engine
 	audit        *audit.Logger
 	store        *Store
+	credentials  *CredentialVerifier
 	configPoller ConfigPoller
 }
 
@@ -57,6 +59,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	encryptionClient *encryption.Client,
+	guardianPolicy *guardian.Policy,
 	configPoller ConfigPoller,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("aiintegrations.api"))
@@ -68,6 +71,7 @@ func NewService(
 		authz:        authzEngine,
 		audit:        auditLogger,
 		store:        NewStore(logger, db, encryptionClient),
+		credentials:  NewCredentialVerifier(logger, guardianPolicy),
 		configPoller: configPoller,
 	}
 }
@@ -161,6 +165,25 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		billingMode = conv.PtrEmpty(before.BillingMode)
 	}
 
+	// Ask the provider about the credentials before writing them. A refused
+	// key never reaches the database, so no config generation is created, no
+	// schedule is enqueued for it, and the user reads the provider's own
+	// explanation now instead of discovering it in a failed poll minutes
+	// later. Verify every save that would start polling on credentials the
+	// provider has not already answered for: a new or changed key or scope,
+	// and the flip that turns an integration back on. A save that changes
+	// neither (a billing mode edit, disabling) reuses an answer we have.
+	credentialsChanged := beforeRow == nil || apiKeySupplied || externalOrgChanged
+	reenabled := beforeRow != nil && !before.Enabled
+	rejections, err := s.verifyCredentials(ctx, provider, Credentials{
+		Provider:               provider,
+		APIKey:                 apiKey,
+		ExternalOrganizationID: externalOrganizationID,
+	}, payload.Enabled && (credentialsChanged || reenabled))
+	if err != nil {
+		return nil, err
+	}
+
 	// Start the watermark one lookback period in the past so the first poll
 	// backfills usage emitted just before the key was configured.
 	watermark := time.Now().UTC().Add(-initialPollLookbackForProvider(provider))
@@ -205,6 +228,20 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit ai integration upsert").LogError(ctx, logger)
+	}
+
+	// A provider that honors some of its feeds and refuses others (they are
+	// entitled separately) keeps the save. Record each refusal and pause that
+	// schedule up front rather than letting it rediscover the same answer over
+	// AutoPauseAfterRejectedPolls failed polls.
+	for _, rejection := range rejections {
+		if err := s.store.PauseScheduleForRejectedCredentials(ctx, cfg.ID, rejection.Schedule, rejection.Err); err != nil {
+			logger.WarnContext(ctx, "failed to pause ai integration schedule with rejected credentials",
+				attr.SlogError(err),
+				attr.SlogAIIntegrationConfigID(cfg.ID.String()),
+				attr.SlogAIIntegrationSyncSchedule(rejection.Schedule),
+			)
+		}
 	}
 
 	if result.CreatedNewGeneration && cfg.Enabled {
@@ -515,6 +552,25 @@ func snapshotFromConfig(cfg Config) audit.AIIntegrationSnapshot {
 	}
 }
 
+// verifyCredentials asks the provider whether it will honor the credentials
+// this save would store. A save whose every sync schedule is refused fails
+// with the provider's message: nothing about the integration would work, so
+// storing the key would only start a poll loop that rediscovers the refusal.
+// A partial refusal is returned to the caller instead, which pauses those
+// schedules once the save lands — providers entitle their feeds separately,
+// and one unavailable feed must not block configuring the others.
+func (s *Service) verifyCredentials(ctx context.Context, provider string, creds Credentials, verify bool) ([]ScheduleRejection, error) {
+	if s.credentials == nil || !verify {
+		return nil, nil
+	}
+
+	rejections := s.credentials.Verify(ctx, creds)
+	if len(rejections) > 0 && len(rejections) == len(syncSchedulesFor(provider)) {
+		return nil, rejections[0].Err
+	}
+	return rejections, nil
+}
+
 func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
 	if s.configPoller == nil {
 		return nil
@@ -525,17 +581,19 @@ func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, c
 		return err
 	}
 	syncIDsBySchedule := make(map[string]uuid.UUID, len(schedules))
-	disabledBySchedule := make(map[string]bool, len(schedules))
+	pausedBySchedule := make(map[string]bool, len(schedules))
 	for _, syncSchedule := range schedules {
 		syncIDsBySchedule[syncSchedule.Schedule] = syncSchedule.ID
-		disabledBySchedule[syncSchedule.Schedule] = !syncSchedule.DisabledAt.IsZero()
+		pausedBySchedule[syncSchedule.Schedule] = !syncSchedule.DisabledAt.IsZero() || !syncSchedule.AutoPausedAt.IsZero()
 	}
 
 	var startErr error
 	for _, syncSchedule := range syncSchedulesFor(provider) {
-		if disabledBySchedule[syncSchedule.schedule] {
-			// The user explicitly paused this schedule; a config save must not
-			// restart it.
+		if pausedBySchedule[syncSchedule.schedule] {
+			// Either the user explicitly paused this schedule, or the save
+			// just paused it over credentials the provider refused for that
+			// feed. Both outrank the save's implicit "start polling now", and
+			// scheduled candidate selection skips paused schedules too.
 			continue
 		}
 		syncID, ok := syncIDsBySchedule[syncSchedule.schedule]
