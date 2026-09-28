@@ -84,6 +84,7 @@ func TestBuildConnectionView_ChecklistVerification(t *testing.T) {
 					got[item.Key] = item.Completed
 					if item.Key == ChecklistKeyAssignAdminRoles {
 						require.Equal(t, accessDescription(tt.access), item.Description)
+						require.Equal(t, accessDetails(tt.access), item.Details)
 					}
 				}
 				require.Equal(t, want, got)
@@ -97,7 +98,7 @@ func TestAccessDescription_ReplacesTheInstructionOnceObserved(t *testing.T) {
 	require.Equal(t, accessInstruction, accessDescription(nil))
 	require.Equal(t, accessInstruction, accessDescription(new(false)))
 	require.Equal(t, "Speakeasy can read apps, users, and groups", accessDescription(new(true)))
-	require.Contains(t, accessInstruction, "Application Administrator")
-	require.Contains(t, accessInstruction, "Read-only Administrator")
 	require.Contains(t, accessInstruction, "multi-factor authentication")
+	require.Contains(t, RequiredOktaAdminRoles, "Application Administrator (org-wide)")
+	require.Contains(t, RequiredOktaAdminRoles, "Read-only Administrator")
 }

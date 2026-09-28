@@ -1,19 +1,24 @@
 package remotemcp_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -134,69 +139,330 @@ func TestVerifyURL_CompatibilityAuthenticationRequired(t *testing.T) {
 	require.Equal(t, "Reachable: received authorization required response", result.Message)
 }
 
-func TestProbeRemoteMcpURL_AcceptsInitializeJSONRPCResponse(t *testing.T) {
-	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, http.MethodPost, r.Method)
-		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-		assert.Contains(t, r.Header.Get("Accept"), "text/event-stream")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}`))
+// recordMethods passes each request to next and records the JSON-RPC method
+// of every POST body it sees.
+func recordMethods(next http.Handler) (http.Handler, func() []string) {
+	var mu sync.Mutex
+	var methods []string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			var msg struct {
+				Method string `json:"method"`
+			}
+			_ = json.Unmarshal(body, &msg)
+			mu.Lock()
+			methods = append(methods, msg.Method)
+			mu.Unlock()
+			r.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		next.ServeHTTP(w, r)
+	})
+	return handler, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(methods)
+	}
+}
+
+// jsonrpcHandler answers each JSON-RPC call with respond and acknowledges
+// notifications with 202 Accepted, recording every method it receives.
+func jsonrpcHandler(respond func(w http.ResponseWriter, r *http.Request, method string, id json.RawMessage)) (http.Handler, func() []string) {
+	return recordMethods(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var msg struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if len(msg.ID) == 0 {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		respond(w, r, msg.Method, msg.ID)
 	}))
+}
+
+func jsonrpcUpstream(t *testing.T, respond func(w http.ResponseWriter, r *http.Request, method string, id json.RawMessage)) (*httptest.Server, func() []string) {
+	t.Helper()
+	handler, methods := jsonrpcHandler(respond)
+	upstream := httptest.NewServer(handler)
 	t.Cleanup(upstream.Close)
+	return upstream, methods
+}
+
+func writeJSONRPC(w http.ResponseWriter, status int, id json.RawMessage, member string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,%s}`, id, member)
+}
+
+// respondWithInitialize answers initialize at 2025-06-18 and rejects every
+// other method, server/discover included, as unknown.
+func respondWithInitialize(w http.ResponseWriter, _ *http.Request, method string, id json.RawMessage) {
+	if method == "initialize" {
+		writeJSONRPC(w, http.StatusOK, id, `"result":{"protocolVersion":"2025-06-18","capabilities":{},"serverInfo":{"name":"initialize-only","version":"1"}}`)
+		return
+	}
+	writeJSONRPC(w, http.StatusOK, id, `"error":{"code":-32601,"message":"method not found"}`)
+}
+
+func newSDKServer() *mcp.Server {
+	return mcp.NewServer(&mcp.Implementation{Name: "upstream", Version: "1"}, nil)
+}
+
+// newDiscoverOnlyUpstream serves 2026-07-28 and nothing earlier. That
+// revision removes initialize, so the server answers the unimplemented method
+// with 404 Not Found and a -32601 body.
+func newDiscoverOnlyUpstream(t *testing.T) (*httptest.Server, func() []string) {
+	t.Helper()
+	server := newSDKServer()
+	sdkHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true})
+	handler, methods := recordMethods(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		var msg struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		if json.Unmarshal(body, &msg) == nil && msg.Method == "initialize" {
+			writeJSONRPC(w, http.StatusNotFound, msg.ID, `"error":{"code":-32601,"message":"method not found"}`)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		sdkHandler.ServeHTTP(w, r)
+	}))
+	upstream := httptest.NewServer(handler)
+	t.Cleanup(upstream.Close)
+	return upstream, methods
+}
+
+func TestProbeRemoteMcpURL_FallsBackToInitializeWhenDiscoverIsUnknown(t *testing.T) {
+	t.Parallel()
+	var discoverHeaders http.Header
+	var headersMu sync.Mutex
+	upstream, methods := jsonrpcUpstream(t, func(w http.ResponseWriter, r *http.Request, method string, id json.RawMessage) {
+		if method == "server/discover" {
+			headersMu.Lock()
+			discoverHeaders = r.Header.Clone()
+			headersMu.Unlock()
+		}
+		respondWithInitialize(w, r, method, id)
+	})
 
 	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
 	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
 	require.Nil(t, result.HTTPStatus)
+	require.Equal(t, []string{"server/discover", "initialize", "notifications/initialized"}, methods())
+
+	headersMu.Lock()
+	defer headersMu.Unlock()
+	require.Equal(t, "2026-07-28", discoverHeaders.Get("Mcp-Protocol-Version"))
+	require.Equal(t, "server/discover", discoverHeaders.Get("Mcp-Method"))
+	require.Contains(t, discoverHeaders.Get("Accept"), "text/event-stream")
 }
 
-func TestProbeRemoteMcpURL_AcceptsCorrelatedJSONRPCError(t *testing.T) {
+func TestProbeRemoteMcpURL_AcceptsStatefulSDKUpstreamThroughInitialize(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"unsupported"}}`))
-	}))
+	server := newSDKServer()
+	// A stateful SDK server does not advertise 2026-07-28 from
+	// server/discover, so the probe has to complete the initialize handshake.
+	handler, methods := recordMethods(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil))
+	upstream := httptest.NewServer(handler)
 	t.Cleanup(upstream.Close)
 
 	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
 	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+	require.Equal(t, []string{"server/discover", "initialize", "notifications/initialized"}, methods())
 }
 
-func TestProbeRemoteMcpURL_RejectsNonResponseJSONRPC(t *testing.T) {
+func TestProbeRemoteMcpURL_AcceptsDiscoverOnlyUpstream(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`))
+	upstream, methods := newDiscoverOnlyUpstream(t)
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+	require.Equal(t, []string{"server/discover"}, methods(), "the upstream answers server/discover, so initialize is never sent")
+}
+
+func TestVerifyURL_AcceptsDiscoverOnlyUpstream(t *testing.T) {
+	t.Parallel()
+	upstream, _ := newDiscoverOnlyUpstream(t)
+
+	ctx, ti := newTestServiceWithPolicy(t, newPermissivePolicy(t))
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeMCPWrite})
+	result, err := ti.service.VerifyURL(ctx, &gen.VerifyURLPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, URL: upstream.URL, TransportType: "streamable-http",
+	})
+	require.NoError(t, err)
+	require.True(t, result.Verified)
+	require.Equal(t, "Success", result.Message)
+}
+
+// statefulUpstream issues a session on initialize, answering each call with
+// respond, each notification with notificationStatus, and the session DELETE
+// with deleteStatus.
+func statefulUpstream(t *testing.T, respond func(w http.ResponseWriter, r *http.Request, method string, id json.RawMessage), notificationStatus int, deleteStatus int) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var deletes atomic.Int32
+	calls, _ := jsonrpcHandler(func(w http.ResponseWriter, r *http.Request, method string, id json.RawMessage) {
+		if method == "initialize" {
+			w.Header().Set("Mcp-Session-Id", "probe-session")
+		}
+		respond(w, r, method, id)
+	})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deletes.Add(1)
+			w.WriteHeader(deleteStatus)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		if !strings.Contains(string(body), `"id":`) {
+			w.WriteHeader(notificationStatus)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		calls.ServeHTTP(w, r)
 	}))
 	t.Cleanup(upstream.Close)
+	return upstream, &deletes
+}
+
+func TestProbeRemoteMcpURL_SessionDeleteDoesNotMaskInitializeError(t *testing.T) {
+	t.Parallel()
+	upstream, deletes := statefulUpstream(t, func(w http.ResponseWriter, _ *http.Request, _ string, id json.RawMessage) {
+		writeJSONRPC(w, http.StatusOK, id, `"error":{"code":-32602,"message":"invalid params"}`)
+	}, http.StatusAccepted, http.StatusInternalServerError)
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome, "the session DELETE status must not replace the initialize answer")
+	require.EqualValues(t, 1, deletes.Load())
+}
+
+func TestProbeRemoteMcpURL_ClassifiesFailedInitializedNotification(t *testing.T) {
+	t.Parallel()
+	for name, deleteStatus := range map[string]int{
+		"delete forbidden":  http.StatusForbidden,
+		"delete no content": http.StatusNoContent,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			upstream, deletes := statefulUpstream(t, respondWithInitialize, http.StatusBadRequest, deleteStatus)
+
+			result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+			require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
+			require.Equal(t, http.StatusBadRequest, requireValue(t, result.HTTPStatus), "the notification status, not the session DELETE status, is reported")
+			require.EqualValues(t, 1, deletes.Load())
+		})
+	}
+}
+
+func TestProbeRemoteMcpURL_RejectsUnknownInitializeProtocolVersion(t *testing.T) {
+	t.Parallel()
+	upstream, _ := jsonrpcUpstream(t, func(w http.ResponseWriter, _ *http.Request, method string, id json.RawMessage) {
+		if method == "initialize" {
+			writeJSONRPC(w, http.StatusOK, id, `"result":{"protocolVersion":"2099-01-01","capabilities":{},"serverInfo":{"name":"unknown","version":"1"}}`)
+			return
+		}
+		writeJSONRPC(w, http.StatusOK, id, `"error":{"code":-32601,"message":"method not found"}`)
+	})
 
 	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
 	require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
 	require.Equal(t, http.StatusOK, requireValue(t, result.HTTPStatus))
 }
 
-func TestProbeRemoteMcpURL_RejectsMismatchedResponseID(t *testing.T) {
-	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":{}}`))
-	}))
-	t.Cleanup(upstream.Close)
+func TestProbeRemoteMcpURL_UnknownInitializeProtocolVersionDoesNotLeakGoroutines(t *testing.T) { //nolint:paralleltest // counts process goroutines, so no other test may run alongside it
+	const probes = 20
+	upstream, _ := jsonrpcUpstream(t, func(w http.ResponseWriter, _ *http.Request, method string, id json.RawMessage) {
+		if method == "initialize" {
+			writeJSONRPC(w, http.StatusOK, id, `"result":{"protocolVersion":"2099-01-01","capabilities":{},"serverInfo":{"name":"unknown","version":"1"}}`)
+			return
+		}
+		writeJSONRPC(w, http.StatusOK, id, `"error":{"code":-32601,"message":"method not found"}`)
+	})
+	policy := newPermissivePolicy(t)
+	baseline := runtime.NumGoroutine()
 
-	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
-	require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
+	for range probes {
+		result := remotemcp.ProbeRemoteMcpURL(t.Context(), policy, upstream.URL)
+		require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
+	}
+
+	// Each leaked connection strands at least one reader goroutine, so a
+	// leak leaves the count at least probes above the baseline.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Less(c, runtime.NumGoroutine(), baseline+probes/2)
+	}, 5*time.Second, 50*time.Millisecond)
 }
 
-func TestProbeRemoteMcpURL_RejectsAmbiguousJSONRPC(t *testing.T) {
+func TestProbeRemoteMcpURL_AcceptsCorrelatedJSONRPCError(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	upstream, _ := jsonrpcUpstream(t, func(w http.ResponseWriter, _ *http.Request, _ string, id json.RawMessage) {
+		writeJSONRPC(w, http.StatusOK, id, `"error":{"code":-32601,"message":"unsupported"}`)
+	})
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+}
+
+func TestProbeRemoteMcpURL_AcceptsJSONRPCErrorOnBadRequest(t *testing.T) {
+	t.Parallel()
+	upstream, _ := jsonrpcUpstream(t, func(w http.ResponseWriter, _ *http.Request, _ string, id json.RawMessage) {
+		writeJSONRPC(w, http.StatusBadRequest, id, `"error":{"code":-32022,"message":"unsupported protocol version"}`)
+	})
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+}
+
+func TestProbeRemoteMcpURL_NonResponseJSONRPCTimesOut(t *testing.T) {
+	t.Parallel()
+	// A JSON-RPC request never completes the SDK's pending call.
+	upstream, _ := jsonrpcUpstream(t, func(w http.ResponseWriter, _ *http.Request, _ string, id json.RawMessage) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"id":1,"result":{}}`))
-	}))
-	t.Cleanup(upstream.Close)
+		_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"method":"initialize"}`, id)
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	result := remotemcp.ProbeRemoteMcpURL(ctx, newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeUnreachable, result.Outcome)
+	require.Equal(t, remotemcp.ProbeReasonTimeout, requireValue(t, result.Reason))
+}
+
+func TestProbeRemoteMcpURL_MismatchedResponseIDTimesOut(t *testing.T) {
+	t.Parallel()
+	// An uncorrelated response never completes the SDK's pending call.
+	upstream, _ := jsonrpcUpstream(t, func(w http.ResponseWriter, _ *http.Request, _ string, _ json.RawMessage) {
+		writeJSONRPC(w, http.StatusOK, json.RawMessage(`"uncorrelated"`), `"result":{}`)
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	result := remotemcp.ProbeRemoteMcpURL(ctx, newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeUnreachable, result.Outcome)
+	require.Equal(t, remotemcp.ProbeReasonTimeout, requireValue(t, result.Reason))
+}
+
+func TestProbeRemoteMcpURL_RejectsOversizedJSON(t *testing.T) {
+	t.Parallel()
+	padding := strings.Repeat("a", 1<<20)
+	upstream, _ := jsonrpcUpstream(t, func(w http.ResponseWriter, _ *http.Request, _ string, id json.RawMessage) {
+		writeJSONRPC(w, http.StatusOK, id, `"result":{"pad":"`+padding+`"}`)
+	})
 
 	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
 	require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
+	require.Equal(t, http.StatusOK, requireValue(t, result.HTTPStatus))
 }
 
 func TestProbeRemoteMcpURL_AcceptsCorrelatedSSEEventWithoutWaitingForEOF(t *testing.T) {
@@ -204,9 +470,13 @@ func TestProbeRemoteMcpURL_AcceptsCorrelatedSSEEventWithoutWaitingForEOF(t *test
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	releaseHandler := func() { releaseOnce.Do(func() { close(release) }) }
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream, _ := jsonrpcUpstream(t, func(w http.ResponseWriter, r *http.Request, method string, id json.RawMessage) {
+		member := `"error":{"code":-32601,"message":"method not found"}`
+		if method == "initialize" {
+			member = `"result":{"protocolVersion":"2025-06-18","capabilities":{},"serverInfo":{"name":"sse","version":"1"}}`
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n\n"))
+		_, _ = fmt.Fprintf(w, "data: {\"jsonrpc\":\"2.0\",\"id\":%s,%s}\n\n", id, member)
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			return
@@ -216,8 +486,7 @@ func TestProbeRemoteMcpURL_AcceptsCorrelatedSSEEventWithoutWaitingForEOF(t *test
 		case <-r.Context().Done():
 		case <-release:
 		}
-	}))
-	t.Cleanup(upstream.Close)
+	})
 	t.Cleanup(releaseHandler)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
@@ -237,6 +506,44 @@ func TestProbeRemoteMcpURL_RejectsNonJSONRPCSSE(t *testing.T) {
 
 	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
 	require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
+}
+
+func TestProbeRemoteMcpURL_RejectsSSEWithoutResponse(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(": keepalive\n\n"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
+	require.Equal(t, http.StatusOK, requireValue(t, result.HTTPStatus))
+}
+
+func TestProbeRemoteMcpURL_RejectsNonJSONResponses(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		status      int
+		contentType string
+	}{
+		"html page":              {status: http.StatusOK, contentType: "text/html"},
+		"plain-text bad request": {status: http.StatusBadRequest, contentType: "text/plain"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", tc.contentType)
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte("not an MCP server"))
+			}))
+			t.Cleanup(upstream.Close)
+
+			result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+			require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
+			require.Equal(t, tc.status, requireValue(t, result.HTTPStatus))
+		})
+	}
 }
 
 func TestProbeRemoteMcpURL_Truncated2xxIsInvalidMCP(t *testing.T) {
@@ -308,6 +615,34 @@ func TestProbeRemoteMcpURL_IgnoresInvalidAuthenticationMetadata(t *testing.T) {
 	require.Nil(t, result.ProtectedResourceMetadataURL)
 }
 
+func TestProbeRemoteMcpURL_AuthenticationRequiredWithJSONRPCErrorBody(t *testing.T) {
+	t.Parallel()
+	upstream, _ := jsonrpcUpstream(t, func(w http.ResponseWriter, _ *http.Request, _ string, id json.RawMessage) {
+		w.Header().Add("WWW-Authenticate", `Bearer resource_metadata="https://auth.example.com/metadata"`)
+		writeJSONRPC(w, http.StatusUnauthorized, id, `"error":{"code":-32001,"message":"unauthorized"}`)
+	})
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeAuthenticationRequired, result.Outcome, "the auth status outranks the JSON-RPC error body")
+	require.Equal(t, "https://auth.example.com/metadata", requireValue(t, result.ProtectedResourceMetadataURL))
+}
+
+func TestProbeRemoteMcpURL_DiscoverRejectionDoesNotMaskInitializeSuccess(t *testing.T) {
+	t.Parallel()
+	upstream, _ := jsonrpcUpstream(t, func(w http.ResponseWriter, r *http.Request, method string, id json.RawMessage) {
+		// A WAF that blocks the server/discover request shape must not turn a
+		// server that completes initialize into an authentication failure.
+		if method == "server/discover" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		respondWithInitialize(w, r, method, id)
+	})
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+}
+
 func TestProbeRemoteMcpURL_ClassifiesHTTPFailures(t *testing.T) {
 	t.Parallel()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -332,7 +667,8 @@ func TestProbeRemoteMcpURL_ClassifiesHTTPFailures(t *testing.T) {
 	require.Equal(t, remotemcp.ProbeReasonTimeout, requireValue(t, timeout.Reason))
 	require.Equal(t, remotemcp.ProbeReasonRateLimited, requireValue(t, rateLimit.Reason))
 	require.Equal(t, remotemcp.ProbeReasonServerError, requireValue(t, serverError.Reason))
-	require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, notFound.Outcome)
+	require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, notFound.Outcome, "a plain 404 is not an MCP server")
+	require.Equal(t, http.StatusNotFound, requireValue(t, notFound.HTTPStatus))
 }
 
 func TestProbeRemoteMcpURL_ResponseBodyTimeoutDoesNotHang(t *testing.T) {
@@ -394,65 +730,70 @@ func TestProbeRemoteMcpURL_TLSFailure(t *testing.T) {
 func TestProbeRemoteMcpURL_FollowsSeeOtherRedirectsAsGETLikeTheProxy(t *testing.T) {
 	t.Parallel()
 	var requests atomic.Int32
-	// The probe no longer forces POST back onto a 302 hop, because the
-	// runtime proxy does not either. Anything the probe approves here has to
-	// be something the proxy can reproduce.
+	// The probe does not force POST back onto a 302 hop, because the runtime
+	// proxy does not either. An endpoint reachable only through such a hop
+	// therefore fails the probe, as it would fail through the proxy.
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hop := requests.Add(1)
-		if r.URL.Path != "/3" {
-			w.Header().Set("Location", fmt.Sprintf("/%d", hop))
-			w.WriteHeader(http.StatusFound)
-			return
+		requests.Add(1)
+		switch r.URL.Path {
+		case "/0":
+			http.Redirect(w, r, "/1", http.StatusFound)
+		case "/1":
+			http.Redirect(w, r, "/2", http.StatusFound)
+		case "/2":
+			http.Redirect(w, r, "/3", http.StatusFound)
+		default:
+			body, err := io.ReadAll(r.Body)
+			assert.NoError(t, err)
+			assert.Equal(t, http.MethodGet, r.Method, "net/http converts 302 to GET and the probe leaves that alone")
+			assert.Empty(t, string(body))
+			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
-		body, err := io.ReadAll(r.Body)
-		assert.NoError(t, err)
-		assert.Equal(t, http.MethodGet, r.Method, "net/http converts 302 to GET and the probe leaves that alone")
-		assert.Empty(t, string(body))
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
 	}))
 	t.Cleanup(upstream.Close)
 
 	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL+"/0")
-	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
-	require.Equal(t, int32(4), requests.Load())
+	require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
+	require.Equal(t, http.StatusMethodNotAllowed, requireValue(t, result.HTTPStatus))
+	require.Equal(t, int32(8), requests.Load(), "server/discover and the initialize fallback each follow three redirects")
 }
 
 func TestProbeRemoteMcpURL_RedirectMethodMatrixMatchesProxy(t *testing.T) {
 	t.Parallel()
 	for name, tc := range map[string]struct {
-		status     int
-		wantMethod string
-		wantBody   bool
+		status      int
+		wantMethod  string
+		wantBody    bool
+		wantOutcome string
 	}{
-		"moved permanently converts to GET": {status: http.StatusMovedPermanently, wantMethod: http.MethodGet, wantBody: false},
-		"found converts to GET":             {status: http.StatusFound, wantMethod: http.MethodGet, wantBody: false},
-		"see other converts to GET":         {status: http.StatusSeeOther, wantMethod: http.MethodGet, wantBody: false},
-		"temporary keeps POST on-origin":    {status: http.StatusTemporaryRedirect, wantMethod: http.MethodPost, wantBody: true},
-		"permanent keeps POST on-origin":    {status: http.StatusPermanentRedirect, wantMethod: http.MethodPost, wantBody: true},
+		"moved permanently converts to GET": {status: http.StatusMovedPermanently, wantMethod: http.MethodGet, wantBody: false, wantOutcome: remotemcp.ProbeOutcomeInvalidMCPResponse},
+		"found converts to GET":             {status: http.StatusFound, wantMethod: http.MethodGet, wantBody: false, wantOutcome: remotemcp.ProbeOutcomeInvalidMCPResponse},
+		"see other converts to GET":         {status: http.StatusSeeOther, wantMethod: http.MethodGet, wantBody: false, wantOutcome: remotemcp.ProbeOutcomeInvalidMCPResponse},
+		"temporary keeps POST on-origin":    {status: http.StatusTemporaryRedirect, wantMethod: http.MethodPost, wantBody: true, wantOutcome: remotemcp.ProbeOutcomeMCPAvailable},
+		"permanent keeps POST on-origin":    {status: http.StatusPermanentRedirect, wantMethod: http.MethodPost, wantBody: true, wantOutcome: remotemcp.ProbeOutcomeMCPAvailable},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			moved, _ := jsonrpcHandler(respondWithInitialize)
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/moved" {
 					http.Redirect(w, r, "/moved", tc.status)
 					return
 				}
-				body, err := io.ReadAll(r.Body)
-				assert.NoError(t, err)
 				assert.Equal(t, tc.wantMethod, r.Method)
-				if tc.wantBody {
-					assert.Contains(t, string(body), `"method":"initialize"`)
-				} else {
+				if !tc.wantBody {
+					body, err := io.ReadAll(r.Body)
+					assert.NoError(t, err)
 					assert.Empty(t, string(body))
+					w.WriteHeader(http.StatusMethodNotAllowed)
+					return
 				}
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+				moved.ServeHTTP(w, r)
 			}))
 			t.Cleanup(upstream.Close)
 
 			result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
-			require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+			require.Equal(t, tc.wantOutcome, result.Outcome)
 		})
 	}
 }
@@ -468,8 +809,7 @@ func TestProbeRemoteMcpURL_RejectsCrossOriginBodyReplayingRedirect(t *testing.T)
 			var targetHits atomic.Int32
 			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				targetHits.Add(1)
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+				w.WriteHeader(http.StatusAccepted)
 			}))
 			t.Cleanup(target.Close)
 
@@ -480,7 +820,7 @@ func TestProbeRemoteMcpURL_RejectsCrossOriginBodyReplayingRedirect(t *testing.T)
 
 			result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
 			require.Equal(t, remotemcp.ProbeOutcomeUnreachable, result.Outcome)
-			require.Equal(t, int32(0), targetHits.Load(), "the initialize body must not reach an upstream-chosen host")
+			require.Equal(t, int32(0), targetHits.Load(), "the probe body must not reach an upstream-chosen host")
 		})
 	}
 }
@@ -489,13 +829,13 @@ func TestProbeRemoteMcpURL_ApprovedRedirectPathInitializesThroughTheProxy(t *tes
 	t.Parallel()
 	// The point of aligning the two: whatever the probe calls available at
 	// setup time, the runtime proxy must be able to initialize through.
+	canonical, _ := jsonrpcHandler(respondWithInitialize)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/canonical" {
-			http.Redirect(w, r, "/canonical", http.StatusFound)
+			http.Redirect(w, r, "/canonical", http.StatusTemporaryRedirect)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}`))
+		canonical.ServeHTTP(w, r)
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -538,7 +878,7 @@ func TestProbeRemoteMcpURL_RejectsFourthRedirect(t *testing.T) {
 	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL+"/0")
 	require.Equal(t, remotemcp.ProbeOutcomeUnreachable, result.Outcome)
 	require.Equal(t, remotemcp.ProbeReasonTransportError, requireValue(t, result.Reason))
-	require.Equal(t, int32(4), requests.Load())
+	require.Equal(t, int32(8), requests.Load(), "server/discover and the initialize fallback each stop after the fourth hop")
 }
 
 func TestProbeRemoteMcpURL_RejectsHTTPSRedirectToHostedHTTP(t *testing.T) {

@@ -10940,7 +10940,8 @@ type RiskMCPScopeRequestBody struct {
 type RiskMCPServerScopeRequestBody struct {
 	// The selected MCP server or gateway ID.
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	// Custom tool names for this server. Omit to follow the policy tool rule.
+	// Custom tool names for this server. Omit to follow the policy tool rule; an
+	// empty list matches every tool on this server, unconditionally.
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 }
 
@@ -10985,7 +10986,8 @@ type RiskMCPScopeResponseBody struct {
 type RiskMCPServerScopeResponseBody struct {
 	// The selected MCP server or gateway ID.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Custom tool names for this server. Omit to follow the policy tool rule.
+	// Custom tool names for this server. Omit to follow the policy tool rule; an
+	// empty list matches every tool on this server, unconditionally.
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 }
 

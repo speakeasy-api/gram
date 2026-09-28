@@ -155,7 +155,9 @@ type IdentityProviderConnectionChecklistItem struct {
 	Title string
 	// What to do in the console, including any value copied from this connection.
 	Description string
-	// Sub-steps, in order. Empty when the description says it all.
+	// Supporting lines under the description: ordered sub-steps for the public-key
+	// step, otherwise notes or the values to enter. Empty when the description
+	// says it all.
 	Details []string
 	// Whether the last verification observed this step done. Omitted for steps the
 	// server cannot observe; the administrator tracks those.

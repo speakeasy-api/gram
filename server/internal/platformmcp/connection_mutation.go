@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
@@ -30,6 +31,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 const (
@@ -235,7 +237,19 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 			return connectionMutationReceipt{}, err
 		}
 		if kind == MCPConnectionSettingsMCPServer {
-			_, err = mcpservers.UpdateMCPServerNetworkAccessModeInTransaction(ctx, tx, s.audit, mcpservers.LifecycleUpdateInput{OrganizationID: principal.OrganizationID, ProjectID: project.ID, ActorUserID: principal.UserID, ServerID: targetID}, mode, finalize)
+			server, lookupErr := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: targetID, ProjectID: project.ID})
+			if lookupErr != nil {
+				return connectionMutationReceipt{}, classifyConnectionMutationError(lookupErr)
+			}
+			if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID {
+				if err := finalize.Finalize(ctx, tx); err != nil {
+					return connectionMutationReceipt{}, connectionMutationUnavailable(err)
+				}
+				actor := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}
+				err = toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, s.audit, actor, targetID, mode)
+			} else {
+				_, err = mcpservers.UpdateMCPServerNetworkAccessModeInTransaction(ctx, tx, s.audit, mcpservers.LifecycleUpdateInput{OrganizationID: principal.OrganizationID, ProjectID: project.ID, ActorUserID: principal.UserID, ServerID: targetID}, mode, finalize)
+			}
 		} else {
 			_, err = metamcp.UpdateMetaMCPServerNetworkAccessModeInTransaction(ctx, tx, s.audit, principal.OrganizationID, project.ID, principal.UserID, nil, targetID, mode, finalize)
 		}

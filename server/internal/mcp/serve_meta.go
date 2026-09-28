@@ -102,12 +102,16 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	req := prepared.request
 	resolution := prepared.protocolVersion
-	if req.Method == "initialize" {
+	if initializeNegotiable(&req, resolution) {
 		// A conforming initialize declares nothing, so Resolve lands on the
 		// default; the negotiated answer is what actually governs the
-		// exchange (the write-back Resolution sanctions).
+		// exchange (the write-back Resolution sanctions). Without a handshake
+		// revision the provisional value stands and dispatch rejects the
+		// method.
 		params, _, _ := parseInitializeParams(req.Params)
-		resolution.InEffect = mcpversions.Negotiate(params.ProtocolVersion, supportedMeta)
+		if negotiated, ok := mcpversions.Negotiate(params.ProtocolVersion, supportedMeta); ok {
+			resolution.InEffect = negotiated
+		}
 	}
 	// Both halves the error wrapper needs, published together: an error
 	// escaping this handler has to echo the id the client sent and be encoded
@@ -217,7 +221,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	// surface does. Without it a client that sent no Mcp-Session-Id gets a
 	// freshly minted id on every request, and nothing it does later can be
 	// tied back to the identity it reported at initialize.
-	if req.Method == "initialize" {
+	if initializeNegotiable(&req, resolution) {
 		w.Header().Set("Mcp-Session-Id", gate.sessionID)
 	}
 
@@ -257,21 +261,25 @@ func (s *Service) handleMetaMCPRequest(
 		}()
 	}
 
+	if !methodAvailable(req, gate.protocolVersion, mcpversions.SupportedMetaServer()) {
+		return nil, unavailableMethod(req)
+	}
+
 	switch req.Method {
-	case "ping":
+	case mcpversions.MethodPing:
 		return handlePing(ctx, logger, req.ID, serverInfoMetaServer)
-	case "initialize":
+	case mcpversions.MethodInitialize:
 		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
-	case "server/discover":
-		return s.handleMetaServerDiscover(ctx, logger, metaServer, req)
-	case "notifications/initialized", "notifications/cancelled":
+	case mcpversions.MethodServerDiscover:
+		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer), mcpversions.SupportedMetaServer())
+	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case "tools/list":
+	case mcpversions.MethodToolsList:
 		return s.listMetaServerTools(ctx, logger, req)
-	case "tools/call":
+	case mcpversions.MethodToolsCall:
 		return s.callMetaServerTool(ctx, logger, mcpEndpoint, metaServer, gate, req)
 	default:
-		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
+		return nil, unavailableMethod(req)
 	}
 }
 
@@ -296,7 +304,7 @@ const metaProtocolVersionMetaKey = "io.modelcontextprotocol/protocolVersion"
 // unsanitizable (or not a string at all) is a malformed value, not an
 // absent one.
 func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) error {
-	if req.Method == "initialize" {
+	if initializeNegotiable(req, mcpversions.Resolve(headerValue, mcpversions.SupportedMetaServer())) {
 		return nil
 	}
 
@@ -333,12 +341,7 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 	}
 
 	if headerDeclared && metaDeclared && headerVersion != metaVersion {
-		return &oops.MCPError{
-			ID:      req.ID,
-			Code:    oops.MCPCodeInvalidRequest,
-			Message: fmt.Sprintf("conflicting protocol version declarations: MCP-Protocol-Version header %q does not match the request _meta declaration %q", headerVersion, metaVersion),
-			Data:    nil,
-		}
+		return conflictingProtocolVersionError(req.ID, headerVersion, metaVersion)
 	}
 
 	declared := conv.Default(headerVersion, metaVersion)
@@ -390,54 +393,14 @@ func (s *Service) handleMetaInitialize(
 	s.metrics.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)
 
 	result := &result[initializeResult]{
-		ID: req.ID,
-		Result: initializeResult{
-			ProtocolVersion: negotiated,
-			Capabilities: map[string]json.RawMessage{
-				"tools": json.RawMessage("{}"),
-			},
-			ServerInfo:   serverInfoMetaServer,
-			Instructions: metamcp.ResolveInstructions(conv.FromPGText[string](metaServer.Instructions)),
-		},
+		ID:             req.ID,
+		Result:         describeMetaServer(metaServer).initializeResult(negotiated),
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     nil,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize initialize response").LogError(ctx, logger)
-	}
-	return bs, nil
-}
-
-func (s *Service) handleMetaServerDiscover(
-	ctx context.Context,
-	logger *slog.Logger,
-	metaServer *metamcprepo.MetaMcpServer,
-	req *rawRequest,
-) (json.RawMessage, error) {
-	hints := cacheHintsCallerUniform
-	if metaServer.UserSessionIssuerID.Valid {
-		// Custom instructions are protected by the issuer gate even when
-		// every authorized caller receives the same self-description.
-		hints = cacheHintsCallerVarying
-	}
-
-	result := &result[metamcp.DiscoverResult]{
-		ID: req.ID,
-		Result: metamcp.DiscoverResult{
-			ProtocolVersions: mcpversions.SupportedMetaServer(),
-			Capabilities: map[string]json.RawMessage{
-				"tools": json.RawMessage("{}"),
-			},
-			ServerInfo:   serverInfoMetaServer,
-			Instructions: metamcp.ResolveInstructions(conv.FromPGText[string](metaServer.Instructions)),
-		},
-		serverIdentity: serverInfoMetaServer,
-		cacheHints:     hints,
-	}
-	bs, err := json.Marshal(result)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize server/discover response").LogError(ctx, logger)
 	}
 	return bs, nil
 }

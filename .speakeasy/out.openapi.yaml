@@ -83798,7 +83798,7 @@ components:
           type: array
           items:
             type: string
-          description: Sub-steps, in order. Empty when the description says it all.
+          description: 'Supporting lines under the description: ordered sub-steps for the public-key step, otherwise notes or the values to enter. Empty when the description says it all.'
         group:
           type: string
           description: 'Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).'
@@ -93095,7 +93095,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom tool names for this server. Omit to follow the policy tool rule.
+          description: Custom tool names for this server. Omit to follow the policy tool rule; an empty list matches every tool on this server, unconditionally.
       required:
         - mcp_server_id
     RiskOverviewCategory:
@@ -99730,6 +99730,13 @@ components:
         name:
           type: string
           description: The name of the toolset
+        network_access_mode:
+          type: string
+          description: The network surfaces through which a Gram-hosted MCP server may be reached.
+          enum:
+            - public_only
+            - dual
+            - private_only
         oauth_enablement_metadata:
           $ref: '#/components/schemas/OAuthEnablementMetadata'
         organization_id:
@@ -102147,6 +102154,13 @@ components:
         name:
           type: string
           description: The new name of the toolset
+        network_access_mode:
+          type: string
+          description: 'Where the hosted MCP is accessible: public_only, dual, or private_only'
+          enum:
+            - public_only
+            - dual
+            - private_only
         prompt_template_names:
           type: array
           items:

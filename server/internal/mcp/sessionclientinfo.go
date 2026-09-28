@@ -142,7 +142,10 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessi
 	// middleware has no header to read for them. A session that handshaked
 	// before a change to the supported set would be attributed the answer the
 	// current set produces, which is the one inaccuracy the derivation costs.
-	recordMCPProtocolVersionSpan(ctx, info.ProtocolVersion, mcpversions.Negotiate(info.ProtocolVersion, mcpversions.SupportedHostedToolset()))
+	// A surface without a revision that defines initialize negotiates
+	// nothing, and the empty value leaves the negotiated attribute unset.
+	negotiated, _ := mcpversions.Negotiate(info.ProtocolVersion, mcpversions.SupportedHostedToolset())
+	recordMCPProtocolVersionSpan(ctx, info.ProtocolVersion, negotiated)
 
 	return identity, info.ProtocolVersion
 }

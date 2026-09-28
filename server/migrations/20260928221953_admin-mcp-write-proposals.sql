@@ -33,6 +33,7 @@ CREATE TABLE "admin_mcp_write_proposals" (
   CONSTRAINT "admin_mcp_write_proposals_connection_client_fkey" FOREIGN KEY ("connection_id", "oauth_client_id") REFERENCES "admin_mcp_connections" ("id", "oauth_client_id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "admin_mcp_write_proposals_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "admin_mcp_write_proposals_organization_project_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "admin_mcp_write_proposals_expected_state_digest_check" CHECK (expected_state_digest <> ''::text),
   CONSTRAINT "admin_mcp_write_proposals_idempotency_key_check" CHECK (idempotency_key <> ''::text),
   CONSTRAINT "admin_mcp_write_proposals_operation_check" CHECK (operation <> ''::text),
   CONSTRAINT "admin_mcp_write_proposals_proposal_digest_check" CHECK (proposal_digest <> ''::text),
@@ -66,8 +67,11 @@ CREATE TABLE "admin_mcp_write_events" (
   CONSTRAINT "admin_mcp_write_events_oauth_client_id_fkey" FOREIGN KEY ("oauth_client_id") REFERENCES "admin_mcp_oauth_clients" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "admin_mcp_write_events_proposal_id_fkey" FOREIGN KEY ("proposal_id") REFERENCES "admin_mcp_write_proposals" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "admin_mcp_write_events_event_check" CHECK (event <> ''::text),
+  CONSTRAINT "admin_mcp_write_events_reason_code_check" CHECK ((reason_code IS NULL) OR (reason_code ~ '^[a-z][a-z0-9_]{0,63}$'::text)),
   CONSTRAINT "admin_mcp_write_events_subject_urn_check" CHECK (subject_urn <> ''::text)
 );
+-- Create index "admin_mcp_write_events_oauth_client_id_idx" to table: "admin_mcp_write_events"
+CREATE INDEX "admin_mcp_write_events_oauth_client_id_idx" ON "admin_mcp_write_events" ("oauth_client_id") WHERE (oauth_client_id IS NOT NULL);
 -- Create index "admin_mcp_write_events_proposal_id_idx" to table: "admin_mcp_write_events"
 CREATE INDEX "admin_mcp_write_events_proposal_id_idx" ON "admin_mcp_write_events" ("proposal_id");
 -- Create index "admin_mcp_write_events_subject_created_idx" to table: "admin_mcp_write_events"

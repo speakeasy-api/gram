@@ -1,4 +1,4 @@
-h1:/TR6ftsU5MmO9SbM9+zrgmsSbeEICHulVhIzeTDcqJc=
+h1:vItsqRMvj6poYINsFo2KGvGDiq1S7R5Zg0jA9w7uB28=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -115,3 +115,4 @@ h1:/TR6ftsU5MmO9SbM9+zrgmsSbeEICHulVhIzeTDcqJc=
 20260918165856_mcp-risk-finding-attribution.up.sql h1:Ng85p9+P2pzfv3OFNs+4AZfGZZPzqF8ExT/CIMbOaeA=
 20260922181038_mark-shadow-risk-findings.up.sql h1:qgcilzk3IbgEj16WFYjGeUIZHW4oUPbjaZf1MYq4w/k=
 20260925223533_mcp-network-traffic.up.sql h1:dURFRUpvGEN9lyOf8rTKbf9197eBeq3uxvpJ7XfJofU=
+20260928161107_imported_session_observations.up.sql h1:ZhguHLvKWzgV4knCWQCZ+/lXtanBUCOkyHoSIxvmvHk=

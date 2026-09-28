@@ -18,12 +18,16 @@ import {
   SLACK_EVENT_GROUPS,
   expandCapabilities,
   expandEvents,
+  SLACK_CONVERSATION_EVENT_TYPES,
+  SLACK_REPLY_MODES,
+  type SlackReplyMode,
 } from "../slackCapabilities";
 import { SLACK_TOOL_URN_PREFIX } from "../slackManifest";
 import {
   ProposeNameComponent,
   ProposePersonalityComponent,
   ProposeSlackSetupComponent,
+  ChooseSlackReplyModeComponent,
   RequestEnvironmentSecretsComponent,
   ShowSlackAppGuideComponent,
   ShowWebhookUrlComponent,
@@ -2002,9 +2006,116 @@ function buildAssistantTools(deps: ToolDeps) {
   const eventSlugEnum = z.enum(
     SLACK_EVENT_GROUPS.map((g) => g.slug) as [string, ...string[]],
   );
+  const replyModeEnum = z.enum(
+    SLACK_REPLY_MODES.map((m) => m.value) as [
+      SlackReplyMode,
+      ...SlackReplyMode[],
+    ],
+  );
+  const replyModeGuide = SLACK_REPLY_MODES.map(
+    (m) => `${m.value}: ${m.label}`,
+  ).join("; ");
+
+  const findSlackTrigger = async (assistantId: string) => {
+    const list = await sdk.triggers.list().catch(() => null);
+    return list?.triggers.find(
+      (t) =>
+        t.targetKind === "assistant" &&
+        t.targetRef === assistantId &&
+        t.definitionSlug === "slack",
+    );
+  };
+
+  // A reply mode governs messages and mentions, so those never stay listed as
+  // extra event types next to it.
+  const slackTriggerConfig = (
+    existing: Record<string, unknown> | null | undefined,
+    replyMode: SlackReplyMode,
+    extraEventTypes?: string[],
+  ): Record<string, unknown> => {
+    const current = Array.isArray(existing?.event_types)
+      ? (existing.event_types as string[])
+      : [];
+    const eventTypes = (extraEventTypes ?? current).filter(
+      (t) => !SLACK_CONVERSATION_EVENT_TYPES.includes(t),
+    );
+    return { ...existing, event_types: eventTypes, routing: replyMode };
+  };
+
+  type ChooseSlackReplyModeArgs = { preselected?: SlackReplyMode };
+
+  const choose_slack_reply_mode = defineFrontendTool<
+    ChooseSlackReplyModeArgs,
+    ToolResult
+  >(
+    {
+      description: `Show a card asking when the assistant should reply in Slack, and save the pick to its slack trigger. Options — ${replyModeGuide}. Direct messages always get a reply. Use it when the user wants to change when an assistant that already has a slack trigger replies, and has not said to what. When they have said, call update_trigger with config.routing instead. During setup, propose_slack_setup asks this itself — do not call this tool first. Never call it in the same turn as another card.`,
+      parameters: z.object({
+        preselected: replyModeEnum
+          .optional()
+          .describe("Option to highlight, when the conversation hints at one."),
+      }),
+      execute: async (_args, ctx) => {
+        const toolCallId = ctx.toolCallId ?? "";
+        type Submit = {
+          success: boolean;
+          cancelled?: boolean;
+          reply_mode?: SlackReplyMode;
+        };
+        const userInput: Submit = await withTimeout(
+          new Promise<Submit>((resolve) => {
+            draft.registerPending(toolCallId, (r) => resolve(r as Submit));
+          }),
+          15 * 60 * 1000,
+          "choose_slack_reply_mode",
+        ).catch((): Submit => ({ success: false, cancelled: true }));
+
+        const replyMode = userInput.reply_mode;
+        if (!userInput.success || !replyMode) {
+          return okResult({
+            cancelled: true,
+            note: "User kept things as they are. Acknowledge briefly.",
+          });
+        }
+
+        return serialize(async () => {
+          try {
+            const trigger = live.id
+              ? await findSlackTrigger(live.id)
+              : undefined;
+            if (!trigger) {
+              return errResult(
+                "This assistant has no Slack trigger yet, so nothing was saved. Set up Slack with propose_slack_setup and pass this reply_mode.",
+                { reply_mode: replyMode },
+              );
+            }
+            await sdk.triggers.update({
+              updateTriggerInstanceForm: {
+                id: trigger.id,
+                config: slackTriggerConfig(
+                  trigger.config as Record<string, unknown> | null,
+                  replyMode,
+                ),
+              },
+            });
+            draft.invalidateAll();
+            return okResult({ reply_mode: replyMode, trigger_id: trigger.id });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "saving reply mode failed",
+            );
+          }
+        });
+      },
+    },
+    "choose_slack_reply_mode",
+  );
+
   type ProposeSlackSetupArgs = {
     preselected_capabilities?: string[];
     preselected_events?: string[];
+    reply_mode?: SlackReplyMode;
+    skip_slack_events?: boolean;
     toolset_name?: string;
   };
 
@@ -2014,7 +2125,7 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "Show the Slack setup card. The user picks which Slack capabilities the assistant has and which Slack events wake it up. On submit, this tool creates a dedicated per-assistant Slack toolset with only the chosen tools (never reuse a catalog toolset), attaches it to the assistant's shared env, and creates a slack trigger when events are chosen. Returns the webhook_url to pass into show_slack_app_guide. Never call this tool in the same turn as show_slack_app_guide or request_environment_secrets — propose_slack_setup first, wait for it to resolve, then continue with declare-keys → install card → secrets card in subsequent turns. Pass plausible preselected groups derived from the user's stated goal; do not call with both empty. If the result is an error about a toolset-name collision, propose a more distinctive name in chat (or ask the user), then re-call with the chosen name in toolset_name.",
+        "Show the Slack setup card. The user picks which Slack capabilities the assistant has, when it replies, and any extra Slack events that wake it up. On submit, this tool creates a dedicated per-assistant Slack toolset with only the chosen tools (never reuse a catalog toolset), attaches it to the assistant's shared env, and creates a slack trigger unless skip_slack_events is set. Returns the webhook_url to pass into show_slack_app_guide. Never call this tool in the same turn as show_slack_app_guide or request_environment_secrets — propose_slack_setup first, wait for it to resolve, then continue with declare-keys → install card → secrets card in subsequent turns. Pass plausible preselected capabilities derived from the user's stated goal. If the result is an error about a toolset-name collision, propose a more distinctive name in chat (or ask the user), then re-call with the chosen name in toolset_name.",
       parameters: z.object({
         preselected_capabilities: z
           .array(capabilitySlugEnum)
@@ -2026,7 +2137,18 @@ function buildAssistantTools(deps: ToolDeps) {
           .array(eventSlugEnum)
           .optional()
           .describe(
-            "Event group slugs to pre-check based on the user's stated goal.",
+            "Extra event group slugs to pre-check, only when the user's stated goal needs them. Messages and mentions are covered by reply_mode.",
+          ),
+        reply_mode: replyModeEnum
+          .optional()
+          .describe(
+            "When the assistant replies, if the user said so or picked it in choose_slack_reply_mode. Leave empty to let the user pick on the card.",
+          ),
+        skip_slack_events: z
+          .boolean()
+          .optional()
+          .describe(
+            "Set only when the user explicitly said the assistant must not react to anything in Slack. No slack trigger is created.",
           ),
         toolset_name: z
           .string()
@@ -2063,6 +2185,7 @@ function buildAssistantTools(deps: ToolDeps) {
           cancelled?: boolean;
           capabilities?: string[];
           events?: string[];
+          reply_mode?: SlackReplyMode;
         };
         const userInput: SubmitPayload = await withTimeout(
           new Promise<SubmitPayload>((resolve) => {
@@ -2085,6 +2208,7 @@ function buildAssistantTools(deps: ToolDeps) {
         const eventSlugs = userInput.events ?? [];
         const toolUrns = expandCapabilities(capabilitySlugs);
         const eventTypes = expandEvents(eventSlugs);
+        const replyMode = userInput.reply_mode;
 
         return serialize(async () => {
           try {
@@ -2157,33 +2281,25 @@ function buildAssistantTools(deps: ToolDeps) {
               await recomputeBehaviorSection(deps, updated);
             }
 
-            const existingTriggerList = await sdk.triggers
-              .list()
-              .catch(() => null);
-            const existingSlackTrigger = existingTriggerList?.triggers.find(
-              (t) =>
-                t.targetKind === "assistant" &&
-                t.targetRef === a.id &&
-                t.definitionSlug === "slack",
-            );
+            const existingSlackTrigger = await findSlackTrigger(a.id);
 
             let triggerId: string | undefined;
             let webhookUrl: string | undefined;
-            if (eventTypes.length > 0) {
+            if (replyMode) {
               if (existingSlackTrigger) {
                 triggerId = existingSlackTrigger.id;
                 webhookUrl = existingSlackTrigger.webhookUrl;
-                const mergedConfig: Record<string, unknown> = {
-                  ...(existingSlackTrigger.config as Record<
-                    string,
-                    unknown
-                  > | null),
-                  event_types: eventTypes,
-                };
                 await sdk.triggers.update({
                   updateTriggerInstanceForm: {
                     id: existingSlackTrigger.id,
-                    config: mergedConfig,
+                    config: slackTriggerConfig(
+                      existingSlackTrigger.config as Record<
+                        string,
+                        unknown
+                      > | null,
+                      replyMode,
+                      eventTypes,
+                    ),
                     status: "active",
                   },
                 });
@@ -2193,7 +2309,7 @@ function buildAssistantTools(deps: ToolDeps) {
                   createTriggerInstanceForm: {
                     name: "Slack",
                     definitionSlug: "slack",
-                    config: { event_types: eventTypes },
+                    config: slackTriggerConfig(null, replyMode, eventTypes),
                     environmentId: envResult.env.id,
                     targetKind: "assistant",
                     targetRef: a.id,
@@ -2290,6 +2406,7 @@ function buildAssistantTools(deps: ToolDeps) {
     show_webhook_url,
     show_slack_app_guide,
     propose_slack_setup,
+    choose_slack_reply_mode,
     list_integrations,
     list_docs,
     read_docs,
@@ -2335,6 +2452,7 @@ export function useOnboardingTools(): {
       propose_name: ProposeNameComponent,
       propose_personality: ProposePersonalityComponent,
       propose_slack_setup: ProposeSlackSetupComponent,
+      choose_slack_reply_mode: ChooseSlackReplyModeComponent,
       request_environment_secrets: RequestEnvironmentSecretsComponent,
       show_webhook_url: ShowWebhookUrlComponent,
       show_slack_app_guide: ShowSlackAppGuideComponent,

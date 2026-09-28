@@ -24,10 +24,27 @@ type MCPScope struct {
 }
 
 // MCPServerScope selects one MCP server or gateway. A nil Tools slice follows
-// the policy tool rule; a non-nil slice is a custom tool selection.
+// the policy tool rule; AllToolsWildcard matches every tool unconditionally,
+// ignoring the tool rule; any other non-nil slice is a custom tool selection.
 type MCPServerScope struct {
 	MCPServerID uuid.UUID `json:"mcp_server_id"`
 	Tools       []string  `json:"tools,omitempty"`
+}
+
+// AllToolsWildcard is the sole element of a Tools slice that selects every
+// tool on a server, unconditionally. NormalizeMCPScope maps an empty input
+// tool list onto this sentinel rather than storing an empty slice: Go's
+// omitempty JSON tag collapses nil and empty-slice to the same absent key,
+// so an empty slice could never survive a stored round-trip as "all tools"
+// distinct from "omitted, follow the tool rule" — and unmarshalMCPScope
+// treats a literal empty-but-non-nil Tools as corruption and fails the whole
+// scope closed. The wildcard is a real, non-empty value, so it survives
+// storage and does not trip that guard.
+const AllToolsWildcard = "*"
+
+// isAllToolsWildcard reports whether tools is exactly the wildcard sentinel.
+func isAllToolsWildcard(tools []string) bool {
+	return len(tools) == 1 && tools[0] == AllToolsWildcard
 }
 
 // Applies reports whether a policy scope applies to a concrete MCP server and
@@ -60,6 +77,9 @@ func (s *MCPScope) toolMatches(server MCPServerScope, toolName string, annotatio
 		return true
 	}
 	if server.Tools != nil {
+		if isAllToolsWildcard(server.Tools) {
+			return true
+		}
 		return slices.Contains(server.Tools, toolName)
 	}
 	return s.toolRuleMatches(toolName, annotations)

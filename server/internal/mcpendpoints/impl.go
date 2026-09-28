@@ -187,6 +187,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, err
 	}
 
+	if mcpServerID.Valid && mcpServer.ToolsetID.Valid && mcpServer.ToolsetID.UUID == mcpServer.ID {
+		return nil, oops.E(oops.CodeInvalid, nil, "hosted MCP endpoints are managed through the toolset")
+	}
 	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, metaMcpServerID, customDomainID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
@@ -529,6 +532,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	if mcpServerID.Valid && targetServer == nil {
 		return nil, oops.E(oops.CodeInvalid, nil, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
 	}
+	if err := rejectHostedEndpointMutation(ctx, dbtx, *authCtx.ProjectID, existing.McpServerID, mcpServerID); err != nil {
+		return nil, err
+	}
 
 	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, uniqueIDs(existing.MetaMcpServerID, metaMcpServerID), metaMcpServerID); err != nil {
 		return nil, err
@@ -718,6 +724,9 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	if existing.CustomDomainID != preexisting.CustomDomainID {
 		return oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request").LogError(ctx, logger)
 	}
+	if err := rejectHostedEndpointMutation(ctx, dbtx, *authCtx.ProjectID, existing.McpServerID); err != nil {
+		return err
+	}
 
 	deleted, err := txRepo.DeleteMCPEndpoint(ctx, repo.DeleteMCPEndpointParams{
 		ID:        endpointID,
@@ -763,6 +772,23 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		}
 	}
 
+	return nil
+}
+
+// rejectHostedEndpointMutation keeps the canonical hosted address owned by its toolset.
+func rejectHostedEndpointMutation(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, serverIDs ...uuid.NullUUID) error {
+	for _, serverID := range serverIDs {
+		if !serverID.Valid {
+			continue
+		}
+		server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID.UUID, ProjectID: projectID})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load endpoint backing server")
+		}
+		if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID {
+			return oops.E(oops.CodeInvalid, nil, "hosted MCP endpoints are managed through the toolset")
+		}
+	}
 	return nil
 }
 
