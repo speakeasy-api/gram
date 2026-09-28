@@ -329,6 +329,8 @@ function NetworkAccessSectionContent({
             await Promise.all([
               invalidateAllToolset(queryClient, { refetchType: "all" }),
               invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+              invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
+              invalidateAllMcpServers(queryClient, { refetchType: "all" }),
             ]);
             toast.success("Network access updated");
           },

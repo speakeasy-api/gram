@@ -37,6 +37,10 @@ const testState = vi.hoisted(() => ({
   mutateToolset: vi.fn(),
   invalidateGetGateway: vi.fn().mockResolvedValue(undefined),
   invalidateListGateway: vi.fn().mockResolvedValue(undefined),
+  invalidateGetServer: vi.fn().mockResolvedValue(undefined),
+  invalidateListServers: vi.fn().mockResolvedValue(undefined),
+  invalidateToolset: vi.fn().mockResolvedValue(undefined),
+  invalidateListToolsets: vi.fn().mockResolvedValue(undefined),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   mutationOptions: undefined as
@@ -46,6 +50,12 @@ const testState = vi.hoisted(() => ({
       }
     | undefined,
   gatewayMutationOptions: undefined as
+    | {
+        onError?: (error: Error) => void;
+        onSuccess?: () => Promise<void>;
+      }
+    | undefined,
+  toolsetMutationOptions: undefined as
     | {
         onError?: (error: Error) => void;
         onSuccess?: () => Promise<void>;
@@ -190,7 +200,7 @@ vi.mock("@gram/client/react-query/listDomains.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
-  invalidateAllGetMcpServer: vi.fn(),
+  invalidateAllGetMcpServer: testState.invalidateGetServer,
 }));
 vi.mock("@gram/client/react-query/getMetaMcpServer.js", () => ({
   invalidateAllGetMetaMcpServer: testState.invalidateGetGateway,
@@ -212,18 +222,27 @@ vi.mock("@gram/client/react-query/updateMetaMcpServer.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
-  invalidateAllMcpServers: vi.fn(),
+  invalidateAllMcpServers: testState.invalidateListServers,
 }));
 vi.mock("@gram/client/react-query/listToolsets.js", () => ({
-  invalidateAllListToolsets: vi.fn(),
+  invalidateAllListToolsets: testState.invalidateListToolsets,
 }));
 vi.mock("@gram/client/react-query/toolset.js", () => ({
-  invalidateAllToolset: vi.fn(),
+  invalidateAllToolset: testState.invalidateToolset,
 }));
 vi.mock("@gram/client/react-query/updateToolset.js", () => ({
   useUpdateToolsetMutation: () => ({
     isPending: false,
-    mutate: testState.mutateToolset,
+    mutate: (
+      variables: unknown,
+      options: {
+        onError?: (error: Error) => void;
+        onSuccess?: () => Promise<void>;
+      },
+    ) => {
+      testState.toolsetMutationOptions = options;
+      testState.mutateToolset(variables, options);
+    },
   }),
 }));
 
@@ -326,16 +345,21 @@ beforeEach(() => {
   testState.mutateToolset.mockReset();
   testState.invalidateGetGateway.mockClear();
   testState.invalidateListGateway.mockClear();
+  testState.invalidateGetServer.mockClear();
+  testState.invalidateListServers.mockClear();
+  testState.invalidateToolset.mockClear();
+  testState.invalidateListToolsets.mockClear();
   testState.toastSuccess.mockClear();
   testState.toastError.mockClear();
   testState.mutationOptions = undefined;
   testState.gatewayMutationOptions = undefined;
+  testState.toolsetMutationOptions = undefined;
 });
 
 afterEach(cleanup);
 
 describe("NetworkAccessSection", () => {
-  it("updates a hosted toolset through the toolset API", () => {
+  it("updates a hosted toolset and invalidates all affected caches on success", async () => {
     render(<NetworkAccessSection toolset={hostedToolset} />);
 
     fireEvent.click(
@@ -351,9 +375,36 @@ describe("NetworkAccessSection", () => {
           updateToolsetRequestBody: { networkAccessMode: "dual" },
         },
       },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
+      expect.any(Object),
     );
     expect(testState.mutate).not.toHaveBeenCalled();
+
+    await testState.toolsetMutationOptions?.onSuccess?.();
+
+    for (const invalidate of [
+      testState.invalidateToolset,
+      testState.invalidateListToolsets,
+      testState.invalidateGetServer,
+      testState.invalidateListServers,
+    ]) {
+      expect(invalidate).toHaveBeenCalledWith(expect.anything(), {
+        refetchType: "all",
+      });
+    }
+    expect(testState.toastSuccess).toHaveBeenCalledWith(
+      "Network access updated",
+    );
+  });
+
+  it("shows an error toast when a hosted toolset update fails", () => {
+    render(<NetworkAccessSection toolset={hostedToolset} />);
+
+    testState.toolsetMutationOptions?.onError?.(
+      new Error("Toolset update failed"),
+    );
+
+    expect(testState.toastError).toHaveBeenCalledWith("Toolset update failed");
+    expect(testState.toastSuccess).not.toHaveBeenCalled();
   });
 
   it("requires confirmation before making a hosted toolset private only", () => {

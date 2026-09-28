@@ -21,6 +21,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// SetHostedNetworkAccessInTransaction changes only the canonical hosted policy
+// within a caller-owned transaction. The caller must authorize the target and
+// hold the organization's ingress and project admission locks first.
+func SetHostedNetworkAccessInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor *contextvalues.AuthContext, toolsetID uuid.UUID, mode networkaccess.Mode) error {
+	if actor == nil || actor.ProjectID == nil || auditLogger == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
+	}
+	toolsets := repo.New(tx)
+	candidate, err := toolsets.GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: *actor.ProjectID})
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "hosted toolset not found")
+	}
+	if candidate.OrganizationID != actor.ActiveOrganizationID {
+		return oops.E(oops.CodeNotFound, nil, "hosted toolset not found")
+	}
+	locked, err := toolsets.GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{Slug: candidate.Slug, ProjectID: *actor.ProjectID})
+	if err != nil || locked.ID != toolsetID || locked.OrganizationID != actor.ActiveOrganizationID {
+		return oops.E(oops.CodeConflict, err, "hosted toolset changed concurrently")
+	}
+	return (&Service{audit: auditLogger}).reconcileHostedNetworkAccess(ctx, tx, actor, locked, &mode)
+}
+
 // A hosted wrapper is identified by its toolset ID, unlike independently
 // managed toolset-backed MCP servers (for example gateway members).
 func (s *Service) reconcileHostedNetworkAccess(ctx context.Context, tx pgx.Tx, actor *contextvalues.AuthContext, after repo.Toolset, requested *networkaccess.Mode) error {
@@ -131,6 +153,7 @@ func (s *Service) reconcileHostedNetworkAccess(ctx context.Context, tx pgx.Tx, a
 	available, err := mcpendpoints.CheckSlugAvailable(ctx, tx, mcpendpoints.SlugAvailabilityCheck{
 		Slug: after.McpSlug.String, CustomDomainID: after.CustomDomainID, OrganizationID: after.OrganizationID,
 		ExcludeToolsetID: uuid.NullUUID{UUID: after.ID, Valid: true}, ExcludeMcpServerID: uuid.NullUUID{UUID: after.ID, Valid: true},
+		SkipDomainOwnershipCheck: true, // The toolset owns this address scope, including soft-deleted domains.
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check hosted MCP address")
@@ -154,9 +177,13 @@ func (s *Service) reconcileHostedNetworkAccess(ctx context.Context, tx pgx.Tx, a
 		}
 		return nil
 	}
+	rootMarker := pgtype.Bool{}
+	if after.CustomDomainID == endpoints[0].CustomDomainID {
+		rootMarker = endpoints[0].IsDomainRoot
+	}
 	updatedEndpoint, err := endpointRepo.UpdateMCPEndpointAddress(ctx, mcpendpointsRepo.UpdateMCPEndpointAddressParams{
 		ID: endpoints[0].ID, ProjectID: after.ProjectID, CustomDomainID: after.CustomDomainID,
-		Slug: after.McpSlug.String,
+		Slug: after.McpSlug.String, IsDomainRoot: rootMarker,
 	})
 	if err != nil {
 		return oops.E(oops.CodeConflict, err, "update hosted MCP endpoint address")

@@ -627,16 +627,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
-	if server, serverErr := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
-		ID: toolset.ID, ProjectID: toolset.ProjectID,
-	}); serverErr == nil {
-		mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
-		if modeErr != nil || !mode.Allows(networkaccess.SurfacePublic) || server.Visibility == mcpservers.VisibilityDisabled || !server.UserSessionIssuerID.Valid || server.UserSessionIssuerID.UUID != toolset.UserSessionIssuerID.UUID {
-			return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
-		}
-	} else if !errors.Is(serverErr, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, serverErr, "load canonical mcp server").LogError(ctx, s.logger)
-	}
+	// loadToolset has already checked the canonical hosted policy for this public fallback.
 	// Honour the surface the challenge was minted under so the resumed
 	// endpoint's URLs match the original mint. Empty ref.RouteBase falls
 	// back to "mcp" for states cached before EndpointRef.RouteBase existed.
@@ -672,14 +663,7 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
-	if server, serverErr := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID}); serverErr == nil {
-		mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
-		if modeErr != nil || !mode.Allows(networkaccess.SurfacePublic) || server.Visibility == mcpservers.VisibilityDisabled || !server.UserSessionIssuerID.Valid || server.UserSessionIssuerID.UUID != toolset.UserSessionIssuerID.UUID {
-			return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
-		}
-	} else if !errors.Is(serverErr, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, serverErr, "load canonical mcp server").LogError(ctx, s.logger)
-	}
+	// loadToolset has already checked the canonical hosted policy for this public fallback.
 	endpoint := newResolvedMcpEndpointFromToolset(toolset, routeBase)
 	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 		return nil, err

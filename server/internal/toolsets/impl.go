@@ -466,6 +466,14 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
 
+	candidate, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{Slug: conv.ToLower(payload.Slug), ProjectID: *authCtx.ProjectID})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, logger)
+	}
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, candidate.ID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+
 	var requestedMode *networkaccess.Mode
 	var finalizeNetworkAccess networkaccess.AdmissionFinalizer
 	if payload.NetworkAccessMode != nil {
@@ -511,8 +519,8 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, existingToolset.ID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
+	if existingToolset.ID != candidate.ID {
+		return nil, oops.E(oops.CodeConflict, nil, "toolset changed concurrently; retry the request")
 	}
 	existingView, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(existingToolset.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
@@ -729,6 +737,16 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}
 
 	logger := s.logger
+	candidate, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{Slug: conv.ToLower(payload.Slug), ProjectID: *authCtx.ProjectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
+	}
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, candidate.ID.String(), authCtx.ProjectID.String())); err != nil {
+		return err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -755,8 +773,8 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toDelete.ID.String(), authCtx.ProjectID.String())); err != nil {
-		return err
+	if toDelete.ID != candidate.ID {
+		return oops.E(oops.CodeConflict, nil, "toolset changed concurrently; retry the request")
 	}
 
 	deleted, err := tr.DeleteToolset(ctx, repo.DeleteToolsetParams{
