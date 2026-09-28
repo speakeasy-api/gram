@@ -471,18 +471,17 @@ func pollUnavailableHTTPStatus(err error) int {
 	return 0
 }
 
-// finalizePollFailure decides what a failed poll returns to Temporal. A
-// failure the provider owns — it refused the configuration, or it was down —
-// and that is already recorded on the schedule returns nil: the outcome is
-// durable in Postgres and shown in the dashboard, the schedule owns the retry
-// cadence (backoff, and auto-pause for rejections), and running the activity
-// again cannot change the provider's answer. Failing the activity on top of
-// that would put a single misconfigured integration — several schedules
-// polling every few minutes, re-armed by every re-save — into activity
-// failure alerting, which exists to catch Gram's own unexpected errors.
+// finalizePollFailure decides what a failed poll returns to Temporal.
 //
-// Everything else still fails the activity: an unrecorded failure (the user
-// would otherwise see nothing), and any failure that is ours to explain.
+// A provider failure — a refusal or an outage — already recorded on the
+// schedule returns nil. It is durable in Postgres and shown in the dashboard,
+// the schedule owns the retry cadence, and re-running cannot change the
+// provider's answer. Failing the activity too would put one misconfigured
+// integration into activity-failure alerting, which exists for Gram's own
+// unexpected errors.
+//
+// Everything else still fails: an unrecorded failure the user would otherwise
+// never see, and any failure that is ours.
 func finalizePollFailure(configID uuid.UUID, provider string, attempt int32, rejected bool, unavailable bool, recorded bool, cause error) error {
 	if recorded && (rejected || unavailable) {
 		return nil

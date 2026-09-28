@@ -165,14 +165,12 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		billingMode = conv.PtrEmpty(before.BillingMode)
 	}
 
-	// Ask the provider about the credentials before writing them. A refused
-	// key never reaches the database, so no config generation is created, no
-	// schedule is enqueued for it, and the user reads the provider's own
-	// explanation now instead of discovering it in a failed poll minutes
-	// later. Verify every save that would start polling on credentials the
-	// provider has not already answered for: a new or changed key or scope,
-	// and the flip that turns an integration back on. A save that changes
-	// neither (a billing mode edit, disabling) reuses an answer we have.
+	// Ask the provider before writing: a refused key never reaches the
+	// database, so nothing is enqueued for it and the user reads the
+	// provider's own explanation now rather than in a failed poll later.
+	// Only saves that would start polling on an unanswered credential need
+	// this — a new or changed key or scope, or re-enabling. A billing mode
+	// edit or a disable reuses the answer we have.
 	credentialsChanged := beforeRow == nil || apiKeySupplied || externalOrgChanged
 	reenabled := beforeRow != nil && !before.Enabled
 	rejections, err := s.verifyCredentials(ctx, provider, Credentials{
@@ -183,10 +181,10 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	if err != nil {
 		return nil, err
 	}
-	// A provider that honors some of its feeds and refuses others (they are
-	// entitled separately) keeps the save. The refusals travel into the upsert
-	// transaction, which pauses just those schedules rather than letting them
-	// rediscover the same answer over AutoPauseAfterRejectedPolls failed polls.
+	// Feeds are entitled separately, so a partial refusal keeps the save. The
+	// refusals travel into the upsert transaction, which pauses just those
+	// schedules instead of letting them rediscover the answer over
+	// AutoPauseAfterRejectedPolls failed polls.
 
 	// Start the watermark one lookback period in the past so the first poll
 	// backfills usage emitted just before the key was configured.
@@ -542,13 +540,10 @@ func snapshotFromConfig(cfg Config) audit.AIIntegrationSnapshot {
 	}
 }
 
-// verifyCredentials asks the provider whether it will honor the credentials
-// this save would store. A save whose every sync schedule is refused fails
-// with the provider's message: nothing about the integration would work, so
-// storing the key would only start a poll loop that rediscovers the refusal.
-// A partial refusal is returned to the caller instead, which pauses those
-// schedules once the save lands — providers entitle their feeds separately,
-// and one unavailable feed must not block configuring the others.
+// verifyCredentials fails the save when every schedule is refused: nothing
+// about the integration would work, so storing the key would only start a
+// poll loop that rediscovers the refusal. A partial refusal is returned
+// instead, for the caller to pause those schedules.
 func (s *Service) verifyCredentials(ctx context.Context, provider string, creds Credentials, verify bool) ([]ScheduleRejection, error) {
 	if s.credentials == nil || !verify {
 		return nil, nil
@@ -580,10 +575,8 @@ func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, c
 	var startErr error
 	for _, syncSchedule := range syncSchedulesFor(provider) {
 		if pausedBySchedule[syncSchedule.schedule] {
-			// Either the user explicitly paused this schedule, or the save
-			// just paused it over credentials the provider refused for that
-			// feed. Both outrank the save's implicit "start polling now", and
-			// scheduled candidate selection skips paused schedules too.
+			// Paused by the user, or by this save over refused credentials.
+			// Both outrank the save's implicit "start polling now".
 			continue
 		}
 		syncID, ok := syncIDsBySchedule[syncSchedule.schedule]

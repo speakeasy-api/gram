@@ -19,9 +19,8 @@ import (
 const (
 	defaultBaseURL = "https://api.chatgpt.com/v1/compliance"
 	maxLogFileSize = 15 * 1024 * 1024
-	// maxHTTPErrorMessage bounds how much of an error response is kept. The
-	// body is persisted as org-visible schedule diagnostics, so it matches the
-	// other provider clients' bound.
+	// Error bodies end up in org-visible schedule diagnostics, so the bound
+	// matches the other provider clients.
 	maxHTTPErrorMessage = 512
 )
 

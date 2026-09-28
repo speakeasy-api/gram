@@ -26,15 +26,13 @@ const (
 	testWorkspaceID   = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 )
 
-// providerStub stands in for every provider API the probes call: one server,
-// routed by request path (and event_type, which is what separates the two
-// workspace-scoped ChatGPT feeds).
+// providerStub stands in for every provider API the probes call, routed by
+// path plus event_type (which separates the two workspace-scoped feeds).
 type providerStub struct {
 	server *httptest.Server
 	mu     sync.Mutex
 	routes []string
-	// details keeps each request whole — method, path, query, and body — so
-	// tests can assert the probes stay the cheapest read each feed allows.
+	// details keeps each request whole so tests can assert probe shape.
 	details []string
 }
 
@@ -88,16 +86,15 @@ func (s *providerStub) requested() []string {
 	return append([]string(nil), s.routes...)
 }
 
-// requestDetails returns every request the stub saw, each as
-// "METHOD path[?sorted query][ body]".
+// requestDetails returns each request as "METHOD path[?query][ body]".
 func (s *providerStub) requestDetails() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string(nil), s.details...)
 }
 
-// requireProbeShape asserts exactly one request reached the stub's path and
-// that it carried every single-record marker.
+// requireProbeShape asserts exactly one request matched path and carried
+// every marker.
 func requireProbeShape(t *testing.T, details []string, path string, markers ...string) {
 	t.Helper()
 
@@ -139,16 +136,15 @@ func TestVerifyCredentialsAcceptsAKeyEveryScheduleCanRead(t *testing.T) {
 	})
 
 	require.Empty(t, rejections)
-	// Both workspace feeds are probed, each asking for a single log file.
+	// Both workspace feeds are probed.
 	require.ElementsMatch(t, []string{
 		"/workspaces/" + testWorkspaceID + "/logs?event_type=CONVERSATION_MESSAGE",
 		"/workspaces/" + testWorkspaceID + "/logs?event_type=CODEX_LOG",
 	}, stub.requested())
 }
 
-// A key without Compliance API entitlement is refused by every feed the
-// chatgpt_compliance config runs. That is the shape of the incident this
-// check exists for: two schedules, one bad key, six failed polls.
+// The incident this check exists for: one unentitled key, every feed refusing
+// it, six failed polls.
 func TestVerifyCredentialsReportsEveryRefusedChatGPTFeed(t *testing.T) {
 	t.Parallel()
 
@@ -168,15 +164,14 @@ func TestVerifyCredentialsReportsEveryRefusedChatGPTFeed(t *testing.T) {
 	require.Len(t, rejections, 2)
 	require.Equal(t, ScheduleChatGPTCompliance, rejections[0].Schedule)
 	require.Equal(t, ScheduleCodexCloudSessions, rejections[1].Schedule)
-	// The provider's own explanation is what the user needs to fix the key.
+	// The provider's own explanation is what fixes the key.
 	require.Contains(t, rejections[0].Err.Error(), "API key not authorized for enterprise logs")
 	require.Contains(t, rejections[0].Err.Error(), "403 Forbidden")
 	require.Contains(t, rejections[0].Err.Error(), ScheduleChatGPTCompliance)
 }
 
-// Anthropic entitles the Compliance API and the Admin Analytics reports
-// separately, so a key can legitimately read one and not the other. Only the
-// refused feed is reported; the save itself still lands.
+// Anthropic entitles Compliance and Admin Analytics separately, so a key can
+// read one and not the other. Only the refused feed is reported.
 func TestVerifyCredentialsReportsOnlyTheRefusedAnthropicFeed(t *testing.T) {
 	t.Parallel()
 
@@ -220,9 +215,8 @@ func TestVerifyCredentialsReportsRefusedCursorKey(t *testing.T) {
 	require.Contains(t, rejections[0].Err.Error(), "invalid api key")
 }
 
-// A provider having a bad minute says nothing about the credentials, so the
-// probe stays silent and the save proceeds. Cursor's client has no HTTP-level
-// retries, which keeps this case quick.
+// A bad minute says nothing about the credentials, so the probe stays silent.
+// Cursor's client has no HTTP-level retries, which keeps this quick.
 func TestVerifyCredentialsIgnoresProviderOutage(t *testing.T) {
 	t.Parallel()
 
@@ -247,9 +241,8 @@ func TestProviderRejectedCredentialsMatchesConfigurationRefusals(t *testing.T) {
 		require.Equal(t, status, got)
 	}
 
-	// A fixed minimal probe that comes back 400/422 is complaining about the
-	// probe, not the credentials, so unlike the poll path it must not block a
-	// save. Throttling and outages are equally inconclusive.
+	// 400/422 on a fixed minimal probe complains about the probe, not the
+	// credentials. Throttling and outages are equally inconclusive.
 	for _, status := range []int{http.StatusBadRequest, http.StatusUnprocessableEntity, http.StatusTooManyRequests, http.StatusInternalServerError} {
 		_, ok := providerRejectedCredentials(&anthropicapi.HTTPError{StatusCode: status, Status: "", Body: ""})
 		require.False(t, ok, status)
@@ -259,9 +252,8 @@ func TestProviderRejectedCredentialsMatchesConfigurationRefusals(t *testing.T) {
 	require.False(t, ok)
 }
 
-// Each probe exists to collect the provider's verdict, not its data. A save
-// waits on all of them inside a 20s budget, so a probe that widened into a
-// full first-page fetch would make every save pay for a real sync.
+// Probes collect a verdict, not data. A save waits on all of them inside a
+// 20s budget, so one that widened into a real fetch would cost every save.
 func TestCredentialProbesAskForASingleRecord(t *testing.T) {
 	t.Parallel()
 
@@ -307,7 +299,7 @@ func TestCredentialProbesAskForASingleRecord(t *testing.T) {
 			"limit=1",
 			"created_at.gte="+url.QueryEscape(since.Format(time.RFC3339)),
 		)
-		// One bucket, one minute wide, on each report.
+		// One bucket, one minute wide.
 		for _, report := range []string{"user_usage_report", "user_cost_report"} {
 			requireProbeShape(t, details, "/v1/organizations/analytics/"+report,
 				"limit=1",

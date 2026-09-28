@@ -501,16 +501,13 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}
 	}
 
-	// Pause the schedules the provider refused at save time, in this same
-	// transaction and after the pause clear and watermark reset above would
-	// have wiped them. Committing the refusal with the config is what keeps
-	// the refused feed out of the poll loop: both scheduled candidate
-	// selection and startUsagePoll skip an auto-paused schedule, and there is
-	// no window in which the schedule is due but unmarked. It lands the state
-	// a poll rejection reaches after AutoPauseAfterRejectedPolls failures,
-	// minus the polls — the provider already answered for this feed, and
-	// asking again cannot change it until the user saves different
-	// credentials.
+	// Pause the schedules the provider refused at save time. This runs after
+	// the pause clear and watermark reset above, which would wipe it, and
+	// inside the same transaction: candidate selection and startUsagePoll
+	// both skip an auto-paused schedule, so committing the pause with the
+	// config leaves no window where the schedule is due but unmarked. It
+	// lands the state AutoPauseAfterRejectedPolls rejections would, minus the
+	// polls.
 	rejectedAt := time.Now().UTC()
 	for _, rejection := range rejections {
 		var errStr string
@@ -528,9 +525,8 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to record rejected ai integration credentials")
 		}
-		// EnsureSync created every one of this provider's schedules a few
-		// statements ago, so a missing row means the rejection names a
-		// schedule this provider does not run.
+		// EnsureSync just created every schedule this provider runs, so a
+		// missing row means the rejection names one it does not.
 		if affected == 0 {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, nil, "failed to record rejected ai integration credentials: no %s schedule", rejection.Schedule)
 		}
@@ -967,9 +963,9 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 	if err != nil {
 		return fmt.Errorf("record ai integration sync schedule poll failure: %w", err)
 	}
-	// No row means the config or the schedule went away under the poll. The
-	// failure has nowhere durable to live, so callers must not treat it as
-	// recorded and quietly drop it.
+	// No row means the config or schedule went away under the poll: the
+	// failure has nowhere durable to live, so callers must not call it
+	// recorded and drop it.
 	if rows == 0 {
 		return fmt.Errorf("record ai integration sync schedule poll failure: no %s schedule for config %s", schedule, configID)
 	}

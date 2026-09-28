@@ -402,10 +402,9 @@ func TestNewPollFailureErrorExpandsShareableCauses(t *testing.T) {
 	require.Contains(t, appErr.Message(), "import cost logs: download failed")
 }
 
-// A provider rejection or outage that reached the schedule row is the
-// provider's failure, not Gram's: the activity succeeds so one misconfigured
-// integration cannot fill activity failure alerting, which is there for our
-// own unexpected errors.
+// A provider rejection or outage on the schedule row is the provider's
+// failure, not Gram's, so the activity succeeds and one misconfigured
+// integration cannot fill activity-failure alerting.
 func TestFinalizePollFailureKeepsProviderFailuresOffTheActivity(t *testing.T) {
 	t.Parallel()
 
@@ -418,8 +417,7 @@ func TestFinalizePollFailureKeepsProviderFailuresOffTheActivity(t *testing.T) {
 	require.NoError(t, finalizePollFailure(configID, aiintegrations.ProviderChatGPTCompliance, 1, true, false, true, rejection))
 	require.NoError(t, finalizePollFailure(configID, aiintegrations.ProviderCodexCompliance, 1, false, true, true, outage))
 
-	// Unrecorded failures still fail: the schedule row says nothing, so
-	// Temporal is the only place the failure would show up at all.
+	// Unrecorded failures still fail: Temporal is the only place they show.
 	var appErr *temporal.ApplicationError
 	err := finalizePollFailure(configID, aiintegrations.ProviderChatGPTCompliance, 1, true, false, false, rejection)
 	require.ErrorAs(t, err, &appErr)

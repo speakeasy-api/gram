@@ -692,9 +692,8 @@ func TestUpsertResetsAllProviderScheduleWatermarks(t *testing.T) {
 	}
 }
 
-// A poll failure that lands on no schedule row — its config or schedule was
-// deleted mid-poll — has nowhere durable to live. Saying so is what stops the
-// activity from treating the failure as recorded and swallowing it.
+// A failure that lands on no schedule row must error, or the poll activity
+// counts it as recorded and swallows it.
 func TestRecordSchedulePollFailureRejectsAMissingSchedule(t *testing.T) {
 	t.Parallel()
 

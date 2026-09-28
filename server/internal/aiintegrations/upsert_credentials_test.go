@@ -48,9 +48,8 @@ func newUpsertTestService(t *testing.T, baseURL string) (context.Context, *pgxpo
 	return ctx, conn, service, poller, orgID
 }
 
-// A key every one of the provider's feeds refuses never becomes a config:
-// with nothing stored, no schedule is ever enqueued for it, so the poll loop
-// that turned one bad key into a burst of activity failures never starts.
+// A key every feed refuses never becomes a config, so the poll loop that
+// turned one bad key into a burst of activity failures never starts.
 func TestUpsertConfigRefusesAKeyTheProviderRejectsEverywhere(t *testing.T) {
 	t.Parallel()
 
@@ -76,9 +75,8 @@ func TestUpsertConfigRefusesAKeyTheProviderRejectsEverywhere(t *testing.T) {
 	require.Empty(t, poller.calls)
 }
 
-// Providers entitle their feeds separately, so a key that reads some of them
-// still saves. The refused feed is paused with the provider's message up
-// front instead of learning the same answer over three failed polls.
+// Feeds are entitled separately, so a key that reads some of them still
+// saves. The refused one is paused up front, not after three failed polls.
 func TestUpsertConfigPausesOnlyTheFeedTheProviderRefuses(t *testing.T) {
 	t.Parallel()
 
@@ -120,14 +118,12 @@ func TestUpsertConfigPausesOnlyTheFeedTheProviderRefuses(t *testing.T) {
 		ScheduleAnthropicAnalyticsCost:  "pending",
 	}, statuses)
 
-	// The paused feed is not started either: only the two analytics
-	// schedules get an immediate poll.
+	// The paused feed is not started: only the two analytics schedules are.
 	require.Len(t, poller.calls, 2)
 }
 
-// The connection toggle and other settings-only saves reuse a key the
-// provider already answered for, so they must not spend a round trip (or
-// risk a provider outage) on re-verifying it.
+// Settings-only saves reuse a key the provider already answered for, so they
+// must not spend a round trip — or risk an outage — re-verifying it.
 func TestUpsertConfigSkipsVerificationForSettingsOnlySaves(t *testing.T) {
 	t.Parallel()
 
