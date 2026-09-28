@@ -371,8 +371,22 @@ func lockActiveConnection(ctx context.Context, tx pgx.Tx, subjectURN string, cli
 	if exclusive {
 		lock = "FOR UPDATE"
 	}
-	var active uuid.UUID
+	// Consent takes the client row before the connection row. Use the same
+	// order, and never take an exclusive client lock shared by other staff.
+	var clientID uuid.UUID
 	err := tx.QueryRow(ctx, `
+SELECT id FROM admin_mcp_oauth_clients
+WHERE id = $1 AND revoked_at IS NULL
+  AND (client_secret_expires_at IS NULL OR client_secret_expires_at > clock_timestamp())
+FOR SHARE`, clientRowID).Scan(&clientID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrConnectionChanged
+	}
+	if err != nil {
+		return fmt.Errorf("lock admin MCP client: %w", err)
+	}
+	var active uuid.UUID
+	err = tx.QueryRow(ctx, `
 SELECT active_generation FROM admin_mcp_connections
 WHERE id = $1 AND oauth_client_id = $2 AND subject_urn = $3
   AND revoked_at IS NULL AND reauthorization_required_at IS NULL
@@ -514,14 +528,25 @@ func (s *proposalStore) GetForSubject(ctx context.Context, id uuid.UUID, subject
 	return p, nil
 }
 
-// GetForOwner additionally requires the registered client, for MCP status reads.
+// GetForOwner requires the live owning connection and generation for MCP reads.
 func (s *proposalStore) GetForOwner(ctx context.Context, id uuid.UUID, owner proposalOwner) (Proposal, error) {
-	p, err := s.GetForSubject(ctx, id, owner.SubjectURN)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return Proposal{}, fmt.Errorf("begin proposal lookup: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	p, err := scanProposal(tx.QueryRow(ctx, `SELECT `+proposalColumns+` FROM admin_mcp_write_proposals WHERE id = $1`, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Proposal{}, ErrProposalNotFound
+	}
 	if err != nil {
 		return Proposal{}, err
 	}
-	if p.OAuthClientID != owner.ClientRowID {
+	if p.SubjectURN != owner.SubjectURN || p.OAuthClientID != owner.ClientRowID || p.ConnectionID != owner.ConnectionID || p.Generation != owner.Generation {
 		return Proposal{}, ErrProposalNotFound
+	}
+	if err := lockActiveConnection(ctx, tx, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
+		return Proposal{}, err
 	}
 	return p, nil
 }
@@ -702,6 +727,29 @@ RETURNING `+proposalColumns, p.ID))
 	return rejected, nil
 }
 
+// replay returns a committed receipt only while the owning connection is still active.
+func (s *proposalStore) replay(ctx context.Context, owner proposalOwner, id uuid.UUID) (Proposal, bool, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return Proposal{}, false, fmt.Errorf("begin proposal replay: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	p, err := lockProposal(ctx, tx, id)
+	if err != nil {
+		return Proposal{}, false, err
+	}
+	if p.SubjectURN != owner.SubjectURN || p.OAuthClientID != owner.ClientRowID || p.ConnectionID != owner.ConnectionID || p.Generation != owner.Generation {
+		return Proposal{}, false, ErrProposalNotFound
+	}
+	if p.Status != ProposalSucceeded {
+		return Proposal{}, false, ErrProposalChanged
+	}
+	if err := lockActiveConnection(ctx, tx, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
+		return Proposal{}, false, err
+	}
+	return p, true, nil
+}
+
 // Execute runs only the stored proposal. The approval is consumed, the
 // business change is made and the receipt is written in one transaction. A
 // completed proposal replays its receipt and never writes again.
@@ -718,10 +766,7 @@ func (s *proposalStore) Execute(ctx context.Context, owner proposalOwner, id uui
 			return Proposal{}, false, err
 		}
 		if pre.Status == ProposalSucceeded {
-			if pre.Generation != owner.Generation || pre.ConnectionID != owner.ConnectionID {
-				return Proposal{}, false, ErrConnectionChanged
-			}
-			return pre, true, nil
+			return s.replay(ctx, owner, id)
 		}
 		conn, release, err := execution.Lock(ctx, pre)
 		if err != nil {
@@ -751,6 +796,9 @@ func (s *proposalStore) Execute(ctx context.Context, owner proposalOwner, id uui
 	if p.Status == ProposalSucceeded {
 		if p.Generation != owner.Generation || p.ConnectionID != owner.ConnectionID {
 			return Proposal{}, false, ErrConnectionChanged
+		}
+		if err := lockActiveConnection(ctx, tx, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
+			return Proposal{}, false, err
 		}
 		return p, true, nil
 	}

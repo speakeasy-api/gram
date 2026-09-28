@@ -277,6 +277,34 @@ func TestProposalStoreExecuteOnceAndReplay(t *testing.T) {
 	require.ErrorIs(t, err, ErrProposalClosed, "an executed proposal cannot be rejected")
 }
 
+func TestProposalStoreRevokedClientCannotReplayReceipt(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "admin_mcp_proposal_revoked_client")
+	ctx, now := t.Context(), time.Now()
+	p, _, err := f.store.Create(ctx, f.owner, featureProposal(f.orgA, "revoked", true), now)
+	require.NoError(t, err)
+	_, err = f.store.Approve(ctx, p.ID, proposalTestSubject, p.ProposalDigest, now, allowProposalBrowser, allowProposalBrowser)
+	require.NoError(t, err)
+	var calls atomic.Int32
+	run := renameRunner(&calls, "Renamed A", nil)
+	_, _, err = f.store.Execute(ctx, f.owner, p.ID, now, ProposalExecution{Run: run})
+	require.NoError(t, err)
+	pending, _, err := f.store.Create(ctx, f.owner, featureProposal(f.orgB, "pending-revocation", true), now)
+	require.NoError(t, err)
+	_, err = f.store.Approve(ctx, pending.ID, proposalTestSubject, pending.ProposalDigest, now, allowProposalBrowser, allowProposalBrowser)
+	require.NoError(t, err)
+	_, err = f.db.Exec(ctx, `UPDATE admin_mcp_oauth_clients SET revoked_at = clock_timestamp() WHERE id = $1`, f.owner.ClientRowID) //nolint:glint // notestingrawsql: Simulate client revocation after approval.
+	require.NoError(t, err)
+	_, _, err = f.store.Execute(ctx, f.owner, pending.ID, now, ProposalExecution{Run: run})
+	require.ErrorIs(t, err, ErrConnectionChanged)
+	require.Equal(t, "Synthetic B", organizationName(t, f.db, f.orgB))
+	_, _, err = f.store.Execute(ctx, f.owner, p.ID, now, ProposalExecution{Run: run})
+	require.ErrorIs(t, err, ErrConnectionChanged)
+	_, err = f.store.GetForOwner(ctx, p.ID, f.owner)
+	require.ErrorIs(t, err, ErrConnectionChanged)
+	require.Equal(t, int32(1), calls.Load())
+}
+
 func TestProposalStoreFailedWriteRollsBack(t *testing.T) {
 	t.Parallel()
 	f := newProposalFixture(t, "admin_mcp_proposal_rollback")

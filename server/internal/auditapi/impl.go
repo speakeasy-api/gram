@@ -165,6 +165,9 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			log.ActorDisplayName = conv.PtrEmpty(audit.SpeakeasyTeamActorLabel)
 			log.ActorSlug = nil
 		}
+		if isAdminActor {
+			log.ActorID = ""
+		}
 	}
 
 	return &gen.ListAuditLogsResult{
@@ -240,23 +243,26 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit surface facets").LogError(ctx, s.logger)
 	}
 
-	actors := toAuditActorFacetOptions(actorRows)
-
-	// Facet values are actor IDs, so mask their display names the same way the
-	// log feed does. Only user actors are candidates — other actor types keep
-	// their labels even if their id collides with a staff user id.
+	// Staff actor IDs are not usable as customer-facing filters. Omit those
+	// facets instead of returning repeated empty IDs that match every log.
+	visibleRows := make([]repo.ListAuditActorFacetsRow, 0, len(actorRows))
 	actorIDs := make([]string, 0, len(actorRows))
 	for _, row := range actorRows {
+		if row.IsAdminActor {
+			continue
+		}
+		visibleRows = append(visibleRows, row)
 		if row.IsUserActor {
 			actorIDs = append(actorIDs, row.Value)
 		}
 	}
+	actors := toAuditActorFacetOptions(visibleRows)
 	speakeasyActors, err := s.speakeasyActorIDs(ctx, authCtx.ActiveOrganizationID, actorIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}
-	for i, actor := range actors {
-		if shouldMaskCustomerActor(actorRows[i].IsAdminActor, speakeasyActors[actor.Value]) {
+	for _, actor := range actors {
+		if speakeasyActors[actor.Value] {
 			actor.DisplayName = audit.SpeakeasyTeamActorLabel
 		}
 	}
@@ -325,12 +331,6 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 	}, nil
 }
 
-// actingSurfaceOrUnknown resolves the stored surface for display.
-//
-// The column is nullable so that rows written before attribution existed need
-// no backfill. Those rows are reported as an unknown surface, which is what
-// they are; the API contract keeps the field always present so a client never
-// has to decide what a missing surface means.
 // customerFacingActingClientID omits the registered OAuth client identifier
 // for staff-only surfaces while preserving customer surface attribution.
 func customerFacingActingClientID(surface pgtype.Text, clientID pgtype.Text) *string {
@@ -340,6 +340,12 @@ func customerFacingActingClientID(surface pgtype.Text, clientID pgtype.Text) *st
 	return conv.FromPGText[string](clientID)
 }
 
+// actingSurfaceOrUnknown resolves the stored surface for display.
+//
+// The column is nullable so that rows written before attribution existed need
+// no backfill. Those rows are reported as an unknown surface, which is what
+// they are; the API contract keeps the field always present so a client never
+// has to decide what a missing surface means.
 func actingSurfaceOrUnknown(surface pgtype.Text) string {
 	if !surface.Valid || surface.String == "" {
 		return string(audit.SurfaceUnknown)

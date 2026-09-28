@@ -143,11 +143,6 @@ func (s *Service) UpdateSupportMatrix(ctx context.Context, payload *gen.UpdateSu
 	return result, nil
 }
 
-// ReadSupportMatrixTx reads the matrix and its revision inside tx.
-func ReadSupportMatrixTx(ctx context.Context, tx pgx.Tx) (*gen.SupportMatrix, error) {
-	return readSupportMatrix(ctx, repo.New(tx))
-}
-
 // UpdateSupportMatrixTx locks the matrix, rejects a stale revision, validates
 // the draft and saves changed entries inside the caller's transaction. The
 // caller owns commit.

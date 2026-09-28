@@ -15,12 +15,12 @@ func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, resul
 	actorDisplayName := conv.FromPGTextOrEmpty[string](input.ActorDisplayName)
 	actorSlug := conv.FromPGTextOrEmpty[string](input.ActorSlug)
 	actingSurface := Surface(conv.FromPGTextOrEmpty[string](input.ActingSurface))
-	if IsStaffAdminSurface(actingSurface) {
-		actorDisplayName = SpeakeasyTeamActorLabel
-		actorSlug = ""
-	}
+	actorID := input.ActorID
 	actingClientID := conv.FromPGTextOrEmpty[string](input.ActingClientID)
 	if IsStaffAdminSurface(actingSurface) {
+		actorID = ""
+		actorDisplayName = SpeakeasyTeamActorLabel
+		actorSlug = ""
 		actingClientID = ""
 	}
 
@@ -28,7 +28,7 @@ func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, resul
 		ID:                 result.ID,
 		OrganizationID:     result.OrganizationID,
 		ProjectID:          input.ProjectID,
-		ActorID:            input.ActorID,
+		ActorID:            actorID,
 		ActorType:          input.ActorType,
 		ActorDisplayName:   actorDisplayName,
 		ActorSlug:          actorSlug,

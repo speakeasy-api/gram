@@ -156,7 +156,13 @@ func TestStaffProposalApprovalRequiresLinkedWritableConnection(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, ProposalApproved, current.Status)
 
-	// A different staff identity must never see this proposal.
+	// Check isolation on a fresh pending proposal: the prior generation was invalidated.
+	var generation uuid.UUID
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT active_generation FROM admin_mcp_connections WHERE id = $1`, f.owner.ConnectionID).Scan(&generation)) //nolint:glint // notestingrawsql: Read the synthetic reconsent generation.
+	f.owner.Generation = generation
+	p, _, err = f.store.Create(t.Context(), f.owner, featureProposal(f.orgA, "other-staff", true), time.Now())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, get().Code)
 	verifier.result.OIDCSubject = "other-staff"
 	require.Equal(t, http.StatusNotFound, get().Code)
 }

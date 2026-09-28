@@ -539,7 +539,7 @@ func newAdminCommand() *cli.Command {
 				}
 				writes := adminmcp.WriteConfig{Enabled: c.Bool("admin-mcp-writes-enabled"), Operations: writeOperations}
 				signer := sessiontokens.NewSigner(key)
-				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, cache.NewRedisCacheAdapter(redisClient), adminService.Verifier(), adminEncryption, signer, writes)
+				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, cache.NewRedisCacheAdapter(redisClient), adminService.Verifier(), adminEncryption, signer, writes, logger)
 				if err != nil {
 					return fmt.Errorf("initialize staff Admin MCP OAuth: %w", err)
 				}

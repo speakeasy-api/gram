@@ -1212,37 +1212,6 @@ func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrg
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
 }
 
-// SetOrganizationDisabledTx locks the organization row and sets or clears
-// disabled_at inside the caller's transaction. It reports whether the
-// organization was disabled before the change so callers can revalidate their
-// expected state. The caller owns commit.
-func (s *Service) SetOrganizationDisabledTx(ctx context.Context, tx pgx.Tx, organizationID string, disabled bool) (bool, error) {
-	q := repo.New(tx)
-	if _, err := q.LockOrganizationMetadata(ctx, organizationID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, oops.C(oops.CodeNotFound)
-		}
-		return false, oops.E(oops.CodeUnexpected, err, "lock organization").LogError(ctx, s.logger)
-	}
-	current, err := orgRepo.New(tx).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "read organization state").LogError(ctx, s.logger)
-	}
-	var rows int64
-	if disabled {
-		rows, err = q.AdminDisableOrganization(ctx, organizationID)
-	} else {
-		rows, err = q.AdminEnableOrganization(ctx, organizationID)
-	}
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "set organization disabled state").LogError(ctx, s.logger)
-	}
-	if rows != 1 {
-		return false, oops.C(oops.CodeNotFound)
-	}
-	return current.DisabledAt.Valid, nil
-}
-
 // TrialExtension is the trial end-date transition an extension wrote.
 type TrialExtension struct {
 	PreviousEndsAt time.Time
@@ -1252,12 +1221,6 @@ type TrialExtension struct {
 // ErrTrialNotRunning reports that an organization has no running enterprise
 // trial to extend.
 var ErrTrialNotRunning = errors.New("organization has no running enterprise trial to extend")
-
-// ExtendTrialTx extends a running enterprise trial and writes its customer
-// audit record inside the caller's transaction. The caller owns commit.
-func (s *Service) ExtendTrialTx(ctx context.Context, tx pgx.Tx, organizationID string, days int) (TrialExtension, error) {
-	return s.extendTrialTx(ctx, tx, s.logger.With(attr.SlogOrganizationID(organizationID)), organizationID, days)
-}
 
 func (s *Service) extendTrialTx(ctx context.Context, tx pgx.Tx, logger *slog.Logger, organizationID string, days int) (TrialExtension, error) {
 	// Checked on the wide value before narrowing; see ExtendTrial.

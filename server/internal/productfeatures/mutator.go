@@ -94,6 +94,9 @@ func (m *Mutator) SetFeature(ctx context.Context, organizationID string, feature
 	if feature == FeatureRemoteSessionAutoRefreshEnforced {
 		return oops.E(oops.CodeInvalid, nil, "remote session auto-refresh enforcement must be changed through the policy setter")
 	}
+	if feature == FeatureRemoteSessionAutoRefresh {
+		return m.SetRemoteSessionAutoRefreshEnabled(ctx, organizationID, enabled, actor)
+	}
 
 	// Skills is always on, so disabling it remains a silent no-op.
 	if feature == FeatureSkills && !enabled {

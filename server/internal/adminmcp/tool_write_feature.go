@@ -80,8 +80,11 @@ type featureWriter struct {
 
 func (f *featureWriter) readState(ctx context.Context, tx pgx.Tx, organizationID string) (featureState, error) {
 	id, err := featurerepo.New(tx).LockOrganizationMetadata(ctx, organizationID)
-	if err != nil || id != organizationID {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && id != organizationID) {
 		return featureState{}, ErrStaleState
+	}
+	if err != nil {
+		return featureState{}, fmt.Errorf("lock feature target: %w", err)
 	}
 	org, err := orgrepo.New(tx).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {

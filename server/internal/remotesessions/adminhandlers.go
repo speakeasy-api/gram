@@ -74,26 +74,6 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 	return s.createGlobalIssuer(ctx, payload, nil)
 }
 
-// CreateGlobalIssuerTx creates a global issuer inside the caller's
-// transaction. The caller owns commit and must call LogGlobalIssuerMutation
-// only after the transaction commits.
-func (s *Service) CreateGlobalIssuerTx(ctx context.Context, dbtx pgx.Tx, payload *adminrsgen.CreateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
-	if dbtx == nil {
-		return nil, errors.New("create global issuer requires a transaction")
-	}
-	return s.createGlobalIssuer(ctx, payload, dbtx)
-}
-
-// LogGlobalIssuerMutation writes the structured-log audit line for a global
-// issuer mutation that committed through a caller-owned transaction.
-func (s *Service) LogGlobalIssuerMutation(ctx context.Context, action, issuerID string) {
-	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
-	if err != nil {
-		return
-	}
-	logGlobalMutation(ctx, logger, authCtx, action, "issuer", issuerID)
-}
-
 func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.CreateGlobalIssuerPayload, callerTx pgx.Tx) (*types.RemoteSessionIssuer, error) {
 	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
@@ -342,16 +322,6 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 // UpdateGlobalIssuer patches a global remote_session_issuer.
 func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
 	return s.updateGlobalIssuer(ctx, payload, nil)
-}
-
-// UpdateGlobalIssuerTx patches a global issuer inside the caller's
-// transaction, with the same locks and binding guards as the dashboard path.
-// The caller owns commit and must call LogGlobalIssuerMutation afterwards.
-func (s *Service) UpdateGlobalIssuerTx(ctx context.Context, dbtx pgx.Tx, payload *adminrsgen.UpdateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
-	if dbtx == nil {
-		return nil, errors.New("update global issuer requires a transaction")
-	}
-	return s.updateGlobalIssuer(ctx, payload, dbtx)
 }
 
 func (s *Service) updateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload, callerTx pgx.Tx) (*types.RemoteSessionIssuer, error) {

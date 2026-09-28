@@ -3,6 +3,7 @@ package adminmcp
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 
@@ -30,7 +31,7 @@ type StaffOAuth struct {
 // NewStaffOAuth builds the staff OAuth handlers. The zero WriteConfig keeps
 // every connection read-only: consent refuses admin:write unless at least one
 // write operation is switched on.
-func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cache, verifier adminSessionVerifier, cipher *encryption.Client, signer *sessiontokens.Signer, writes WriteConfig) (*StaffOAuth, error) {
+func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cache, verifier adminSessionVerifier, cipher *encryption.Client, signer *sessiontokens.Signer, writes WriteConfig, logger *slog.Logger) (*StaffOAuth, error) {
 	if baseURL == nil || baseURL.Scheme != "https" || baseURL.Host == "" || (baseURL.Path != "" && baseURL.Path != "/") || db == nil || challengeCache == nil || verifier == nil || cipher == nil || signer == nil {
 		return nil, errors.New("staff OAuth configuration is incomplete")
 	}
@@ -57,7 +58,7 @@ func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cach
 		Clients:              clients,
 		Authorization:        authorization,
 		Tokens:               NewStaffOAuthTokens(clientStore, postgresStaffGrantStore{db: db}, verifier, cipher, signer, issuer, resource),
-		Approval:             newStaffProposalApproval(newProposalStore(db, nil), authorization, challengeCache, writes),
+		Approval:             newStaffProposalApproval(newProposalStore(db, logger), authorization, challengeCache, writes),
 		issuer:               issuer,
 		resource:             resource,
 		protectedResourceURL: protectedResourceURL,

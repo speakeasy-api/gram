@@ -54,7 +54,7 @@ func TestParseWriteOperationsRejectsUnknownNames(t *testing.T) {
 	require.Empty(t, empty)
 
 	_, err = ParseWriteOperations("set_organization_feature,delete_global_issuer")
-	require.Error(t, err)
+	require.ErrorIs(t, err, errUnknownWriteOp)
 }
 
 func TestRequireWriteAuthority(t *testing.T) {
@@ -74,7 +74,7 @@ func TestRequireWriteAuthority(t *testing.T) {
 	require.ErrorIs(t, err, ErrWriteDisabled, "an operation outside the enabled list must be refused")
 
 	_, err = requireWriteAuthority(writePrincipalContext(t, []string{ScopeRead, ScopeWrite}), enabled, WriteOperation("delete_global_issuer"))
-	require.Error(t, err)
+	require.ErrorIs(t, err, errUnknownWriteOp)
 
 	_, err = requireWriteAuthority(writePrincipalContext(t, []string{ScopeRead}), enabled, OperationSetOrganizationFeature)
 	require.ErrorIs(t, err, ErrWriteScope)
@@ -155,6 +155,46 @@ func staffConsentWithScope(t *testing.T, writes WriteConfig, scope string) (*rec
 	// Return the consent page body alongside the final response for assertions.
 	result.Header().Set("X-Test-Consent-Page", page.Body.String())
 	return store, result
+}
+
+func TestStaffConsentRechecksWriteSwitchOnSubmit(t *testing.T) {
+	t.Parallel()
+	s, store, _, pkce := staffAuthorizationFixture(t)
+	s.writes = WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only the reviewed feature operation is enabled.
+	request := staffAuthorizeRequest(pkce)
+	query := request.URL.Query()
+	query.Set("scope", "admin:read admin:write")
+	request.URL.RawQuery = query.Encode()
+	response := httptest.NewRecorder()
+	s.AuthorizeHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusFound, response.Code)
+	connectURL := response.Header().Get("Location")
+	proof := staffBrowserProof(t, response)
+	get := httptest.NewRequest(http.MethodGet, connectURL, nil)
+	get.AddCookie(proof)
+	get.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "browser-session"})
+	page := httptest.NewRecorder()
+	s.ConnectHandler().ServeHTTP(page, get)
+	require.Equal(t, http.StatusOK, page.Code)
+
+	parsed, err := url.Parse(connectURL)
+	require.NoError(t, err)
+	state := parsed.Query().Get("state")
+	challenge, err := s.cache.Get(t.Context(), staffChallengePrefix+state)
+	require.NoError(t, err)
+	s.writes = WriteConfig{}
+	form := url.Values{"state": {state}, "csrf_token": {challenge.CSRFToken}, "action": {"approve"}}
+	post := httptest.NewRequest(http.MethodPost, Path+"/connect", strings.NewReader(form.Encode()))
+	post.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	post.AddCookie(proof)
+	post.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "browser-session"})
+	result := httptest.NewRecorder()
+	s.ConnectHandler().ServeHTTP(result, post)
+	require.Equal(t, http.StatusSeeOther, result.Code)
+	callback, err := url.Parse(result.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "invalid_scope", callback.Query().Get("error"))
+	require.Zero(t, store.calls)
 }
 
 func TestStaffConsentGrantsWriteOnlyWhenSwitchedOn(t *testing.T) {

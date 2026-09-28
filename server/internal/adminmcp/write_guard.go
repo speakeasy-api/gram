@@ -3,6 +3,7 @@ package adminmcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -78,7 +79,7 @@ func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
 		}
 		op := WriteOperation(name)
 		if !op.known() {
-			return nil, errors.New("unknown admin MCP write operation: " + name)
+			return nil, fmt.Errorf("%w: %s", errUnknownWriteOp, name)
 		}
 		operations[op] = true
 	}

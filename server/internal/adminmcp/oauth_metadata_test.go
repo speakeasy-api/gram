@@ -21,13 +21,13 @@ func TestStaffOAuthUsesCanonicalAdminOrigin(t *testing.T) {
 	require.NoError(t, err)
 	cipher, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	oauth, err := NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{})
+	oauth, err := NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{}, testenv.NewLogger(t))
 	require.NoError(t, err)
 	require.Equal(t, "https://admin.example.test/admin-mcp", oauth.Resource())
 	require.Equal(t, "https://admin.example.test/admin-mcp/oauth", oauth.Issuer())
 	require.Equal(t, "https://admin.example.test/.well-known/oauth-protected-resource/admin-mcp", oauth.ProtectedResourceURL())
 	base.Path = "/unexpected-prefix"
-	_, err = NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{})
+	_, err = NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{}, testenv.NewLogger(t))
 	require.Error(t, err)
 }
 

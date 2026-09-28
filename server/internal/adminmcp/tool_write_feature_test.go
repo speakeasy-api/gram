@@ -107,7 +107,7 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 	otherPrincipal.Subject = "user:other-staff"
 	other = context.WithValue(other, principalKey{}, otherPrincipal)
 	_, err = writer.execute(other, ProposalIDInput{ProposalID: id.String()})
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrProposalNotFound)
 	f.reauth()
 	_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgB, Feature: "logs", Enabled: true, RetryKey: "old-connection"})
 	require.ErrorIs(t, err, ErrConnectionChanged)
@@ -117,7 +117,7 @@ func TestFeatureWriteStaleStateAndDisabledSwitch(t *testing.T) {
 	t.Parallel()
 	f := newProposalFixture(t, "admin_mcp_feature_stale")
 	writer := &featureWriter{store: f.store, writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	tx, err := f.db.Begin(t.Context())                                                                                                                       //nolint:glint // notestingrawsql: Exercise the production transaction-bound state reader with a synthetic database.
+	tx, err := f.db.Begin(t.Context())                                                                                                                       //nolint:glint // notestingrawsql: Exercise the transaction-bound state reader with a synthetic database.
 	require.NoError(t, err)
 	state, err := writer.readState(t.Context(), tx, f.orgA)
 	require.NoError(t, err)

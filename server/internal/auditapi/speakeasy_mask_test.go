@@ -63,6 +63,7 @@ func TestAuditService_List_MasksAdminSurfaceActors(t *testing.T) {
 		subjectType:      "organization",
 	})
 
+	customerClientID := "customer-client"
 	controlLogID := insertAuditLog(t, ctx, ti, auditLogSeed{
 		organizationID:   authCtx.ActiveOrganizationID,
 		projectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
@@ -70,6 +71,7 @@ func TestAuditService_List_MasksAdminSurfaceActors(t *testing.T) {
 		actorType:        "user",
 		actorDisplayName: new("Customer User"),
 		actorSlug:        new("customer"),
+		actingClientID:   &customerClientID,
 		action:           "project:update",
 		subjectID:        "project-1",
 		subjectType:      "project",
@@ -87,17 +89,21 @@ func TestAuditService_List_MasksAdminSurfaceActors(t *testing.T) {
 	adminLog := byID[adminLogID.String()]
 	require.NotNil(t, adminLog)
 	require.Equal(t, "Speakeasy Team", *adminLog.ActorDisplayName)
+	require.Empty(t, adminLog.ActorID, "staff actor IDs must not appear in customer feeds")
 	require.Nil(t, adminLog.ActorSlug)
 	require.Nil(t, adminLog.ActingClientID, "staff OAuth client IDs must not appear in customer feeds")
 
 	controlLog := byID[controlLogID.String()]
 	require.NotNil(t, controlLog)
+	require.Equal(t, "customer-user", controlLog.ActorID)
 	require.Equal(t, "Customer User", *controlLog.ActorDisplayName)
 	require.Equal(t, "customer", *controlLog.ActorSlug)
+	require.NotNil(t, controlLog.ActingClientID)
+	require.Equal(t, customerClientID, *controlLog.ActingClientID, "customer OAuth client IDs remain visible")
 }
 
-// Admin actor facets use the same surface-based privacy rule and do not depend
-// on a Speakeasy organization membership row for the raw OIDC subject.
+// Admin actor facets are omitted because their IDs cannot be exposed as
+// customer-facing filter values.
 func TestAuditService_ListFacets_MasksAdminSurfaceActors(t *testing.T) {
 	t.Parallel()
 
@@ -120,9 +126,7 @@ func TestAuditService_ListFacets_MasksAdminSurfaceActors(t *testing.T) {
 
 	result, err := ti.service.ListFacets(ctx, &gen.ListFacetsPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Actors, 1)
-	require.Equal(t, "oidc|test-operator", result.Actors[0].Value)
-	require.Equal(t, "Speakeasy Team", result.Actors[0].DisplayName)
+	require.Empty(t, result.Actors, "staff actor IDs must not appear in customer facets")
 }
 
 // Audit entries whose actor is a member of the Speakeasy org are surfaced to
