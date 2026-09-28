@@ -39,6 +39,7 @@ seconds, capped by the source credential's expiry where available.
 | `iss`             | `https://tunnel.speakeasy.com` (AICP).                                                                     |
 | `aud`             | The destination's saved resource identifier, or `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>` when unset. |
 | `sub`             | Typed principal identifier, for example `user:<USER_ID>`. The prefix identifies the principal type.        |
+| `organization_id` | The destination owner's Speakeasy organization ID.                                                         |
 | `email`           | Human user's email from their Gram profile; absent for agents and API keys.                                |
 | `allowed_methods` | Present only during consent discovery; methods Gram permits in that context.                               |
 | `iat`, `exp`      | Issuance and expiry, Unix seconds.                                                                         |
@@ -109,17 +110,27 @@ If your server uses the caller claims:
 2. Verify the signature with an explicit RS256 allowlist and require
    `typ=speakeasy-identity+jwt` and `version=1`.
 3. Require `iss=https://tunnel.speakeasy.com` and the exact destination audience.
+   If your server is reachable other than through the tunnel agent, also
+   require `organization_id` equal to your organization's ID.
 4. Require `iat` and `exp`, reject expired/future-dated tokens, and enforce a
    maximum 60-second lifetime with at most five seconds of clock tolerance.
 
 Gram enforces its consent and tool-access rules before forwarding. Use the
 verified caller claims for your server's own access policy.
 
-The default `tunneled-mcp-server:<ID>` audience is unique to your tunneled
-server. A saved resource identifier is not: another organization can save the
-same identifier, and Gram then issues assertions with that audience to its own
-callers. When you use a custom audience, do not accept every valid assertion;
-allowlist the `sub` values your policy admits.
+The tunnel connection is the primary binding: only Speakeasy can deliver
+requests through your tunnel, and it forwards only assertions minted for this
+server. The assertion identifies the caller for your policy and audit, and
+proves the request came from Speakeasy. The default `tunneled-mcp-server:<ID>`
+audience is unique to your server. A saved resource identifier is not: another
+organization can save the same identifier and receive assertions with that
+audience. Do one of the following:
+
+- Accept requests only from the tunnel agent, for example with a network
+  policy, so every request arrives through your tunnel.
+- If your server is reachable any other way, such as from the internet, require
+  `organization_id` to match your organization's ID. This rejects assertions
+  minted for another organization that saved the same identifier.
 
 If your access policy requires these claims, reject a missing or invalid
 assertion. A captured assertion can be reused until it expires, even with a

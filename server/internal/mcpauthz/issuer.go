@@ -142,7 +142,8 @@ func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
 	}
 	claims := jwt.MapClaims{
 		"iss": s.issuer, "sub": principalType + ":" + subject, "aud": audience,
-		"iat": now.Unix(), "exp": expires.Unix(), "jti": uuid.NewString(), "version": 1,
+		"organization_id": target.OrganizationID,
+		"iat":             now.Unix(), "exp": expires.Unix(), "jti": uuid.NewString(), "version": 1,
 	}
 	if principalType == "user" && auth.UserID == subject && auth.Email != nil && *auth.Email != "" {
 		claims["email"] = *auth.Email

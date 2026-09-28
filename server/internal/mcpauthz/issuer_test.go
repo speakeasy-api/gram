@@ -91,7 +91,8 @@ func TestAssertionVerifiesWithPublicJWKSAndBindsDestination(t *testing.T) {
 	for key := range claims {
 		keys = append(keys, key)
 	}
-	require.ElementsMatch(t, []string{"iss", "sub", "aud", "iat", "exp", "jti", "version"}, keys)
+	require.ElementsMatch(t, []string{"iss", "sub", "aud", "organization_id", "iat", "exp", "jti", "version"}, keys)
+	require.Equal(t, target.OrganizationID, claims["organization_id"])
 	require.IsType(t, "", claims["aud"])
 	require.Equal(t, time.Minute, standard.Expiry.Time().Sub(standard.IssuedAt.Time()))
 	require.NotContains(t, claims, "email")
