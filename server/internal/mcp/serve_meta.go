@@ -65,6 +65,11 @@ type metaGateContext struct {
 	protocolVersion mcpversions.Resolution
 }
 
+func shouldRecordMetaMCPNetworkRequest(agentID uuid.UUID) bool {
+	// Agent gateways are synthetic and have no network access panel to feed.
+	return agentID == uuid.Nil
+}
+
 // serveResolvedMetaMCPEndpoint terminates MCP for a meta-MCP-backed
 // endpoint: it runs the issuer gate when the meta server is issuer-gated,
 // then dispatches the JSON-RPC request. Only POST reaches here — GET/DELETE
@@ -82,6 +87,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 ) error {
 	ctx := r.Context()
 
+	if shouldRecordMetaMCPNetworkRequest(agentID) {
+		s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, uuid.Nil, metaServer.ID, metaServer.OrganizationID)
+	}
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))
 
 	// Stamped provisionally with the surface's newest revision so responses

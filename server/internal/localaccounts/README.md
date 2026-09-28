@@ -1,10 +1,20 @@
 # Local account profiles
 
-Supported only in initialized **secondary Git worktrees**, not the primary
-checkout. Create a secondary worktree and run `./zero` there before using these
-commands. Its configuration must include an explicit Compose project and a
-matching, non-default Temporal namespace; changing those values on the primary
-checkout is not a supported workaround.
+Supported in initialized **primary checkouts and secondary Git worktrees**.
+Run `./zero` in the checkout first. The primary defaults are Compose project
+`gram` (including when `COMPOSE_PROJECT_NAME` is unset), Temporal namespace
+`default`, and queue `main`. Only the primary checkout may use this combination.
+Secondary worktrees still require an explicit Compose project and a matching,
+non-default Temporal namespace, as configured by `git:workinit`.
+
+PostgreSQL, Redis, and Temporal must be running Compose containers owned by the
+current canonical checkout, with the configured loopback endpoints matching their
+actual published ports. A loopback Temporal address alone is not sufficient:
+the legacy shared Temporal container (including `gram-shared`) is refused, even
+if reachable locally. Use the checkout's per-worktree `gram-temporal` service;
+do not repoint the command to the shared server or change a secondary worktree's
+namespace to `default`. Ownership is rechecked before querying open workflows,
+including the final pre-write check. No Compose or mise defaults need changing.
 
 `mise run account` changes the selected local development account only. It is not
 an admin/billing API and has no Platform MCP tool. It never wakes or seeds the

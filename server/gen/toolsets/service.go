@@ -309,6 +309,8 @@ type UpdateToolsetPayload struct {
 	McpSlug *types.Slug
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool
+	// Where the hosted MCP is accessible: public_only, dual, or private_only
+	NetworkAccessMode *types.NetworkAccessMode
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
 	// The mode to use for tool selection

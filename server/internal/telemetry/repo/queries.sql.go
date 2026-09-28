@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"sort"
 	"strconv"
@@ -2992,6 +2993,10 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 type GetChatMetricsByIDsParams struct {
 	GramProjectID string
 	ChatIDs       []string // UUIDs of chats to get metrics for
+
+	// EventTimeFrom, when non-zero, restricts reads to events at or after this
+	// instant so ClickHouse can prune partitions and hourly summary buckets.
+	EventTimeFrom time.Time
 }
 
 // ChatMetricsRow represents token and cost metrics for a single chat.
@@ -3004,14 +3009,58 @@ type ChatMetricsRow struct {
 }
 
 // GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
-// This is used to enrich chat overview data from PostgreSQL with metrics from ClickHouse.
-//
-//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+// Agent-session surfaces (Claude Code, Codex, Cursor, …) are served from
+// chat_session_summaries so chat.load does not scan raw telemetry_logs.
+// Managed assistant completions are absent from that summary, so any chat
+// missing from it falls back to the raw gen_ai.usage projection.
 func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByIDsParams) (map[string]ChatMetricsRow, error) {
 	if len(arg.ChatIDs) == 0 {
 		return make(map[string]ChatMetricsRow), nil
 	}
 
+	metricsMap, err := q.scanChatMetrics(ctx, chatMetricsFromSessionSummaries(arg))
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics from session summaries: %w", err)
+	}
+
+	missing := make([]string, 0)
+	for _, id := range arg.ChatIDs {
+		if _, ok := metricsMap[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return metricsMap, nil
+	}
+
+	raw, err := q.scanChatMetrics(ctx, chatMetricsFromRawLogs(GetChatMetricsByIDsParams{
+		GramProjectID: arg.GramProjectID,
+		ChatIDs:       missing,
+		EventTimeFrom: arg.EventTimeFrom,
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics from telemetry logs: %w", err)
+	}
+	maps.Copy(metricsMap, raw)
+	return metricsMap, nil
+}
+
+func chatMetricsFromSessionSummaries(arg GetChatMetricsByIDsParams) squirrel.SelectBuilder {
+	sb := sq.Select(
+		"s.chat_id as gram_chat_id",
+		"sum(s.total_input_tokens) as total_input_tokens",
+		"sum(s.total_output_tokens) as total_output_tokens",
+		"sum(s.total_tokens) as total_tokens",
+		"sum(s.total_cost) as total_cost",
+	).
+		From("chat_session_summaries s").
+		Where("s.gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"s.chat_id": arg.ChatIDs}).
+		GroupBy("s.chat_id")
+	return withChatMetricsEventTimeFrom(sb, "s.time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?, 'UTC'))", arg.EventTimeFrom)
+}
+
+func chatMetricsFromRawLogs(arg GetChatMetricsByIDsParams) squirrel.SelectBuilder {
 	sb := sq.Select(
 		"chat_id as gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
@@ -3023,7 +3072,18 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where(squirrel.Eq{"chat_id": arg.ChatIDs}).
 		GroupBy("chat_id")
+	return withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+}
 
+func withChatMetricsEventTimeFrom(sb squirrel.SelectBuilder, pred string, eventTimeFrom time.Time) squirrel.SelectBuilder {
+	if eventTimeFrom.IsZero() {
+		return sb
+	}
+	return sb.Where(pred, eventTimeFrom.UnixNano())
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) scanChatMetrics(ctx context.Context, sb squirrel.SelectBuilder) (map[string]ChatMetricsRow, error) {
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building get chat metrics by IDs query: %w", err)
@@ -3056,6 +3116,10 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 type GetClaudeTurnUsageByChatIDsParams struct {
 	GramProjectID string
 	ChatIDs       []string
+
+	// EventTimeFrom, when non-zero, restricts the raw telemetry_logs scan to
+	// events at or after this instant so ClickHouse can prune daily partitions.
+	EventTimeFrom time.Time
 }
 
 // ClaudeTurnUsageRow represents aggregated Claude Code usage for one prompt.id turn.
@@ -3130,8 +3194,10 @@ func (q *Queries) GetClaudeTurnUsageByChatIDs(ctx context.Context, arg GetClaude
 		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
 		Where("gram_chat_id IS NOT NULL").
 		Where("gram_chat_id != ''").
-		Where(promptIDExpr+" != ''").
-		Where(isClaudeCodeExpr).
+		Where(promptIDExpr + " != ''").
+		Where(isClaudeCodeExpr)
+	sb = withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+	sb = sb.
 		GroupBy("gram_chat_id", promptIDExpr).
 		OrderBy("gram_chat_id ASC", "start_time_unix_nano ASC", "prompt_id ASC")
 
@@ -3193,10 +3259,12 @@ func (q *Queries) GetClaudeToolUsageByChatIDs(ctx context.Context, arg GetClaude
 		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
 		Where("gram_chat_id IS NOT NULL").
 		Where("gram_chat_id != ''").
-		Where(toolUseIDExpr+" != ''").
-		Where(promptIDExpr+" != ''").
+		Where(toolUseIDExpr + " != ''").
+		Where(promptIDExpr + " != ''").
 		Where(isToolResultExpr).
-		Where(isClaudeCodeExpr).
+		Where(isClaudeCodeExpr)
+	sb = withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+	sb = sb.
 		GroupBy("gram_chat_id", toolUseIDExpr, promptIDExpr).
 		OrderBy("gram_chat_id ASC", "min(time_unix_nano) ASC", "tool_use_id ASC")
 
@@ -7614,7 +7682,21 @@ type GetActiveCountsParams struct {
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
 	ToolsetSlug    string // Optional filter
-	SessionMode    bool   // If true, count by messages; if false, count by tool calls
+	MCPServerID    string // Optional filter - scopes to calls the gateway proxied to one configured MCP server
+	// MCPServerURLSuffixes and ToolSources scope to the same server as an agent
+	// hook observed it: by the URL the agent called (/mcp/<slug>) or, for a
+	// hook that never resolved a URL, by the server name it reported (by exact
+	// value, every spelling supplied). Hook rows carry neither a toolset slug nor
+	// an mcp_server_id, so without these a hook-only server counts no users.
+	MCPServerURLSuffixes []string // Optional filter
+	ToolSources          []string // Optional filter
+	SessionMode          bool     // If true, count by messages; if false, count by tool calls
+}
+
+// selectsHookObserved reports whether the read names a server by a hook-side
+// identity, in which case hook-observed tool calls count toward active users.
+func (arg GetActiveCountsParams) selectsHookObserved() bool {
+	return len(arg.MCPServerURLSuffixes) > 0 || len(arg.ToolSources) > 0
 }
 
 // ActiveCounts represents active server and user counts.
@@ -7627,14 +7709,28 @@ type ActiveCounts struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams) (*ActiveCounts, error) {
-	var userCountCondition string
-	if arg.SessionMode {
+	// Active users are the distinct people, keyed by userKey, with an event
+	// matching eventPredicate in the window.
+	userKey := "if(external_user_id != '', external_user_id, user_id)"
+	var eventPredicate string
+	switch {
+	case arg.SessionMode:
 		// Count users with chat completion messages
-		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion') AND if(external_user_id != '', external_user_id, user_id) != '')"
-	} else {
+		eventPredicate = "toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion')"
+	case arg.selectsHookObserved():
+		// Count users with tool calls the gateway or an agent hook observed. A
+		// hook row records a hooks: URN rather than tools:, and identifies the
+		// actor by email where a gateway row may carry only an id, so the
+		// person is keyed the way ListMCPUsageUsers keys them, email first:
+		// the two readers then agree, and someone seen through both lanes
+		// counts once whenever both rows name the same email.
+		userKey = chFirstNonEmpty("user_email", "external_user_id", "user_id", "''")
+		eventPredicate = "((event_source != 'hook' AND startsWith(gram_urn, 'tools:')) OR (event_source = 'hook' AND tool_name != ''))"
+	default:
 		// Count users with tool calls
-		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), startsWith(gram_urn, 'tools:') AND if(external_user_id != '', external_user_id, user_id) != '')"
+		eventPredicate = "startsWith(gram_urn, 'tools:')"
 	}
+	userCountCondition := "uniqExactIf(" + userKey + ", " + eventPredicate + " AND " + userKey + " != '')"
 
 	sb := sq.Select(
 		"uniqExactIf(tool_source, tool_source != '' AND event_source = 'hook') as active_servers_count",
@@ -7651,8 +7747,25 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
+	// One configured server is recorded under whichever identity the observing
+	// side had: a hosted call under its toolset slug, a proxied call under its
+	// configured id, a hook-observed call under the URL or name the agent used.
+	// A row carries one of them, so matching any never counts a user twice.
+	identity := squirrel.Or{}
 	if arg.ToolsetSlug != "" {
-		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+		identity = append(identity, squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+	if arg.MCPServerID != "" {
+		identity = append(identity, squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
+	if len(arg.MCPServerURLSuffixes) > 0 {
+		identity = append(identity, hookServerURLMatch(arg.MCPServerURLSuffixes))
+	}
+	if len(arg.ToolSources) > 0 {
+		identity = append(identity, hookToolSourceMatch(arg.ToolSources))
+	}
+	if len(identity) > 0 {
+		sb = sb.Where(identity)
 	}
 
 	query, args, err := sb.ToSql()

@@ -858,6 +858,20 @@ type DirectoryGroup struct {
 	WorkosLastEventID      pgtype.Text
 }
 
+type DirectoryRoleMapping struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+	AttributeKey     pgtype.Text
+	AttributeValue   pgtype.Text
+	RoleUrn          string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
 type DirectoryUser struct {
 	ID                    uuid.UUID
 	OrganizationID        string
@@ -3007,6 +3021,54 @@ type SlackAppToolset struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type SlackDirectoryConnection struct {
+	ID                      uuid.UUID
+	OrganizationID          string
+	SlackTeamID             string
+	SlackTeamName           pgtype.Text
+	CredentialsEncrypted    pgtype.Text
+	GrantedScopes           []string
+	Generation              uuid.UUID
+	Health                  string
+	DisconnectedAt          pgtype.Timestamptz
+	LastSyncStartedAt       pgtype.Timestamptz
+	LastFullSyncGeneration  uuid.NullUUID
+	LastFullSyncSucceededAt pgtype.Timestamptz
+	LastSyncFailedAt        pgtype.Timestamptz
+	LastErrorCode           pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
+type SlackDirectoryMembership struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	SlackTeamID               string
+	SlackUserID               string
+	DisplayName               pgtype.Text
+	Email                     pgtype.Text
+	Status                    string
+	MemberType                string
+	ProviderUpdatedAt         pgtype.Timestamptz
+	LastSeenAt                pgtype.Timestamptz
+	MappingRevision           int64
+	MappingConflictReason     pgtype.Text
+	MappingConflictDetectedAt pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+type SlackIdentityMapping struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SlackTeamID    string
+	SlackUserID    string
+	UserID         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
+}
+
 type SlackRegistration struct {
 	ID             uuid.UUID
 	SlackAppID     uuid.UUID
@@ -3395,6 +3457,21 @@ type TriggerInstance struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type TriggerThreadRoute struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	TargetKind           string
+	TargetRef            string
+	CorrelationID        string
+	RouteToCorrelationID pgtype.Text
+	State                string
+	LastSeenCursor       pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 type TrustedIssuerSession struct {

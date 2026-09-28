@@ -70,6 +70,13 @@ type UpdateSetupTaskRequestBody struct {
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
 }
 
+// SubmitOnboardingSurveyRequestBody is the type of the "organizations" service
+// "submitOnboardingSurvey" endpoint HTTP request body.
+type SubmitOnboardingSurveyRequestBody struct {
+	// Use case the survey answers resolved to.
+	UseCase *string `form:"use_case,omitempty" json:"use_case,omitempty" xml:"use_case,omitempty"`
+}
+
 // GetResponseBody is the type of the "organizations" service "get" endpoint
 // HTTP response body.
 type GetResponseBody struct {
@@ -233,6 +240,13 @@ type UpdateSetupTaskResponseBody struct {
 	BlockedBy []string `form:"blocked_by" json:"blocked_by" xml:"blocked_by"`
 	// Whether a platform administrator hid the task.
 	Hidden bool `form:"hidden" json:"hidden" xml:"hidden"`
+}
+
+// SubmitOnboardingSurveyResponseBody is the type of the "organizations"
+// service "submitOnboardingSurvey" endpoint HTTP response body.
+type SubmitOnboardingSurveyResponseBody struct {
+	// Setup tasks in catalog order.
+	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
 }
 
 // GetUnauthorizedResponseBody is the type of the "organizations" service "get"
@@ -3233,6 +3247,196 @@ type UpdateSetupTaskGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SubmitOnboardingSurveyUnauthorizedResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "unauthorized" error.
+type SubmitOnboardingSurveyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SubmitOnboardingSurveyForbiddenResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "forbidden" error.
+type SubmitOnboardingSurveyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SubmitOnboardingSurveyBadRequestResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "bad_request" error.
+type SubmitOnboardingSurveyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SubmitOnboardingSurveyNotFoundResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "not_found" error.
+type SubmitOnboardingSurveyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SubmitOnboardingSurveyConflictResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "conflict" error.
+type SubmitOnboardingSurveyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SubmitOnboardingSurveyUnsupportedMediaResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SubmitOnboardingSurveyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SubmitOnboardingSurveyInvalidResponseBody is the type of the "organizations"
+// service "submitOnboardingSurvey" endpoint HTTP response body for the
+// "invalid" error.
+type SubmitOnboardingSurveyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SubmitOnboardingSurveyInvariantViolationResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SubmitOnboardingSurveyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SubmitOnboardingSurveyUnexpectedResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "unexpected" error.
+type SubmitOnboardingSurveyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SubmitOnboardingSurveyGatewayErrorResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "gateway_error" error.
+type SubmitOnboardingSurveyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // OrganizationInvitationResponseBody is used to define fields on response body
 // types.
 type OrganizationInvitationResponseBody struct {
@@ -3574,6 +3778,26 @@ func NewUpdateSetupTaskResponseBody(res *organizations.SetupTask) *UpdateSetupTa
 		}
 	} else {
 		body.BlockedBy = []string{}
+	}
+	return body
+}
+
+// NewSubmitOnboardingSurveyResponseBody builds the HTTP response body from the
+// result of the "submitOnboardingSurvey" endpoint of the "organizations"
+// service.
+func NewSubmitOnboardingSurveyResponseBody(res *organizations.ListSetupTasksResult) *SubmitOnboardingSurveyResponseBody {
+	body := &SubmitOnboardingSurveyResponseBody{}
+	if res.Tasks != nil {
+		body.Tasks = make([]*SetupTaskResponseBody, len(res.Tasks))
+		for i, val := range res.Tasks {
+			if val == nil {
+				body.Tasks[i] = nil
+				continue
+			}
+			body.Tasks[i] = marshalOrganizationsSetupTaskToSetupTaskResponseBody(val)
+		}
+	} else {
+		body.Tasks = []*SetupTaskResponseBody{}
 	}
 	return body
 }
@@ -5886,6 +6110,156 @@ func NewUpdateSetupTaskGatewayErrorResponseBody(res *goa.ServiceError) *UpdateSe
 	return body
 }
 
+// NewSubmitOnboardingSurveyUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "submitOnboardingSurvey" endpoint of the
+// "organizations" service.
+func NewSubmitOnboardingSurveyUnauthorizedResponseBody(res *goa.ServiceError) *SubmitOnboardingSurveyUnauthorizedResponseBody {
+	body := &SubmitOnboardingSurveyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSubmitOnboardingSurveyForbiddenResponseBody builds the HTTP response body
+// from the result of the "submitOnboardingSurvey" endpoint of the
+// "organizations" service.
+func NewSubmitOnboardingSurveyForbiddenResponseBody(res *goa.ServiceError) *SubmitOnboardingSurveyForbiddenResponseBody {
+	body := &SubmitOnboardingSurveyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSubmitOnboardingSurveyBadRequestResponseBody builds the HTTP response
+// body from the result of the "submitOnboardingSurvey" endpoint of the
+// "organizations" service.
+func NewSubmitOnboardingSurveyBadRequestResponseBody(res *goa.ServiceError) *SubmitOnboardingSurveyBadRequestResponseBody {
+	body := &SubmitOnboardingSurveyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSubmitOnboardingSurveyNotFoundResponseBody builds the HTTP response body
+// from the result of the "submitOnboardingSurvey" endpoint of the
+// "organizations" service.
+func NewSubmitOnboardingSurveyNotFoundResponseBody(res *goa.ServiceError) *SubmitOnboardingSurveyNotFoundResponseBody {
+	body := &SubmitOnboardingSurveyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSubmitOnboardingSurveyConflictResponseBody builds the HTTP response body
+// from the result of the "submitOnboardingSurvey" endpoint of the
+// "organizations" service.
+func NewSubmitOnboardingSurveyConflictResponseBody(res *goa.ServiceError) *SubmitOnboardingSurveyConflictResponseBody {
+	body := &SubmitOnboardingSurveyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSubmitOnboardingSurveyUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "submitOnboardingSurvey" endpoint of
+// the "organizations" service.
+func NewSubmitOnboardingSurveyUnsupportedMediaResponseBody(res *goa.ServiceError) *SubmitOnboardingSurveyUnsupportedMediaResponseBody {
+	body := &SubmitOnboardingSurveyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSubmitOnboardingSurveyInvalidResponseBody builds the HTTP response body
+// from the result of the "submitOnboardingSurvey" endpoint of the
+// "organizations" service.
+func NewSubmitOnboardingSurveyInvalidResponseBody(res *goa.ServiceError) *SubmitOnboardingSurveyInvalidResponseBody {
+	body := &SubmitOnboardingSurveyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSubmitOnboardingSurveyInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "submitOnboardingSurvey" endpoint of
+// the "organizations" service.
+func NewSubmitOnboardingSurveyInvariantViolationResponseBody(res *goa.ServiceError) *SubmitOnboardingSurveyInvariantViolationResponseBody {
+	body := &SubmitOnboardingSurveyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSubmitOnboardingSurveyUnexpectedResponseBody builds the HTTP response
+// body from the result of the "submitOnboardingSurvey" endpoint of the
+// "organizations" service.
+func NewSubmitOnboardingSurveyUnexpectedResponseBody(res *goa.ServiceError) *SubmitOnboardingSurveyUnexpectedResponseBody {
+	body := &SubmitOnboardingSurveyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSubmitOnboardingSurveyGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "submitOnboardingSurvey" endpoint of the
+// "organizations" service.
+func NewSubmitOnboardingSurveyGatewayErrorResponseBody(res *goa.ServiceError) *SubmitOnboardingSurveyGatewayErrorResponseBody {
+	body := &SubmitOnboardingSurveyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPayload builds a organizations service get endpoint payload.
 func NewGetPayload(sessionToken *string) *organizations.GetPayload {
 	v := &organizations.GetPayload{}
@@ -6064,6 +6438,17 @@ func NewUpdateSetupTaskPayload(body *UpdateSetupTaskRequestBody, sessionToken *s
 	return v
 }
 
+// NewSubmitOnboardingSurveyPayload builds a organizations service
+// submitOnboardingSurvey endpoint payload.
+func NewSubmitOnboardingSurveyPayload(body *SubmitOnboardingSurveyRequestBody, sessionToken *string) *organizations.SubmitOnboardingSurveyPayload {
+	v := &organizations.SubmitOnboardingSurveyPayload{
+		UseCase: *body.UseCase,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // ValidateSendInviteRequestBody runs the validations defined on
 // SendInviteRequestBody
 func ValidateSendInviteRequestBody(body *SendInviteRequestBody) (err error) {
@@ -6135,6 +6520,15 @@ func ValidateUpdateSetupTaskRequestBody(body *UpdateSetupTaskRequestBody) (err e
 		if err2 := ValidateSetupTaskAssigneeInputRequestBody(body.Assignee); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateSubmitOnboardingSurveyRequestBody runs the validations defined on
+// SubmitOnboardingSurveyRequestBody
+func ValidateSubmitOnboardingSurveyRequestBody(body *SubmitOnboardingSurveyRequestBody) (err error) {
+	if body.UseCase == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_case", "body"))
 	}
 	return
 }

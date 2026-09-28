@@ -31,10 +31,11 @@ type Client struct {
 	GenerateWorkOSAdminPortalLinkEndpoint      goa.Endpoint
 	ListSetupTasksEndpoint                     goa.Endpoint
 	UpdateSetupTaskEndpoint                    goa.Endpoint
+	SubmitOnboardingSurveyEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "organizations" service client given the endpoints.
-func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, listUsers, removeUser, enableWebhooks, disableWebhooks, createPortalSession, getOnboardingStatus, verifyOnboardingHooksSetup, sendEnterpriseAdminOnboardingEmail, generateWorkOSAdminPortalLink, listSetupTasks, updateSetupTask goa.Endpoint) *Client {
+func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, listUsers, removeUser, enableWebhooks, disableWebhooks, createPortalSession, getOnboardingStatus, verifyOnboardingHooksSetup, sendEnterpriseAdminOnboardingEmail, generateWorkOSAdminPortalLink, listSetupTasks, updateSetupTask, submitOnboardingSurvey goa.Endpoint) *Client {
 	return &Client{
 		GetEndpoint:                                get,
 		SendInviteEndpoint:                         sendInvite,
@@ -52,6 +53,7 @@ func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, lis
 		GenerateWorkOSAdminPortalLinkEndpoint:      generateWorkOSAdminPortalLink,
 		ListSetupTasksEndpoint:                     listSetupTasks,
 		UpdateSetupTaskEndpoint:                    updateSetupTask,
+		SubmitOnboardingSurveyEndpoint:             submitOnboardingSurvey,
 	}
 }
 
@@ -400,4 +402,27 @@ func (c *Client) UpdateSetupTask(ctx context.Context, p *UpdateSetupTaskPayload)
 		return
 	}
 	return ires.(*SetupTask), nil
+}
+
+// SubmitOnboardingSurvey calls the "submitOnboardingSurvey" endpoint of the
+// "organizations" service.
+// SubmitOnboardingSurvey may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SubmitOnboardingSurvey(ctx context.Context, p *SubmitOnboardingSurveyPayload) (res *ListSetupTasksResult, err error) {
+	var ires any
+	ires, err = c.SubmitOnboardingSurveyEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSetupTasksResult), nil
 }

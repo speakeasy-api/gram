@@ -53,6 +53,10 @@ type Client struct {
 	// the getObservabilityOverview endpoint.
 	GetObservabilityOverviewDoer goahttp.Doer
 
+	// GetMcpNetworkTraffic Doer is the HTTP client used to make requests to the
+	// getMcpNetworkTraffic endpoint.
+	GetMcpNetworkTrafficDoer goahttp.Doer
+
 	// GetMetaMcpServerUsage Doer is the HTTP client used to make requests to the
 	// getMetaMcpServerUsage endpoint.
 	GetMetaMcpServerUsageDoer goahttp.Doer
@@ -185,6 +189,7 @@ func NewClient(
 		GetUserMetricsSummaryDoer:            doer,
 		GetEmployeeDataFlowGraphDoer:         doer,
 		GetObservabilityOverviewDoer:         doer,
+		GetMcpNetworkTrafficDoer:             doer,
 		GetMetaMcpServerUsageDoer:            doer,
 		GetProjectOverviewDoer:               doer,
 		GetUnproxiedMcpServerUsageDoer:       doer,
@@ -430,6 +435,30 @@ func (c *Client) GetObservabilityOverview() goa.Endpoint {
 		resp, err := c.GetObservabilityOverviewDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getObservabilityOverview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMcpNetworkTraffic returns an endpoint that makes HTTP requests to the
+// telemetry service getMcpNetworkTraffic server.
+func (c *Client) GetMcpNetworkTraffic() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMcpNetworkTrafficRequest(c.encoder)
+		decodeResponse = DecodeGetMcpNetworkTrafficResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMcpNetworkTrafficRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMcpNetworkTrafficDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getMcpNetworkTraffic", err)
 		}
 		return decodeResponse(resp)
 	}

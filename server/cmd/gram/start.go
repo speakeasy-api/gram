@@ -153,6 +153,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -371,6 +372,9 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars:  []string{"GRAM_SITE_URL"},
 			Required: true,
 		},
+		&cli.StringFlag{Name: "slack-client-id", EnvVars: []string{"SLACK_CLIENT_ID"}, Usage: "OAuth client ID for the Gram Slack app"},
+		&cli.StringFlag{Name: "slack-client-secret", EnvVars: []string{"SLACK_CLIENT_SECRET"}, Usage: "OAuth client secret for the Gram Slack app"},
+
 		&cli.StringFlag{
 			Name:     "database-url",
 			Usage:    "Database URL",
@@ -1473,6 +1477,13 @@ func newStartCommand() *cli.Command {
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
+
+			var slackDirectoryProvider slackdirectoryconnections.Provider
+			if c.String("slack-client-id") != "" && c.String("slack-client-id") != "unset" && c.String("slack-client-secret") != "" && c.String("slack-client-secret") != "unset" {
+				callbackURL := serverURL.JoinPath(slackdirectoryconnections.CallbackPath)
+				slackDirectoryProvider = slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient("", guardianPolicy.PooledClient()), c.String("slack-client-id"), c.String("slack-client-secret"), callbackURL.String())
+			}
+			slackdirectoryconnections.Attach(mux, slackdirectoryconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, cache.NewRedisCacheAdapter(redisClient), encryptionClient, slackDirectoryProvider, siteURL, background.NewSlackDirectorySyncScheduler(temporalEnv)))
 			dataexports.Attach(mux, dataexports.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
@@ -1604,7 +1615,7 @@ func newStartCommand() *cli.Command {
 			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, skillsPublishSignaler, siteURL)
 			skills.Attach(mux, skillsService)
-			toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil)
+			toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil).WithNetworkAccessEligibility(networkIngressAdmission)
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
@@ -1780,8 +1791,10 @@ func newStartCommand() *cli.Command {
 				RiskFindings:            riskFindings,
 				Telemetry:               telemetryrepo.New(chDB),
 				TelemetryDrilldown:      telemetryrepo.New(chDB),
+				WorkflowRun:             posthogClient,
 				CanonicalIdentity:       telemSvc,
 				RecentToolCalls:         telemetryrepo.New(chDB),
+				NetworkTraffic:          telemetryrepo.New(chDB),
 				EventFeed:               otelchrepo.New(chDB),
 				LogsEnabled:             platformmcp.FeatureChecker(logsEnabled),
 				ShadowInventory:         accessService,
@@ -1968,6 +1981,11 @@ func newStartCommand() *cli.Command {
 
 					piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, featureFlags, db, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
+					var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
+					if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {
+						slackDirectoryRefresher = slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient("", guardianPolicy.PooledClient()), id, secret, "")
+					}
+
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:               guardianPolicy,
 						TunnelHTTPClient:             tunnelHTTPClient,
@@ -1976,6 +1994,7 @@ func newStartCommand() *cli.Command {
 						FeatureProvider:              featureFlags,
 						AssetStorage:                 assetStorage,
 						SlackClient:                  slackClient,
+						SlackDirectoryTokenRefresher: slackDirectoryRefresher,
 						ChatMessageWriter:            chatWriter,
 						ChatClient:                   chatClient,
 						OpenRouter:                   openRouter,
