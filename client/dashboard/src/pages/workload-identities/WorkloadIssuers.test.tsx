@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
@@ -79,55 +85,63 @@ function renderPage() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  // Catalog leads, so the platforms live behind the Private toggle.
-  fireEvent.click(screen.getByRole("button", { name: /^Private/ }));
+  // Catalog leads, so the platforms live behind the Custom toggle.
+  fireEvent.click(screen.getByRole("button", { name: /^Custom/ }));
 }
+
+const PLATFORM_NAMES = ["build", "staging", "legacy"];
 
 function visiblePlatforms(): string[] {
   return screen
     .getAllByRole("link")
     .map((link) => link.textContent ?? "")
-    .map((text) => text.split("https://")[0]?.trim() ?? "");
+    .map((text) => PLATFORM_NAMES.find((name) => text.startsWith(name)) ?? "");
 }
 
-it("offers only the tags actually in use, so a filter cannot empty the list", () => {
+// The toolbar search reports its value on a timer, even undebounced, so each
+// query is awaited until the list reflects it.
+async function search(query: string, expected: string[]) {
+  fireEvent.change(screen.getByPlaceholderText("Search name, URL or tag…"), {
+    target: { value: query },
+  });
+  await waitFor(() => expect(visiblePlatforms()).toEqual(expected));
+}
+
+it("finds platforms by free-text search, with no per-tag buttons", () => {
   renderPage();
 
-  const chips = screen
-    .getAllByRole("button", { pressed: false })
-    .map((button) => button.textContent);
-
-  expect(chips).toContain("production");
-  expect(chips).toContain("ci");
-  // "legacy" carries no tags, so its name must not become a filter.
-  expect(chips).not.toContain("legacy");
-});
-
-it("narrows the platforms to the ones carrying the selected tag", () => {
-  renderPage();
-
-  expect(visiblePlatforms()).toEqual(["build", "staging", "legacy"]);
-
-  fireEvent.click(screen.getByRole("button", { name: "production" }));
-
-  expect(visiblePlatforms()).toEqual(["build"]);
-});
-
-it("clears the filter when the active tag is clicked again", () => {
-  renderPage();
-
-  fireEvent.click(screen.getByRole("button", { name: "ci" }));
-  expect(visiblePlatforms()).toEqual(["build", "staging"]);
-
-  fireEvent.click(screen.getByRole("button", { name: "ci" }));
+  // No per-tag buttons: a tag is found by typing it.
+  expect(screen.queryByRole("button", { name: "production" })).toBeNull();
   expect(visiblePlatforms()).toEqual(["build", "staging", "legacy"]);
 });
 
-it("restores every platform through All", () => {
+it("narrows the platforms to the ones matching a tag", async () => {
   renderPage();
 
-  fireEvent.click(screen.getByRole("button", { name: "production" }));
-  fireEvent.click(screen.getByRole("button", { name: "All" }));
+  await search("production", ["build"]);
+});
 
-  expect(visiblePlatforms()).toEqual(["build", "staging", "legacy"]);
+it("matches the name and issuer URL, ignoring case", async () => {
+  renderPage();
+
+  await search("LEG", ["legacy"]);
+  await search("build.example.com", ["build"]);
+});
+
+it("restores every platform when the search is cleared", async () => {
+  renderPage();
+
+  await search("production", ["build"]);
+  await search("", ["build", "staging", "legacy"]);
+});
+
+it("says so when nothing matches", async () => {
+  renderPage();
+
+  fireEvent.change(screen.getByPlaceholderText("Search name, URL or tag…"), {
+    target: { value: "no-such-platform" },
+  });
+
+  expect(await screen.findByText("No platforms match")).toBeTruthy();
+  expect(screen.queryAllByRole("link")).toHaveLength(0);
 });

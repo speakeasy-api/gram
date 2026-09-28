@@ -1,14 +1,15 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Page } from "@/components/page-layout";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
 import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
+import { admissionMatches } from "./search";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
+import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import {
   invalidateAllWorkloadIdentities,
   useWorkloadIdentities,
@@ -17,14 +18,15 @@ import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitW
 import { useAgents } from "@gram/client/react-query/agents.js";
 import { useWithdrawWorkloadIssuerMutation } from "@gram/client/react-query/withdrawWorkloadIssuer.js";
 import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/withdrawWorkloadSubject.js";
+import { WithdrawIssuerDialog } from "./WithdrawIssuerDialog";
+import { WithdrawSubjectDialog } from "./WithdrawSubjectDialog";
 import { Plus } from "lucide-react";
-import { useState } from "react";
 import {
-  AdmitSubjectDialog,
+  AdmitSubjectSheet,
   type AdmitSubjectValues,
-} from "./AdmitSubjectDialog";
+} from "./AdmitSubjectSheet";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -36,6 +38,11 @@ import { toast } from "sonner";
  * what makes "this issuer's workloads" a well-defined set even where two issuers
  * share a URL across tiers.
  */
+// The identifiers an administrator copies into the platform's console.
+function issuerSummary(issuer: WorkloadIssuer): string {
+  return `Issuer ${issuer.issuer}, keys at ${issuer.jwksUri}.`;
+}
+
 export function WorkloadIssuerDetailPage(): JSX.Element {
   return (
     <RequireScope scope={["workload:read", "workload:write"]} level="page">
@@ -50,6 +57,10 @@ function IssuerDetail(): JSX.Element {
   const queryClient = useQueryClient();
   const [admitOpen, setAdmitOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [withdrawing, setWithdrawing] = useState<WorkloadAdmission | null>(
+    null,
+  );
   const { data, isPending } = useWorkloadIdentities({});
   // throwOnError because the whole agents service 404s where the agent
   // management rollout is off, and the global query policy suppresses only 401
@@ -67,6 +78,11 @@ function IssuerDetail(): JSX.Element {
         (admission) => admission.workloadIssuerId === issuerId,
       ),
     [data, issuerId],
+  );
+
+  const visibleAdmissions = useMemo(
+    () => admissions.filter((admission) => admissionMatches(admission, search)),
+    [admissions, search],
   );
 
   const agents = useMemo(
@@ -118,6 +134,7 @@ function IssuerDetail(): JSX.Element {
       await invalidateAllWorkloadIdentities(queryClient, {
         refetchType: "all",
       });
+      setWithdrawing(null);
       toast.success("Workload withdrawn");
     },
     onError: (error) => {
@@ -141,14 +158,14 @@ function IssuerDetail(): JSX.Element {
       header: "Subject",
       render: (admission) => (
         <Stack gap={1}>
+          {/* The label leads when there is one: it is the operator's own name
+              for the machine, and reads faster than the subject beneath it. */}
+          {admission.name.length > 0 && (
+            <Text className="font-medium">{admission.name}</Text>
+          )}
           <Text className="font-mono text-xs break-all">
             {admission.subject}
           </Text>
-          {admission.name.length > 0 && (
-            <Text muted small>
-              {admission.name}
-            </Text>
-          )}
         </Stack>
       ),
     },
@@ -164,14 +181,6 @@ function IssuerDetail(): JSX.Element {
         ),
     },
     {
-      key: "tier",
-      header: "Admitted by",
-      width: "130px",
-      render: (admission) => (
-        <Text>{admission.projectId ? "This project" : "Organization"}</Text>
-      ),
-    },
-    {
       key: "actions",
       header: "",
       width: "120px",
@@ -181,9 +190,7 @@ function IssuerDetail(): JSX.Element {
             size="sm"
             variant="tertiary"
             disabled={withdrawSubject.isPending}
-            onClick={() =>
-              withdrawSubject.mutate({ request: { id: admission.id } })
-            }
+            onClick={() => setWithdrawing(admission)}
           >
             <Button.Text>Withdraw</Button.Text>
           </Button>
@@ -244,18 +251,8 @@ function IssuerDetail(): JSX.Element {
         </Stack>
       }
       title={issuer?.name ?? "Trusted platform"}
-      description={
-        issuer
-          ? `${issuer.issuer} — the identifier an assertion's iss claim must carry. Keys at ${issuer.jwksUri}.`
-          : undefined
-      }
+      description={issuer ? issuerSummary(issuer) : undefined}
     >
-      {issuer && (
-        <Badge variant="neutral" background className="mb-6">
-          {issuer.projectId === "" ? "Organization" : "This project"}
-        </Badge>
-      )}
-
       {admissions.length === 0 && !isPending ? (
         <InlineEmptyState
           icon="cpu"
@@ -263,56 +260,51 @@ function IssuerDetail(): JSX.Element {
           description="Trusting a platform allows nothing on its own. Allow a machine so it can exchange its identity token for a Gram session."
         />
       ) : (
-        <Table columns={columns} data={admissions} rowKey={(row) => row.id} />
+        <>
+          <Page.Toolbar className="mb-4">
+            <Page.Toolbar.Search
+              className="w-full"
+              value={search}
+              onChange={setSearch}
+              placeholder="Search subject, label or agent…"
+            />
+          </Page.Toolbar>
+          <Table
+            columns={columns}
+            data={visibleAdmissions}
+            rowKey={(row) => row.id}
+            noResultsMessage={<Text>No machines match that search.</Text>}
+          />
+        </>
       )}
-      <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>Stop trusting this platform?</Dialog.Title>
-            <Dialog.Description>
-              {admissions.length === 0
-                ? "Gram will stop accepting this platform's identity tokens. Nothing is allowed under it, so nothing else changes."
-                : `Gram will stop accepting this platform's identity tokens, and the ${
-                    admissions.length === 1
-                      ? "machine allowed under it"
-                      : `${admissions.length} machines allowed under it`
-                  } will stop authenticating. Existing sessions are not revoked by this.`}
-            </Dialog.Description>
-          </Dialog.Header>
-          <Dialog.Footer>
-            <Button
-              variant="tertiary"
-              onClick={() => setWithdrawOpen(false)}
-              disabled={withdrawIssuer.isPending}
-            >
-              <Button.Text>Cancel</Button.Text>
-            </Button>
-            <Button
-              variant="destructive-primary"
-              disabled={withdrawIssuer.isPending || issuer === undefined}
-              onClick={() => {
-                if (issuer !== undefined) {
-                  withdrawIssuer.mutate({ request: { id: issuer.id } });
-                }
-              }}
-            >
-              <Button.Text>
-                {withdrawIssuer.isPending ? "Withdrawing…" : "Stop trusting"}
-              </Button.Text>
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
+      <WithdrawSubjectDialog
+        admission={withdrawing}
+        onOpenChange={(open) => {
+          if (!open) setWithdrawing(null);
+        }}
+        onConfirm={(admission) =>
+          withdrawSubject.mutate({ request: { id: admission.id } })
+        }
+        isPending={withdrawSubject.isPending}
+      />
+      <WithdrawIssuerDialog
+        issuer={issuer}
+        open={withdrawOpen}
+        onOpenChange={setWithdrawOpen}
+        onConfirm={(target) =>
+          withdrawIssuer.mutate({ request: { id: target.id } })
+        }
+        isPending={withdrawIssuer.isPending}
+        machineCount={admissions.length}
+      />
 
       {issuer && (
-        <AdmitSubjectDialog
+        <AdmitSubjectSheet
           open={admitOpen}
           onOpenChange={setAdmitOpen}
           onSubmit={handleAllow}
           isPending={admitSubject.isPending}
-          // Scoped to this platform: the page is already about one, so offering
-          // a choice of issuer here would be a second way to say where you are.
-          issuers={[issuer]}
+          issuer={issuer}
           agents={agents}
         />
       )}

@@ -1,5 +1,5 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import { cn } from "@/lib/utils";
+import { Page } from "@/components/page-layout";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -20,10 +20,11 @@ import { useMemo, useState } from "react";
 import { Link, Outlet } from "react-router";
 import { useRoutes } from "@/routes";
 import { toast } from "sonner";
+import { issuerMatches } from "./search";
 import {
-  RegisterIssuerDialog,
+  RegisterIssuerSheet,
   type RegisterIssuerValues,
-} from "./RegisterIssuerDialog";
+} from "./RegisterIssuerSheet";
 
 /**
  * The platforms this organization has trusted, one card each, and a way to trust
@@ -56,32 +57,17 @@ function WorkloadIssuersCatalogue(): JSX.Element {
   const queryClient = useQueryClient();
   const [registerOpen, setRegisterOpen] = useState(false);
   // Catalog leads: the question an operator arrives with is which platform they
-  // are connecting, and the answer is a preset where one exists. Private is the
+  // are connecting, and the answer is a preset where one exists. Custom is the
   // fallback for a platform the catalogue does not carry yet — which today is
   // all of them.
   const [view, setView] = useState<IssuerView>("catalog");
-  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const { data, isPending } = useWorkloadIdentities({});
-  const issuers = data?.issuers ?? [];
-
-  // Only tags actually in use are offered, so the filter row cannot point at an
-  // empty result.
-  const allTags = useMemo(() => {
-    const seen = new Set<string>();
-    for (const issuer of issuers) {
-      for (const tag of issuer.tags) {
-        seen.add(tag);
-      }
-    }
-    return [...seen].sort((a, b) => a.localeCompare(b));
-  }, [issuers]);
+  const issuers = useMemo(() => data?.issuers ?? [], [data]);
 
   const visibleIssuers = useMemo(
-    () =>
-      activeTag === null
-        ? issuers
-        : issuers.filter((issuer) => issuer.tags.includes(activeTag)),
-    [issuers, activeTag],
+    () => issuers.filter((issuer) => issuerMatches(issuer, search)),
+    [issuers, search],
   );
 
   const registerIssuer = useRegisterWorkloadIssuerMutation({
@@ -127,7 +113,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
     <>
       <ResourceListPage
         title="Access Hub"
-        description="The platforms whose identity tokens this organization will accept in exchange for a Gram session. Trusting one allows nothing on its own — open a platform to allow the machines that may use it."
+        description="Platform workloads, such as CI jobs, cloud services and AI agents running on other platforms, sign in to Gram with identity tokens from the platforms registered here. Registering a platform admits nothing on its own. Open it to admit the specific platform workloads that may connect and assign each one an agent whose permissions it inherits."
         primaryAction={registerButton}
       >
         <Stack
@@ -142,7 +128,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
             onChange={setView}
             options={[
               { value: "catalog", label: "Catalog" },
-              { value: "custom", label: `Private (${issuers.length})` },
+              { value: "custom", label: `Custom (${issuers.length})` },
             ]}
           />
           <Text muted small className="min-w-0 text-right">
@@ -157,45 +143,35 @@ function WorkloadIssuersCatalogue(): JSX.Element {
             <Cards noGrid>
               <InlineEmptyState
                 icon="cpu"
-                heading="No private platforms yet"
+                heading="No custom platforms yet"
                 description="Trust the platform that issues your machines\u2019 identity tokens, using the identifier and key URL from its console. Nothing is allowed until you then allow a machine under it."
               />
             </Cards>
           ) : (
             <>
-              {allTags.length > 0 && (
-                <Stack
-                  direction="horizontal"
-                  gap={2}
-                  align="center"
-                  className="mb-4 flex-wrap"
-                >
-                  <TagFilterChip
-                    label="All"
-                    active={activeTag === null}
-                    onClick={() => setActiveTag(null)}
+              <Page.Toolbar className="mb-4">
+                <Page.Toolbar.Search
+                  className="w-full"
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Search name, URL or tag…"
+                />
+              </Page.Toolbar>
+              {visibleIssuers.length === 0 && !isPending ? (
+                <Cards noGrid>
+                  <InlineEmptyState
+                    icon="search"
+                    heading="No platforms match"
+                    description="Nothing registered here matches that search. Try part of a name, an issuer URL or a tag."
                   />
-                  {allTags.map((tag) => (
-                    <TagFilterChip
-                      key={tag}
-                      label={tag}
-                      active={activeTag === tag}
-                      // Clicking the active tag clears it, so the filter can be
-                      // undone where it was set.
-                      onClick={() =>
-                        setActiveTag((current) =>
-                          current === tag ? null : tag,
-                        )
-                      }
-                    />
+                </Cards>
+              ) : (
+                <Cards isLoading={isPending} cardSize={2}>
+                  {visibleIssuers.map((issuer) => (
+                    <IssuerCard key={issuer.id} issuer={issuer} />
                   ))}
-                </Stack>
+                </Cards>
               )}
-              <Cards isLoading={isPending} cardSize={2}>
-                {visibleIssuers.map((issuer) => (
-                  <IssuerCard key={issuer.id} issuer={issuer} />
-                ))}
-              </Cards>
             </>
           )
         ) : (
@@ -207,13 +183,13 @@ function WorkloadIssuersCatalogue(): JSX.Element {
             <InlineEmptyState
               icon="layout-grid"
               heading="No catalog platforms yet"
-              description="Presets for common platforms will appear here, each carrying that platform's issuer identifier, JWKS URL and whether its subjects can safely be matched by a wildcard. Until then, trust the platform as a private one."
+              description="Presets for common platforms will appear here, each carrying that platform's issuer identifier, JWKS URL and whether its subjects can safely be matched by a wildcard. Until then, register the platform as a custom one."
             />
           </Cards>
         )}
       </ResourceListPage>
 
-      <RegisterIssuerDialog
+      <RegisterIssuerSheet
         open={registerOpen}
         onOpenChange={setRegisterOpen}
         onSubmit={handleRegister}
@@ -227,9 +203,6 @@ type IssuerView = "catalog" | "custom";
 
 function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
   const routes = useRoutes();
-  // project_id carries the tier: an organization-tier issuer is usable by every
-  // project, a project-tier one only by the project it names.
-  const organizationTier = issuer.projectId === "";
 
   return (
     // A link rather than an onClick, so the card keeps what a link gives for
@@ -246,47 +219,20 @@ function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
           </Card.Description>
         </Card.Header>
         <Card.Content>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="neutral" background>
-              {organizationTier ? "Organization" : "This project"}
-            </Badge>
-            {issuer.tags.map((tag) => (
-              <Badge key={tag} variant="information">
-                {tag}
-              </Badge>
-            ))}
-          </div>
+          {issuer.tags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {issuer.tags.map((tag) => (
+                <Badge key={tag} variant="information">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
           <Text muted small className="mt-3 block break-all">
             Keys: {issuer.jwksUri}
           </Text>
         </Card.Content>
       </Card>
     </Link>
-  );
-}
-
-function TagFilterChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-3 py-1 text-xs transition-colors",
-        active
-          ? "border-foreground bg-foreground text-background"
-          : "border-border text-muted-foreground hover:border-foreground/30",
-      )}
-    >
-      {label}
-    </button>
   );
 }
