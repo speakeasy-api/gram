@@ -98715,7 +98715,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Custom tool names for this server. Omit to follow the policy tool rule.
+                    description: Custom tool names for this server. Omit to follow the policy tool rule; an empty list matches every tool on this server, unconditionally.
             required:
                 - mcp_server_id
         RiskOverviewCategory:

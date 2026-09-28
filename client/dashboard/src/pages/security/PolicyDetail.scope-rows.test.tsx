@@ -81,6 +81,15 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: () => ({
     data: {
       mcpServers: [
+        // Listed before "Support MCP" and has no tools, so a focus-tracking
+        // regression (falling back to the first server in the list instead
+        // of staying on the one just deselected) lands here and is visible
+        // as an empty tool list rather than silently matching by luck.
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          name: "Billing MCP",
+          toolsetId: "toolset-2",
+        },
         {
           id: "11111111-1111-4111-8111-111111111111",
           name: "Support MCP",
@@ -124,6 +133,11 @@ vi.mock("@gram/client/react-query/listToolsets.js", () => ({
   useListToolsets: () => ({
     data: {
       toolsets: [
+        {
+          id: "toolset-2",
+          name: "Billing tools",
+          tools: [],
+        },
         {
           id: "toolset-1",
           name: "Support tools",
@@ -450,6 +464,67 @@ describe("StandardPolicyEditor scope rows", () => {
     ).toBeNull();
   });
 
+  it("keeps a server in scope as a wildcard when its last tool is unchecked", async () => {
+    renderEditor(policy({ sources: ["gitleaks"] }));
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    const server = screen.getByRole("checkbox", { name: "Support MCP" });
+    fireEvent.click(server);
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("true");
+    });
+
+    // "Support MCP" has two tools in the fixture: unchecking both empties
+    // the tool list, which must not drop the server from scope.
+    fireEvent.click(screen.getByRole("checkbox", { name: "deleteTicket" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "listTickets" }));
+
+    expect(server.getAttribute("aria-checked")).not.toBe("false");
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("checkbox", { name: "deleteTicket" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+      expect(
+        screen
+          .getByRole("checkbox", { name: "listTickets" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+    });
+    expect(screen.getByText(/All tools, unconditionally/)).toBeTruthy();
+  });
+
+  it("keeps the pane on the deselected server so its tools stay pickable", async () => {
+    renderEditor(policy({ sources: ["gitleaks"] }));
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    const server = screen.getByRole("checkbox", { name: "Support MCP" });
+    fireEvent.click(server);
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("true");
+    });
+
+    // Deselect via the server's own checkbox, the same interaction reported
+    // as broken: without focus tracking, the pane falls back to the first
+    // server in the list ("Billing MCP", which has no tools) instead of
+    // staying on "Support MCP", stranding its tools out of view.
+    fireEvent.click(server);
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("false");
+    });
+    expect(
+      screen.queryByText("No tools are available for this server."),
+    ).toBeNull();
+
+    const tool = screen.getByRole("checkbox", { name: "deleteTicket" });
+    fireEvent.click(tool);
+    await waitFor(() => {
+      expect(tool.getAttribute("aria-checked")).toBe("true");
+    });
+    expect(server.getAttribute("aria-checked")).not.toBe("false");
+  });
+
   it("preserves server selection across mode switches", async () => {
     renderEditor(policy({ sources: ["gitleaks"] }));
 
@@ -543,6 +618,10 @@ describe("PolicyMCPScopePicker all-server selection", () => {
   it("cherry-picks a tool on a server that is not yet in scope", () => {
     render(<ScopePickerHarness />);
 
+    // Focus the server row (not its checkbox, which would select it) before
+    // picking a tool — the pane otherwise defaults to the first server in
+    // the list, which is not this one.
+    fireEvent.click(screen.getByRole("button", { name: /Support MCP/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: "listTickets" }));
 
     expect(
