@@ -1680,6 +1680,11 @@ CREATE TABLE IF NOT EXISTS trigger_thread_routes (
   CONSTRAINT trigger_thread_routes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+-- Serves the project_id foreign key's cascade, which also reaches soft-deleted
+-- rows that the partial indexes below leave out.
+CREATE INDEX IF NOT EXISTS trigger_thread_routes_project_id_idx
+ON trigger_thread_routes (project_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS trigger_thread_routes_target_correlation_id_key
 ON trigger_thread_routes (project_id, target_kind, target_ref, correlation_id)
 WHERE deleted IS FALSE;

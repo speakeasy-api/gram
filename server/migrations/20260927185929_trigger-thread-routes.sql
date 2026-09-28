@@ -20,6 +20,8 @@ CREATE TABLE "trigger_thread_routes" (
   CONSTRAINT "trigger_thread_routes_target_kind_check" CHECK ((target_kind <> ''::text) AND (char_length(target_kind) <= 60)),
   CONSTRAINT "trigger_thread_routes_target_ref_check" CHECK ((target_ref <> ''::text) AND (char_length(target_ref) <= 255))
 );
+-- Create index "trigger_thread_routes_project_id_idx" to table: "trigger_thread_routes"
+CREATE INDEX "trigger_thread_routes_project_id_idx" ON "trigger_thread_routes" ("project_id");
 -- Create index "trigger_thread_routes_route_to_correlation_id_idx" to table: "trigger_thread_routes"
 CREATE INDEX "trigger_thread_routes_route_to_correlation_id_idx" ON "trigger_thread_routes" ("project_id", "target_kind", "target_ref", "route_to_correlation_id") WHERE ((route_to_correlation_id IS NOT NULL) AND (deleted IS FALSE));
 -- Create index "trigger_thread_routes_target_correlation_id_key" to table: "trigger_thread_routes"
