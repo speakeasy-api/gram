@@ -1147,6 +1147,7 @@ func newTriggersApp(
 	serverURL *url.URL,
 	siteURL *url.URL,
 	slackClient *slack_client.SlackClient,
+	cacheImpl cache.Cache,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
 	return bgtriggers.NewApp(
@@ -1179,6 +1180,7 @@ func newTriggersApp(
 		serverURL,
 		siteURL,
 		slackClient,
+		cacheImpl,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
 }
