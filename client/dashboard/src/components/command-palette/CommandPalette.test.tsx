@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LauncherCandidate } from "./candidates/types";
@@ -65,6 +71,7 @@ const IDLE_JUDGE: JudgeState = {
 
 const runSettings = vi.fn();
 const runSlack = vi.fn();
+const runMarketplace = vi.fn();
 const runSessions = vi.fn();
 
 function candidate(
@@ -98,6 +105,17 @@ const SLACK = candidate({
   verbs: ["open", "disable"],
   group: "MCP Servers",
   run: runSlack,
+});
+
+const MARKETPLACE = candidate({
+  id: "marketplace",
+  kind: "marketplace",
+  title: "Plugin marketplace",
+  detail: "Plugin marketplace · unpublished changes",
+  keywords: ["marketplace", "publish"],
+  verbs: ["open", "publish"],
+  group: "Plugins",
+  run: runMarketplace,
 });
 
 const SESSIONS = candidate({
@@ -151,6 +169,19 @@ const DISABLE_SLACK: JudgeState = {
   disabled: false,
 };
 
+/** A settled judgment that picks the marketplace row and the publish verb. */
+const PUBLISH_MARKETPLACE: JudgeState = {
+  judgment: {
+    target: { marketplace: 0.95, "action:settings": 0.05 },
+    action: { open: 0.05, publish: 0.9, unclear: 0.05 },
+    ready: 0.9,
+  },
+  fresh: true,
+  inFlight: false,
+  latencyMs: 123,
+  disabled: false,
+};
+
 const input = () =>
   screen.getByPlaceholderText("Ask AI or search resources and pages…");
 
@@ -164,6 +195,7 @@ beforeEach(() => {
   palette.close.mockReset();
   runSettings.mockReset();
   runSlack.mockReset().mockResolvedValue(undefined);
+  runMarketplace.mockReset().mockResolvedValue(undefined);
   runSessions.mockReset();
 });
 
@@ -257,7 +289,7 @@ describe("CommandPalette", () => {
     expect(sent.map((c) => c.id)).toContain("mcp:slack");
   });
 
-  it("labels a mutating row with its verb and confirms before running", async () => {
+  it("runs a reversible verb on the first Enter", async () => {
     mocks.judgeState = DISABLE_SLACK;
     render(<CommandPalette />);
 
@@ -268,45 +300,76 @@ describe("CommandPalette", () => {
 
     await userEvent.keyboard("{Enter}");
 
-    expect(runSlack).not.toHaveBeenCalled();
-    expect(screen.getByText("Disable Slack?")).toBeDefined();
-    expect(screen.queryByPlaceholderText(/search resources/)).toBeNull();
+    // Enabling a server back is one click in the toast, so the palette does
+    // not spend a second keystroke confirming it.
+    expect(runSlack).toHaveBeenCalledWith("disable");
+    await waitFor(() => expect(palette.close).toHaveBeenCalled());
+  });
+
+  it("sets the verb rows apart under an Actions heading", async () => {
+    mocks.judgeState = DISABLE_SLACK;
+    render(<CommandPalette />);
+
+    await userEvent.type(input(), "slack");
+
+    const actions = screen.getByRole("group", { name: "Actions" });
+    expect(
+      within(actions).getByRole("option", { name: /Disable · Slack/ }),
+    ).toBeDefined();
+    // Plain matches stay out of it.
+    expect(within(actions).queryByRole("option", { name: /Settings/ })).toBe(
+      null,
+    );
+  });
+
+  it("confirms a verb that cannot be undone", async () => {
+    mocks.candidates = [SETTINGS, MARKETPLACE];
+    mocks.judgeState = PUBLISH_MARKETPLACE;
+    render(<CommandPalette />);
+
+    await userEvent.type(input(), "publish");
+    await userEvent.keyboard("{Enter}");
+
+    expect(runMarketplace).not.toHaveBeenCalled();
+    expect(screen.getByText("Publish Plugin marketplace?")).toBeDefined();
     // The list collapses to the row being confirmed.
     expect(screen.getAllByRole("option")).toHaveLength(1);
 
     await userEvent.keyboard("{Enter}");
 
-    expect(runSlack).toHaveBeenCalledWith("disable");
+    expect(runMarketplace).toHaveBeenCalledWith("publish");
     await waitFor(() => expect(palette.close).toHaveBeenCalled());
   });
 
   it("returns from confirm to the list on Escape, keeping the query", async () => {
-    mocks.judgeState = DISABLE_SLACK;
+    mocks.candidates = [SETTINGS, MARKETPLACE];
+    mocks.judgeState = PUBLISH_MARKETPLACE;
     render(<CommandPalette />);
 
-    await userEvent.type(input(), "slack");
+    await userEvent.type(input(), "publish");
     await userEvent.keyboard("{Enter}");
-    expect(screen.getByText("Disable Slack?")).toBeDefined();
+    expect(screen.getByText("Publish Plugin marketplace?")).toBeDefined();
 
     await userEvent.keyboard("{Escape}");
 
-    expect(screen.queryByText("Disable Slack?")).toBeNull();
-    expect((input() as HTMLInputElement).value).toBe("slack");
+    expect(screen.queryByText("Publish Plugin marketplace?")).toBeNull();
+    expect((input() as HTMLInputElement).value).toBe("publish");
     expect(palette.close).not.toHaveBeenCalled();
-    expect(runSlack).not.toHaveBeenCalled();
+    expect(runMarketplace).not.toHaveBeenCalled();
   });
 
   it("returns to the list when the mutation rejects", async () => {
-    mocks.judgeState = DISABLE_SLACK;
-    runSlack.mockRejectedValue(new Error("boom"));
+    mocks.candidates = [SETTINGS, MARKETPLACE];
+    mocks.judgeState = PUBLISH_MARKETPLACE;
+    runMarketplace.mockRejectedValue(new Error("boom"));
     render(<CommandPalette />);
 
-    await userEvent.type(input(), "slack");
+    await userEvent.type(input(), "publish");
     await userEvent.keyboard("{Enter}");
     await userEvent.keyboard("{Enter}");
 
     await waitFor(() => expect(input()).toBeDefined());
-    expect((input() as HTMLInputElement).value).toBe("slack");
+    expect((input() as HTMLInputElement).value).toBe("publish");
     expect(palette.close).not.toHaveBeenCalled();
   });
 

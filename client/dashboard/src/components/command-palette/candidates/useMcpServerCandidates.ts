@@ -7,7 +7,10 @@ import {
 } from "@/lib/mcp-server-visibility";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type {
+  McpServer,
+  McpServerVisibility,
+} from "@gram/client/models/components/mcpserver.js";
 import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
@@ -88,8 +91,13 @@ export function useMcpServerCandidates({
     const canWrite = (server: McpServer) =>
       hasScope("mcp:write", server.toolsetId ?? server.id);
 
-    const setVisibility = async (server: McpServer, verb: Verb) => {
-      const visibility = verb === "enable" ? "private" : "disabled";
+    // `offerUndo` is false for the undo itself, so the toasts do not loop.
+    const applyVisibility = async (
+      server: McpServer,
+      visibility: McpServerVisibility,
+      offerUndo: boolean,
+    ) => {
+      let previous: McpServerVisibility = server.visibility;
       try {
         // The update replaces the whole record, so it is built from the row
         // as it is now rather than from the cached one the list rendered
@@ -99,6 +107,7 @@ export function useMcpServerCandidates({
           ...buildGetMcpServerQuery(client, { id: server.id }),
           staleTime: 0,
         });
+        previous = latest.visibility;
         if (latest.visibility !== visibility) {
           await updateMcpServer({
             request: {
@@ -118,8 +127,26 @@ export function useMcpServerCandidates({
         throw error;
       }
       await invalidateMcpServerQueries(queryClient);
-      toast.success(mcpServerVisibilityToast(visibility));
+      // Undo restores the visibility the server actually had, which is not
+      // always the opposite verb: disabling a public server and undoing it
+      // must put it back to public, not to private.
+      toast.success(
+        mcpServerVisibilityToast(visibility),
+        offerUndo && previous !== visibility
+          ? {
+              action: {
+                label: "Undo",
+                onClick: () => {
+                  void applyVisibility(server, previous, false);
+                },
+              },
+            }
+          : undefined,
+      );
     };
+
+    const setVisibility = (server: McpServer, verb: Verb) =>
+      applyVisibility(server, verb === "enable" ? "private" : "disabled", true);
 
     const toolsetCandidates: LauncherCandidate[] = toolsets.map((toolset) => {
       const linked = byToolsetId.get(toolset.id);

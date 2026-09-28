@@ -206,29 +206,33 @@ filter).
 
 ### Mutation confirm flow
 
-State machine in the palette component:
+Enter on a row resolved to `open` navigates and closes, as today.
 
-```
-list ──Enter on verb≠open──▶ confirm(candidate, verb) ──Enter──▶ running ──▶ closed
-  ▲                               │ Esc                            │ error
-  └───────────────────────────────┘                                └──▶ list (toast)
-```
+A **reversible** verb (`enable`, `disable`) runs from the list on the first
+Enter. Its toast carries an **Undo** that restores the visibility the server
+actually had, which is not always the opposite verb: disabling a public server
+and undoing it must put it back to public, not to private. A second keystroke
+would buy nothing that Undo does not, and it costs one on every use.
 
-- **confirm:** the input is replaced by a bar: `Disable Slack MCP?  ↵ confirm · esc back`.
-  The list collapses to the single row. Query text is preserved.
-- **running:** the row shows a spinner; Enter/Esc are ignored.
-- **Execution** is the candidate's `run(verb)`:
-  - `enable`/`disable`: `useUpdateMcpServerMutation` with the existing
-    `mcpServerVisibilityUpdateForm(server, "private" | "disabled")` shape
-    from `DangerZoneSection.tsx`, then `invalidateAllMcpServers`,
-    `invalidateAllGetMcpServer`, `invalidateAllMcpEndpoints`. Toast copies
-    `mcpServerVisibilityToast`. These helpers are lifted into a shared
-    module so the settings page and the palette share one implementation.
-  - `publish`: `usePublishPluginsMutation` with `githubUsernames: []`
-    (the server accepts an empty collaborator list), then
-    `invalidateAllPublishStatus`. Toast matches `Plugins.tsx`.
-- `ready` never bypasses confirm. Publish is one-way; the unconditional
-  second Enter is the price of offering it at all.
+An **irreversible** verb (`publish`) still confirms. The input is replaced by a
+bar reading `Publish Plugin marketplace?  ↵ confirm · esc back`, the list
+collapses to that row, a second Enter runs it, and Esc returns to the list with
+the query intact. `ready` never skips this step.
+
+Execution is the candidate's `run(verb)`:
+
+- `enable`/`disable`: refetch the server, then `useUpdateMcpServerMutation`
+  with the `mcpServerVisibilityUpdateForm` shape, then
+  `invalidateMcpServerQueries`.
+- `publish`: `usePublishPluginsMutation` with an empty collaborator list, then
+  `invalidateAllPublishStatus`.
+
+### Ranked list layout
+
+Rows whose verb is not `open` are Jev's answer to something the user asked in
+words, so they render first under an **Actions** heading, and the remaining
+matches render flat below it. `domOrder` follows that partition, so ↑/↓ still
+walk the list in the order it is drawn.
 
 ### Footer
 

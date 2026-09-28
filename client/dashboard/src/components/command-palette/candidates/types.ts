@@ -70,6 +70,12 @@ export function isSendable(c: LauncherCandidate): boolean {
 }
 
 /** Verbs that change state and therefore require a second Enter. */
+/**
+ * Verbs the palette confirms before running, because they cannot be undone.
+ * Reversible verbs run on the first Enter and offer an Undo in their toast.
+ */
+export const CONFIRM_VERBS: ReadonlySet<Verb> = new Set<Verb>(["publish"]);
+
 export const MUTATING_VERBS: ReadonlySet<Verb> = new Set<Verb>([
   "enable",
   "disable",

@@ -478,7 +478,12 @@ describe("useMcpServerCandidates", () => {
         }),
       },
     });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("MCP server enabled");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "MCP server enabled",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Undo" }),
+      }),
+    );
   });
 
   // A hosted server is granted under its toolset id (the server resolves the
@@ -558,7 +563,12 @@ describe("useMcpServerCandidates", () => {
       },
     });
     expect(mocks.invalidateMcpServerQueries).toHaveBeenCalled();
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("MCP server disabled");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "MCP server disabled",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Undo" }),
+      }),
+    );
   });
 
   // The MCP page's gate: without a reader or writer scope the listing is not
@@ -628,7 +638,11 @@ describe("useMcpServerCandidates", () => {
     });
     expect(mocks.updateMcpServer).not.toHaveBeenCalled();
     expect(mocks.invalidateMcpServerQueries).toHaveBeenCalled();
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("MCP server disabled");
+    // Nothing changed, so there is nothing to undo.
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "MCP server disabled",
+      undefined,
+    );
   });
 
   it("toasts and rethrows when the pre-update fetch fails", async () => {
