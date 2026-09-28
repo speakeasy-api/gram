@@ -59,6 +59,7 @@ func CreateMessageUser(content string) or.ChatMessages {
 func CreateMessageAssistant(content string) or.ChatMessages {
 	c := or.CreateChatAssistantMessageContentStr(content)
 	return or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
+		Model:            nil,
 		Role:             or.ChatAssistantMessageRoleAssistant,
 		Content:          optionalnullable.From(&c),
 		Name:             nil,
@@ -73,8 +74,9 @@ func CreateMessageAssistant(content string) or.ChatMessages {
 
 func CreateMessageSystem(content string) or.ChatMessages {
 	return or.CreateChatMessagesSystem(or.ChatSystemMessage{
-		Role:    or.ChatSystemMessageRoleSystem,
-		Content: or.CreateChatSystemMessageContentStr(content),
-		Name:    nil,
+		ConfigurationUpdate: nil,
+		Role:                or.ChatSystemMessageRoleSystem,
+		Content:             or.CreateChatSystemMessageContentStr(content),
+		Name:                nil,
 	})
 }

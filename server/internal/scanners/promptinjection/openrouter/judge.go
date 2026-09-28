@@ -500,11 +500,13 @@ func SystemMessage() or.ChatMessages { return systemMessage(SystemPrompt) }
 
 func systemMessage(prompt string) or.ChatMessages {
 	return or.CreateChatMessagesSystem(or.ChatSystemMessage{
-		Role: or.ChatSystemMessageRoleSystem,
+		ConfigurationUpdate: nil,
+		Role:                or.ChatSystemMessageRoleSystem,
 		Content: or.CreateChatSystemMessageContentArrayOfChatContentText([]or.ChatContentText{{
-			Type:         or.ChatContentTextTypeText,
-			Text:         prompt,
-			CacheControl: &or.ChatContentCacheControl{Type: or.ChatContentCacheControlTypeEphemeral, TTL: nil},
+			PromptCacheBreakpoint: nil,
+			Type:                  or.ChatContentTextTypeText,
+			Text:                  prompt,
+			CacheControl:          &or.ChatContentCacheControl{Type: or.ChatContentCacheControlTypeEphemeral, TTL: nil},
 		}}),
 		Name: nil,
 	})

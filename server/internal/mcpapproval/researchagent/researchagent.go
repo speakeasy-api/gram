@@ -246,9 +246,10 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 
 	messages := []or.ChatMessages{
 		or.CreateChatMessagesSystem(or.ChatSystemMessage{
-			Role:    or.ChatSystemMessageRoleSystem,
-			Content: or.CreateChatSystemMessageContentStr(systemPrompt),
-			Name:    nil,
+			ConfigurationUpdate: nil,
+			Role:                or.ChatSystemMessageRoleSystem,
+			Content:             or.CreateChatSystemMessageContentStr(systemPrompt),
+			Name:                nil,
 		}),
 		or.CreateChatMessagesUser(or.ChatUserMessage{
 			Role:    or.ChatUserMessageRoleUser,
@@ -787,6 +788,7 @@ func assistantToolCallMessage(response *openrouter.CompletionResponse) or.ChatMe
 	}
 
 	message := or.ChatAssistantMessage{
+		Model:            nil,
 		Role:             or.ChatAssistantMessageRoleAssistant,
 		Content:          nil,
 		Name:             nil,

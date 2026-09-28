@@ -8,13 +8,17 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 func testClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
-	server := httptest.NewServer(handler)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		handler(w, r)
+	}))
 	t.Cleanup(server.Close)
 	return &Client{httpClient: server.Client(), resolveKey: func(context.Context, string) (string, error) { return "test-key", nil }, endpoint: server.URL}
 }
@@ -89,8 +93,10 @@ func TestEvaluateInvalidInput(t *testing.T) {
 
 func TestEvaluateNonOKStatus(t *testing.T) {
 	t.Parallel()
+	var attempts atomic.Int32
 
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("secret-bearing error body"))
 	})
@@ -99,6 +105,7 @@ func TestEvaluateNonOKStatus(t *testing.T) {
 
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "secret-bearing")
+	require.EqualValues(t, 1, attempts.Load())
 }
 
 func TestEvaluateModelMismatch(t *testing.T) {
@@ -277,4 +284,77 @@ func TestEvaluateMissingDependencies(t *testing.T) {
 	client.httpClient, client.resolveKey = http.DefaultClient, nil
 	_, err = client.Evaluate(t.Context(), "org", json.RawMessage(`{}`), testQuestions())
 	require.ErrorIs(t, err, ErrUnavailable)
+}
+
+func TestEvaluateRejectsMissingProbability(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"noul"}},"usage":{"input_tokens":5,"output_tokens":1,"cost":0.1}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org", json.RawMessage(`{}`), testQuestions())
+	require.ErrorContains(t, err, "invalid typesafe probability")
+}
+
+func TestEvaluateAcceptsZeroProbability(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"noul","noul":0}},"usage":{"input_tokens":5,"output_tokens":1,"cost":0.1}}`))
+	})
+	result, err := client.Evaluate(t.Context(), "org", json.RawMessage(`{}`), testQuestions())
+	require.NoError(t, err)
+	require.Zero(t, result.Probabilities["match"])
+}
+
+func TestEvaluateHonorsParentDeadline(t *testing.T) {
+	t.Parallel()
+	release := make(chan struct{})
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	})
+	defer close(release)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	_, err := client.Evaluate(ctx, "org", json.RawMessage(`{}`), testQuestions())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestEvaluateRedactsSDKDecodeErrors(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":"private-response-value","output_tokens":1,"cost":0.1}}`))
+	})
+	_, err := client.Evaluate(t.Context(), "org", json.RawMessage(`{}`), testQuestions())
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "private-response-value")
+}
+
+func TestEvaluatePreservesState(t *testing.T) {
+	t.Parallel()
+	for _, state := range []string{`"plain text"`, `{"id":9007199254740993}`, `[9007199254740993,"text"]`} {
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+				var body struct {
+					State     json.RawMessage     `json:"state"`
+					Questions map[string]Question `json:"questions"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+					return
+				}
+				if string(body.State) != state {
+					t.Errorf("state changed: %s", body.State)
+				}
+				if body.Questions["match"].Instructions != "does it match?" || body.Questions["match"].Criteria["true"] != "yes" || body.Questions["match"].Criteria["false"] != "no" {
+					t.Error("question changed")
+				}
+				_, _ = w.Write([]byte(`{"model":"typesafe/jev-1.13","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1,"cost":0.1}}`))
+			})
+			_, err := client.Evaluate(t.Context(), "org", json.RawMessage(state), testQuestions())
+			require.NoError(t, err)
+		})
+	}
 }
