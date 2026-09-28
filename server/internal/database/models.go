@@ -3459,6 +3459,21 @@ type TriggerInstance struct {
 	Deleted        bool
 }
 
+type TriggerThreadRoute struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	TargetKind           string
+	TargetRef            string
+	CorrelationID        string
+	RouteToCorrelationID pgtype.Text
+	State                string
+	LastSeenCursor       pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
 type TrustedIssuerSession struct {
 	ID                             uuid.UUID
 	RemoteSessionClientID          uuid.NullUUID
