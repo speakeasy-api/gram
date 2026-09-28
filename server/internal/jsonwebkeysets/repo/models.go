@@ -10,49 +10,88 @@ import (
 )
 
 type ExternalKey struct {
-	ID                           uuid.UUID
-	OrganizationID               pgtype.Text
-	ProjectID                    uuid.NullUUID
-	ExternalCredentialID         uuid.UUID
-	Provider                     string
-	Algorithm                    string
-	Name                         string
-	CustomerGrantReference       pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	ExternalCredentialID uuid.UUID
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Algorithm string
+	// @access: confidential
+	Name string
+	// @access: restricted
+	CustomerGrantReference pgtype.Text
+	// @access: confidential
 	IdentityProviderConnectionID uuid.NullUUID
-	CreatedAt                    pgtype.Timestamptz
-	UpdatedAt                    pgtype.Timestamptz
-	DeletedAt                    pgtype.Timestamptz
-	Deleted                      bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type JsonWebKey struct {
-	ID                 uuid.UUID
-	OrganizationID     string
-	ProjectID          uuid.NullUUID
-	JsonWebKeySetID    uuid.UUID
-	ExternalKeyID      uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	JsonWebKeySetID uuid.UUID
+	// @access: confidential
+	ExternalKeyID uuid.UUID
+	// @access: restricted
 	ExternalKeyVersion pgtype.Text
-	State              string
-	Kid                string
-	PublicJwk          []byte
-	ActivatedAt        pgtype.Timestamptz
-	RetiredAt          pgtype.Timestamptz
-	RevokedAt          pgtype.Timestamptz
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
-	Deleted            bool
+	// @access: confidential
+	State string
+	// @access: confidential
+	Kid string
+	// @access: confidential
+	PublicJwk []byte
+	// @access: confidential
+	ActivatedAt pgtype.Timestamptz
+	// @access: confidential
+	RetiredAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type JsonWebKeySet struct {
-	ID                           uuid.UUID
-	OrganizationID               string
-	ProjectID                    uuid.NullUUID
-	ExternalKeyID                uuid.UUID
-	Name                         string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	ExternalKeyID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
 	IdentityProviderConnectionID uuid.NullUUID
-	CreatedAt                    pgtype.Timestamptz
-	UpdatedAt                    pgtype.Timestamptz
-	DeletedAt                    pgtype.Timestamptz
-	Deleted                      bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

@@ -10,44 +10,78 @@ import (
 )
 
 type WorkloadAgentAssignment struct {
-	ID               uuid.UUID
-	OrganizationID   string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
 	WorkloadIssuerID uuid.UUID
-	Subject          string
-	MatchKind        string
-	AgentID          uuid.UUID
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	// @access: restricted
+	Subject string
+	// @access: confidential
+	MatchKind string
+	// @access: confidential
+	AgentID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type WorkloadIdentityAdmission struct {
-	ID               uuid.UUID
-	OrganizationID   string
-	ProjectID        uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
 	WorkloadIssuerID uuid.UUID
-	Subject          string
-	MatchKind        string
-	Name             pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	// @access: restricted
+	Subject string
+	// @access: confidential
+	MatchKind string
+	// @access: confidential
+	Name pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type WorkloadIssuer struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	ProjectID              uuid.NullUUID
-	Name                   string
-	Tags                   []string
-	Issuer                 string
-	JwksUri                string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Tags []string
+	// @access: restricted
+	Issuer string
+	// @access: restricted
+	JwksUri string
+	// @access: confidential
 	AllowWildcardAdmission bool
-	Metadata               []byte
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	// @access: opaque-restricted
+	Metadata []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

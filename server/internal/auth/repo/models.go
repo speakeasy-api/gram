@@ -10,14 +10,24 @@ import (
 )
 
 type Project struct {
-	ID                     uuid.UUID
-	Name                   string
-	Slug                   string
-	OrganizationID         string
-	LogoAssetID            uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Slug string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	LogoAssetID uuid.NullUUID
+	// @access: confidential
 	FunctionsRunnerVersion pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

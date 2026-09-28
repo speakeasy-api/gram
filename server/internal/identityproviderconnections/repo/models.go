@@ -10,148 +10,277 @@ import (
 )
 
 type ExternalCredential struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID pgtype.Text
-	ProjectID      uuid.NullUUID
-	Provider       string
-	Name           string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Name string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type GcpIamCredential struct {
-	ExternalCredentialID        uuid.UUID
+	// @access: confidential
+	ExternalCredentialID uuid.UUID
+	// @access: confidential
 	ExternalCredentialsProvider string
-	ImpersonateServiceAccount   pgtype.Text
-	WifPoolID                   pgtype.Text
-	WifProviderID               pgtype.Text
-	WifProjectNumber            pgtype.Text
-	SkipProjectVerification     bool
-	CreatedAt                   pgtype.Timestamptz
-	UpdatedAt                   pgtype.Timestamptz
+	// @access: restricted
+	ImpersonateServiceAccount pgtype.Text
+	// @access: restricted
+	WifPoolID pgtype.Text
+	// @access: restricted
+	WifProviderID pgtype.Text
+	// @access: restricted
+	WifProjectNumber pgtype.Text
+	// @access: confidential
+	SkipProjectVerification bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type IdentityProviderConnection struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID string
-	Provider       string
-	Status         string
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Status string
+	// @access: confidential
 	LastVerifiedAt pgtype.Timestamptz
-	LastError      pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	LastError pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type OktaIdentityProviderConnection struct {
-	IdentityProviderConnectionID        uuid.UUID
+	// @access: confidential
+	IdentityProviderConnectionID uuid.UUID
+	// @access: confidential
 	IdentityProviderConnectionsProvider string
-	OrganizationID                      string
-	AttachmentScope                     pgtype.Text
-	OrgUrl                              string
-	IssuerUrl                           string
-	IssuerUrlOverrideReason             pgtype.Text
-	OwnershipClaimed                    bool
-	RemoteSessionIssuerID               uuid.UUID
-	RemoteSessionClientID               uuid.UUID
-	DpopRequired                        bool
-	GrantedScopes                       []string
-	ObservedAdminRoles                  []string
-	ListingMode                         string
-	AgentID                             pgtype.Text
-	AgentAppID                          pgtype.Text
-	ApplicationsSyncedAt                pgtype.Timestamptz
-	ApplicationsSyncRequestedAt         pgtype.Timestamptz
-	CreatedAt                           pgtype.Timestamptz
-	UpdatedAt                           pgtype.Timestamptz
-	DeletedAt                           pgtype.Timestamptz
-	Deleted                             bool
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	AttachmentScope pgtype.Text
+	// @access: restricted
+	OrgUrl string
+	// @access: restricted
+	IssuerUrl string
+	// @access: opaque-restricted
+	IssuerUrlOverrideReason pgtype.Text
+	// @access: confidential
+	OwnershipClaimed bool
+	// @access: confidential
+	RemoteSessionIssuerID uuid.UUID
+	// @access: confidential
+	RemoteSessionClientID uuid.UUID
+	// @access: confidential
+	DpopRequired bool
+	// @access: opaque-restricted
+	GrantedScopes []string
+	// @access: confidential
+	ObservedAdminRoles []string
+	// @access: confidential
+	ListingMode string
+	// @access: confidential
+	AgentID pgtype.Text
+	// @access: confidential
+	AgentAppID pgtype.Text
+	// @access: confidential
+	ApplicationsSyncedAt pgtype.Timestamptz
+	// @access: confidential
+	ApplicationsSyncRequestedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type RemoteSessionClient struct {
-	ID                              uuid.UUID
-	ProjectID                       uuid.NullUUID
-	OrganizationID                  pgtype.Text
-	AttachmentScope                 pgtype.Text
-	RemoteSessionIssuerID           uuid.UUID
-	ClientID                        string
-	ClientSecretEncrypted           pgtype.Text
-	ClientIDIssuedAt                pgtype.Timestamptz
-	ClientSecretExpiresAt           pgtype.Timestamptz
-	TokenEndpointAuthMethod         pgtype.Text
-	JsonWebKeySetID                 uuid.NullUUID
-	Scope                           []string
-	GrantTypes                      []string
-	Audience                        pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: confidential
+	AttachmentScope pgtype.Text
+	// @access: confidential
+	RemoteSessionIssuerID uuid.UUID
+	// @access: restricted
+	ClientID string
+	// @access: secret-restricted
+	ClientSecretEncrypted pgtype.Text
+	// @access: confidential
+	ClientIDIssuedAt pgtype.Timestamptz
+	// @access: confidential
+	ClientSecretExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	TokenEndpointAuthMethod pgtype.Text
+	// @access: confidential
+	JsonWebKeySetID uuid.NullUUID
+	// @access: opaque-restricted
+	Scope []string
+	// @access: opaque-restricted
+	GrantTypes []string
+	// @access: restricted
+	Audience pgtype.Text
+	// @access: confidential
 	TokenEndpointAuthAudienceFormat pgtype.Text
-	ClientIDMetadataUri             pgtype.Text
-	LegacyCallbackUrl               bool
-	ResourceIdentifier              pgtype.Text
-	ResourceName                    pgtype.Text
-	ResourceDocumentation           pgtype.Text
-	ResourcePolicyUri               pgtype.Text
-	ResourceTosUri                  pgtype.Text
-	UpstreamRejectedAt              pgtype.Timestamptz
-	IdentityProviderConnectionID    uuid.NullUUID
-	CreatedAt                       pgtype.Timestamptz
-	UpdatedAt                       pgtype.Timestamptz
-	DeletedAt                       pgtype.Timestamptz
-	Deleted                         bool
+	// @access: confidential
+	ClientIDMetadataUri pgtype.Text
+	// @access: confidential
+	LegacyCallbackUrl bool
+	// @access: restricted
+	ResourceIdentifier pgtype.Text
+	// @access: opaque-restricted
+	ResourceName pgtype.Text
+	// @access: restricted
+	ResourceDocumentation pgtype.Text
+	// @access: restricted
+	ResourcePolicyUri pgtype.Text
+	// @access: restricted
+	ResourceTosUri pgtype.Text
+	// @access: confidential
+	UpstreamRejectedAt pgtype.Timestamptz
+	// @access: confidential
+	IdentityProviderConnectionID uuid.NullUUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type RemoteSessionIssuer struct {
-	ID                                         uuid.UUID
-	ProjectID                                  uuid.NullUUID
-	OrganizationID                             pgtype.Text
-	AttachmentScope                            pgtype.Text
-	Slug                                       string
-	Issuer                                     string
-	AuthorizationEndpoint                      pgtype.Text
-	TokenEndpoint                              pgtype.Text
-	RevocationEndpoint                         pgtype.Text
-	RegistrationEndpoint                       pgtype.Text
-	JwksUri                                    pgtype.Text
-	Jwks                                       []byte
-	JwksFetchedAt                              pgtype.Timestamptz
-	JwksLastError                              pgtype.Text
-	JwksLastErrorAt                            pgtype.Timestamptz
-	JwksCacheExpiresAt                         pgtype.Timestamptz
-	JwksEtag                                   pgtype.Text
-	ServiceDocumentation                       pgtype.Text
-	OpPolicyUri                                pgtype.Text
-	OpTosUri                                   pgtype.Text
-	ScopesSupported                            []string
-	GrantTypesSupported                        []string
-	AuthorizationGrantProfilesSupported        []string
-	ResponseTypesSupported                     []string
-	TokenEndpointAuthMethodsSupported          []string
-	CodeChallengeMethodsSupported              []string
-	ClientIDMetadataDocumentSupported          bool
-	UserinfoEndpoint                           pgtype.Text
-	IntrospectionEndpoint                      pgtype.Text
-	IntrospectionEndpointAuthMethodsSupported  []string
-	IDTokenSigningAlgValuesSupported           []string
-	ClaimsSupported                            []string
-	BackchannelLogoutSupported                 pgtype.Bool
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: confidential
+	AttachmentScope pgtype.Text
+	// @access: confidential
+	Slug string
+	// @access: restricted
+	Issuer string
+	// @access: restricted
+	AuthorizationEndpoint pgtype.Text
+	// @access: restricted
+	TokenEndpoint pgtype.Text
+	// @access: restricted
+	RevocationEndpoint pgtype.Text
+	// @access: restricted
+	RegistrationEndpoint pgtype.Text
+	// @access: restricted
+	JwksUri pgtype.Text
+	// @access: opaque-restricted
+	Jwks []byte
+	// @access: confidential
+	JwksFetchedAt pgtype.Timestamptz
+	// @access: opaque-restricted
+	JwksLastError pgtype.Text
+	// @access: confidential
+	JwksLastErrorAt pgtype.Timestamptz
+	// @access: confidential
+	JwksCacheExpiresAt pgtype.Timestamptz
+	// @access: opaque-restricted
+	JwksEtag pgtype.Text
+	// @access: restricted
+	ServiceDocumentation pgtype.Text
+	// @access: restricted
+	OpPolicyUri pgtype.Text
+	// @access: restricted
+	OpTosUri pgtype.Text
+	// @access: opaque-restricted
+	ScopesSupported []string
+	// @access: opaque-restricted
+	GrantTypesSupported []string
+	// @access: opaque-restricted
+	AuthorizationGrantProfilesSupported []string
+	// @access: opaque-restricted
+	ResponseTypesSupported []string
+	// @access: opaque-restricted
+	TokenEndpointAuthMethodsSupported []string
+	// @access: opaque-restricted
+	CodeChallengeMethodsSupported []string
+	// @access: confidential
+	ClientIDMetadataDocumentSupported bool
+	// @access: restricted
+	UserinfoEndpoint pgtype.Text
+	// @access: restricted
+	IntrospectionEndpoint pgtype.Text
+	// @access: opaque-restricted
+	IntrospectionEndpointAuthMethodsSupported []string
+	// @access: opaque-restricted
+	IDTokenSigningAlgValuesSupported []string
+	// @access: opaque-restricted
+	ClaimsSupported []string
+	// @access: confidential
+	BackchannelLogoutSupported pgtype.Bool
+	// @access: confidential
 	AuthorizationResponseIssParameterSupported pgtype.Bool
-	ScopeOverride                              []string
-	ResourceIndicatorSupported                 pgtype.Bool
-	Oidc                                       bool
-	Passthrough                                bool
-	TunneledMcpServerID                        uuid.NullUUID
-	Name                                       pgtype.Text
-	LogoAssetID                                uuid.NullUUID
-	ClientSetupDocumentationUrl                pgtype.Text
-	Metadata                                   []byte
-	MetadataFetchedAt                          pgtype.Timestamptz
-	MetadataLastError                          pgtype.Text
-	MetadataLastErrorAt                        pgtype.Timestamptz
-	MetadataLastErrorUrl                       pgtype.Text
-	CreatedAt                                  pgtype.Timestamptz
-	UpdatedAt                                  pgtype.Timestamptz
-	DeletedAt                                  pgtype.Timestamptz
-	Deleted                                    bool
+	// @access: opaque-restricted
+	ScopeOverride []string
+	// @access: confidential
+	ResourceIndicatorSupported pgtype.Bool
+	// @access: confidential
+	Oidc bool
+	// @access: confidential
+	Passthrough bool
+	// @access: confidential
+	TunneledMcpServerID uuid.NullUUID
+	// @access: confidential
+	Name pgtype.Text
+	// @access: confidential
+	LogoAssetID uuid.NullUUID
+	// @access: restricted
+	ClientSetupDocumentationUrl pgtype.Text
+	// @access: opaque-restricted
+	Metadata []byte
+	// @access: confidential
+	MetadataFetchedAt pgtype.Timestamptz
+	// @access: opaque-restricted
+	MetadataLastError pgtype.Text
+	// @access: confidential
+	MetadataLastErrorAt pgtype.Timestamptz
+	// @access: restricted
+	MetadataLastErrorUrl pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

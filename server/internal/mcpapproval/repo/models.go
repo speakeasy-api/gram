@@ -11,59 +11,105 @@ import (
 
 // Append-only approve/deny history with the rationale and the evidence it rested on.
 type McpApprovalDecision struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	ProjectID            uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	McpApprovalRequestID uuid.UUID
-	Decision             string
-	DecidedBy            string
-	Rationale            pgtype.Text
-	EvidenceSnapshot     []byte
-	EvidenceVersion      int32
-	McpResearchReportID  uuid.NullUUID
+	// @access: confidential
+	Decision string
+	// @access: confidential
+	DecidedBy string
+	// @access: opaque-restricted
+	Rationale pgtype.Text
+	// @access: opaque-restricted
+	EvidenceSnapshot []byte
+	// @access: confidential
+	EvidenceVersion int32
+	// @access: confidential
+	McpResearchReportID uuid.NullUUID
 	// Resolved blast radius of the approval. Empty for a denial.
+	// @access: confidential
 	GrantedPrincipalUrns []string
-	DecidedAt            pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	// @access: confidential
+	DecidedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 // Who asked for a server and why. Separate from the request so demand is visible without duplicating reviews.
 type McpApprovalRequestRequester struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	ProjectID            uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	McpApprovalRequestID uuid.UUID
-	UserID               string
-	UserEmail            pgtype.Text
-	Note                 pgtype.Text
-	RequestedAt          pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	// @access: confidential
+	UserID string
+	// @access: confidential-pii
+	UserEmail pgtype.Text
+	// @access: opaque-restricted
+	Note pgtype.Text
+	// @access: confidential
+	RequestedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 // Research-agent output for an approval request. Findings are gathered and cited, never adjudicated — the admin decides.
 type McpResearchReport struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	ProjectID            uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	McpApprovalRequestID uuid.UUID
-	Status               string
-	Report               []byte
-	ReportVersion        int32
-	ToolCalls            []byte
-	Model                pgtype.Text
-	PromptVersion        pgtype.Text
-	RequestedBy          pgtype.Text
-	StartedAt            pgtype.Timestamptz
-	CompletedAt          pgtype.Timestamptz
-	Error                pgtype.Text
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	DeletedAt            pgtype.Timestamptz
-	Deleted              bool
+	// @access: confidential
+	Status string
+	// @access: opaque-restricted
+	Report []byte
+	// @access: confidential
+	ReportVersion int32
+	// @access: opaque-restricted
+	ToolCalls []byte
+	// @access: confidential
+	Model pgtype.Text
+	// @access: confidential
+	PromptVersion pgtype.Text
+	// @access: confidential
+	RequestedBy pgtype.Text
+	// @access: confidential
+	StartedAt pgtype.Timestamptz
+	// @access: confidential
+	CompletedAt pgtype.Timestamptz
+	// @access: opaque-restricted
+	Error pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

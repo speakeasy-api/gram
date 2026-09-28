@@ -9,11 +9,18 @@ import (
 )
 
 type OrganizationFeature struct {
-	ID             int64
+	// @access: confidential
+	ID int64
+	// @access: confidential
 	OrganizationID string
-	FeatureName    string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	FeatureName string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

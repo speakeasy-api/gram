@@ -9,16 +9,28 @@ import (
 )
 
 type OpenrouterApiKey struct {
+	// @access: confidential
 	OrganizationID string
-	KeyType        string
-	Key            pgtype.Text
-	KeyEncrypted   pgtype.Text
-	KeyHash        string
+	// @access: confidential
+	KeyType string
+	// @access: secret-restricted
+	Key pgtype.Text
+	// @access: secret-restricted
+	KeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	KeyHash string
+	// @access: restricted
 	MonthlyCredits int64
-	Disabled       bool
-	DisableCauses  []string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	Disabled bool
+	// @access: confidential
+	DisableCauses []string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

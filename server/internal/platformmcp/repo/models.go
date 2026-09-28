@@ -10,190 +10,349 @@ import (
 )
 
 type PlatformMcpAuthorizationGrant struct {
-	ID                    uuid.UUID
-	OrganizationID        string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: secret-restricted
 	AuthorizationCodeHash string
-	OauthClientID         uuid.UUID
-	ConnectionID          uuid.UUID
-	ConnectionGeneration  uuid.UUID
-	RedirectUri           string
-	CodeChallenge         string
-	ExpiresAt             pgtype.Timestamptz
-	ConsumedAt            pgtype.Timestamptz
-	RevokedAt             pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
+	// @access: confidential
+	OauthClientID uuid.UUID
+	// @access: confidential
+	ConnectionID uuid.UUID
+	// @access: confidential
+	ConnectionGeneration uuid.UUID
+	// @access: restricted
+	RedirectUri string
+	// @access: secret-restricted
+	CodeChallenge string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	ConsumedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type PlatformMcpCatalogRegistration struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	ProjectID              uuid.UUID
-	SourceKind             string
-	CatalogProvider        string
-	CatalogReference       string
-	Status                 string
-	RemoteMcpServerID      uuid.NullUUID
-	RemoteMcpServerOwned   bool
-	UserSessionIssuerID    uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	SourceKind string
+	// @access: confidential
+	CatalogProvider string
+	// @access: restricted
+	CatalogReference string
+	// @access: confidential
+	Status string
+	// @access: confidential
+	RemoteMcpServerID uuid.NullUUID
+	// @access: confidential
+	RemoteMcpServerOwned bool
+	// @access: confidential
+	UserSessionIssuerID uuid.NullUUID
+	// @access: confidential
 	UserSessionIssuerOwned bool
-	McpServerID            uuid.NullUUID
-	McpServerOwned         bool
-	McpEndpointID          uuid.NullUUID
-	McpEndpointOwned       bool
-	ConnectionID           uuid.NullUUID
-	ConnectionGeneration   uuid.NullUUID
-	UserID                 pgtype.Text
-	ActingSurface          pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	McpServerOwned bool
+	// @access: confidential
+	McpEndpointID uuid.NullUUID
+	// @access: confidential
+	McpEndpointOwned bool
+	// @access: confidential
+	ConnectionID uuid.NullUUID
+	// @access: confidential
+	ConnectionGeneration uuid.NullUUID
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential
+	ActingSurface pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type PlatformMcpConnection struct {
-	ID                        uuid.UUID
-	OrganizationID            string
-	SubjectUrn                string
-	OauthClientID             uuid.UUID
-	ActiveGeneration          uuid.UUID
-	AuthorizedAt              pgtype.Timestamptz
-	ReauthorizedAt            pgtype.Timestamptz
-	AuthorizationExpiresAt    pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	SubjectUrn string
+	// @access: confidential
+	OauthClientID uuid.UUID
+	// @access: confidential
+	ActiveGeneration uuid.UUID
+	// @access: confidential
+	AuthorizedAt pgtype.Timestamptz
+	// @access: confidential
+	ReauthorizedAt pgtype.Timestamptz
+	// @access: confidential
+	AuthorizationExpiresAt pgtype.Timestamptz
+	// @access: confidential
 	ReauthorizationRequiredAt pgtype.Timestamptz
-	ReauthorizationReason     pgtype.Text
-	RevokedAt                 pgtype.Timestamptz
-	CreatedAt                 pgtype.Timestamptz
-	UpdatedAt                 pgtype.Timestamptz
+	// @access: confidential
+	ReauthorizationReason pgtype.Text
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type PlatformMcpDistribution struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	ProjectID            uuid.UUID
-	RegistrationID       uuid.UUID
-	DefaultPluginID      uuid.UUID
-	PluginID             uuid.NullUUID
-	PluginServerID       uuid.NullUUID
-	State                string
-	Version              int64
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	RegistrationID uuid.UUID
+	// @access: confidential
+	DefaultPluginID uuid.UUID
+	// @access: confidential
+	PluginID uuid.NullUUID
+	// @access: confidential
+	PluginServerID uuid.NullUUID
+	// @access: confidential
+	State string
+	// @access: confidential
+	Version int64
+	// @access: confidential
 	AttachmentWasCreated bool
-	PublicationState     string
+	// @access: confidential
+	PublicationState string
+	// @access: confidential
 	PublicationUpdatedAt pgtype.Timestamptz
-	ConnectionID         uuid.NullUUID
+	// @access: confidential
+	ConnectionID uuid.NullUUID
+	// @access: confidential
 	ConnectionGeneration uuid.NullUUID
-	UserID               pgtype.Text
-	ActingSurface        pgtype.Text
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential
+	ActingSurface pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type PlatformMcpOauthClient struct {
-	ID                             uuid.UUID
-	ClientID                       string
-	ClientSecretHash               pgtype.Text
-	ClientName                     string
-	RedirectUris                   []string
-	ClientIDIssuedAt               pgtype.Timestamptz
-	ClientSecretExpiresAt          pgtype.Timestamptz
-	RevokedAt                      pgtype.Timestamptz
-	ClientIDMetadataUri            pgtype.Text
-	ClientIDMetadataFetchedAt      pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+	// @access: restricted
+	ClientID string
+	// @access: secret-restricted
+	ClientSecretHash pgtype.Text
+	// @access: opaque-restricted
+	ClientName string
+	// @access: opaque-restricted
+	RedirectUris []string
+	// @access: confidential
+	ClientIDIssuedAt pgtype.Timestamptz
+	// @access: confidential
+	ClientSecretExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: restricted
+	ClientIDMetadataUri pgtype.Text
+	// @access: confidential
+	ClientIDMetadataFetchedAt pgtype.Timestamptz
+	// @access: confidential
 	ClientIDMetadataCacheExpiresAt pgtype.Timestamptz
-	ClientIDMetadataEtag           pgtype.Text
-	CreatedAt                      pgtype.Timestamptz
-	UpdatedAt                      pgtype.Timestamptz
+	// @access: opaque-restricted
+	ClientIDMetadataEtag pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type PlatformMcpOnboardingWorkflow struct {
-	ID                         uuid.UUID
-	OrganizationID             string
-	InitiatingSubjectUrn       string
-	SourceSurface              string
-	ClientFamily               string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	InitiatingSubjectUrn string
+	// @access: confidential
+	SourceSurface string
+	// @access: confidential
+	ClientFamily string
+	// @access: confidential
 	AgentConfigurationCopiedAt pgtype.Timestamptz
-	ConnectionID               uuid.NullUUID
-	ConnectionGeneration       uuid.NullUUID
-	SelectedProjectID          uuid.NullUUID
-	SelectedRegistrationID     uuid.NullUUID
-	Status                     string
-	CorrelationID              uuid.UUID
-	ExpiresAt                  pgtype.Timestamptz
-	ClosedAt                   pgtype.Timestamptz
-	CreatedAt                  pgtype.Timestamptz
-	UpdatedAt                  pgtype.Timestamptz
+	// @access: confidential
+	ConnectionID uuid.NullUUID
+	// @access: confidential
+	ConnectionGeneration uuid.NullUUID
+	// @access: confidential
+	SelectedProjectID uuid.NullUUID
+	// @access: confidential
+	SelectedRegistrationID uuid.NullUUID
+	// @access: confidential
+	Status string
+	// @access: confidential
+	CorrelationID uuid.UUID
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	ClosedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type PlatformMcpOperationReceipt struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	ProjectID            uuid.UUID
-	RegistrationID       uuid.NullUUID
-	ConnectionID         uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	RegistrationID uuid.NullUUID
+	// @access: confidential
+	ConnectionID uuid.NullUUID
+	// @access: confidential
 	ConnectionGeneration uuid.NullUUID
-	UserID               pgtype.Text
-	ActingSurface        pgtype.Text
-	Operation            string
-	IdempotencyKey       string
-	InputHash            string
-	Status               string
-	ResultCode           pgtype.Text
-	ResultPayload        []byte
-	ExpiresAt            pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential
+	ActingSurface pgtype.Text
+	// @access: confidential
+	Operation string
+	// @access: opaque-restricted
+	IdempotencyKey string
+	// @access: confidential
+	InputHash string
+	// @access: confidential
+	Status string
+	// @access: confidential
+	ResultCode pgtype.Text
+	// @access: opaque-restricted
+	ResultPayload []byte
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type PlatformMcpReadiness struct {
-	ID                               uuid.UUID
-	OrganizationID                   string
-	ProjectID                        uuid.UUID
-	RegistrationID                   uuid.UUID
-	ConnectionID                     uuid.NullUUID
-	ConnectionGeneration             uuid.NullUUID
-	UserID                           pgtype.Text
-	ActingSurface                    pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	RegistrationID uuid.UUID
+	// @access: confidential
+	ConnectionID uuid.NullUUID
+	// @access: confidential
+	ConnectionGeneration uuid.NullUUID
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential
+	ActingSurface pgtype.Text
+	// @access: confidential
 	ProviderAuthorizationFingerprint string
-	State                            string
-	EvidenceCode                     pgtype.Text
-	CheckedAt                        pgtype.Timestamptz
-	ExpiresAt                        pgtype.Timestamptz
-	CreatedAt                        pgtype.Timestamptz
-	UpdatedAt                        pgtype.Timestamptz
+	// @access: confidential
+	State string
+	// @access: confidential
+	EvidenceCode pgtype.Text
+	// @access: confidential
+	CheckedAt pgtype.Timestamptz
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type PlatformMcpSession struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	ConnectionID         uuid.UUID
-	OauthClientID        uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ConnectionID uuid.UUID
+	// @access: confidential
+	OauthClientID uuid.UUID
+	// @access: confidential
 	ConnectionGeneration uuid.UUID
-	Jti                  string
-	RefreshTokenHash     string
-	ExpiresAt            pgtype.Timestamptz
-	RefreshExpiresAt     pgtype.Timestamptz
-	RotatedAt            pgtype.Timestamptz
-	RevokedAt            pgtype.Timestamptz
-	ReplacedBySessionID  uuid.NullUUID
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	// @access: secret-restricted
+	Jti string
+	// @access: secret-restricted
+	RefreshTokenHash string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	RefreshExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	RotatedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	ReplacedBySessionID uuid.NullUUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type PlatformMcpSetupHandoff struct {
-	ID                   uuid.UUID
-	OrganizationID       string
-	ProjectID            uuid.UUID
-	RegistrationID       uuid.UUID
-	ConnectionID         uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	RegistrationID uuid.UUID
+	// @access: confidential
+	ConnectionID uuid.NullUUID
+	// @access: confidential
 	ConnectionGeneration uuid.NullUUID
-	UserID               pgtype.Text
-	ActingSurface        pgtype.Text
-	ProviderKey          string
-	Intent               string
-	HandoffHash          string
-	ExpiresAt            pgtype.Timestamptz
-	RedeemedAt           pgtype.Timestamptz
-	InvalidatedAt        pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	// @access: confidential
+	UserID pgtype.Text
+	// @access: confidential
+	ActingSurface pgtype.Text
+	// @access: confidential
+	ProviderKey string
+	// @access: confidential
+	Intent string
+	// @access: secret-restricted
+	HandoffHash string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	RedeemedAt pgtype.Timestamptz
+	// @access: confidential
+	InvalidatedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

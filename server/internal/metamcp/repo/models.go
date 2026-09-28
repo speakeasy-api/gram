@@ -10,28 +10,49 @@ import (
 )
 
 type MetaMcpServer struct {
-	ID                  uuid.UUID
-	OrganizationID      string
-	ProjectID           uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	UserSessionIssuerID uuid.NullUUID
-	Name                string
-	Instructions        pgtype.Text
-	Visibility          string
-	NetworkAccessMode   pgtype.Text
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
+	Instructions pgtype.Text
+	// @access: confidential
+	Visibility string
+	// @access: confidential
+	NetworkAccessMode pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type MetaMcpServerMember struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	MetaMcpServerID uuid.UUID
-	McpServerID     uuid.UUID
-	SortOrder       int32
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	SortOrder int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

@@ -10,19 +10,34 @@ import (
 )
 
 type Package struct {
-	ID              uuid.UUID
-	Name            string
-	Title           pgtype.Text
-	Summary         pgtype.Text
-	DescriptionRaw  pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Title pgtype.Text
+	// @access: opaque-restricted
+	Summary pgtype.Text
+	// @access: opaque-restricted
+	DescriptionRaw pgtype.Text
+	// @access: opaque-restricted
 	DescriptionHtml pgtype.Text
-	Url             pgtype.Text
-	Keywords        []string
-	ImageAssetID    uuid.NullUUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: restricted
+	Url pgtype.Text
+	// @access: opaque-restricted
+	Keywords []string
+	// @access: confidential
+	ImageAssetID uuid.NullUUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

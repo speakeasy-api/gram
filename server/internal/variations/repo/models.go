@@ -11,35 +11,63 @@ import (
 )
 
 type ToolVariation struct {
-	ID              uuid.UUID
-	GroupID         uuid.UUID
-	SrcToolUrn      urn.Tool
-	SrcToolName     string
-	Confirm         pgtype.Text
-	ConfirmPrompt   pgtype.Text
-	Name            pgtype.Text
-	Summary         pgtype.Text
-	Description     pgtype.Text
-	Tags            []string
-	Summarizer      pgtype.Text
-	Title           pgtype.Text
-	ReadOnlyHint    pgtype.Bool
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	GroupID uuid.UUID
+	// @access: confidential
+	SrcToolUrn urn.Tool
+	// @access: confidential
+	SrcToolName string
+	// @access: confidential
+	Confirm pgtype.Text
+	// @access: opaque-restricted
+	ConfirmPrompt pgtype.Text
+	// @access: confidential
+	Name pgtype.Text
+	// @access: opaque-restricted
+	Summary pgtype.Text
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: opaque-restricted
+	Tags []string
+	// @access: opaque-restricted
+	Summarizer pgtype.Text
+	// @access: confidential
+	Title pgtype.Text
+	// @access: confidential
+	ReadOnlyHint pgtype.Bool
+	// @access: confidential
 	DestructiveHint pgtype.Bool
-	IdempotentHint  pgtype.Bool
-	OpenWorldHint   pgtype.Bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	IdempotentHint pgtype.Bool
+	// @access: confidential
+	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type ToolVariationsGroup struct {
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-	Name        string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: opaque-restricted
 	Description pgtype.Text
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	DeletedAt   pgtype.Timestamptz
-	Deleted     bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

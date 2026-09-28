@@ -11,57 +11,104 @@ import (
 )
 
 type HttpSecurity struct {
-	ID                  uuid.UUID
-	DeploymentID        uuid.UUID
-	ProjectID           uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
 	Openapiv3DocumentID uuid.NullUUID
-	Key                 string
-	Type                pgtype.Text
-	Name                pgtype.Text
-	InPlacement         pgtype.Text
-	Scheme              pgtype.Text
-	BearerFormat        pgtype.Text
-	OauthTypes          []string
-	OauthFlows          []byte
-	EnvVariables        []string
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
+	// @access: confidential
+	Key string
+	// @access: confidential
+	Type pgtype.Text
+	// @access: confidential
+	Name pgtype.Text
+	// @access: confidential
+	InPlacement pgtype.Text
+	// @access: confidential
+	Scheme pgtype.Text
+	// @access: confidential
+	BearerFormat pgtype.Text
+	// @access: confidential
+	OauthTypes []string
+	// @access: opaque-restricted
+	OauthFlows []byte
+	// @access: confidential
+	EnvVariables []string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type Toolset struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	ProjectID              uuid.UUID
-	Name                   string
-	Slug                   string
-	Description            pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Slug string
+	// @access: opaque-restricted
+	Description pgtype.Text
+	// @access: confidential
 	DefaultEnvironmentSlug pgtype.Text
-	McpSlug                pgtype.Text
-	McpIsPublic            bool
-	McpEnabled             bool
-	ToolSelectionMode      string
-	CustomDomainID         uuid.NullUUID
-	ExternalOauthServerID  uuid.NullUUID
-	OauthProxyServerID     uuid.NullUUID
-	UserSessionIssuerID    uuid.NullUUID
-	ToolVariationsGroupID  uuid.NullUUID
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
+	// @access: confidential
+	McpSlug pgtype.Text
+	// @access: confidential
+	McpIsPublic bool
+	// @access: confidential
+	McpEnabled bool
+	// @access: confidential
+	ToolSelectionMode string
+	// @access: confidential
+	CustomDomainID uuid.NullUUID
+	// @access: confidential
+	ExternalOauthServerID uuid.NullUUID
+	// @access: confidential
+	OauthProxyServerID uuid.NullUUID
+	// @access: confidential
+	UserSessionIssuerID uuid.NullUUID
+	// @access: confidential
+	ToolVariationsGroupID uuid.NullUUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type ToolsetVersion struct {
-	ID            uuid.UUID
-	ToolsetID     uuid.UUID
-	Version       int64
-	ToolUrns      []urn.Tool
-	ResourceUrns  []urn.Resource
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ToolsetID uuid.UUID
+	// @access: confidential
+	Version int64
+	// @access: confidential
+	ToolUrns []urn.Tool
+	// @access: opaque-restricted
+	ResourceUrns []urn.Resource
+	// @access: confidential
 	PredecessorID uuid.NullUUID
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

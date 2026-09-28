@@ -10,34 +10,60 @@ import (
 )
 
 type BillingMetadatum struct {
-	ID                               uuid.UUID
-	OrganizationID                   string
-	StripeCustomerID                 pgtype.Text
-	StripeSubscriptionID             pgtype.Text
-	StripeBillingCycleAnchor         pgtype.Timestamptz
-	StripeCheckoutIdempotencyKey     pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: restricted
+	StripeCustomerID pgtype.Text
+	// @access: restricted
+	StripeSubscriptionID pgtype.Text
+	// @access: confidential
+	StripeBillingCycleAnchor pgtype.Timestamptz
+	// @access: confidential
+	StripeCheckoutIdempotencyKey pgtype.Text
+	// @access: confidential
 	StripeCheckoutBillingCycleAnchor pgtype.Timestamptz
-	StripeCheckoutTrialEnd           pgtype.Timestamptz
-	StripeCheckoutExpiresAt          pgtype.Timestamptz
-	StripeCheckoutSessionID          pgtype.Text
-	TumMonthlyTokenLimit             pgtype.Int8
-	AlertEmail                       pgtype.Text
-	BillingCycleAnchorDay            int32
+	// @access: confidential
+	StripeCheckoutTrialEnd pgtype.Timestamptz
+	// @access: confidential
+	StripeCheckoutExpiresAt pgtype.Timestamptz
+	// @access: restricted
+	StripeCheckoutSessionID pgtype.Text
+	// @access: restricted
+	TumMonthlyTokenLimit pgtype.Int8
+	// @access: confidential-pii
+	AlertEmail pgtype.Text
+	// @access: confidential
+	BillingCycleAnchorDay int32
 	// Contracted org-level cap for tunneled MCP server sources. NULL means use the finite plan default.
+	// @access: restricted
 	TunneledMcpServerLimit pgtype.Int4
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type StripeInvoice struct {
-	StripeInvoiceID      string
-	OrganizationID       pgtype.Text
-	StripeCustomerID     string
+	// @access: restricted
+	StripeInvoiceID string
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: restricted
+	StripeCustomerID string
+	// @access: restricted
 	StripeSubscriptionID string
-	ServicePeriodStart   pgtype.Timestamptz
-	ServicePeriodEnd     pgtype.Timestamptz
-	InvoiceState         string
-	FinalizedAt          pgtype.Timestamptz
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
+	// @access: confidential
+	ServicePeriodStart pgtype.Timestamptz
+	// @access: confidential
+	ServicePeriodEnd pgtype.Timestamptz
+	// @access: confidential
+	InvoiceState string
+	// @access: confidential
+	FinalizedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

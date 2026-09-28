@@ -12,33 +12,49 @@ import (
 // Customer-hosted MCP server sources that connect to Gram through outbound tunnels.
 type TunneledMcpServer struct {
 	// Stable UUID for the tunneled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.
+	// @access: confidential
 	ID uuid.UUID
 	// Project that owns this tunneled MCP source. All management queries are scoped by project_id.
+	// @access: confidential
 	ProjectID uuid.UUID
 	// User-facing display name for the tunneled MCP source.
+	// @access: confidential
 	Name string
 	// Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.
+	// @access: secret-restricted
 	KeyHash string
 	// Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.
+	// @access: secret-restricted
 	KeyPrefix string
 	// Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.
+	// @access: confidential
 	Status string
 	// Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.
+	// @access: confidential
 	AllowPublic bool
 	// Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.
+	// @access: opaque-restricted
 	AgentVersion pgtype.Text
 	// RFC 9728 protected-resource identifier of the tunneled server, recorded as the RFC 8707 resource on grants and used only for exact-match credential routing. Names a host inside the customer's private network — never dialed by Gram.
-	ResourceIdentifier         pgtype.Text
+	// @access: restricted
+	ResourceIdentifier pgtype.Text
+	// @access: confidential
 	PublicRequestRatePerSecond pgtype.Int4
-	PublicRequestBurst         pgtype.Int4
+	// @access: confidential
+	PublicRequestBurst pgtype.Int4
 	// Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.
+	// @access: confidential
 	LastSeenAt pgtype.Timestamptz
 	// Time when the tunneled MCP source was created.
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// Time when the durable tunneled MCP source record was last updated.
+	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
 	// Soft-delete timestamp for the tunneled MCP source. NULL means the source is active.
+	// @access: confidential
 	DeletedAt pgtype.Timestamptz
 	// Generated soft-delete flag derived from deleted_at and used by partial indexes.
+	// @access: confidential
 	Deleted bool
 }
