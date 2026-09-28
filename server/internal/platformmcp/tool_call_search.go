@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 
-	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	telemetrysvc "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
@@ -218,7 +216,7 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		NextCursor:             "",
 		AttributionUnavailable: false,
 	}
-	var server toolCallServerIdentities
+	var server toolLogsTargets
 	if search.mcpID != "" {
 		server, err = s.toolCallSearchServer(ctx, principal, search)
 		if err != nil {
@@ -273,11 +271,12 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		MCPServerMatchers:  matchers.servers,
 		MetaMCPMatchers:    matchers.meta,
 		TargetTypes:        nil,
-		HostedToolsetSlugs: server.toolsetSlugs,
-		MCPServerTargetIDs: server.targetIDs,
+		HostedToolsetSlugs: server.hostedToolsetSlugs,
+		MCPServerTargetIDs: server.mcpServerTargetIDs,
 		// Never set from a configured server: a shadow row is named by the
 		// calling app, so selecting one by name would fold an unrelated
-		// same-named server's calls into this server's history.
+		// same-named server's calls into this server's history. See
+		// serverIdentity.toolLogsTargets.
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        userFilters,
@@ -481,85 +480,27 @@ func toolCallSearchUserScope(projectID string) string {
 	return queryScope("tool_call_search_user", projectID)
 }
 
-// toolCallServerIdentities is every identity one configured MCP server's calls
-// are recorded under in the Tool Logs query, grouped by the target type the
-// query classifies them as, so each is matched only where it can occur.
+// toolCallSearchServer resolves mcp_id to the targets a trace-level read may
+// narrow to. It delegates to serverIdentity, the one resolution of a
+// configured MCP in this package, and takes from it only what
+// toolLogsTargets admits: the identities the platform itself stamped, never
+// the names an agent reported. GetMCP is the authorization boundary, failing
+// closed for an MCP this principal cannot see.
 //
-// Every identity here is one Gram itself stamped: a matcher loaded from this
-// project's configured servers, or the toolset a call arrived at. The name the
-// calling app reported is deliberately not among them — see
-// serverIdentitiesForToolCallSearch.
-type toolCallServerIdentities struct {
-	// targetIDs match proxied calls to a remote or tunneled server, which the
-	// matcher folds onto the server slug (or its id when it has none) under the
-	// hosted or tunneled target type.
-	targetIDs []string
-	// toolsetSlugs match calls that arrived at a hosted toolset directly, and
-	// hook-observed calls whose URL resolved to it.
-	toolsetSlugs []string
-}
-
-func (i toolCallServerIdentities) empty() bool {
-	return len(i.targetIDs) == 0 && len(i.toolsetSlugs) == 0
-}
-
-// toolCallSearchServer resolves mcp_id to the identities its telemetry is
-// recorded under. GetMCP is the authorization boundary: it fails closed for an
-// MCP this principal cannot see, and its result is deliberately not carried
-// into the identities. An empty result means the server has no reliable
-// identity, which the caller reports rather than widening to the whole project.
-func (s *DiagnosticsService) toolCallSearchServer(ctx context.Context, principal Principal, search toolCallSearch) (toolCallServerIdentities, error) {
+// Empty targets mean nothing reliable identifies the server, which the caller
+// reports rather than widening to the whole project.
+func (s *DiagnosticsService) toolCallSearchServer(ctx context.Context, principal Principal, search toolCallSearch) (toolLogsTargets, error) {
 	if s.db == nil {
-		return toolCallServerIdentities{}, ErrUnavailable
+		return toolLogsTargets{}, ErrUnavailable
 	}
 	if _, err := s.reader.GetMCP(ctx, principal, GetMCPInput{ProjectID: search.projectID, MCPID: search.mcpID}); err != nil {
-		return toolCallServerIdentities{}, fmt.Errorf("resolve tool call search mcp: %w", err)
+		return toolLogsTargets{}, fmt.Errorf("resolve tool call search mcp: %w", err)
 	}
-	target, err := s.diagnosticsTarget(ctx, principal.OrganizationID, search.projectID, search.mcpID)
+	identity, err := s.serverIdentity(ctx, principal.OrganizationID, search.projectID, search.mcpID)
 	if err != nil {
-		return toolCallServerIdentities{}, err
+		return toolLogsTargets{}, err
 	}
-	return serverIdentitiesForToolCallSearch(target), nil
-}
-
-// serverIdentitiesForToolCallSearch derives the identities from the configured
-// server's diagnostics row. It is the one seam that decides what a configured
-// server is recorded as, and it admits only identities Gram itself stamped.
-//
-// The configured server's slug and display name are not among them. A shadow
-// row's target id is the name the calling app reported, which nothing verifies:
-// folding it in would attribute a personal server that happens to share the
-// name to the corporate one, so an mcp_id-scoped search returns only calls a
-// matcher or a toolset already tied to this server. Hook-observed calls whose
-// URL resolved to this server are unaffected, because the query classifies
-// those under the toolset slug rather than as shadow. Attributing the rest
-// waits on telemetry carrying a reliable link, such as the plugin-routed names
-// calling apps derive from plugin membership, which are not known here.
-func serverIdentitiesForToolCallSearch(target platformrepo.GetPlatformMCPDiagnosticsTargetRow) toolCallServerIdentities {
-	identities := toolCallServerIdentities{targetIDs: nil, toolsetSlugs: nil}
-	// The matcher stamps the server slug as the target id, falling back to the
-	// server id when the slug is empty; both are carried so either spelling
-	// matches.
-	identities.targetIDs = appendUnique(identities.targetIDs, target.McpSlug)
-	if target.McpServerID != uuid.Nil {
-		identities.targetIDs = appendUnique(identities.targetIDs, target.McpServerID.String())
-	}
-	// Direct telemetry identifies only the toolset. When several configured
-	// MCP wrappers share it, those rows cannot be attributed to one wrapper.
-	if target.ToolsetMcpCount <= 1 {
-		identities.toolsetSlugs = appendUnique(identities.toolsetSlugs, target.ToolsetSlug)
-	}
-	return identities
-}
-
-func appendUnique(values []string, candidates ...string) []string {
-	for _, candidate := range candidates {
-		if candidate == "" || slices.Contains(values, candidate) {
-			continue
-		}
-		values = append(values, candidate)
-	}
-	return values
+	return identity.toolLogsTargets(), nil
 }
 
 // toolCallSearchUserFilter resolves a person reference to the telemetry column

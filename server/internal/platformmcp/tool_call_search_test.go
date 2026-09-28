@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -487,101 +486,116 @@ func TestListAttributeKeys_SplitsCustomFromFilterableSystemKeys(t *testing.T) {
 	require.ErrorIs(t, err, ErrToolCallSearchInvalid)
 }
 
-// TestServerIdentitiesForToolCallSearch_RemoteServerWithoutToolsetSlug pins that
-// a configured remote server, which has no toolset slug, is still matched by
-// the slug and id its matcher stamps as the target id under the hosted or
-// tunneled type.
-func TestServerIdentitiesForToolCallSearch_RemoteServerWithoutToolsetSlug(t *testing.T) {
+// TestToolLogsTargets_RemoteServerWithoutToolsetSlug pins that a configured
+// remote server, which has no toolset slug, is still matched by the slug and
+// id its matcher stamps as the target id under the hosted or tunneled type.
+func TestToolLogsTargets_RemoteServerWithoutToolsetSlug(t *testing.T) {
 	t.Parallel()
 
-	serverID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
-	identities := serverIdentitiesForToolCallSearch(platformrepo.GetPlatformMCPDiagnosticsTargetRow{
-		McpServerID:     serverID,
-		ProjectID:       uuid.MustParse(toolCallSearchTestProject),
-		McpSlug:         "billing",
-		ToolsetSlug:     "",
-		ToolsetMcpCount: 0,
-	})
+	serverID := uuid.MustParse("00000000-0000-0000-0000-000000000002").String()
+	targets := serverIdentity{
+		mcpServerID: serverID,
+		mcpSlug:     "billing",
+		toolsetSlug: "",
+		urlSuffixes: []string{"/mcp/billing"},
+		toolSources: nil,
+	}.toolLogsTargets()
 
-	require.False(t, identities.empty())
-	require.Equal(t, []string{"billing", serverID.String()}, identities.targetIDs)
-	require.Empty(t, identities.toolsetSlugs)
+	require.False(t, targets.empty())
+	require.Equal(t, []string{"billing", serverID}, targets.mcpServerTargetIDs)
+	require.Empty(t, targets.hostedToolsetSlugs)
 
 	// A server with no slug is still matched by its id.
-	unnamed := serverIdentitiesForToolCallSearch(platformrepo.GetPlatformMCPDiagnosticsTargetRow{
-		McpServerID:     serverID,
-		ProjectID:       uuid.MustParse(toolCallSearchTestProject),
-		McpSlug:         "",
-		ToolsetSlug:     "",
-		ToolsetMcpCount: 0,
-	})
-	require.Equal(t, []string{serverID.String()}, unnamed.targetIDs)
+	unnamed := serverIdentity{
+		mcpServerID: serverID,
+		mcpSlug:     "",
+		toolsetSlug: "",
+		urlSuffixes: nil,
+		toolSources: nil,
+	}.toolLogsTargets()
+	require.Equal(t, []string{serverID}, unnamed.mcpServerTargetIDs)
 }
 
-// TestServerIdentitiesForToolCallSearch_OmitsClientReportedNames pins the rule
-// that keeps one configured server's history its own: a shadow row is named by
-// the calling app, so a personal server someone happens to call "billing" must
-// not surface in the corporate "billing" server's history. The identities
-// therefore carry no shadow selector at all, and the only spellings they do
-// carry are matched under target types a client cannot choose.
-func TestServerIdentitiesForToolCallSearch_OmitsClientReportedNames(t *testing.T) {
+// TestToolLogsTargets_OmitsClientReportedNames pins the rule that keeps one
+// configured server's history its own: a shadow row is named by the calling
+// app, so a personal server someone happens to call "billing" must not surface
+// in the corporate "billing" server's history.
+//
+// The identity deliberately carries a fully populated toolSources, the way
+// serverIdentity resolves it for the summary reads, so this asserts that a
+// trace-level read drops those names rather than merely never having had them.
+func TestToolLogsTargets_OmitsClientReportedNames(t *testing.T) {
 	t.Parallel()
 
-	serverID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
-	identities := serverIdentitiesForToolCallSearch(platformrepo.GetPlatformMCPDiagnosticsTargetRow{
-		McpServerID:     serverID,
-		ProjectID:       uuid.MustParse(toolCallSearchTestProject),
-		McpSlug:         "billing",
-		ToolsetSlug:     "billing-toolset",
-		ToolsetMcpCount: 1,
-	})
+	serverID := uuid.MustParse("00000000-0000-0000-0000-000000000004").String()
+	identity := serverIdentity{
+		mcpServerID: serverID,
+		mcpSlug:     "billing",
+		toolsetSlug: "billing-toolset",
+		urlSuffixes: []string{"/mcp/billing"},
+		toolSources: []string{"billing", "Billing", "plugin_finance_Billing", serverID},
+	}
+	targets := identity.toolLogsTargets()
 
 	// Every selector the search can build from a configured server, so a new
 	// one cannot be added without this assertion being revisited.
 	params := telemetryrepo.ListToolUsageTracesParams{
-		HostedToolsetSlugs: identities.toolsetSlugs,
-		MCPServerTargetIDs: identities.targetIDs,
+		HostedToolsetSlugs: targets.hostedToolsetSlugs,
+		MCPServerTargetIDs: targets.mcpServerTargetIDs,
 		ShadowServerNames:  nil,
 	}
 	require.Equal(t, []string{"billing-toolset"}, params.HostedToolsetSlugs)
-	require.Equal(t, []string{"billing", serverID.String()}, params.MCPServerTargetIDs)
+	require.Equal(t, []string{"billing", serverID}, params.MCPServerTargetIDs)
 	require.Empty(t, params.ShadowServerNames,
 		"a configured server must never select shadow rows by a client-reported name")
 
-	// A server known only by a name a client reported has no reliable identity
-	// at all, so the search reports attribution unavailable rather than handing
-	// back whatever else answers to that name.
-	nameOnly := serverIdentitiesForToolCallSearch(platformrepo.GetPlatformMCPDiagnosticsTargetRow{
-		McpServerID:     uuid.Nil,
-		ProjectID:       uuid.MustParse(toolCallSearchTestProject),
-		McpSlug:         "",
-		ToolsetSlug:     "",
-		ToolsetMcpCount: 0,
-	})
+	// The display name and the plugin-routed name the summary reads match on
+	// reach no selector at all, under any target type.
+	for _, reported := range identity.toolSources {
+		if reported == "billing" || reported == serverID {
+			// Also a platform-stamped spelling; matched as a target id under
+			// the hosted and tunneled types only, never as a shadow name.
+			continue
+		}
+		require.NotContains(t, params.MCPServerTargetIDs, reported)
+		require.NotContains(t, params.HostedToolsetSlugs, reported)
+	}
+
+	// An identity with nothing the platform stamped is empty, so the search
+	// reports attribution unavailable rather than dropping the target filter
+	// and reading the whole project under this server's name.
+	nameOnly := serverIdentity{
+		mcpServerID: "",
+		mcpSlug:     "",
+		toolsetSlug: "",
+		urlSuffixes: nil,
+		toolSources: []string{"billing", "Billing"},
+	}.toolLogsTargets()
 	require.True(t, nameOnly.empty())
 }
 
-// TestServerIdentitiesForToolCallSearch_HostedToolsetSlugIsHostedOnly pins that
-// a hosted server's toolset slug is matched under the hosted type only, and is
-// dropped when several configured wrappers share the toolset.
-func TestServerIdentitiesForToolCallSearch_HostedToolsetSlugIsHostedOnly(t *testing.T) {
+// TestToolLogsTargets_HostedToolsetSlugIsHostedOnly pins that a hosted server's
+// toolset slug is carried as the hosted selector, and that when serverIdentity
+// blanked it because several configured wrappers share the toolset, the server
+// is still matched by the target ids alone.
+func TestToolLogsTargets_HostedToolsetSlugIsHostedOnly(t *testing.T) {
 	t.Parallel()
 
-	serverID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
-	row := platformrepo.GetPlatformMCPDiagnosticsTargetRow{
-		McpServerID:     serverID,
-		ProjectID:       uuid.MustParse(toolCallSearchTestProject),
-		McpSlug:         "payments",
-		ToolsetSlug:     "payments-toolset",
-		ToolsetMcpCount: 1,
+	serverID := uuid.MustParse("00000000-0000-0000-0000-000000000003").String()
+	identity := serverIdentity{
+		mcpServerID: serverID,
+		mcpSlug:     "payments",
+		toolsetSlug: "payments-toolset",
+		urlSuffixes: []string{"/mcp/payments"},
+		toolSources: nil,
 	}
-	identities := serverIdentitiesForToolCallSearch(row)
-	require.Equal(t, []string{"payments-toolset"}, identities.toolsetSlugs)
-	require.Equal(t, []string{"payments", serverID.String()}, identities.targetIDs)
+	targets := identity.toolLogsTargets()
+	require.Equal(t, []string{"payments-toolset"}, targets.hostedToolsetSlugs)
+	require.Equal(t, []string{"payments", serverID}, targets.mcpServerTargetIDs)
 
-	row.ToolsetMcpCount = 2
-	shared := serverIdentitiesForToolCallSearch(row)
-	require.Empty(t, shared.toolsetSlugs, "a toolset shared by several wrappers cannot be attributed to one")
+	identity.toolsetSlug = ""
+	shared := identity.toolLogsTargets()
+	require.Empty(t, shared.hostedToolsetSlugs, "a toolset shared by several wrappers cannot be attributed to one")
 	require.False(t, shared.empty())
 }
 
