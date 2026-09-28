@@ -324,15 +324,18 @@ function NetworkAccessSectionContent({
           },
         },
         {
-          onSuccess: async () => {
+          onSuccess: () => {
             setConfirmPrivateOnlyOpen(false);
-            await Promise.all([
+            void Promise.all([
               invalidateAllToolset(queryClient, { refetchType: "all" }),
               invalidateAllListToolsets(queryClient, { refetchType: "all" }),
               invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
               invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-            ]);
-            toast.success("Network access updated");
+            ])
+              .then(() => {
+                toast.success("Network access updated");
+              })
+              .catch(onError);
           },
           onError,
         },

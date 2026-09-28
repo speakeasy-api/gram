@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -58,7 +64,7 @@ const testState = vi.hoisted(() => ({
   toolsetMutationOptions: undefined as
     | {
         onError?: (error: Error) => void;
-        onSuccess?: () => Promise<void>;
+        onSuccess?: () => void;
       }
     | undefined,
 }));
@@ -237,7 +243,7 @@ vi.mock("@gram/client/react-query/updateToolset.js", () => ({
       variables: unknown,
       options: {
         onError?: (error: Error) => void;
-        onSuccess?: () => Promise<void>;
+        onSuccess?: () => void;
       },
     ) => {
       testState.toolsetMutationOptions = options;
@@ -379,7 +385,12 @@ describe("NetworkAccessSection", () => {
     );
     expect(testState.mutate).not.toHaveBeenCalled();
 
-    await testState.toolsetMutationOptions?.onSuccess?.();
+    testState.toolsetMutationOptions?.onSuccess?.();
+    await waitFor(() =>
+      expect(testState.toastSuccess).toHaveBeenCalledWith(
+        "Network access updated",
+      ),
+    );
 
     for (const invalidate of [
       testState.invalidateToolset,
@@ -391,9 +402,6 @@ describe("NetworkAccessSection", () => {
         refetchType: "all",
       });
     }
-    expect(testState.toastSuccess).toHaveBeenCalledWith(
-      "Network access updated",
-    );
   });
 
   it("shows an error toast when a hosted toolset update fails", () => {
