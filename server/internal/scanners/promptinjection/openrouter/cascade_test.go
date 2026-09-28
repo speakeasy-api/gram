@@ -168,7 +168,7 @@ func TestCascadeTruncatesJevEvidenceButPreservesOpusEvidence(t *testing.T) {
 	t.Parallel()
 	cascade, client := testCascade(t, PrefilterThreshold, safeVerdictJSON)
 	msg := judgemessage.New(message.ToolResponse, "search", "HEAD"+strings.Repeat("界<&", 6000)+"TAIL")
-	trajectory := judgemessage.Trajectory{PriorUserRequest: "review the result", RecentUntrustedContent: ""}
+	trajectory := judgemessage.Trajectory{PriorUserRequest: strings.Repeat("<&", 4000), RecentUntrustedContent: strings.Repeat("<&", 4000)}
 	jev := &mockPrefilter{}
 	probabilities := make(map[string]float64)
 	for id := range PrefilterQuestions() {
@@ -181,7 +181,7 @@ func TestCascadeTruncatesJevEvidenceButPreservesOpusEvidence(t *testing.T) {
 			require.True(t, ok)
 			questionJSON, err := json.Marshal(args.Get(3))
 			require.NoError(t, err)
-			require.LessOrEqual(t, len(prepared)+len(questionJSON), maxPrefilterInputBytes)
+			require.LessOrEqual(t, estimatePrefilterTokens(prepared, questionJSON), maxPrefilterInputTokens)
 			require.NoError(t, json.Unmarshal(prepared, &seen))
 		}).Return(typesafe.Result{Probabilities: probabilities, Model: typesafe.Model, InputTokens: 10, OutputTokens: 1, CostUSD: 0}, nil).Once()
 	cascade.jev = jev
@@ -213,7 +213,7 @@ func TestCascadeRetriesContextOverflowWithSmallerInput(t *testing.T) {
 			require.True(t, ok)
 			questions, err := json.Marshal(args.Get(3))
 			require.NoError(t, err)
-			firstSize = len(state) + len(questions)
+			firstSize = estimatePrefilterTokens(state, questions)
 		}).Return(typesafe.Result{Probabilities: nil, Model: typesafe.Model, InputTokens: 0, OutputTokens: 0, CostUSD: 0}, typesafe.ErrContextLengthExceeded).Once()
 	probabilities := make(map[string]float64)
 	for id := range PrefilterQuestions() {
@@ -226,7 +226,7 @@ func TestCascadeRetriesContextOverflowWithSmallerInput(t *testing.T) {
 			require.True(t, ok)
 			questions, err := json.Marshal(args.Get(3))
 			require.NoError(t, err)
-			require.LessOrEqual(t, len(state)+len(questions), firstSize*4/5)
+			require.LessOrEqual(t, estimatePrefilterTokens(state, questions), firstSize*4/5)
 			require.NoError(t, json.Unmarshal(state, &retryPayload))
 		}).Return(typesafe.Result{Probabilities: probabilities, Model: typesafe.Model, InputTokens: 10, OutputTokens: 1, CostUSD: 0}, nil).Once()
 	cascade.jev = jev

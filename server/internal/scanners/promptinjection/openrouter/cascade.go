@@ -91,9 +91,13 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 	ctx, span := c.opus.tracer.Start(ctx, "risk.prompt_injection.cascade")
 	defer span.End()
 	questions := PrefilterQuestions()
-	prepared, content, truncated, err := preparePrefilterPayload(msg, trajectory, questions, maxPrefilterInputBytes)
+	prepared, content, truncated, err := preparePrefilterPayload(msg, trajectory, questions, maxPrefilterInputTokens)
 	if err != nil {
 		c.opus.logger.WarnContext(ctx, "PI prefilter evidence unavailable", attr.SlogError(err))
+		return unavailableResult
+	}
+	questionJSON, err := json.Marshal(questions)
+	if err != nil {
 		return unavailableResult
 	}
 	// Both attempts share the prefilter deadline; shrinking must not extend
@@ -105,7 +109,7 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 		if prefilterCtx.Err() != nil {
 			return unavailableResult
 		}
-		span.SetAttributes(attribute.Bool("prefilter.input_truncated", truncated), attribute.Int("prefilter.state_bytes", len(prepared)), attribute.Int("prefilter.attempts", attempt+1))
+		span.SetAttributes(attribute.Bool("prefilter.input_truncated", truncated), attribute.Int("prefilter.state_bytes", len(prepared)), attribute.Int("prefilter.estimated_input_tokens", estimatePrefilterTokens(prepared, questionJSON)), attribute.Int("prefilter.attempts", attempt+1))
 		start := time.Now()
 		result, err = c.jev.Evaluate(prefilterCtx, req.OrgID, prepared, questions)
 		outcome := o11y.OutcomeFromErrorWithTimeout(err)
@@ -113,13 +117,9 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 		if attempt != 0 || !errors.Is(err, typesafe.ErrContextLengthExceeded) {
 			break
 		}
-		questionJSON, marshalErr := json.Marshal(questions)
-		if marshalErr != nil {
-			return unavailableResult
-		}
 		// Base the reduction on the actual rejected input, not the ceiling:
 		// even a request already below the normal budget must get smaller.
-		retryBudget := (len(prepared) + len(questionJSON)) * 4 / 5
+		retryBudget := estimatePrefilterTokens(prepared, questionJSON) * 4 / 5
 		prepared, content, truncated, err = preparePrefilterPayload(msg, trajectory, questions, retryBudget)
 		if err != nil {
 			break

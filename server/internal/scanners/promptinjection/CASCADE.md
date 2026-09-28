@@ -9,9 +9,11 @@ at least 0.50 triggers review. Lower probabilities produce no finding. This matc
 prefilter cutoff; a false negative at this stage cannot be recovered by Opus. These are
 probabilities, not TypeSafe's distinct Choice/Score confidence statistic.
 
-Jev input uses a conservative 28,000-byte budget across serialized state and all
-questions, leaving headroom below the documented 32k-token context limit. No
-public Jev tokenizer is documented; this is a byte-based proxy, not an exact
+Jev input uses a 28,000 estimated-token budget across serialized state and all
+questions, leaving headroom below the documented 32k-token context limit. The
+estimate is Unicode characters divided by four, rounded up, including JSON
+structure and escaping. No public Jev tokenizer is documented; this English-text
+heuristic can undercount JSON, code, and non-English content. It is not an exact
 provider token count. The largest evidence fields are shortened first, retaining
 head and tail text on UTF-8 boundaries and marking truncation. JSON structure,
 question wording, and attribution structure are preserved; shortened tool identities
@@ -19,7 +21,7 @@ are explicitly marked. Cleared-scan token
 accounting uses the evidence actually sent. Truncation is recorded in tracing.
 
 On the exact structured OpenRouter `context_length_exceeded` error, retry Jev
-once with a byte budget 20% below the actual rejected state plus questions.
+once with an estimated-token budget 20% below the rejected state plus questions.
 Questions stay unchanged; evidence is truncated further. Both attempts share the
 10-second prefilter deadline, and each physical attempt is recorded. A second
 failure returns unavailable. Generic HTTP errors, message text, rate limits, and

@@ -9,15 +9,15 @@ import (
 	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 )
 
-// Jev publishes a 32k state-plus-question context limit but no tokenizer.
-// Serialized UTF-8 bytes are a deliberately conservative proxy, not an exact
-// token count. Include all questions and leave headroom for provider framing.
-const maxPrefilterInputBytes = 28000
+// Estimate tokens as serialized Unicode characters / 4, including all
+// questions. This English-text heuristic can undercount code and non-English
+// input; leave headroom below Jev's 32k limit and handle explicit overflow.
+const maxPrefilterInputTokens = 28000
 
 // preparePrefilterPayload bounds the complete evidence before calling Jev.
 // Truncation can hide an attack in omitted text; it is marked in the evidence.
 // Opus still receives its independently prepared, fuller confirmation evidence.
-func preparePrefilterPayload(msg judgemessage.Message, trajectory judgemessage.Trajectory, questions map[string]typesafe.Question, maxInputBytes int) ([]byte, []string, bool, error) {
+func preparePrefilterPayload(msg judgemessage.Message, trajectory judgemessage.Trajectory, questions map[string]typesafe.Question, maxInputTokens int) ([]byte, []string, bool, error) {
 	payload := judgePayload{Message: judgemessage.RenderPayload(msg), Trajectory: nil}
 	if trajectory.HasContent() {
 		rendered := judgemessage.RenderTrajectory(trajectory)
@@ -27,7 +27,6 @@ func preparePrefilterPayload(msg judgemessage.Message, trajectory judgemessage.T
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("marshal prefilter questions: %w", err)
 	}
-	budget := maxInputBytes - len(questionJSON)
 	fields := prefilterTextFields(&payload)
 	truncated := false
 	for {
@@ -35,7 +34,7 @@ func preparePrefilterPayload(msg judgemessage.Message, trajectory judgemessage.T
 		if err != nil {
 			return nil, nil, truncated, fmt.Errorf("marshal prefilter evidence: %w", err)
 		}
-		if len(prepared) <= budget {
+		if estimatePrefilterTokens(prepared, questionJSON) <= maxInputTokens {
 			return prepared, judgePayloadContent(payload), truncated, nil
 		}
 		// Reduce the largest field first, preserving small attribution/context
@@ -95,4 +94,10 @@ func prefilterTextFields(payload *judgePayload) []prefilterText {
 			prefilterText{value: &t.RecentUntrustedContentDecoded, truncated: &t.RecentUntrustedContentTruncated})
 	}
 	return fields
+}
+
+// estimatePrefilterTokens rounds up the characters/4 heuristic for the complete
+// serialized state and questions; UTF-8 bytes are not character counts.
+func estimatePrefilterTokens(state, questions []byte) int {
+	return (utf8.RuneCount(state) + utf8.RuneCount(questions) + 3) / 4
 }
