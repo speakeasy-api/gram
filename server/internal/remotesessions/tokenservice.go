@@ -267,7 +267,13 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		// pgx.ErrNoRows case above), while one that clears on its own or
 		// needs an administrator comes back as its refined ErrNoValidToken.
 		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
-		return zero, refinedRefreshFailure(err)
+		switch {
+		case errors.Is(err, ErrRemoteSessionUnavailable):
+			return zero, ErrRemoteSessionUnavailable
+		case errors.Is(err, ErrRemoteSessionMisconfigured):
+			return zero, ErrRemoteSessionMisconfigured
+		}
+		return zero, nil
 	}
 
 	if tok == "" || sess.ID != selectedID {
@@ -681,63 +687,6 @@ func (m *ChallengeManager) validateAndRefresh(
 	// remotesessionmetrics.RefreshOutcomeSessionInactive lands here as an empty token, which the
 	// caller treats the same as "never linked".
 	return res.AccessToken, res.Session, res.SourceUpdatedAt, nil
-}
-
-// refinedRefreshFailure maps a failed request-path refresh onto the remedy
-// callers act on. It returns ErrRemoteSessionUnavailable when retrying the same
-// request is expected to succeed, ErrRemoteSessionMisconfigured when only an
-// administrator can repair the issuer or client, and nil when the grant itself
-// is unusable and only re-linking replaces it; nil keeps that case on the
-// empty-token signal every "no usable token" path shares.
-//
-// Failures validateAndRefresh raises itself, such as an unreadable stored
-// access token, never clear on retry, so anything that is not a *RefreshError
-// is treated as needing a re-link.
-func refinedRefreshFailure(err error) error {
-	refreshErr, ok := errors.AsType[*RefreshError](err)
-	if !ok {
-		return nil
-	}
-	switch refreshErr.Outcome {
-	case remotesessionmetrics.RefreshOutcomeUpstreamError,
-		remotesessionmetrics.RefreshOutcomeRateLimited,
-		remotesessionmetrics.RefreshOutcomeUnreachable,
-		remotesessionmetrics.RefreshOutcomeCanceled:
-		return ErrRemoteSessionUnavailable
-	case remotesessionmetrics.RefreshOutcomeRejected,
-		remotesessionmetrics.RefreshOutcomeRejectedUnparsed:
-		// The upstream refused the client's request rather than the grant, so
-		// the grant stays stored and re-linking would send the same request
-		// again. Only a configuration change repairs it.
-		return ErrRemoteSessionMisconfigured
-	case remotesessionmetrics.RefreshOutcomeInternalError:
-		// Internal errors split on whether Gram raised a classified
-		// TokenRefreshError before or after the POST. A plain error is a
-		// database, cache, or response-decoding failure that clears on retry.
-		tokenErr, ok := errors.AsType[*TokenRefreshError](err)
-		if !ok {
-			return ErrRemoteSessionUnavailable
-		}
-		switch tokenErr.remedy {
-		case refreshRemedyRetry:
-			return ErrRemoteSessionUnavailable
-		case refreshRemedyAdministrator:
-			return ErrRemoteSessionMisconfigured
-		case refreshRemedyReconnect, refreshRemedyUnset:
-			return nil
-		}
-		return nil
-	case remotesessionmetrics.RefreshOutcomeInvalidGrant,
-		// invalid_client marks the client for re-registration at the next
-		// login before clearing the grant, so re-linking repairs it.
-		remotesessionmetrics.RefreshOutcomeInvalidClient,
-		remotesessionmetrics.RefreshOutcomeNoGrant,
-		remotesessionmetrics.RefreshOutcomeSessionInactive,
-		remotesessionmetrics.RefreshOutcomeRefreshed,
-		remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner:
-		return nil
-	}
-	return nil
 }
 
 // refreshFailureAttrs is the attribute set a failed request-path refresh is

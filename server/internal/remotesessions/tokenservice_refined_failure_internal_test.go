@@ -19,9 +19,10 @@ import (
 // Pins the remedy each request-path refresh failure maps onto. The MCP issuer
 // gate answers ErrRemoteSessionUnavailable with a retryable 503,
 // ErrRemoteSessionMisconfigured with a challenge that names an administrator,
-// and nil with the reconnect challenge, so a misfiled case either strands a
-// user on retries that cannot succeed or signs them out over an upstream blip.
-func TestRefinedRefreshFailure(t *testing.T) {
+// and a failure matching neither with the reconnect challenge, so a misfiled
+// case either strands a user on retries that cannot succeed or signs them out
+// over an upstream blip.
+func TestRefreshErrorIs(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -122,8 +123,10 @@ func TestRefinedRefreshFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			wrapped := &RefreshError{IssuerURL: "", Outcome: refreshOutcomeForError(t.Context(), tc.err), err: tc.err}
-			require.Equal(t, tc.want, refinedRefreshFailure(fmt.Errorf("refresh: %w", wrapped)))
+			wrapped := fmt.Errorf("refresh: %w", &RefreshError{IssuerURL: "", Outcome: refreshOutcomeForError(t.Context(), tc.err), err: tc.err})
+			for _, remedy := range []error{ErrRemoteSessionUnavailable, ErrRemoteSessionMisconfigured} {
+				require.Equal(t, errors.Is(tc.want, remedy), errors.Is(wrapped, remedy), remedy.Error())
+			}
 		})
 	}
 }
@@ -177,12 +180,4 @@ func TestClientAssertionUnconfigured_InvalidStoredKeyVersionName(t *testing.T) {
 	_, err = serializeClientAssertion(t.Context(), nil, "not-a-key-version", "kid", jwk, "client", "https://issuer.example.com", time.Now())
 	require.ErrorContains(t, err, "build client assertion signer")
 	require.True(t, clientAssertionUnconfigured(&tokenEndpointSigningError{err: fmt.Errorf("sign private_key_jwt client assertion: %w", err)}))
-}
-
-// An error validateAndRefresh raises itself, such as an unreadable stored
-// access token, never clears on retry, so it must keep the reconnect remedy.
-func TestRefinedRefreshFailure_NonRefreshErrorNeedsReconnect(t *testing.T) {
-	t.Parallel()
-
-	require.NoError(t, refinedRefreshFailure(fmt.Errorf("decrypt access token: %w", errors.New("cipher: message authentication failed"))))
 }

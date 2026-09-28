@@ -58,7 +58,9 @@ type RefreshResult struct {
 // carries the issuer URL and outcome the upstream-refresh metric recorded for
 // the attempt, so a failure log can name the provider and be joined to its
 // metric series, and it wraps the underlying cause: errors.Is on
-// ErrNoValidToken and errors.As on *TokenRefreshError see through it.
+// ErrNoValidToken and errors.As on *TokenRefreshError see through it. errors.Is
+// also matches ErrRemoteSessionUnavailable or ErrRemoteSessionMisconfigured
+// when the failure calls for that remedy rather than a re-link.
 type RefreshError struct {
 	// IssuerURL is the upstream identity provider's issuer URL; empty when the
 	// attempt died before the session's client and issuer rows could be
@@ -75,6 +77,53 @@ type RefreshError struct {
 func (e *RefreshError) Error() string { return e.err.Error() }
 
 func (e *RefreshError) Unwrap() error { return e.err }
+
+// Is matches ErrRemoteSessionUnavailable when retrying the same request is
+// expected to succeed and ErrRemoteSessionMisconfigured when only an
+// administrator can repair the issuer or client. A failure matching neither
+// leaves the grant itself unusable, and only re-linking replaces it.
+func (e *RefreshError) Is(target error) bool {
+	switch e.Outcome {
+	case remotesessionmetrics.RefreshOutcomeUpstreamError,
+		remotesessionmetrics.RefreshOutcomeRateLimited,
+		remotesessionmetrics.RefreshOutcomeUnreachable,
+		remotesessionmetrics.RefreshOutcomeCanceled:
+		return target == ErrRemoteSessionUnavailable
+	case remotesessionmetrics.RefreshOutcomeRejected,
+		remotesessionmetrics.RefreshOutcomeRejectedUnparsed:
+		// The upstream refused the client's request rather than the grant, so
+		// the grant stays stored and re-linking would send the same request
+		// again. Only a configuration change repairs it.
+		return target == ErrRemoteSessionMisconfigured
+	case remotesessionmetrics.RefreshOutcomeInternalError:
+		// Internal errors split on whether Gram raised a classified
+		// TokenRefreshError before or after the POST. A plain error is a
+		// database, cache, or response-decoding failure that clears on retry.
+		tokenErr, ok := errors.AsType[*TokenRefreshError](e.err)
+		if !ok {
+			return target == ErrRemoteSessionUnavailable
+		}
+		switch tokenErr.remedy {
+		case refreshRemedyRetry:
+			return target == ErrRemoteSessionUnavailable
+		case refreshRemedyAdministrator:
+			return target == ErrRemoteSessionMisconfigured
+		case refreshRemedyReconnect, refreshRemedyUnset:
+			return false
+		}
+		return false
+	case remotesessionmetrics.RefreshOutcomeInvalidGrant,
+		// invalid_client marks the client for re-registration at the next
+		// login before clearing the grant, so re-linking repairs it.
+		remotesessionmetrics.RefreshOutcomeInvalidClient,
+		remotesessionmetrics.RefreshOutcomeNoGrant,
+		remotesessionmetrics.RefreshOutcomeSessionInactive,
+		remotesessionmetrics.RefreshOutcomeRefreshed,
+		remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner:
+		return false
+	}
+	return false
+}
 
 // RefreshService owns the single-flighted refresh of a remote session. It is
 // deliberately constructible without any HTTP-serving context so the
