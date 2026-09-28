@@ -1,4 +1,4 @@
-h1:E6GOSlMnb4ACoNBpX2a9DxfC3rAWgeeTtySsmmKg600=
+h1:cNuM9IvXSZvSFa0bf5DVxbsjl2szk+BAEWC+9NRGti0=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -437,3 +437,4 @@ h1:E6GOSlMnb4ACoNBpX2a9DxfC3rAWgeeTtySsmmKg600=
 20260925164527_directory-role-mappings.sql h1:tsvCc28RZeYHPlSXWliZRVi8BSTHg1Is0FPZPpvkK/g=
 20260925192954_slack_identity_mappings.sql h1:A2KN73NAHtx0UpVCVK3kj4OVWY67CCwB2KB/+PJjJu4=
 20260927185929_trigger-thread-routes.sql h1:jyVG+nXirOsIje+xGPZtmlRYpVzhKH5Ul3SuK0pkSXw=
+20260928122607_gateway_discovery_mode.sql h1:hLOH1DJ4mg8+Df7j2Pc17lVJCq6QhhYkqNSqnD+jHEs=
