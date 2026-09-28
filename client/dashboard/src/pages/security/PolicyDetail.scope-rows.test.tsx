@@ -479,7 +479,7 @@ describe("StandardPolicyEditor scope rows", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "deleteTicket" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "listTickets" }));
 
-    expect(server.getAttribute("aria-checked")).not.toBe("false");
+    expect(server.getAttribute("aria-checked")).toBe("true");
     await waitFor(() => {
       expect(
         screen
@@ -493,6 +493,104 @@ describe("StandardPolicyEditor scope rows", () => {
       ).toBe("true");
     });
     expect(screen.getByText(/All tools, unconditionally/)).toBeTruthy();
+  });
+
+  it("drops a rule-mode server when its sole rule-matching tool is unchecked, instead of wildcarding", async () => {
+    renderEditor(policy({ sources: ["gitleaks"] }));
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Tool rule: All tools" }),
+    );
+    // Defaults the rule to destructiveHint, which in this fixture matches
+    // only "deleteTicket" — genuinely narrower than "every tool".
+    fireEvent.click(screen.getByText("Tools with MCP annotations"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    const server = screen.getByRole("checkbox", { name: "Support MCP" });
+    fireEvent.click(server);
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("true");
+    });
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("checkbox", { name: "deleteTicket" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+    });
+    expect(
+      screen
+        .getByRole("checkbox", { name: "listTickets" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "deleteTicket" }));
+
+    await waitFor(() => {
+      expect(server.getAttribute("aria-checked")).toBe("false");
+    });
+  });
+
+  it("drops a custom-selection server when its last tool is unchecked while a top-level rule is set, instead of saving a tool list the backend rejects", async () => {
+    renderEditor(policy({ sources: ["gitleaks"] }));
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Tool rule: All tools" }),
+    );
+    fireEvent.click(screen.getByText("Tools with MCP annotations"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    // Pick a tool the rule (destructiveHint) does NOT match, so this stays a
+    // "custom" selection instead of being recognized as tracking the rule.
+    fireEvent.click(screen.getByRole("button", { name: /Support MCP/ }));
+    const tool = screen.getByRole("checkbox", { name: "listTickets" });
+    fireEvent.click(tool);
+    await waitFor(() => {
+      expect(tool.getAttribute("aria-checked")).toBe("true");
+    });
+
+    // NormalizeMCPScope rejects an empty tool list on a server when the
+    // scope has a top-level rule, so wildcarding here (as a plain custom
+    // selection normally would) would only fail at save time.
+    fireEvent.click(tool);
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("checkbox", { name: "Support MCP" })
+          .getAttribute("aria-checked"),
+      ).toBe("false");
+    });
+  });
+
+  it("renders a stored ['*'] tool list as the wildcard, not a custom selection with a phantom tool", () => {
+    renderEditor(
+      policy({
+        sources: ["gitleaks"],
+        mcpScope: {
+          allServers: false,
+          toolAnnotations: [],
+          servers: [
+            {
+              mcpServerId: "11111111-1111-4111-8111-111111111111",
+              tools: ["*"],
+            },
+          ],
+        },
+      }),
+    );
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Support MCP" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(screen.getByText(/All tools, unconditionally/)).toBeTruthy();
+    expect(screen.queryByText(/^Custom ·/)).toBeNull();
   });
 
   it("keeps the pane on the deselected server so its tools stay pickable", async () => {

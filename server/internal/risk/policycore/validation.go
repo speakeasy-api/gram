@@ -113,6 +113,9 @@ func NormalizeMCPScope(input *MCPScopeInput) (*MCPScope, error) {
 		var tools []string
 		if server.Tools != nil {
 			if len(server.Tools) == 0 {
+				if len(annotations) > 0 {
+					return nil, fmt.Errorf("custom MCP tool selection must include at least one tool when the policy has a tool-annotation rule")
+				}
 				// An explicit empty list means "every tool on this server",
 				// same as never selecting one — not "no tools". Normalize to
 				// the wildcard sentinel rather than storing an empty slice:
@@ -126,6 +129,9 @@ func NormalizeMCPScope(input *MCPScopeInput) (*MCPScope, error) {
 					tool := strings.TrimSpace(rawTool)
 					if tool == "" {
 						return nil, fmt.Errorf("MCP tool name must not be empty")
+					}
+					if tool == AllToolsWildcard {
+						return nil, fmt.Errorf("MCP tool name %q is reserved for matching every tool; use an empty tool list instead", AllToolsWildcard)
 					}
 					if _, ok := seenTools[tool]; ok {
 						continue

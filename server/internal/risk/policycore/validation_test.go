@@ -74,6 +74,21 @@ func TestNormalizeAndValidateMCPScope(t *testing.T) {
 		{MCPServerID: serverID.String()},
 	}})
 	require.Error(t, err)
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{{
+		MCPServerID: serverID.String(),
+		Tools:       []string{AllToolsWildcard},
+	}}})
+	require.ErrorContains(t, err, "reserved")
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{
+		ToolAnnotations: []string{"readOnlyHint"},
+		Servers: []*MCPServerScopeInput{{
+			MCPServerID: serverID.String(),
+			Tools:       []string{},
+		}},
+	})
+	require.Error(t, err, "an empty tool list must not silently override a tool-annotation rule")
 }
 
 func TestValidateMCPScopeSources(t *testing.T) {

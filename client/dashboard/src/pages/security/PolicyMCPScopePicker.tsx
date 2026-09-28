@@ -13,6 +13,7 @@ import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import type { RiskMCPServerScope } from "@gram/client/models/components/riskmcpserverscope.js";
 import {
+  ALL_TOOLS_WILDCARD,
   type PolicyMCPScopeValue,
   type ToolAnnotation,
 } from "./policy-mcp-scope";
@@ -191,8 +192,16 @@ export function PolicyMCPScopePicker({
     if (stored?.tools !== undefined) {
       // An empty tools list means "every tool on this server", the same as
       // never picking one — not "no tools". The server normalizes it the
-      // same way on save.
-      if (stored.tools.length === 0) return { kind: "wildcard" };
+      // same way on save, but persists it as the single-element sentinel
+      // list `["*"]` (length 1, not 0) — see AllToolsWildcard in
+      // server/internal/risk/policycore/types.go — so both representations
+      // must be recognized here.
+      if (
+        stored.tools.length === 0 ||
+        (stored.tools.length === 1 && stored.tools[0] === ALL_TOOLS_WILDCARD)
+      ) {
+        return { kind: "wildcard" };
+      }
       return { kind: "custom", tools: stored.tools };
     }
     if (stored) return { kind: "rule", derived: false };
@@ -292,10 +301,23 @@ export function PolicyMCPScopePicker({
       : [...current, toolName];
     next.sort();
     if (next.length === 0) {
-      // Unchecking the last tool means "every tool on this server", not "no
-      // tools" — keep the server in scope as a wildcard rather than dropping
-      // it out of the policy entirely.
-      replaceServer(server.id, { mcpServerId: server.id, tools: [] });
+      if (
+        (selection.kind === "custom" || selection.kind === "wildcard") &&
+        value.toolAnnotations.length === 0
+      ) {
+        // Unchecking the last tool of an explicit selection means "every tool
+        // on this server", not "no tools" — keep the server in scope as a
+        // wildcard. A rule-derived selection (kind: "rule") must NOT take this
+        // path: it can be narrowed by the policy's top-level ToolAnnotations,
+        // and wildcarding here would silently widen past that rule. When a
+        // top-level rule IS set, the server can't wildcard past it either —
+        // NormalizeMCPScope rejects an empty tool list in that case — so
+        // fall through to dropping the server rather than saving a payload
+        // the backend will reject.
+        replaceServer(server.id, { mcpServerId: server.id, tools: [] });
+      } else {
+        removeServer(server);
+      }
     } else if (
       next.length === ruleSelection.length &&
       next.every((name, index) => name === ruleSelection[index])
