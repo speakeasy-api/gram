@@ -73,6 +73,8 @@ type ProductFeaturesView struct {
 	// Whether gateway defaults and per-connection discovery choices can be
 	// configured
 	GatewayDiscoveryModesEnabled *bool
+	// Whether new gateway connections can freeze reviewed tool definitions
+	GatewayFrozenToolsetsEnabled *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -104,6 +106,7 @@ var (
 			"session_portability_enabled",
 			"network_ingress_enabled",
 			"gateway_discovery_modes_enabled",
+			"gateway_frozen_toolsets_enabled",
 			"device_agent",
 		},
 	}
@@ -183,6 +186,9 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.GatewayDiscoveryModesEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("gateway_discovery_modes_enabled", "result"))
+	}
+	if result.GatewayFrozenToolsetsEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gateway_frozen_toolsets_enabled", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

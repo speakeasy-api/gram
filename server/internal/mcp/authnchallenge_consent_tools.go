@@ -111,7 +111,9 @@ func (s *Service) describeConsentToolset(ctx context.Context, endpoint *Resolved
 }
 
 func (s *Service) consentToolPickerEligible(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
-	if !endpoint.McpServerID.Valid {
+	// Gateways use qualified member definitions in the frozen review. The legacy
+	// picker selects member-local names and cannot represent a gateway policy.
+	if endpoint.MetaMcpServerID.Valid || !endpoint.McpServerID.Valid {
 		return false, nil
 	}
 	if !endpoint.ToolsetID.Valid {

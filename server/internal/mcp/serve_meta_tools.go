@@ -174,15 +174,16 @@ func (s *Service) handleMetaDescribeToolsCall(
 				continue
 			}
 			described = append(described, metamcp.SchemaTool{
-				Title:        entry.Title,
-				OutputSchema: entry.OutputSchema,
-				Icons:        entry.Icons,
-				Execution:    entry.Execution,
-				Meta:         entry.Meta,
-				Name:         metamcp.QualifyName(mr.member.slug, entry.Name),
-				Description:  entry.Description,
-				InputSchema:  entry.InputSchema,
-				Annotations:  entry.Annotations,
+				RawDefinition: entry.rawDefinition,
+				Title:         entry.Title,
+				OutputSchema:  entry.OutputSchema,
+				Icons:         entry.Icons,
+				Execution:     entry.Execution,
+				Meta:          entry.Meta,
+				Name:          metamcp.QualifyName(mr.member.slug, entry.Name),
+				Description:   entry.Description,
+				InputSchema:   entry.InputSchema,
+				Annotations:   entry.Annotations,
 			})
 		}
 	}
@@ -231,6 +232,15 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	if member.backend != metaMemberBackendHosted {
 		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}
+	if gate.frozen != nil {
+		selection, err := toolfilter.SelectionForTool("mcp_server:"+member.serverID.String(), toolName)
+		if err != nil {
+			return nil, fmt.Errorf("project approved member tool: %w", err)
+		}
+		memberGate := *gate
+		memberGate.toolSelection = selection
+		gate = &memberGate
+	}
 
 	toolset, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
@@ -238,6 +248,10 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
 		}
 		return nil, err
+	}
+
+	if gate.frozen != nil {
+		ctx = context.WithValue(ctx, frozenHostedExecutionKey{}, frozenHostedExecution{approved: gate.frozen, member: member, routing: hostedMemberRouting(member, inputs)})
 	}
 
 	// Pre-dispatch security check so an unsatisfied member surfaces as a
@@ -303,9 +317,10 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 
 // memberCatalog is one hosted member's described tool inventory.
 type memberCatalog struct {
-	entries    []*toolListEntry
-	byName     map[string]*toolListEntry
-	incomplete bool
+	entries         []*toolListEntry
+	byName          map[string]*toolListEntry
+	routingIdentity string
+	incomplete      bool
 }
 
 // describeMemberToolset loads the member's catalog via the same model view
@@ -317,7 +332,7 @@ func (s *Service) describeMemberToolset(
 	gate *metaGateContext,
 	member metaMember,
 ) (*memberCatalog, error) {
-	toolset, _, err := s.loadMemberToolset(ctx, logger, gate, member)
+	toolset, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +358,7 @@ func (s *Service) describeMemberToolset(
 		described.Tools = toolfilter.FilterToolsBySelection(described.Tools, gate.toolSelection)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, routingIdentity: hostedMemberRouting(member, inputs)}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		// External-MCP passthrough tools are excluded from the meta MCP

@@ -11,6 +11,7 @@ import (
 	"context"
 
 	types "github.com/speakeasy-api/gram/server/gen/types"
+	usersessionsviews "github.com/speakeasy-api/gram/server/gen/user_sessions/views"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -24,6 +25,13 @@ type Service interface {
 	// List available user session facet values (clients, users, servers) in the
 	// caller's project.
 	ListFacets(context.Context, *ListFacetsPayload) (res *ListUserSessionFacetsResult, err error)
+	// Read the complete currently permitted gateway inventory for an optional
+	// frozen connection. Does not execute tools. Unavailable members prevent
+	// approval.
+	PreviewGatewayToolset(context.Context, *PreviewGatewayToolsetPayload) (res *GatewayToolsetReview, err error)
+	// Mint a gateway connection from a freshly validated tool-definition review.
+	// This separate route prevents older servers from ignoring frozen options.
+	MintFrozenGatewaySession(context.Context, *MintFrozenGatewaySessionPayload) (res *MintFrozenGatewaySessionResult, err error)
 	// Mint a user_session on behalf of the authenticated dashboard user, bound to
 	// an issuer-gated audience: an MCP server, a meta MCP server, or a legacy
 	// toolset without an mcp_servers wrapper. Exactly one of toolset_id,
@@ -56,7 +64,33 @@ const ServiceName = "userSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"listUserSessions", "listFacets", "mintUserSession", "revokeUserSession"}
+var MethodNames = [6]string{"listUserSessions", "listFacets", "previewGatewayToolset", "mintFrozenGatewaySession", "mintUserSession", "revokeUserSession"}
+
+type FrozenGatewayReview struct {
+	// Fingerprint returned by the complete inventory review.
+	Fingerprint string
+	// Qualified tool names approved for this connection. Empty means no tools.
+	Tools []string
+}
+
+type GatewayReviewedTool struct {
+	// Qualified tool name.
+	Name string
+	// Fingerprint of the full definition and routing identity.
+	Fingerprint string
+	// Full MCP tool definition as formatted JSON text, preserving exact schema
+	// numbers for human review.
+	Definition string
+}
+
+// GatewayToolsetReview is the result type of the userSessions service
+// previewGatewayToolset method.
+type GatewayToolsetReview struct {
+	// Fingerprint of the complete permitted inventory.
+	Fingerprint string
+	// Tools available for review.
+	Tools []*GatewayReviewedTool
+}
 
 // ListFacetsPayload is the payload type of the userSessions service listFacets
 // method.
@@ -105,6 +139,30 @@ type ListUserSessionsResult struct {
 	NextCursor *string
 }
 
+// MintFrozenGatewaySessionPayload is the payload type of the userSessions
+// service mintFrozenGatewaySession method.
+type MintFrozenGatewaySessionPayload struct {
+	// Gateway to connect.
+	MetaMcpServerID string
+	// Optional explicit discovery mode.
+	DiscoveryMode *string
+	// The reviewed inventory and exact approved tools.
+	FrozenToolset    *FrozenGatewayReview
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// MintFrozenGatewaySessionResult is the result type of the userSessions
+// service mintFrozenGatewaySession method.
+type MintFrozenGatewaySessionResult struct {
+	// Gateway bearer token.
+	AccessToken string
+	// Lifetime in seconds.
+	ExpiresIn int
+	// Number of approved tools in this frozen connection.
+	FrozenToolCount int
+}
+
 // MintUserSessionPayload is the payload type of the userSessions service
 // mintUserSession method.
 type MintUserSessionPayload struct {
@@ -138,6 +196,15 @@ type MintUserSessionResult struct {
 	AccessToken string
 	// Lifetime of the access token in seconds.
 	ExpiresIn int
+}
+
+// PreviewGatewayToolsetPayload is the payload type of the userSessions service
+// previewGatewayToolset method.
+type PreviewGatewayToolsetPayload struct {
+	// The gateway to review.
+	MetaMcpServerID  string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // RevokeUserSessionPayload is the payload type of the userSessions service
@@ -207,4 +274,88 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// NewGatewayToolsetReview initializes result type GatewayToolsetReview from
+// viewed result type GatewayToolsetReview.
+func NewGatewayToolsetReview(vres *usersessionsviews.GatewayToolsetReview) *GatewayToolsetReview {
+	return newGatewayToolsetReview(vres.Projected)
+}
+
+// NewViewedGatewayToolsetReview initializes viewed result type
+// GatewayToolsetReview from result type GatewayToolsetReview using the given
+// view.
+func NewViewedGatewayToolsetReview(res *GatewayToolsetReview, view string) *usersessionsviews.GatewayToolsetReview {
+	p := newGatewayToolsetReviewView(res)
+	return &usersessionsviews.GatewayToolsetReview{Projected: p, View: "default"}
+}
+
+// newGatewayToolsetReview converts projected type GatewayToolsetReview to
+// service type GatewayToolsetReview.
+func newGatewayToolsetReview(vres *usersessionsviews.GatewayToolsetReviewView) *GatewayToolsetReview {
+	res := &GatewayToolsetReview{}
+	if vres.Fingerprint != nil {
+		res.Fingerprint = *vres.Fingerprint
+	}
+	if vres.Tools != nil {
+		res.Tools = make([]*GatewayReviewedTool, len(vres.Tools))
+		for i, val := range vres.Tools {
+			if val == nil {
+				res.Tools[i] = nil
+				continue
+			}
+			res.Tools[i] = transformUsersessionsviewsGatewayReviewedToolViewToGatewayReviewedTool(val)
+		}
+	}
+	return res
+}
+
+// newGatewayToolsetReviewView projects result type GatewayToolsetReview to
+// projected type GatewayToolsetReviewView using the "default" view.
+func newGatewayToolsetReviewView(res *GatewayToolsetReview) *usersessionsviews.GatewayToolsetReviewView {
+	vres := &usersessionsviews.GatewayToolsetReviewView{
+		Fingerprint: &res.Fingerprint,
+	}
+	if res.Tools != nil {
+		vres.Tools = make([]*usersessionsviews.GatewayReviewedToolView, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				vres.Tools[i] = nil
+				continue
+			}
+			vres.Tools[i] = transformGatewayReviewedToolToUsersessionsviewsGatewayReviewedToolView(val)
+		}
+	} else {
+		vres.Tools = []*usersessionsviews.GatewayReviewedToolView{}
+	}
+	return vres
+}
+
+// transformUsersessionsviewsGatewayReviewedToolViewToGatewayReviewedTool
+// builds a value of type *GatewayReviewedTool from a value of type
+// *usersessionsviews.GatewayReviewedToolView.
+func transformUsersessionsviewsGatewayReviewedToolViewToGatewayReviewedTool(v *usersessionsviews.GatewayReviewedToolView) *GatewayReviewedTool {
+	if v == nil {
+		return nil
+	}
+	res := &GatewayReviewedTool{
+		Name:        *v.Name,
+		Fingerprint: *v.Fingerprint,
+		Definition:  *v.Definition,
+	}
+
+	return res
+}
+
+// transformGatewayReviewedToolToUsersessionsviewsGatewayReviewedToolView
+// builds a value of type *usersessionsviews.GatewayReviewedToolView from a
+// value of type *GatewayReviewedTool.
+func transformGatewayReviewedToolToUsersessionsviewsGatewayReviewedToolView(v *GatewayReviewedTool) *usersessionsviews.GatewayReviewedToolView {
+	res := &usersessionsviews.GatewayReviewedToolView{
+		Name:        &v.Name,
+		Fingerprint: &v.Fingerprint,
+		Definition:  &v.Definition,
+	}
+
+	return res
 }

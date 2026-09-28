@@ -56,6 +56,7 @@ type metaGateContext struct {
 	organizationID  string
 	tokens          map[uuid.UUID]remotesessions.UpstreamToken
 	toolSelection   *toolfilter.SessionSelection
+	frozen          *toolfilter.FrozenToolset
 	discoveryMode   metamcp.DiscoveryMode
 	authenticated   bool
 	sessionID       string
@@ -173,6 +174,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		organizationID: metaServer.OrganizationID,
 		tokens:         gateTokens,
 		toolSelection:  nil,
+		frozen:         nil,
 		discoveryMode:  metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode.String),
 		authenticated:  false,
 		sessionID:      parseMcpSessionID(r.Header),
@@ -186,6 +188,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	}
 	if gatePolicy != nil {
 		gate.toolSelection = gatePolicy.Selection
+		if gatePolicy.Gateway != nil {
+			gate.frozen = gatePolicy.Gateway.Frozen
+		}
 		if gatePolicy.Gateway != nil && gatePolicy.Gateway.DiscoveryMode != nil {
 			gate.discoveryMode = *gatePolicy.Gateway.DiscoveryMode
 		}
@@ -462,7 +467,7 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 	tools := make([]*toolListEntry, 0, len(contract))
 	for _, tool := range contract {
 		tools = append(tools, &toolListEntry{
-			Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
+			routingIdentity: "", rawDefinition: nil, Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 			Name:        tool.Name,
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
@@ -532,6 +537,9 @@ func (s *Service) callMetaServerTool(
 		return nil, err
 	}
 
+	if gate.frozen != nil {
+		members = slices.DeleteFunc(members, func(member metaMember) bool { return !frozenIncludesMember(gate.frozen, member.serverID) })
+	}
 	if gate.discoveryMode == metamcp.DiscoveryModeDirect {
 		return s.executeMetaMemberTool(ctx, logger, gate, members, req, params.Name, params.Arguments, params.Meta)
 	}

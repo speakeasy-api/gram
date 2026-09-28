@@ -163,6 +163,7 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 	handle(http.MethodGet, PublicServerRoute+"/authorize", service.HandleAuthorize)
 	handle(http.MethodGet, PublicServerRoute+"/connect", service.HandleConsent)
 	handle(http.MethodPost, PublicServerRoute+"/connect", service.HandleConsent)
+	handle(http.MethodPost, PublicServerRoute+"/connect/frozen-v2", service.HandleConsent)
 	handle(http.MethodPost, PublicServerRoute+"/connect/remote-session", service.HandleConsentAction)
 	handle(http.MethodPost, PublicServerRoute+"/connect/mcp", service.HandleConsentMCP)
 	handle(http.MethodDelete, PublicServerRoute+"/connect/mcp", service.HandleConsentMCP)

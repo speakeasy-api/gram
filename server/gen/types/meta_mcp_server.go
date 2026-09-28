@@ -32,6 +32,9 @@ type MetaMcpServer struct {
 	// Whether the organization allows new discovery choices. Read through the
 	// gateway without requiring organization feature-management access.
 	DiscoveryModesEnabled *bool
+	// Whether the organization allows new frozen toolsets. Read through the
+	// gateway without requiring organization feature-management access.
+	FrozenToolsetsEnabled *bool
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode string

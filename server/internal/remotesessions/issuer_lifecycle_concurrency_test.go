@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	orgusersgen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
@@ -22,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
-	"github.com/stretchr/testify/require"
 )
 
 func TestIssuerLifecycle_RotationAdoptsEMABoundReplacement(t *testing.T) {
@@ -97,7 +98,7 @@ func TestIssuerLifecycle_ProjectUserIssuerMutationHidesSiblingBindings(t *testin
 	require.NoError(t, err)
 	service := usersessions.NewService(logger, tracer, testenv.NewMeterProvider(t), ti.conn, ti.sessionManager, nil,
 		authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
-		audit.NewLogger(), policy, nil, testenv.NewEncryptionClient(t), nil, "", nil, ti.features)
+		audit.NewLogger(), policy, nil, testenv.NewEncryptionClient(t), nil, "", nil, ti.features, nil)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	sibling := createProject(t, ctx, ti.conn, "issuer-review-sibling")

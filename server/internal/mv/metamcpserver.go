@@ -22,6 +22,7 @@ func BuildMetaMcpServerView(server repo.MetaMcpServer) *types.MetaMcpServer {
 		NetworkAccessMode:     types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
 		Instructions:          conv.FromPGText[string](server.Instructions),
 		DiscoveryModesEnabled: nil,
+		FrozenToolsetsEnabled: nil,
 		DiscoveryMode:         string(metamcp.ResolveDiscoveryMode(server.DiscoveryMode.String)),
 		CreatedAt:             conv.FromPGTimestamptz(server.CreatedAt),
 		UpdatedAt:             conv.FromPGTimestamptz(server.UpdatedAt),

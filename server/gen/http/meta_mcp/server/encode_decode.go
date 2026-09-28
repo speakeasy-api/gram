@@ -2100,6 +2100,7 @@ func marshalTypesMetaMcpServerToMetaMcpServerResponseBody(v *types.MetaMcpServer
 		NetworkAccessMode:     string(v.NetworkAccessMode),
 		Instructions:          v.Instructions,
 		DiscoveryModesEnabled: v.DiscoveryModesEnabled,
+		FrozenToolsetsEnabled: v.FrozenToolsetsEnabled,
 		DiscoveryMode:         v.DiscoveryMode,
 		CreatedAt:             v.CreatedAt,
 		UpdatedAt:             v.UpdatedAt,

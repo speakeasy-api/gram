@@ -555,6 +555,26 @@
                 </select>
               </dd>
             </div>
+            {{end}} {{if .GatewayReview}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Toolset</dt>
+              <dd class="mt-1 ml-0">
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="gateway_freeze" value="on" {{if .GatewayReview.Error}}data-review-unavailable{{end}} form="consent-approve-form" {{if .GatewayReview.Frozen}}checked{{end}} {{if and .GatewayReview.Error (not .GatewayReview.Frozen)}}disabled data-unavailable{{end}} />Freeze reviewed tool definitions</label>
+                {{if .GatewayReview.Frozen}}<p class="text-sm text-muted-foreground">Uncheck to create a connection with live tools.</p>{{end}}
+                <p class="text-xs text-muted-foreground mt-2">Optional. Changed or new tools stay unavailable until you approve them. Access can still be revoked. Tool definitions do not prove unchanged upstream behavior.</p>
+                {{if .GatewayReview.Error}}<p class="text-sm text-default-warning mt-2">{{.GatewayReview.Error}}</p>{{else}}
+                <input type="hidden" name="gateway_review" value="{{.GatewayReview.Fingerprint}}" form="consent-approve-form" />
+                {{if .GatewayReview.Removed}}<p class="text-sm text-default-warning mt-2">{{.GatewayReview.Removed}} previously approved tools are no longer available.</p>{{end}}
+                <details class="mt-2"><summary class="text-sm cursor-pointer">Review tool definitions ({{len .GatewayReview.Tools}})</summary>
+                  <div class="flex flex-col gap-3 mt-2">{{range .GatewayReview.Tools}}
+                    <div class="border p-3">
+                      <label class="flex items-center gap-2 text-sm font-mono"><input type="checkbox" name="gateway_tools" value="{{.Name}}" form="consent-approve-form" {{if .Checked}}checked{{end}} />{{.Name}}</label>
+                      {{if .Changed}}<p class="text-sm text-default-warning mt-2">Changed since approval</p><details><summary class="text-xs cursor-pointer">Previously approved definition</summary><pre class="text-xs overflow-auto max-h-64">{{.PreviousDefinition}}</pre></details>{{end}}
+                      <details><summary class="text-xs cursor-pointer">Current definition</summary><pre class="text-xs overflow-auto max-h-64">{{.Definition}}</pre></details>
+                    </div>{{end}}</div>
+                </details>{{end}}
+              </dd>
+            </div>
             {{end}} {{if .ShowDiscoveryMode}}
             <div data-agent-self-only>
               <dt class="text-eyebrow">Tool discovery</dt>
@@ -646,7 +666,7 @@
         <div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">
           <form
             method="POST"
-            action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect"
+            action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect{{if .GatewayReview}}/frozen-v2{{end}}"
             id="consent-approve-form"
             data-approve-form
           >
@@ -655,13 +675,13 @@
             <button
               type="submit"
               name="action"
-              value="approve"
+              value="{{if and .GatewayReview .GatewayReview.Frozen}}approve_frozen{{else}}approve{{end}}"
               id="consent-approve-button"
               data-self-label="Give access"
               data-agent-label="Authorize agent"
               data-consent-self-ready="{{if and (not .ShowToolsIsland) .ConsentEnabled}}true{{else}}false{{end}}"
               class="bg-primary text-primary-foreground enabled:interact:bg-foreground disabled:bg-muted disabled:text-muted-foreground h-10 w-full px-6 text-sm sm:w-auto disabled:cursor-not-allowed"
-              {{if or .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
+              {{if or .ShowToolsIsland (not .ConsentEnabled) (and .GatewayReview .GatewayReview.Frozen .GatewayReview.Error)}}disabled{{end}}
             >
               Give access
             </button>

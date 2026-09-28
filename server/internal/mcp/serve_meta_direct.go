@@ -5,13 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
 
-	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -36,32 +34,18 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	if err != nil {
 		return nil, err
 	}
-	tools := make([]*toolListEntry, 0)
-	names := map[string]bool{}
-	for _, member := range members {
-		catalog, err := s.describeMetaMember(ctx, logger, gate, member)
-		if err != nil {
-			var denied *oops.ShareableError
-			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
-				continue
-			}
-			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
+	snapshot, err := s.captureGatewayToolset(ctx, logger, gate, members)
+	if err != nil {
+		return nil, err
+	}
+	tools := make([]*toolListEntry, 0, len(snapshot.Tools))
+	for _, tool := range snapshot.Tools {
+		var entry toolListEntry
+		if err := json.Unmarshal(tool.Definition, &entry); err != nil {
+			return nil, fmt.Errorf("decode gateway tool: %w", err)
 		}
-		if catalog.incomplete {
-			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again").LogWarn(ctx, logger)
-		}
-		for _, entry := range catalog.entries {
-			qualified := *entry
-			qualified.Name = metamcp.QualifyName(member.slug, entry.Name)
-			if names[qualified.Name] {
-				return nil, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
-			}
-			names[qualified.Name] = true
-			tools = append(tools, &qualified)
-			if len(tools) > 10000 {
-				return nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
-			}
-		}
+		entry.Name = tool.Name
+		tools = append(tools, &entry)
 	}
 	slices.SortFunc(tools, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
 	catalogBytes, err := json.Marshal(tools)

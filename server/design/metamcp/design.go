@@ -316,6 +316,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
 	Attribute("instructions", String, "Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.")
 	Attribute("discovery_modes_enabled", Boolean, "Whether the organization allows new discovery choices. Read through the gateway without requiring organization feature-management access.")
+	Attribute("frozen_toolsets_enabled", Boolean, "Whether the organization allows new frozen toolsets. Read through the gateway without requiring organization feature-management access.")
 	Attribute("discovery_mode", String, "The effective default discovery mode. Unconfigured connections follow this value.", func() { Enum("progressive", "direct") })
 
 	Attribute("created_at", String, func() {

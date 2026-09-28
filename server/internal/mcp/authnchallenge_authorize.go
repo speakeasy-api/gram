@@ -206,7 +206,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
-	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+	challengeState := AuthnChallengeState{
+		GatewayReviewFingerprint: "", FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:                  nil,
 		Federation:               nil,
 		ID:                       challengeID,
