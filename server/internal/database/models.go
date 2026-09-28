@@ -1783,6 +1783,66 @@ type OktaResourceConnection struct {
 	UpdatedAt                    pgtype.Timestamptz
 }
 
+type OnboardingPlaybook struct {
+	ID             uuid.UUID
+	UseCaseID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Name           string
+	Description    string
+	IsDefault      bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+}
+
+type OnboardingPlaybookStep struct {
+	PlaybookID uuid.UUID
+	StepID     uuid.UUID
+	Position   int32
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+// Onboarding steps mirrored from application code; deleted_at marks a step the code no longer defines.
+type OnboardingStep struct {
+	ID              uuid.UUID
+	Slug            string
+	Title           string
+	Description     string
+	ParentStepID    uuid.NullUUID
+	Completion      string
+	HiddenByDefault bool
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+}
+
+type OnboardingStepDependency struct {
+	StepID         uuid.UUID
+	RequiresStepID uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type OnboardingStepMethod struct {
+	StepID              uuid.UUID
+	IntegrationMethodID uuid.UUID
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+}
+
+type OnboardingUseCase struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Description string
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+}
+
 type OpenrouterApiKey struct {
 	OrganizationID string
 	KeyType        string
@@ -1895,6 +1955,17 @@ type OrganizationOnboarding struct {
 	ID             uuid.UUID
 	OrganizationID string
 	Preset         pgtype.Text
+	MdmVendor      pgtype.Text
+	MdmVendorName  pgtype.Text
+	PlaybookID     uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type OrganizationOnboardingVendor struct {
+	OrganizationID string
+	Vendor         string
+	PlanID         uuid.NullUUID
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
@@ -3345,6 +3416,18 @@ type SupportMatrixMethodPlatform struct {
 	CreatedAt  pgtype.Timestamptz
 	UpdatedAt  pgtype.Timestamptz
 	DeletedAt  pgtype.Timestamptz
+}
+
+// Plans each vendor sells, as the support matrix names them; an organization declares the one it is on per vendor.
+type SupportMatrixPlan struct {
+	ID        uuid.UUID
+	Slug      string
+	Vendor    string
+	Name      string
+	SortOrder int32
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
 }
 
 // Global admin support catalog of upstream product surfaces, independent of customer installations.
