@@ -13,6 +13,10 @@ import (
 	"strings"
 	"time"
 
+	sdk "github.com/OpenRouterTeam/go-sdk"
+	"github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/OpenRouterTeam/go-sdk/retry"
+
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -67,6 +71,9 @@ func (c *Client) Evaluate(ctx context.Context, orgID string, state json.RawMessa
 	if !json.Valid(state) || len(questions) == 0 {
 		return result, errors.New("invalid typesafe evaluation input")
 	}
+	if c.resolveKey == nil || c.httpClient == nil {
+		return result, ErrUnavailable
+	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	apiKey, err := c.resolveKey(ctx, orgID)
@@ -76,61 +83,137 @@ func (c *Client) Evaluate(ctx context.Context, orgID string, state json.RawMessa
 	if apiKey == "" || apiKey == "unset" {
 		return result, ErrUnavailable
 	}
-	body, err := json.Marshal(struct {
-		Model     string              `json:"model"`
-		State     json.RawMessage     `json:"state"`
-		Questions map[string]Question `json:"questions"`
-	}{Model: Model, State: state, Questions: questions})
+	sdkQuestions := make(map[string]components.Questions, len(questions))
+	for id, question := range questions {
+		if question.Type != "noul" {
+			return result, errors.New("unsupported typesafe question type")
+		}
+		criteria := &components.DecisionsNoulQuestionCriteria{True: components.CreateTrueStr(""), False: components.CreateFalseStr("")}
+		for label, description := range question.Criteria {
+			switch label {
+			case "true":
+				value := components.CreateTrueStr(description)
+				criteria.True = value
+			case "false":
+				value := components.CreateFalseStr(description)
+				criteria.False = value
+			default:
+				return result, errors.New("invalid typesafe noul criterion")
+			}
+		}
+		if len(question.Criteria) == 0 {
+			criteria = nil
+		}
+		sdkQuestions[id] = components.CreateQuestionsNoul(components.DecisionsNoulQuestion{
+			Type:         components.DecisionsNoulQuestionTypeNoul,
+			Instructions: components.CreateDecisionsNoulQuestionInstructionsStr(question.Instructions),
+			Criteria:     criteria,
+		})
+	}
+	// Preserve JSON numbers in structured state rather than rounding through float64.
+	decoder := json.NewDecoder(bytes.NewReader(state))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return result, errors.New("invalid typesafe state")
+	}
+	var sdkState components.State
+	switch value := value.(type) {
+	case string:
+		sdkState = components.CreateStateStr(value)
+	case map[string]any:
+		sdkState = components.CreateStateMapOfAny(value)
+	case []any:
+		sdkState = components.CreateStateArrayOfAny(value)
+	default:
+		return result, errors.New("invalid typesafe state")
+	}
+	transport := &boundedClient{client: c.httpClient, endpoint: c.endpoint, err: nil}
+	client := sdk.New(sdk.WithClient(transport), sdk.WithSecurity(apiKey),
+		sdk.WithRetryConfig(retry.Config{Strategy: "none", Backoff: nil, RetryConnectionErrors: false}))
+	response, err := client.Alpha.Decisions.Create(ctx, components.DecisionsRequest{
+		Model: Model, State: sdkState, Questions: sdkQuestions,
+		Provider: nil, SessionID: nil, Trace: nil, User: nil,
+	})
 	if err != nil {
-		return result, fmt.Errorf("encode typesafe request: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
-	if err != nil {
-		return result, fmt.Errorf("create typesafe request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := c.httpClient.Do(req)
-	if err != nil {
-		return result, fmt.Errorf("request typesafe evaluation: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
-	if res.StatusCode != http.StatusOK {
-		// Provider error bodies may echo sensitive state or credentials.
-		return result, fmt.Errorf("typesafe HTTP status %d", res.StatusCode)
-	}
-	raw, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
-	if err != nil {
-		return result, fmt.Errorf("read typesafe response: %w", err)
-	}
-	if len(raw) > 1<<20 {
-		return result, errors.New("typesafe response exceeds limit")
-	}
-	var response struct {
-		Model   string `json:"model"`
-		Answers map[string]struct {
-			Type string   `json:"type"`
-			Noul *float64 `json:"noul"`
-		} `json:"answers"`
-		Usage *struct {
-			InputTokens  int      `json:"input_tokens"`
-			OutputTokens int      `json:"output_tokens"`
-			Cost         *float64 `json:"cost"`
-		} `json:"usage"`
-	}
-	if err := json.Unmarshal(raw, &response); err != nil {
+		if transport.err != nil {
+			return result, transport.err
+		}
+		if ctx.Err() != nil {
+			return result, fmt.Errorf("request typesafe evaluation: %w", ctx.Err())
+		}
+		// SDK decoding errors can include provider response bodies.
 		return result, errors.New("invalid typesafe response JSON")
 	}
-	if (response.Model != Model && !strings.HasPrefix(response.Model, Model+"-")) || response.Usage == nil || response.Usage.Cost == nil || math.IsNaN(*response.Usage.Cost) || math.IsInf(*response.Usage.Cost, 0) || *response.Usage.Cost < 0 || response.Usage.InputTokens < 0 || response.Usage.OutputTokens < 0 || len(response.Answers) != len(questions) {
+	if (response.Model != Model && !strings.HasPrefix(response.Model, Model+"-")) || response.Usage.Cost == nil || math.IsNaN(*response.Usage.Cost) || math.IsInf(*response.Usage.Cost, 0) || *response.Usage.Cost < 0 || response.Usage.InputTokens < 0 || response.Usage.OutputTokens < 0 || len(response.Answers) != len(questions) {
 		return result, errors.New("invalid typesafe response metadata")
 	}
 	probabilities := make(map[string]float64, len(questions))
 	for id := range questions {
 		answer, ok := response.Answers[id]
-		if !ok || answer.Type != "noul" || answer.Noul == nil || math.IsNaN(*answer.Noul) || math.IsInf(*answer.Noul, 0) || *answer.Noul < 0 || *answer.Noul > 1 {
+		if !ok || answer.Type != components.AnswersTypeNoul || answer.DecisionsNoulAnswer == nil {
 			return result, errors.New("invalid typesafe probability")
 		}
-		probabilities[id] = *answer.Noul
+		probability := answer.DecisionsNoulAnswer.Noul
+		if math.IsNaN(probability) || math.IsInf(probability, 0) || probability < 0 || probability > 1 {
+			return result, errors.New("invalid typesafe probability")
+		}
+		probabilities[id] = probability
 	}
-	return Result{Probabilities: probabilities, Model: response.Model, InputTokens: response.Usage.InputTokens, OutputTokens: response.Usage.OutputTokens, CostUSD: *response.Usage.Cost}, nil
+	return Result{Probabilities: probabilities, Model: response.Model, InputTokens: int(response.Usage.InputTokens), OutputTokens: int(response.Usage.OutputTokens), CostUSD: *response.Usage.Cost}, nil
+}
+
+// boundedClient keeps provider bodies bounded and private before SDK decoding.
+// It is scoped to one evaluation, whose SDK retries are disabled.
+type boundedClient struct {
+	client   *guardian.HTTPClient
+	endpoint string
+	err      error
+}
+
+func (c *boundedClient) Do(req *http.Request) (*http.Response, error) {
+	response, err := c.do(req)
+	c.err = err
+	return response, err
+}
+
+func (c *boundedClient) do(req *http.Request) (*http.Response, error) {
+	// Preserve the SDK request while allowing a local endpoint in tests.
+	endpoint, err := req.URL.Parse(c.endpoint)
+	if err != nil {
+		return nil, errors.New("invalid typesafe endpoint")
+	}
+	req.URL = endpoint
+	res, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request typesafe evaluation: %w", err)
+	}
+	originalBody := res.Body
+	defer o11y.NoLogDefer(func() error { return originalBody.Close() })
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("typesafe HTTP status %d", res.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
+	if err != nil {
+		return nil, fmt.Errorf("read typesafe response: %w", err)
+	}
+	if len(raw) > 1<<20 {
+		return nil, errors.New("typesafe response exceeds limit")
+	}
+	// The SDK represents noul as float64: missing/null must not become a safe zero.
+	var presence struct {
+		Answers map[string]struct {
+			Noul *float64 `json:"noul"`
+		} `json:"answers"`
+	}
+	if err := json.Unmarshal(raw, &presence); err != nil {
+		return nil, errors.New("invalid typesafe response JSON")
+	}
+	for _, answer := range presence.Answers {
+		if answer.Noul == nil {
+			return nil, errors.New("invalid typesafe probability")
+		}
+	}
+	res.Body = io.NopCloser(bytes.NewReader(raw))
+	return res, nil
 }
