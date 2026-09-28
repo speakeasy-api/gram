@@ -1,36 +1,37 @@
 package remotemcp
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
 const (
 	// probeURLTimeout bounds connection setup and response classification for
-	// the synchronous management endpoint.
+	// the synchronous management endpoint. It also bounds each HTTP request,
+	// including the session DELETE the SDK sends on a detached context.
 	probeURLTimeout = 10 * time.Second
 
 	probeURLMaxRedirects = 3
-	probeURLMaxBodyBytes = 1024 * 1024
-	probeURLRequestID    = int64(1)
 
-	probeURLBody = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"roots":{}},"clientInfo":{"name":"gram-probe","version":"1"},"protocolVersion":"` + mcpversions.Version20250618 + `"}}`
+	// probeURLMaxBodyBytes caps each response body the probe reads. Discovery
+	// and initialize results are small; 1 MiB leaves headroom without letting
+	// an untrusted upstream hold a large buffer.
+	probeURLMaxBodyBytes = 1 << 20 // 1 MiB
 
 	ProbeOutcomeMCPAvailable           = "mcp_available"
 	ProbeOutcomeAuthenticationRequired = "authentication_required"
@@ -65,9 +66,9 @@ type probeObservation struct {
 	httpStatus *int
 }
 
-// ProbeRemoteMcpURL issues an MCP initialize request against rawURL and
-// reports a structured outcome. The caller is responsible for bounding the
-// overall deadline via ctx.
+// ProbeRemoteMcpURL connects to rawURL with the MCP SDK client and reports a
+// structured outcome. The caller is responsible for bounding the overall
+// deadline via ctx.
 func ProbeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL string) ProbeResult {
 	if _, err := proxy.ValidateRemoteMCPURL(ctx, policy, rawURL); err != nil {
 		return classifyTransportError(ctx, err)
@@ -77,8 +78,13 @@ func ProbeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL stri
 
 // probeRemoteMcpURL probes a URL that has already passed management-time
 // validation. Redirect targets are independently validated before following.
+//
+// The SDK client opens with a 2026-07-28 server/discover request and falls
+// back to the initialize handshake when the upstream does not answer it, so
+// upstreams that implement either one verify.
 func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL string) probeObservation {
 	client := policy.Client()
+	client.Timeout = probeURLTimeout
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) > probeURLMaxRedirects {
 			return fmt.Errorf("stopped after %d redirects", probeURLMaxRedirects)
@@ -98,69 +104,148 @@ func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL stri
 		}
 		return nil
 	}
+	recorder := &probeRoundTripper{base: client.Transport, mu: sync.Mutex{}, last: nil}
+	client.Transport = recorder
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, strings.NewReader(probeURLBody))
-	if err != nil {
-		return probeObservation{result: unreachableResult(ProbeReasonTransportError, nil), httpStatus: nil}
+	mcpClient := mcp.NewClient(&mcp.Implementation{
+		Name:        "gram-probe",
+		Title:       "",
+		Description: "",
+		Version:     "1",
+		WebsiteURL:  "",
+		Icons:       nil,
+	}, nil)
+	transport := &probeTransport{
+		inner: &mcp.StreamableClientTransport{
+			Endpoint:   rawURL,
+			HTTPClient: client,
+			// mcp.StreamableClientTransport treats zero as the SDK default of 5;
+			// a negative value disables reconnects so the probe stays one-shot.
+			MaxRetries:           -1,
+			DisableStandaloneSSE: true,
+			OAuthHandler:         nil,
+		},
+		conn: nil,
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
-	req.ContentLength = int64(len(probeURLBody))
+	session, err := mcpClient.Connect(ctx, transport, nil)
+	last := recorder.lastResponse()
 
-	//nolint:bodyclose // Body is closed by the defer below; the linter cannot trace the wrapped client.
-	resp, err := client.Do(req)
+	// Closing sends a DELETE for a stateful session on a context the SDK
+	// detaches from ctx; client.Timeout bounds it, and the result does not
+	// wait on it.
 	if err != nil {
+		if transport.conn != nil {
+			go o11y.NoLogDefer(transport.conn.Close)
+		}
+		return classifyProbeError(ctx, err, last)
+	}
+	go o11y.NoLogDefer(session.Close)
+
+	var status *int
+	if last != nil {
+		status = &last.status
+	}
+	return probeObservation{result: mcpAvailableResult(), httpStatus: status}
+}
+
+// probeResponse is the part of an upstream response the probe classifies.
+type probeResponse struct {
+	// status is the HTTP status code.
+	status int
+
+	// wwwAuthenticate holds every WWW-Authenticate header value.
+	wwwAuthenticate []string
+}
+
+// probeTransport keeps the connection it opens. Connect does not close the
+// connection on every failure path, and an unclosed connection leaves the
+// SDK's reader goroutine blocked for good.
+type probeTransport struct {
+	inner mcp.Transport
+	conn  mcp.Connection
+}
+
+func (t *probeTransport) Connect(ctx context.Context) (mcp.Connection, error) {
+	conn, err := t.inner.Connect(ctx)
+	t.conn = conn
+	return conn, err //nolint:wrapcheck // the SDK classifies its own transport errors
+}
+
+// probeRoundTripper caps response bodies and remembers the most recent
+// response. The SDK falls back from server/discover to initialize on every
+// discover failure, and the session DELETE it sends while closing is not
+// recorded, so when Connect fails the most recent response belongs to the
+// request that failed.
+type probeRoundTripper struct {
+	base http.RoundTripper
+	mu   sync.Mutex
+	last *probeResponse
+}
+
+func (rt *probeRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := rt.base.RoundTrip(req)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // preserve the base transport's error for classification
+	}
+
+	if req.Method != http.MethodDelete {
+		rt.mu.Lock()
+		rt.last = &probeResponse{status: resp.StatusCode, wwwAuthenticate: resp.Header.Values("WWW-Authenticate")}
+		rt.mu.Unlock()
+	}
+
+	resp.Body = http.MaxBytesReader(nil, resp.Body, probeURLMaxBodyBytes)
+	return resp, nil
+}
+
+func (rt *probeRoundTripper) lastResponse() *probeResponse {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.last
+}
+
+// classifyProbeError maps a failed SDK connection to a probe outcome. Checks
+// run in order: failures that never produced a usable response, HTTP statuses
+// with a fixed meaning, then JSON-RPC errors, which show the upstream speaks
+// the protocol even while rejecting the request.
+func classifyProbeError(ctx context.Context, err error, last *probeResponse) probeObservation {
+	if _, ok := errors.AsType[*url.Error](err); ok || ctx.Err() != nil || last == nil {
 		return probeObservation{result: classifyTransportError(ctx, err), httpStatus: nil}
 	}
-	defer o11y.NoLogDefer(resp.Body.Close)
 
-	status := resp.StatusCode
-	switch status {
-	case http.StatusUnauthorized, http.StatusForbidden:
+	status := last.status
+	switch {
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		return probeObservation{
 			result: ProbeResult{
 				Outcome:                      ProbeOutcomeAuthenticationRequired,
-				ProtectedResourceMetadataURL: parseProtectedResourceMetadataURL(resp.Header.Values("WWW-Authenticate")),
+				ProtectedResourceMetadataURL: parseProtectedResourceMetadataURL(last.wwwAuthenticate),
 				HTTPStatus:                   nil,
 				Reason:                       nil,
 			},
 			httpStatus: &status,
 		}
-	case http.StatusRequestTimeout:
+	case status == http.StatusRequestTimeout:
 		return probeObservation{result: unreachableResult(ProbeReasonTimeout, &status), httpStatus: &status}
-	case http.StatusTooManyRequests:
+	case status == http.StatusTooManyRequests:
 		return probeObservation{result: unreachableResult(ProbeReasonRateLimited, &status), httpStatus: &status}
-	}
-
-	if status >= 200 && status < 300 {
-		validMCP, err := classifyMCPSuccess(resp)
-		if err != nil {
-			if errors.Is(err, io.ErrUnexpectedEOF) {
-				return probeObservation{result: invalidMCPResponseResult(status), httpStatus: &status}
-			}
-			result := classifyTransportError(ctx, err)
-			result.HTTPStatus = &status
-			return probeObservation{result: result, httpStatus: &status}
-		}
-		if validMCP {
-			return probeObservation{
-				result: ProbeResult{
-					Outcome:                      ProbeOutcomeMCPAvailable,
-					ProtectedResourceMetadataURL: nil,
-					HTTPStatus:                   nil,
-					Reason:                       nil,
-				},
-				httpStatus: &status,
-			}
-		}
-		return probeObservation{result: invalidMCPResponseResult(status), httpStatus: &status}
-	}
-
-	if status >= 500 {
+	case status >= http.StatusInternalServerError:
 		return probeObservation{result: unreachableResult(ProbeReasonServerError, &status), httpStatus: &status}
 	}
 
+	if _, ok := errors.AsType[*jsonrpc.Error](err); ok {
+		return probeObservation{result: mcpAvailableResult(), httpStatus: &status}
+	}
 	return probeObservation{result: invalidMCPResponseResult(status), httpStatus: &status}
+}
+
+func mcpAvailableResult() ProbeResult {
+	return ProbeResult{
+		Outcome:                      ProbeOutcomeMCPAvailable,
+		ProtectedResourceMetadataURL: nil,
+		HTTPStatus:                   nil,
+		Reason:                       nil,
+	}
 }
 
 func invalidMCPResponseResult(status int) ProbeResult {
@@ -201,84 +286,6 @@ func classifyTransportError(ctx context.Context, err error) ProbeResult {
 		return unreachableResult(ProbeReasonTLSError, nil)
 	}
 	return unreachableResult(ProbeReasonTransportError, nil)
-}
-
-// classifyMCPSuccess requires a response to the initialize request, either as
-// one JSON-RPC message or as an SSE data event.
-func classifyMCPSuccess(resp *http.Response) (bool, error) {
-	contentType := resp.Header.Get("Content-Type")
-	mediaType := strings.ToLower(strings.TrimSpace(strings.SplitN(contentType, ";", 2)[0]))
-
-	switch mediaType {
-	case "application/json":
-		body, err := io.ReadAll(io.LimitReader(resp.Body, probeURLMaxBodyBytes+1))
-		if err != nil {
-			return false, fmt.Errorf("read probe response: %w", err)
-		}
-		if len(body) > probeURLMaxBodyBytes {
-			return false, nil
-		}
-		return isInitializeResponse(body), nil
-	case "text/event-stream":
-		return containsJSONRPCSSEEvent(resp.Body)
-	default:
-		return false, nil
-	}
-}
-
-func containsJSONRPCSSEEvent(body io.Reader) (bool, error) {
-	limited := &io.LimitedReader{R: body, N: probeURLMaxBodyBytes + 1}
-	scanner := bufio.NewScanner(limited)
-	scanner.Buffer(make([]byte, 0, 64*1024), probeURLMaxBodyBytes+1)
-
-	var data strings.Builder
-	decodeEvent := func() bool {
-		return data.Len() > 0 && isInitializeResponse([]byte(data.String()))
-	}
-
-	for scanner.Scan() {
-		line := strings.TrimSuffix(scanner.Text(), "\r")
-		if line == "" {
-			if decodeEvent() {
-				return true, nil
-			}
-			data.Reset()
-			continue
-		}
-
-		field, value, found := strings.Cut(line, ":")
-		if !found || field != "data" {
-			continue
-		}
-		value = strings.TrimPrefix(value, " ")
-		if data.Len() > 0 {
-			data.WriteByte('\n')
-		}
-		data.WriteString(value)
-	}
-
-	if err := scanner.Err(); err != nil {
-		if errors.Is(err, bufio.ErrTooLong) || limited.N == 0 {
-			return false, nil
-		}
-		return false, fmt.Errorf("scan probe event stream: %w", err)
-	}
-	if limited.N == 0 {
-		return false, nil
-	}
-	return decodeEvent(), nil
-}
-
-func isInitializeResponse(data []byte) bool {
-	if err := proxy.ValidateStrictJSONRPCBody(data); err != nil {
-		return false
-	}
-	message, err := jsonrpc.DecodeMessage(data)
-	if err != nil {
-		return false
-	}
-	response, ok := message.(*jsonrpc.Response)
-	return ok && response.ID.Raw() == probeURLRequestID
 }
 
 func parseProtectedResourceMetadataURL(headers []string) *string {
