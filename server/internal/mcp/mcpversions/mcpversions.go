@@ -120,7 +120,7 @@ func SupportedConsentToolset() []string {
 func Negotiate(requested string, supported []string) (string, bool) {
 	candidates := make([]string, 0, len(supported))
 	for _, version := range supported {
-		if Known(version) && !AtLeast(version, Version20260728) {
+		if DefinesMethod(MethodInitialize, version) {
 			candidates = append(candidates, version)
 		}
 	}

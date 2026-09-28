@@ -13,7 +13,7 @@ import (
 func TestServePublic_Declared20260728LifecycleRequestsDoNotInitialize(t *testing.T) {
 	t.Parallel()
 	for _, surface := range []string{"hosted", "meta"} {
-		for _, method := range []string{"initialize", "server/discover"} {
+		for _, method := range []string{mcpversions.MethodInitialize, mcpversions.MethodServerDiscover} {
 			t.Run(surface+"/"+method, func(t *testing.T) {
 				t.Parallel()
 				ctx, ti := newTestMCPService(t)

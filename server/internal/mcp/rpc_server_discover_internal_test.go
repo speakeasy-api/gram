@@ -30,7 +30,7 @@ func TestServerDiscoverNotificationHasNoResponse(t *testing.T) {
 			service := &Service{logger: logger,
 				toolsetsRepo: toolsetsrepo.New(failingDBTX{}), mcpMetadataRepo: metadatarepo.New(failingDBTX{})}
 			resolution := mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728}
-			req := &rawRequest{JSONRPC: "2.0", Method: "server/discover",
+			req := &rawRequest{JSONRPC: "2.0", Method: mcpversions.MethodServerDiscover,
 				Params: json.RawMessage(`{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`)}
 			var body json.RawMessage
 			var err error
@@ -77,7 +77,7 @@ func TestPlatformServerDiscoverIsCallerVarying(t *testing.T) {
 	t.Parallel()
 	resolution := mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728}
 	body, err := (&Service{logger: testenv.NewLogger(t)}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{},
-		&rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(1), Method: "server/discover"}, "", &resolution)
+		&rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(1), Method: mcpversions.MethodServerDiscover}, "", &resolution)
 	require.NoError(t, err)
 	var response struct {
 		Result struct {
@@ -144,7 +144,7 @@ func TestHostedServerDiscoverStoredInstructionsAndCachePrivacy(t *testing.T) {
 				toolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, toolsetIsPublic: new(tc.public),
 				authenticated: tc.authenticated, wrapperIsPublic: tc.wrapperPublic,
 				protocolVersion: mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728},
-			}, &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(1), Method: "server/discover"})
+			}, &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(1), Method: mcpversions.MethodServerDiscover})
 			require.NoError(t, err)
 			var response struct {
 				Result struct {

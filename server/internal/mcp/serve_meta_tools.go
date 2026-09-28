@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -257,7 +258,7 @@ func (s *Service) handleMetaExecuteToolCall(
 	syntheticReq := &rawRequest{
 		JSONRPC: "2.0",
 		ID:      req.ID,
-		Method:  "tools/call",
+		Method:  mcpversions.MethodToolsCall,
 		Params:  params,
 	}
 

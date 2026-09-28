@@ -160,7 +160,7 @@ func TestHandleInitialize_WritesNegotiatedVersionBackIntoPayload(t *testing.T) {
 	req := &rawRequest{
 		JSONRPC: "2.0",
 		ID:      mcpjsonrpc.NumberID(1),
-		Method:  "initialize",
+		Method:  mcpversions.MethodInitialize,
 		Params:  rawParams,
 	}
 

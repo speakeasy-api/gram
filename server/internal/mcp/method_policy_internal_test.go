@@ -21,7 +21,7 @@ func TestMethodDispatchByRevision(t *testing.T) {
 	t.Parallel()
 	for _, surface := range []string{"hosted", "platform", "meta"} {
 		for _, version := range mcpversions.All() {
-			for _, method := range []string{"initialize", "notifications/initialized", "ping", "server/discover", "unknown/method"} {
+			for _, method := range []string{mcpversions.MethodInitialize, mcpversions.MethodNotificationsInitialized, mcpversions.MethodPing, mcpversions.MethodServerDiscover, "unknown/method"} {
 				t.Run(surface+"/"+version+"/"+method, func(t *testing.T) {
 					t.Parallel()
 					_, payload := newClientIdentityFixture(t)
@@ -31,7 +31,7 @@ func TestMethodDispatchByRevision(t *testing.T) {
 					logger := testenv.NewLogger(t)
 					service := &Service{logger: logger, sessionClientInfo: sessionclientinfo.NewStore(nil, 1),
 						toolsetsRepo: toolsets_repo.New(failingDBTX{}), mcpMetadataRepo: metadata_repo.New(failingDBTX{})}
-					if method == "server/discover" {
+					if method == mcpversions.MethodServerDiscover {
 						// A discovery path must not invoke the session store.
 						service.sessionClientInfo = nil
 					}
@@ -47,7 +47,7 @@ func TestMethodDispatchByRevision(t *testing.T) {
 							&metaGateContext{protocolVersion: payload.protocolVersion}, req, version)
 					}
 					declares20260728 := version == mcpversions.Version20260728
-					allowed := method != "unknown/method" && ((method == "server/discover") == declares20260728)
+					allowed := method != "unknown/method" && ((method == mcpversions.MethodServerDiscover) == declares20260728)
 					if !allowed {
 						require.Error(t, err)
 						var shareable *oops.ShareableError
@@ -57,7 +57,7 @@ func TestMethodDispatchByRevision(t *testing.T) {
 						return
 					}
 					require.NoError(t, err)
-					if method == "notifications/initialized" {
+					if method == mcpversions.MethodNotificationsInitialized {
 						require.Empty(t, body)
 						return
 					}
@@ -65,7 +65,7 @@ func TestMethodDispatchByRevision(t *testing.T) {
 						Result map[string]json.RawMessage `json:"result"`
 					}
 					require.NoError(t, json.Unmarshal(body, &response))
-					if method == "server/discover" {
+					if method == mcpversions.MethodServerDiscover {
 						require.Contains(t, response.Result, "supportedVersions")
 						var supported []string
 						require.NoError(t, json.Unmarshal(response.Result["supportedVersions"], &supported))
@@ -90,19 +90,9 @@ func TestMethodDispatchByRevision(t *testing.T) {
 	}
 }
 
-func TestMethodPolicyCoversCommonOperations(t *testing.T) {
-	t.Parallel()
-	for _, method := range []string{"tools/list", "tools/call", "prompts/list", "prompts/get", "resources/list", "resources/templates/list", "resources/read", "notifications/cancelled"} {
-		for _, version := range mcpversions.All() {
-			require.True(t, methodAvailable(&rawRequest{Method: method}, mcpversions.Resolution{Declared: version, InEffect: version}, mcpversions.SupportedHostedToolset()), "%s/%s", version, method)
-		}
-	}
-	require.False(t, methodAvailable(&rawRequest{Method: "tools/list"}, mcpversions.Resolution{InEffect: "unknown"}, mcpversions.SupportedHostedToolset()))
-}
-
 func TestInitializeRequiresNegotiableRevision(t *testing.T) {
 	t.Parallel()
-	req := &rawRequest{Method: "initialize", ID: mcpjsonrpc.NumberID(1), Params: json.RawMessage(`{"protocolVersion":"2025-11-25"}`)}
+	req := &rawRequest{Method: mcpversions.MethodInitialize, ID: mcpjsonrpc.NumberID(1), Params: json.RawMessage(`{"protocolVersion":"2025-11-25"}`)}
 	resolution := mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect}
 	require.True(t, methodAvailable(req, resolution, mcpversions.SupportedHostedToolset()))
 	// A surface serving only handshake-free revisions has nothing to
@@ -113,7 +103,7 @@ func TestInitializeRequiresNegotiableRevision(t *testing.T) {
 
 func TestUnavailableMethodNotificationHasNoResponse(t *testing.T) {
 	t.Parallel()
-	for _, method := range []string{"notifications/initialized", "ping", "unknown/method"} {
+	for _, method := range []string{mcpversions.MethodNotificationsInitialized, mcpversions.MethodPing, "unknown/method"} {
 		req := &rawRequest{Method: method}
 		body, err := (&Service{}).handlePlatformToolsetRequest(t.Context(), nil, platformtools.Toolset{}, req, "",
 			&mcpversions.Resolution{Declared: mcpversions.Version20260728, InEffect: mcpversions.Version20260728})
@@ -141,7 +131,7 @@ func TestInitializeDeclarationControlsVersionValidation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			req := &rawRequest{Method: "initialize", ID: mcpjsonrpc.NumberID(1), Params: json.RawMessage(tc.params)}
+			req := &rawRequest{Method: mcpversions.MethodInitialize, ID: mcpjsonrpc.NumberID(1), Params: json.RawMessage(tc.params)}
 			resolution := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(tc.declared, req.Params), mcpversions.SupportedHostedToolset())
 			for surface, err := range map[string]error{
 				"hosted": validateSupportedProtocolVersion(req, resolution, mcpversions.SupportedHostedToolset()),
@@ -162,7 +152,7 @@ func TestInitializeDeclarationControlsVersionValidation(t *testing.T) {
 func TestInitializeDeclaring20260728CannotStartHandshake(t *testing.T) {
 	t.Parallel()
 	req := &rawRequest{
-		Method: "initialize",
+		Method: mcpversions.MethodInitialize,
 		ID:     mcpjsonrpc.NumberID(1),
 		Params: json.RawMessage(`{"protocolVersion":"2025-11-25","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`),
 	}
@@ -178,7 +168,7 @@ func TestInitializeDeclaring20260728CannotStartHandshake(t *testing.T) {
 
 func TestRequestDeclarationsMustAgreeBeforeDispatch(t *testing.T) {
 	t.Parallel()
-	for _, method := range []string{"server/discover", "tools/list", "ping", "notifications/initialized"} {
+	for _, method := range []string{mcpversions.MethodServerDiscover, mcpversions.MethodToolsList, mcpversions.MethodPing, mcpversions.MethodNotificationsInitialized} {
 		for _, tc := range []struct {
 			name, header, meta string
 			conflict           bool

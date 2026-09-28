@@ -65,10 +65,10 @@ const consentUpstreamTimeout = 20 * time.Second
 // families. Extend deliberately; every addition widens what a pre-mint
 // credential can reach.
 var consentAllowedMethods = map[string]bool{
-	"initialize":                true,
-	"notifications/initialized": true,
-	"ping":                      true,
-	"tools/list":                true,
+	mcpversions.MethodInitialize:               true,
+	mcpversions.MethodNotificationsInitialized: true,
+	mcpversions.MethodPing:                     true,
+	mcpversions.MethodToolsList:                true,
 }
 
 // HandleConsentMCP serves `POST|DELETE /mcp/{mcpSlug}/connect/mcp`.
@@ -221,7 +221,7 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 	}
 
 	switch req.Method {
-	case "initialize":
+	case mcpversions.MethodInitialize:
 		protocolVersion, ok := consentProtocolVersion(req.Params)
 		if !ok {
 			return writeConsentJSONRPCError(w, req.ID, proxy.RejectCodeMethodNotFound, "method is not available on the consent transport")
@@ -237,12 +237,12 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      serverInfoHostedToolset,
 		}, nil)
-	case "notifications/initialized":
+	case mcpversions.MethodNotificationsInitialized:
 		w.WriteHeader(http.StatusAccepted)
 		return nil
-	case "ping":
+	case mcpversions.MethodPing:
 		return writeConsentJSONRPCResult(w, req.ID, map[string]any{}, nil)
-	case "tools/list":
+	case mcpversions.MethodToolsList:
 		toolset, terr := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
 			ID:        endpoint.ToolsetID.UUID,
 			ProjectID: endpoint.ProjectID,

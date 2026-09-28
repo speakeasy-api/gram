@@ -1114,7 +1114,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		callerToolSelection = gateToolSelection
 	}
 
-	isHostedToolsCall := req.Method == "tools/call" && cfg.mcpServerID != nil
+	isHostedToolsCall := req.Method == mcpversions.MethodToolsCall && cfg.mcpServerID != nil
 	resolvePendingIssuerGate := func() error {
 		if pendingIssuerGate == nil {
 			return nil
@@ -1695,29 +1695,29 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	}
 
 	switch req.Method {
-	case "ping":
+	case mcpversions.MethodPing:
 		return handlePing(ctx, s.logger, req.ID, serverInfoHostedToolset)
-	case "server/discover":
+	case mcpversions.MethodServerDiscover:
 		description := describeHostedServer(ctx, s.logger, s.mcpMetadataRepo, payload)
 		return handleServerDiscover(ctx, s.logger, req.ID, description, mcpversions.SupportedHostedToolset())
-	case "initialize":
+	case mcpversions.MethodInitialize:
 		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.mcpMetadataRepo, s.sessionClientInfo)
-	case "notifications/initialized", "notifications/cancelled":
+	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case "tools/list":
+	case mcpversions.MethodToolsList:
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
-	case "tools/call":
+	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
 		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
-	case "prompts/list":
+	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
-	case "prompts/get":
+	case mcpversions.MethodPromptsGet:
 		return handlePromptsGet(ctx, s.logger, s.db, payload, req, s.scanEvaluator)
-	case "resources/list":
+	case mcpversions.MethodResourcesList:
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
-	case "resources/templates/list":
+	case mcpversions.MethodResourcesTemplatesList:
 		return handleResourcesTemplatesList(ctx, s.logger, req)
-	case "resources/read":
+	case mcpversions.MethodResourcesRead:
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
 	default:
 		return nil, unavailableMethod(req)
@@ -1877,7 +1877,7 @@ func (s *Service) HandleToolsList(
 	req := &rawRequest{
 		JSONRPC: "2.0",
 		ID:      mcpjsonrpc.NumberID(1),
-		Method:  "tools/list",
+		Method:  mcpversions.MethodToolsList,
 		Params:  json.RawMessage("{}"),
 	}
 
@@ -1949,7 +1949,7 @@ func (s *Service) HandleToolsCall(
 	req := &rawRequest{
 		JSONRPC: "2.0",
 		ID:      mcpjsonrpc.NumberID(1),
-		Method:  "tools/call",
+		Method:  mcpversions.MethodToolsCall,
 		Params:  params,
 	}
 

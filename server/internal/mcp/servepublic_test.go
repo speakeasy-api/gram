@@ -38,7 +38,7 @@ func makeInitializeBody() []byte {
 	reqBody := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
-		"method":  "initialize",
+		"method":  mcpversions.MethodInitialize,
 		"params": map[string]any{
 			"protocolVersion": "2025-03-26",
 			"capabilities":    map[string]any{},
@@ -525,7 +525,7 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 		{
 			"jsonrpc": "2.0",
 			"id":      1,
-			"method":  "initialize",
+			"method":  mcpversions.MethodInitialize,
 		},
 	}
 	bodyBytes, err := json.Marshal(batchBody)
@@ -630,7 +630,7 @@ func makeToolsCallBody(toolName string) []byte {
 	bs, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      3,
-		"method":  "tools/call",
+		"method":  mcpversions.MethodToolsCall,
 		"params": map[string]any{
 			"name":      toolName,
 			"arguments": map[string]any{},
@@ -913,7 +913,7 @@ func makeInitializeBodyWithVersion(version string) []byte {
 	bs, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
-		"method":  "initialize",
+		"method":  mcpversions.MethodInitialize,
 		"params":  params,
 	})
 	return bs
@@ -1023,7 +1023,7 @@ func TestServePublic_UnsupportedBodyMetaVersionReturnsSpecificationError(t *test
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
-		"method":  "tools/list",
+		"method":  mcpversions.MethodToolsList,
 		"params": map[string]any{
 			"_meta": map[string]any{
 				"io.modelcontextprotocol/protocolVersion": mcpversions.Version20260728,
@@ -1107,7 +1107,7 @@ func carriedProtocolVersion(t *testing.T, ctx context.Context, ti *testInstance,
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
-		"method":  "tools/list",
+		"method":  mcpversions.MethodToolsList,
 		"params":  map[string]any{},
 	})
 	require.NoError(t, err)

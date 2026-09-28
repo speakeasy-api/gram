@@ -215,17 +215,17 @@ func (s *Service) handlePlatformToolsetRequest(
 	}
 
 	switch req.Method {
-	case "ping":
+	case mcpversions.MethodPing:
 		return handlePing(ctx, s.logger, req.ID, serverInfoPlatformToolset)
-	case "server/discover":
+	case mcpversions.MethodServerDiscover:
 		return handleServerDiscover(ctx, s.logger, req.ID, describePlatformServer(), mcpversions.SupportedPlatformToolset())
-	case "initialize":
+	case mcpversions.MethodInitialize:
 		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion)
-	case "notifications/initialized", "notifications/cancelled":
+	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case "tools/list":
+	case mcpversions.MethodToolsList:
 		return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
-	case "tools/call":
+	case mcpversions.MethodToolsCall:
 		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader)
 	default:
 		return nil, unavailableMethod(req)

@@ -266,17 +266,17 @@ func (s *Service) handleMetaMCPRequest(
 	}
 
 	switch req.Method {
-	case "ping":
+	case mcpversions.MethodPing:
 		return handlePing(ctx, logger, req.ID, serverInfoMetaServer)
-	case "initialize":
+	case mcpversions.MethodInitialize:
 		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
-	case "server/discover":
+	case mcpversions.MethodServerDiscover:
 		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer), mcpversions.SupportedMetaServer())
-	case "notifications/initialized", "notifications/cancelled":
+	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case "tools/list":
+	case mcpversions.MethodToolsList:
 		return s.listMetaServerTools(ctx, logger, req)
-	case "tools/call":
+	case mcpversions.MethodToolsCall:
 		return s.callMetaServerTool(ctx, logger, mcpEndpoint, metaServer, gate, req)
 	default:
 		return nil, unavailableMethod(req)
