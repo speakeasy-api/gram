@@ -9978,19 +9978,20 @@ CREATE TABLE IF NOT EXISTS onboarding_step_methods (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT onboarding_step_methods_pkey PRIMARY KEY (step_id, integration_method_id),
   CONSTRAINT onboarding_step_methods_step_id_fkey FOREIGN KEY (step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE,
-  CONSTRAINT onboarding_step_methods_integration_method_id_fkey FOREIGN KEY (integration_method_id) REFERENCES support_matrix_integration_methods (id) ON DELETE CASCADE
+  CONSTRAINT onboarding_step_methods_integration_method_id_fkey FOREIGN KEY (integration_method_id) REFERENCES support_matrix_integration_methods (id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS onboarding_step_methods_integration_method_id_idx ON onboarding_step_methods (integration_method_id);
 
 -- Prerequisites: step_id cannot start until requires_step_id is done. Edges
 -- never cross a group's own line: a step neither requires its parent nor a
--- child of its own.
+-- child of its own, and never itself.
 CREATE TABLE IF NOT EXISTS onboarding_step_dependencies (
   step_id uuid NOT NULL,
   requires_step_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT onboarding_step_dependencies_pkey PRIMARY KEY (step_id, requires_step_id),
+  CONSTRAINT onboarding_step_dependencies_step_id_check CHECK (step_id <> requires_step_id),
   CONSTRAINT onboarding_step_dependencies_step_id_fkey FOREIGN KEY (step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE,
   CONSTRAINT onboarding_step_dependencies_requires_step_id_fkey FOREIGN KEY (requires_step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE
 );
@@ -10046,6 +10047,7 @@ CREATE TABLE IF NOT EXISTS onboarding_playbook_steps (
   CONSTRAINT onboarding_playbook_steps_playbook_id_fkey FOREIGN KEY (playbook_id) REFERENCES onboarding_playbooks (id) ON DELETE CASCADE,
   CONSTRAINT onboarding_playbook_steps_step_id_fkey FOREIGN KEY (step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE
 );
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_playbook_steps_position_key ON onboarding_playbook_steps (playbook_id, position);
 CREATE INDEX IF NOT EXISTS onboarding_playbook_steps_step_id_idx ON onboarding_playbook_steps (step_id);
 
 -- Onboarding state is organization-scoped, independent of any project.
