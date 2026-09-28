@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:browser:serve": "vite build --config test/vite.config.ts && vite preview --config test/vite.config.ts",
     "type-check": "tsc -b --noEmit"
   },
   "dependencies": {

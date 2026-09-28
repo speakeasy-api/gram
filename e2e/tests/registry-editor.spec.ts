@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-// Run against the admin Vite dev server; the fixture mounts the real editor and
-// JSON worker, not the sheet's textarea mock. No API or stored records are used.
-const adminURL = process.env["GRAM_ADMIN_EDITOR_TEST_URL"];
-test.skip(!adminURL, "Set GRAM_ADMIN_EDITOR_TEST_URL to the admin Vite origin");
+// Built fixture mounts real Monaco and its JSON worker; no API or stored records.
+const adminURL = "http://127.0.0.1:4179";
 
 test("JSON worker never fetches a record's external schema", async ({
   page,

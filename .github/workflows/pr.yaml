@@ -1934,6 +1934,12 @@ jobs:
         run: aube run test
         working-directory: client/admin
 
+      - name: Test registry editor in Chromium
+        working-directory: e2e
+        run: |
+          aube exec playwright install --with-deps chromium
+          aube run test:registry-editor
+
       - name: Prune aube store
         if: success()
         run: aube store prune
