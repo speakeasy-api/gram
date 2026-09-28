@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { OnboardingPlaybook } from "@/pages/organization/OnboardingPlaybook";
 import { OnboardingStack } from "@/pages/organization/OnboardingStack";
 import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
@@ -478,6 +479,9 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
                   : "Demo gate applies"}
               </span>
             </div>
+          </Row>
+          <Row label="Playbook">
+            <OnboardingPlaybook organizationId={org.id} />
           </Row>
           <TrialFacts org={org} />
         </Panel>
