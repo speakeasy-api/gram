@@ -346,6 +346,13 @@ type mcpInputs struct {
 	// a different member's toolset slug — keying by slug would never find the
 	// record the handshake wrote.
 	clientInfoScope string
+	// toolsetID is the described toolset's id when the builder loaded its
+	// row, so describing the server needs no second lookup by slug. Invalid
+	// for internal callers, which carry only the slug and never handshake.
+	toolsetID uuid.NullUUID
+	// toolsetIsPublic is the described toolset's own mcp_is_public flag,
+	// loaded with toolsetID. Nil reads as private.
+	toolsetIsPublic *bool
 	// tags is the parsed ?tags= filter. When non-empty, tools/list and
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
@@ -1265,7 +1272,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
-	if req.Method == "initialize" {
+	if initializeNegotiable(&req, protocolVersion) {
 		w.Header().Set("Mcp-Session-Id", sessionID)
 	}
 
@@ -1313,6 +1320,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		metaMcpServerID:          "",
 		clientInfoScope:          "",
 		skipProxyTools:           false,
+		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		toolsetIsPublic:          new(toolset.McpIsPublic),
 		tags:                     tags,
 		protocolVersion:          protocolVersion,
 		identityCoverageRecorded: hostedCoverageRecorded,
@@ -1681,11 +1690,18 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		}()
 	}
 
+	if !methodAvailable(req, payload.protocolVersion, mcpversions.SupportedHostedToolset()) {
+		return nil, unavailableMethod(req)
+	}
+
 	switch req.Method {
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID, serverInfoHostedToolset)
+	case "server/discover":
+		description := describeHostedServer(ctx, s.logger, s.mcpMetadataRepo, payload)
+		return handleServerDiscover(ctx, s.logger, req.ID, description, mcpversions.SupportedHostedToolset())
 	case "initialize":
-		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo, s.sessionClientInfo)
+		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.mcpMetadataRepo, s.sessionClientInfo)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
@@ -1704,7 +1720,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
 	default:
-		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
+		return nil, unavailableMethod(req)
 	}
 }
 

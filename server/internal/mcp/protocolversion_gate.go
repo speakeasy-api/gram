@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -94,11 +95,33 @@ func validateMCPRequestEnvelope(ctx context.Context, logger *slog.Logger, p *pre
 }
 
 func validateSupportedProtocolVersion(req *rawRequest, resolution mcpversions.Resolution, supported []string) error {
-	if req.Method == "initialize" || resolution.Declared == "" || slices.Contains(supported, resolution.Declared) {
+	negotiableInitialize := initializeNegotiable(req, resolution)
+	if req.Method == "initialize" && !negotiableInitialize {
+		// A 2026-07-28 or later declaration rules out the handshake, so a
+		// header that disagrees with the `_meta` declaration is a conflict to
+		// report here rather than a supported header that dispatch then
+		// answers as method-not-found.
+		if metaVersion := mcprequests.DeclaredProtocolVersion("", req.Params); metaVersion != "" && metaVersion != resolution.Declared {
+			return conflictingProtocolVersionError(req.ID, resolution.Declared, metaVersion)
+		}
+	}
+	if negotiableInitialize || resolution.Declared == "" || slices.Contains(supported, resolution.Declared) {
 		return nil
 	}
 
 	return unsupportedProtocolVersionError(req.ID, resolution.Declared, supported)
+}
+
+// conflictingProtocolVersionError reports an MCP-Protocol-Version header that
+// does not mirror the request's `_meta` declaration. Both values must be
+// sanitized; raw hostile bytes are never echoed to the client.
+func conflictingProtocolVersionError(id mcpjsonrpc.ID, headerVersion, metaVersion string) *oops.MCPError {
+	return &oops.MCPError{
+		ID:      id,
+		Code:    oops.MCPCodeInvalidRequest,
+		Message: fmt.Sprintf("conflicting protocol version declarations: MCP-Protocol-Version header %q does not match the request _meta declaration %q", headerVersion, metaVersion),
+		Data:    nil,
+	}
 }
 
 func (s *Service) prepareTerminatedMCPRequest(

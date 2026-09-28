@@ -464,6 +464,8 @@ func (s *Service) buildMemberDispatch(
 		metaMcpServerID:          gate.metaServerID.String(),
 		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
 		skipProxyTools:           true,
+		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		toolsetIsPublic:          new(toolset.McpIsPublic),
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,
 		identityCoverageRecorded: false,

@@ -222,6 +222,10 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 
 	switch req.Method {
 	case "initialize":
+		protocolVersion, ok := consentProtocolVersion(req.Params)
+		if !ok {
+			return writeConsentJSONRPCError(w, req.ID, proxy.RejectCodeMethodNotFound, "method is not available on the consent transport")
+		}
 		sessionID := uuid.NewString()
 		draft.McpSessionID = sessionID
 		if err := s.consentToolInventoryCache.Store(ctx, draft); err != nil {
@@ -229,7 +233,7 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 		}
 		w.Header().Set(proxy.McpSessionIDHeader, sessionID)
 		return writeConsentJSONRPCResult(w, req.ID, map[string]any{
-			"protocolVersion": consentProtocolVersion(req.Params),
+			"protocolVersion": protocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      serverInfoHostedToolset,
 		}, nil)
@@ -582,8 +586,9 @@ func decodeConsentJSONRPCRequest(w http.ResponseWriter, r *http.Request) (*conse
 
 // consentProtocolVersion negotiates the local toolset server's revision with
 // the consent island. Remote and tunneled backends bypass this function so the
-// island and upstream server negotiate directly.
-func consentProtocolVersion(params json.RawMessage) string {
+// island and upstream server negotiate directly. It reports false when the
+// consent surface supports no revision that defines initialize.
+func consentProtocolVersion(params json.RawMessage) (string, bool) {
 	var decoded struct {
 		ProtocolVersion string `json:"protocolVersion"`
 	}

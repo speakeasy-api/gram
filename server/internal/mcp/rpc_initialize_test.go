@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestParseInitializeParams(t *testing.T) {
@@ -163,7 +162,7 @@ func TestHandleInitialize_WritesNegotiatedVersionBackIntoPayload(t *testing.T) {
 		Params:  rawParams,
 	}
 
-	body, err := handleInitialize(t.Context(), testenv.NewLogger(t), nil, req, payload, nil, toolsets_repo.New(failingDBTX{}), metadata_repo.New(failingDBTX{}), store)
+	body, err := handleInitialize(t.Context(), testenv.NewLogger(t), nil, req, payload, nil, metadata_repo.New(failingDBTX{}), store)
 	require.NoError(t, err)
 
 	require.Equal(t, mcpversions.Version20251125, payload.protocolVersion.InEffect)

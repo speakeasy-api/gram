@@ -1090,7 +1090,7 @@ func TestServePublic_InitializeBodyWinsOverNonconformingHeader(t *testing.T) {
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-header-mcp")
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(mcpversions.Version20251125), "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20260728,
+		mcpversions.HTTPHeader: mcpversions.Version20250326,
 	})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)

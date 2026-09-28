@@ -236,13 +236,13 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 	} {
 		// Exercise setting and resetting the same endpoint sequentially.
 		setInstructions(tc.stored)
-		for _, method := range []string{"initialize", "server/discover"} {
+		for _, method := range []string{"initialize"} {
 			require.Equal(t, tc.want, served(method), "case=%s method=%s", tc.name, method)
 		}
 	}
 }
 
-func TestServePublic_MetaEndpoint_ServerDiscover(t *testing.T) {
+func TestServePublic_MetaEndpoint_ServerDiscoverRequires20260728(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -255,21 +255,19 @@ func TestServePublic_MetaEndpoint_ServerDiscover(t *testing.T) {
 
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "server/discover", nil), "", nil)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
-
+	require.Equal(t, http.StatusOK, w.Code)
 	envelope := decodeRPCResponse(t, w)
-	var result struct {
-		ProtocolVersions []string `json:"protocolVersions"`
-		ServerInfo       struct {
-			Name string `json:"name"`
-		} `json:"serverInfo"`
+	var rpcError struct {
+		Code int `json:"code"`
 	}
-	require.NoError(t, json.Unmarshal(envelope["result"], &result))
-	require.Equal(t, mcpversions.SupportedMetaServer(), result.ProtocolVersions)
-	require.Equal(t, "Gram Gateway", result.ServerInfo.Name)
+	require.NoError(t, json.Unmarshal(envelope["error"], &rpcError))
+	require.Equal(t, -32601, rpcError.Code)
+	require.Empty(t, w.Header().Get("Mcp-Session-Id"))
 
-	// The self-description is assembled from constants, so it is shareable.
-	requireCacheHints(t, envelope["result"], "public")
+	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "server/discover", nil), "", map[string]string{mcpversions.HTTPHeader: mcpversions.Version20260728})
+	require.NoError(t, err)
+	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedMetaServer())
+	require.Empty(t, w.Header().Get("Mcp-Session-Id"))
 }
 
 func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
