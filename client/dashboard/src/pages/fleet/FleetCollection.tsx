@@ -104,7 +104,7 @@ export function FleetCollection({
         })}
         {!rows.length && (
           <p className="p-4 text-sm">
-            No observed activity in the last 24 hours matches these filters.
+            No observed activity in the last 7 days matches these filters.
           </p>
         )}
       </div>
@@ -157,7 +157,7 @@ export function FleetCollection({
       ))}
       {!rows.length && (
         <p className="p-4 text-sm">
-          No observed activity in the last 24 hours matches these filters.
+          No observed activity in the last 7 days matches these filters.
         </p>
       )}
     </div>

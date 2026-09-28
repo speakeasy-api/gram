@@ -16,7 +16,7 @@ it("rolls the server pagination bound and pauses while hidden, refreshing on res
     .spyOn(document, "visibilityState", "get")
     .mockReturnValue("visible");
   const { result } = renderHook(useFleetWindow);
-  expect(result.current.from.getTime()).toBe(Date.now() - FLEET_WINDOW_MS);
+  expect(result.current.from.toISOString()).toBe("2026-08-25T12:00:00.000Z");
   void act(() => vi.advanceTimersByTime(30_000));
   expect(result.current.from.getTime()).toBe(Date.now() - FLEET_WINDOW_MS);
   const lastVisible = result.current.from;

@@ -223,8 +223,8 @@ queries. `agent-management` independently gates the registered inventory and
 Production PostHog must define `gram-fleet` and enable the relevant flags for the
 demo organization group. This PR does not change remote PostHog configuration.
 
-Fleet shows observed activity in the last 24 hours. Core fixtures are 2–20 minutes
-old at reseed, so they survive nearly the full daily interval; there are no future
+Fleet shows observed activity in the last 7 days. Core fixtures are 2–20 minutes
+old at reseed, so they remain visible between daily refreshes; there are no future
 timestamps or scheduler changes. Reseed before local verification. Registration
 edits do not count. Credential stamps are organization-wide, best-effort and
 coalesced (roughly five minutes for sessions and one for keys), with no freshness
@@ -233,18 +233,18 @@ ordinary demo visitors receive only synthetic registration data and aggregate
 timestamps with read-only permissions. No demo credential, policy or mutation
 endpoint is opened.
 
-| Registered identity         | Owner / department             | Scope        | Evidence / lifecycle                                                   |
-| --------------------------- | ------------------------------ | ------------ | ---------------------------------------------------------------------- |
-| Release assistant           | Amara / Support Engineering    | Organization | Session 2m ago; active, selected + all-server restrictions             |
-| Support triage              | Jonas / Support Engineering    | Organization | Session 12m ago; suspended 6m ago; all-server restriction              |
-| Retired documentation bot   | Priya / Platform Engineering   | Project      | Session 15m ago; revoked 8m ago; credential revoked with it            |
-| Release notes assistant     | Amara / Support Engineering    | Organization | API key only, 3m ago; active                                           |
-| Billing reconciliation      | Hana / Billing Operations      | Project      | Session 5m ago beats key 25m ago; active                               |
-| Deploy verifier             | Mateo / Platform Engineering   | Project      | Session 10m ago; credential revoked 4m ago; registration active        |
-| Incident evidence collector | Priya / Platform Engineering   | Organization | Session 7m ago; active                                                 |
-| Engineering digest          | Lucas / Engineering Leadership | Project      | Session 20m ago; active                                                |
-| Legacy invoice exporter     | Hana / Billing Operations      | Organization | Last use 4d ago, suspended 3d ago; omitted but restriction recoverable |
-| Nightly report agent        | Lucas / Engineering Leadership | Organization | Never used; omitted                                                    |
+| Registered identity         | Owner / department             | Scope        | Evidence / lifecycle                                                     |
+| --------------------------- | ------------------------------ | ------------ | ------------------------------------------------------------------------ |
+| Release assistant           | Amara / Support Engineering    | Organization | Session 2m ago; active, selected + all-server restrictions               |
+| Support triage              | Jonas / Support Engineering    | Organization | Session 12m ago; suspended 6m ago; all-server restriction                |
+| Retired documentation bot   | Priya / Platform Engineering   | Project      | Session 15m ago; revoked 8m ago; credential revoked with it              |
+| Release notes assistant     | Amara / Support Engineering    | Organization | API key only, 3m ago; active                                             |
+| Billing reconciliation      | Hana / Billing Operations      | Project      | Session 5m ago beats key 25m ago; active                                 |
+| Deploy verifier             | Mateo / Platform Engineering   | Project      | Session 10m ago; credential revoked 4m ago; registration active          |
+| Incident evidence collector | Priya / Platform Engineering   | Organization | Session 7m ago; active                                                   |
+| Engineering digest          | Lucas / Engineering Leadership | Project      | Session 20m ago; active                                                  |
+| Legacy invoice exporter     | Hana / Billing Operations      | Organization | Last use 4d ago, suspended 3d ago; included with restriction recoverable |
+| Nightly report agent        | Lucas / Engineering Leadership | Organization | Never used; omitted                                                      |
 
 Three assistants have five explicit `assistant_threads`: four recent conversations
 and one 48-hour historical conversation. Support handoff assistant (creator Jonas),

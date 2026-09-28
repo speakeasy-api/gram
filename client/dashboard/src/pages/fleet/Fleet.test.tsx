@@ -187,7 +187,7 @@ it("keeps the selected inspector and page during a rolling fetch, then resets an
   await settle();
   expect(mocks.listArgs.mock.calls[0]?.[0]).toMatchObject({
     offset: 50,
-    from: new Date("2026-08-31T12:00:00Z"),
+    from: new Date("2026-08-25T12:00:00Z"),
   });
   expect(screen.getByRole("complementary", { name: "Inspector" })).toBeTruthy();
   let finish: (value: {
@@ -234,7 +234,9 @@ it("does not reuse captures across a new search and keeps the selected URL for r
 
 it("filters stale placeholder rows on each tick without taking focus from search", async () => {
   mocks.query.mockResolvedValueOnce({
-    chats: [capture(new Date(NOW.getTime() - 24 * 60 * 60 * 1000 + 10_000))],
+    chats: [
+      capture(new Date(NOW.getTime() - 7 * 24 * 60 * 60 * 1000 + 10_000)),
+    ],
     total: 1,
   });
   mount("?selected=session%3Acapture");
@@ -248,7 +250,7 @@ it("filters stale placeholder rows on each tick without taking focus from search
   });
   expect(screen.queryByRole("complementary", { name: "Inspector" })).toBeNull();
   expect(
-    screen.getByText(/selected item is outside the last 24 hours/),
+    screen.getByText(/selected item is outside the last 7 days/),
   ).toBeTruthy();
   expect(document.activeElement).toBe(search);
   expect(screen.getByLabelText("URL").textContent).toContain(

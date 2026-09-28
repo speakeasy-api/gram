@@ -132,7 +132,7 @@ export function buildFleetRows({
   ];
 }
 
-export const FLEET_WINDOW_MS = 24 * 60 * 60 * 1_000;
+export const FLEET_WINDOW_MS = 7 * 24 * 60 * 60 * 1_000;
 
 /** Both views use observed timestamps; profile creation/edits are not activity. */
 export function recentFleetRows(rows: FleetRow[], now: number): FleetRow[] {

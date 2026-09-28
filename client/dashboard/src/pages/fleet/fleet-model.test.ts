@@ -2,12 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
-import {
-  buildFleetRows,
-  fleetDirectory,
-  recentFleetRows,
-  FLEET_WINDOW_MS,
-} from "./fleet-model";
+import { buildFleetRows, fleetDirectory, recentFleetRows } from "./fleet-model";
 
 const now = new Date("2026-09-01T12:00:00Z");
 const agent: ManagedAgent = {
@@ -183,13 +178,18 @@ describe("Fleet attribution", () => {
 });
 
 describe("Fleet observed activity window", () => {
-  it("includes the boundary and server clock skew, excludes older and unknown activity", () => {
-    const boundary = new Date(now.getTime() - FLEET_WINDOW_MS);
+  it("includes seven days of activity and the boundary, excludes older and unknown activity", () => {
+    const boundary = new Date("2026-08-25T12:00:00Z");
     const rows = buildFleetRows({
       ...input,
       sessions: [],
       assistants: [],
       agents: [
+        {
+          ...agent,
+          id: "earlier-this-week",
+          lastCredentialUsedAt: new Date("2026-08-28T12:00:00Z"),
+        },
         { ...agent, id: "boundary", lastCredentialUsedAt: boundary },
         {
           ...agent,
@@ -206,6 +206,7 @@ describe("Fleet observed activity window", () => {
     });
     const recent = recentFleetRows(rows, now.getTime());
     expect(recent.map((row) => row.id)).toEqual([
+      "agent:earlier-this-week",
       "agent:boundary",
       "agent:ahead",
     ]);
@@ -215,7 +216,7 @@ describe("Fleet observed activity window", () => {
           identity.rows.map((row) => row.id),
         ),
       ),
-    ).toEqual(["agent:boundary", "agent:ahead"]);
+    ).toEqual(["agent:earlier-this-week", "agent:boundary", "agent:ahead"]);
   });
   it("uses only explicit loaded captures for assistants after paging or searching", () => {
     const firstPage = recentFleetRows(buildFleetRows(input), now.getTime());

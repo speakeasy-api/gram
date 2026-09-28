@@ -279,7 +279,7 @@ function FleetPage(): JSX.Element {
       description={
         restrictions
           ? "Organization-wide agent restrictions, regardless of activity age."
-          : `Observed activity in ${project.name} over the last 24 hours. Agent credential use is organization-wide.`
+          : `Observed activity in ${project.name} over the last 7 days. Agent credential use is organization-wide.`
       }
       hideToolbar
       primaryAction={
@@ -405,7 +405,7 @@ function FleetPage(): JSX.Element {
           <>
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
               <span>
-                Last 24 hours · {filtered.length} loaded{" "}
+                Last 7 days · {filtered.length} loaded{" "}
                 {filtered.length === 1 ? "item" : "items"} ·{" "}
                 {chats.data?.total ?? "…"} captured sessions match the search
                 and time window
@@ -452,8 +452,8 @@ function FleetPage(): JSX.Element {
             </div>
             {selected && !selectedRow && !chats.isLoading && (
               <p role="status" className="text-sm">
-                The selected item is outside the last 24 hours, not in the
-                loaded page or filter, or no longer available.{" "}
+                The selected item is outside the last 7 days, not in the loaded
+                page or filter, or no longer available.{" "}
                 <Button variant="tertiary" size="sm" onClick={close}>
                   Clear selection
                 </Button>
@@ -473,7 +473,7 @@ function FleetPage(): JSX.Element {
             <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
               <span className="text-muted-foreground text-xs">
                 Captured sessions: {chats.data?.chats.length ?? 0} loaded of{" "}
-                {chats.data?.total ?? "…"} in the last 24 hours. Assistants
+                {chats.data?.total ?? "…"} in the last 7 days. Assistants
                 reflect explicit captures loaded during this visit. Agents
                 require observed credential use you can view; missing timestamps
                 are excluded.
