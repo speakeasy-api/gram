@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -102,13 +103,29 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 	marketplaceRepublished := false
 	marketplaceUpdateDeferred := false
 
+	var expiresAt *time.Time
+	if payload.PreviousKeyFate == previousKeyFateGrace {
+		t := time.Now().UTC().Add(observabilityCredentialGrace)
+		expiresAt = &t
+	}
+
 	// The hooks rollout gate is unconditional: an org it has not cleared must not
 	// receive a regenerated hooks subtree, so its marketplace keeps the previous
 	// credential and the rotation reports the update as deferred.
 	canRepublish := s.github != nil && marketplacePublished && s.hooksRolloutEligible(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
 
+	var (
+		previous            []*gen.RotatedObservabilityKey
+		previousKeysRetired = true
+	)
+
 	switch {
 	case canRepublish:
+		// DNO-1227: publishProject pushes to GitHub before persisting the keys it
+		// baked in, so a failed key transaction leaves the marketplace serving a
+		// credential no api_keys row backs — and an ordinary republish carries it
+		// forward rather than repairing it. Pre-existing, tracked separately;
+		// rotation is currently the only way out of that state.
 		outcome, err := s.publishProject(ctx, publishProjectInput{
 			ProjectID:        *ac.ProjectID,
 			ProjectName:      "",
@@ -130,36 +147,41 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 		if err != nil {
 			return nil, err
 		}
-		// publishProject re-reads the rollout gate, so it can decline the rotation
-		// after this handler's own check passed. When it does, it has not written
-		// the candidate either — and the plaintext is already on its way back to
-		// the caller, with every previous key about to be retired. Persist it here
-		// so the project is never left without a credential that authenticates.
 		marketplaceRepublished = outcome.HooksKeyPublished
 		marketplaceUpdateDeferred = !outcome.HooksKeyPublished
-		if !outcome.HooksKeyPublished {
-			if err := s.persistRotatedHooksAPIKey(ctx, ac, candidate); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
+
+		if outcome.HooksKeyPublished {
+			// The replacement is committed and already on GitHub, so retirement
+			// cannot be rolled back into it. Failing the request here would hide
+			// the one-time plaintext of a credential that is already live and
+			// published — strictly worse than reporting the rotation as
+			// incomplete. The cutoff was read before minting, so a retry sweeps
+			// the same previous keys without touching this replacement.
+			previous, err = s.retirePreviousHooksKeys(ctx, s.db, ac, candidate, retireBefore, payload.PreviousKeyFate, expiresAt)
+			if err != nil {
+				s.logger.ErrorContext(ctx, "observability credential rotation published a replacement but could not retire the previous keys", attr.SlogError(err))
+				previous = nil
+				previousKeysRetired = false
 			}
+			break
+		}
+
+		// publishProject re-reads the rollout gate, so it can decline the rotation
+		// after this handler's own check passed. When it does it has written
+		// nothing, which leaves this identical to the no-marketplace path.
+		previous, err = s.rotateCredentialAtomically(ctx, ac, candidate, retireBefore, payload.PreviousKeyFate, expiresAt)
+		if err != nil {
+			return nil, err
 		}
 	default:
 		marketplaceUpdateDeferred = marketplacePublished
-		if err := s.persistRotatedHooksAPIKey(ctx, ac, candidate); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
+		// Nothing has escaped the database on this path, so minting the
+		// replacement and retiring the previous keys share one transaction:
+		// either the project ends the call rotated, or unchanged.
+		previous, err = s.rotateCredentialAtomically(ctx, ac, candidate, retireBefore, payload.PreviousKeyFate, expiresAt)
+		if err != nil {
+			return nil, err
 		}
-	}
-
-	var expiresAt *time.Time
-	if payload.PreviousKeyFate == previousKeyFateGrace {
-		t := time.Now().UTC().Add(observabilityCredentialGrace)
-		expiresAt = &t
-	}
-
-	// The replacement is already persisted, so the fate is applied to every hooks
-	// key that predates this rotation in one statement.
-	previous, err := s.applyPreviousHooksKeyFate(ctx, ac, candidate, retireBefore, payload.PreviousKeyFate, expiresAt)
-	if err != nil {
-		return nil, err
 	}
 
 	result := &gen.RotateObservabilityCredentialResult{
@@ -167,16 +189,31 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 		KeyPrefix:                 candidate.keyPrefix,
 		PreviousKeyFate:           payload.PreviousKeyFate,
 		PreviousKeys:              previous,
-		PreviousKeysExpireAt:      nil,
+		PreviousKeysExpireAt:      latestPreviousKeyExpiry(previous),
+		PreviousKeysRetired:       previousKeysRetired,
 		MarketplaceRepublished:    marketplaceRepublished,
 		MarketplaceUpdateDeferred: &marketplaceUpdateDeferred,
 	}
-	if expiresAt != nil && len(previous) > 0 {
-		formatted := expiresAt.Format(time.RFC3339)
-		result.PreviousKeysExpireAt = &formatted
-	}
 
 	return result, nil
+}
+
+// latestPreviousKeyExpiry reports the last moment any previous key still
+// authenticates. It is an upper bound, not a shared deadline: a key already
+// inside a shorter window kept its earlier expiry, which is why this is read
+// back from the retired keys rather than from the deadline this rotation asked
+// for.
+func latestPreviousKeyExpiry(previous []*gen.RotatedObservabilityKey) *string {
+	var latest *string
+	for _, key := range previous {
+		if key.ExpiresAt == nil {
+			continue
+		}
+		if latest == nil || *key.ExpiresAt > *latest {
+			latest = key.ExpiresAt
+		}
+	}
+	return latest
 }
 
 // projectMarketplacePublished reports whether this project has a published
@@ -195,16 +232,45 @@ func (s *Service) projectMarketplacePublished(ctx context.Context, projectID uui
 	}
 }
 
-// persistRotatedHooksAPIKey writes the replacement key when no republish
-// happens. Unlike persistDownloadAPIKey this audits the creation: rotation is an
-// explicit admin action, not an automated asset download.
-func (s *Service) persistRotatedHooksAPIKey(ctx context.Context, ac *contextvalues.AuthContext, candidate pluginAPIKeyCandidate) error {
+// rotateCredentialAtomically mints the replacement and applies the previous
+// keys' fate in one transaction. Used on every path that has not already
+// published the replacement: nothing has escaped the database, so a failure
+// anywhere must leave the project exactly as it was rather than stranding an
+// extra live key.
+func (s *Service) rotateCredentialAtomically(
+	ctx context.Context,
+	ac *contextvalues.AuthContext,
+	candidate pluginAPIKeyCandidate,
+	retireBefore pgtype.Timestamptz,
+	fate string,
+	expiresAt *time.Time,
+) ([]*gen.RotatedObservabilityKey, error) {
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin credential rotation").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := s.createRotatedHooksAPIKey(ctx, dbtx, ac, candidate); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
+	}
+
+	previous, err := s.retirePreviousHooksKeys(ctx, dbtx, ac, candidate, retireBefore, fate, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit credential rotation").LogError(ctx, s.logger)
+	}
+
+	return previous, nil
+}
+
+// createRotatedHooksAPIKey writes the replacement key. Unlike
+// persistDownloadAPIKey this audits the creation: rotation is an explicit admin
+// action, not an automated asset download.
+func (s *Service) createRotatedHooksAPIKey(ctx context.Context, dbtx keysrepo.DBTX, ac *contextvalues.AuthContext, candidate pluginAPIKeyCandidate) error {
 	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
 	scopes := []string{candidate.scope.String()}
 	created, err := keysrepo.New(dbtx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
@@ -234,17 +300,21 @@ func (s *Service) persistRotatedHooksAPIKey(ctx context.Context, ac *contextvalu
 		return fmt.Errorf("audit log key creation: %w", err)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
 	return nil
 }
 
-// applyPreviousHooksKeyFate revokes or expires every hooks key of the project
-// other than the replacement, and reports the ones it touched.
-func (s *Service) applyPreviousHooksKeyFate(
+// retirePreviousHooksKeys revokes or expires every hooks key of the project
+// other than the replacement, and reports the ones it touched along with the
+// deadline each one actually ended up with.
+//
+// Nb: the retirement UPDATE is set-based, but the api_key:revoke audit rows are
+// written one per key. A project with a long download history therefore holds
+// the transaction open across that many inserts. Batching them needs a
+// multi-row insert in the audit package (each row also writes an outbox event
+// keyed off the inserted row), tracked in DNO-1228.
+func (s *Service) retirePreviousHooksKeys(
 	ctx context.Context,
+	dbtx keysrepo.DBTX,
 	ac *contextvalues.AuthContext,
 	replacement pluginAPIKeyCandidate,
 	retireBefore pgtype.Timestamptz,
@@ -253,12 +323,6 @@ func (s *Service) applyPreviousHooksKeyFate(
 ) ([]*gen.RotatedObservabilityKey, error) {
 	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin previous key update").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
 	keysQ := keysrepo.New(dbtx)
 
 	type retiredKey struct {
@@ -266,6 +330,7 @@ func (s *Service) applyPreviousHooksKeyFate(
 		name      string
 		keyPrefix string
 		scopes    []string
+		expiresAt pgtype.Timestamptz
 	}
 	var retired []retiredKey
 
@@ -281,7 +346,9 @@ func (s *Service) applyPreviousHooksKeyFate(
 			return nil, oops.E(oops.CodeUnexpected, err, "revoke previous hooks keys").LogError(ctx, s.logger)
 		}
 		for _, row := range rows {
-			retired = append(retired, retiredKey{id: row.ID, name: row.Name, keyPrefix: row.KeyPrefix, scopes: row.Scopes})
+			// A revoked key is gone now, whatever expiry it carried, so its
+			// deadline is deliberately not reported.
+			retired = append(retired, retiredKey{id: row.ID, name: row.Name, keyPrefix: row.KeyPrefix, scopes: row.Scopes, expiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}})
 		}
 	case previousKeyFateGrace:
 		if expiresAt == nil {
@@ -298,7 +365,7 @@ func (s *Service) applyPreviousHooksKeyFate(
 			return nil, oops.E(oops.CodeUnexpected, err, "expire previous hooks keys").LogError(ctx, s.logger)
 		}
 		for _, row := range rows {
-			retired = append(retired, retiredKey{id: row.ID, name: row.Name, keyPrefix: row.KeyPrefix, scopes: row.Scopes})
+			retired = append(retired, retiredKey{id: row.ID, name: row.Name, keyPrefix: row.KeyPrefix, scopes: row.Scopes, expiresAt: row.ExpiresAt})
 		}
 	}
 
@@ -322,15 +389,21 @@ func (s *Service) applyPreviousHooksKeyFate(
 			}
 		}
 
+		// The deadline reported is the one the database settled on, which for a
+		// key already inside a shorter window is earlier than the one this
+		// rotation asked for.
+		var keyExpiry *string
+		if key.expiresAt.Valid {
+			formatted := key.expiresAt.Time.UTC().Format(time.RFC3339)
+			keyExpiry = &formatted
+		}
+
 		previous = append(previous, &gen.RotatedObservabilityKey{
 			ID:        key.id.String(),
 			Name:      key.name,
 			KeyPrefix: key.keyPrefix,
+			ExpiresAt: keyExpiry,
 		})
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit previous key update").LogError(ctx, s.logger)
 	}
 
 	return previous, nil

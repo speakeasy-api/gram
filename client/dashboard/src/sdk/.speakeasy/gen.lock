@@ -10793,7 +10793,7 @@ examples:
         application/json: {"previous_key_fate": "grace"}
       responses:
         "200":
-          application/json: {"key": "<key>", "key_prefix": "<value>", "marketplace_republished": false, "previous_key_fate": "revoke_immediately", "previous_keys": [{"id": "21110a23-0302-4578-b2f3-b2757f944ca0", "key_prefix": "<value>", "name": "<value>"}]}
+          application/json: {"key": "<key>", "key_prefix": "<value>", "marketplace_republished": false, "previous_key_fate": "revoke_immediately", "previous_keys": [{"id": "21110a23-0302-4578-b2f3-b2757f944ca0", "key_prefix": "<value>", "name": "<value>"}], "previous_keys_retired": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

@@ -5179,6 +5179,7 @@ func unmarshalRotatedObservabilityKeyResponseBodyToPluginsRotatedObservabilityKe
 		ID:        *v.ID,
 		Name:      *v.Name,
 		KeyPrefix: *v.KeyPrefix,
+		ExpiresAt: v.ExpiresAt,
 	}
 
 	return res

@@ -53,9 +53,13 @@ export type RotateObservabilityCredentialResult = {
    */
   previousKeys: Array<RotatedObservabilityKey>;
   /**
-   * When previous keys stop authenticating if previous_key_fate is grace.
+   * The latest deadline among previous keys when previous_key_fate is grace. Individual keys can expire earlier, so this is an upper bound rather than a shared deadline; per-key deadlines are on previous_keys.
    */
   previousKeysExpireAt?: Date | undefined;
+  /**
+   * Whether the chosen fate was applied to the previous keys. False means the replacement was created and published but retiring the previous keys failed, so they are still valid and the rotation should be retried.
+   */
+  previousKeysRetired: boolean;
 };
 
 /** @internal */
@@ -79,6 +83,7 @@ export const RotateObservabilityCredentialResult$inboundSchema: z.ZodMiniType<
     previous_keys_expire_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    previous_keys_retired: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -88,6 +93,7 @@ export const RotateObservabilityCredentialResult$inboundSchema: z.ZodMiniType<
       "previous_key_fate": "previousKeyFate",
       "previous_keys": "previousKeys",
       "previous_keys_expire_at": "previousKeysExpireAt",
+      "previous_keys_retired": "previousKeysRetired",
     });
   }),
 );

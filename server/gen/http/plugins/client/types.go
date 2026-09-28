@@ -277,8 +277,14 @@ type RotateObservabilityCredentialResponseBody struct {
 	// Previous observability plugin hooks keys that were revoked or scheduled to
 	// expire.
 	PreviousKeys []*RotatedObservabilityKeyResponseBody `form:"previous_keys,omitempty" json:"previous_keys,omitempty" xml:"previous_keys,omitempty"`
-	// When previous keys stop authenticating if previous_key_fate is grace.
+	// The latest deadline among previous keys when previous_key_fate is grace.
+	// Individual keys can expire earlier, so this is an upper bound rather than a
+	// shared deadline; per-key deadlines are on previous_keys.
 	PreviousKeysExpireAt *string `form:"previous_keys_expire_at,omitempty" json:"previous_keys_expire_at,omitempty" xml:"previous_keys_expire_at,omitempty"`
+	// Whether the chosen fate was applied to the previous keys. False means the
+	// replacement was created and published but retiring the previous keys failed,
+	// so they are still valid and the rotation should be retried.
+	PreviousKeysRetired *bool `form:"previous_keys_retired,omitempty" json:"previous_keys_retired,omitempty" xml:"previous_keys_retired,omitempty"`
 	// Whether the published marketplace was updated with the new credential.
 	MarketplaceRepublished *bool `form:"marketplace_republished,omitempty" json:"marketplace_republished,omitempty" xml:"marketplace_republished,omitempty"`
 	// True when a marketplace exists but could not be updated yet (for example the
@@ -4567,6 +4573,10 @@ type RotatedObservabilityKeyResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The recognizable prefix of the previous key.
 	KeyPrefix *string `form:"key_prefix,omitempty" json:"key_prefix,omitempty" xml:"key_prefix,omitempty"`
+	// When this key stops authenticating. A key already inside a shorter grace
+	// window keeps its earlier deadline, so this can precede the rotation's own
+	// deadline. Absent when the key was revoked immediately.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // MarketplaceSettingsResultResponseBody is used to define fields on response
@@ -7120,6 +7130,7 @@ func NewRotateObservabilityCredentialResultOK(body *RotateObservabilityCredentia
 		KeyPrefix:                 *body.KeyPrefix,
 		PreviousKeyFate:           *body.PreviousKeyFate,
 		PreviousKeysExpireAt:      body.PreviousKeysExpireAt,
+		PreviousKeysRetired:       *body.PreviousKeysRetired,
 		MarketplaceRepublished:    *body.MarketplaceRepublished,
 		MarketplaceUpdateDeferred: body.MarketplaceUpdateDeferred,
 	}
@@ -8686,6 +8697,9 @@ func ValidateRotateObservabilityCredentialResponseBody(body *RotateObservability
 	}
 	if body.PreviousKeys == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("previous_keys", "body"))
+	}
+	if body.PreviousKeysRetired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_keys_retired", "body"))
 	}
 	if body.MarketplaceRepublished == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("marketplace_republished", "body"))
@@ -14247,6 +14261,9 @@ func ValidateRotatedObservabilityKeyResponseBody(body *RotatedObservabilityKeyRe
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
 	return
 }

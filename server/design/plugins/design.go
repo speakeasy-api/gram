@@ -728,10 +728,14 @@ var RotatedObservabilityKey = Type("RotatedObservabilityKey", func() {
 	})
 	Attribute("name", String, "The API key name.")
 	Attribute("key_prefix", String, "The recognizable prefix of the previous key.")
+	Attribute("expires_at", String, func() {
+		Description("When this key stops authenticating. A key already inside a shorter grace window keeps its earlier deadline, so this can precede the rotation's own deadline. Absent when the key was revoked immediately.")
+		Format(FormatDateTime)
+	})
 })
 
 var RotateObservabilityCredentialResult = Type("RotateObservabilityCredentialResult", func() {
-	Required("key", "key_prefix", "previous_key_fate", "previous_keys", "marketplace_republished")
+	Required("key", "key_prefix", "previous_key_fate", "previous_keys", "previous_keys_retired", "marketplace_republished")
 
 	Attribute("key", String, "The newly minted hooks-scoped API key. Returned only on this response.")
 	Attribute("key_prefix", String, "The recognizable prefix of the new key.")
@@ -741,9 +745,10 @@ var RotateObservabilityCredentialResult = Type("RotateObservabilityCredentialRes
 	})
 	Attribute("previous_keys", ArrayOf(RotatedObservabilityKey), "Previous observability plugin hooks keys that were revoked or scheduled to expire.")
 	Attribute("previous_keys_expire_at", String, func() {
-		Description("When previous keys stop authenticating if previous_key_fate is grace.")
+		Description("The latest deadline among previous keys when previous_key_fate is grace. Individual keys can expire earlier, so this is an upper bound rather than a shared deadline; per-key deadlines are on previous_keys.")
 		Format(FormatDateTime)
 	})
+	Attribute("previous_keys_retired", Boolean, "Whether the chosen fate was applied to the previous keys. False means the replacement was created and published but retiring the previous keys failed, so they are still valid and the rotation should be retried.")
 	Attribute("marketplace_republished", Boolean, "Whether the published marketplace was updated with the new credential.")
 	Attribute("marketplace_update_deferred", Boolean, "True when a marketplace exists but could not be updated yet (for example the organization is not approved for the latest hooks version, or GitHub publishing is unavailable). Existing marketplace installs keep the previous credential until the marketplace is republished.")
 })

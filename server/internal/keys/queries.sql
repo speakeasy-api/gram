@@ -104,7 +104,7 @@ WHERE organization_id = @organization_id
   AND scopes @> ARRAY['hooks']::text[]
   AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
   AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
-RETURNING id, organization_id, project_id, name, key_prefix, scopes;
+RETURNING id, organization_id, project_id, name, key_prefix, scopes, expires_at;
 
 -- name: ExpirePluginHooksAPIKeysByProject :many
 -- LEAST keeps the earliest deadline: an already-expired key is excluded
@@ -123,7 +123,10 @@ WHERE organization_id = @organization_id
   AND scopes @> ARRAY['hooks']::text[]
   AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
   AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
-RETURNING id, organization_id, project_id, name, key_prefix, scopes;
+-- The returned expires_at is the deadline LEAST settled on, which for a key
+-- already inside a shorter window is earlier than the one this rotation asked
+-- for. Callers must report these rather than their own requested deadline.
+RETURNING id, organization_id, project_id, name, key_prefix, scopes, expires_at;
 
 -- name: ListAPIKeysByOrganization :many
 -- Deliberately does NOT join users the way GetAPIKeyByKeyHash does. A key

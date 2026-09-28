@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type RotatedObservabilityKey = {
   /**
+   * When this key stops authenticating. A key already inside a shorter grace window keeps its earlier deadline, so this can precede the rotation's own deadline. Absent when the key was revoked immediately.
+   */
+  expiresAt?: Date | undefined;
+  /**
    * The API key ID.
    */
   id: string;
@@ -29,12 +33,16 @@ export const RotatedObservabilityKey$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     id: z.string(),
     key_prefix: z.string(),
     name: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "expires_at": "expiresAt",
       "key_prefix": "keyPrefix",
     });
   }),

@@ -277,8 +277,14 @@ type RotateObservabilityCredentialResponseBody struct {
 	// Previous observability plugin hooks keys that were revoked or scheduled to
 	// expire.
 	PreviousKeys []*RotatedObservabilityKeyResponseBody `form:"previous_keys" json:"previous_keys" xml:"previous_keys"`
-	// When previous keys stop authenticating if previous_key_fate is grace.
+	// The latest deadline among previous keys when previous_key_fate is grace.
+	// Individual keys can expire earlier, so this is an upper bound rather than a
+	// shared deadline; per-key deadlines are on previous_keys.
 	PreviousKeysExpireAt *string `form:"previous_keys_expire_at,omitempty" json:"previous_keys_expire_at,omitempty" xml:"previous_keys_expire_at,omitempty"`
+	// Whether the chosen fate was applied to the previous keys. False means the
+	// replacement was created and published but retiring the previous keys failed,
+	// so they are still valid and the rotation should be retried.
+	PreviousKeysRetired bool `form:"previous_keys_retired" json:"previous_keys_retired" xml:"previous_keys_retired"`
 	// Whether the published marketplace was updated with the new credential.
 	MarketplaceRepublished bool `form:"marketplace_republished" json:"marketplace_republished" xml:"marketplace_republished"`
 	// True when a marketplace exists but could not be updated yet (for example the
@@ -4567,6 +4573,10 @@ type RotatedObservabilityKeyResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The recognizable prefix of the previous key.
 	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+	// When this key stops authenticating. A key already inside a shorter grace
+	// window keeps its earlier deadline, so this can precede the rotation's own
+	// deadline. Absent when the key was revoked immediately.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // MarketplaceSettingsResultResponseBody is used to define fields on response
@@ -4832,6 +4842,7 @@ func NewRotateObservabilityCredentialResponseBody(res *plugins.RotateObservabili
 		KeyPrefix:                 res.KeyPrefix,
 		PreviousKeyFate:           res.PreviousKeyFate,
 		PreviousKeysExpireAt:      res.PreviousKeysExpireAt,
+		PreviousKeysRetired:       res.PreviousKeysRetired,
 		MarketplaceRepublished:    res.MarketplaceRepublished,
 		MarketplaceUpdateDeferred: res.MarketplaceUpdateDeferred,
 	}

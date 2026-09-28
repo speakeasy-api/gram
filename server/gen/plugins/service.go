@@ -453,8 +453,14 @@ type RotateObservabilityCredentialResult struct {
 	// Previous observability plugin hooks keys that were revoked or scheduled to
 	// expire.
 	PreviousKeys []*RotatedObservabilityKey
-	// When previous keys stop authenticating if previous_key_fate is grace.
+	// The latest deadline among previous keys when previous_key_fate is grace.
+	// Individual keys can expire earlier, so this is an upper bound rather than a
+	// shared deadline; per-key deadlines are on previous_keys.
 	PreviousKeysExpireAt *string
+	// Whether the chosen fate was applied to the previous keys. False means the
+	// replacement was created and published but retiring the previous keys failed,
+	// so they are still valid and the rotation should be retried.
+	PreviousKeysRetired bool
 	// Whether the published marketplace was updated with the new credential.
 	MarketplaceRepublished bool
 	// True when a marketplace exists but could not be updated yet (for example the
@@ -471,6 +477,10 @@ type RotatedObservabilityKey struct {
 	Name string
 	// The recognizable prefix of the previous key.
 	KeyPrefix string
+	// When this key stops authenticating. A key already inside a shorter grace
+	// window keeps its earlier deadline, so this can precede the rotation's own
+	// deadline. Absent when the key was revoked immediately.
+	ExpiresAt *string
 }
 
 // SetPluginAssignmentsPayload is the payload type of the plugins service

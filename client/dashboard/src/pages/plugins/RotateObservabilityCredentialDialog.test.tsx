@@ -61,6 +61,7 @@ vi.mock("@/components/code", () => ({
 }));
 
 import { RotateObservabilityCredentialDialog } from "./RotateObservabilityCredentialDialog";
+import { rotationErrorCopy } from "./rotation-error-copy";
 
 const rotated: RotateObservabilityCredentialResult = {
   key: "gram_local_rotated_hooks_key",
@@ -71,9 +72,11 @@ const rotated: RotateObservabilityCredentialResult = {
       id: "00000000-0000-0000-0000-000000000001",
       name: "plugins-hooks-download-20260713-104500-abcdef",
       keyPrefix: "gram_local_",
+      expiresAt: new Date("2026-09-12T00:00:00Z"),
     },
   ],
   previousKeysExpireAt: new Date("2026-09-12T00:00:00Z"),
+  previousKeysRetired: true,
   marketplaceRepublished: false,
   marketplaceUpdateDeferred: false,
 };
@@ -95,6 +98,11 @@ function requestedFate(): string {
 
   return variables.request.rotateObservabilityCredentialRequestBody
     .previousKeyFate;
+}
+
+/** Minimal stand-in for an SDK error carrying an HTTP status. */
+function gramErrorWithStatus(status: number): unknown {
+  return { statusCode: status, message: "server wording that must not leak" };
 }
 
 // Typed no-ops: the props are void-returning, and a bare vi.fn() is not.
@@ -163,7 +171,7 @@ describe("RotateObservabilityCredentialDialog", () => {
 
     fireEvent.click(
       screen.getByRole("radio", {
-        name: /Revoke the previous key immediately/,
+        name: /Stop the current key from working now/,
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Rotate credential" }));
@@ -172,12 +180,15 @@ describe("RotateObservabilityCredentialDialog", () => {
     resolveRotation({
       ...rotated,
       previousKeyFate: "revoke_immediately",
+      previousKeys: [{ ...rotated.previousKeys[0]!, expiresAt: undefined }],
       previousKeysExpireAt: undefined,
     });
 
+    // Daniel's ask: say what it means for the customer, not that a key was
+    // "revoked".
     expect(
       await screen.findByText(
-        "The previous key was revoked immediately and no longer authenticates.",
+        /stopped working\. Installations still using it cannot send observability data/,
       ),
     ).toBeDefined();
   });
@@ -195,6 +206,91 @@ describe("RotateObservabilityCredentialDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rotate credential" }));
     resolveRotation({ ...rotated, marketplaceUpdateDeferred: true });
 
-    expect(await screen.findByText(/could not be updated yet/)).toBeDefined();
+    // The copy must not name a cause: a deferred update can equally mean the
+    // organization is not cleared or that publishing is unavailable.
+    const deferred = await screen.findByText(
+      /Your marketplace package was not updated/,
+    );
+    expect(deferred.textContent).not.toMatch(/not cleared|approved|latest/);
+  });
+
+  it("reports each previous key's real deadline rather than this rotation's", async () => {
+    render(
+      <RotateObservabilityCredentialDialog
+        open
+        onOpenChange={noopOpenChange}
+        isDownloading={false}
+        onDownload={noopDownload}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Rotate credential" }));
+
+    // A key already inside a shorter window keeps its earlier deadline, so the
+    // dialog must not promise every key lasts until the rotation's own.
+    const earlier = new Date("2026-09-08T00:00:00Z");
+    const latest = new Date("2026-09-12T00:00:00Z");
+    resolveRotation({
+      ...rotated,
+      previousKeys: [
+        { ...rotated.previousKeys[0]!, expiresAt: latest },
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          name: "plugins-hooks-20260701-090000-abc123",
+          keyPrefix: "gram_local_",
+          expiresAt: earlier,
+        },
+      ],
+    });
+
+    const copy = await screen.findByText(/at the latest/);
+    expect(copy.textContent).toContain(latest.toLocaleString());
+    expect(copy.textContent).toContain(earlier.toLocaleString());
+  });
+
+  it("flags a rotation that published a key but left the previous ones live", async () => {
+    render(
+      <RotateObservabilityCredentialDialog
+        open
+        onOpenChange={noopOpenChange}
+        isDownloading={false}
+        onDownload={noopDownload}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Rotate credential" }));
+    resolveRotation({
+      ...rotated,
+      previousKeys: [],
+      previousKeysExpireAt: undefined,
+      previousKeysRetired: false,
+    });
+
+    expect(
+      await screen.findByText(/previous keys were left untouched/),
+    ).toBeDefined();
+  });
+
+  it("turns a rotation failure into the next step, without server wording", () => {
+    render(
+      <RotateObservabilityCredentialDialog
+        open
+        onOpenChange={noopOpenChange}
+        isDownloading={false}
+        onDownload={noopDownload}
+      />,
+    );
+
+    expect(rotationErrorCopy(gramErrorWithStatus(412))).toBe(
+      "Publish your marketplace package before creating a new observability key. Nothing was changed.",
+    );
+    expect(rotationErrorCopy(gramErrorWithStatus(400))).toMatch(
+      /Turn on the Observability plugin/,
+    );
+    // A failure that changed nothing has to read differently from a partial
+    // rotation, and never echo the server's own wording.
+    expect(rotationErrorCopy(new Error("previous key fate"))).toBe(
+      "The new key could not be created. Nothing was changed — try again.",
+    );
   });
 });

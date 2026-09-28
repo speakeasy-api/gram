@@ -100125,13 +100125,17 @@ components:
                     description: Previous observability plugin hooks keys that were revoked or scheduled to expire.
                 previous_keys_expire_at:
                     type: string
-                    description: When previous keys stop authenticating if previous_key_fate is grace.
+                    description: The latest deadline among previous keys when previous_key_fate is grace. Individual keys can expire earlier, so this is an upper bound rather than a shared deadline; per-key deadlines are on previous_keys.
                     format: date-time
+                previous_keys_retired:
+                    type: boolean
+                    description: Whether the chosen fate was applied to the previous keys. False means the replacement was created and published but retiring the previous keys failed, so they are still valid and the rotation should be retried.
             required:
                 - key
                 - key_prefix
                 - previous_key_fate
                 - previous_keys
+                - previous_keys_retired
                 - marketplace_republished
         RotateTunneledMcpServerKeyForm:
             type: object
@@ -100158,6 +100162,10 @@ components:
         RotatedObservabilityKey:
             type: object
             properties:
+                expires_at:
+                    type: string
+                    description: When this key stops authenticating. A key already inside a shorter grace window keeps its earlier deadline, so this can precede the rotation's own deadline. Absent when the key was revoked immediately.
+                    format: date-time
                 id:
                     type: string
                     description: The API key ID.

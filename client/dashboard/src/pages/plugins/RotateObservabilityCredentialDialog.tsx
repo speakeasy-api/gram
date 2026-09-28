@@ -7,6 +7,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import type { ObservabilityDownloadPlatform } from "./observability-platforms";
 import { OBSERVABILITY_DOWNLOAD_PLATFORMS } from "./observability-platforms";
+import { rotationErrorCopy } from "./rotation-error-copy";
 import type { RotateObservabilityCredentialResult } from "@gram/client/models/components/rotateobservabilitycredentialresult.js";
 import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
@@ -19,37 +20,66 @@ type PreviousKeyFate = "revoke_immediately" | "grace";
 
 const GRACE_DAYS = 7;
 
+/**
+ * What happened to the marketplace package, without guessing why. A deferred
+ * update can mean this organization is not yet on the latest observability
+ * plugin or that publishing is unavailable, and the customer's next step is
+ * the same either way.
+ */
 function marketplaceStatusCopy(
   result: RotateObservabilityCredentialResult,
 ): string {
   if (result.marketplaceRepublished) {
-    return "The published marketplace now embeds this credential. Installed copies pick it up on the next plugin update.";
+    return "Your marketplace package now carries the new key. Installations pick it up the next time they update the plugin.";
   }
   if (result.marketplaceUpdateDeferred) {
-    return "A marketplace exists, but it could not be updated yet — this organization is not cleared for the latest observability hooks. Existing marketplace installs keep the previous credential until the marketplace is republished.";
+    return "Your marketplace package was not updated, so it still carries the previous key. Installations that pull from it keep using the previous key until the package is published again — use the key above to update them in the meantime.";
   }
-  return "This project has no published marketplace. Use the key above for existing installs, or download a ZIP for a new package.";
+  return "This project has no marketplace package. Use the key above to update existing installations, or download a package below.";
 }
 
+function formatDeadline(value: Date): string {
+  return value.toLocaleString();
+}
+
+/**
+ * Deadlines are read back per key rather than assumed, because a key already
+ * inside a shorter window keeps its earlier deadline instead of being extended
+ * by this rotation.
+ */
 function previousKeyFateCopy(
   result: RotateObservabilityCredentialResult,
 ): string {
   const count = result.previousKeys.length;
   if (count === 0) {
-    return "No previous observability plugin keys were in use.";
+    return "No previous observability keys were in use.";
   }
   if (result.previousKeyFate === "revoke_immediately") {
-    return count === 1
-      ? "The previous key was revoked immediately and no longer authenticates."
-      : `${count} previous keys were revoked immediately and no longer authenticate.`;
+    const subject =
+      count === 1 ? "The previous key" : `All ${count} previous keys`;
+    return `${subject} stopped working. Installations still using ${count === 1 ? "it" : "them"} cannot send observability data until you give them the new key.`;
   }
-  const until = result.previousKeysExpireAt
-    ? result.previousKeysExpireAt.toLocaleString()
-    : `the end of the ${GRACE_DAYS}-day grace window`;
 
-  return count === 1
-    ? `The previous key stays valid until ${until}.`
-    : `${count} previous keys stay valid until ${until}.`;
+  const deadlines = result.previousKeys
+    .map((key) => key.expiresAt)
+    .filter((value): value is Date => value !== undefined)
+    .map((value) => value.getTime());
+
+  if (deadlines.length === 0) {
+    return count === 1
+      ? `The previous key keeps working for up to ${GRACE_DAYS} days.`
+      : `${count} previous keys keep working for up to ${GRACE_DAYS} days.`;
+  }
+
+  const latest = formatDeadline(new Date(Math.max(...deadlines)));
+  const earliest = Math.min(...deadlines);
+  const subject =
+    count === 1 ? "The previous key keeps" : `${count} previous keys keep`;
+
+  if (earliest === Math.max(...deadlines)) {
+    return `${subject} working until ${latest}.`;
+  }
+  return `${subject} working until ${latest} at the latest. Some stop earlier — the first on ${formatDeadline(new Date(earliest))}.`;
 }
 
 export function RotateObservabilityCredentialDialog({
@@ -69,8 +99,8 @@ export function RotateObservabilityCredentialDialog({
     useState<RotateObservabilityCredentialResult | null>(null);
 
   const rotateMutation = useRotateObservabilityCredentialMutation({
-    onError: () => {
-      toast.error("Failed to rotate the observability credential");
+    onError: (error) => {
+      toast.error(rotationErrorCopy(error));
     },
   });
 
@@ -138,13 +168,28 @@ export function RotateObservabilityCredentialDialog({
             <Stack gap={4}>
               <Stack gap={2}>
                 <Text as="h3" className="font-medium">
-                  New hooks credential
+                  New observability key
                 </Text>
                 <CodeBlock copyLabel="observability credential">
                   {result.key}
                 </CodeBlock>
               </Stack>
-              <Alert variant="info">{previousKeyFateCopy(result)}</Alert>
+              {!result.previousKeysRetired && (
+                <Alert variant="warning">
+                  The new key works, but the previous keys were left untouched —
+                  they can still send data. Rotate again to retire them.
+                </Alert>
+              )}
+              <Alert
+                variant={
+                  result.previousKeyFate === "revoke_immediately" &&
+                  result.previousKeys.length > 0
+                    ? "warning"
+                    : "info"
+                }
+              >
+                {previousKeyFateCopy(result)}
+              </Alert>
               <Alert
                 variant={result.marketplaceUpdateDeferred ? "warning" : "info"}
               >
@@ -152,12 +197,11 @@ export function RotateObservabilityCredentialDialog({
               </Alert>
               <Stack gap={2}>
                 <Text as="h3" className="font-medium">
-                  Download an updated ZIP
+                  Download an updated package
                 </Text>
                 <Text muted small>
-                  A ZIP download mints its own hooks key for that package.
-                  Marketplace installs should take the republished package, and
-                  existing installs the key above.
+                  A download comes with its own key for that package. Use the
+                  key above for installations you are updating by hand.
                 </Text>
                 <div className="flex flex-wrap gap-2">
                   {OBSERVABILITY_DOWNLOAD_PLATFORMS.map(
@@ -189,9 +233,11 @@ export function RotateObservabilityCredentialDialog({
             <Dialog.Header>
               <Dialog.Title>Rotate observability credential</Dialog.Title>
               <Dialog.Description>
-                Mint a replacement hooks-scoped API key for the Observability
-                plugin. Choose what happens to the key already baked into
-                installed copies.
+                Create a new key for sending observability data to Gram, and
+                choose how long existing installations can keep using their
+                current key. You will see the new key once — replace it in your
+                marketplace package and anywhere the plugin was installed by
+                hand.
               </Dialog.Description>
             </Dialog.Header>
             <RadioCardGroup
@@ -199,24 +245,24 @@ export function RotateObservabilityCredentialDialog({
               onValueChange={(value) => {
                 setFate(value as PreviousKeyFate);
               }}
-              aria-label="What happens to the previous key"
+              aria-label="What happens to the current key"
             >
               <RadioCard
                 value="grace"
-                title={`Keep the previous key valid for ${GRACE_DAYS} days`}
+                title={`Let existing installations keep using the current key for ${GRACE_DAYS} days`}
               >
                 <Text muted small>
-                  Installed copies keep reporting while you roll out the
-                  replacement. The old key then stops authenticating.
+                  They keep sending data while you roll out the new key. The
+                  current key then stops working.
                 </Text>
               </RadioCard>
               <RadioCard
                 value="revoke_immediately"
-                title="Revoke the previous key immediately"
+                title="Stop the current key from working now"
               >
                 <Text muted small>
-                  Use this if the key may be leaked. Installed copies stop
-                  reporting until they are updated.
+                  Use this if the key may have leaked. Installations stop
+                  sending data until you give them the new key.
                 </Text>
               </RadioCard>
             </RadioCardGroup>

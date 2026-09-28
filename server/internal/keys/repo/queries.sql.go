@@ -295,7 +295,7 @@ WHERE organization_id = $2
   AND scopes @> ARRAY['hooks']::text[]
   AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
   AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
-RETURNING id, organization_id, project_id, name, key_prefix, scopes
+RETURNING id, organization_id, project_id, name, key_prefix, scopes, expires_at
 `
 
 type ExpirePluginHooksAPIKeysByProjectParams struct {
@@ -313,12 +313,16 @@ type ExpirePluginHooksAPIKeysByProjectRow struct {
 	Name           string
 	KeyPrefix      string
 	Scopes         []string
+	ExpiresAt      pgtype.Timestamptz
 }
 
 // LEAST keeps the earliest deadline: an already-expired key is excluded
 // outright, and a key already inside a grace window keeps that window rather
 // than having it extended, so repeated rotations cannot keep one credential
 // alive indefinitely.
+// The returned expires_at is the deadline LEAST settled on, which for a key
+// already inside a shorter window is earlier than the one this rotation asked
+// for. Callers must report these rather than their own requested deadline.
 func (q *Queries) ExpirePluginHooksAPIKeysByProject(ctx context.Context, arg ExpirePluginHooksAPIKeysByProjectParams) ([]ExpirePluginHooksAPIKeysByProjectRow, error) {
 	rows, err := q.db.Query(ctx, expirePluginHooksAPIKeysByProject,
 		arg.ExpiresAt,
@@ -341,6 +345,7 @@ func (q *Queries) ExpirePluginHooksAPIKeysByProject(ctx context.Context, arg Exp
 			&i.Name,
 			&i.KeyPrefix,
 			&i.Scopes,
+			&i.ExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -711,7 +716,7 @@ WHERE organization_id = $1
   AND scopes @> ARRAY['hooks']::text[]
   AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
   AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
-RETURNING id, organization_id, project_id, name, key_prefix, scopes
+RETURNING id, organization_id, project_id, name, key_prefix, scopes, expires_at
 `
 
 type RevokePluginHooksAPIKeysByProjectParams struct {
@@ -728,6 +733,7 @@ type RevokePluginHooksAPIKeysByProjectRow struct {
 	Name           string
 	KeyPrefix      string
 	Scopes         []string
+	ExpiresAt      pgtype.Timestamptz
 }
 
 // Plugin distribution mints hooks keys as plugins-hooks-<timestamp>-<token>
@@ -766,6 +772,7 @@ func (q *Queries) RevokePluginHooksAPIKeysByProject(ctx context.Context, arg Rev
 			&i.Name,
 			&i.KeyPrefix,
 			&i.Scopes,
+			&i.ExpiresAt,
 		); err != nil {
 			return nil, err
 		}

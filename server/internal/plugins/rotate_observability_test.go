@@ -726,3 +726,131 @@ func countPluginMCPKeys(keys []keysrepo.ApiKey) int {
 
 	return count
 }
+
+// failNextHooksKeyRetirement makes the next UPDATE of a hooks key raise, which
+// is what a retirement failure looks like from inside the rotation: the
+// replacement has been inserted, the previous keys have not been retired yet.
+func failNextHooksKeyRetirement(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
+	t.Helper()
+
+	// A trigger is the only way to make one specific statement fail mid
+	// transaction; there is no query to generate for it.
+	//nolint:glint // notestingrawsql: fault injection needs DDL, which sqlc cannot express.
+	_, err := conn.Exec(ctx, `
+CREATE OR REPLACE FUNCTION test_fail_hooks_retirement() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'injected retirement failure';
+END
+$$;
+CREATE TRIGGER test_fail_hooks_retirement
+BEFORE UPDATE ON api_keys
+FOR EACH ROW WHEN (OLD.name LIKE 'plugins-hooks-%')
+EXECUTE FUNCTION test_fail_hooks_retirement();`)
+	require.NoError(t, err)
+}
+
+// A rotation that has not published anything must be all-or-nothing: a failure
+// while retiring the previous keys cannot leave the replacement behind, or the
+// project ends up with an extra live credential nobody asked for and the caller
+// is told the rotation failed.
+func TestRotateObservabilityCredential_RetirementFailureLeavesNoExtraKey(t *testing.T) {
+	t.Parallel()
+
+	for _, fate := range []string{"revoke_immediately", "grace"} {
+		t.Run(fate, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestPluginsService(t)
+
+			_, _, err := ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "claude"})
+			require.NoError(t, err)
+
+			before := listHooksKeys(t, ctx, ti.conn)
+			require.Len(t, before, 1)
+
+			failNextHooksKeyRetirement(t, ctx, ti.conn)
+
+			_, err = ti.service.RotateObservabilityCredential(ctx, rotateObservabilityPayload(fate))
+			require.Error(t, err)
+
+			after := listHooksKeys(t, ctx, ti.conn)
+			require.Len(t, after, len(before),
+				"a failed rotation must not leave an extra active key")
+			require.Equal(t, before[0].ID, after[0].ID,
+				"the surviving key must be the one that was already there")
+		})
+	}
+}
+
+// The response reports the deadline the database settled on, not the one this
+// rotation asked for: a key already inside a shorter window keeps its earlier
+// expiry, so promising seven more days would be false.
+func TestRotateObservabilityCredential_DoesNotOverpromiseGraceDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, _, err := ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "claude"})
+	require.NoError(t, err)
+
+	original := listHooksKeys(t, ctx, ti.conn)
+	require.Len(t, original, 1)
+
+	shortWindow := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+	setKeyExpiry(t, ctx, ti.conn, original[0].KeyHash, shortWindow)
+
+	result, err := ti.service.RotateObservabilityCredential(ctx, rotateObservabilityPayload("grace"))
+	require.NoError(t, err)
+	require.Len(t, result.PreviousKeys, 1)
+
+	actual := keyExpiry(t, ctx, ti.conn, original[0].KeyHash)
+	require.WithinDuration(t, shortWindow, actual, time.Second,
+		"the key must keep its earlier deadline")
+
+	require.NotNil(t, result.PreviousKeys[0].ExpiresAt)
+	perKey, err := time.Parse(time.RFC3339, *result.PreviousKeys[0].ExpiresAt)
+	require.NoError(t, err)
+	require.WithinDuration(t, actual, perKey, time.Second,
+		"each key must report the deadline it actually has")
+
+	require.NotNil(t, result.PreviousKeysExpireAt)
+	reported, err := time.Parse(time.RFC3339, *result.PreviousKeysExpireAt)
+	require.NoError(t, err)
+	require.False(t, reported.After(actual),
+		"the rotation must not promise validity beyond an existing key's expiry")
+}
+
+// Once the replacement is on GitHub there is no rolling it back, so a failure
+// while retiring the previous keys must not fail the request: the one-time
+// plaintext of a credential that is already live and published would be lost.
+// The rotation reports itself incomplete instead, and a retry finishes the job.
+func TestRotateObservabilityCredential_PublishedRotationReportsUnretiredKeys(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	features := &feature.InMemory{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	features.SetFlagPayload(feature.FlagHooksRollout, authCtx.ActiveOrganizationID, []byte(`{"version": 9999}`))
+
+	publishTestObservabilityProject(t, ctx, ti, "rotate-partial")
+
+	claudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
+	hooksBefore := publishedHooksAPIKey(t, mock, claudeObservability)
+	require.NotEmpty(t, hooksBefore)
+
+	failNextHooksKeyRetirement(t, ctx, ti.conn)
+
+	result, err := ti.service.RotateObservabilityCredential(ctx, rotateObservabilityPayload("grace"))
+	require.NoError(t, err, "a published rotation must not fail once the key is out the door")
+	require.NotEmpty(t, result.Key)
+	require.True(t, result.MarketplaceRepublished)
+	require.False(t, result.PreviousKeysRetired, "the caller must be told the previous keys are still live")
+	require.Empty(t, result.PreviousKeys)
+	require.Nil(t, result.PreviousKeysExpireAt)
+
+	require.Equal(t, result.Key, publishedHooksAPIKey(t, mock, claudeObservability),
+		"the published plugin must embed the returned credential")
+}
