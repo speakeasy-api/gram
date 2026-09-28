@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -16,8 +17,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -167,15 +170,38 @@ func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, 
 	httpClient.Transport = roundTripper
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "platform-mcp-readiness", Version: "1.0.0"}, nil)
-	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: remoteURL, HTTPClient: httpClient, MaxRetries: 0, DisableStandaloneSSE: true}, nil)
+	// The SDK treats MaxRetries == 0 as its default of 5 reconnect attempts; a
+	// negative value disables retries so one probe is one attempt.
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: remoteURL, HTTPClient: httpClient, MaxRetries: -1, DisableStandaloneSSE: true}, nil)
 	if err != nil {
-		return catalogProbeFailure(err, roundTripper, catalogProbeStageInitialize)
+		return p.probeFailure(ctx, remoteURL, err, roundTripper, catalogProbeStageInitialize)
 	}
-	defer func() { _ = session.Close() }()
+	defer o11y.NoLogDefer(session.Close)
 	if _, err := session.ListTools(ctx, nil); err != nil {
-		return catalogProbeFailure(err, roundTripper, catalogProbeStageToolsList)
+		return p.probeFailure(ctx, remoteURL, err, roundTripper, catalogProbeStageToolsList)
 	}
 	return ReadinessReady, "tools_list_ok"
+}
+
+// probeFailure classifies a failed probe and logs the underlying error. The
+// caller-visible result is only the closed state and evidence code; the
+// server-side log keeps the SDK error and last failing HTTP status so an
+// operator can tell why a provider's response was rejected.
+func (p *RemoteMCPReadinessProber) probeFailure(ctx context.Context, remoteURL string, err error, roundTripper *catalogAuthorizationRoundTripper, stage catalogProbeStage) (ReadinessState, string) {
+	state, evidence := catalogProbeFailure(err, roundTripper, stage)
+	attrs := []any{
+		attr.SlogOutcome(evidence),
+		attr.SlogReason(string(stage)),
+		attr.SlogError(err),
+	}
+	if parsed, parseErr := url.Parse(remoteURL); parseErr == nil {
+		attrs = append(attrs, attr.SlogServerAddress(parsed.Host))
+	}
+	if status := roundTripper.failedStatus.Load(); status != 0 {
+		attrs = append(attrs, attr.SlogHTTPResponseStatusCode(int(status)))
+	}
+	p.logger.WarnContext(ctx, "remote mcp readiness probe failed", attrs...)
+	return state, evidence
 }
 
 type catalogProbeStage string
@@ -223,6 +249,10 @@ type catalogAuthorizationRoundTripper struct {
 	responded    atomic.Bool
 	transient    atomic.Bool
 	redirected   atomic.Bool
+
+	// failedStatus is the most recent non-2xx HTTP status the provider
+	// returned, or zero when every response succeeded. It is logged only.
+	failedStatus atomic.Int32
 }
 
 func (rt *catalogAuthorizationRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -240,6 +270,9 @@ func (rt *catalogAuthorizationRoundTripper) RoundTrip(request *http.Request) (*h
 		return nil, fmt.Errorf("send registered Remote MCP readiness request: %w", err)
 	}
 	rt.responded.Store(true)
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		rt.failedStatus.Store(int32(response.StatusCode)) //nolint:gosec // HTTP status codes are three-digit values
+	}
 	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
 		rt.unauthorized.Store(true)
 	}
