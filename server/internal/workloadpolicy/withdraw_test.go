@@ -172,6 +172,7 @@ func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 		Subject:          channelOne,
 		MatchKind:        string(workloadidentity.MatchKindExact),
 		Name:             nil,
+		Tags:             nil,
 		AgentID:          agentID.String(),
 		ProjectScoped:    true,
 	})

@@ -1175,6 +1175,7 @@ func marshalTypesWorkloadIssuerToWorkloadIssuerResponseBody(v *types.WorkloadIss
 		Name:                   v.Name,
 		Issuer:                 v.Issuer,
 		JwksURI:                v.JwksURI,
+		Description:            v.Description,
 		AllowWildcardAdmission: v.AllowWildcardAdmission,
 		CreatedAt:              v.CreatedAt,
 		UpdatedAt:              v.UpdatedAt,
@@ -1210,6 +1211,14 @@ func marshalTypesWorkloadAdmissionToWorkloadAdmissionResponseBody(v *types.Workl
 		WildcardActive:   v.WildcardActive,
 		CreatedAt:        v.CreatedAt,
 		UpdatedAt:        v.UpdatedAt,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	} else {
+		res.Tags = []string{}
 	}
 
 	return res

@@ -177,6 +177,9 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Re-checked on every lookup rather than at write time, so clearing it makes wildcard rules already written inert immediately — an incident control rather than a setup step, which is why the dashboard does not ask for it at registration.", func() {
 		Default(true)
 	})
+	Attribute("description", String, "What the platform is and what runs on it, shown in place of the issuer URL wherever the issuer is listed. Trimmed on write; blank is stored as none. At most 500 characters.", func() {
+		MaxLength(500)
+	})
 	Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.", func() {
 		MaxLength(40)
 	})
@@ -201,6 +204,9 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("name", String, "Optional label, for platforms whose subjects are not self-describing.", func() {
 		MinLength(1)
 	})
+	Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.", func() {
+		MaxLength(40)
+	})
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits.", func() {
 		Format(FormatUUID)
 	})
@@ -224,6 +230,7 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 	Attribute("name", String, "The label an operator works with.")
 	Attribute("issuer", String, "The issuer identifier the assertion's iss claim must carry.")
 	Attribute("jwks_uri", String, "Where the issuer publishes its signing keys.")
+	Attribute("description", String, "What the platform is and what runs on it. Empty rather than absent where none is set.")
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule.")
 	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.")
 	Attribute("created_at", String, func() {
@@ -233,7 +240,7 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "allow_wildcard_admission", "tags", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "description", "allow_wildcard_admission", "tags", "created_at", "updated_at")
 })
 
 var WorkloadAdmission = Type("WorkloadAdmission", func() {
@@ -256,6 +263,7 @@ var WorkloadAdmission = Type("WorkloadAdmission", func() {
 		Enum("exact", "wildcard")
 	})
 	Attribute("name", String, "Optional label; empty when none was supplied.")
+	Attribute("tags", ArrayOf(String), "Free-form labels for finding the admitted workload. Empty rather than absent where none are set.")
 	Attribute("agent_id", String, "The agent whose policy this workload inherits. Empty when the assignment is missing, which the token endpoint refuses.", func() {
 		Format(FormatUUID)
 	})
@@ -268,7 +276,7 @@ var WorkloadAdmission = Type("WorkloadAdmission", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "workload_issuer_id", "issuer", "issuer_name", "subject", "match_kind", "name", "agent_id", "agent_name", "wildcard_active", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "workload_issuer_id", "issuer", "issuer_name", "subject", "match_kind", "name", "tags", "agent_id", "agent_name", "wildcard_active", "created_at", "updated_at")
 })
 
 var WorkloadIdentityPolicy = Type("WorkloadIdentityPolicy", func() {

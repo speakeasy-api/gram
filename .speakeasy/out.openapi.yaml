@@ -74374,6 +74374,13 @@ components:
         subject:
           type: string
           description: The sub claim the issuer must assert, stored and compared exactly as supplied.
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 64
+          description: Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+          maxItems: 40
       description: Form for admitting a workload subject and assigning its agent.
       required:
         - issuer
@@ -91581,6 +91588,10 @@ components:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Re-checked on every lookup rather than at write time, so clearing it makes wildcard rules already written inert immediately — an incident control rather than a setup step, which is why the dashboard does not ask for it at registration.
           default: true
+        description:
+          type: string
+          description: What the platform is and what runs on it, shown in place of the issuer URL wherever the issuer is listed. Trimmed on write; blank is stored as none. At most 500 characters.
+          maxLength: 500
         issuer:
           type: string
           description: The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
@@ -103532,6 +103543,11 @@ components:
         subject:
           type: string
           description: The sub claim, exactly as stored.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for finding the admitted workload. Empty rather than absent where none are set.
         updated_at:
           type: string
           format: date-time
@@ -103553,6 +103569,7 @@ components:
         - subject
         - match_kind
         - name
+        - tags
         - agent_id
         - agent_name
         - wildcard_active
@@ -103584,6 +103601,9 @@ components:
         created_at:
           type: string
           format: date-time
+        description:
+          type: string
+          description: What the platform is and what runs on it. Empty rather than absent where none is set.
         id:
           type: string
           description: The workload issuer id.
@@ -103619,6 +103639,7 @@ components:
         - name
         - issuer
         - jwks_uri
+        - description
         - allow_wildcard_admission
         - tags
         - created_at

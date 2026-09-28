@@ -15,6 +15,7 @@ function admission(
     subject: "repo:acme/payments-api:ref:refs/heads/main",
     matchKind: "exact",
     name: "Payments deploy",
+    tags: ["payments", "deploy"],
     agentId: "22222222-2222-2222-2222-222222222222",
     agentName: "Release assistant",
     wildcardActive: false,
@@ -24,7 +25,7 @@ function admission(
   };
 }
 
-it("matches a machine by subject, label or agent, ignoring case", () => {
+it("matches a machine by subject, label, tag or agent, ignoring case", () => {
   const machine = admission();
 
   expect(admissionMatches(machine, "payments-api")).toBe(true);

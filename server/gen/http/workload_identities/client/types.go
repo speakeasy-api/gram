@@ -30,6 +30,10 @@ type RegisterIssuerRequestBody struct {
 	// incident control rather than a setup step, which is why the dashboard does
 	// not ask for it at registration.
 	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
+	// What the platform is and what runs on it, shown in place of the issuer URL
+	// wherever the issuer is listed. Trimmed on write; blank is stored as none. At
+	// most 500 characters.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
 	// not key/value pairs. Trimmed and de-duplicated on write. At most 40.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
@@ -55,6 +59,9 @@ type AdmitSubjectRequestBody struct {
 	MatchKind string `form:"match_kind" json:"match_kind" xml:"match_kind"`
 	// Optional label, for platforms whose subjects are not self-describing.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Free-form labels for finding the admitted workload in a long list. Flat
+	// strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The agent whose policy the admitted workload inherits.
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
 	// Admit the subject for the selected project alone rather than the whole
@@ -1056,6 +1063,9 @@ type WorkloadIssuerResponseBody struct {
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Where the issuer publishes its signing keys.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// What the platform is and what runs on it. Empty rather than absent where
+	// none is set.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
 	// Free-form labels for grouping and filtering trusted platforms. Empty rather
@@ -1086,6 +1096,9 @@ type WorkloadAdmissionResponseBody struct {
 	MatchKind *string `form:"match_kind,omitempty" json:"match_kind,omitempty" xml:"match_kind,omitempty"`
 	// Optional label; empty when none was supplied.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Free-form labels for finding the admitted workload. Empty rather than absent
+	// where none are set.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The agent whose policy this workload inherits. Empty when the assignment is
 	// missing, which the token endpoint refuses.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
@@ -1107,6 +1120,7 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 		Issuer:                 p.Issuer,
 		JwksURI:                p.JwksURI,
 		AllowWildcardAdmission: p.AllowWildcardAdmission,
+		Description:            p.Description,
 		ProjectScoped:          p.ProjectScoped,
 	}
 	{
@@ -1145,6 +1159,12 @@ func NewAdmitSubjectRequestBody(p *workloadidentities.AdmitSubjectPayload) *Admi
 		var zero string
 		if body.MatchKind == zero {
 			body.MatchKind = "exact"
+		}
+	}
+	if p.Tags != nil {
+		body.Tags = make([]string, len(p.Tags))
+		for i, val := range p.Tags {
+			body.Tags[i] = val
 		}
 	}
 	{
@@ -3376,6 +3396,9 @@ func ValidateWorkloadIssuerResponseBody(body *WorkloadIssuerResponseBody) (err e
 	if body.JwksURI == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_uri", "body"))
 	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
 	if body.AllowWildcardAdmission == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("allow_wildcard_admission", "body"))
 	}
@@ -3429,6 +3452,9 @@ func ValidateWorkloadAdmissionResponseBody(body *WorkloadAdmissionResponseBody) 
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Tags == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
 	}
 	if body.AgentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))

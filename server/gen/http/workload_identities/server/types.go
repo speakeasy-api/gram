@@ -31,6 +31,10 @@ type RegisterIssuerRequestBody struct {
 	// incident control rather than a setup step, which is why the dashboard does
 	// not ask for it at registration.
 	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
+	// What the platform is and what runs on it, shown in place of the issuer URL
+	// wherever the issuer is listed. Trimmed on write; blank is stored as none. At
+	// most 500 characters.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
 	// not key/value pairs. Trimmed and de-duplicated on write. At most 40.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
@@ -56,6 +60,9 @@ type AdmitSubjectRequestBody struct {
 	MatchKind *string `form:"match_kind,omitempty" json:"match_kind,omitempty" xml:"match_kind,omitempty"`
 	// Optional label, for platforms whose subjects are not self-describing.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Free-form labels for finding the admitted workload in a long list. Flat
+	// strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The agent whose policy the admitted workload inherits.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// Admit the subject for the selected project alone rather than the whole
@@ -1057,6 +1064,9 @@ type WorkloadIssuerResponseBody struct {
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
 	// Where the issuer publishes its signing keys.
 	JwksURI string `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
+	// What the platform is and what runs on it. Empty rather than absent where
+	// none is set.
+	Description string `form:"description" json:"description" xml:"description"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
 	// Free-form labels for grouping and filtering trusted platforms. Empty rather
@@ -1087,6 +1097,9 @@ type WorkloadAdmissionResponseBody struct {
 	MatchKind string `form:"match_kind" json:"match_kind" xml:"match_kind"`
 	// Optional label; empty when none was supplied.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Free-form labels for finding the admitted workload. Empty rather than absent
+	// where none are set.
+	Tags []string `form:"tags" json:"tags" xml:"tags"`
 	// The agent whose policy this workload inherits. Empty when the assignment is
 	// missing, which the token endpoint refuses.
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
@@ -1996,9 +2009,10 @@ func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput 
 // endpoint payload.
 func NewRegisterIssuerPayload(body *RegisterIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.RegisterIssuerPayload {
 	v := &workloadidentities.RegisterIssuerPayload{
-		Name:    *body.Name,
-		Issuer:  *body.Issuer,
-		JwksURI: *body.JwksURI,
+		Name:        *body.Name,
+		Issuer:      *body.Issuer,
+		JwksURI:     *body.JwksURI,
+		Description: body.Description,
 	}
 	if body.AllowWildcardAdmission != nil {
 		v.AllowWildcardAdmission = *body.AllowWildcardAdmission
@@ -2055,6 +2069,12 @@ func NewAdmitSubjectPayload(body *AdmitSubjectRequestBody, sessionToken *string,
 	if body.MatchKind == nil {
 		v.MatchKind = "exact"
 	}
+	if body.Tags != nil {
+		v.Tags = make([]string, len(body.Tags))
+		for i, val := range body.Tags {
+			v.Tags[i] = val
+		}
+	}
 	if body.ProjectScoped == nil {
 		v.ProjectScoped = false
 	}
@@ -2105,6 +2125,11 @@ func ValidateRegisterIssuerRequestBody(body *RegisterIssuerRequestBody) (err err
 	if body.JwksURI != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_uri", *body.JwksURI, goa.FormatURI))
 	}
+	if body.Description != nil {
+		if utf8.RuneCountInString(*body.Description) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.description", *body.Description, utf8.RuneCountInString(*body.Description), 500, false))
+		}
+	}
 	if len(body.Tags) > 40 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 40, false))
 	}
@@ -2139,6 +2164,14 @@ func ValidateAdmitSubjectRequestBody(body *AdmitSubjectRequestBody) (err error) 
 	if body.Name != nil {
 		if utf8.RuneCountInString(*body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if len(body.Tags) > 40 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 40, false))
+	}
+	for _, e := range body.Tags {
+		if utf8.RuneCountInString(e) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags[*]", e, utf8.RuneCountInString(e), 64, false))
 		}
 	}
 	if body.AgentID != nil {

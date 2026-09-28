@@ -83,6 +83,9 @@ type AdmitSubjectPayload struct {
 	MatchKind string
 	// Optional label, for platforms whose subjects are not self-describing.
 	Name *string
+	// Free-form labels for finding the admitted workload in a long list. Flat
+	// strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+	Tags []string
 	// The agent whose policy the admitted workload inherits.
 	AgentID string
 	// Admit the subject for the selected project alone rather than the whole
@@ -118,6 +121,10 @@ type RegisterIssuerPayload struct {
 	// incident control rather than a setup step, which is why the dashboard does
 	// not ask for it at registration.
 	AllowWildcardAdmission bool
+	// What the platform is and what runs on it, shown in place of the issuer URL
+	// wherever the issuer is listed. Trimmed on write; blank is stored as none. At
+	// most 500 characters.
+	Description *string
 	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
 	// not key/value pairs. Trimmed and de-duplicated on write. At most 40.
 	Tags []string

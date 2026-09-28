@@ -19,6 +19,7 @@ function admission(
     subject: "repo:acme/payments-api:ref:refs/heads/main",
     matchKind: "exact",
     name: "Payments deploy",
+    tags: [],
     agentId: "22222222-2222-2222-2222-222222222222",
     agentName: "Release assistant",
     wildcardActive: false,

@@ -3104,6 +3104,11 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- with nothing to show. The issuer URL is the machine-readable identity.
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
 
+  -- What the platform is and what runs on it, in the operator's words. Optional
+  -- and shown in place of the issuer URL wherever the issuer is listed, since a
+  -- URL alone rarely tells an administrator which platform they are looking at.
+  description TEXT CHECK (CHAR_LENGTH(description) <= 500),
+
   -- Free-form labels for filtering a long list, following the convention the
   -- skills and memories tables already use. Flat strings, not key/value pairs.
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
@@ -3269,6 +3274,10 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   -- admit-from-a-rejected-attempt flow, whose point is that nobody transcribes
   -- a subject by hand.
   name TEXT CHECK (name IS NULL OR name <> ''),
+
+  -- Free-form labels for finding a machine in a long admitted set, following
+  -- the same convention and limits as workload_issuers.tags.
+  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

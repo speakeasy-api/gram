@@ -26,6 +26,7 @@ func BuildWorkloadIssuerView(row repo.WorkloadIssuer) *types.WorkloadIssuer {
 		Name:                   row.Name,
 		Issuer:                 row.Issuer,
 		JwksURI:                row.JwksUri,
+		Description:            conv.FromPGTextOrEmpty[string](row.Description),
 		AllowWildcardAdmission: row.AllowWildcardAdmission,
 		// Empty rather than nil, so a client never has to distinguish "no tags"
 		// from "field absent".
@@ -89,6 +90,7 @@ func BuildWorkloadAdmissionView(row repo.ListWorkloadAdmissionsRow) *types.Workl
 		Subject:          row.Subject,
 		MatchKind:        row.MatchKind,
 		Name:             conv.PtrValOrEmpty(conv.FromPGText[string](row.Name), ""),
+		Tags:             tagsOrEmpty(row.Tags),
 		AgentID:          agentID,
 		AgentName:        conv.PtrValOrEmpty(conv.FromPGText[string](row.AgentName), ""),
 		WildcardActive:   wildcardActive,

@@ -27,6 +27,9 @@ type WorkloadAdmission struct {
 	MatchKind string
 	// Optional label; empty when none was supplied.
 	Name string
+	// Free-form labels for finding the admitted workload. Empty rather than absent
+	// where none are set.
+	Tags []string
 	// The agent whose policy this workload inherits. Empty when the assignment is
 	// missing, which the token endpoint refuses.
 	AgentID string

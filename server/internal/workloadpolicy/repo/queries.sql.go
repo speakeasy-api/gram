@@ -47,9 +47,9 @@ func (q *Queries) CountLiveAdmissionsForSubject(ctx context.Context, arg CountLi
 }
 
 const createWorkloadAdmission = `-- name: CreateWorkloadAdmission :one
-INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, created_at, updated_at, deleted_at, deleted
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateWorkloadAdmissionParams struct {
@@ -59,6 +59,7 @@ type CreateWorkloadAdmissionParams struct {
 	Subject          string
 	MatchKind        string
 	Name             pgtype.Text
+	Tags             []string
 }
 
 func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloadAdmissionParams) (WorkloadIdentityAdmission, error) {
@@ -69,6 +70,7 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 		arg.Subject,
 		arg.MatchKind,
 		arg.Name,
+		arg.Tags,
 	)
 	var i WorkloadIdentityAdmission
 	err := row.Scan(
@@ -79,6 +81,7 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 		&i.Subject,
 		&i.MatchKind,
 		&i.Name,
+		&i.Tags,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -88,15 +91,16 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 }
 
 const createWorkloadIssuer = `-- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateWorkloadIssuerParams struct {
 	OrganizationID         string
 	ProjectID              uuid.NullUUID
 	Name                   string
+	Description            pgtype.Text
 	Tags                   []string
 	Issuer                 string
 	JwksUri                string
@@ -108,6 +112,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.Name,
+		arg.Description,
 		arg.Tags,
 		arg.Issuer,
 		arg.JwksUri,
@@ -119,6 +124,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Description,
 		&i.Tags,
 		&i.Issuer,
 		&i.JwksUri,
@@ -133,7 +139,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 }
 
 const findWorkloadIssuersByIssuer = `-- name: FindWorkloadIssuersByIssuer :many
-SELECT id, organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -171,6 +177,7 @@ func (q *Queries) FindWorkloadIssuersByIssuer(ctx context.Context, arg FindWorkl
 			&i.OrganizationID,
 			&i.ProjectID,
 			&i.Name,
+			&i.Description,
 			&i.Tags,
 			&i.Issuer,
 			&i.JwksUri,
@@ -219,7 +226,7 @@ func (q *Queries) GetOrganizationAgent(ctx context.Context, arg GetOrganizationA
 }
 
 const getWorkloadAdmission = `-- name: GetWorkloadAdmission :one
-SELECT id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, created_at, updated_at, deleted_at, deleted
 FROM workload_identity_admissions
 WHERE organization_id = $1
   AND id = $2
@@ -244,6 +251,7 @@ func (q *Queries) GetWorkloadAdmission(ctx context.Context, arg GetWorkloadAdmis
 		&i.Subject,
 		&i.MatchKind,
 		&i.Name,
+		&i.Tags,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -311,7 +319,7 @@ func (q *Queries) GetWorkloadAgentAssignmentForSubject(ctx context.Context, arg 
 }
 
 const getWorkloadIssuer = `-- name: GetWorkloadIssuer :one
-SELECT id, organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -337,6 +345,7 @@ func (q *Queries) GetWorkloadIssuer(ctx context.Context, arg GetWorkloadIssuerPa
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Description,
 		&i.Tags,
 		&i.Issuer,
 		&i.JwksUri,
@@ -352,7 +361,7 @@ func (q *Queries) GetWorkloadIssuer(ctx context.Context, arg GetWorkloadIssuerPa
 
 const listWorkloadAdmissions = `-- name: ListWorkloadAdmissions :many
 SELECT
-  a.id, a.organization_id, a.project_id, a.workload_issuer_id, a.subject, a.match_kind, a.name, a.created_at, a.updated_at, a.deleted_at, a.deleted,
+  a.id, a.organization_id, a.project_id, a.workload_issuer_id, a.subject, a.match_kind, a.name, a.tags, a.created_at, a.updated_at, a.deleted_at, a.deleted,
   i.issuer AS issuer_url,
   i.name AS issuer_name,
   i.allow_wildcard_admission,
@@ -396,6 +405,7 @@ type ListWorkloadAdmissionsRow struct {
 	Subject                string
 	MatchKind              string
 	Name                   pgtype.Text
+	Tags                   []string
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -428,6 +438,7 @@ func (q *Queries) ListWorkloadAdmissions(ctx context.Context, arg ListWorkloadAd
 			&i.Subject,
 			&i.MatchKind,
 			&i.Name,
+			&i.Tags,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -450,7 +461,7 @@ func (q *Queries) ListWorkloadAdmissions(ctx context.Context, arg ListWorkloadAd
 
 const listWorkloadIssuers = `-- name: ListWorkloadIssuers :many
 
-SELECT id, organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -484,6 +495,7 @@ func (q *Queries) ListWorkloadIssuers(ctx context.Context, arg ListWorkloadIssue
 			&i.OrganizationID,
 			&i.ProjectID,
 			&i.Name,
+			&i.Description,
 			&i.Tags,
 			&i.Issuer,
 			&i.JwksUri,
@@ -545,7 +557,7 @@ WHERE organization_id = $1
   AND id = $2
   AND (project_id IS NULL OR project_id = $3)
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteWorkloadAdmissionParams struct {
@@ -565,6 +577,7 @@ func (q *Queries) SoftDeleteWorkloadAdmission(ctx context.Context, arg SoftDelet
 		&i.Subject,
 		&i.MatchKind,
 		&i.Name,
+		&i.Tags,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -579,7 +592,7 @@ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND workload_issuer_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteWorkloadAdmissionsByIssuerParams struct {
@@ -607,6 +620,7 @@ func (q *Queries) SoftDeleteWorkloadAdmissionsByIssuer(ctx context.Context, arg 
 			&i.Subject,
 			&i.MatchKind,
 			&i.Name,
+			&i.Tags,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -730,7 +744,7 @@ WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
   AND id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteWorkloadIssuerParams struct {
@@ -750,6 +764,7 @@ func (q *Queries) SoftDeleteWorkloadIssuer(ctx context.Context, arg SoftDeleteWo
 		&i.OrganizationID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Description,
 		&i.Tags,
 		&i.Issuer,
 		&i.JwksUri,
