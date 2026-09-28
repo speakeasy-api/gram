@@ -1,5 +1,18 @@
 # server
 
+## 2.13.0
+
+### Minor Changes
+
+- 7f9ba34: Show observed public versus private traffic in an MCP server's or gateway's Network access panel, so admins can check which route clients still use before switching to private only or back to public.
+  
+  Each resolved inbound MCP request to a hosted, remote, tunneled or stored gateway endpoint now writes one `mcp_network_request` telemetry log carrying the server id and network surface. Rows carry no tool URN, so they never count as tool calls. A new `mcp_network_traffic_hourly_summaries` table keeps hourly totals for 90 days, and `telemetry.getMcpNetworkTraffic` returns zero-filled hourly points for a 24h or 7d window plus the last time each route was seen. Counts only cover requests observed while telemetry logs are enabled, and the panel says so.
+
+### Patch Changes
+
+- 1331638: Platform MCP diagnostics now attribute usage to the configured MCP server. `query_mcp_metrics` counts the calls the gateway proxied to a remote, tunneled, or gateway-member server instead of reporting zero beside a nonzero latency, reports active users for those servers, and never claims `no_observations` when any metric in the same result is nonzero. `get_project_overview` folds the names calling apps used for a server (a plugin-routed prefix, a bare slug, a display name, or an id) onto the configured server and returns its `mcp_id`, so `top_servers` line up with the ids the other tools take; names no configured server is known by are reported as the app used them.
+- 3dfd30e: Platform MCP tools advertise output schemas that accept properties they do not name, so an agent that connected before a tool's result gained a field keeps working instead of rejecting every result. Agents can list and inspect MCP servers that sit in plugins again: `find_mcp` and `get_mcp` results that name a plugin no longer fail the client's schema check, and each membership always carries `state` and `publication_state`.
+
 ## 2.12.0
 
 ### Minor Changes
