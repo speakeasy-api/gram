@@ -135,10 +135,9 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 		switch item.Key {
 		case "public_key_auth":
 			require.Len(t, item.Details, 3)
-			require.NotEmpty(t, item.Description)
-			for _, detail := range item.Details {
-				require.NotEmpty(t, detail)
-			}
+			require.Contains(t, item.Details[0], "Public keys")
+			require.Contains(t, item.Details[1], "Use a URL to fetch keys dynamically")
+			require.Contains(t, item.Details[2], "Client Credentials")
 			require.Nil(t, item.Completed, "nothing observed before the first verification")
 		case "assign_admin_roles":
 			require.Contains(t, item.Description, "multi-factor authentication")
