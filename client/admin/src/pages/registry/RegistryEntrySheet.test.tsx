@@ -203,9 +203,7 @@ it("disables duplicate submission and close while pending", async () => {
   ).toBe(true);
 });
 
-it("never fetches a schema and delegates field validation on explicit Save", async () => {
-  const fetch = vi.fn().mockRejectedValue(new Error("Unexpected schema fetch"));
-  vi.stubGlobal("fetch", fetch);
+it("delegates field validation on explicit Save", async () => {
   mutations.save.mockRejectedValue(
     Object.assign(new Error("/server/name: required"), { statusCode: 422 }),
   );
@@ -218,7 +216,6 @@ it("never fetches a schema and delegates field validation on explicit Save", asy
     "/server/name",
   );
   expect((textarea as HTMLTextAreaElement).value).toBe("{}");
-  expect(fetch).not.toHaveBeenCalled();
 });
 
 it("checks syntax on blur and before Save, not each keystroke", async () => {

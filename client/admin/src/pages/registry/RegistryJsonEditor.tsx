@@ -164,7 +164,11 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
           {!this.large && (
             <Button
               variant="outline"
-              disabled={disabled || !this.state.mounted}
+              disabled={
+                disabled ||
+                !this.state.mounted ||
+                value.length > RICH_EDITOR_LIMIT
+              }
               onClick={this.formatDocument}
             >
               Format JSON

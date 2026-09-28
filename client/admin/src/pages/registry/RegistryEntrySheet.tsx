@@ -178,7 +178,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
     } catch (error) {
       setFailure(error);
       if (errorStatus(error) === 422)
-        setServerIssues(serverValidationIssues(errorText(error)));
+        setServerIssues(serverValidationIssues(errorText(error), text));
       if (errorStatus(error) === 409) setConflict(true);
     } finally {
       inFlight.current = false;

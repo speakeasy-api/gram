@@ -26,7 +26,26 @@ export function formatRegistryJson(text: string): string | null {
 
 // registry.go joins sanitized validation messages with "; ". Preserve generic
 // errors and newlines verbatim; an unrecognized path only gets a root marker.
-export function serverValidationIssues(message: string): ValidationIssue[] {
+export function serverValidationIssues(
+  message: string,
+  text?: string,
+): ValidationIssue[] {
+  // The legacy error string does not escape pointer keys. If the actual draft
+  // contains delimiter-bearing keys, do not guess a path or manufacture issues.
+  // Parsing inspects keys only; the original text is never reserialized.
+  let ambiguous = false;
+  if (text !== undefined) {
+    try {
+      JSON.parse(text, (key, value: unknown) => {
+        if (key.includes(": ") || key.includes("; ") || /[\r\n]/.test(key))
+          ambiguous = true;
+        return value;
+      });
+    } catch {
+      ambiguous = true;
+    }
+  }
+  if (ambiguous) return [{ path: "", message }];
   return message.split(/; (?=\/[^\n]*?: |: )/).map((part) => {
     const match = /^(\/[^\n]*?|): ([\s\S]*)$/.exec(part);
     return match

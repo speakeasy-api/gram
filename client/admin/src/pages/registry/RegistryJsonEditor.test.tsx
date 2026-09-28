@@ -154,7 +154,15 @@ it("retains the mounted editor across oversized paste and undo-sized updates", (
   expect(mock.edits).not.toHaveBeenCalled();
   rerender(<RegistryJsonEditor {...props} value={mock.value} />);
   expect(screen.getByTestId("monaco")).toBe(editor);
+  expect(
+    (screen.getByRole("button", { name: "Format JSON" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
   rerender(<RegistryJsonEditor {...props} value="{}" />);
+  expect(
+    (screen.getByRole("button", { name: "Format JSON" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(false);
   expect(screen.getByTestId("monaco")).toBe(editor);
   expect(mock.paste).toBe(paste);
   expect(mock.dispose).not.toHaveBeenCalled();

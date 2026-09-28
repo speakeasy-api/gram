@@ -67,3 +67,18 @@ it("maps duplicate properties to the final server-validated value at every depth
     '"last"',
   );
 });
+
+it.each(["a; /server/name: injected", "a: injected", "a\nkey"])(
+  "keeps ambiguous server paths as intact root feedback for key %s",
+  (key) => {
+    const raw = JSON.stringify({ server: { variables: { [key]: 42 } } });
+    const path =
+      "/server/variables/" + key.replaceAll("~", "~0").replaceAll("/", "~1");
+    const message = path + ": expected object; /server/name: required";
+    const issues = serverValidationIssues(message, raw);
+    expect(issues).toEqual([{ path: "", message }]);
+    const [marker] = registryIssueOffsets(raw, issues);
+    expect(marker?.offset).toBe(0);
+    expect(marker?.length).toBe(raw.length);
+  },
+);
