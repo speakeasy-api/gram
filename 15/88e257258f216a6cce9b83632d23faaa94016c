@@ -19,6 +19,8 @@ server/internal/platformmcp/tool_network_ingress_test.go
   h_9630b74bdac540 1-173
 server/internal/platformmcp/repo/queries.sql.go
   h_9630b74bdac540 1938-1995,2776-2799
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 350,376
 ---
 {
   "schema_version": "authorship/3.0.0",
