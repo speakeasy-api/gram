@@ -56,6 +56,8 @@ This produces migrations in **two flavors** that must always stay in sync:
 
 `mise run clickhouse:diff` generates both flavors together. When adjusting a newly generated, unpublished migration (for example, adding grants Atlas ignores), make the equivalent change in **both** directories, then run `mise run clickhouse:hash` to regenerate `atlas.sum`. Hashing updates checksums, not database or revision state. Apply pending migrations locally with `mise run clickhouse:migrate`.
 
+**Every column needs a data classification.** End each column `COMMENT` with a line `@access: <class>` (for example `COMMENT 'Raw log body.\n@access: opaque-restricted'`). Classes are `confidential` (internal IDs, timestamps, Gram-controlled enums, counts, short labels), `confidential-pii` (emails, personal names, IPs, person IDs in external IdPs), `secret-restricted` (credentials, tokens and their hashes, encrypted auth material), `restricted` (billing-system IDs, customer-configured endpoints, other known-sensitive or uncertain data) or `opaque-restricted` (arbitrary customer, user or model content: messages, prompts, tool payloads, customer JSON, free-form descriptions). A `Nested(...)` column shares one comment across its subcolumns, so use the strictest class among them. `mise run lint:column-classification` (and CI) fails on unclassified columns; see `server/internal/dataclassification`.
+
 **No semicolons in `COMMENT '...'` strings.** golang-migrate splits statements naively, so a semicolon inside a column/table comment breaks its parser and the local migrations fail to replay. Rephrase the comment instead.
 
 Three CI checks guard this on every PR:

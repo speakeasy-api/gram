@@ -69,6 +69,17 @@ Reference these guidelines when:
 
 When creating any tables, add a non-nullable column named `project_id` of type `uuid` with a foreign key constraint to the `projects` table. If appropriate to the nature and usage patterns of the table also include `organization_id TEXT NOT NULL` column.
 
+### Data classification
+
+Every column must document what it holds with a comment whose last non-empty line is `@access: <class>`, where the class is one of `confidential` (internal IDs, timestamps, Gram-controlled enums, counts, short labels), `confidential-pii` (emails, personal names, IPs, person IDs in external IdPs), `secret-restricted` (credentials, tokens and their hashes, encrypted auth material), `restricted` (billing-system IDs, customer-configured endpoints, other known-sensitive or uncertain data) or `opaque-restricted` (arbitrary customer, user or model content: messages, prompts, tool payloads, customer JSON, free-form descriptions). The names follow the policy levels (confidential, restricted); `-pii`, `secret-` and `opaque-` narrow them. Descriptive prose may precede the marker:
+
+```sql
+COMMENT ON COLUMN chat_messages.content IS 'Raw message text.
+@access: opaque-restricted';
+```
+
+Classify by reading the code that writes the column, because column names are often misleading, and choose the stricter class when unsure. The class records what the data is; consumers such as read-only SQL agents decide which classes they read. `mise run lint:column-classification` (and CI) fails when a column lacks a valid marker. Classes and parsing live in `server/internal/dataclassification`.
+
 ### Change tracking
 
 All tables should have `created_at` and `updated_at` columns:
