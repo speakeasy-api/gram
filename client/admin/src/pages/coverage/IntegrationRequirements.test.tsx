@@ -2,22 +2,18 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { CatalogContext } from "./catalogContext";
 import { IntegrationRequirements } from "./IntegrationRequirements";
-import type { Catalog, Draft } from "./model";
+import type { Catalog } from "./model";
 
 afterEach(cleanup);
 
 it("shows required integrations and named gaps together", () => {
   const catalog: Catalog = {
-    methods: [
-      {
-        id: "device",
-        name: "Device Agent",
-        vendor: "Cross-platform",
-        plans: "",
-        facts: {},
-      },
+    capabilities: [
+      { id: "session", name: "Session tracking", group: "Observability" },
+      { id: "tokens", name: "Token tracking", group: "Observability" },
+      { id: "cost", name: "Cost tracking", group: "Observability" },
     ],
-    products: [
+    platforms: [
       {
         id: "cli",
         name: "Claude Code CLI",
@@ -26,26 +22,36 @@ it("shows required integrations and named gaps together", () => {
         surface: "CLI",
       },
     ],
-    capabilities: [
-      { id: "session", name: "Session tracking", group: "Observability" },
-      { id: "tokens", name: "Token tracking", group: "Observability" },
-      { id: "cost", name: "Cost tracking", group: "Observability" },
-    ],
-  };
-  const draft: Draft = {
-    references: {},
-    mappings: {
-      "device/cli": {
-        applicability: "applicable",
-        conditions: "",
-        facts: { session: { status: "supported", note: "", verify: false } },
+    methods: [
+      {
+        id: "device",
+        name: "Device Agent",
+        vendor: "Cross-platform",
+        plans: "",
+        claims: {},
+        platforms: [
+          {
+            platform: "cli",
+            applicability: "applicable",
+            accounts: {
+              personal: "supported",
+              team: "supported",
+              enterprise: "supported",
+            },
+            note: "",
+            cells: {
+              session: { status: "supported", note: "", verify: false },
+              tokens: { status: "unknown", note: "", verify: false },
+              cost: { status: "unknown", note: "", verify: false },
+            },
+          },
+        ],
       },
-    },
+    ],
   };
   render(
     <CatalogContext.Provider value={catalog}>
       <IntegrationRequirements
-        draft={draft}
         platformIds={["cli"]}
         capabilityIds={["session", "tokens"]}
         methodIds={["device"]}

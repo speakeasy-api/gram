@@ -1,68 +1,85 @@
-import { accountFact, type AccountFilter } from "./accounts";
+import { accountFact, methodAccountFact, type AccountFilter } from "./accounts";
 import {
-  emptyMapping,
-  getFact,
-  mappingKey,
-  methodReference,
+  cellFact,
+  claimFact,
+  platformSupport,
   summarize,
   unknown,
-  type Draft,
+  type Capability,
   type Catalog,
   type Fact,
-  type Mapping,
   type Method,
-  type Product,
-  type Capability,
+  type Platform,
+  type PlatformSupport,
 } from "./model";
 
 export type MethodContribution = { method: Method; fact: Fact };
 
+export type MatrixCell = {
+  method?: Method;
+  platform?: Platform;
+  capability?: Capability;
+  /** The method's entry for the platform, when both are named. */
+  support?: PlatformSupport;
+  fact: Fact;
+  contributions: MethodContribution[];
+};
+
+/** Resolve one cell of the explorer. Naming a method and a platform without a
+ * capability yields their applicability; naming a platform and a capability
+ * without a method summarises every method's cell. */
 export function resolveMatrixCell(
-  draft: Draft,
   catalog: Catalog,
   ids: { methods?: string; platforms?: string; capabilities?: string },
   account: AccountFilter = "all",
-): {
-  method?: Method;
-  product?: Product;
-  capability?: Capability;
-  mapping: Mapping;
-  fact: Fact;
-  contributions: MethodContribution[];
-} {
-  const { methods, products, capabilities } = catalog;
+): MatrixCell {
+  const { methods, platforms, capabilities } = catalog;
   const method = methods.find((item) => item.id === ids.methods);
-  const product = products.find((item) => item.id === ids.platforms);
+  const platform = platforms.find((item) => item.id === ids.platforms);
   const capability = capabilities.find((item) => item.id === ids.capabilities);
-  const mapping =
-    method && product
-      ? (draft.mappings[mappingKey(method.id, product.id)] ?? emptyMapping)
-      : emptyMapping;
+  const support =
+    method && platform ? platformSupport(method, platform.id) : undefined;
   const candidates = method ? [method] : methods;
   const contributions: MethodContribution[] = [];
-  if (capability && (method || product)) {
+  if (capability && (method || platform)) {
     for (const candidate of candidates) {
-      const candidateMapping = product
-        ? (draft.mappings[mappingKey(candidate.id, product.id)] ?? emptyMapping)
-        : emptyMapping;
-      const reference = methodReference(draft, candidate, capability.id);
-      const claim = product
-        ? getFact(candidateMapping, capability.id, reference)
-        : reference;
-      contributions.push({
-        method: candidate,
-        fact: accountFact(
-          candidate,
-          claim,
-          account,
-          candidateMapping.conditions,
-        ),
-      });
+      if (platform) {
+        const candidateSupport = platformSupport(candidate, platform.id);
+        contributions.push({
+          method: candidate,
+          fact: accountFact(
+            candidateSupport,
+            cellFact(candidateSupport, capability.id),
+            account,
+          ),
+        });
+      } else {
+        contributions.push({
+          method: candidate,
+          fact: methodAccountFact(
+            candidate,
+            claimFact(candidate, capability.id),
+            account,
+          ),
+        });
+      }
     }
   }
   let fact = unknown;
   if (method) fact = contributions[0]?.fact ?? unknown;
-  else if (product && capability)
+  else if (platform && capability)
     fact = summarize(contributions.map((entry) => entry.fact));
-  return { method, product, capability, mapping, fact, contributions };
+  return { method, platform, capability, support, fact, contributions };
+}
+
+const osNames = { mac: "Mac", windows: "Windows", linux: "Linux" } as const;
+
+/** What is known per operating system, or nothing when nothing is. */
+export function osSummary(cell: MatrixCell): string {
+  const os = cell.support?.os;
+  if (!os) return "";
+  return (Object.keys(osNames) as (keyof typeof osNames)[])
+    .filter((name) => os[name])
+    .map((name) => `${osNames[name]}${os[name] === "verify" ? "*" : ""}`)
+    .join(" · ");
 }

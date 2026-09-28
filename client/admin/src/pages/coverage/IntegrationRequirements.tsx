@@ -2,39 +2,35 @@ import { type AccountFilter } from "./accounts";
 import { useCatalog } from "./catalogContext";
 import { useMemo, type JSX } from "react";
 import { ChevronRight } from "lucide-react";
-import { type Draft } from "./model";
 import { integrationRequirements } from "./requirements";
 
 export function IntegrationRequirements({
-  draft,
   platformIds,
   capabilityIds,
   methodIds,
   scoped,
   account = "all",
 }: {
-  draft: Draft;
   platformIds: string[];
   capabilityIds: string[];
   methodIds: string[];
   scoped: boolean;
   account?: AccountFilter;
 }): JSX.Element {
-  const { methods, products, capabilities } = useCatalog();
+  const { methods, platforms, capabilities } = useCatalog();
   const result = useMemo(
     () =>
       integrationRequirements(
-        draft,
         platformIds.flatMap((platformId) =>
           capabilityIds.map((capabilityId) => ({ platformId, capabilityId })),
         ),
         methods.filter((method) => methodIds.includes(method.id)),
         account,
       ),
-    [draft, platformIds, capabilityIds, methodIds, methods, account],
+    [platformIds, capabilityIds, methodIds, methods, account],
   );
   const allSelected =
-    products.every((product) => platformIds.includes(product.id)) &&
+    platforms.every((platform) => platformIds.includes(platform.id)) &&
     capabilities.every((capability) => capabilityIds.includes(capability.id)) &&
     methods.every((method) => methodIds.includes(method.id));
   const count = platformIds.length * capabilityIds.length;
@@ -136,8 +132,9 @@ export function IntegrationRequirements({
               {result.gaps.map((target) => (
                 <li key={`${target.platformId}/${target.capabilityId}`}>
                   {
-                    products.find((product) => product.id === target.platformId)
-                      ?.name
+                    platforms.find(
+                      (platform) => platform.id === target.platformId,
+                    )?.name
                   }{" "}
                   ·{" "}
                   {

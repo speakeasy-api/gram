@@ -1,12 +1,10 @@
 package organizations
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/supportmatrix"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,16 +112,10 @@ func TestSetupTaskCatalogDependenciesHaveNoCycles(t *testing.T) {
 func TestSetupTaskCatalogMethodsExistInTheSupportMatrix(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile(filepath.Join("..", "admin", "supportmatrix", "catalog.json"))
+	matrix, err := supportmatrix.Current()
 	require.NoError(t, err)
-	var catalog struct {
-		Methods []struct {
-			ID string `json:"id"`
-		} `json:"methods"`
-	}
-	require.NoError(t, json.Unmarshal(raw, &catalog))
-	known := make(map[string]bool, len(catalog.Methods))
-	for _, method := range catalog.Methods {
+	known := make(map[string]bool, len(matrix.Methods))
+	for _, method := range matrix.Methods {
 		known[method.ID] = true
 	}
 	for _, card := range setupTaskCatalog {

@@ -1,275 +1,89 @@
 import { describe, expect, it } from "vitest";
-import seed from "../../../../../server/internal/admin/supportmatrix/catalog.json";
+import { accountFact, methodAccountFact, methodEligibility } from "./accounts";
 import {
-  accountFact,
-  accountTypes,
-  accountEligibility,
-  updateAccountEligibility,
-  withoutAccountConditions,
-  updateAccountNotes,
-} from "./accounts";
-import { catalogSchema, emptyMapping, type Draft, type Fact } from "./model";
-import { resolveMatrixCell } from "./matrixCell";
-import { integrationRequirements } from "./requirements";
-import { importCsvHeader, parseMatrixImport } from "./importCsv";
+  notApplicable,
+  type Eligibility,
+  type Fact,
+  type Method,
+  type PlatformSupport,
+} from "./model";
 
-const catalog = catalogSchema.parse(seed);
-const supported: Fact = { status: "supported", note: "", verify: false };
-const draft: Draft = {
-  references: {},
-  mappings: {
-    "device/claude-code-cli": { ...emptyMapping, applicability: "applicable" },
-  },
+const supported: Fact = {
+  status: "supported",
+  note: "via hooks",
+  verify: false,
 };
+const support = (
+  personal: Eligibility,
+  team: Eligibility = "supported",
+  enterprise: Eligibility = "supported",
+): PlatformSupport => ({
+  platform: "cli",
+  applicability: "applicable",
+  accounts: { personal, team, enterprise },
+  note: "",
+  cells: { session: supported },
+});
 
-describe("account coverage", () => {
-  it.each(accountTypes)(
-    "inherits Device Agent session coverage for %s accounts",
-    (account) => {
-      expect(
-        resolveMatrixCell(
-          draft,
-          catalog,
-          {
-            platforms: "claude-code-cli",
-            capabilities: "session",
-          },
-          account,
-        ).fact.status,
-      ).toBe("supported");
-    },
-  );
-
-  it("excludes enterprise-only methods from personal and team coverage", () => {
-    const method = catalog.methods.find(
-      (method) => method.id === "openai-api",
-    )!;
-    expect(accountFact(method, supported, "personal").status).toBe(
-      "impossible",
+describe("accountFact", () => {
+  it("leaves the cell alone for every account type and for eligible ones", () => {
+    expect(accountFact(support("unsupported"), supported, "all")).toEqual(
+      supported,
     );
-    expect(accountFact(method, supported, "team").status).toBe("impossible");
-    expect(accountFact(method, supported, "enterprise").status).toBe(
-      "supported",
+    expect(accountFact(support("unsupported"), supported, "team")).toEqual(
+      supported,
     );
   });
-
-  it("includes enterprise in team eligibility without interpreting personal exclusions as support", () => {
-    const method = catalog.methods.find((method) => method.id === "settings")!;
-    expect(accountFact(method, supported, "personal").status).toBe(
-      "impossible",
+  it("makes the capability impossible for an ineligible account type", () => {
+    const fact = accountFact(support("unsupported"), supported, "personal");
+    expect(fact.status).toBe("impossible");
+    expect(fact.note).toBe(
+      "Personal accounts are not eligible for this method",
     );
-    expect(accountFact(method, supported, "team").status).toBe("supported");
-    expect(accountFact(method, supported, "enterprise").status).toBe(
-      "supported",
-    );
-    expect(
-      accountFact(method, { ...supported, status: "partial" }, "team").status,
-    ).toBe("partial");
   });
+  it("leaves unknown eligibility unknown and to be verified", () => {
+    const fact = accountFact(support("unknown"), supported, "personal");
+    expect(fact.status).toBe("unknown");
+    expect(fact.verify).toBe(true);
+    expect(accountFact(undefined, supported, "team").status).toBe("unknown");
+  });
+  it("never turns not applicable into anything else", () => {
+    expect(
+      accountFact(support("unsupported"), notApplicable, "personal"),
+    ).toEqual(notApplicable);
+  });
+});
 
-  it.each(["hooks", "litellm"])(
-    "keeps unassessed %s plan eligibility unknown",
-    (id) => {
-      const method = catalog.methods.find((method) => method.id === id)!;
-      for (const account of accountTypes)
-        expect(accountFact(method, supported, account).status).toBe("unknown");
-    },
-  );
-
-  it("does not recommend an ineligible integration", () => {
-    const method = catalog.methods.find(
-      (method) => method.id === "openai-api",
-    )!;
-    const restricted: Draft = {
-      references: { [method.id]: { session: supported } },
-      mappings: {
-        [`${method.id}/example`]: {
-          ...emptyMapping,
-          applicability: "applicable",
-        },
-      },
-    };
-    const targets = [{ platformId: "example", capabilityId: "session" }];
+describe("methodEligibility", () => {
+  const method = (...accounts: Eligibility[]): Method => ({
+    id: "hooks",
+    name: "Hooks",
+    vendor: "Vendor",
+    plans: "",
+    claims: { session: supported },
+    platforms: accounts.map((personal, index) => ({
+      ...support(personal),
+      platform: `p${index}`,
+    })),
+  });
+  it("is eligible where any platform is, unknown where none is but some might be", () => {
     expect(
-      integrationRequirements(restricted, targets, [method], "personal")
-        .combinations,
-    ).toEqual([]);
+      methodEligibility(method("unsupported", "supported"), "personal"),
+    ).toBe("supported");
     expect(
-      integrationRequirements(restricted, targets, [method], "enterprise")
-        .combinations,
-    ).toEqual([[method.id]]);
+      methodEligibility(method("unsupported", "unknown"), "personal"),
+    ).toBe("unknown");
     expect(
-      resolveMatrixCell(
-        restricted,
-        {
-          ...catalog,
-          methods: [method],
-          products: [
-            {
-              id: "example",
-              name: "Example",
-              vendor: "Example",
-              family: "Example",
-              surface: "App",
-            },
-          ],
-        },
-        { platforms: "example", capabilities: "session" },
-        "personal",
-      ).fact.status,
+      methodEligibility(method("unsupported", "unsupported"), "personal"),
+    ).toBe("unsupported");
+    expect(methodEligibility(method(), "personal")).toBe("unsupported");
+  });
+  it("narrows a method's claim the same way", () => {
+    expect(
+      methodAccountFact(method("unsupported"), supported, "personal").status,
     ).toBe("impossible");
-  });
-});
-
-describe("imported plan eligibility", () => {
-  it.each([
-    [
-      "Team plans: ✅; Personal accounts: ✅",
-      "supported",
-      "supported",
-      "supported",
-    ],
-    [
-      "Team plans: ✅; Personal accounts: ☠️",
-      "impossible",
-      "supported",
-      "supported",
-    ],
-    [
-      "Team plans: Enterprise only; Personal accounts: ☠️",
-      "impossible",
-      "impossible",
-      "supported",
-    ],
-    ["Team plans: --; Personal accounts: --", "unknown", "unknown", "unknown"],
-    ["Team plans: MDM; Personal accounts: --", "unknown", "unknown", "unknown"],
-  ])("reads %s", (plans, personal, team, enterprise) => {
-    const method = { ...catalog.methods[0]!, plans };
-    expect(
-      accountTypes.map(
-        (account) => accountFact(method, supported, account).status,
-      ),
-    ).toEqual([personal, team, enterprise]);
-  });
-});
-
-describe("CSV account coverage", () => {
-  it.each([
-    [
-      "Personal accounts: supported; Team plans: supported; Enterprise plans: supported",
-      ["supported", "supported", "supported"],
-    ],
-    [
-      "Personal accounts: unsupported; Team plans: unsupported; Enterprise plans: supported",
-      ["impossible", "impossible", "supported"],
-    ],
-    [
-      "Personal accounts: unknown; Team plans: supported; Enterprise plans: unsupported",
-      ["unknown", "supported", "impossible"],
-    ],
-    [
-      "Team plans: Enterprise only; Personal accounts: ☠️",
-      ["impossible", "impossible", "supported"],
-    ],
-    [
-      "Personal accounts: supported\nTeam plans: supported\nEnterprise plans: supported",
-      ["supported", "supported", "supported"],
-    ],
-  ])("uses imported eligibility: %s", (conditions, expected) => {
-    const imported = parseMatrixImport(
-      [
-        importCsvHeader,
-        `mapping,device,claude-code-cli,,,,,applicable,"${conditions}"`,
-      ].join("\n"),
-      catalog,
-      { mappings: {}, references: {} },
-    ).draft;
-    const scopedCatalog = { ...catalog, methods: [catalog.methods[0]!] };
-    const statuses = accountTypes.map(
-      (account) =>
-        resolveMatrixCell(
-          imported,
-          scopedCatalog,
-          { platforms: "claude-code-cli", capabilities: "session" },
-          account,
-        ).fact.status,
+    expect(methodAccountFact(method("unsupported"), supported, "all")).toEqual(
+      supported,
     );
-    expect(statuses).toEqual(expected);
-    for (const [index, account] of accountTypes.entries()) {
-      const requirements = integrationRequirements(
-        imported,
-        [{ platformId: "claude-code-cli", capabilityId: "session" }],
-        scopedCatalog.methods,
-        account,
-      );
-      expect(requirements.combinations).toEqual(
-        expected[index] === "supported" ? [["device"]] : [],
-      );
-    }
-  });
-});
-
-describe("editing account eligibility", () => {
-  const method = catalog.methods[0]!;
-  it("changes one account without changing the other accounts or platform restrictions", () => {
-    const original = "OS: macOS; Team plans: ✅; Personal accounts: ✅; VERIFY";
-    const conditions = updateAccountEligibility(
-      method,
-      original,
-      "team",
-      "unsupported",
-    );
-    expect(
-      accountTypes.map((type) => accountEligibility(method, conditions, type)),
-    ).toEqual(["supported", "unsupported", "supported"]);
-    expect(withoutAccountConditions(conditions)).toBe("OS: macOS; VERIFY");
-    const changed: Draft = {
-      ...draft,
-      mappings: {
-        "device/claude-code-cli": {
-          ...draft.mappings["device/claude-code-cli"]!,
-          conditions,
-        },
-      },
-    };
-    const cell = resolveMatrixCell(
-      changed,
-      { ...catalog, methods: [method] },
-      { platforms: "claude-code-cli", capabilities: "session" },
-      "team",
-    );
-    expect(cell.fact.status).toBe("impossible");
-    expect(cell.contributions[0]?.fact.status).toBe("impossible");
-  });
-  it("retains explicit unknown and avoids duplicate labels after repeated edits", () => {
-    const first = updateAccountEligibility(
-      method,
-      "OS: Linux",
-      "personal",
-      "unknown",
-    );
-    const second = updateAccountEligibility(
-      method,
-      first,
-      "enterprise",
-      "unsupported",
-    );
-    expect(
-      accountTypes.map((type) => accountEligibility(method, second, type)),
-    ).toEqual(["unknown", "supported", "unsupported"]);
-    expect(second.match(/Personal accounts:/g)).toHaveLength(1);
-  });
-  it("preserves account settings when multiline notes change", () => {
-    const conditions = updateAccountEligibility(
-      method,
-      "old notes",
-      "personal",
-      "unsupported",
-    );
-    const edited = updateAccountNotes(conditions, "macOS only\nRequires setup");
-    expect(withoutAccountConditions(edited)).toBe("macOS only\nRequires setup");
-    expect(
-      accountTypes.map((type) => accountEligibility(method, edited, type)),
-    ).toEqual(["unsupported", "supported", "supported"]);
   });
 });

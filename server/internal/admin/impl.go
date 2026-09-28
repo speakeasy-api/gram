@@ -448,7 +448,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SaveRegistryEntry = service.strictAdminJSONLimit(server.SaveRegistryEntry, func() any { return new(adminserver.SaveRegistryEntryRequestBody) }, 16<<20)
 	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
 	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
-	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
 	adminserver.Mount(mux, server)
 
 }
