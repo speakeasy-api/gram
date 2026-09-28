@@ -1,0 +1,35 @@
+server/database/sqlc.yaml
+  h_9630b74bdac540 892-900
+  h_9630b74bdac540 891
+server/internal/adminmcp/proposal_store_test.go
+  h_9630b74bdac540 18,92-94,109,113,297
+server/internal/adminmcp/proposal_approval_test.go
+  h_9630b74bdac540 15,137,145,161-162
+server/internal/adminmcp/oauth_authorize.go
+  h_9630b74bdac540 210-216,218,238-249,252-270
+  h_9630b74bdac540 250-251
+server/internal/adminmcp/queries.sql
+  h_9630b74bdac540 1-171
+server/internal/adminmcp/proposal_approval.go
+  h_9630b74bdac540 18,98-103,110-111
+server/internal/adminmcp/proposal_store.go
+  h_9630b74bdac540 14,21,24,26,64,187-218,222-223,226-227,309,344-351,361-362,369,371-375,423,425,428,438-443,449-467,470,480,482-483,492-498,503,505,511-512,516,518,528-529,534,536,540,546-547,551-554,580-581,586-587,598,613-614,641,662,664,666,672,682-683,696,698,700,706,716-717,727,769-770,781,817,841,845,851
+  h_9630b74bdac540 219-221
+server/internal/adminmcp/repo/db.go
+  h_9630b74bdac540 1-32
+server/internal/adminmcp/repo/models.go
+  h_9630b74bdac540 1-42
+server/internal/adminmcp/repo/queries.sql.go
+  h_9630b74bdac540 1-668
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ebb167c5d24ffb39d14098b6ab08e22f5ebfebe",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
