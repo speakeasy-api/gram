@@ -97773,6 +97773,13 @@ components:
         name:
           type: string
           description: The name of the toolset
+        network_access_mode:
+          type: string
+          description: The network surfaces through which a Gram-hosted MCP server may be reached.
+          enum:
+            - public_only
+            - dual
+            - private_only
         oauth_enablement_metadata:
           $ref: '#/components/schemas/OAuthEnablementMetadata'
         organization_id:
@@ -100190,6 +100197,13 @@ components:
         name:
           type: string
           description: The new name of the toolset
+        network_access_mode:
+          type: string
+          description: 'Where the hosted MCP is accessible: public_only, dual, or private_only'
+          enum:
+            - public_only
+            - dual
+            - private_only
         prompt_template_names:
           type: array
           items:

@@ -192,6 +192,11 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, ts.McpEnabled)
+	_, err = mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
+		ID: ts.ID, ProjectID: projectID, Name: pgtype.Text{String: ts.Name, Valid: true},
+		Slug: ts.McpSlug, ToolsetID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Visibility: "disabled",
+	})
+	require.NoError(t, err)
 
 	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 		SessionToken:     nil,
@@ -214,6 +219,9 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, reloaded.McpEnabled, "attaching toolset to assistant must enable MCP")
+	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, "private", server.Visibility, "assistant attachment must also enable the hosted wrapper")
 }
 
 func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {

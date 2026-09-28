@@ -70,6 +70,9 @@ func UpdateMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx pgx.T
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("lock MCP server: %w", err)
 	}
+	if existing.ToolsetID.Valid && existing.ToolsetID.UUID == existing.ID {
+		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "hosted MCP network access is managed through the toolset")
+	}
 	if existing.UnproxiedMcpServerID.Valid && !mode.IsPublicOnly() {
 		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
 	}

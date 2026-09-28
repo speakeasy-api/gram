@@ -291,6 +291,9 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
+		if mcpServer.ID == mcpServer.ToolsetID.UUID && !toolset.McpEnabled {
+			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+		}
 		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
