@@ -1,9 +1,7 @@
 # Prompt injection confirmation
 
-`risk-prompt-injection-cascade` selects Jev prefiltering followed by Opus
-confirmation. It is evaluated locally by organization/project group keys. Create
-the PostHog flag disabled before merging; missing flags, lookup failures, and
-disabled flags preserve the existing Gemini judge.
+Prompt-injection scanning uses Jev prefiltering followed by Opus confirmation.
+The cascade runs for every scan; there is no rollout flag or Gemini fallback.
 
 Jev returns three Noul probabilities for operational instruction overrides,
 guarded-secret extraction, and unauthorized external exfiltration. Any probability
@@ -49,8 +47,8 @@ results must be reported separately.
 
 `-sources cascade_context -check-floors=false` runs four synthetic conversation
 smoke cases. These check transport and composition, not representative accuracy.
-Evaluate the complete labeled corpus and real conversation examples before
-enabling the flag for any rollout.
+Evaluate the complete labeled corpus and real conversation examples to measure
+precision, recall, and provider failures.
 
 ## Research and rollout evidence
 
@@ -68,7 +66,7 @@ fallback. This implementation returns unavailable on Jev errors. The research
 motivates further evaluation; it does not establish rollout readiness for this
 implementation's revised Jev instructions, confirmation window, or timeout.
 
-Before enabling the flag, rerun the original 1,190-case benchmark, compare models
+To validate the migration, rerun the original 1,190-case benchmark, compare models
 with equivalent evidence, and report errors separately alongside precision,
 overall recall, and in-scope regression recall. Keep additional window fixtures
 as a separate slice, distinguish prior-only live evidence from historical

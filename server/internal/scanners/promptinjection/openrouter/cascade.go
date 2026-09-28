@@ -37,27 +37,22 @@ const ConfirmationTimeout = 45 * time.Second
 // Cascade filters candidate injections with Jev, then lets Opus decide whether
 // the target is an injection in its conversation context.
 type Cascade struct {
-	baseline   *Engine
 	opus       *Engine
 	jev        typesafe.Evaluator
-	enabled    func(context.Context, string, string) bool
 	loadWindow func(context.Context, string, string, judgemessage.Message) (judgemessage.Window, error)
 }
 
-func NewCascade(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter, jev typesafe.Evaluator, enabled func(context.Context, string, string) bool, loadWindow func(context.Context, string, string, judgemessage.Message) (judgemessage.Window, error)) *Cascade {
+func NewCascade(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter, jev typesafe.Evaluator, loadWindow func(context.Context, string, string, judgemessage.Message) (judgemessage.Window, error)) *Cascade {
 	opus := New(logger, tracerProvider, meterProvider, client, limiter)
 	opus.model = ConfirmationModel
 	opus.systemPrompt = SystemPrompt + "\n" + WindowInstructions
 	opus.timeout = ConfirmationTimeout
-	return &Cascade{baseline: New(logger, tracerProvider, meterProvider, client, limiter), opus: opus, jev: jev, enabled: enabled, loadWindow: loadWindow}
+	return &Cascade{opus: opus, jev: jev, loadWindow: loadWindow}
 }
 
 func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]promptinjection.Result, error) {
 	if len(req.Messages) == 0 {
 		return nil, nil
-	}
-	if !c.enabled(ctx, req.OrgID, req.ProjectID) {
-		return c.baseline.Classify(ctx, req)
 	}
 	results := make([]promptinjection.Result, len(req.Messages))
 	sem := make(chan struct{}, concurrency)

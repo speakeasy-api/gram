@@ -39,7 +39,7 @@ func testCascade(t *testing.T, probability float64, response string) (*Cascade, 
 	}
 	jev.On("Evaluate", mock.Anything, "org-a", mock.Anything, mock.Anything).Return(typesafe.Result{Probabilities: probabilities, Model: typesafe.Model, InputTokens: 10, OutputTokens: 1, CostUSD: 0.001}, nil)
 	client := &fakeCompletionClient{responder: func(string) string { return response }}
-	cascade := NewCascade(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t), jev, func(context.Context, string, string) bool { return true }, judgemessage.NewWindowLoader(nil).Load)
+	cascade := NewCascade(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client, testJudgeLimiter(t), jev, judgemessage.NewWindowLoader(nil).Load)
 	return cascade, client
 }
 
@@ -119,18 +119,6 @@ func TestCascadeContextFailureDoesNotConfirm(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
 	require.Zero(t, client.calls.Load())
-}
-
-func TestCascadeDisabledUsesBaseline(t *testing.T) {
-	t.Parallel()
-	cascade, client := testCascade(t, 0.1, injectionVerdictJSON("baseline verdict"))
-	cascade.jev = typesafe.Unavailable{}
-	cascade.enabled = func(context.Context, string, string) bool { return false }
-	results, err := cascade.Classify(t.Context(), req("candidate"))
-	require.NoError(t, err)
-	require.Equal(t, promptinjection.LabelInjection, results[0].Label)
-	require.Equal(t, Model, results[0].Model)
-	require.EqualValues(t, 1, client.calls.Load())
 }
 
 func TestCascadeRejectsIncompleteProbabilities(t *testing.T) {

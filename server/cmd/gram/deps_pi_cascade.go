@@ -4,12 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
-	"github.com/google/uuid"
-	"github.com/hashicorp/golang-lru/v2/expirable"
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -21,7 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func newPICascade(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, policy *guardian.Policy, provisioner openrouter.Provisioner, flags feature.Provider, db repo.DBTX, limiter *ratelimit.Limiter) *piopenrouter.Cascade {
+func newPICascade(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client openrouter.CompletionClient, policy *guardian.Policy, provisioner openrouter.Provisioner, db repo.DBTX, limiter *ratelimit.Limiter) *piopenrouter.Cascade {
 	jev := typesafe.New(policy.PooledClient(), func(ctx context.Context, orgID string) (string, error) {
 		key, err := provisioner.ProvisionAPIKey(ctx, orgID, openrouter.KeyTypeInternal)
 		if err != nil {
@@ -29,27 +24,5 @@ func newPICascade(logger *slog.Logger, tracerProvider trace.TracerProvider, mete
 		}
 		return key, nil
 	})
-	groupsCache := expirable.NewLRU[uuid.UUID, repo.GetProjectFlagGroupsRow](1024, nil, 10*time.Minute)
-	enabled := func(ctx context.Context, orgID, projectID string) bool {
-		id, err := uuid.Parse(projectID)
-		if err != nil {
-			return false
-		}
-		groups, cached := groupsCache.Get(id)
-		if !cached {
-			groups, err = repo.New(db).GetProjectFlagGroups(ctx, id)
-			if err != nil {
-				logger.WarnContext(ctx, "resolve PI cascade rollout groups", attr.SlogError(err))
-				return false
-			}
-			groupsCache.Add(id, groups)
-		}
-		on, err := flags.IsFlagEnabledLocal(ctx, feature.FlagRiskPromptInjectionCascade, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug), nil)
-		if err != nil {
-			logger.WarnContext(ctx, "evaluate PI cascade rollout", attr.SlogError(err))
-			return false
-		}
-		return on
-	}
-	return piopenrouter.NewCascade(logger, tracerProvider, meterProvider, client, limiter, jev, enabled, judgemessage.NewWindowLoader(db).Load)
+	return piopenrouter.NewCascade(logger, tracerProvider, meterProvider, client, limiter, jev, judgemessage.NewWindowLoader(db).Load)
 }

@@ -65,7 +65,7 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 				window.Messages[window.TargetIndex] = judgemessage.RenderPayload(target)
 				return window, nil
 			}
-			cascade := piopenrouter.NewCascade(logger, tracer, meter, completion, limiter, prefilter, func(context.Context, string, string) bool { return true }, load)
+			cascade := piopenrouter.NewCascade(logger, tracer, meter, completion, limiter, prefilter, load)
 			scanner := promptinjection.NewScanner(logger, cascade.Classify)
 			result, verdict, err := scanner.ScanStrictWithVerdict(ctx, row.Text, benchOrgID, benchProjectID, "", row.judgeMessage(), row.trajectory())
 			results[i] = result.Findings
