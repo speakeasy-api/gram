@@ -478,7 +478,12 @@ describe("useMcpServerCandidates", () => {
         }),
       },
     });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("MCP server enabled");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "MCP server enabled",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Undo" }),
+      }),
+    );
   });
 
   // A hosted server is granted under its toolset id (the server resolves the
@@ -558,7 +563,12 @@ describe("useMcpServerCandidates", () => {
       },
     });
     expect(mocks.invalidateMcpServerQueries).toHaveBeenCalled();
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("MCP server disabled");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "MCP server disabled",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Undo" }),
+      }),
+    );
   });
 
   // The MCP page's gate: without a reader or writer scope the listing is not
@@ -612,6 +622,85 @@ describe("useMcpServerCandidates", () => {
     });
   });
 
+  it("undoes a disable back to the visibility the server actually had", async () => {
+    mocks.scopes = ["mcp:write"];
+    // Public, not private: the opposite of "disable" would restore the wrong
+    // one, which is why Undo replays the visibility the row actually had.
+    mocks.mcpServers = [mcpServer("Slack", "slack-a1", "public")];
+    mocks.updateMcpServer.mockResolvedValue({});
+    const { result } = renderCandidates();
+    const [slack] = byKind(result.current, "mcp_server");
+
+    await act(async () => {
+      await slack?.run("disable");
+    });
+    expect(mocks.updateMcpServer).toHaveBeenCalledWith({
+      request: {
+        updateMcpServerForm: expect.objectContaining({
+          id: "server-slack-a1",
+          visibility: "disabled",
+        }),
+      },
+    });
+
+    const [, options] = mocks.toastSuccess.mock.calls.at(-1) as [
+      string,
+      { action: { onClick: () => void } },
+    ];
+    // The refetch now answers with the row as the disable left it.
+    mocks.latestServers["server-slack-a1"] = mcpServer(
+      "Slack",
+      "slack-a1",
+      "disabled",
+    );
+    mocks.updateMcpServer.mockClear();
+    await act(async () => {
+      options.action.onClick();
+    });
+
+    expect(mocks.updateMcpServer).toHaveBeenCalledWith({
+      request: {
+        updateMcpServerForm: expect.objectContaining({
+          id: "server-slack-a1",
+          visibility: "public",
+        }),
+      },
+    });
+    // The undo does not offer an undo of its own.
+    expect(mocks.toastSuccess).toHaveBeenLastCalledWith(
+      "MCP server set to public",
+      undefined,
+    );
+  });
+
+  it("surfaces a failed undo without an unhandled rejection", async () => {
+    mocks.scopes = ["mcp:write"];
+    mocks.mcpServers = [mcpServer("Slack", "slack-a1", "private")];
+    mocks.updateMcpServer.mockResolvedValue({});
+    const { result } = renderCandidates();
+    const [slack] = byKind(result.current, "mcp_server");
+
+    await act(async () => {
+      await slack?.run("disable");
+    });
+    const [, options] = mocks.toastSuccess.mock.calls.at(-1) as [
+      string,
+      { action: { onClick: () => void } },
+    ];
+
+    mocks.latestServers["server-slack-a1"] = mcpServer(
+      "Slack",
+      "slack-a1",
+      "disabled",
+    );
+    mocks.updateMcpServer.mockRejectedValue(new Error("boom"));
+    await act(async () => {
+      options.action.onClick();
+    });
+
+    expect(mocks.toastError).toHaveBeenCalledWith("boom");
+  });
+
   it("skips the update when the fresh row already has the requested visibility", async () => {
     mocks.scopes = ["mcp:write"];
     mocks.mcpServers = [mcpServer("Slack", "slack-a1", "private")];
@@ -628,7 +717,11 @@ describe("useMcpServerCandidates", () => {
     });
     expect(mocks.updateMcpServer).not.toHaveBeenCalled();
     expect(mocks.invalidateMcpServerQueries).toHaveBeenCalled();
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("MCP server disabled");
+    // Nothing changed, so there is nothing to undo.
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "MCP server disabled",
+      undefined,
+    );
   });
 
   it("toasts and rethrows when the pre-update fetch fails", async () => {
