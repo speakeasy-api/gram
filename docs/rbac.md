@@ -47,7 +47,7 @@ A request's effective grants are normally loaded from both:
 - the authenticated user principal, such as `user:user_01abc`
 - the user's canonical role principal, such as `role:global:<role-uuid>` or `role:organization:<role-uuid>`
 
-This lets us give most access through roles while still allowing direct user grants when needed.
+This lets us give most access through roles while still allowing direct user grants when needed. A direct grant naming a concrete resource also outranks a block the user inherits from a role or `user:all`; see [Principal Precedence](#principal-precedence).
 
 An agent-authenticated request loads the same way but from the agent's own set: the agent principal, such as `agent:<agent-uuid>`, plus the role principals recorded for it in `agent_role_assignments`. It never loads `user:all`, its owner's user principal, or its owner's roles into that set — those are evaluated as a separate policy the request is also bounded by.
 
@@ -383,6 +383,59 @@ Assume the user has:
 
 Again, the exclusion side only subtracts. A blocklist/bypass grant without a
 matching base grant never grants anything.
+
+### Principal Precedence
+
+A caller's grants come from principals of different specificity: `user:all`
+(everyone), the roles they hold, and the user or agent itself. Allows from all
+of them combine, and a blocklist exclusion (`*:blocked_*`) from any of them
+normally subtracts. One case is decided by specificity instead:
+
+> A grant made directly to the user that names a concrete resource outranks a
+> blocklist exclusion that reaches them only through a role or `user:all`.
+
+This lets an administrator block a server for a role, including a
+directory-synced one, and still give individual members of that role access to
+it by name, without changing role membership.
+
+| Grants held                                                                         | `mcp:connect` on `server_1` |
+| ----------------------------------------------------------------------------------- | --------------------------- |
+| role: `mcp:connect *`, `mcp:blocked_connect server_1`                               | Denied                      |
+| role: `mcp:connect *`, `mcp:blocked_connect server_1`; user: `mcp:connect server_1` | Allowed                     |
+| `user:all`: `mcp:blocked_connect server_1`; user: `mcp:connect server_1`            | Allowed                     |
+| role: `mcp:blocked_connect server_1`; user: `mcp:connect *`                         | Denied                      |
+| user: `mcp:connect server_1`, `mcp:blocked_connect server_1`                        | Denied                      |
+| `user:all`: `mcp:blocked_connect server_1`; role: `mcp:connect server_1`            | Denied                      |
+
+The rules behind that table:
+
+- The user's own blocks always apply, including to their own grants.
+- A direct grant spanning every resource (`resource_id: "*"`) does not
+  outrank, so a broad user grant can still be revoked on one resource by a
+  role or organization-wide block.
+- Agent grants never outrank. An agent's owner can write its policy
+  (`agents.createPolicyGrant`) without being an administrator, so letting those
+  grants outrank would let owners lift a block an administrator put on the
+  agent's role or on `user:all`.
+- Roles and `user:all` share one level: a role grant does not outrank a
+  `user:all` block, and the reverse. The built-in member role grants
+  `mcp:connect` on every server, so letting roles outrank `user:all` would
+  silently lift every "everyone: no access" rule for ordinary members.
+- A narrowed direct grant outranks only as far as it reaches. A direct grant for
+  one tool proves server-level access and that tool; every other tool stays
+  blocked.
+- Non-blocklist exclusions are unaffected. `risk_policy:bypass` exempts a
+  principal from a policy rather than taking access away, so a direct
+  `risk_policy:evaluate` grant never cancels it.
+- Each admitted policy (credential, agent, owner) is evaluated on its own
+  grants, and every policy must still allow.
+
+The engine implements this in `server/internal/authz/precedence.go`. The same
+rule is mirrored in `ListAccessibleMCPServersForUser` and
+`ListAccessibleSkillsForUser` (`server/internal/access/queries.sql`),
+`runtimepolicy.DelegationContained`, and the dashboard's `useRBAC` and
+per-server access list. `access.listGrants` reports each scope's
+`direct_selectors` so clients can apply it.
 
 ## Scopes vs Grants
 

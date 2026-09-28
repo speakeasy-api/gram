@@ -85,7 +85,8 @@ func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Se
 // all implied scopes, is allowed by every parent policy. Instance authorization
 // alone is insufficient: a narrower exclusion may overlap a broad delegation
 // without matching its dimensionless check. Such overlap fails closed because
-// delegated policies cannot encode exclusions. Discovery and issuance share
+// delegated policies cannot encode exclusions, unless a direct grant naming the
+// resource outranks the inherited restriction. Discovery and issuance share
 // this check so neither can broaden a parent's effective permissions.
 func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (bool, error) {
 	for _, grant := range delegated.RuntimeGrants() {
@@ -97,9 +98,17 @@ func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (
 			if !hasExclusion {
 				continue
 			}
+			// A direct grant naming the concrete resource outranks restrictions
+			// inherited from roles or user:all, exactly as it does at runtime.
+			// The principal's own restrictions are never outranked.
+			directlyGranted := authz.ExclusionYieldsToDirectGrants(grant.Scope) &&
+				authz.GrantsContainSelector(authz.DirectOverrideGrants(policy), grant.Scope, grant.Selector)
 			for _, restriction := range policy {
 				// Root is deliberately not an exclusion, matching authz's evaluator.
 				if !slices.Contains(authz.ScopeImplicationClosure(restriction.Scope), exclusion) {
+					continue
+				}
+				if directlyGranted && !authz.IsDirectGrant(restriction) {
 					continue
 				}
 				if _, overlaps := intersectSelectors(grant.Selector, restriction.Selector); overlaps {

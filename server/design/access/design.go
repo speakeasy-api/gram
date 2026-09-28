@@ -1005,6 +1005,10 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
 		Description("Selector constraints. Null means unrestricted.")
 	})
+
+	Attribute("direct_selectors", ArrayOf(SelectorModel), func() {
+		Description("The subset of this scope's selectors granted to the calling user by name rather than through a role or everyone. For allow scopes it holds only selectors naming a concrete resource, which outrank blocks inherited from roles or everyone on that resource. For blocked scopes it holds the caller's own blocks, which always apply. Omitted when empty.")
+	})
 })
 
 var RoleModel = Type("Role", func() {

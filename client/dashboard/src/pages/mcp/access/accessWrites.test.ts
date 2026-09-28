@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
-import { buildAccessRows } from "./accessRows";
+import { buildAccessRows, reachableTools } from "./accessRows";
 import {
   addPrincipalsWrite,
   allowDestructiveWrite,
@@ -823,4 +823,210 @@ it("removing an agent with broader role access writes server-local exclusions", 
     { principalUrn: "agent:a1", level: "blocked_manage" },
   ]);
   expect(write.message).toContain("Other servers are unchanged");
+});
+
+describe("a person a role's block cancels", () => {
+  // Engineering reaches every server but is blocked on this one. Hana's own
+  // rule here outranks that block, so it is what her access rests on.
+  const cancelled = (own: Partial<ResourceAudienceEntry> = {}) =>
+    state([
+      role({ level: "use", memberIds: ["u1"] }),
+      role({ appliesTo: "resource", level: "blocked", memberIds: ["u1"] }),
+      entry({ principalUrn: "user:u1", memberIds: ["u1"], ...own }),
+    ]);
+
+  function personRow(rows: ReturnType<typeof buildAccessRows>) {
+    return rows.find((row) => row.principalUrn === "user:u1")!;
+  }
+
+  it("widens the person's own rule instead of relying on the role", () => {
+    const { direct, rows } = cancelled({ tools: ["search"] });
+
+    const written = allowWrite(direct, personRow(rows), "use").entries;
+    expect(written).toContainEqual({
+      principalUrn: "user:u1",
+      level: "use",
+      tools: [],
+      dispositions: [],
+    });
+  });
+
+  it("revokes by dropping the person's own rule, with no block of its own", () => {
+    const { direct, rows } = cancelled({ tools: ["search"] });
+
+    const written = revokeScopeWrite(direct, personRow(rows), "use").entries;
+    expect(written.filter((rule) => rule.principalUrn === "user:u1")).toEqual(
+      [],
+    );
+  });
+});
+
+describe("a person a role's block trims", () => {
+  // Engineering reaches every server but is kept off delete here. Choosing
+  // delete for Hana has to be written as her own rule naming it, which
+  // outranks the role's block; the rest is still subtracted.
+  const trimmedByRole = () =>
+    state([
+      role({ level: "use", memberIds: ["u1"] }),
+      role({
+        appliesTo: "resource",
+        level: "blocked",
+        tools: ["delete"],
+        memberIds: ["u1"],
+      }),
+      entry({ principalUrn: "user:u1", level: "view", memberIds: ["u1"] }),
+    ]);
+
+  it("writes the choice as the person's own rule and subtracts the rest", () => {
+    const { direct, rows } = trimmedByRole();
+    const person = rows.find((row) => row.principalUrn === "user:u1")!;
+
+    const written = narrowWrite(
+      direct,
+      person,
+      { tools: ["search", "delete"], dispositions: [] },
+      catalog,
+    ).entries;
+
+    expect(written).toContainEqual({
+      principalUrn: "user:u1",
+      level: "use",
+      tools: ["search", "delete"],
+      dispositions: [],
+    });
+    expect(written).toContainEqual({
+      principalUrn: "user:u1",
+      level: "blocked",
+      tools: ["fetch"],
+      dispositions: [],
+    });
+  });
+});
+
+describe("narrowed direct grants past inherited blocks", () => {
+  const user = "user:1";
+  const inherited = (overrides: Partial<ResourceAudienceEntry> = {}) =>
+    role({
+      level: "blocked",
+      appliesTo: "resource",
+      tools: ["search"],
+      memberIds: ["1"],
+      ...overrides,
+    });
+
+  it("preserves an overriding tool selection when saved without a catalogue", () => {
+    const entries = [
+      inherited(),
+      entry({ principalUrn: user, tools: ["search"] }),
+    ];
+    const { direct, rows } = state(entries);
+    const person = rows.find((row) => row.principalUrn === user)!;
+    const seed = narrowingSeed(person, undefined);
+    expect(seed).toEqual({ tools: ["search"], dispositions: [] });
+    const write = narrowWrite(direct, person, seed, undefined);
+    expect(write.entries).toContainEqual(
+      expect.objectContaining({
+        principalUrn: user,
+        level: "use",
+        tools: ["search"],
+      }),
+    );
+  });
+
+  it("preserves overriding dispositions but still subtracts the user's own block", () => {
+    const { rows } = state([
+      inherited({ tools: [], dispositions: ["read_only", "destructive"] }),
+      entry({ principalUrn: user, dispositions: ["read_only", "destructive"] }),
+      entry({
+        principalUrn: user,
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+    expect(
+      narrowingSeed(
+        rows.find((row) => row.principalUrn === user)!,
+        undefined,
+      ),
+    ).toEqual({ tools: [], dispositions: ["read_only"] });
+  });
+
+  it("does not seed tools cancelled by the user's own block", () => {
+    const { rows } = state([
+      inherited(),
+      entry({ principalUrn: user, tools: ["search"] }),
+      entry({ principalUrn: user, level: "blocked", tools: ["search"] }),
+    ]);
+    expect(
+      narrowingSeed(
+        rows.find((row) => row.principalUrn === user)!,
+        undefined,
+      ),
+    ).toEqual({ tools: [], dispositions: [] });
+  });
+
+  it("restores selected annotations past a role block without restoring excluded classes", () => {
+    const broad = role({ memberIds: ["1"] });
+    const { direct, rows } = state([
+      broad,
+      inherited(),
+      entry({ principalUrn: user, tools: ["delete"] }),
+    ]);
+    const person = rows.find((row) => row.principalUrn === user)!;
+    const write = narrowWrite(
+      direct,
+      person,
+      { tools: [], dispositions: ["read_only"] },
+      undefined,
+    );
+    const after = [
+      broad,
+      ...write.entries.map((rule) =>
+        entry({
+          ...rule,
+          kind: rule.principalUrn === user ? "user" : "role",
+          memberIds: rule.principalUrn === user ? undefined : ["1"],
+        }),
+      ),
+    ];
+    const updated = buildAccessRows(after).find(
+      (row) => row.principalUrn === user,
+    )!;
+    expect(reachableTools(updated.cells.use, catalog)).toEqual([
+      "search",
+      "fetch",
+    ]);
+  });
+});
+
+it("keeps unannotated tools when an existing direct grant already overrides the role block", () => {
+  const user = "user:1";
+  const { direct, rows } = state([
+    role({ level: "blocked", appliesTo: "resource", memberIds: ["1"] }),
+    entry({ principalUrn: user }),
+  ]);
+  const person = rows.find((row) => row.principalUrn === user)!;
+  const write = narrowWrite(
+    direct,
+    person,
+    { tools: [], dispositions: ["read_only"] },
+    undefined,
+  );
+  expect(write.entries).toContainEqual({ principalUrn: user, level: "use" });
+  const after = write.entries.map((rule) =>
+    entry({
+      ...rule,
+      kind: rule.principalUrn === user ? "user" : "role",
+      memberIds: rule.principalUrn === user ? undefined : ["1"],
+    }),
+  );
+  const updated = buildAccessRows(after).find(
+    (row) => row.principalUrn === user,
+  )!;
+  expect(
+    reachableTools(updated.cells.use, [
+      ...catalog,
+      { name: "unannotated", annotations: [] },
+    ]),
+  ).toEqual(["search", "fetch", "unannotated"]);
 });

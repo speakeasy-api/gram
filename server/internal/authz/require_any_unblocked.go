@@ -14,7 +14,9 @@ import (
 // Checks carry base scopes, not blocked scopes, and must include the concrete
 // resource dimensions. Exclusions use strict selector matching and never expand
 // to root. Every admitted policy can exclude; one allow alternative must still
-// be satisfied by all policies, just as with RequireAny.
+// be satisfied by all policies, just as with RequireAny. An exclusion inherited
+// from a role or user:all does not reject a check that a direct grant naming
+// the concrete resource satisfies.
 func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error {
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
@@ -49,6 +51,13 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		for _, policy := range authorization.policies {
 			grant, _ := matchingGrant(policy, expandWithoutRoot(exclusion))
 			if grant == nil {
+				continue
+			}
+			override, _, err := directOverride(policy, check)
+			if err != nil {
+				return e.mapError(ctx, err)
+			}
+			if override != nil {
 				continue
 			}
 			challengeLogger{

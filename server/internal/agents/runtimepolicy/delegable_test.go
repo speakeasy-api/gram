@@ -164,3 +164,39 @@ func TestDelegableGrantsConcreteResourcePreservesPinnedDimensions(t *testing.T) 
 	require.NoError(t, err)
 	require.Empty(t, grants, "scoped discovery excludes unrelated resource kinds")
 }
+
+func TestDelegationContainedDirectGrantOutranksInheritedRestriction(t *testing.T) {
+	t.Parallel()
+	const (
+		server = "locked-server"
+		user   = "user:owner-1"
+		role   = "role:organization:everyone-but-locked"
+	)
+	roleAllow := authz.Grant{PrincipalUrn: role, Scope: authz.ScopeMCPConnect, Selector: authz.NewSelector(authz.ScopeMCPConnect, "*")}
+	roleBlock := authz.Grant{PrincipalUrn: role, Scope: authz.ScopeMCPBlockedConnect, Selector: authz.NewSelector(authz.ScopeMCPBlockedConnect, server)}
+	direct := authz.Grant{PrincipalUrn: user, Scope: authz.ScopeMCPConnect, Selector: authz.NewSelector(authz.ScopeMCPConnect, server)}
+	ownBlock := authz.Grant{PrincipalUrn: user, Scope: authz.ScopeMCPBlockedConnect, Selector: authz.NewSelector(authz.ScopeMCPBlockedConnect, server)}
+	concrete, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, server)})
+	require.NoError(t, err)
+	wildcard, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, "*")})
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name      string
+		policy    []authz.Grant
+		delegated DelegatedPolicy
+		contained bool
+	}{
+		{"inherited restriction blocks", []authz.Grant{roleAllow, roleBlock}, concrete, false},
+		{"direct grant outranks inherited restriction", []authz.Grant{roleAllow, roleBlock, direct}, concrete, true},
+		{"own restriction still blocks", []authz.Grant{roleAllow, direct, ownBlock}, concrete, false},
+		{"wildcard delegation still overlaps", []authz.Grant{roleAllow, roleBlock, direct}, wildcard, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			contained, err := DelegationContained(tc.delegated, tc.policy)
+			require.NoError(t, err)
+			require.Equal(t, tc.contained, contained)
+		})
+	}
+}

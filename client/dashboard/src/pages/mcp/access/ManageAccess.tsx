@@ -54,6 +54,8 @@ import { pageCount, pageOf } from "./manageAccessState";
 import {
   accessSummary,
   buildAccessRows,
+  cappingBlocks,
+  keptIndividually,
   reachableTools,
   inheritedGrants,
   scopeState,
@@ -150,22 +152,6 @@ export function ManageAccess({
 
   const direct = useMemo(() => ownRules(entries), [entries]);
   const rows = useMemo(() => buildAccessRows(entries), [entries]);
-  // People a block already reaches, named by the block itself rather than
-  // read off the rows: someone with no rule of their own here has no row,
-  // and granting them access would write a rule the block cancels.
-  const cancelled = useMemo(() => {
-    const byUser = new Map<string, string>();
-    for (const entry of entries) {
-      if (entry.level !== "blocked") continue;
-      if ((entry.tools ?? []).length || (entry.dispositions ?? []).length) {
-        continue;
-      }
-      for (const memberId of entry.memberIds ?? []) {
-        if (!byUser.has(memberId)) byUser.set(memberId, entry.displayName);
-      }
-    }
-    return byUser;
-  }, [entries]);
 
   // Rules covering every server, which a rule added here cannot narrow.
   const orgWide = useMemo(
@@ -238,11 +224,7 @@ export function ManageAccess({
       ? new Set(reachableTools(cell, toolCatalog ?? []) ?? [])
       : null;
     const limitedBy = capped
-      ? cell.blocks.find(
-          (block) =>
-            block.principalUrn !== row.principalUrn ||
-            block.appliesTo !== "resource",
-        )?.displayName
+      ? cappingBlocks(row, cell)[0]?.displayName
       : undefined;
 
     setNarrowing({
@@ -268,7 +250,8 @@ export function ManageAccess({
 
   // Removing a rule this page owns is what the button says it is. Removing a
   // principal an organization-wide rule still reaches is not: it writes a
-  // block, which outranks every grant. Only that case is worth a dialog.
+  // block, which outranks every grant but the ones people were given here by
+  // name. Only that case is worth a dialog.
   const removeRow = (row: AccessRow) => {
     if (inheritedGrants(row).length === 0) {
       applyWrite(revokeRowWrite(direct, row, resourceName));
@@ -421,6 +404,9 @@ export function ManageAccess({
       {removing && (
         <RemoveAudienceDialog
           row={removing}
+          keptBy={keptIndividually(removing, rows).map(
+            (row) => row.displayName,
+          )}
           serverName={resourceName}
           pending={setAudience.isPending}
           onConfirm={confirmRemove}
@@ -440,11 +426,9 @@ export function ManageAccess({
           alreadyAdded={direct.map((entry) => entry.principalUrn)}
           // A principal an organization-wide rule already covers cannot be
           // narrowed by adding a rule here — grants add, they never subtract
-          // — so say what it already has instead of offering a no-op.
-          blockedFrom={[...cancelled].map(([userId, by]) => ({
-            principalUrn: `user:${userId}`,
-            reason: `Blocked by ${by} on this server`,
-          }))}
+          // — so say what it already has instead of offering a no-op. People
+          // a role's or everyone's block reaches stay on offer: their own rule
+          // here outranks that block.
           alreadyReaches={orgWide
             // A narrowed organization rule leaves room to grant more here, so
             // only unrestricted ones make a principal unaddable.

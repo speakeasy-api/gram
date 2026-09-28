@@ -7094,6 +7094,16 @@ func marshalAccessListRoleGrantToListRoleGrantResponseBody(v *access.ListRoleGra
 			res.Selectors[i] = marshalAccessSelectorToSelectorResponseBody(val)
 		}
 	}
+	if v.DirectSelectors != nil {
+		res.DirectSelectors = make([]*SelectorResponseBody, len(v.DirectSelectors))
+		for i, val := range v.DirectSelectors {
+			if val == nil {
+				res.DirectSelectors[i] = nil
+				continue
+			}
+			res.DirectSelectors[i] = marshalAccessSelectorToSelectorResponseBody(val)
+		}
+	}
 
 	return res
 }
