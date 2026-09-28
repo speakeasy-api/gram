@@ -2351,11 +2351,25 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// caller: between the caller's check and this point a flag flip could
 	// otherwise push an uncleared version onto the org. A held-back rotation
 	// leaves the published credential in place and is reported as deferred.
-	if input.RotateHooksKey && observabilityEnabled {
-		if targetHooksVersion == hooksGeneratorVersion {
+	if input.RotateHooksKey {
+		if observabilityEnabled && targetHooksVersion == hooksGeneratorVersion {
 			rotateHooks = true
 		} else {
-			hooksConfigDeferred = true
+			// Publish nothing. This call exists only to carry a new credential
+			// into the marketplace, and the gate says it may not — so falling
+			// through to an ordinary publish would do work the caller never
+			// asked for: regenerating MCP (minting a consumer key customers did
+			// not ask to rotate), or regenerating the hooks subtree through the
+			// not-carriable fallback below, which mints a THIRD hooks key and
+			// advances a gated org past the very gate that just held it back.
+			// The caller persists its candidate instead and reports the
+			// marketplace update as deferred.
+			return &publishOutcome{
+				RepoURL:             repoURL,
+				Skipped:             true,
+				HooksConfigDeferred: true,
+				HooksKeyPublished:   false,
+			}, nil
 		}
 	}
 
@@ -2597,10 +2611,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 	}
 
-	// rotateHooks is the only path that seeds the caller's candidate into
-	// `candidates`, so it is exactly the condition under which persistPluginAPIKeys
-	// has just written it.
-	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred, HooksKeyPublished: rotateHooks}, nil
+	// Report publication from the candidate that actually reached the repo and
+	// persistPluginAPIKeys, not from the rotation flag: if some future path
+	// regenerates hooks with a key of its own, the caller must still learn that
+	// ITS candidate was never written and persist it.
+	rotatedKeyPublished := input.HooksKeyCandidate != nil && hooksCandidate == input.HooksKeyCandidate
+
+	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred, HooksKeyPublished: rotatedKeyPublished}, nil
 }
 
 // carryHooksSubtree copies the published hooks (observability) subtree

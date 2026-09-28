@@ -504,6 +504,18 @@ type flakyRolloutProvider struct {
 	mu               sync.Mutex
 	clearedResponses int
 	payload          []byte
+	cleared          int
+	withheld         int
+}
+
+// reads reports how many payload reads have been answered cleared and uncleared,
+// so a test can prove which reads a call actually made rather than only what it
+// concluded.
+func (p *flakyRolloutProvider) reads() (cleared, withheld int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return p.cleared, p.withheld
 }
 
 // clearNext clears the rollout for the next n payload reads and withholds it
@@ -520,9 +532,12 @@ func (p *flakyRolloutProvider) FlagPayload(_ context.Context, _ feature.Flag, _ 
 	defer p.mu.Unlock()
 
 	if p.clearedResponses <= 0 {
+		p.withheld++
+
 		return nil, nil
 	}
 	p.clearedResponses--
+	p.cleared++
 
 	return p.payload, nil
 }
@@ -542,7 +557,7 @@ func TestRotateObservabilityCredential_PersistsKeyWhenPublishDeclines(t *testing
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
-	features := &flakyRolloutProvider{payload: []byte(`{"version": 9999}`), clearedResponses: 0, mu: sync.Mutex{}}
+	features := &flakyRolloutProvider{payload: []byte(`{"version": 9999}`), clearedResponses: 0, mu: sync.Mutex{}, cleared: 0, withheld: 0}
 	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
 
 	features.clearNext(math.MaxInt)
@@ -563,8 +578,20 @@ func TestRotateObservabilityCredential_PersistsKeyWhenPublishDeclines(t *testing
 	claudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
 	publishedBefore := publishedHooksAPIKey(t, mock, claudeObservability)
 
+	clearedBefore, withheldBefore := features.reads()
+
 	result, err := ti.service.RotateObservabilityCredential(ctx, rotateObservabilityPayload("revoke_immediately"))
 	require.NoError(t, err)
+
+	// Pin the interleaving this test exists for: the handler's own check has to be
+	// the cleared read, and publishProject has to re-read the gate and be refused.
+	// If a later change moves the cleared read elsewhere, the handler takes the
+	// ordinary deferral branch instead — where every assertion below still holds —
+	// so assert the reads, not only their consequences.
+	clearedAfter, withheldAfter := features.reads()
+	require.Equal(t, clearedBefore+1, clearedAfter, "the rotation handler's eligibility check must be the cleared read")
+	require.Greater(t, withheldAfter, withheldBefore, "publishProject must re-read the gate and be refused")
+
 	require.False(t, result.MarketplaceRepublished)
 	require.NotNil(t, result.MarketplaceUpdateDeferred)
 	require.True(t, *result.MarketplaceUpdateDeferred)
@@ -582,6 +609,75 @@ func TestRotateObservabilityCredential_PersistsKeyWhenPublishDeclines(t *testing
 	live := listHooksKeys(t, ctx, ti.conn)
 	require.Len(t, live, 1)
 	require.Equal(t, result.KeyPrefix, live[0].KeyPrefix)
+}
+
+// A rotation the gate declines must publish nothing at all. Falling through to
+// an ordinary publish would do work the caller never asked for: regenerating the
+// MCP component mints a replacement consumer key, and regenerating an
+// uncarriable hooks subtree mints a third hooks key while advancing a gated org
+// past the gate that just held it back.
+func TestRotateObservabilityCredential_DeclinedRotationPublishesNothing(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	features := &flakyRolloutProvider{payload: []byte(`{"version": 9999}`), clearedResponses: 0, mu: sync.Mutex{}, cleared: 0, withheld: 0}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	features.clearNext(math.MaxInt)
+	publishTestObservabilityProject(t, ctx, ti, "rotate-gated-pending")
+
+	// An MCP change the project has not published yet: without the early return
+	// this is what carries a declined rotation into a full publish.
+	secondToolset := createTestToolset(t, ctx, ti.conn, "rotate-gated-pending-toolset-2")
+	plugins, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.NotEmpty(t, plugins.Plugins)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugins.Plugins[0].ID,
+		ToolsetID:   conv.PtrEmpty(secondToolset.ID.String()),
+		DisplayName: conv.PtrEmpty("rotate-gated-pending second server"),
+		Policy:      "required",
+		SortOrder:   1,
+	})
+	require.NoError(t, err)
+
+	rewindPublishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID, "0")
+
+	keysBefore, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	mcpCountBefore := countPluginMCPKeys(keysBefore)
+
+	claudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
+	publishedBefore := publishedHooksAPIKey(t, mock, claudeObservability)
+
+	// Cleared for the handler's own check, withheld for publishProject's re-read.
+	features.clearNext(1)
+
+	result, err := ti.service.RotateObservabilityCredential(ctx, rotateObservabilityPayload("revoke_immediately"))
+	require.NoError(t, err)
+	require.False(t, result.MarketplaceRepublished)
+	require.NotNil(t, result.MarketplaceUpdateDeferred)
+	require.True(t, *result.MarketplaceUpdateDeferred)
+
+	keysAfter, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, mcpCountBefore, countPluginMCPKeys(keysAfter),
+		"a declined rotation must not mint a replacement consumer key")
+
+	require.Equal(t, publishedBefore, publishedHooksAPIKey(t, mock, claudeObservability),
+		"a declined rotation must leave the published credential alone")
+
+	// Exactly one new hooks key: the one handed to the caller, persisted locally.
+	live := listHooksKeys(t, ctx, ti.conn)
+	require.Len(t, live, 1)
+	require.Equal(t, result.KeyPrefix, live[0].KeyPrefix)
+
+	hash, err := auth.GetAPIKeyHash(result.Key)
+	require.NoError(t, err)
+	_, err = keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, hash)
+	require.NoError(t, err)
 }
 
 // publishTestObservabilityProject gives the project a plugin, a skill, and a
