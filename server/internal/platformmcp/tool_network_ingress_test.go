@@ -2,10 +2,12 @@ package platformmcp
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -48,6 +50,53 @@ func TestNetworkIngressToolHasSameContractWhenUnavailable(t *testing.T) {
 	text, ok := result.Content[0].(*mcp.TextContent)
 	require.True(t, ok)
 	require.Contains(t, text.Text, `"code":"feature_unavailable"`)
+}
+
+func TestNetworkIngressToolHidesUnexpectedErrors(t *testing.T) {
+	t.Parallel()
+	pool, err := pgxpool.New(t.Context(), "postgres://sentinel-db-user@sentinel-db-host:5432/sentinel_db")
+	require.NoError(t, err)
+	pool.Close()
+	reader := NewPostgresReader(testenv.NewLogger(t), pool).WithNetworkIngressStatus(mustParseURL(t, "https://app.getgram.test"))
+	require.NotNil(t, reader.networkIngress)
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "ingress-error", Version: "0.0.1"}, nil)
+	bindExternalTestPrincipal(server)
+	reg := newRegistrar(server)
+	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	registerNetworkIngressTool(reg, reader.networkIngress)
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = serverSession.Close() }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "ingress-client", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: getNetworkIngressToolName, Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	require.Len(t, result.Content, 1)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, text.Text, `"code":"feature_unavailable"`)
+	for _, forbidden := range []string{"sentinel", "pool", "resolve network ingress organization"} {
+		require.NotContains(t, text.Text, forbidden)
+	}
+}
+
+func TestSafeNetworkIngressErrorCodeWithholdsFreeText(t *testing.T) {
+	t.Parallel()
+	for _, code := range []string{"provider_error", "kubernetes_api", "invalid_credentials", "deletion_pending"} {
+		require.Equal(t, code, safeNetworkIngressErrorCode(code))
+	}
+	for _, value := range []string{
+		"", "Provider_Error", "tskey-client-sentinel secret rejected", "error: https://api.tailscale.com/x",
+		"provider-error", "_leading", strings.Repeat("a", 65),
+	} {
+		require.Empty(t, safeNetworkIngressErrorCode(value), value)
+	}
 }
 
 func TestNetworkIngressNextActionNamesTheFirstBlockingStep(t *testing.T) {

@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
+	"regexp"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -32,7 +35,13 @@ const (
 	networkIngressNextRepair             = "repair_ingress_in_dashboard"
 )
 
+// networkIngressErrorCodePattern admits only the short reconcile codes the
+// ingress lifecycle stores (for example provider_error). Anything else is
+// withheld rather than returned, so free text can never reach a client.
+var networkIngressErrorCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+
 type NetworkIngressStatusService struct {
+	logger       *slog.Logger
 	queries      *platformrepo.Queries
 	db           *pgxpool.Pool
 	dashboardURL *url.URL
@@ -43,7 +52,7 @@ type NetworkIngressStatusService struct {
 func (r *PostgresReader) WithNetworkIngressStatus(dashboardURL *url.URL) *PostgresReader {
 	if r.db != nil && validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
-		r.networkIngress = &NetworkIngressStatusService{queries: platformrepo.New(r.db), db: r.db, dashboardURL: &copyURL}
+		r.networkIngress = &NetworkIngressStatusService{logger: r.logger, queries: platformrepo.New(r.db), db: r.db, dashboardURL: &copyURL}
 	}
 	return r
 }
@@ -114,7 +123,7 @@ func (s *NetworkIngressStatusService) Get(ctx context.Context, principal Princip
 			CredentialsConfigured: row.CredentialsConfigured,
 			Status:                row.Status,
 			DNSName:               row.DnsName.String,
-			LastError:             row.LastError.String,
+			LastError:             safeNetworkIngressErrorCode(row.LastError.String),
 			HealthCheckedAt:       timestampString(row.HealthCheckedAt.Time, row.HealthCheckedAt.Valid),
 			ConnectedSince:        timestampString(row.ConnectedSince.Time, row.ConnectedSince.Valid),
 		}
@@ -122,6 +131,13 @@ func (s *NetworkIngressStatusService) Get(ctx context.Context, principal Princip
 	output.NextAction = networkIngressNextAction(output)
 	output.ReadyForPrivateAccess = output.NextAction == networkIngressNextNone
 	return output, nil
+}
+
+func safeNetworkIngressErrorCode(value string) string {
+	if !networkIngressErrorCodePattern.MatchString(value) {
+		return ""
+	}
+	return value
 }
 
 func networkIngressNextAction(output GetNetworkIngressOutput) string {
@@ -160,11 +176,16 @@ func registerNetworkIngressTool(reg *Registrar, service *NetworkIngressStatusSer
 			return nil, GetNetworkIngressOutput{}, err
 		}
 		output, err := service.Get(ctx, principal)
-		if errors.Is(err, ErrUnavailable) {
+		if err != nil {
+			// Database and lookup failures stay server-side: the SDK would
+			// otherwise return the wrapped error text to the client.
+			if !errors.Is(err, ErrUnavailable) && service != nil && service.logger != nil {
+				service.logger.ErrorContext(ctx, "get network ingress status", attr.SlogError(err))
+			}
 			result, marshalErr := networkIngressUnavailableResult("Private network ingress status is temporarily unavailable.")
 			return result, GetNetworkIngressOutput{}, marshalErr
 		}
-		return nil, output, err
+		return nil, output, nil
 	})
 }
 

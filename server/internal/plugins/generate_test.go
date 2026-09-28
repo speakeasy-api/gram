@@ -3224,6 +3224,11 @@ func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *test
 			"Do not attempt any network change while it is not ready",
 			"call `get_network_ingress` again rather than assuming it is ready",
 		}},
+		{"network changes check observed traffic first", []string{
+			"call `get_mcp_network_traffic`", "`target_kind: mcp`", "`window: \"7d\"`",
+			"zero does not prove a route is unused or that every client has migrated",
+			"require an independent client inventory from the user before proposing `private_only`",
+		}},
 		{"network changes keep settings version and confirmation", []string{
 			"do not choose for the user", "`dual` adds tailnet access and keeps public access",
 			"`private_only` refuses every client that is not on the tailnet",
@@ -3243,7 +3248,9 @@ func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *test
 			}
 		})
 	}
+	require.NotEqual(t, -1, strings.Index(workflow, "## 7. Keep authentication separate"))
 	require.Less(t, strings.Index(workflow, "## 7. Keep authentication separate"), strings.Index(workflow, "## 8. Optionally restrict"))
+	require.Less(t, strings.Index(workflow, "call `get_mcp_network_traffic`"), strings.Index(workflow, "Present the choice per server"))
 	require.Less(t, strings.Index(workflow, "## 8. Optionally restrict"), strings.Index(workflow, "## 9. Record diagnostics only when the user asks"))
 	require.NotContains(t, workflow, "Claude Code session")
 	for _, forbidden := range []string{"codex mcp add", "codex mcp remove", "tailscale up", "OAuth client secret:"} {
