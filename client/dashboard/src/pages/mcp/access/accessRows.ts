@@ -159,7 +159,7 @@ function blockCovers(
  * block reaching it through a role or everyone is set aside entirely when the
  * line's own rule opens the whole server.
  */
-export function standingBlocks(cell: ScopeCell): ResourceAudienceEntry[] {
+function standingBlocks(cell: ScopeCell): ResourceAudienceEntry[] {
   const outranked = cell.direct.some(isUnnarrowed);
   return cell.blocks.filter(
     (block) => !(outranked && isInherited(cell, block)),
@@ -303,7 +303,7 @@ export interface ScopeState {
 }
 
 /** Grants on this line other than the rule this page owns for this row. */
-export function foreignGrants(
+function foreignGrants(
   row: AccessRow,
   scope: ScopeKey,
 ): ResourceAudienceEntry[] {
