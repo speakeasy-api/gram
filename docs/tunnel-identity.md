@@ -29,7 +29,7 @@ adding its own assertion.
 The tunnel gateway and agent forward the assertion to your server. Upstream
 OAuth uses its own `Authorization` header.
 
-Tokens use RS256 and the protected header `typ: speakeasy-authz+jwt`. The `kid`
+Tokens use RS256 and the protected header `typ: speakeasy-identity+jwt`. The `kid`
 is the public key's RFC 7638 SHA-256 thumbprint. Their lifetime is at most 60
 seconds, capped by the source credential's expiry where available.
 
@@ -107,7 +107,7 @@ If your server uses the caller claims:
 1. Read exactly one assertion and select an RSA signing key by `kid` from the
    AICP JWKS above. Do not follow a token-provided key URL or issuer.
 2. Verify the signature with an explicit RS256 allowlist and require
-   `typ=speakeasy-authz+jwt` and `version=1`.
+   `typ=speakeasy-identity+jwt` and `version=1`.
 3. Require `iss=https://tunnel.speakeasy.com` and the exact destination audience.
 4. Require `iat` and `exp`, reject expired/future-dated tokens, and enforce a
    maximum 60-second lifetime with at most five seconds of clock tolerance.

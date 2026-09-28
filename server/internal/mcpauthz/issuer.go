@@ -152,7 +152,7 @@ func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = s.kid
-	token.Header["typ"] = "speakeasy-authz+jwt"
+	token.Header["typ"] = "speakeasy-identity+jwt"
 	signed, err := token.SignedString(s.key)
 	if err != nil {
 		return "", errors.New("sign caller assertion")

@@ -68,7 +68,7 @@ func verifiedClaims(t *testing.T, raw string, keys jose.JSONWebKeySet) (josejwt.
 	t.Helper()
 	token, err := josejwt.ParseSigned(raw, []jose.SignatureAlgorithm{jose.RS256})
 	require.NoError(t, err)
-	require.Equal(t, "speakeasy-authz+jwt", token.Headers[0].ExtraHeaders[jose.HeaderType])
+	require.Equal(t, "speakeasy-identity+jwt", token.Headers[0].ExtraHeaders[jose.HeaderType])
 	require.NotEmpty(t, token.Headers[0].KeyID)
 	require.Len(t, keys.Key(token.Headers[0].KeyID), 1)
 	var standard josejwt.Claims
