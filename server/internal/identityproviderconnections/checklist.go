@@ -2,7 +2,6 @@ package identityproviderconnections
 
 import (
 	"slices"
-	"strings"
 )
 
 // Listing modes select the console checklist template.
@@ -37,6 +36,10 @@ const (
 // RequiredOktaScopes are the Okta API scopes the connection verifies and the
 // sync relies on.
 var RequiredOktaScopes = []string{"okta.apps.read", "okta.users.read", "okta.groups.read"}
+
+// RequiredOktaAdminRoles are the admin roles the checklist asks operators to
+// assign to the service app.
+var RequiredOktaAdminRoles = []string{"Application Administrator (org-wide)", "Read-only Administrator"}
 
 // ChecklistItem is one console step for the administrator. Completed is nil
 // for steps the server has no signal for.
@@ -89,7 +92,7 @@ type AgentAppSignal struct {
 }
 
 const (
-	accessInstruction   = "On the app's Admin roles tab, assign Application Administrator (org-wide) and Read-only Administrator. Okta will ask you to confirm your identity with multi-factor authentication before assigning roles."
+	accessInstruction   = "On the app's Admin roles tab, assign these roles. Okta will ask you to confirm your identity with multi-factor authentication before assigning roles. Speakeasy checks whether it can read apps, users, and groups through the Okta API; it does not check which named admin roles are assigned."
 	linkInstruction     = "On User access and authentication, keep Create a new OIDC app linked to this AI agent selected. Okta uses this app only to decide which users the agent may act for; it does not change how your people sign in to Speakeasy."
 	activateInstruction = "Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (under Applications, the Speakeasy Agent app marked Linked AI Agent), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy. Okta issues assertions only for the users assigned here."
 )
@@ -223,7 +226,6 @@ func appItem(listingMode string, completed *bool) ChecklistItem {
 }
 
 func connectItems(listingMode, jwksURL string, done completions) []ChecklistItem {
-	scopes := strings.Join(RequiredOktaScopes, ", ")
 	return []ChecklistItem{
 		appItem(listingMode, done.appCreated),
 		{
@@ -232,9 +234,9 @@ func connectItems(listingMode, jwksURL string, done completions) []ChecklistItem
 			Title:       "Let Okta recognize Speakeasy",
 			Description: "Add Speakeasy's key URL so Okta can check that connection requests come from Speakeasy. You do not need to create or share a password.",
 			Details: []string{
-				"On the newly created Speakeasy app's General tab, find Client Credentials, click Edit, and set Client authentication to Public key / Private key.",
-				"Choose Use a URL to fetch keys dynamically.",
-				"Enter this URL: " + jwksURL,
+				"On the newly created Speakeasy app's General tab, find Public keys and click Edit.",
+				"Choose Use a URL to fetch keys dynamically, enter this URL, and save: " + jwksURL,
+				"Then, in Client Credentials, click Edit, set Client authentication to Public key / Private key, and save. Okta only allows this after the key URL is saved.",
 			},
 			Completed: done.keyAuth,
 		},
@@ -250,8 +252,8 @@ func connectItems(listingMode, jwksURL string, done completions) []ChecklistItem
 			Key:         ChecklistKeyGrantScopes,
 			Group:       ChecklistGroupConnect,
 			Title:       "Allow read-only permissions",
-			Description: "On the app's Okta API Scopes tab, grant " + scopes + ". These permissions let Speakeasy read apps, users, and groups without changing them.",
-			Details:     []string{},
+			Description: "On the app's Okta API Scopes tab, grant these permissions. They let Speakeasy read apps, users, and groups without changing them.",
+			Details:     slices.Clone(RequiredOktaScopes),
 			Completed:   done.scopesGranted,
 		},
 		{
@@ -259,7 +261,7 @@ func connectItems(listingMode, jwksURL string, done completions) []ChecklistItem
 			Group:       ChecklistGroupConnect,
 			Title:       "Allow access to apps, users, and groups",
 			Description: accessDescription(done.apiAccess),
-			Details:     []string{"Speakeasy checks whether it can read apps, users, and groups through the Okta API. It does not check which named admin roles are assigned."},
+			Details:     slices.Clone(RequiredOktaAdminRoles),
 			Completed:   done.apiAccess,
 		},
 		{

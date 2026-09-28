@@ -16,7 +16,7 @@ import { STEP_AFFORDANCES } from "./checklistAffordances";
 import { ConnectionChecklist } from "./ConnectionChecklist";
 import { ConnectionSetupProgress } from "./ConnectionSetupProgress";
 import { ConnectionFacts, ConnectionScopes } from "./OktaConnectionDetails";
-import { ClientIdStep, CreateConnectionForm } from "./OktaConnectionForms";
+import { CreateConnectionForm } from "./OktaConnectionForms";
 import { RevokeConnectionButton } from "./RevokeConnectionButton";
 import {
   CONNECTION_STATUS,
@@ -273,9 +273,6 @@ export function OktaConnectionTab({
     <div className="flex flex-col gap-10">
       <ConnectionSetupProgress connection={connection} />
       <ChecklistSection connection={connection} />
-      {connectionStep(connection) === "submit_client_id" && (
-        <ClientIdStep connection={connection} />
-      )}
       <ConnectionCard connection={connection} />
     </div>
   );

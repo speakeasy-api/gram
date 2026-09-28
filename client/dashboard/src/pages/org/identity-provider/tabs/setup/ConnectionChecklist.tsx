@@ -116,7 +116,9 @@ function GroupSection({
       >
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-eyebrow">{group.title}</span>
+            <span className="text-eyebrow text-default font-semibold">
+              {group.title}
+            </span>
             <Text muted small>
               {summary}
             </Text>

@@ -182,9 +182,8 @@ func TestOktaChecklist_CopyInvariants(t *testing.T) {
 		offersKeyURL := strings.Contains(itemText(item), checklistJWKSURL)
 		require.Equal(t, key == idpc.ChecklistKeyPublicKeyAuth, offersKeyURL, "%s: the management JWKS is only offered to the service app", key)
 	}
-	for _, scope := range idpc.RequiredOktaScopes {
-		require.Contains(t, items[idpc.ChecklistKeyGrantScopes].Description, scope)
-	}
+	require.Equal(t, idpc.RequiredOktaScopes, items[idpc.ChecklistKeyGrantScopes].Details)
+	require.Equal(t, idpc.RequiredOktaAdminRoles, items[idpc.ChecklistKeyAssignAdminRoles].Details)
 	for _, key := range agentKeys {
 		require.NotContains(t, strings.ToLower(itemText(items[key])), "optional", key)
 	}
