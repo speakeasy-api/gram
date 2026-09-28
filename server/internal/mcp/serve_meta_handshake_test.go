@@ -20,7 +20,14 @@ import (
 
 // handshakeUpstream is a scripted member that records the handshake dispatch runs against it.
 type handshakeUpstream struct {
-	url             string
+	handshakeUpstreamConfig
+	url      string
+	mu       sync.Mutex
+	requests []handshakeRequest
+}
+
+// handshakeUpstreamConfig is fixed before the server starts serving requests.
+type handshakeUpstreamConfig struct {
 	sessionID       string
 	protocolVersion string
 	listPages       int
@@ -29,8 +36,6 @@ type handshakeUpstream struct {
 	initializeError bool
 	// truncatesInitialize mints a session on initialize, then drops the connection mid-body.
 	truncatesInitialize bool
-	mu                  sync.Mutex
-	requests            []handshakeRequest
 }
 
 type handshakeRequest struct {
@@ -41,9 +46,12 @@ type handshakeRequest struct {
 	cursor    string
 }
 
-func newHandshakeUpstream(t *testing.T, sessionID string, initializeError bool) *handshakeUpstream {
+func newHandshakeUpstream(t *testing.T, config handshakeUpstreamConfig) *handshakeUpstream {
 	t.Helper()
-	u := &handshakeUpstream{url: "", sessionID: sessionID, protocolVersion: mcpversions.Version20250618, initializeError: initializeError, truncatesInitialize: false, mu: sync.Mutex{}, requests: nil}
+	if config.protocolVersion == "" {
+		config.protocolVersion = mcpversions.Version20250618
+	}
+	u := &handshakeUpstream{handshakeUpstreamConfig: config}
 	srv := httptest.NewServer(http.HandlerFunc(u.serve))
 	t.Cleanup(srv.Close)
 	u.url = srv.URL
@@ -193,7 +201,7 @@ func driveMemberToolResult(t *testing.T, upstream *handshakeUpstream, memberSuff
 func TestServePublic_MetaEndpoint_DispatchRejectsInitializeError(t *testing.T) {
 	t.Parallel()
 
-	upstream := newHandshakeUpstream(t, "sess-"+uuid.NewString()[:8], true)
+	upstream := newHandshakeUpstream(t, handshakeUpstreamConfig{sessionID: "sess-" + uuid.NewString()[:8], initializeError: true})
 	text, isError, requests := driveMemberToolResult(t, upstream, "initerror")
 	require.True(t, isError)
 	require.Contains(t, text, "unsupported client capabilities")
@@ -213,7 +221,7 @@ func TestServePublic_MetaEndpoint_DispatchRejectsInitializeError(t *testing.T) {
 func TestServePublic_MetaEndpoint_DispatchAcknowledgesStatelessLegacyMember(t *testing.T) {
 	t.Parallel()
 
-	upstream := newHandshakeUpstream(t, "", false)
+	upstream := newHandshakeUpstream(t, handshakeUpstreamConfig{})
 	requests := driveMemberTool(t, upstream, "stateless")
 
 	require.Len(t, acks(requests), 1, "requests: %+v", requests)
@@ -227,8 +235,7 @@ func TestServePublic_MetaEndpoint_DispatchAcknowledgesStatelessLegacyMember(t *t
 func TestServePublic_MetaEndpoint_DispatchClosesSessionMintedBeforeBodyFailure(t *testing.T) {
 	t.Parallel()
 
-	upstream := newHandshakeUpstream(t, "sess-"+uuid.NewString()[:8], false)
-	upstream.truncatesInitialize = true
+	upstream := newHandshakeUpstream(t, handshakeUpstreamConfig{sessionID: "sess-" + uuid.NewString()[:8], truncatesInitialize: true})
 	text, isError, requests := driveMemberToolResult(t, upstream, "truncated")
 	require.True(t, isError, "a member that drops mid-initialize is a member error: %s", text)
 
@@ -251,9 +258,9 @@ func TestServePublic_MetaEndpoint_MemberProtocolRevisions(t *testing.T) {
 			if version == mcpversions.Version20260728 {
 				sessionID = ""
 			}
-			upstream := newHandshakeUpstream(t, sessionID, false)
-			upstream.protocolVersion = version
+			upstream := newHandshakeUpstream(t, handshakeUpstreamConfig{sessionID: sessionID, protocolVersion: version})
 			requests := driveMemberTool(t, upstream, "revision")
+			require.NotEmpty(t, requests)
 			require.Equal(t, "server/discover", requests[0].rpcMethod)
 			calls, deletes := 0, 0
 			for _, req := range requests {
@@ -286,8 +293,7 @@ func TestServePublic_MetaEndpoint_MemberPagination(t *testing.T) {
 	for _, pages := range []int{2, 10} {
 		t.Run(strconv.Itoa(pages), func(t *testing.T) {
 			t.Parallel()
-			upstream := newHandshakeUpstream(t, "pagination-session", false)
-			upstream.listPages = pages
+			upstream := newHandshakeUpstream(t, handshakeUpstreamConfig{sessionID: "pagination-session", listPages: pages})
 			ctx, ti := newTestMCPService(t)
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
@@ -328,8 +334,7 @@ func TestServePublic_MetaEndpoint_MemberDiscoveryFallback(t *testing.T) {
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusInternalServerError} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
 			t.Parallel()
-			upstream := newHandshakeUpstream(t, "fallback-session", false)
-			upstream.discoveryStatus = status
+			upstream := newHandshakeUpstream(t, handshakeUpstreamConfig{sessionID: "fallback-session", discoveryStatus: status})
 			requests := driveMemberTool(t, upstream, "discovery-fallback")
 			discovers, calls := 0, 0
 			for _, req := range requests {

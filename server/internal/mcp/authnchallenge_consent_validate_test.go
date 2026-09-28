@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -83,12 +84,13 @@ const (
 
 // validationMemberRequest is one request as it arrived at the fake member.
 type validationMemberRequest struct {
-	method    string
-	jsonrpc   string
-	rpcMethod string
-	auth      string
-	session   string
-	version   string
+	method      string
+	jsonrpc     string
+	rpcMethod   string
+	auth        string
+	session     string
+	version     string
+	metaVersion string
 }
 
 // validationMember is a scripted MCP upstream recording every request it receives on the wire.
@@ -134,17 +136,23 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 		JSONRPC string          `json:"jsonrpc"`
 		ID      json.RawMessage `json:"id"`
 		Method  string          `json:"method"`
+		Params  struct {
+			Meta map[string]json.RawMessage `json:"_meta"`
+		} `json:"params"`
 	}
 	_ = json.Unmarshal(body, &rpc)
+	var metaVersion string
+	_ = json.Unmarshal(rpc.Params.Meta[sdk.MetaKeyProtocolVersion], &metaVersion)
 
 	m.mu.Lock()
 	m.requests = append(m.requests, validationMemberRequest{
-		method:    r.Method,
-		jsonrpc:   rpc.JSONRPC,
-		rpcMethod: rpc.Method,
-		auth:      r.Header.Get("Authorization"),
-		session:   r.Header.Get("Mcp-Session-Id"),
-		version:   r.Header.Get("MCP-Protocol-Version"),
+		method:      r.Method,
+		jsonrpc:     rpc.JSONRPC,
+		rpcMethod:   rpc.Method,
+		auth:        r.Header.Get("Authorization"),
+		session:     r.Header.Get("Mcp-Session-Id"),
+		version:     r.Header.Get("MCP-Protocol-Version"),
+		metaVersion: metaVersion,
 	})
 	version := m.protocolVersion
 	mode := m.mode
@@ -1311,6 +1319,7 @@ func TestServeConsentAction_ValidateMemberProtocolRevisions(t *testing.T) {
 			requireValidated(t, fx)
 			require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
 			requests := fx.member.drain()
+			require.NotEmpty(t, requests)
 			require.Equal(t, "server/discover", requests[0].rpcMethod)
 			lists, deletes := 0, 0
 			for _, req := range requests {
@@ -1322,6 +1331,7 @@ func TestServeConsentAction_ValidateMemberProtocolRevisions(t *testing.T) {
 					require.Equal(t, version, req.version)
 				}
 				if version == "2026-07-28" {
+					require.Equal(t, version, req.metaVersion)
 					require.NotEqual(t, "initialize", req.rpcMethod)
 					require.NotEqual(t, "notifications/initialized", req.rpcMethod)
 					require.Empty(t, req.session)
