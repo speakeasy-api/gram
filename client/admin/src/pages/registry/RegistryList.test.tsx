@@ -45,6 +45,9 @@ it("bounds pages, sends search and publication filters, resets cursor and shows 
       }),
   );
   await renderWithApp(<RegistryList />);
+  expect(
+    screen.getByRole("heading", { name: "MCP Registry", level: 1 }),
+  ).toBeTruthy();
   await screen.findByText("1 issues");
   expect(list.mock.calls[0]?.[0]).toEqual({
     query: undefined,
