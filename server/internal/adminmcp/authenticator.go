@@ -40,6 +40,7 @@ type staffAccessStore interface {
 type staffAccessSession struct {
 	Subject          string
 	ClientID         string
+	ClientRowID      string
 	ConnectionID     string
 	Generation       string
 	ActiveGeneration string
@@ -97,7 +98,7 @@ func (a *StaffAuthenticator) Authenticate(ctx context.Context, token string) (Pr
 	if !ok || staff == nil || staff.SessionID != browserSessionID || staff.OIDCSubject != subject.ID || staff.Email == "" {
 		return Principal{}, errors.New("staff identity does not match connection")
 	}
-	return Principal{Subject: claims.Subject, Email: staff.Email, ClientID: claims.ClientID, ConnectionID: session.ConnectionID, Scopes: session.Scopes, staff: staff}, nil
+	return Principal{Subject: claims.Subject, Email: staff.Email, ClientID: claims.ClientID, ClientRowID: session.ClientRowID, ConnectionID: session.ConnectionID, Generation: session.Generation, Scopes: session.Scopes, staff: staff}, nil
 }
 
 type postgresStaffAccessStore struct{ db *pgxpool.Pool }
@@ -106,7 +107,7 @@ func (s postgresStaffAccessStore) ActiveSession(ctx context.Context, jti string)
 	var result staffAccessSession
 	var connectionID, generation, activeGeneration string
 	err := s.db.QueryRow(ctx, `
-SELECT connection.subject_urn, client.client_id, connection.id::text,
+SELECT connection.subject_urn, client.client_id, client.id::text, connection.id::text,
        session.connection_generation::text, connection.active_generation::text,
        connection.resource_uri, connection.scopes, connection.admin_session_id_enc, session.expires_at
 FROM admin_mcp_sessions AS session
@@ -118,7 +119,7 @@ WHERE session.jti = $1
   AND connection.revoked_at IS NULL AND connection.reauthorization_required_at IS NULL
   AND connection.authorization_expires_at > clock_timestamp()
   AND client.revoked_at IS NULL
-`, jti).Scan(&result.Subject, &result.ClientID, &connectionID, &generation, &activeGeneration, &result.ResourceURI, &result.Scopes, &result.AdminSessionEnc, &result.ExpiresAt)
+`, jti).Scan(&result.Subject, &result.ClientID, &result.ClientRowID, &connectionID, &generation, &activeGeneration, &result.ResourceURI, &result.Scopes, &result.AdminSessionEnc, &result.ExpiresAt)
 	result.ConnectionID = connectionID
 	result.Generation = generation
 	result.ActiveGeneration = activeGeneration

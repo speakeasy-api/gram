@@ -159,7 +159,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}
 	for _, log := range logs {
-		isAdminActor := log.ActingSurface == string(audit.SurfaceAdmin)
+		isAdminActor := audit.IsStaffAdminSurface(audit.Surface(log.ActingSurface))
 		isSpeakeasyActor := log.ActorType == "user" && speakeasyActors[log.ActorID]
 		if shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor) {
 			log.ActorDisplayName = conv.PtrEmpty(audit.SpeakeasyTeamActorLabel)
@@ -320,7 +320,7 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		AfterSnapshot:      row.AfterSnapshot,
 		Metadata:           metadata,
 		ActingSurface:      actingSurfaceOrUnknown(row.ActingSurface),
-		ActingClientID:     conv.FromPGText[string](row.ActingClientID),
+		ActingClientID:     customerFacingActingClientID(row.ActingSurface, row.ActingClientID),
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
@@ -331,6 +331,15 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 // no backfill. Those rows are reported as an unknown surface, which is what
 // they are; the API contract keeps the field always present so a client never
 // has to decide what a missing surface means.
+// customerFacingActingClientID omits the registered OAuth client identifier
+// for staff-only surfaces while preserving customer surface attribution.
+func customerFacingActingClientID(surface pgtype.Text, clientID pgtype.Text) *string {
+	if surface.Valid && audit.IsStaffAdminSurface(audit.Surface(surface.String)) {
+		return nil
+	}
+	return conv.FromPGText[string](clientID)
+}
+
 func actingSurfaceOrUnknown(surface pgtype.Text) string {
 	if !surface.Valid || surface.String == "" {
 		return string(audit.SurfaceUnknown)

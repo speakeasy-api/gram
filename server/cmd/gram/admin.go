@@ -114,6 +114,16 @@ func newAdminCommand() *cli.Command {
 			Usage:   "Independent signing key for staff Admin MCP access tokens",
 			EnvVars: []string{"GRAM_ADMIN_MCP_SIGNING_KEY"},
 		},
+		&cli.BoolFlag{
+			Name:    "admin-mcp-writes-enabled",
+			Usage:   "Global switch for staff Admin MCP writes. Off by default; each operation also needs admin-mcp-write-operations",
+			EnvVars: []string{"GRAM_ADMIN_MCP_WRITES_ENABLED"},
+		},
+		&cli.StringFlag{
+			Name:    "admin-mcp-write-operations",
+			Usage:   "Comma-separated staff Admin MCP write operations to enable. Empty enables none",
+			EnvVars: []string{"GRAM_ADMIN_MCP_WRITE_OPERATIONS"},
+		},
 		&cli.StringFlag{
 			Name:     "environment",
 			Usage:    "The current server environment", // local, dev, prod
@@ -523,15 +533,23 @@ func newAdminCommand() *cli.Command {
 				if err := validateAdminMCPSigningKey(key, c.String("admin-encryption-key"), c.String("encryption-key")); err != nil {
 					return err
 				}
+				writeOperations, err := adminmcp.ParseWriteOperations(c.String("admin-mcp-write-operations"))
+				if err != nil {
+					return fmt.Errorf("configure staff Admin MCP writes: %w", err)
+				}
+				writes := adminmcp.WriteConfig{Enabled: c.Bool("admin-mcp-writes-enabled"), Operations: writeOperations}
 				signer := sessiontokens.NewSigner(key)
-				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, cache.NewRedisCacheAdapter(redisClient), adminService.Verifier(), adminEncryption, signer)
+				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, cache.NewRedisCacheAdapter(redisClient), adminService.Verifier(), adminEncryption, signer, writes)
 				if err != nil {
 					return fmt.Errorf("initialize staff Admin MCP OAuth: %w", err)
 				}
 				staffOAuth.Attach(mux)
 				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
-				staffHandler := adminmcp.NewRuntime(staffAuth, staffOAuth.ProtectedResourceURL(), adminService).Handler()
-				mux.Handle(http.MethodPost, adminmcp.Path, staffHandler.ServeHTTP)
+				staffRuntime := adminmcp.NewRuntime(staffAuth, staffOAuth.ProtectedResourceURL(), adminService)
+				if err := adminmcp.AttachFeatureWrites(staffRuntime, staffOAuth, productFeatures, writes); err != nil {
+					return fmt.Errorf("configure staff Admin MCP write tools: %w", err)
+				}
+				mux.Handle(http.MethodPost, adminmcp.Path, staffRuntime.Handler().ServeHTTP)
 			}
 
 			srv := &http.Server{

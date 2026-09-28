@@ -14,9 +14,14 @@ func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, resul
 	input := entry.Params
 	actorDisplayName := conv.FromPGTextOrEmpty[string](input.ActorDisplayName)
 	actorSlug := conv.FromPGTextOrEmpty[string](input.ActorSlug)
-	if conv.FromPGTextOrEmpty[string](input.ActingSurface) == string(SurfaceAdmin) {
+	actingSurface := Surface(conv.FromPGTextOrEmpty[string](input.ActingSurface))
+	if IsStaffAdminSurface(actingSurface) {
 		actorDisplayName = SpeakeasyTeamActorLabel
 		actorSlug = ""
+	}
+	actingClientID := conv.FromPGTextOrEmpty[string](input.ActingClientID)
+	if IsStaffAdminSurface(actingSurface) {
+		actingClientID = ""
 	}
 
 	if _, err := outbox.PublishWebhookEvent(ctx, dbtx, result.OrganizationID, entry.OutboxEvent, events.AuditLogCreatedPayloadV1{
@@ -36,7 +41,7 @@ func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, resul
 		AfterSnapshot:      input.AfterSnapshot,
 		Metadata:           input.Metadata,
 		ActingSurface:      conv.FromPGTextOrEmpty[string](input.ActingSurface),
-		ActingClientID:     conv.FromPGTextOrEmpty[string](input.ActingClientID),
+		ActingClientID:     actingClientID,
 	}); err != nil {
 		return fmt.Errorf("append to outbox: %w", err)
 	}

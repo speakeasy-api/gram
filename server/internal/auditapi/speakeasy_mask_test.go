@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
+
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
@@ -45,7 +46,8 @@ func TestAuditService_List_MasksAdminSurfaceActors(t *testing.T) {
 
 	ctx, ti := newTestAuditService(t)
 	authCtx := testAuthContext(t, ctx)
-	adminSurface := "admin"
+	adminSurface := "admin_mcp"
+	staffClientID := "staff-client-secret"
 
 	adminLogID := insertAuditLog(t, ctx, ti, auditLogSeed{
 		organizationID:   authCtx.ActiveOrganizationID,
@@ -55,6 +57,7 @@ func TestAuditService_List_MasksAdminSurfaceActors(t *testing.T) {
 		actorDisplayName: new("Test Operator"),
 		actorSlug:        new("test-operator"),
 		actingSurface:    &adminSurface,
+		actingClientID:   &staffClientID,
 		action:           "organization:update",
 		subjectID:        authCtx.ActiveOrganizationID,
 		subjectType:      "organization",
@@ -85,6 +88,7 @@ func TestAuditService_List_MasksAdminSurfaceActors(t *testing.T) {
 	require.NotNil(t, adminLog)
 	require.Equal(t, "Speakeasy Team", *adminLog.ActorDisplayName)
 	require.Nil(t, adminLog.ActorSlug)
+	require.Nil(t, adminLog.ActingClientID, "staff OAuth client IDs must not appear in customer feeds")
 
 	controlLog := byID[controlLogID.String()]
 	require.NotNil(t, controlLog)
@@ -99,7 +103,7 @@ func TestAuditService_ListFacets_MasksAdminSurfaceActors(t *testing.T) {
 
 	ctx, ti := newTestAuditService(t)
 	authCtx := testAuthContext(t, ctx)
-	adminSurface := "admin"
+	adminSurface := "admin_mcp"
 
 	insertAuditLog(t, ctx, ti, auditLogSeed{
 		organizationID:   authCtx.ActiveOrganizationID,

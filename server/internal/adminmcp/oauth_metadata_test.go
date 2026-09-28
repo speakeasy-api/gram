@@ -21,13 +21,13 @@ func TestStaffOAuthUsesCanonicalAdminOrigin(t *testing.T) {
 	require.NoError(t, err)
 	cipher, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	oauth, err := NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"))
+	oauth, err := NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{})
 	require.NoError(t, err)
 	require.Equal(t, "https://admin.example.test/admin-mcp", oauth.Resource())
 	require.Equal(t, "https://admin.example.test/admin-mcp/oauth", oauth.Issuer())
 	require.Equal(t, "https://admin.example.test/.well-known/oauth-protected-resource/admin-mcp", oauth.ProtectedResourceURL())
 	base.Path = "/unexpected-prefix"
-	_, err = NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"))
+	_, err = NewStaffOAuth(base, &pgxpool.Pool{}, testenv.NewMemoryCache(), &fakeAdminVerifier{}, cipher, sessiontokens.NewSigner("staff-test-signing-key"), WriteConfig{})
 	require.Error(t, err)
 }
 
@@ -75,5 +75,13 @@ func TestStaffOAuthMetadataURLs(t *testing.T) {
 		for key, value := range tt.want {
 			require.Equal(t, value, metadata[key], key)
 		}
+		require.Equal(t, []any{ScopeRead}, metadata["scopes_supported"], "writes are off by default")
 	}
+
+	oauth.writes = WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
+	rec := httptest.NewRecorder()
+	oauth.AuthorizationServerHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/admin-mcp/oauth", nil))
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &metadata))
+	require.Equal(t, []any{ScopeRead, ScopeWrite}, metadata["scopes_supported"])
 }
