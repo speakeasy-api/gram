@@ -3,8 +3,7 @@ import { CompassIcon } from "lucide-react";
 
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 
-export const DEMO_ORGANIZATION_URL =
-  "https://app.getgram.ai/acme-demo/projects/default";
+export const DEMO_ORGANIZATION_URL = "https://app.getgram.ai/explore-demo";
 
 export function DemoOrganizationNavItem(): JSX.Element {
   return (

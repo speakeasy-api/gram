@@ -207,7 +207,7 @@ describe("AppSidebar", () => {
           { label: "Admin MCP", href: "/mcp-setup" },
           {
             label: "Demo organization",
-            href: "https://app.getgram.ai/acme-demo/projects/default",
+            href: "https://app.getgram.ai/explore-demo",
           },
         ],
       },
@@ -254,7 +254,7 @@ describe("AppSidebar", () => {
 
     const demoLink = screen.getByRole("link", { name: "Demo organization" });
     expect(demoLink.getAttribute("href")).toBe(
-      "https://app.getgram.ai/acme-demo/projects/default",
+      "https://app.getgram.ai/explore-demo",
     );
     expect(demoLink.getAttribute("target")).toBe("_blank");
     expect(demoLink.getAttribute("rel")).toBe("noopener noreferrer");
