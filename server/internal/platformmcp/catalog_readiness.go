@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -31,6 +32,11 @@ const (
 	catalogProbeTimeout     = 15 * time.Second
 	catalogProbeMaxResponse = 1 << 20
 	catalogReadinessTTL     = time.Minute
+
+	// catalogProbeMaxLoggedError bounds the provider-influenced error detail a
+	// failed probe logs. 512 bytes holds an SDK error and a short JSON-RPC
+	// message without letting a provider fill the log line.
+	catalogProbeMaxLoggedError = 512
 )
 
 var errCatalogProbeResponseTooLarge = errors.New("platform mcp catalogue readiness response too large")
@@ -185,14 +191,14 @@ func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, 
 
 // probeFailure classifies a failed probe and logs the underlying error. The
 // caller-visible result is only the closed state and evidence code; the
-// server-side log keeps the SDK error and last failing HTTP status so an
-// operator can tell why a provider's response was rejected.
+// server-side log keeps a redacted, bounded SDK error and the last failing
+// HTTP status so an operator can tell why a provider's response was rejected.
 func (p *RemoteMCPReadinessProber) probeFailure(ctx context.Context, remoteURL string, err error, roundTripper *catalogAuthorizationRoundTripper, stage catalogProbeStage) (ReadinessState, string) {
 	state, evidence := catalogProbeFailure(err, roundTripper, stage)
 	attrs := []any{
 		attr.SlogOutcome(evidence),
 		attr.SlogReason(string(stage)),
-		attr.SlogError(err),
+		attr.SlogError(errors.New(redactProbeError(err.Error(), remoteURL, roundTripper))),
 	}
 	if parsed, parseErr := url.Parse(remoteURL); parseErr == nil {
 		attrs = append(attrs, attr.SlogServerAddress(parsed.Host))
@@ -202,6 +208,28 @@ func (p *RemoteMCPReadinessProber) probeFailure(ctx context.Context, remoteURL s
 	}
 	p.logger.WarnContext(ctx, "remote mcp readiness probe failed", attrs...)
 	return state, evidence
+}
+
+// redactProbeError removes the endpoint's query string and every credential
+// the probe sent from an SDK error, then bounds its length. Go HTTP errors
+// embed the full request URL, and JSON-RPC errors carry provider-authored text.
+func redactProbeError(detail, remoteURL string, roundTripper *catalogAuthorizationRoundTripper) string {
+	secrets := []string{roundTripper.token}
+	if parsed, err := url.Parse(remoteURL); err == nil {
+		secrets = append(secrets, parsed.RawQuery)
+	}
+	for _, header := range roundTripper.headers {
+		secrets = append(secrets, header.Value.String)
+	}
+	for _, secret := range secrets {
+		if secret != "" {
+			detail = strings.ReplaceAll(detail, secret, "[REDACTED]")
+		}
+	}
+	if len(detail) > catalogProbeMaxLoggedError {
+		detail = detail[:catalogProbeMaxLoggedError] + "…"
+	}
+	return detail
 }
 
 type catalogProbeStage string

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -121,12 +122,25 @@ func TestRemoteMCPReadinessProbeLogsRejectedToolsList(t *testing.T) {
 	var logs bytes.Buffer
 	prober := &RemoteMCPReadinessProber{logger: slog.New(slog.NewJSONHandler(&logs, nil)), policy: policy}
 
-	state, evidence := prober.probe(t.Context(), upstream.URL, nil, "")
+	state, evidence := prober.probe(t.Context(), upstream.URL+"?tenant=probe-query-sentinel", nil, "probe-token-sentinel")
 
 	require.Equal(t, ReadinessUnsupported, state)
 	require.Equal(t, "invalid_mcp_response", evidence)
 	require.Contains(t, logs.String(), "remote mcp readiness probe failed")
 	require.Contains(t, logs.String(), `"tools_list"`)
 	require.Contains(t, logs.String(), "400")
-	require.NotContains(t, logs.String(), "Authorization")
+	require.NotContains(t, logs.String(), "probe-token-sentinel")
+	require.NotContains(t, logs.String(), "probe-query-sentinel")
+}
+
+func TestRedactProbeErrorRemovesCredentialsAndBoundsLength(t *testing.T) {
+	t.Parallel()
+
+	roundTripper := &catalogAuthorizationRoundTripper{token: "token-sentinel"}
+	detail := redactProbeError(`Post "https://mcp.example.test/mcp?key=query-sentinel": token-sentinel `+strings.Repeat("x", catalogProbeMaxLoggedError), "https://mcp.example.test/mcp?key=query-sentinel", roundTripper)
+
+	require.NotContains(t, detail, "token-sentinel")
+	require.NotContains(t, detail, "query-sentinel")
+	require.Contains(t, detail, "https://mcp.example.test/mcp?[REDACTED]")
+	require.LessOrEqual(t, len(detail), catalogProbeMaxLoggedError+len("…"))
 }
