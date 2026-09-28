@@ -5,7 +5,9 @@ The cascade runs for every scan; there is no rollout flag or Gemini fallback.
 
 Jev returns three Noul probabilities for operational instruction overrides,
 guarded-secret extraction, and unauthorized external exfiltration. Any probability
-at least 0.50 triggers review. Lower probabilities produce no finding. This matches the evaluated
+at least 0.50 triggers review. Lower probabilities clear only complete evidence;
+if rendering or input-budget reduction truncated any evidence, the result is
+unavailable and incomplete instead. This matches the evaluated
 prefilter cutoff; a false negative at this stage cannot be recovered by Opus. These are
 probabilities, not TypeSafe's distinct Choice/Score confidence statistic.
 

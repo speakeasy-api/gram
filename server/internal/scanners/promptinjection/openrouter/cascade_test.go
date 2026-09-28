@@ -167,8 +167,16 @@ func TestCascadeOversizedWindowDoesNotCallOpus(t *testing.T) {
 func TestCascadeTruncatesJevEvidenceButPreservesOpusEvidence(t *testing.T) {
 	t.Parallel()
 	cascade, client := testCascade(t, PrefilterThreshold, safeVerdictJSON)
-	msg := judgemessage.New(message.ToolResponse, "search", "HEAD"+strings.Repeat("界<&", 6000)+"TAIL")
-	trajectory := judgemessage.Trajectory{PriorUserRequest: strings.Repeat("<&", 4000), RecentUntrustedContent: strings.Repeat("<&", 4000)}
+	calls := make([]judgemessage.ToolCall, 8)
+	for i := range calls {
+		calls[i] = judgemessage.NewToolCall("search", "HEAD"+strings.Repeat("evidence ", 1700)+"TAIL")
+	}
+	msg := judgemessage.NewForToolCalls(calls)
+	trajectory := judgemessage.Trajectory{PriorUserRequest: "inspect these results", RecentUntrustedContent: ""}
+	full, _ := prepareJudgePayload(msg, trajectory)
+	questionJSON, err := json.Marshal(PrefilterQuestions())
+	require.NoError(t, err)
+	require.Greater(t, estimatePrefilterTokens(full, questionJSON), maxPrefilterInputTokens, "plain ASCII evidence exceeds the budget without HTML escaping")
 	jev := &mockPrefilter{}
 	probabilities := make(map[string]float64)
 	for id := range PrefilterQuestions() {
@@ -197,7 +205,12 @@ func TestCascadeTruncatesJevEvidenceButPreservesOpusEvidence(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(client.lastPrompt()), &confirmation))
 	require.Equal(t, judgemessage.RenderPayload(msg), confirmation.Window.Messages[0])
-	require.Less(t, len(seen.Message.Body), len(confirmation.Window.Messages[0].Body))
+	prefilterLength, confirmationLength := 0, 0
+	for i, call := range seen.Message.ToolCalls {
+		prefilterLength += len(call.Arguments)
+		confirmationLength += len(confirmation.Window.Messages[0].ToolCalls[i].Arguments)
+	}
+	require.Less(t, prefilterLength, confirmationLength)
 	jev.AssertExpectations(t)
 }
 
@@ -232,12 +245,9 @@ func TestCascadeRetriesContextOverflowWithSmallerInput(t *testing.T) {
 	cascade.jev = jev
 	results, err := cascade.Classify(t.Context(), req(strings.Repeat("evidence ", 1000)))
 	require.NoError(t, err)
-	require.True(t, results[0].Completed)
-	require.Equal(t, promptinjection.LabelSafe, results[0].Label)
+	require.False(t, results[0].Completed)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
 	require.True(t, retryPayload.Message.BodyTruncated)
-	count, err := cascade.opus.stokenCodec.Count(t.Context(), judgePayloadContent(retryPayload)...)
-	require.NoError(t, err)
-	require.EqualValues(t, count, results[0].STokens)
 	require.Zero(t, client.calls.Load())
 	jev.AssertExpectations(t)
 }
@@ -269,4 +279,14 @@ func TestCascadeDoesNotRetryOtherPrefilterErrors(t *testing.T) {
 	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
 	require.Zero(t, client.calls.Load())
 	jev.AssertExpectations(t)
+}
+
+func TestCascadeTruncatedNegativePrefilterIsUnavailable(t *testing.T) {
+	t.Parallel()
+	cascade, client := testCascade(t, 0, safeVerdictJSON)
+	results, err := cascade.Classify(t.Context(), req(strings.Repeat("evidence ", 2000)))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
+	require.False(t, results[0].Completed)
+	require.Zero(t, client.calls.Load())
 }

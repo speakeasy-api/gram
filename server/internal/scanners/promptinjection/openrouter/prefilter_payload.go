@@ -28,7 +28,10 @@ func preparePrefilterPayload(msg judgemessage.Message, trajectory judgemessage.T
 		return nil, nil, false, fmt.Errorf("marshal prefilter questions: %w", err)
 	}
 	fields := prefilterTextFields(&payload)
-	truncated := false
+	truncated := payload.Message.ToolCallsTruncated
+	for _, field := range fields {
+		truncated = truncated || *field.truncated
+	}
 	for {
 		prepared, err := json.Marshal(payload)
 		if err != nil {

@@ -136,6 +136,10 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 	}
 	span.SetAttributes(attribute.Float64("prefilter.probability", probability), attribute.Float64("prefilter.cost_usd", result.CostUSD), attribute.Int("prefilter.input_tokens", result.InputTokens), attribute.Int("prefilter.output_tokens", result.OutputTokens), attribute.Bool("prefilter.escalated", probability >= PrefilterThreshold))
 	if probability < PrefilterThreshold {
+		// Omitted evidence cannot be cleared by a negative prefilter judgment.
+		if truncated {
+			return unavailableResult
+		}
 		cleared := safeResult
 		cleared.Model = result.Model
 		count, countErr := c.opus.stokenCodec.Count(ctx, content...)
