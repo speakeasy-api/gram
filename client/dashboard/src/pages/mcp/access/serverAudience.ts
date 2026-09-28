@@ -179,7 +179,9 @@ export function blockingRules(
  * The rules with every block this person's own rules outrank set aside. A
  * rule naming this server that is made to the person directly outranks a
  * block reaching them through a role or everyone, for the capabilities it
- * grants. Mirrors server/internal/authz/precedence.go.
+ * grants. View and manage are about the server itself, so a narrowed rule
+ * restores them whole; connect reaches tools, so only an unnarrowed rule sets
+ * a connect block aside here. Mirrors server/internal/authz/precedence.go.
  */
 function withoutOutrankedBlocks(
   reaching: ResourceAudienceEntry[],
@@ -190,12 +192,15 @@ function withoutOutrankedBlocks(
     (entry) =>
       entry.principalUrn === principalUrn &&
       entry.appliesTo === "resource" &&
-      !isBlock(entry) &&
-      !isNarrowedRule(entry),
+      !isBlock(entry),
   );
   if (direct.length === 0) return reaching;
   const outranked = new Set(
-    direct.flatMap((entry) => capabilitiesOf(entry.level)),
+    direct.flatMap((entry) =>
+      capabilitiesOf(entry.level).filter(
+        (capability) => capability !== "use" || !isNarrowedRule(entry),
+      ),
+    ),
   );
   return reaching.filter(
     (entry) =>

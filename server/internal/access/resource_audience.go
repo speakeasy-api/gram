@@ -260,9 +260,10 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	// page, so writing one against an audience the caller is part of would
 	// take away their own ability to undo it. Blocks on connect and manage
 	// leave the page readable, so neither needs a guard. A caller who keeps
-	// their own unnarrowed view or manage rule on this resource is not locked
-	// out by a role or everyone block, because a direct grant naming the
-	// resource outranks both; their own block still applies.
+	// their own view or manage rule on this resource is not locked out by a
+	// role or everyone block, because a direct grant naming the resource
+	// outranks both for the page's server-level read, even when narrowed;
+	// their own block still applies.
 	if slices.ContainsFunc(audienceLockoutLevels, func(level string) bool {
 		return len(principalsByLevel[level]) > 0
 	}) {
@@ -273,7 +274,7 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		callerURN := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID).String()
 		keepsOwnView := slices.ContainsFunc(audienceViewLevels, func(level string) bool {
 			return slices.ContainsFunc(principalsByLevel[level], func(entry authz.PrincipalSelectors) bool {
-				return entry.Principal.String() == callerURN && len(entry.Selectors) == 0
+				return entry.Principal.String() == callerURN
 			})
 		})
 		held := make(map[string]struct{}, len(callerPrincipals))

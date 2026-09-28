@@ -236,15 +236,36 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
  * outranks a block written against a role or everyone. A rule their own block
  * already cancels keeps nothing.
  */
+/**
+ * Whether this line's own rules naming the server still reach something past
+ * its own blocks. Blocks from a role or everyone do not count: the rules
+ * outrank them. Without a catalogue, only an unnarrowed own block is known to
+ * cancel them.
+ */
+function keepsThroughOwnRules(
+  cell: ScopeCell,
+  catalog: ToolSelectionTool[],
+): boolean {
+  if (cell.direct.length === 0) return false;
+  const ownBlocks = cell.blocks.filter((block) => !isInherited(cell, block));
+  if (catalog.length === 0) return !ownBlocks.some(isUnnarrowed);
+  return catalog.some(
+    (tool) =>
+      cell.direct.some((grant) => coversTool(grant, tool)) &&
+      !ownBlocks.some((block) => coversTool(block, tool)),
+  );
+}
+
 export function keptIndividually(
   group: AccessRow,
   rows: AccessRow[],
+  /** The server's tools, so a narrowed rule its own block cancels keeps nothing. */
+  catalog: ToolSelectionTool[] = [],
 ): AccessRow[] {
   return rows.filter((row) => {
     if (row === group || !outranksInheritedBlocks(row)) return false;
-    const keeps = SCOPE_ROWS.some(
-      ({ key }) =>
-        row.cells[key].direct.length > 0 && scopeState(row, key).granted,
+    const keeps = SCOPE_ROWS.some(({ key }) =>
+      keepsThroughOwnRules(row.cells[key], catalog),
     );
     if (!keeps) return false;
     if (group.kind === "everyone") return true;

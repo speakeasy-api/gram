@@ -682,6 +682,32 @@ func TestService_SetResourceAudience_AllowsBlockingEveryonesViewWhileKeepingOwn(
 	require.NoError(t, err)
 }
 
+// A narrowed view rule still satisfies the page's server-level read, so it
+// keeps the caller in as well as an unnarrowed one.
+func TestService_SetResourceAudience_AllowsBlockingEveryonesViewWhileKeepingNarrowedOwn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	callerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: "*", Level: "blocked_view"},
+			{PrincipalUrn: callerPrincipal.String(), Level: "view", Tools: []string{"search"}},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+}
+
 // Restricting a server to one team is written as "everyone else: no access",
 // which stores a block — and a role block outranks every grant except one made
 // to a person by name for this resource. Naming the

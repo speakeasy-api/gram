@@ -19,6 +19,7 @@ export function AddAudienceDialog({
   kinds,
   alreadyAdded,
   alreadyReaches,
+  blockedReason,
   pending,
   onAdd,
   onClose,
@@ -30,6 +31,11 @@ export function AddAudienceDialog({
   alreadyAdded: string[];
   /** Principals an organization-wide rule already covers, and what it gives. */
   alreadyReaches?: { principalUrn: string; reason: string }[];
+  /**
+   * Why a principal is withheld because a block reaches it that a rule added
+   * here would not outrank, or undefined when a rule here would take effect.
+   */
+  blockedReason?: (principalUrn: string) => string | undefined;
   pending: boolean;
   onAdd: (principalUrns: string[]) => void;
   onClose: () => void;
@@ -50,21 +56,28 @@ export function AddAudienceDialog({
         icon: audienceIcon(group.kind),
         options: (data?.options ?? [])
           .filter((option) => option.kind === group.kind)
-          .map((option) => ({
-            label: option.displayName,
-            value: option.principalUrn,
-            description:
-              covered.get(option.principalUrn) ??
-              (added.has(option.principalUrn)
-                ? "Already has access"
-                : option.description),
-            disabled:
-              added.has(option.principalUrn) ||
-              covered.has(option.principalUrn),
-          })),
+          .map((option) => {
+            // A block the rule would not outrank is the truer answer, even
+            // when a rule here already names the principal.
+            const blocked = blockedReason?.(option.principalUrn);
+            return {
+              label: option.displayName,
+              value: option.principalUrn,
+              description:
+                blocked ??
+                covered.get(option.principalUrn) ??
+                (added.has(option.principalUrn)
+                  ? "Already has access"
+                  : option.description),
+              disabled:
+                blocked !== undefined ||
+                added.has(option.principalUrn) ||
+                covered.has(option.principalUrn),
+            };
+          }),
       }))
       .filter((group) => group.options.length > 0);
-  }, [data?.options, kinds, alreadyAdded, alreadyReaches]);
+  }, [data?.options, kinds, alreadyAdded, alreadyReaches, blockedReason]);
 
   return (
     <Dialog

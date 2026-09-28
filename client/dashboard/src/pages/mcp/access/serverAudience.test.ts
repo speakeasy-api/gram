@@ -118,6 +118,22 @@ describe("principal precedence", () => {
     expect(effectiveReach(reaching, [], hana)).toBeNull();
   });
 
+  it("lets a narrowed own view rule outrank a role's view block", () => {
+    const viewBlock = entry({
+      principalUrn: "role:global:admin",
+      displayName: "Admin",
+      level: "blocked_view",
+      appliesTo: "resource",
+    });
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "view" }),
+      viewBlock,
+      ownRule({ level: "view", tools: ["search"] }),
+    ];
+
+    expect(effectiveReach(reaching, [], hana)?.capabilities).toContain("view");
+  });
+
   it("does not let a rule covering every server outrank a block", () => {
     const reaching = [adminBlock, ownRule({ appliesTo: "all_resources" })];
 

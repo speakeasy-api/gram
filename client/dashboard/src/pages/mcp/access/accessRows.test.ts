@@ -483,6 +483,26 @@ describe("keptIndividually", () => {
     );
   });
 
+  it("leaves out a person whose own block cancels every tool their rule names", () => {
+    const rows = buildAccessRows([
+      role("Staff", { memberIds: ["u1"] }),
+      entry({
+        principalUrn: "user:u1",
+        displayName: "Hana Sato",
+        tools: ["a"],
+      }),
+      entry({
+        principalUrn: "user:u1",
+        displayName: "Hana Sato",
+        level: "blocked",
+        tools: ["a"],
+      }),
+    ]);
+    const staff = rows.find((row) => row.principalUrn === "role:Staff")!;
+
+    expect(keptIndividually(staff, rows, catalog)).toEqual([]);
+  });
+
   it("names everyone holding their own rule when the group is everyone", () => {
     const rows = buildAccessRows([
       everyone,

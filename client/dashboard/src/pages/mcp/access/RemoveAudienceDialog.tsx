@@ -34,6 +34,12 @@ export function RemoveAudienceDialog({
   const isGroup = isRole || row.kind === "everyone";
   // "Everyone in Everyone" is not a sentence: the everyone row already names
   // the group, so it takes the verb directly.
+  // Anyone kept individually is named below, so the summary must not claim
+  // the whole group loses the server.
+  const loses =
+    isGroup && keptBy.length > 0
+      ? "loses this server: connecting, viewing and managing, except anyone given it individually."
+      : "loses this server: connecting, viewing and managing.";
   const groupPhrase = (rest: string) =>
     row.kind === "everyone"
       ? `Everyone ${rest}`
@@ -53,11 +59,7 @@ export function RemoveAudienceDialog({
           <Dialog.Title>
             Remove {row.displayName} from {server}?
           </Dialog.Title>
-          <Dialog.Description>
-            {groupPhrase(
-              "loses this server: connecting, viewing and managing.",
-            )}
-          </Dialog.Description>
+          <Dialog.Description>{groupPhrase(loses)}</Dialog.Description>
         </Dialog.Header>
 
         <ul className="text-muted-foreground list-disc space-y-1 py-2 pl-5 text-sm">

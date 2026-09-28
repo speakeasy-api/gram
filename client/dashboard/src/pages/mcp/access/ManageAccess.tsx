@@ -75,7 +75,7 @@ import {
   type AudienceWrite,
 } from "./accessWrites";
 import { RoleLink } from "./RoleLink";
-import { ownRules, LEVEL_VERB } from "./serverAudience";
+import { isUnnarrowed, ownRules, LEVEL_VERB } from "./serverAudience";
 
 /** Narrowing the tool dialog is currently editing, and the row it belongs to. */
 interface NarrowingTarget {
@@ -152,6 +152,26 @@ export function ManageAccess({
 
   const direct = useMemo(() => ownRules(entries), [entries]);
   const rows = useMemo(() => buildAccessRows(entries), [entries]);
+
+  // Agents a role's or everyone's unnarrowed connect block reaches. Unlike a
+  // person's, an agent's own rule here does not outrank that block, so the
+  // agent picker withholds them rather than writing a rule that does nothing.
+  const agentBlockedReason = useMemo(() => {
+    const byAgent = new Map<string, string>();
+    let everyone: string | undefined;
+    for (const entry of entries) {
+      if (entry.level !== "blocked" || !isUnnarrowed(entry)) continue;
+      if (entry.kind === "agent") continue;
+      if (entry.kind === "everyone") everyone ??= entry.displayName;
+      for (const agentId of entry.agentIds ?? []) {
+        if (!byAgent.has(agentId)) byAgent.set(agentId, entry.displayName);
+      }
+    }
+    return (principalUrn: string): string | undefined => {
+      const by = byAgent.get(principalUrn.replace(/^agent:/, "")) ?? everyone;
+      return by ? `Blocked by ${by} on this server` : undefined;
+    };
+  }, [entries]);
 
   // Rules covering every server, which a rule added here cannot narrow.
   const orgWide = useMemo(
@@ -404,7 +424,7 @@ export function ManageAccess({
       {removing && (
         <RemoveAudienceDialog
           row={removing}
-          keptBy={keptIndividually(removing, rows).map(
+          keptBy={keptIndividually(removing, rows, toolCatalog ?? []).map(
             (row) => row.displayName,
           )}
           serverName={resourceName}
@@ -424,6 +444,7 @@ export function ManageAccess({
           }
           kinds={[adding]}
           alreadyAdded={direct.map((entry) => entry.principalUrn)}
+          blockedReason={adding === "agent" ? agentBlockedReason : undefined}
           // A principal an organization-wide rule already covers cannot be
           // narrowed by adding a rule here — grants add, they never subtract
           // — so say what it already has instead of offering a no-op. People

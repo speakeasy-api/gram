@@ -333,10 +333,12 @@ export function MCPTeamAccessTab({
               </div>
               <Text muted small className="mt-1">
                 These people are granted access through one rule and blocked by
-                another, so they cannot reach this server. To fix it, give them
-                access to this server by name, which outranks a role&rsquo;s
-                block, or remove the block: on the blocking role&rsquo;s page,
-                or from the list above when it names the person directly.
+                another, so they cannot reach this server. To fix it, remove the
+                block: on the blocking role&rsquo;s page, or from the list above
+                when it names the person directly. When the block comes from a
+                role or everyone, giving them access to this server by name also
+                works, since that outranks it; a block on the person themselves
+                still applies.
               </Text>
             </div>
             <Table columns={conflictColumns}>
