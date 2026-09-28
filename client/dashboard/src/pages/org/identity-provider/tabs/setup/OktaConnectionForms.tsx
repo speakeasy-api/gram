@@ -125,7 +125,7 @@ export function CreateConnectionForm(): JSX.Element {
   );
 }
 
-export function ClientIdStep({
+export function ClientIdForm({
   connection,
 }: {
   connection: OktaIdentityProviderConnection;
@@ -164,68 +164,53 @@ export function ClientIdStep({
   };
 
   return (
-    <SettingsSection id={CLIENT_ID_SECTION_ID}>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Paste the client ID</SettingsSection.Title>
-        <SettingsSection.Description>
-          Complete the Connect section of the checklist, then paste the client
-          ID of the Okta API Services app. Speakeasy checks the connection right
-          away. You can save this ID only once. To change it, revoke this
-          connection and connect again.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          <Field className="max-w-xl">
-            <FieldLabel htmlFor="okta-client-id">Client ID</FieldLabel>
-            <Input
-              id="okta-client-id"
-              disabled={submit.isPending}
-              onEnter={submitClientId}
-              aria-invalid={showClientIdError}
-              aria-describedby={`okta-client-id-help${showClientIdError ? " okta-client-id-error" : ""}`}
-              error={showClientIdError}
-              value={clientId}
-              onChange={setClientId}
-              placeholder="0oa..."
-              className="font-mono"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <FieldDescription id="okta-client-id-help">
-              Found under Applications, in the API Services app&apos;s General
-              tab. Use this app&apos;s client ID, not the single sign-on (SSO)
-              app or AI agent ID.
-            </FieldDescription>
-            {showClientIdError && (
-              <p
-                id="okta-client-id-error"
-                role="alert"
-                className="text-destructive text-sm"
-              >
-                Enter an Okta client ID starting with 0oa followed by at least
-                17 letters or numbers.
-              </p>
-            )}
-          </Field>
-          <ApiErrorAlert error={submit.error} />
-        </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            Speakeasy checks that it can connect securely to Okta and read
-            applications, users, and groups.
-          </SettingsSection.FooterHint>
-          <SettingsSection.FooterActions>
-            <Button
-              disabled={!validClientId || submit.isPending}
-              onClick={submitClientId}
-            >
-              {submit.isPending ? "Verifying..." : "Submit and verify"}
-            </Button>
-          </SettingsSection.FooterActions>
-        </SettingsSection.Footer>
-      </SettingsSection.Panel>
-    </SettingsSection>
+    <section
+      id={CLIENT_ID_SECTION_ID}
+      aria-label="Submit the Okta client ID"
+      className="flex max-w-3xl flex-col gap-4"
+    >
+      <Field className="max-w-xl">
+        <FieldLabel htmlFor="okta-client-id">Client ID</FieldLabel>
+        <Input
+          id="okta-client-id"
+          disabled={submit.isPending}
+          onEnter={submitClientId}
+          aria-invalid={showClientIdError}
+          aria-describedby={`okta-client-id-help${showClientIdError ? " okta-client-id-error" : ""}`}
+          error={showClientIdError}
+          value={clientId}
+          onChange={setClientId}
+          placeholder="0oa..."
+          className="font-mono"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <FieldDescription id="okta-client-id-help">
+          Use the API Services app&apos;s client ID, not the single sign-on
+          (SSO) app or AI agent ID. You can save this ID only once. To change
+          it, revoke this connection and connect again.
+        </FieldDescription>
+        {showClientIdError && (
+          <p
+            id="okta-client-id-error"
+            role="alert"
+            className="text-destructive text-sm"
+          >
+            Enter an Okta client ID starting with 0oa followed by at least 17
+            letters or numbers.
+          </p>
+        )}
+      </Field>
+      <ApiErrorAlert error={submit.error} />
+      <div>
+        <Button
+          disabled={!validClientId || submit.isPending}
+          onClick={submitClientId}
+        >
+          {submit.isPending ? "Verifying..." : "Submit and verify"}
+        </Button>
+      </div>
+    </section>
   );
 }
 

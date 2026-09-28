@@ -5,6 +5,10 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AIToolsTable } from "./AIToolsTable";
 
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 const mocks = vi.hoisted(() => ({
   useAiDetections: vi.fn(),
 }));

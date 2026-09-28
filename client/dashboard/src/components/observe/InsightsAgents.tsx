@@ -1,3 +1,4 @@
+import { CostsSetupEmptyState } from "@/components/setup-empty-state";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { formatPlatform } from "@/lib/formatPlatform";
@@ -538,6 +539,18 @@ export function InsightsAgentsContent(): JSX.Element {
                 models over {rangeLabel}.
               </p>
             </div>
+            {!usersQuery.isPending &&
+              !usersQuery.isError &&
+              users.length === 0 && (
+                <CostsSetupEmptyState
+                  filtered={
+                    clientFilter !== "all" ||
+                    !!accountType ||
+                    (dateRange !== "30d" && dateRange !== "90d") ||
+                    !!customRange
+                  }
+                />
+              )}
             <Page.Toolbar>
               <Page.Toolbar.Filters
                 schema={COST_FILTERS}

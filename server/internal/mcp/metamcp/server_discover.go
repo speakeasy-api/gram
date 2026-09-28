@@ -2,14 +2,15 @@ package metamcp
 
 import "encoding/json"
 
-// DiscoverResult is the response shape for MCP 2026-07-28's sessionless
-// server/discover method: the same self-description initialize answers, minus
-// any session establishment, plus the set of protocol revisions the surface
-// can serve. ServerInfo carries the serving package's server-identity value
-// opaquely so the wire shape stays colocated with the other views.
+// DiscoverResult is the sessionless MCP 2026-07-28 server description.
+// The serving package supplies identity and caching fields in its envelope.
 type DiscoverResult struct {
-	ProtocolVersions []string                   `json:"protocolVersions"`
-	Capabilities     map[string]json.RawMessage `json:"capabilities"`
-	ServerInfo       any                        `json:"serverInfo"`
-	Instructions     string                     `json:"instructions,omitempty"`
+	// SupportedVersions lists the revisions served by this surface.
+	SupportedVersions []string `json:"supportedVersions"`
+
+	// Capabilities describes the operations offered by this server.
+	Capabilities map[string]json.RawMessage `json:"capabilities"`
+
+	// Instructions provides operator guidance for using this server.
+	Instructions string `json:"instructions,omitempty"`
 }

@@ -1,3 +1,4 @@
+import { ShadowAISetupEmptyState } from "@/components/setup-empty-state";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { Page } from "@/components/page-layout";
@@ -91,15 +92,10 @@ function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
 
 function InventoryEmptyState() {
   return (
-    <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-      <Text variant="body" className="font-medium">
-        No MCP servers observed yet
-      </Text>
-      <Text muted small className="max-w-md">
-        Servers appear here once your AI integration reports activity. Check
-        back after your first agent run.
-      </Text>
-    </div>
+    <ShadowAISetupEmptyState
+      heading="No MCP servers observed yet"
+      description="Shadow AI reveals MCP servers observed in agent traffic or raised in an access request. Install and run the device agent to discover servers on your organization's devices."
+    />
   );
 }
 
