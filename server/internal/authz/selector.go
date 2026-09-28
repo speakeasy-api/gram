@@ -82,6 +82,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindChat
 	case "agent":
 		return ResourceKindAgent
+	case "workload":
+		return ResourceKindWorkload
 	default:
 		return ResourceKindWildcard
 	}

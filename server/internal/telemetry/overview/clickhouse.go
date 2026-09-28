@@ -120,13 +120,16 @@ func FetchClickHouse(
 	eg.Go(func() error {
 		var queryErr error
 		result.ActiveCounts, queryErr = reader.GetActiveCounts(egCtx, repo.GetActiveCountsParams{
-			GramProjectID:  params.ProjectID,
-			TimeStart:      params.TimeStart,
-			TimeEnd:        params.TimeEnd,
-			ExternalUserID: "",
-			APIKeyID:       "",
-			ToolsetSlug:    "",
-			SessionMode:    params.SessionMode,
+			GramProjectID:        params.ProjectID,
+			TimeStart:            params.TimeStart,
+			TimeEnd:              params.TimeEnd,
+			ExternalUserID:       "",
+			APIKeyID:             "",
+			ToolsetSlug:          "",
+			MCPServerID:          "",
+			MCPServerURLSuffixes: nil,
+			ToolSources:          nil,
+			SessionMode:          params.SessionMode,
 		})
 		if queryErr != nil {
 			return oops.E(oops.CodeUnexpected, queryErr, "error retrieving active server counts")

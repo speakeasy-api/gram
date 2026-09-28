@@ -46,6 +46,9 @@ type GetCurrentUserResponseBody struct {
 	User *UserResponseBody `form:"user,omitempty" json:"user,omitempty" xml:"user,omitempty"`
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUserResponseBody `form:"workos,omitempty" json:"workos,omitempty" xml:"workos,omitempty"`
+	// Best-effort local provenance, only on getCurrentUser for the oauth2-1 slot
+	// with a local backend and verifiable disk storage and worktree origin.
+	Provenance *CurrentUserProvenanceResponseBody `form:"provenance,omitempty" json:"provenance,omitempty" xml:"provenance,omitempty"`
 }
 
 // SetCurrentUserResponseBody is the type of the "devIdp" service
@@ -57,6 +60,9 @@ type SetCurrentUserResponseBody struct {
 	User *UserResponseBody `form:"user,omitempty" json:"user,omitempty" xml:"user,omitempty"`
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUserResponseBody `form:"workos,omitempty" json:"workos,omitempty" xml:"workos,omitempty"`
+	// Best-effort local provenance, only on getCurrentUser for the oauth2-1 slot
+	// with a local backend and verifiable disk storage and worktree origin.
+	Provenance *CurrentUserProvenanceResponseBody `form:"provenance,omitempty" json:"provenance,omitempty" xml:"provenance,omitempty"`
 }
 
 // UserResponseBody is used to define fields on response body types.
@@ -93,6 +99,17 @@ type WorkosCurrentUserResponseBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
+// CurrentUserProvenanceResponseBody is used to define fields on response body
+// types.
+type CurrentUserProvenanceResponseBody struct {
+	// Parsed running backend (local).
+	Backend string `form:"backend" json:"backend" xml:"backend"`
+	// Canonical absolute process worktree root.
+	WorktreeRoot string `form:"worktree_root" json:"worktree_root" xml:"worktree_root"`
+	// Canonical absolute opened SQLite main database path.
+	DatabasePath string `form:"database_path" json:"database_path" xml:"database_path"`
+}
+
 // NewGetCurrentUserResponseBody builds the HTTP response body from the result
 // of the "getCurrentUser" endpoint of the "devIdp" service.
 func NewGetCurrentUserResponseBody(res *devidp.CurrentUser) *GetCurrentUserResponseBody {
@@ -104,6 +121,9 @@ func NewGetCurrentUserResponseBody(res *devidp.CurrentUser) *GetCurrentUserRespo
 	}
 	if res.Workos != nil {
 		body.Workos = marshalDevidpWorkosCurrentUserToWorkosCurrentUserResponseBody(res.Workos)
+	}
+	if res.Provenance != nil {
+		body.Provenance = marshalDevidpCurrentUserProvenanceToCurrentUserProvenanceResponseBody(res.Provenance)
 	}
 	return body
 }
@@ -119,6 +139,9 @@ func NewSetCurrentUserResponseBody(res *devidp.CurrentUser) *SetCurrentUserRespo
 	}
 	if res.Workos != nil {
 		body.Workos = marshalDevidpWorkosCurrentUserToWorkosCurrentUserResponseBody(res.Workos)
+	}
+	if res.Provenance != nil {
+		body.Provenance = marshalDevidpCurrentUserProvenanceToCurrentUserProvenanceResponseBody(res.Provenance)
 	}
 	return body
 }

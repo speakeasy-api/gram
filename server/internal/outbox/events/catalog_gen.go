@@ -29,6 +29,7 @@ var All = []outbox.EventRegistration{
 	DataExportRouteV1,
 	DeploymentV1,
 	DeviceIntegrationV1,
+	DirectoryRoleMappingV1,
 	EnvironmentV1,
 	GcpIamCredentialV1,
 	GcpKmsKeyV1,
@@ -76,6 +77,8 @@ var All = []outbox.EventRegistration{
 	ShadowMCPApprovalV1,
 	SkillEfficacySettingsV1,
 	SkillV1,
+	SlackDirectoryConnectionV1,
+	SlackIdentityMappingV1,
 	SpendRuleV1,
 	TemplateV1,
 	ToolsetV1,
@@ -88,4 +91,6 @@ var All = []outbox.EventRegistration{
 	UserSessionIssuerV1,
 	UserSessionV1,
 	VariationV1,
+	WorkloadAdmissionV1,
+	WorkloadIssuerV1,
 }

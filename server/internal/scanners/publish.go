@@ -35,8 +35,20 @@ type FindingMetadata struct {
 	Shadow bool
 }
 
-func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, logPrefix string) (int, []string, error) {
-	results, ruleIDs := StartPublishFindings(ctx, pub, meta, findings)
+// FindingOption adds producer-specific metadata to a finding before publish.
+type FindingOption func(*riskv1.Finding)
+
+// WithFindingMCPContext attaches trusted MCP attribution and enforcement state.
+func WithFindingMCPContext(attribution *riskv1.Finding_Attribution, execution *riskv1.Finding_Execution, outcome riskv1.Finding_EnforcementOutcome) FindingOption {
+	return func(finding *riskv1.Finding) {
+		finding.SetAttribution(attribution)
+		finding.SetExecution(execution)
+		finding.SetEnforcementOutcome(outcome)
+	}
+}
+
+func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, logPrefix string, options ...FindingOption) (int, []string, error) {
+	results, ruleIDs := StartPublishFindings(ctx, pub, meta, findings, options...)
 
 	published := 0
 	var publishErr error
@@ -60,7 +72,7 @@ func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher
 // rule ids. Callers that run inside Temporal activities drain the results with
 // their own timeout/heartbeat discipline (see risk_analysis.drainPublishAcks)
 // instead of blocking on bare Get calls.
-func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding) ([]gcp.PublishResult, []string) {
+func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, options ...FindingOption) ([]gcp.PublishResult, []string) {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	results := make([]gcp.PublishResult, 0, len(findings))
 	ruleIDs := make([]string, 0, len(findings))
@@ -116,6 +128,9 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 			EventKind: new(chrepo.EventKindFinding),
 			Shadow:    &meta.Shadow,
 		}.Build()
+		for _, option := range options {
+			option(msg)
+		}
 
 		results = append(results, pub.Publish(ctx, msg))
 		ruleIDs = append(ruleIDs, finding.RuleID)

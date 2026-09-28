@@ -14,18 +14,22 @@ export type Policy = ClosedEnum<typeof Policy>;
 
 export type AddPluginServerForm = {
   /**
-   * Display name for the server. Defaults to the backing toolset or mcp_server name when omitted.
+   * Display name for the server. Defaults to the backing server name when omitted.
    */
   displayName?: string | undefined;
   /**
-   * Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of toolset_id or mcp_server_id.
+   * Gram MCP server ID. Provide exactly one backend ID.
    */
   mcpServerId?: string | undefined;
+  /**
+   * MCP gateway ID. Provide exactly one backend ID.
+   */
+  metaMcpServerId?: string | undefined;
   pluginId: string;
   policy?: Policy | undefined;
   sortOrder?: number | undefined;
   /**
-   * Gram toolset ID for a toolset-backed MCP server. Provide exactly one of toolset_id or mcp_server_id.
+   * Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.
    */
   toolsetId?: string | undefined;
 };
@@ -39,6 +43,7 @@ export const Policy$outboundSchema: z.ZodMiniEnum<typeof Policy> = z.enum(
 export type AddPluginServerForm$Outbound = {
   display_name?: string | undefined;
   mcp_server_id?: string | undefined;
+  meta_mcp_server_id?: string | undefined;
   plugin_id: string;
   policy: string;
   sort_order: number;
@@ -53,6 +58,7 @@ export const AddPluginServerForm$outboundSchema: z.ZodMiniType<
   z.object({
     displayName: z.optional(z.string()),
     mcpServerId: z.optional(z.string()),
+    metaMcpServerId: z.optional(z.string()),
     pluginId: z.string(),
     policy: z._default(Policy$outboundSchema, "required"),
     sortOrder: z._default(z.int(), 0),
@@ -62,6 +68,7 @@ export const AddPluginServerForm$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       displayName: "display_name",
       mcpServerId: "mcp_server_id",
+      metaMcpServerId: "meta_mcp_server_id",
       pluginId: "plugin_id",
       sortOrder: "sort_order",
       toolsetId: "toolset_id",

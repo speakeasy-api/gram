@@ -21,6 +21,10 @@ type Endpoints struct {
 	CreateRole                           goa.Endpoint
 	UpdateRole                           goa.Endpoint
 	DeleteRole                           goa.Endpoint
+	ListDirectoryRoleMappings            goa.Endpoint
+	SyncDirectoryGroups                  goa.Endpoint
+	SetDirectoryRoleMapping              goa.Endpoint
+	DeleteDirectoryRoleMapping           goa.Endpoint
 	ListScopes                           goa.Endpoint
 	ListMembers                          goa.Endpoint
 	ListGrants                           goa.Endpoint
@@ -55,6 +59,10 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateRole:                           NewCreateRoleEndpoint(s, a.APIKeyAuth),
 		UpdateRole:                           NewUpdateRoleEndpoint(s, a.APIKeyAuth),
 		DeleteRole:                           NewDeleteRoleEndpoint(s, a.APIKeyAuth),
+		ListDirectoryRoleMappings:            NewListDirectoryRoleMappingsEndpoint(s, a.APIKeyAuth),
+		SyncDirectoryGroups:                  NewSyncDirectoryGroupsEndpoint(s, a.APIKeyAuth),
+		SetDirectoryRoleMapping:              NewSetDirectoryRoleMappingEndpoint(s, a.APIKeyAuth),
+		DeleteDirectoryRoleMapping:           NewDeleteDirectoryRoleMappingEndpoint(s, a.APIKeyAuth),
 		ListScopes:                           NewListScopesEndpoint(s, a.APIKeyAuth),
 		ListMembers:                          NewListMembersEndpoint(s, a.APIKeyAuth),
 		ListGrants:                           NewListGrantsEndpoint(s, a.APIKeyAuth),
@@ -87,6 +95,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRole = m(e.CreateRole)
 	e.UpdateRole = m(e.UpdateRole)
 	e.DeleteRole = m(e.DeleteRole)
+	e.ListDirectoryRoleMappings = m(e.ListDirectoryRoleMappings)
+	e.SyncDirectoryGroups = m(e.SyncDirectoryGroups)
+	e.SetDirectoryRoleMapping = m(e.SetDirectoryRoleMapping)
+	e.DeleteDirectoryRoleMapping = m(e.DeleteDirectoryRoleMapping)
 	e.ListScopes = m(e.ListScopes)
 	e.ListMembers = m(e.ListMembers)
 	e.ListGrants = m(e.ListGrants)
@@ -283,6 +295,146 @@ func NewDeleteRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return nil, s.DeleteRole(ctx, p)
+	}
+}
+
+// NewListDirectoryRoleMappingsEndpoint returns an endpoint function that calls
+// the method "listDirectoryRoleMappings" of service "access".
+func NewListDirectoryRoleMappingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListDirectoryRoleMappingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListDirectoryRoleMappings(ctx, p)
+	}
+}
+
+// NewSyncDirectoryGroupsEndpoint returns an endpoint function that calls the
+// method "syncDirectoryGroups" of service "access".
+func NewSyncDirectoryGroupsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SyncDirectoryGroupsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SyncDirectoryGroups(ctx, p)
+	}
+}
+
+// NewSetDirectoryRoleMappingEndpoint returns an endpoint function that calls
+// the method "setDirectoryRoleMapping" of service "access".
+func NewSetDirectoryRoleMappingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetDirectoryRoleMappingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetDirectoryRoleMapping(ctx, p)
+	}
+}
+
+// NewDeleteDirectoryRoleMappingEndpoint returns an endpoint function that
+// calls the method "deleteDirectoryRoleMapping" of service "access".
+func NewDeleteDirectoryRoleMappingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteDirectoryRoleMappingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteDirectoryRoleMapping(ctx, p)
 	}
 }
 

@@ -1,0 +1,17 @@
+edition = "2024";
+
+package gram.plugins.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1";
+
+message OrganizationPublicationRequested {
+  string organization_id = 1;
+  string created_by_user_id = 2;
+  string after_project_id = 3;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {seconds: 604800}
+  };
+}

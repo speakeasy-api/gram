@@ -86,3 +86,8 @@ func ListSetupTasksOrganizationsPath() string {
 func UpdateSetupTaskOrganizationsPath() string {
 	return "/rpc/organizations.updateSetupTask"
 }
+
+// SubmitOnboardingSurveyOrganizationsPath returns the URL path to the organizations service submitOnboardingSurvey HTTP endpoint.
+func SubmitOnboardingSurveyOrganizationsPath() string {
+	return "/rpc/organizations.submitOnboardingSurvey"
+}

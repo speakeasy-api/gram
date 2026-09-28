@@ -214,7 +214,7 @@ func TestResolveAssignedAgent_ADeletedIssuerResolvesNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found, "the assignment must resolve before the delete, or the refusal below proves nothing")
 
-	softDelete(t, conn, fixture.issuerID)
+	softDelete(t, conn, fixture.tenant.organizationID, fixture.issuerID)
 
 	_, found, err = workloadidentity.ResolveAssignedAgent(t.Context(), conn, fixture.params())
 

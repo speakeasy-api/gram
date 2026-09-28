@@ -73,6 +73,7 @@ type Endpoints struct {
 	GetSpendBreakdown                     goa.Endpoint
 	GetSupportMatrix                      goa.Endpoint
 	UpdateSupportMatrix                   goa.Endpoint
+	GetSupportCoverage                    goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -154,6 +155,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSpendBreakdown:                     NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
 		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
+		GetSupportCoverage:                    NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -215,6 +217,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSpendBreakdown = m(e.GetSpendBreakdown)
 	e.GetSupportMatrix = m(e.GetSupportMatrix)
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
+	e.GetSupportCoverage = m(e.GetSupportCoverage)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1463,5 +1466,28 @@ func NewUpdateSupportMatrixEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.UpdateSupportMatrix(ctx, p)
+	}
+}
+
+// NewGetSupportCoverageEndpoint returns an endpoint function that calls the
+// method "getSupportCoverage" of service "admin".
+func NewGetSupportCoverageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSupportCoveragePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSupportCoverage(ctx, p)
 	}
 }

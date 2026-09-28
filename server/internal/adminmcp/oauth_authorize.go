@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
@@ -178,9 +179,15 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 	}
 	_, sessionID, err := s.staffSession(r)
 	if err != nil {
-		if !errors.Is(err, errMissingStaffCookie) {
+		var authErr *oops.ShareableError
+		if !errors.Is(err, errMissingStaffCookie) && (!errors.As(err, &authErr) || authErr.Code != oops.CodeUnauthorized) {
 			staffOAuthError(w, http.StatusUnauthorized, "access_denied", "staff login is required")
 			return
+		}
+		// A logged-out session can leave a path-scoped browser cookie behind.
+		// Clear it before returning to normal staff login, without touching /admin.
+		if !errors.Is(err, errMissingStaffCookie) {
+			http.SetCookie(w, &http.Cookie{Name: constants.AdminSessionCookie, Path: Path, MaxAge: -1, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:exhaustruct // Only the scoped cookie is expired.
 		}
 		// The relative return target is server-owned and contains only the opaque
 		// challenge ID, never an untrusted redirect URI or client-supplied URL.
@@ -198,6 +205,18 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
 		return
 	}
+	// Chrome also checks form-action on the 303 after consent. Only this
+	// registered callback may receive the resulting browser navigation.
+	callback, err := url.Parse(challenge.RedirectURI)
+	if err != nil {
+		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
+		return
+	}
+	callbackSource := callback.Scheme + ":"
+	if callback.Host != "" {
+		callbackSource = callback.Scheme + "://" + callback.Host
+	}
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' "+callbackSource+"; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page.String()))
 }

@@ -21,6 +21,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -397,6 +399,7 @@ func NewService(
 	identityResolver IdentityResolver,
 	userSessionSigner *sessiontokens.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
+	scanEvaluator *mcpriskscan.Evaluator,
 	remoteProxyManager *remotemcp.ProxyManager,
 	tunnelRoutes route.Store,
 	tunnelForwardToken string,
@@ -409,7 +412,6 @@ func NewService(
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
 	metrics := mcpmetrics.NewMetrics(meter, logger)
-	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
 	hostedToolsCallCheckpoint, err := mcptoolexecution.NewHostedCheckpoint(db, meterProvider, logger, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("initialize hosted MCP kill-switch checkpoint: %w", err)
@@ -1545,6 +1547,20 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 		return nil, fmt.Errorf("lookup toolset: %w", err)
 	}
 	if !toolset.McpEnabled {
+		return nil, errToolsetNotFound
+	}
+	wrapper, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return &toolset, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lookup hosted MCP network policy: %w", err)
+	}
+	mode, err := networkaccess.Effective(wrapper.NetworkAccessMode)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hosted MCP network policy: %w", err)
+	}
+	if !wrapper.ToolsetID.Valid || wrapper.ToolsetID.UUID != toolset.ID || wrapper.Visibility == "disabled" || !mode.Allows(networkaccess.SurfacePublic) || wrapper.UserSessionIssuerID != toolset.UserSessionIssuerID || (wrapper.Visibility == "public") != toolset.McpIsPublic {
 		return nil, errToolsetNotFound
 	}
 	return &toolset, nil

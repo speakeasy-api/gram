@@ -41,6 +41,7 @@ import { Integrations } from "./integrations.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Killswitches } from "./killswitches.js";
+import { Launcher } from "./launcher.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
@@ -71,6 +72,7 @@ import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
 import { SkillEfficacy } from "./skillefficacy.js";
 import { Skills } from "./skills.js";
+import { SlackDirectoryConnections } from "./slackdirectoryconnections.js";
 import { SpendRules } from "./spendrules.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
@@ -87,6 +89,7 @@ import { UserSessionIssuers } from "./usersessionissuers.js";
 import { UserSessionIssuersCimdClients } from "./usersessionissuerscimdclients.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
+import { WorkloadIdentities } from "./workloadidentities.js";
 
 export class Gram extends ClientSDK {
   private _otel?: Otel;
@@ -288,6 +291,11 @@ export class Gram extends ClientSDK {
     return (this._killswitches ??= new Killswitches(this._options));
   }
 
+  private _launcher?: Launcher;
+  get launcher(): Launcher {
+    return (this._launcher ??= new Launcher(this._options));
+  }
+
   private _litellm?: Litellm;
   get litellm(): Litellm {
     return (this._litellm ??= new Litellm(this._options));
@@ -451,6 +459,13 @@ export class Gram extends ClientSDK {
     return (this._skills ??= new Skills(this._options));
   }
 
+  private _slackDirectoryConnections?: SlackDirectoryConnections;
+  get slackDirectoryConnections(): SlackDirectoryConnections {
+    return (this._slackDirectoryConnections ??= new SlackDirectoryConnections(
+      this._options,
+    ));
+  }
+
   private _spendRules?: SpendRules;
   get spendRules(): SpendRules {
     return (this._spendRules ??= new SpendRules(this._options));
@@ -532,5 +547,10 @@ export class Gram extends ClientSDK {
   private _variations?: Variations;
   get variations(): Variations {
     return (this._variations ??= new Variations(this._options));
+  }
+
+  private _workloadIdentities?: WorkloadIdentities;
+  get workloadIdentities(): WorkloadIdentities {
+    return (this._workloadIdentities ??= new WorkloadIdentities(this._options));
   }
 }

@@ -168,6 +168,87 @@ func TestStaffOAuthTokenRejectsChangedStaffSession(t *testing.T) {
 	require.Zero(t, store.exchange)
 }
 
+func publicStaffTokenRequest(grantType string, extras url.Values) *http.Request {
+	form := url.Values{"grant_type": {grantType}, "resource": {staffAudience}, "client_id": {staffClient}}
+	maps.Copy(form, extras)
+	request := httptest.NewRequest(http.MethodPost, Path+"/token", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return request
+}
+
+func usePublicStaffClient(t *testing.T, tokens *StaffOAuthTokens) {
+	t.Helper()
+	clients, ok := tokens.clients.(*recordingStaffClientStore)
+	require.True(t, ok)
+	clients.client.SecretHash = ""
+}
+
+func TestStaffOAuthPublicClientExchangeAndRefresh(t *testing.T) {
+	t.Parallel()
+	tokens, store, verifier := staffTokensFixture(t)
+	usePublicStaffClient(t, tokens)
+
+	response := httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}}))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, 1, store.exchange)
+	require.Equal(t, "linked-browser-session", verifier.key)
+
+	response = httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, publicStaffTokenRequest("refresh_token", url.Values{"refresh_token": {"old-refresh-token"}}))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, 1, store.rotate)
+
+	store.status = errStaffRefreshReuse
+	response = httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, publicStaffTokenRequest("refresh_token", url.Values{"refresh_token": {"used-token"}}))
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), `"error":"invalid_grant"`)
+}
+
+func TestStaffOAuthPublicClientCannotPresentCredentials(t *testing.T) {
+	t.Parallel()
+	tokens, store, _ := staffTokensFixture(t)
+	usePublicStaffClient(t, tokens)
+
+	// Basic auth, even with an empty secret, is the confidential presentation.
+	form := url.Values{"grant_type": {"authorization_code"}, "resource": {staffAudience}, "code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}}
+	request := httptest.NewRequest(http.MethodPost, Path+"/token", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.SetBasicAuth(staffClient, "")
+	response := httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+
+	response = httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "client_secret": {"guess"}}))
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+
+	response = httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "client_id": {staffClient, "client_other"}}))
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+
+	// Any other Authorization header is an ambiguous presentation, not absent.
+	for _, header := range []string{"Bearer some-token", "Basic not-base64", "Basic"} {
+		request := publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}})
+		request.Header.Set("Authorization", header)
+		response = httptest.NewRecorder()
+		tokens.TokenHandler().ServeHTTP(response, request)
+		require.Equal(t, http.StatusUnauthorized, response.Code, header)
+	}
+	require.Zero(t, store.validate)
+}
+
+func TestStaffOAuthConfidentialClientCannotDowngradeToPublic(t *testing.T) {
+	t.Parallel()
+	tokens, store, _ := staffTokensFixture(t)
+	response := httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}}))
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+	require.Zero(t, store.validate)
+}
+
 func TestStaffOAuthTokenRejectsPublicAndBodyClientCredentials(t *testing.T) {
 	t.Parallel()
 	tokens, store, _ := staffTokensFixture(t)

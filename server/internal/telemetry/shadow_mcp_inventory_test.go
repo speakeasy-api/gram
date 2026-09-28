@@ -19,13 +19,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
+// inventoryTestDay anchors fixture timestamps to the recent past. The
+// telemetry tables carry a 90-day TTL and reads look back at most 90 days, so
+// fixed dates age out and the rows disappear before the tests can read them.
+var inventoryTestDay = time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -20)
+
+// inventoryTestTime returns a fixture timestamp: inventoryTestDay plus
+// dayOffset days, then the given hour, minute, second, and nanoseconds (UTC).
+func inventoryTestTime(dayOffset, hour, minute, sec, nsec int) time.Time {
+	return inventoryTestDay.AddDate(0, 0, dayOffset).Add(
+		time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute +
+			time.Duration(sec)*time.Second + time.Duration(nsec),
+	)
+}
+
 func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
 	otherProjectID := uuid.NewString()
-	firstSeen := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	firstSeen := inventoryTestTime(0, 12, 0, 0, 0)
 	lastSeen := firstSeen.Add(time.Hour)
 
 	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
@@ -92,7 +106,7 @@ func TestShadowMCPInventoryURLs_NameOverrideSurvivesLaterObservation(t *testing.
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
 	serverURL := "https://github.example.com/mcp"
-	firstSeen := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	firstSeen := inventoryTestTime(15, 12, 0, 0, 0)
 
 	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
 		GramProjectID:      projectID,
@@ -139,7 +153,7 @@ func TestShadowMCPInventoryURLs_NameOverrideCanBeCleared(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
 	serverURL := "https://github.example.com/mcp"
-	seenAt := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	seenAt := inventoryTestTime(15, 12, 0, 0, 0)
 
 	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
 		GramProjectID:      projectID,
@@ -191,7 +205,7 @@ func TestShadowMCPInventoryURLs_NameOverrideClearDominatesRegressingClock(t *tes
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
 	serverURL := "https://github.example.com/mcp"
-	seenAt := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	seenAt := inventoryTestTime(15, 12, 0, 0, 0)
 
 	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
 		GramProjectID:      projectID,
@@ -246,7 +260,7 @@ func TestShadowMCPInventoryURLs_UpdatedAtNanosecondRoundTrip(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
 	serverURL := "https://github.example.com/mcp"
-	seenAt := time.Date(2026, 7, 14, 12, 30, 45, 123456789, time.UTC)
+	seenAt := inventoryTestTime(15, 12, 30, 45, 123456789)
 
 	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
 		GramProjectID:      projectID,
@@ -274,7 +288,7 @@ func TestShadowMCPInventoryURLs_ListBySlugHash(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
 	otherProjectID := uuid.NewString()
-	seenAt := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	seenAt := inventoryTestTime(14, 12, 0, 0, 0)
 
 	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
 		{
@@ -340,7 +354,7 @@ func TestShadowMCPInventoryURLs_PaginatesLastSeen(t *testing.T) {
 	projectID := uuid.NewString()
 	// Nonzero nanoseconds: the cursor's last_seen equality tie-break only
 	// works if sub-second precision survives the round trip.
-	base := time.Date(2026, 6, 29, 12, 30, 0, 123456789, time.UTC)
+	base := inventoryTestTime(0, 12, 30, 0, 123456789)
 
 	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
 		{GramProjectID: projectID, CanonicalServerURL: "https://gamma.example.com/mcp", URLHost: "gamma.example.com", ServerName: "Gamma", SeenAt: base.Add(3 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
@@ -384,7 +398,7 @@ func TestShadowMCPInventoryURLs_PaginatesLastCalledThenLastSeen(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
-	base := time.Date(2026, 6, 29, 12, 45, 0, 987654321, time.UTC)
+	base := inventoryTestTime(0, 12, 45, 0, 987654321)
 
 	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
 		{GramProjectID: projectID, CanonicalServerURL: "https://never-called.example.com/mcp", URLHost: "never-called.example.com", ServerName: "Never Called", SeenAt: base.Add(5 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
@@ -450,7 +464,7 @@ func TestShadowMCPInventoryURLs_RejectsInvalidCursor(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
-	lastSeen := time.Date(2026, 6, 29, 12, 45, 0, 0, time.UTC)
+	lastSeen := inventoryTestTime(0, 12, 45, 0, 0)
 
 	invalidBase64 := "not base64"
 	invalidJSON := base64.RawURLEncoding.EncodeToString([]byte("not-json"))
@@ -494,7 +508,7 @@ func TestShadowMCPInventoryUsage_FromTelemetry(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
 	otherProjectID := uuid.NewString()
-	base := time.Date(2026, 6, 29, 13, 0, 0, 0, time.UTC)
+	base := inventoryTestTime(0, 13, 0, 0, 0)
 
 	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
 		ProjectID:  projectID,
@@ -548,7 +562,7 @@ func TestShadowMCPInventoryUsage_FiltersToCanonicalURLsBeforeLimit(t *testing.T)
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
-	base := time.Date(2026, 6, 29, 13, 30, 0, 0, time.UTC)
+	base := inventoryTestTime(0, 13, 30, 0, 0)
 
 	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
 		ProjectID:  projectID,
@@ -587,7 +601,7 @@ func TestListShadowMCPInventoryUsers_FromTelemetry(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
-	base := time.Date(2026, 6, 29, 14, 0, 0, 0, time.UTC)
+	base := inventoryTestTime(0, 14, 0, 0, 0)
 
 	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
 		ProjectID:  projectID,
@@ -635,7 +649,7 @@ func TestListShadowMCPInventoryUsers_Paginates(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
-	base := time.Date(2026, 6, 29, 14, 30, 0, 0, time.UTC)
+	base := inventoryTestTime(0, 14, 30, 0, 0)
 
 	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
 		ProjectID:  projectID,
@@ -698,7 +712,7 @@ func TestLoggerUpsertShadowMCPInventoryURLs(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
-	seenAt := time.Date(2026, 6, 29, 15, 0, 0, 0, time.UTC)
+	seenAt := inventoryTestTime(0, 15, 0, 0, 0)
 	invURL, ok := shadowmcp.CanonicalizeInventoryURL("https://mcp.speakeasy.com/mcp?token=secret")
 	require.True(t, ok)
 
@@ -731,7 +745,7 @@ func TestBackfillShadowMCPInventoryURLs_CanonicalizesAndUpserts(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	projectID := ti.projectID
 	otherProjectID := uuid.NewString()
-	observedAt := time.Date(2026, 6, 29, 16, 0, 0, 0, time.UTC)
+	observedAt := inventoryTestTime(0, 16, 0, 0, 0)
 
 	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
 		ProjectID:  projectID,
@@ -790,7 +804,7 @@ func TestBackfillShadowMCPInventoryURLs_ExcludesHostedHostnames(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	projectID := ti.projectID
-	observedAt := time.Date(2026, 6, 29, 17, 0, 0, 0, time.UTC)
+	observedAt := inventoryTestTime(0, 17, 0, 0, 0)
 	customDomain := "gram-hosted-" + uuid.NewString()[:8] + ".example.com"
 
 	_, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
@@ -918,7 +932,7 @@ func TestListShadowMCPInventoryUsage_FiltersByUser(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
-	base := time.Date(2026, 6, 29, 14, 0, 0, 0, time.UTC)
+	base := inventoryTestTime(0, 14, 0, 0, 0)
 
 	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
 		ProjectID:  projectID,
@@ -1056,7 +1070,7 @@ func TestListShadowMCPInventoryUsage_NoUserKeysIsUnnarrowed(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
-	base := time.Date(2026, 6, 29, 14, 0, 0, 0, time.UTC)
+	base := inventoryTestTime(0, 14, 0, 0, 0)
 
 	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
 		ProjectID:  projectID,

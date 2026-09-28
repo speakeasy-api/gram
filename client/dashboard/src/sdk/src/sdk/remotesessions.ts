@@ -3,17 +3,23 @@
  */
 
 import { remoteSessionsAttachBinding } from "../funcs/remoteSessionsAttachBinding.js";
+import { remoteSessionsCommitServerIdentityConfiguration } from "../funcs/remoteSessionsCommitServerIdentityConfiguration.js";
 import { remoteSessionsDetachBinding } from "../funcs/remoteSessionsDetachBinding.js";
 import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { remoteSessionsListBindings } from "../funcs/remoteSessionsListBindings.js";
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { CommitServerIdentityConfigurationResult } from "../models/components/commitserveridentityconfigurationresult.js";
 import { ListBindingsResponseBody } from "../models/components/listbindingsresponsebody.js";
 import { PrincipalRemoteSessionBinding } from "../models/components/principalremotesessionbinding.js";
 import {
   AttachBindingRequest,
   AttachBindingSecurity,
 } from "../models/operations/attachbinding.js";
+import {
+  CommitServerIdentityConfigurationRequest,
+  CommitServerIdentityConfigurationSecurity,
+} from "../models/operations/commitserveridentityconfiguration.js";
 import {
   DetachBindingRequest,
   DetachBindingSecurity,
@@ -47,6 +53,25 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PrincipalRemoteSessionBinding> {
     return unwrapAsync(remoteSessionsAttachBinding(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * commitServerIdentityConfiguration remoteSessions
+   *
+   * @remarks
+   * Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
+   */
+  async commitServerIdentityConfiguration(
+    request: CommitServerIdentityConfigurationRequest,
+    security?: CommitServerIdentityConfigurationSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<CommitServerIdentityConfigurationResult> {
+    return unwrapAsync(remoteSessionsCommitServerIdentityConfiguration(
       this,
       request,
       security,

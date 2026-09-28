@@ -9,6 +9,7 @@ features:
   typescript:
     additionalDependencies: 0.1.0
     bigint: 0.0.3
+    constsAndDefaults: 0.1.14
     core: 3.31.6
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
@@ -58,6 +59,7 @@ trackedFiles:
   src/funcs/adminGetSpendBreakdown.ts: {}
   src/funcs/adminGetStripeCustomer.ts: {}
   src/funcs/adminGetStripeSubscription.ts: {}
+  src/funcs/adminGetSupportCoverage.ts: {}
   src/funcs/adminGetSupportMatrix.ts: {}
   src/funcs/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/funcs/adminListGlobalIssuers.ts: {}
@@ -168,6 +170,9 @@ trackedFiles:
   src/models/components/spendproduct.ts: {}
   src/models/components/starttrialrequestbody.ts: {}
   src/models/components/supportcapability.ts: {}
+  src/models/components/supportcoveragecell.ts: {}
+  src/models/components/supportcoverageresult.ts: {}
+  src/models/components/supportcoverageunmapped.ts: {}
   src/models/components/supportdraft.ts: {}
   src/models/components/supportfact.ts: {}
   src/models/components/supportmapping.ts: {}
@@ -201,6 +206,7 @@ trackedFiles:
   src/models/operations/admingetspendbreakdown.ts: {}
   src/models/operations/admingetstripecustomer.ts: {}
   src/models/operations/admingetstripesubscription.ts: {}
+  src/models/operations/admingetsupportcoverage.ts: {}
   src/models/operations/adminlistglobalissuerconvergencecandidates.ts: {}
   src/models/operations/adminlistglobalissuers.ts: {}
   src/models/operations/adminlistorganizationactivity.ts: {}
@@ -251,6 +257,8 @@ trackedFiles:
   src/react-query/adminGetStripeCustomer.ts: {}
   src/react-query/adminGetStripeSubscription.core.ts: {}
   src/react-query/adminGetStripeSubscription.ts: {}
+  src/react-query/adminGetSupportCoverage.core.ts: {}
+  src/react-query/adminGetSupportCoverage.ts: {}
   src/react-query/adminGetSupportMatrix.core.ts: {}
   src/react-query/adminGetSupportMatrix.ts: {}
   src/react-query/adminListGlobalIssuerConvergenceCandidates.core.ts: {}
@@ -696,6 +704,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminGetSupportCoverage:
+    speakeasy-default-admin-get-support-coverage:
+      parameters:
+        query:
+          organization_id: "<id>"
+          window_days: 30
+      responses:
+        "200":
+          application/json: {"cells": [{"capability": "blocking", "detail": "<value>", "last_seen": "2025-05-03T07:25:53.248Z", "status": "observed", "surface": "other", "value": 527166}], "from": "2026-06-10T13:59:12.724Z", "to": "2024-07-04T20:01:31.648Z", "unmapped": [{"hook_source": "<value>", "sessions": 947494}], "window_days": 388369}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetSupportMatrix:
     speakeasy-default-admin-get-support-matrix:
       responses:

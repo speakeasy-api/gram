@@ -102,10 +102,18 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeAgentWrite:              activeRuntimeScope(),
 	authz.ScopeAgentAuthorize:          activeRuntimeScope(),
 	authz.ScopeAgentTransfer:           activeRuntimeScope(),
-	authz.ScopeOrgDeviceAgentSync:      safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
-	authz.ScopeOrgHooksIngest:          safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
-	scopeMCPApprovalReadTombstone:      retiredRuntimeScope(),
-	scopeMCPApprovalDecideTombstone:    retiredRuntimeScope(),
+	// Registered but deliberately NOT agent-runtime-safe. A workload inherits its
+	// assigned agent's policy, so making these safe would let a machine admit
+	// further machines and assign them agents — the trust policy editing itself.
+	// Configuring workload identity stays a human act, beside agent:authorize.
+	authz.ScopeWorkloadRead:         activeRuntimeScope(),
+	authz.ScopeWorkloadBlockedRead:  activeRuntimeScope(),
+	authz.ScopeWorkloadWrite:        activeRuntimeScope(),
+	authz.ScopeWorkloadBlockedWrite: activeRuntimeScope(),
+	authz.ScopeOrgDeviceAgentSync:   safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
+	authz.ScopeOrgHooksIngest:       safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
+	scopeMCPApprovalReadTombstone:   retiredRuntimeScope(),
+	scopeMCPApprovalDecideTombstone: retiredRuntimeScope(),
 }
 
 // RuntimeScopeLifecycleFor returns the lifecycle of a scope known to the agent

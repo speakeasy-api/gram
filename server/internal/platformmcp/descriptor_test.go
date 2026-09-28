@@ -31,7 +31,7 @@ func TestListProjectsDescriptionDoesNotAdvertiseHiddenResourceSignals(t *testing
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
@@ -227,7 +227,7 @@ func TestExternalResourceRegistrationRequiresAuthorizationPolicy(t *testing.T) {
 func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	byName := map[string]ExternalAuthorization{}
 	for _, descriptor := range registrar.For(AudienceExternal) {
 		require.Contains(t, []ExternalAuthorization{ExternalAuthorizationMember, ExternalAuthorizationOrgAdmin}, descriptor.Meta.Authorization, descriptor.Name)
@@ -294,8 +294,9 @@ func TestExternalCatalogueFiltersByLiveCapabilities(t *testing.T) {
 		{Name: "mcps", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
 		{Name: "skill_write", Meta: ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, DiscoveryScopes: discoverySkillWrite}},
 		{Name: "admin", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly}},
+		{Name: "admin_mcp", Meta: ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, DiscoveryScopes: discoveryMCPRead}},
 	}}
-	tools := []*mcp.Tool{{Name: "context"}, {Name: "projects"}, {Name: "mcps"}, {Name: "skill_write"}, {Name: "admin"}}
+	tools := []*mcp.Tool{{Name: "context"}, {Name: "projects"}, {Name: "mcps"}, {Name: "skill_write"}, {Name: "admin"}, {Name: "admin_mcp"}}
 
 	memberCtx := authz.GrantsToContext(t.Context(), []authz.Grant{
 		authz.NewGrant(authz.ScopeProjectRead, "project-1"),
@@ -311,9 +312,14 @@ func TestExternalCatalogueFiltersByLiveCapabilities(t *testing.T) {
 
 	adminCtx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
 	require.Equal(t, []string{"context", "admin"}, toolNames(registrar.FilterExternalTools(adminCtx, principal, tools)))
+	adminMCPContext := authz.GrantsToContext(t.Context(), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID),
+		authz.NewGrant(authz.ScopeMCPRead, "mcp-1"),
+	})
+	require.Equal(t, []string{"context", "mcps", "admin", "admin_mcp"}, toolNames(registrar.FilterExternalTools(adminMCPContext, principal, tools)))
 
 	rootCtx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
-	require.Equal(t, []string{"context", "projects", "mcps", "skill_write", "admin"}, toolNames(registrar.FilterExternalTools(rootCtx, principal, tools)))
+	require.Equal(t, []string{"context", "projects", "mcps", "skill_write", "admin", "admin_mcp"}, toolNames(registrar.FilterExternalTools(rootCtx, principal, tools)))
 
 	require.Empty(t, registrar.FilterExternalTools(t.Context(), principal, tools), "missing prepared grants fail closed")
 }
@@ -382,7 +388,7 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
@@ -453,7 +459,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 

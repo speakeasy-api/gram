@@ -182,9 +182,16 @@ export function removeVisitsMatching(
   }
 }
 
+const NO_ENTRIES: RecentEntry[] = [];
+
 /**
  * Read the recents for the current scope. `enabled` (the palette's open state)
  * gates the read so we only touch localStorage when the palette is shown.
+ *
+ * Entries are remembered with the key they were read under and returned only
+ * while that key is current: when the user or workspace changes, the previous
+ * scope's entries are never handed out during the render before the new key
+ * has been read.
  */
 export function useRecentlyVisited(
   userId: string | undefined,
@@ -193,11 +200,14 @@ export function useRecentlyVisited(
   enabled: boolean,
 ): RecentEntry[] {
   const key = storageKey(userId, orgSlug, projectSlug);
-  const [entries, setEntries] = useState<RecentEntry[]>([]);
+  const [state, setState] = useState<{ key: string; entries: RecentEntry[] }>({
+    key,
+    entries: NO_ENTRIES,
+  });
 
   useEffect(() => {
     if (!enabled) return;
-    const refresh = () => setEntries(read(key));
+    const refresh = () => setState({ key, entries: read(key) });
     refresh();
     window.addEventListener(UPDATED_EVENT, refresh);
     window.addEventListener("storage", refresh);
@@ -207,5 +217,5 @@ export function useRecentlyVisited(
     };
   }, [key, enabled]);
 
-  return entries;
+  return state.key === key ? state.entries : NO_ENTRIES;
 }

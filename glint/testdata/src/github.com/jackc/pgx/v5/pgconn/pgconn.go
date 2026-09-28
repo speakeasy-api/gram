@@ -9,3 +9,8 @@ type PgError struct {
 }
 
 func (e *PgError) Error() string { return e.Message }
+
+// CommandTag is a minimal stand-in for
+// github.com/jackc/pgx/v5/pgconn.CommandTag, the result type of pgx Exec
+// methods that the notestingrawsql analyzer keys on.
+type CommandTag struct{}

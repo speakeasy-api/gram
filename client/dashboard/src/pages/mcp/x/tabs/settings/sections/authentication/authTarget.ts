@@ -22,6 +22,8 @@ export type AuthTarget = {
   slug: string;
   /** Project owning the target. */
   projectId: string;
+  /** Selects the Remote MCP identity surface without changing shared auth UI. */
+  kind: "remote-mcp" | "standard";
   /** Resource identifier used by the target's mcp:write check. */
   permissionResourceId: string;
   /** Whether the target backend accepts organization-owned issuers. */
@@ -50,6 +52,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
     () => ({
       slug: mcpServer.slug ?? "mcp",
       projectId: mcpServer.projectId,
+      kind: mcpServer.remoteMcpServerId ? "remote-mcp" : "standard",
       permissionResourceId: mcpServer.toolsetId ?? mcpServer.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
@@ -89,6 +92,7 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
     () => ({
       slug: toolset.slug,
       projectId: toolset.projectId,
+      kind: "standard",
       permissionResourceId: toolset.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
@@ -121,6 +125,7 @@ export function useMetaMcpAuthTarget(
     () => ({
       slug: slugSeed,
       projectId: metaMcpServer.projectId,
+      kind: "standard",
       permissionResourceId: metaMcpServer.projectId,
       supportsOrganizationIssuers: false,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,

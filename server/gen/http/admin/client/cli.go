@@ -1140,15 +1140,10 @@ func BuildSetOrganizationOnboardingPayload(adminSetOrganizationOnboardingBody st
 	{
 		err = json.Unmarshal([]byte(adminSetOrganizationOnboardingBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"preset\": \"security\",\n      \"visible_task_keys\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"preset\": \"abc123\",\n      \"visible_task_keys\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.VisibleTaskKeys == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("visible_task_keys", "body"))
-		}
-		if body.Preset != nil {
-			if !(*body.Preset == "gateway" || *body.Preset == "security") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.preset", *body.Preset, []any{"gateway", "security"}))
-			}
 		}
 		if err != nil {
 			return nil, err
@@ -1931,6 +1926,48 @@ func BuildUpdateSupportMatrixPayload(adminUpdateSupportMatrixBody string, adminU
 	if body.Draft != nil {
 		v.Draft = marshalSupportDraftRequestBodyToAdminSupportDraft(body.Draft)
 	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetSupportCoveragePayload builds the payload for the admin
+// getSupportCoverage endpoint from CLI flags.
+func BuildGetSupportCoveragePayload(adminGetSupportCoverageOrganizationID string, adminGetSupportCoverageWindowDays string, adminGetSupportCoverageAdminSessionToken string) (*admin.GetSupportCoveragePayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetSupportCoverageOrganizationID
+	}
+	var windowDays int
+	{
+		if adminGetSupportCoverageWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminGetSupportCoverageWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if windowDays < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
+			}
+			if windowDays > 90 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 90, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetSupportCoverageAdminSessionToken != "" {
+			adminSessionToken = &adminGetSupportCoverageAdminSessionToken
+		}
+	}
+	v := &admin.GetSupportCoveragePayload{}
+	v.OrganizationID = organizationID
+	v.WindowDays = windowDays
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

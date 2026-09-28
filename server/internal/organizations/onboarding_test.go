@@ -66,7 +66,6 @@ func TestOnboardingAuditFailureRollsBackPresetUpdate(t *testing.T) {
 func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	queries := orgrepo.New(ti.conn)
@@ -89,7 +88,7 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 			visible = append(visible, task.Key)
 		}
 	}
-	require.ElementsMatch(t, []string{"domain-verification", "identity-provider", "instrument-agents", "additional-agent-config", "platform-mcp"}, visible)
+	require.ElementsMatch(t, []string{"identity-provider", "instrument-agents", "additional-agent-config", "platform-mcp"}, visible)
 	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 	require.Len(t, listed.Tasks, len(visible))
@@ -109,11 +108,8 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 			keys = append(keys, task.Key)
 		}
 		require.ElementsMatch(t, preset.VisibleTaskKeys, keys)
-		require.Nil(t, setupTask(listed.Tasks, "identity-provider"), "presets must not duplicate the split identity tasks")
 		if preset.Key == "security" {
-			require.NotNil(t, setupTask(listed.Tasks, "domain-verification"))
-			require.Equal(t, []string{"domain-verification"}, setupTask(listed.Tasks, "connect-idp").BlockedBy)
-			require.Empty(t, setupTask(listed.Tasks, "directory-sync").BlockedBy)
+			require.Empty(t, setupTask(listed.Tasks, "identity-provider").BlockedBy)
 		}
 	}
 }
@@ -121,7 +117,6 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 func TestOnboardingPreservesRawProgressAndAssignment(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsServiceWithEmail(t)
-	stubUnverifiedDomainPolicy(ti)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	queries := orgrepo.New(ti.conn)
@@ -208,7 +203,6 @@ func TestOnboardingSerializesWithTaskUpdates(t *testing.T) {
 func TestOnboardingAuditsFactCompletionAndResolvedAssignee(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	_, err := orgrepo.New(ti.conn).UpsertOrganizationSetupTask(ctx, orgrepo.UpsertOrganizationSetupTaskParams{
@@ -306,4 +300,38 @@ func TestOnboardingAuditFailureRollsBackSelection(t *testing.T) {
 			require.Zero(t, count)
 		})
 	}
+}
+
+func TestOnboardingStorageIsOrganizationScoped(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	queries := orgrepo.New(conn)
+
+	org := orgrepo.CreateOrganizationMetadataParams{ID: "org_onboarding_storage_test", Name: "Test organization", Slug: "onboarding-storage-test"}
+	require.NoError(t, queries.CreateOrganizationMetadata(ctx, org))
+
+	// The second write upserts on organization_onboarding_organization_id_key,
+	// so it fails if that unique index is missing and the organization keeps a
+	// single onboarding row.
+	for _, preset := range []string{"gateway", "security"} {
+		err = queries.SetOrganizationOnboardingPreset(ctx, orgrepo.SetOrganizationOnboardingPresetParams{OrganizationID: org.ID, Preset: conv.ToPGText(preset)})
+		require.NoError(t, err)
+	}
+	selection, err := queries.GetOrganizationOnboardingSelection(ctx, org.ID)
+	require.NoError(t, err)
+	require.Len(t, selection, 1)
+	require.Equal(t, conv.ToPGText("security"), selection[0].OnboardingPreset)
+
+	// Onboarding state has no lifetime beyond its organization: deleting the
+	// organization cascades, so a recreated organization starts without a preset.
+	//nolint:glint // notestingrawsql: organizations are never hard-deleted by application code, so no SQLc query exercises the ON DELETE CASCADE foreign key
+	_, err = conn.Exec(ctx, `DELETE FROM organization_metadata WHERE id = $1`, org.ID)
+	require.NoError(t, err)
+	require.NoError(t, queries.CreateOrganizationMetadata(ctx, org))
+	selection, err = queries.GetOrganizationOnboardingSelection(ctx, org.ID)
+	require.NoError(t, err)
+	require.Len(t, selection, 1)
+	require.False(t, selection[0].OnboardingPreset.Valid)
 }

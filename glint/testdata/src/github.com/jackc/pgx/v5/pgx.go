@@ -3,11 +3,11 @@ package pgx
 import (
 	"context"
 	"errors"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var ErrNoRows = errors.New("no rows in result set")
-
-type CommandTag struct{}
 
 type Rows interface{}
 
@@ -27,8 +27,8 @@ type TxOptions struct{}
 
 type Conn struct{}
 
-func (*Conn) Exec(ctx context.Context, sql string, args ...any) (CommandTag, error) {
-	return CommandTag{}, nil
+func (*Conn) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
 }
 
 func (*Conn) Query(ctx context.Context, sql string, args ...any) (Rows, error) {
@@ -56,7 +56,7 @@ func (*Conn) CopyFrom(ctx context.Context, table Identifier, cols []string, src 
 }
 
 type Tx interface {
-	Exec(ctx context.Context, sql string, args ...any) (CommandTag, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) Row
 	Begin(ctx context.Context) (Tx, error)
@@ -67,7 +67,7 @@ type Tx interface {
 }
 
 type Querier interface {
-	Exec(ctx context.Context, sql string, args ...any) (CommandTag, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) Row
 }

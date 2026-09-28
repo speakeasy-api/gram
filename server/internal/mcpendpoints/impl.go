@@ -36,6 +36,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -54,6 +55,7 @@ type Service struct {
 	temporalEnv           *tenv.Environment
 	pluginsGitHubEnabled  bool
 	distributionAdmission *admission.Guard
+	publicationRequests   plugins.PublicationRequests
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -81,7 +83,13 @@ func NewService(
 		temporalEnv:           temporalEnv,
 		pluginsGitHubEnabled:  pluginsGitHubEnabled,
 		distributionAdmission: admission.NewGuard(nil, nil),
+		publicationRequests:   plugins.PublicationRequests{Enabled: false},
 	}
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
+	return s
 }
 
 func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
@@ -142,8 +150,8 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
-	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
 	}
 
 	// Match the deletion and update paths' lock order — custom domains before
@@ -179,6 +187,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, err
 	}
 
+	if mcpServerID.Valid && mcpServer.ToolsetID.Valid && mcpServer.ToolsetID.UUID == mcpServer.ID {
+		return nil, oops.E(oops.CodeInvalid, nil, "hosted MCP endpoints are managed through the toolset")
+	}
 	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, metaMcpServerID, customDomainID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
@@ -246,13 +257,16 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		}
 	}
 
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{mcpServerID}, metaMcpServerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	s.triggerPluginPublish(ctx, authCtx, attached, pluginCreated)
 	if !attached {
-		s.publishForMCPMembership(ctx, authCtx, mcpServerID)
+		s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{mcpServerID}, metaMcpServerID)
 	}
 
 	return mv.BuildMcpEndpointView(created), nil
@@ -471,6 +485,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
+	}
 
 	domainIDs := uniqueIDs(preexisting.CustomDomainID, customDomainID)
 	if err := lockCustomDomains(ctx, dbtx, domainIDs); err != nil {
@@ -514,6 +531,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	}
 	if mcpServerID.Valid && targetServer == nil {
 		return nil, oops.E(oops.CodeInvalid, nil, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
+	}
+	if err := rejectHostedEndpointMutation(ctx, dbtx, *authCtx.ProjectID, existing.McpServerID, mcpServerID); err != nil {
+		return nil, err
 	}
 
 	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, uniqueIDs(existing.MetaMcpServerID, metaMcpServerID), metaMcpServerID); err != nil {
@@ -598,10 +618,13 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		}
 	}
 
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	s.publishForMCPMembership(ctx, authCtx, existing.McpServerID, updated.McpServerID)
+	s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID)
 
 	if wasRoot && existing.CustomDomainID.Valid {
 		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {
@@ -681,6 +704,9 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := lockEndpointMutationScope(ctx, dbtx, authCtx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope").LogError(ctx, logger)
+	}
 
 	if err := lockCustomDomains(ctx, dbtx, uniqueIDs(preexisting.CustomDomainID)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
@@ -697,6 +723,9 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	}
 	if existing.CustomDomainID != preexisting.CustomDomainID {
 		return oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request").LogError(ctx, logger)
+	}
+	if err := rejectHostedEndpointMutation(ctx, dbtx, *authCtx.ProjectID, existing.McpServerID); err != nil {
+		return err
 	}
 
 	deleted, err := txRepo.DeleteMCPEndpoint(ctx, repo.DeleteMCPEndpointParams{
@@ -729,10 +758,13 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		}
 	}
 
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID}, existing.MetaMcpServerID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	s.publishForMCPMembership(ctx, authCtx, existing.McpServerID)
+	s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID}, existing.MetaMcpServerID)
 
 	if wasRoot {
 		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {
@@ -740,6 +772,23 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		}
 	}
 
+	return nil
+}
+
+// rejectHostedEndpointMutation keeps the canonical hosted address owned by its toolset.
+func rejectHostedEndpointMutation(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, serverIDs ...uuid.NullUUID) error {
+	for _, serverID := range serverIDs {
+		if !serverID.Valid {
+			continue
+		}
+		server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID.UUID, ProjectID: projectID})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load endpoint backing server")
+		}
+		if server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID {
+			return oops.E(oops.CodeInvalid, nil, "hosted MCP endpoints are managed through the toolset")
+		}
+	}
 	return nil
 }
 
@@ -804,6 +853,19 @@ func uniqueIDs(ids ...uuid.NullUUID) []uuid.UUID {
 		return strings.Compare(a.String(), b.String())
 	})
 	return result
+}
+
+func lockEndpointMutationScope(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext) error {
+	if tx == nil || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
+		return fmt.Errorf("invalid MCP endpoint mutation scope")
+	}
+	if err := networkingressrepo.New(tx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return fmt.Errorf("lock network ingress lifecycle: %w", err)
+	}
+	if err := admission.LockProject(ctx, tx, *authCtx.ProjectID); err != nil {
+		return fmt.Errorf("lock distribution admission: %w", err)
+	}
+	return nil
 }
 
 func lockCustomDomains(ctx context.Context, dbtx pgx.Tx, domainIDs []uuid.UUID) error {

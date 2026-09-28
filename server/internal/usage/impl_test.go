@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -24,10 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -250,22 +253,27 @@ func (f *fakeTrialNotifier) TrialInactive(_ context.Context, organizationID stri
 	return f.inactiveErr
 }
 
-func seedEnabledToolsets(t *testing.T, db repo.DBTX, orgID string, serverCount int) {
+func seedEnabledToolsets(t *testing.T, db *pgxpool.Pool, orgID string, serverCount int) {
 	t.Helper()
 	ctx := t.Context()
-	projectID := uuid.New()
-	_, err := db.Exec(ctx, `
-		INSERT INTO projects (id, organization_id, name, slug)
-		VALUES ($1, $2, 'Usage Test Project', $3)
-	`, projectID, orgID, "usage-"+projectID.String()[:8])
+	project, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Usage Test Project",
+		Slug:           "usage-" + uuid.NewString()[:8],
+		OrganizationID: orgID,
+	})
 	require.NoError(t, err)
 
 	for i := range serverCount {
-		toolsetID := uuid.New()
-		_, err = db.Exec(ctx, `
-			INSERT INTO toolsets (id, organization_id, project_id, name, slug, mcp_enabled)
-			VALUES ($1, $2, $3, $4, $5, TRUE)
-		`, toolsetID, orgID, projectID, "Enabled Server", fmt.Sprintf("enabled-%d-%s", i, toolsetID.String()[:8]))
+		_, err = toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+			OrganizationID:         orgID,
+			ProjectID:              project.ID,
+			Name:                   "Enabled Server",
+			Slug:                   fmt.Sprintf("enabled-%d-%s", i, uuid.NewString()[:8]),
+			Description:            pgtype.Text{},
+			DefaultEnvironmentSlug: pgtype.Text{},
+			McpSlug:                pgtype.Text{},
+			McpEnabled:             true,
+		})
 		require.NoError(t, err)
 	}
 }

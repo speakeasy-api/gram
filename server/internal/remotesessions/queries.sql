@@ -206,6 +206,36 @@ WHERE id = @id
   )
   AND deleted IS FALSE;
 
+-- name: GetRemoteSessionIssuerByIDForConfigurationCommit :one
+-- GetRemoteSessionIssuerByID holding a row lock until the transaction ends,
+-- for the atomic dashboard commit in dashboard.go. That handler reads the
+-- provider once before the transaction to learn the capabilities it registers
+-- against, performs the upstream registration, then re-reads here to confirm
+-- the provider still matches what it registered for.
+--
+-- Only the lock makes that confirmation authoritative. UpdateRemoteSessionIssuer
+-- takes no advisory lock, so without FOR UPDATE a concurrent edit can commit
+-- between the re-read and the client insert, and the credentials are persisted
+-- against configuration that no longer exists -- a client registered at the old
+-- registration_endpoint, or a CIMD client created after CIMD support was
+-- switched off. Registration has already finished by the time this is taken, so
+-- no lock is held across an upstream HTTP call.
+--
+-- Scoping matches GetRemoteSessionIssuerByID rather than the ProjectOwned
+-- variant: the commit may select an inherited organization-level or global
+-- provider, and locking only project-owned rows would leave exactly those
+-- unprotected.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND (
+    project_id = @project_id
+    OR (@include_organizational::boolean AND project_id IS NULL AND organization_id = @organization_id)
+    OR (@include_global::boolean AND project_id IS NULL AND organization_id IS NULL)
+  )
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetRemoteSessionIssuerByIDProjectOwned :one
 -- Strictly project-owned read. Unlike GetRemoteSessionIssuerByID this does not
 -- resolve inherited organization-level issuers: it backs refreshMetadata, which
@@ -1031,7 +1061,7 @@ WHERE c.id = @id
   AND c.deleted IS FALSE;
 
 -- name: GetUserSessionIssuerForProject :one
-SELECT id
+SELECT id, project_id
 FROM user_session_issuers
 WHERE id = @id
   AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
@@ -3210,6 +3240,34 @@ SET remote_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
 WHERE remote_session_issuer_id = @source_issuer_id
   AND deleted IS FALSE;
+
+-- name: LockRemoteSessionClientUserSessionIssuerLink :exec
+-- Lock the join-table row an agent attachment's foreign key check reads, before
+-- the caller checks for attachments that deleting the row would cascade to. A
+-- concurrent attachment either commits first, and the check sees it, or waits
+-- for this transaction to end.
+SELECT 1
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id
+  AND user_session_issuer_id = @user_session_issuer_id
+FOR UPDATE;
+
+-- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
+-- Report whether any unrevoked agent attachment goes through a client's binding
+-- to a user session issuer, which deleting that binding would cascade-delete.
+-- Only the caller's project can hold them: the caller refuses an
+-- organization-wide binding, and any other binding has a project-owned client
+-- or user session issuer, which pins every attachment through it to that
+-- project.
+SELECT EXISTS (
+  SELECT 1
+  FROM principal_remote_session_bindings
+  WHERE project_id = @project_id
+    AND organization_id = @organization_id
+    AND remote_session_client_id = @remote_session_client_id
+    AND user_session_issuer_id = @user_session_issuer_id
+    AND revoked_at IS NULL
+);
 
 -- name: ListOrganizationRemoteSessionsByClientID :many
 -- Sessions minted against a client. See the ORG REACHABILITY note on

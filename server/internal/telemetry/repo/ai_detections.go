@@ -373,9 +373,9 @@ func (q *Queries) listAIDetectionRowsByScope(ctx context.Context, scope aiDetect
 		// analytics filter: user_email is part of the ai_detections sort key
 		// and rows must be matched exactly as written, or merges would move
 		// rows between keys as the identity map changes.
-		Where("user_email = ?", scope.UserEmail). //nolint:glint // exact sort-key lookup, not identity-scoped analytics
+		Where("user_email = ?", scope.UserEmail). //nolint:glint // norawuseremailfilter: exact sort-key lookup, not identity-scoped analytics
 		Where(squirrel.Eq{"target_id": targetIDs}).
-		GroupBy("organization_id", "target_id", "device_serial", "user_email", "signal") //nolint:glint // grouping by the exact sort key to resolve row versions, not identity bucketing
+		GroupBy("organization_id", "target_id", "device_serial", "user_email", "signal") //nolint:glint // norawuseremailfilter: grouping by the exact sort key to resolve row versions, not identity bucketing
 
 	query, queryArgs, err := sb.ToSql()
 	if err != nil {
@@ -490,7 +490,7 @@ func resolvedAIDetections(organizationID, targetID string) squirrel.SelectBuilde
 	).
 		From("ai_detections").
 		Where("organization_id = ?", organizationID).
-		GroupBy("organization_id", "target_id", "device_serial", "user_email", "signal") //nolint:glint // resolve ReplacingMergeTree rows by their exact storage key before canonical identity folding
+		GroupBy("organization_id", "target_id", "device_serial", "user_email", "signal") //nolint:glint // norawuseremailfilter: resolve ReplacingMergeTree rows by their exact storage key before canonical identity folding
 	if targetID != "" {
 		resolved = resolved.Where("target_id = ?", targetID)
 	}
@@ -539,14 +539,14 @@ func buildListAIDetectionSummariesQuery(arg ListAIDetectionSummariesParams) (str
 		if canonicalOrgLit != "" {
 			sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, "user_email", arg.UserEmails))
 		} else {
-			sb = sb.Where(squirrel.Eq{"user_email": arg.UserEmails}) //nolint:glint // fold not rolled out to this org; both sides are lowercase-normalized
+			sb = sb.Where(squirrel.Eq{"user_email": arg.UserEmails}) //nolint:glint // norawuseremailfilter: fold not rolled out to this org; both sides are lowercase-normalized
 		}
 	}
 	if arg.ExactUserEmail != "" {
 		if canonicalOrgLit != "" {
 			sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, "user_email", []string{arg.ExactUserEmail}))
 		} else {
-			sb = sb.Where("lowerUTF8(user_email) = ?", arg.ExactUserEmail) //nolint:glint // fold not rolled out to this org; both sides are lowercase-normalized
+			sb = sb.Where("lowerUTF8(user_email) = ?", arg.ExactUserEmail) //nolint:glint // norawuseremailfilter: fold not rolled out to this org; both sides are lowercase-normalized
 		}
 	}
 

@@ -21,24 +21,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 const workloadSessionSubject = "repo:acme/payments-api:ref:refs/heads/main"
 
-// seedWorkloadIssuer registers an issuer the workload principal can name. Raw
-// SQL because writes belong to the management API milestone.
+// seedWorkloadIssuer registers an organization-tier issuer the workload
+// principal can name.
 func seedWorkloadIssuer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string) uuid.UUID {
 	t.Helper()
 
-	var id uuid.UUID
-	err := ti.conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `
-		INSERT INTO workload_issuers (organization_id, name, issuer, jwks_uri)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id
-	`, organizationID, "gh-actions-"+uuid.NewString()[:8], "https://token.actions.githubusercontent.com", "https://token.actions.githubusercontent.com/.well-known/jwks").Scan(&id)
+	id, err := testrepo.New(ti.conn).CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: organizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "gh-actions-" + uuid.NewString()[:8],
+		Issuer:         "https://token.actions.githubusercontent.com",
+		JwksUri:        "https://token.actions.githubusercontent.com/.well-known/jwks",
+	})
 	require.NoError(t, err)
 
 	return id
@@ -204,12 +205,14 @@ func TestApplyIssuerGate_WorkloadSessionWithNoAssignedAgentIsRefused(t *testing.
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
-func softDeleteWorkloadIssuer(t *testing.T, ctx context.Context, ti *testInstance, id uuid.UUID) {
+func softDeleteWorkloadIssuer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, id uuid.UUID) {
 	t.Helper()
 
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, id)
+	deleted, err := testrepo.New(ti.conn).SoftDeleteWorkloadIssuerFixture(ctx, testrepo.SoftDeleteWorkloadIssuerFixtureParams{
+		ID: id, OrganizationID: organizationID,
+	})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
 }
 
 // Deleting the issuer that vouched for a workload withdraws the authority of
@@ -234,7 +237,7 @@ func TestApplyIssuerGate_WorkloadSessionRefusedWhenItsIssuerIsDeleted(t *testing
 	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
 	require.NoError(t, err, "the workload must be admitted before the delete, or the refusal below proves nothing")
 
-	softDeleteWorkloadIssuer(t, ctx, ti, issuerID)
+	softDeleteWorkloadIssuer(t, ctx, ti, fx.orgID, issuerID)
 
 	w = httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
