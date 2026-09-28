@@ -103,7 +103,7 @@ func TestConcurrentInitialConfigurationConflicts(t *testing.T) {
 	results := make(chan error, 2)
 	for range 2 {
 		go func() {
-			_, err := f.service.Configure(t.Context(), roleprovisioning.ConfigureInput{OrganizationID: f.org, Enabled: true})
+			_, err := f.service.Configure(t.Context(), roleprovisioning.ConfigureInput{Actor: f.actor, OrganizationID: f.org, Enabled: true})
 			results <- err
 		}()
 	}

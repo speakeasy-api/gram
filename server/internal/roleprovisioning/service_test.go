@@ -37,11 +37,11 @@ func TestConfigureSelectionsExclusionsAndStaleVersion(t *testing.T) {
 	f := newFixture(t)
 	excluded := f.addRole(f.org, "Excluded")
 	v := f.configure(0, true, roleprovisioning.Selection{RoleURN: excluded, Enabled: false})
-	require.Equal(t, 1, f.count(`SELECT count(*) FROM publish_outbox`))
+	require.Equal(t, 1, f.count(`SELECT count(*) FROM publish_outbox WHERE topic='gram.plugins.v1.RoleProvisioningRequested'`))
 	require.Zero(t, f.count(`SELECT count(*) FROM plugins`), "saving intent must not provision")
-	_, err := f.service.Configure(t.Context(), roleprovisioning.ConfigureInput{OrganizationID: f.org, ExpectedVersion: 0, Enabled: false, Roles: []roleprovisioning.Selection{{RoleURN: excluded, Enabled: true}}})
+	_, err := f.service.Configure(t.Context(), roleprovisioning.ConfigureInput{Actor: f.actor, OrganizationID: f.org, ExpectedVersion: 0, Enabled: false, Roles: []roleprovisioning.Selection{{RoleURN: excluded, Enabled: true}}})
 	require.ErrorIs(t, err, roleprovisioning.ErrConflict)
-	require.Equal(t, 1, f.count(`SELECT count(*) FROM publish_outbox`), "stale save must not emit a hint")
+	require.Equal(t, 1, f.count(`SELECT count(*) FROM publish_outbox WHERE topic='gram.plugins.v1.RoleProvisioningRequested'`), "stale save must not emit a hint")
 	settings, err := f.service.Settings(t.Context(), f.org)
 	require.NoError(t, err)
 	require.True(t, settings.Enabled)
@@ -168,7 +168,7 @@ func TestMissingDestinationStaysPending(t *testing.T) {
 				f.exec(`DELETE FROM projects WHERE id=$1`, f.project)
 			}
 			if mode == "explicit-null" {
-				_, err := f.service.Configure(t.Context(), roleprovisioning.ConfigureInput{OrganizationID: f.org, Enabled: true, ProjectID: new(uuid.Nil)})
+				_, err := f.service.Configure(t.Context(), roleprovisioning.ConfigureInput{Actor: f.actor, OrganizationID: f.org, Enabled: true, ProjectID: new(uuid.Nil)})
 				require.NoError(t, err)
 			} else {
 				f.configure(0, true)
@@ -237,9 +237,9 @@ func TestCrossOrganizationConfigurationRejectedAtomically(t *testing.T) {
 	foreignProject := f.addProject(foreignOrg, "foreign")
 	foreignRole := f.addRole(foreignOrg, "Foreign role")
 	inputs := []roleprovisioning.ConfigureInput{
-		{OrganizationID: f.org, Enabled: true, ProjectID: &foreignProject},
-		{OrganizationID: f.org, Enabled: true, Roles: []roleprovisioning.Selection{{RoleURN: foreignRole, Enabled: true}}},
-		{OrganizationID: f.org, Enabled: true, Roles: []roleprovisioning.Selection{{RoleURN: f.role, Enabled: true, ProjectID: &foreignProject}}},
+		{Actor: f.actor, OrganizationID: f.org, Enabled: true, ProjectID: &foreignProject},
+		{Actor: f.actor, OrganizationID: f.org, Enabled: true, Roles: []roleprovisioning.Selection{{RoleURN: foreignRole, Enabled: true}}},
+		{Actor: f.actor, OrganizationID: f.org, Enabled: true, Roles: []roleprovisioning.Selection{{RoleURN: f.role, Enabled: true, ProjectID: &foreignProject}}},
 	}
 	for _, input := range inputs {
 		_, err := f.service.Configure(t.Context(), input)

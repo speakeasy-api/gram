@@ -14,6 +14,8 @@ import (
 )
 
 const (
+	ActionOrganizationRoleProvisioningConfigured Action = "organization:role_provisioning_configured"
+
 	ActionOrganizationInviteCreate     Action = "organization_invitation:create"
 	ActionOrganizationInviteRevoke     Action = "organization_invitation:revoke"
 	ActionOrganizationInviteRoleUpdate Action = "organization_invitation:update_role"
@@ -965,4 +967,43 @@ func (l *Logger) LogOrganizationPaygDeactivated(ctx context.Context, dbtx repo.D
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationBillingV1})
+}
+
+// RoleProvisioningSnapshot records saved intent, not reconciliation or delivery.
+type RoleProvisioningSnapshot struct {
+	Enabled   bool                           `json:"enabled"`
+	ProjectID uuid.NullUUID                  `json:"project_id"`
+	Version   int64                          `json:"version"`
+	Roles     []RoleProvisioningRoleSnapshot `json:"roles"`
+}
+
+type RoleProvisioningRoleSnapshot struct {
+	RoleURN   string        `json:"role_urn"`
+	Enabled   bool          `json:"enabled"`
+	ProjectID uuid.NullUUID `json:"project_id"`
+}
+
+type LogOrganizationRoleProvisioningConfiguredEvent struct {
+	OrganizationID                 string
+	Actor                          urn.Principal
+	RoleProvisioningSnapshotBefore *RoleProvisioningSnapshot
+	RoleProvisioningSnapshotAfter  *RoleProvisioningSnapshot
+}
+
+func (l *Logger) LogOrganizationRoleProvisioningConfigured(ctx context.Context, dbtx repo.DBTX, event LogOrganizationRoleProvisioningConfiguredEvent) error {
+	before, err := marshalAuditPayload(event.RoleProvisioningSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal role-provisioning before snapshot: %w", err)
+	}
+	after, err := marshalAuditPayload(event.RoleProvisioningSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal role-provisioning after snapshot: %w", err)
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ActorID:        event.Actor.ID, ActorType: string(event.Actor.Type),
+		Action:    string(ActionOrganizationRoleProvisioningConfigured),
+		SubjectID: event.OrganizationID, SubjectType: "organization",
+		BeforeSnapshot: before, AfterSnapshot: after,
+	}, OutboxEvent: events.OrganizationRoleProvisioningV1})
 }

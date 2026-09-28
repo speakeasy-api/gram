@@ -33,7 +33,7 @@ SELECT workos_name FROM organization_roles
 WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE AND workos_deleted IS FALSE FOR UPDATE;
 
 -- name: LockGlobalRole :one
-SELECT workos_name FROM global_roles WHERE id = @id AND deleted IS FALSE AND workos_deleted IS FALSE FOR UPDATE;
+SELECT workos_name FROM global_roles WHERE id = @id AND deleted IS FALSE AND workos_deleted IS FALSE FOR SHARE;
 
 -- name: GetRoleSetting :one
 SELECT * FROM role_provisioning_settings WHERE organization_id = @organization_id AND role_urn = @role_urn;

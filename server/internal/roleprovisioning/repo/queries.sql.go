@@ -306,7 +306,7 @@ func (q *Queries) ListRoleSettings(ctx context.Context, organizationID pgtype.Te
 }
 
 const lockGlobalRole = `-- name: LockGlobalRole :one
-SELECT workos_name FROM global_roles WHERE id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE FOR UPDATE
+SELECT workos_name FROM global_roles WHERE id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE FOR SHARE
 `
 
 func (q *Queries) LockGlobalRole(ctx context.Context, id uuid.UUID) (string, error) {

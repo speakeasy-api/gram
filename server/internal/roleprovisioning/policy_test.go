@@ -5,10 +5,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/roleprovisioning"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,6 +21,35 @@ func (f *fixture) attachDirectRemote(pluginID, projectID uuid.UUID) {
 	f.exec(`INSERT INTO mcp_servers (id,project_id,remote_mcp_server_id,visibility) VALUES ($1,$2,$3,'public')`, server, projectID, remote)
 	f.exec(`INSERT INTO platform_mcp_catalog_registrations (organization_id,project_id,source_kind,catalog_provider,catalog_reference,mcp_server_id) VALUES ($1,$2,'remote','direct-remote-url-v1','https://mcp.example.test/api',$3)`, f.org, projectID, server)
 	f.exec(`INSERT INTO plugin_servers (plugin_id,mcp_server_id,display_name) VALUES ($1,$2,'Admin content')`, pluginID, server)
+}
+
+func TestEveryoneRemoteOriginAdditionStillRequiresApproval(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.configure(0, true)
+	pluginID := f.reconcile(f.role).PluginID
+	f.attachDirectRemote(pluginID, f.project)
+	f.exec(`DELETE FROM plugin_assignments WHERE plugin_id=$1`, pluginID)
+	f.exec(`INSERT INTO plugin_assignments (plugin_id,organization_id,principal_urn) VALUES ($1,$2,$3)`, pluginID, f.org, urn.PrincipalWildcard)
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, f.org, true)
+	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, f.org, false)
+	flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, f.org, []byte(`{"mode":"enforce"}`))
+	f.exec(`INSERT INTO risk_policies (organization_id,project_id,name,sources,action,version) VALUES ($1,$2,'Approval required',ARRAY['shadow_mcp'],'block',1)`, f.org, f.project)
+	f.service = roleprovisioning.New(f.db, audit.NewLogger(), admission.NewGuard(flags, nil), plugins.PublicationRequests{})
+	audits, err := audittest.AuditLogCount(t.Context(), f.db)
+	require.NoError(t, err)
+	outbox := f.count(`SELECT count(*) FROM publish_outbox`)
+	result := f.reconcile(f.role)
+	require.Equal(t, "audience_approval_required", result.Pending)
+	require.Equal(t, []string{urn.PrincipalWildcard}, f.audiences(pluginID))
+	require.Equal(t, 1, f.count(`SELECT count(*) FROM role_plugin_associations WHERE plugin_id=$1 AND is_current`, pluginID))
+	require.Equal(t, 1, f.count(`SELECT count(*) FROM plugin_servers WHERE plugin_id=$1 AND NOT deleted`, pluginID))
+	require.Equal(t, 1, f.count(`SELECT count(*) FROM role_provisioning_settings WHERE organization_id=$1 AND role_urn=$2 AND last_error_code='audience_approval_required'`, f.org, f.role))
+	afterAudits, err := audittest.AuditLogCount(t.Context(), f.db)
+	require.NoError(t, err)
+	require.Equal(t, audits, afterAudits)
+	require.Equal(t, outbox, f.count(`SELECT count(*) FROM publish_outbox`))
 }
 
 func TestAudienceRepairAndRemapFailClosed(t *testing.T) {
@@ -78,7 +109,7 @@ func TestConfigurationOutboxFailureRollsBackIntent(t *testing.T) {
 	// This trigger exists only in this test's disposable cloned database.
 	f.exec(`CREATE FUNCTION reject_provisioning_hint() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected outbox failure'; END $$`)
 	f.exec(`CREATE TRIGGER reject_hint BEFORE INSERT ON publish_outbox FOR EACH ROW EXECUTE FUNCTION reject_provisioning_hint()`)
-	_, err := f.service.Configure(t.Context(), roleprovisioning.ConfigureInput{OrganizationID: f.org, Enabled: true})
+	_, err := f.service.Configure(t.Context(), roleprovisioning.ConfigureInput{Actor: f.actor, OrganizationID: f.org, Enabled: true})
 	require.ErrorContains(t, err, "injected outbox failure")
 	require.Zero(t, f.count(`SELECT count(*) FROM organization_role_provisioning_settings`))
 	require.Zero(t, f.count(`SELECT count(*) FROM role_provisioning_settings`))

@@ -107,6 +107,8 @@ func (s *Service) Reconcile(ctx context.Context, organizationID, roleURN string,
 			switch {
 			case errors.Is(err, admission.ErrApprovalRequired):
 				result = Result{Pending: "audience_approval_required"}
+			case errors.Is(err, admission.ErrPrivateGatewayAudience):
+				result = Result{Pending: "private_gateway_audience"}
 			case errors.Is(err, admission.ErrUnavailable), errors.Is(err, admission.ErrDistributionDisabled):
 				result = Result{Pending: "admission_unavailable"}
 			case errors.Is(err, pgx.ErrNoRows):
@@ -231,7 +233,11 @@ func (s *Service) transition(ctx context.Context, tx pgx.Tx, org, role, name str
 		packageChanged = true
 	}
 	guard := func(ctx context.Context, tx pgx.Tx, p pluginsrepo.Plugin, current, desired []string) error {
-		if assignments.IsSubset(desired, current) {
+		// Only unchanged assignments and removals bypass admission. An existing
+		// Everyone assignment must not hide a newly added role from gateway checks.
+		if !slices.ContainsFunc(desired, func(principal string) bool {
+			return !slices.Contains(current, principal)
+		}) {
 			return nil
 		}
 		config, policyErr := resolved.config, resolved.err

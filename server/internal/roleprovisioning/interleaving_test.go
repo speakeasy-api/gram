@@ -43,7 +43,7 @@ func TestExplicitPendingDestinationSurvivesFirstEnable(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	pending := uuid.Nil
-	v, err := f.service.Configure(t.Context(), roleprovisioning.ConfigureInput{OrganizationID: f.org, Enabled: false, ProjectID: &pending})
+	v, err := f.service.Configure(t.Context(), roleprovisioning.ConfigureInput{Actor: f.actor, OrganizationID: f.org, Enabled: false, ProjectID: &pending})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), v)
 	// Unlike an untouched default-off row, this is an explicitly saved choice.
@@ -169,7 +169,7 @@ func TestConfigureWaitsForRunningReconciliation(t *testing.T) {
 			}()
 			// Reconcile owns the organization lock and waits on the admission lock.
 			reconcilerPID := f.waitForBlocked(ctx, pid)
-			input := roleprovisioning.ConfigureInput{OrganizationID: f.org, ExpectedVersion: 1, Enabled: operation != "disable"}
+			input := roleprovisioning.ConfigureInput{Actor: f.actor, OrganizationID: f.org, ExpectedVersion: 1, Enabled: operation != "disable"}
 			if operation == "remap" {
 				input.Roles = []roleprovisioning.Selection{{RoleURN: f.role, Enabled: true, ProjectID: &destination}}
 			}

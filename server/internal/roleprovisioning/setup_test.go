@@ -82,7 +82,7 @@ func (f *fixture) addRole(org, name string) string {
 }
 func (f *fixture) configure(version int64, enabled bool, selections ...roleprovisioning.Selection) int64 {
 	f.t.Helper()
-	v, err := f.service.Configure(f.t.Context(), roleprovisioning.ConfigureInput{OrganizationID: f.org, ExpectedVersion: version, Enabled: enabled, Roles: selections})
+	v, err := f.service.Configure(f.t.Context(), roleprovisioning.ConfigureInput{Actor: f.actor, OrganizationID: f.org, ExpectedVersion: version, Enabled: enabled, Roles: selections})
 	require.NoError(f.t, err)
 	require.Equal(f.t, version+1, v)
 	return v

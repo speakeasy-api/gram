@@ -50,16 +50,20 @@ func New(db *pgxpool.Pool, logger *audit.Logger, guard *admission.Guard, publica
 type Selection struct {
 	RoleURN string
 	Enabled bool
-	// Nil leaves an existing destination unchanged; a pointer to uuid.Nil clears it.
+	// Nil preserves the destination, except an explicit organization destination
+	// fills pending roles. A pointer to uuid.Nil keeps this role pending.
 	ProjectID *uuid.UUID
 }
 
 type ConfigureInput struct {
+	Actor           Actor
 	OrganizationID  string
 	ExpectedVersion int64
 	Enabled         bool
 	// Nil preserves the saved default. On first configuration, it selects the
 	// best eligible project. A pointer to uuid.Nil explicitly leaves it pending.
+	// An explicit nonzero project also fills pending role destinations, unless
+	// that role has an explicit ProjectID in this save. Non-null roles stay put.
 	ProjectID *uuid.UUID
 	Roles     []Selection
 }
@@ -108,11 +112,22 @@ func (s *Service) Settings(ctx context.Context, organizationID string) (Settings
 	return result, nil
 }
 
-// Configure commits intent and its durable hint, never downstream provisioning.
+func configurationSnapshot(enabled bool, projectID uuid.NullUUID, version int64, roles []repo.ListRoleSettingsRow) *audit.RoleProvisioningSnapshot {
+	snapshot := &audit.RoleProvisioningSnapshot{Enabled: enabled, ProjectID: projectID, Version: version, Roles: make([]audit.RoleProvisioningRoleSnapshot, 0, len(roles))}
+	for _, role := range roles {
+		snapshot.Roles = append(snapshot.Roles, audit.RoleProvisioningRoleSnapshot{RoleURN: role.RoleUrn, Enabled: role.Enabled, ProjectID: role.ProjectID})
+	}
+	return snapshot
+}
+
+// Configure commits audited intent and its durable hint, never downstream provisioning.
 // The expected version covers every explicit organization and per-role change.
 func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, error) {
-	if in.OrganizationID == "" || in.ExpectedVersion < 0 {
+	if in.OrganizationID == "" || in.ExpectedVersion < 0 || in.Actor.Principal.IsZero() || s.audit == nil {
 		return 0, ErrInvalid
+	}
+	if _, err := in.Actor.Principal.Value(); err != nil {
+		return 0, fmt.Errorf("%w: actor: %w", ErrInvalid, err)
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -131,6 +146,11 @@ func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, erro
 	if saved.Version != in.ExpectedVersion {
 		return 0, ErrConflict
 	}
+	beforeRoles, err := q.ListRoleSettings(ctx, text(in.OrganizationID))
+	if err != nil {
+		return 0, err
+	}
+	before := configurationSnapshot(saved.Enabled, saved.ProjectID, saved.Version, beforeRoles)
 	projects, err := q.ListProjects(ctx, in.OrganizationID)
 	if err != nil {
 		return 0, err
@@ -176,7 +196,8 @@ func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, erro
 			return 0, err
 		}
 		selection, ok := selected[role.RoleUrn]
-		if !ok {
+		fillPending := in.ProjectID != nil && destination.Valid
+		if !ok && !fillPending {
 			continue
 		}
 		setting, err := q.GetRoleSetting(ctx, repo.GetRoleSettingParams{OrganizationID: text(in.OrganizationID), RoleUrn: role.RoleUrn})
@@ -184,15 +205,35 @@ func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, erro
 			return 0, err
 		}
 		target := setting.ProjectID
-		if selection.ProjectID != nil {
-			target = nullableID(*selection.ProjectID)
+		// An explicit organization destination resolves pending roles, but never
+		// replaces an existing override. Per-role intent in this save wins.
+		if fillPending && !target.Valid {
+			target = destination
 		}
-		if err = q.SaveRoleSetting(ctx, repo.SaveRoleSettingParams{OrganizationID: text(in.OrganizationID), RoleUrn: role.RoleUrn, Enabled: selection.Enabled, ProjectID: target}); err != nil {
+		enabled := setting.Enabled
+		if ok {
+			enabled = selection.Enabled
+			if selection.ProjectID != nil {
+				target = nullableID(*selection.ProjectID)
+			}
+		}
+		if err = q.SaveRoleSetting(ctx, repo.SaveRoleSettingParams{OrganizationID: text(in.OrganizationID), RoleUrn: role.RoleUrn, Enabled: enabled, ProjectID: target}); err != nil {
 			return 0, err
 		}
 	}
 	version, err := q.SaveSettings(ctx, repo.SaveSettingsParams{OrganizationID: in.OrganizationID, Enabled: pgtype.Bool{Bool: in.Enabled, Valid: true}, ProjectID: destination, Version: pgtype.Int8{Int64: saved.Version + 1, Valid: true}})
 	if err != nil {
+		return 0, err
+	}
+	afterRoles, err := q.ListRoleSettings(ctx, text(in.OrganizationID))
+	if err != nil {
+		return 0, err
+	}
+	if err = s.audit.LogOrganizationRoleProvisioningConfigured(ctx, tx, audit.LogOrganizationRoleProvisioningConfiguredEvent{
+		OrganizationID: in.OrganizationID, Actor: in.Actor.Principal,
+		RoleProvisioningSnapshotBefore: before,
+		RoleProvisioningSnapshotAfter:  configurationSnapshot(in.Enabled, destination, version, afterRoles),
+	}); err != nil {
 		return 0, err
 	}
 	if err = hints.Emit(ctx, tx, hints.Hint{OrganizationID: in.OrganizationID}); err != nil {
