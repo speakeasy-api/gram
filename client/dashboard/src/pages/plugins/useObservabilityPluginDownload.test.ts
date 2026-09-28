@@ -4,13 +4,15 @@ import { useObservabilityPluginDownload } from "./useObservabilityPluginDownload
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("@/contexts/Fetcher", () => ({ useFetcher: () => mocks }));
+const revokeObjectURL = vi.fn();
 
 beforeEach(() => {
   mocks.fetch.mockReset();
+  revokeObjectURL.mockReset();
   vi.useFakeTimers();
   vi.stubGlobal("URL", {
     createObjectURL: vi.fn(() => "blob:plugin"),
-    revokeObjectURL: vi.fn(),
+    revokeObjectURL,
   });
 });
 afterEach(() => {
@@ -53,8 +55,8 @@ describe("useObservabilityPluginDownload", () => {
       {},
     );
     expect(result.current.isDownloading).toBe(false);
-    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
     vi.runAllTimers();
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:plugin");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:plugin");
   });
 });

@@ -17,7 +17,9 @@ vi.mock("@/components/code", () => ({
   CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+});
 
 function openProvider(
   provider: string,
@@ -27,7 +29,7 @@ function openProvider(
     <TooltipProvider>
       <InstallInstructionsDialog
         open
-        onOpenChange={vi.fn()}
+        onOpenChange={vi.fn<() => void>()}
         repoOwner="example-owner"
         repoName="example-marketplace"
         marketplaceUrl="https://example.invalid/marketplace"
@@ -109,8 +111,8 @@ describe("installation instructions", () => {
       render(
         <PublishDialog
           open
-          onOpenChange={vi.fn()}
-          onPublish={vi.fn()}
+          onOpenChange={vi.fn<() => void>()}
+          onPublish={vi.fn<() => void>()}
           isPending={false}
           mode={mode}
         />,
