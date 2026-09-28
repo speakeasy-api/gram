@@ -12,6 +12,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceTriggerThreadRouteCursor = `-- name: AdvanceTriggerThreadRouteCursor :exec
+UPDATE trigger_thread_routes
+SET last_seen_cursor = CASE
+        WHEN last_seen_cursor IS NULL THEN $1::text
+        WHEN $1::text COLLATE "C" > last_seen_cursor COLLATE "C" THEN $1::text
+        ELSE last_seen_cursor
+    END,
+    updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND target_kind = $3
+  AND target_ref = $4
+  AND correlation_id = $5
+  AND deleted IS FALSE
+`
+
+type AdvanceTriggerThreadRouteCursorParams struct {
+	LastSeenCursor string
+	ProjectID      uuid.UUID
+	TargetKind     string
+	TargetRef      string
+	CorrelationID  string
+}
+
+// Moves the cursor forward without touching state, so a delivery racing an
+// unsubscribe cannot subscribe the target again.
+func (q *Queries) AdvanceTriggerThreadRouteCursor(ctx context.Context, arg AdvanceTriggerThreadRouteCursorParams) error {
+	_, err := q.db.Exec(ctx, advanceTriggerThreadRouteCursor,
+		arg.LastSeenCursor,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.CorrelationID,
+	)
+	return err
+}
+
 const createDashboardTriggerInstance = `-- name: CreateDashboardTriggerInstance :one
 INSERT INTO trigger_instances (
     organization_id,
@@ -296,6 +332,48 @@ func (q *Queries) GetTriggerInstanceByIDPublic(ctx context.Context, id uuid.UUID
 	return i, err
 }
 
+const getTriggerThreadRoute = `-- name: GetTriggerThreadRoute :one
+SELECT id, project_id, target_kind, target_ref, correlation_id, route_to_correlation_id, state, last_seen_cursor, created_at, updated_at, deleted_at, deleted
+FROM trigger_thread_routes
+WHERE project_id = $1
+  AND target_kind = $2
+  AND target_ref = $3
+  AND correlation_id = $4
+  AND deleted IS FALSE
+`
+
+type GetTriggerThreadRouteParams struct {
+	ProjectID     uuid.UUID
+	TargetKind    string
+	TargetRef     string
+	CorrelationID string
+}
+
+func (q *Queries) GetTriggerThreadRoute(ctx context.Context, arg GetTriggerThreadRouteParams) (TriggerThreadRoute, error) {
+	row := q.db.QueryRow(ctx, getTriggerThreadRoute,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.CorrelationID,
+	)
+	var i TriggerThreadRoute
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.CorrelationID,
+		&i.RouteToCorrelationID,
+		&i.State,
+		&i.LastSeenCursor,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const listActiveTriggerInstancesByTarget = `-- name: ListActiveTriggerInstancesByTarget :many
 SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
@@ -467,6 +545,76 @@ func (q *Queries) ListTriggerInstances(ctx context.Context, projectID uuid.UUID)
 	return items, nil
 }
 
+const routeTriggerThread = `-- name: RouteTriggerThread :one
+INSERT INTO trigger_thread_routes (
+    project_id,
+    target_kind,
+    target_ref,
+    correlation_id,
+    route_to_correlation_id,
+    state,
+    last_seen_cursor
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (project_id, target_kind, target_ref, correlation_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    route_to_correlation_id = EXCLUDED.route_to_correlation_id,
+    state = EXCLUDED.state,
+    last_seen_cursor = CASE
+        WHEN EXCLUDED.last_seen_cursor IS NULL THEN trigger_thread_routes.last_seen_cursor
+        WHEN trigger_thread_routes.last_seen_cursor IS NULL THEN EXCLUDED.last_seen_cursor
+        WHEN EXCLUDED.last_seen_cursor COLLATE "C" > trigger_thread_routes.last_seen_cursor COLLATE "C" THEN EXCLUDED.last_seen_cursor
+        ELSE trigger_thread_routes.last_seen_cursor
+    END,
+    updated_at = clock_timestamp()
+RETURNING id, project_id, target_kind, target_ref, correlation_id, route_to_correlation_id, state, last_seen_cursor, created_at, updated_at, deleted_at, deleted
+`
+
+type RouteTriggerThreadParams struct {
+	ProjectID            uuid.UUID
+	TargetKind           string
+	TargetRef            string
+	CorrelationID        string
+	RouteToCorrelationID pgtype.Text
+	State                string
+	LastSeenCursor       pgtype.Text
+}
+
+func (q *Queries) RouteTriggerThread(ctx context.Context, arg RouteTriggerThreadParams) (TriggerThreadRoute, error) {
+	row := q.db.QueryRow(ctx, routeTriggerThread,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.CorrelationID,
+		arg.RouteToCorrelationID,
+		arg.State,
+		arg.LastSeenCursor,
+	)
+	var i TriggerThreadRoute
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.CorrelationID,
+		&i.RouteToCorrelationID,
+		&i.State,
+		&i.LastSeenCursor,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setTriggerInstanceStatus = `-- name: SetTriggerInstanceStatus :one
 UPDATE trigger_instances
 SET
@@ -547,6 +695,41 @@ func (q *Queries) SetTriggerInstanceStatusByID(ctx context.Context, arg SetTrigg
 	return i, err
 }
 
+const setTriggerThreadRoutesStateForTarget = `-- name: SetTriggerThreadRoutesStateForTarget :execrows
+UPDATE trigger_thread_routes
+SET state = $1,
+    updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND target_kind = $3
+  AND target_ref = $4
+  AND (correlation_id = $5 OR route_to_correlation_id = $5)
+  AND deleted IS FALSE
+`
+
+type SetTriggerThreadRoutesStateForTargetParams struct {
+	State         string
+	ProjectID     uuid.UUID
+	TargetKind    string
+	TargetRef     string
+	CorrelationID string
+}
+
+// Sets the state of every conversation delivered under @correlation_id: the
+// conversation itself and every conversation routed to it.
+func (q *Queries) SetTriggerThreadRoutesStateForTarget(ctx context.Context, arg SetTriggerThreadRoutesStateForTargetParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setTriggerThreadRoutesStateForTarget,
+		arg.State,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.CorrelationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateTriggerInstance = `-- name: UpdateTriggerInstance :one
 UPDATE trigger_instances
 SET
@@ -606,6 +789,73 @@ func (q *Queries) UpdateTriggerInstance(ctx context.Context, arg UpdateTriggerIn
 		&i.TargetDisplay,
 		&i.ConfigJson,
 		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertTriggerThreadRouteState = `-- name: UpsertTriggerThreadRouteState :one
+INSERT INTO trigger_thread_routes (
+    project_id,
+    target_kind,
+    target_ref,
+    correlation_id,
+    state,
+    last_seen_cursor
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+ON CONFLICT (project_id, target_kind, target_ref, correlation_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    state = EXCLUDED.state,
+    last_seen_cursor = CASE
+        WHEN EXCLUDED.last_seen_cursor IS NULL THEN trigger_thread_routes.last_seen_cursor
+        WHEN trigger_thread_routes.last_seen_cursor IS NULL THEN EXCLUDED.last_seen_cursor
+        WHEN EXCLUDED.last_seen_cursor COLLATE "C" > trigger_thread_routes.last_seen_cursor COLLATE "C" THEN EXCLUDED.last_seen_cursor
+        ELSE trigger_thread_routes.last_seen_cursor
+    END,
+    updated_at = clock_timestamp()
+RETURNING id, project_id, target_kind, target_ref, correlation_id, route_to_correlation_id, state, last_seen_cursor, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertTriggerThreadRouteStateParams struct {
+	ProjectID      uuid.UUID
+	TargetKind     string
+	TargetRef      string
+	CorrelationID  string
+	State          string
+	LastSeenCursor pgtype.Text
+}
+
+// Cursors are compared in byte order, so a cursor only moves forward when the
+// source's cursors sort lexically (Slack message timestamps do).
+func (q *Queries) UpsertTriggerThreadRouteState(ctx context.Context, arg UpsertTriggerThreadRouteStateParams) (TriggerThreadRoute, error) {
+	row := q.db.QueryRow(ctx, upsertTriggerThreadRouteState,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.CorrelationID,
+		arg.State,
+		arg.LastSeenCursor,
+	)
+	var i TriggerThreadRoute
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.CorrelationID,
+		&i.RouteToCorrelationID,
+		&i.State,
+		&i.LastSeenCursor,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
