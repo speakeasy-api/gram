@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
@@ -88,9 +89,9 @@ func featureProposal(organizationID, key string, enabled bool) NewProposal {
 
 func countWriteEvents(t *testing.T, db *pgxpool.Pool, proposalID uuid.UUID, event string) int {
 	t.Helper()
-	var count int
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM admin_mcp_write_events WHERE proposal_id = $1 AND event = $2`, proposalID, event).Scan(&count)) //nolint:glint // notestingrawsql: Assert the staff event trail directly.
-	return count
+	count, err := repo.New(db).CountWriteEventsFixture(t.Context(), repo.CountWriteEventsFixtureParams{ProposalID: proposalID, Event: event})
+	require.NoError(t, err)
+	return int(count)
 }
 
 func organizationName(t *testing.T, db *pgxpool.Pool, id string) string {
@@ -105,11 +106,11 @@ func organizationName(t *testing.T, db *pgxpool.Pool, id string) string {
 func renameRunner(calls *atomic.Int32, name string, fail error) ProposalRunner {
 	return func(ctx context.Context, tx pgx.Tx, p Proposal) (string, json.RawMessage, error) {
 		calls.Add(1)
-		tag, err := tx.Exec(ctx, `UPDATE organization_metadata SET name = $2 WHERE id = $1`, p.Target.OrganizationID, name) //nolint:glint // notestingrawsql: Synthetic business write inside the execution transaction.
+		renamed, err := repo.New(tx).RenameOrganizationFixture(ctx, repo.RenameOrganizationFixtureParams{Name: name, ID: p.Target.OrganizationID})
 		if err != nil {
 			return "", nil, fmt.Errorf("rename synthetic organization: %w", err)
 		}
-		if tag.RowsAffected() != 1 {
+		if renamed != 1 {
 			return "", nil, ErrStaleState
 		}
 		if fail != nil {
@@ -293,8 +294,7 @@ func TestProposalStoreRevokedClientCannotReplayReceipt(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.store.Approve(ctx, pending.ID, proposalTestSubject, pending.ProposalDigest, now, allowProposalBrowser, allowProposalBrowser)
 	require.NoError(t, err)
-	_, err = f.db.Exec(ctx, `UPDATE admin_mcp_oauth_clients SET revoked_at = clock_timestamp() WHERE id = $1`, f.owner.ClientRowID) //nolint:glint // notestingrawsql: Simulate client revocation after approval.
-	require.NoError(t, err)
+	require.NoError(t, repo.New(f.db).RevokeOAuthClientFixture(ctx, f.owner.ClientRowID))
 	_, _, err = f.store.Execute(ctx, f.owner, pending.ID, now, ProposalExecution{Run: run})
 	require.ErrorIs(t, err, ErrConnectionChanged)
 	require.Equal(t, "Synthetic B", organizationName(t, f.db, f.orgB))

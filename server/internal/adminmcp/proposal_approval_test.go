@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -133,7 +134,7 @@ func TestStaffProposalApprovalRequiresLinkedWritableConnection(t *testing.T) {
 	require.Equal(t, http.StatusOK, page.Code)
 	form := approvalForm(t, page.Body.String())
 
-	_, err = f.db.Exec(t.Context(), `UPDATE admin_mcp_connections SET scopes = ARRAY['admin:read'] WHERE id = $1`, f.owner.ConnectionID) //nolint:glint // notestingrawsql: Simulate a scope downgrade between preview and approval.
+	err = repo.New(f.db).SetConnectionScopesFixture(t.Context(), repo.SetConnectionScopesFixtureParams{Scopes: []string{ScopeRead}, ID: f.owner.ConnectionID})
 	require.NoError(t, err)
 	post := httptest.NewRecorder()
 	handler.ServeHTTP(post, approvalRequest(http.MethodPost, p.ID, form, "browser-session"))
@@ -141,7 +142,7 @@ func TestStaffProposalApprovalRequiresLinkedWritableConnection(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, get().Code, "a downgraded connection invalidates the proposal")
 
 	// A separate proposal is needed after the scope downgrade invalidates the first.
-	_, err = f.db.Exec(t.Context(), `UPDATE admin_mcp_connections SET scopes = ARRAY['admin:read','admin:write'] WHERE id = $1`, f.owner.ConnectionID) //nolint:glint // notestingrawsql: Restore synthetic fixture scope for the reconsent check.
+	err = repo.New(f.db).SetConnectionScopesFixture(t.Context(), repo.SetConnectionScopesFixtureParams{Scopes: []string{ScopeRead, ScopeWrite}, ID: f.owner.ConnectionID})
 	require.NoError(t, err)
 	p, _, err = f.store.Create(t.Context(), f.owner, featureProposal(f.orgA, "reauth", true), time.Now())
 	require.NoError(t, err)
@@ -157,8 +158,8 @@ func TestStaffProposalApprovalRequiresLinkedWritableConnection(t *testing.T) {
 	require.NotEqual(t, ProposalApproved, current.Status)
 
 	// Check isolation on a fresh pending proposal: the prior generation was invalidated.
-	var generation uuid.UUID
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT active_generation FROM admin_mcp_connections WHERE id = $1`, f.owner.ConnectionID).Scan(&generation)) //nolint:glint // notestingrawsql: Read the synthetic reconsent generation.
+	generation, err := repo.New(f.db).GetConnectionGenerationFixture(t.Context(), f.owner.ConnectionID)
+	require.NoError(t, err)
 	f.owner.Generation = generation
 	p, _, err = f.store.Create(t.Context(), f.owner, featureProposal(f.orgA, "other-staff", true), time.Now())
 	require.NoError(t, err)

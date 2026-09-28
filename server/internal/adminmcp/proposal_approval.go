@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -94,28 +95,20 @@ func (s *StaffProposalApproval) verifyConnection() ProposalRevalidator {
 	}
 }
 
-func (s *StaffProposalApproval) checkConnection(ctx context.Context, db interface {
-	QueryRow(context.Context, string, ...any) pgx.Row
-}, p Proposal) error {
-	var encrypted string
-	var scopes []string
-	err := db.QueryRow(ctx, `
-SELECT connection.admin_session_id_enc, connection.scopes
-FROM admin_mcp_connections AS connection
-JOIN admin_mcp_oauth_clients AS client ON client.id = connection.oauth_client_id
-WHERE connection.id = $1 AND connection.oauth_client_id = $2 AND connection.active_generation = $3
-  AND connection.revoked_at IS NULL AND connection.reauthorization_required_at IS NULL
-  AND connection.authorization_expires_at > clock_timestamp() AND client.revoked_at IS NULL
-  AND (client.client_secret_expires_at IS NULL OR client.client_secret_expires_at > clock_timestamp())
-`, p.ConnectionID, p.OAuthClientID, p.Generation).Scan(&encrypted, &scopes)
+func (s *StaffProposalApproval) checkConnection(ctx context.Context, db repo.DBTX, p Proposal) error {
+	connection, err := repo.New(db).GetLinkedWriteConnection(ctx, repo.GetLinkedWriteConnectionParams{
+		ConnectionID:  p.ConnectionID,
+		OauthClientID: p.OAuthClientID,
+		Generation:    p.Generation,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrConnectionChanged
 	}
 	if err != nil {
 		return fmt.Errorf("read linked staff connection: %w", err)
 	}
-	linked, err := s.session.cipher.Decrypt(encrypted)
-	if err != nil || linked == "" || !slices.Contains(scopes, ScopeWrite) {
+	linked, err := s.session.cipher.Decrypt(connection.AdminSessionIDEnc)
+	if err != nil || linked == "" || !slices.Contains(connection.Scopes, ScopeWrite) {
 		return ErrWriteIdentity
 	}
 	verified, err := s.session.verifier.Authorize(ctx, linked, &security.APIKeyScheme{Name: constants.AdminAuthSecurityScheme}) //nolint:exhaustruct // Only the scheme name is used.

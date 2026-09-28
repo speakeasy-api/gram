@@ -207,11 +207,15 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 		staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not prepare authorization")
 		return
 	}
+	view := staffConsentView{
+		ClientName:  client.Name,
+		RedirectURI: challenge.RedirectURI,
+		State:       challenge.ID,
+		CSRF:        challenge.CSRFToken,
+		Write:       slices.Contains(challenge.Scopes, ScopeWrite),
+	}
 	var page strings.Builder
-	if err := staffConsentPage.Execute(&page, struct {
-		ClientName, RedirectURI, State, CSRF string
-		Write                                bool
-	}{ClientName: client.Name, RedirectURI: challenge.RedirectURI, State: challenge.ID, CSRF: challenge.CSRFToken, Write: slices.Contains(challenge.Scopes, ScopeWrite)}); err != nil {
+	if err := staffConsentPage.Execute(&page, view); err != nil {
 		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
 		return
 	}
@@ -231,7 +235,39 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 	_, _ = w.Write([]byte(page.String()))
 }
 
-var staffConsentPage = template.Must(template.New("staff-consent").Parse(`<!doctype html><html><head><title>Connect Staff Admin MCP</title></head><body><h1>Connect Staff Admin MCP</h1><p>{{.ClientName}} requests access to staff administration. The callback is {{.RedirectURI}}.</p>{{if .Write}}<p><strong>This client also requests admin:write.</strong> It may prepare staff changes. Each change still needs your separate approval in this admin site before it runs.</p>{{else}}<p>Access is read-only.</p>{{end}}<form method="post" action="/admin-mcp/connect"><input type="hidden" name="state" value="{{.State}}"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><button type="submit" name="action" value="approve">Approve</button><button type="submit" name="action" value="deny">Deny</button></form></body></html>`))
+// staffConsentView is the data rendered on the staff consent page.
+type staffConsentView struct {
+	// ClientName is the registered MCP client's display name.
+	ClientName string
+	// RedirectURI is the registered callback that receives the authorization code.
+	RedirectURI string
+	// State is the opaque challenge ID posted back on approve or deny.
+	State string
+	// CSRF binds the form post to this challenge.
+	CSRF string
+	// Write is true when the client requested admin:write.
+	Write bool
+}
+
+var staffConsentPage = template.Must(template.New("staff-consent").Parse(`<!doctype html>
+<html>
+<head><title>Connect Staff Admin MCP</title></head>
+<body>
+<h1>Connect Staff Admin MCP</h1>
+<p>{{.ClientName}} requests access to staff administration. The callback is {{.RedirectURI}}.</p>
+{{if .Write}}
+<p><strong>This client also requests admin:write.</strong> It may prepare staff changes. Each change still needs your separate approval in this admin site before it runs.</p>
+{{else}}
+<p>Access is read-only.</p>
+{{end}}
+<form method="post" action="/admin-mcp/connect">
+<input type="hidden" name="state" value="{{.State}}">
+<input type="hidden" name="csrf_token" value="{{.CSRF}}">
+<button type="submit" name="action" value="approve">Approve</button>
+<button type="submit" name="action" value="deny">Deny</button>
+</form>
+</body>
+</html>`))
 
 func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)

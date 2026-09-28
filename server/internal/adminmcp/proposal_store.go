@@ -11,16 +11,19 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const (
@@ -58,7 +61,7 @@ const (
 var (
 	ErrProposalNotFound     = errors.New("write proposal not found")
 	ErrProposalConflict     = errors.New("this idempotency key was already used for a different target or change")
-	ErrTooManyPending       = errors.New("too many pending write proposals; approve, reject or let some expire first")
+	ErrTooManyPending       = fmt.Errorf("too many pending write proposals: at most %d can await approval at once. Approve or reject one in the admin site, or wait for one to expire (proposals expire %d minutes after they are prepared)", maxPendingProposals, int(proposalLifetime/time.Minute))
 	ErrProposalNotApproved  = errors.New("write proposal has not been approved in the admin site")
 	ErrProposalClosed       = errors.New("write proposal is no longer executable")
 	ErrProposalExpired      = errors.New("write proposal expired; prepare a new one")
@@ -181,53 +184,47 @@ func newProposalStore(db *pgxpool.Pool, logger *slog.Logger) *proposalStore {
 	return &proposalStore{db: db, logger: logger}
 }
 
-const proposalColumns = `id, subject_urn, oauth_client_id, connection_id, connection_generation, operation,
- operation_schema_version, platform_global, organization_id, project_id, resource_kind, resource_id,
- idempotency_key, arguments, expected_state_digest, proposal_digest, preview, status, expires_at,
- approved_by_subject_urn, approved_at, rejected_at, invalidated_at, invalidation_reason, executed_at,
- result_code, result_payload, created_at`
-
-func scanProposal(row pgx.Row) (Proposal, error) {
-	var p Proposal
-	var operation, status string
-	var organizationID, resourceKind, resourceID, approvedBy, invalidationReason, resultCode *string
-	var arguments, preview, result []byte
-	err := row.Scan(&p.ID, &p.SubjectURN, &p.OAuthClientID, &p.ConnectionID, &p.Generation, &operation,
-		&p.SchemaVersion, &p.PlatformGlobal, &organizationID, &p.Target.ProjectID, &resourceKind, &resourceID,
-		&p.IdempotencyKey, &arguments, &p.ExpectedStateDigest, &p.ProposalDigest, &preview, &status, &p.ExpiresAt,
-		&approvedBy, &p.ApprovedAt, &p.RejectedAt, &p.InvalidatedAt, &invalidationReason, &p.ExecutedAt,
-		&resultCode, &result, &p.CreatedAt)
-	if err != nil {
-		return Proposal{}, fmt.Errorf("scan write proposal: %w", err)
+func proposalFromRow(row repo.AdminMcpWriteProposal) Proposal {
+	return Proposal{
+		ID:             row.ID,
+		SubjectURN:     row.SubjectUrn,
+		OAuthClientID:  row.OauthClientID,
+		ConnectionID:   row.ConnectionID,
+		Generation:     row.ConnectionGeneration,
+		Operation:      WriteOperation(row.Operation),
+		SchemaVersion:  int(row.OperationSchemaVersion),
+		PlatformGlobal: row.PlatformGlobal,
+		Target: ProposalTarget{
+			OrganizationID: row.OrganizationID.String,
+			ProjectID:      row.ProjectID,
+			ResourceKind:   row.ResourceKind.String,
+			ResourceID:     row.ResourceID.String,
+		},
+		IdempotencyKey:      row.IdempotencyKey,
+		Arguments:           row.Arguments,
+		ExpectedStateDigest: row.ExpectedStateDigest,
+		ProposalDigest:      row.ProposalDigest,
+		Preview:             row.Preview,
+		Status:              ProposalStatus(row.Status),
+		ExpiresAt:           row.ExpiresAt.Time,
+		ApprovedBy:          row.ApprovedBySubjectUrn.String,
+		ApprovedAt:          optionalTime(row.ApprovedAt),
+		RejectedAt:          optionalTime(row.RejectedAt),
+		InvalidatedAt:       optionalTime(row.InvalidatedAt),
+		InvalidationReason:  row.InvalidationReason.String,
+		ExecutedAt:          optionalTime(row.ExecutedAt),
+		ResultCode:          row.ResultCode.String,
+		ResultPayload:       row.ResultPayload,
+		CreatedAt:           row.CreatedAt.Time,
 	}
-	p.Operation = WriteOperation(operation)
-	p.Status = ProposalStatus(status)
-	p.Target.OrganizationID = deref(organizationID)
-	p.Target.ResourceKind = deref(resourceKind)
-	p.Target.ResourceID = deref(resourceID)
-	p.ApprovedBy = deref(approvedBy)
-	p.InvalidationReason = deref(invalidationReason)
-	p.ResultCode = deref(resultCode)
-	p.Arguments = arguments
-	p.Preview = preview
-	if result != nil {
-		p.ResultPayload = result
-	}
-	return p, nil
 }
 
-func deref(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func nullableText(value string) *string {
-	if value == "" {
+func optionalTime(value pgtype.Timestamptz) *time.Time {
+	if !value.Valid {
 		return nil
 	}
-	return &value
+	t := value.Time
+	return &t
 }
 
 // canonicalJSON produces a stable encoding so digests survive the JSONB round
@@ -309,7 +306,7 @@ func digestsEqual(a, b string) bool {
 }
 
 func (input NewProposal) validate() error {
-	if !input.Operation.known() || input.SchemaVersion <= 0 {
+	if !input.Operation.known() || input.SchemaVersion <= 0 || input.SchemaVersion > math.MaxInt32 {
 		return errInvalidProposalInput
 	}
 	key := strings.TrimSpace(input.IdempotencyKey)
@@ -344,55 +341,38 @@ func sameProposalRequest(existing, requested Proposal) bool {
 		bytes.Equal(existingArgs, requestedArgs)
 }
 
-type pgExecer interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
-}
-
-func recordWriteEvent(ctx context.Context, db pgExecer, proposalID uuid.NullUUID, subjectURN string, clientRowID uuid.NullUUID, event, reason string) error {
-	_, err := db.Exec(ctx, `
-INSERT INTO admin_mcp_write_events (proposal_id, subject_urn, oauth_client_id, event, reason_code)
-VALUES ($1, $2, $3, $4, $5)
-`, proposalID, subjectURN, clientRowID, event, nullableText(reason))
+func recordWriteEvent(ctx context.Context, q *repo.Queries, p Proposal, event, reason string) error {
+	err := q.RecordWriteEvent(ctx, repo.RecordWriteEventParams{
+		ProposalID:    uuid.NullUUID{UUID: p.ID, Valid: true},
+		SubjectUrn:    p.SubjectURN,
+		OauthClientID: uuid.NullUUID{UUID: p.OAuthClientID, Valid: true},
+		Event:         event,
+		ReasonCode:    conv.ToPGTextEmpty(reason),
+	})
 	if err != nil {
 		return fmt.Errorf("record admin MCP write event: %w", err)
 	}
 	return nil
 }
 
-func proposalEventIDs(p Proposal) (uuid.NullUUID, uuid.NullUUID) {
-	return uuid.NullUUID{UUID: p.ID, Valid: true}, uuid.NullUUID{UUID: p.OAuthClientID, Valid: true}
-}
-
 // lockActiveConnection serialises proposal work with reconsent and revocation,
 // which update the same connection row. Share mode lets concurrent executes on
 // one connection proceed while still blocking a generation change.
-func lockActiveConnection(ctx context.Context, tx pgx.Tx, subjectURN string, clientRowID, connectionID, generation uuid.UUID, exclusive bool) error {
-	lock := "FOR SHARE"
-	if exclusive {
-		lock = "FOR UPDATE"
-	}
-	// Consent takes the client row before the connection row. Use the same
-	// order, and never take an exclusive client lock shared by other staff.
-	var clientID uuid.UUID
-	err := tx.QueryRow(ctx, `
-SELECT id FROM admin_mcp_oauth_clients
-WHERE id = $1 AND revoked_at IS NULL
-  AND (client_secret_expires_at IS NULL OR client_secret_expires_at > clock_timestamp())
-FOR SHARE`, clientRowID).Scan(&clientID)
+func lockActiveConnection(ctx context.Context, q *repo.Queries, subjectURN string, clientRowID, connectionID, generation uuid.UUID, exclusive bool) error {
+	_, err := q.LockLiveOAuthClient(ctx, clientRowID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrConnectionChanged
 	}
 	if err != nil {
 		return fmt.Errorf("lock admin MCP client: %w", err)
 	}
+	params := repo.LockWriteConnectionSharedParams{ID: connectionID, OauthClientID: clientRowID, SubjectUrn: subjectURN}
 	var active uuid.UUID
-	err = tx.QueryRow(ctx, `
-SELECT active_generation FROM admin_mcp_connections
-WHERE id = $1 AND oauth_client_id = $2 AND subject_urn = $3
-  AND revoked_at IS NULL AND reauthorization_required_at IS NULL
-  AND authorization_expires_at > clock_timestamp()
-  AND scopes @> ARRAY['admin:read', 'admin:write']::text[]
-`+lock, connectionID, clientRowID, subjectURN).Scan(&active)
+	if exclusive {
+		active, err = q.LockWriteConnectionExclusive(ctx, repo.LockWriteConnectionExclusiveParams(params))
+	} else {
+		active, err = q.LockWriteConnectionShared(ctx, params)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrConnectionChanged
 	}
@@ -440,11 +420,12 @@ func (s *proposalStore) Create(ctx context.Context, owner proposalOwner, input N
 		return Proposal{}, false, fmt.Errorf("begin write proposal: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	q := repo.New(tx)
 
-	if err := lockActiveConnection(ctx, tx, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, true); err != nil {
+	if err := lockActiveConnection(ctx, q, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, true); err != nil {
 		return Proposal{}, false, err
 	}
-	existing, found, err := s.findByKey(ctx, tx, requested)
+	existing, found, err := findByKey(ctx, q, requested)
 	if err != nil {
 		return Proposal{}, false, err
 	}
@@ -454,33 +435,39 @@ func (s *proposalStore) Create(ctx context.Context, owner proposalOwner, input N
 		}
 		return existing, true, nil
 	}
-	var pending int
-	if err := tx.QueryRow(ctx, `
-SELECT count(*) FROM admin_mcp_write_proposals
-WHERE subject_urn = $1 AND oauth_client_id = $2 AND status = 'pending_approval' AND expires_at > $3
-`, owner.SubjectURN, owner.ClientRowID, now).Scan(&pending); err != nil {
+	pending, err := q.CountPendingProposals(ctx, repo.CountPendingProposalsParams{
+		SubjectUrn:    owner.SubjectURN,
+		OauthClientID: owner.ClientRowID,
+		Now:           conv.ToPGTimestamptz(now),
+	})
+	if err != nil {
 		return Proposal{}, false, fmt.Errorf("count pending write proposals: %w", err)
 	}
 	if pending >= maxPendingProposals {
 		return Proposal{}, false, ErrTooManyPending
 	}
-	created, err := scanProposal(tx.QueryRow(ctx, `
-INSERT INTO admin_mcp_write_proposals
- (subject_urn, oauth_client_id, connection_id, connection_generation, operation, operation_schema_version,
-  platform_global, organization_id, project_id, resource_kind, resource_id, idempotency_key, arguments,
-  expected_state_digest, proposal_digest, preview, status, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'pending_approval', $17)
-ON CONFLICT (subject_urn, oauth_client_id, operation, idempotency_key) DO NOTHING
-RETURNING `+proposalColumns,
-		requested.SubjectURN, requested.OAuthClientID, requested.ConnectionID, requested.Generation,
-		string(requested.Operation), requested.SchemaVersion, requested.PlatformGlobal,
-		nullableText(requested.Target.OrganizationID), requested.Target.ProjectID,
-		nullableText(requested.Target.ResourceKind), nullableText(requested.Target.ResourceID),
-		requested.IdempotencyKey, []byte(requested.Arguments), requested.ExpectedStateDigest,
-		requested.ProposalDigest, []byte(requested.Preview), requested.ExpiresAt))
+	row, err := q.InsertProposal(ctx, repo.InsertProposalParams{
+		SubjectUrn:             requested.SubjectURN,
+		OauthClientID:          requested.OAuthClientID,
+		ConnectionID:           requested.ConnectionID,
+		ConnectionGeneration:   requested.Generation,
+		Operation:              string(requested.Operation),
+		OperationSchemaVersion: conv.SafeInt32(requested.SchemaVersion),
+		PlatformGlobal:         requested.PlatformGlobal,
+		OrganizationID:         conv.ToPGTextEmpty(requested.Target.OrganizationID),
+		ProjectID:              requested.Target.ProjectID,
+		ResourceKind:           conv.ToPGTextEmpty(requested.Target.ResourceKind),
+		ResourceID:             conv.ToPGTextEmpty(requested.Target.ResourceID),
+		IdempotencyKey:         requested.IdempotencyKey,
+		Arguments:              requested.Arguments,
+		ExpectedStateDigest:    requested.ExpectedStateDigest,
+		ProposalDigest:         requested.ProposalDigest,
+		Preview:                requested.Preview,
+		ExpiresAt:              conv.ToPGTimestamptz(requested.ExpiresAt),
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// A concurrent request won the retry key; answer from its row.
-		existing, found, err := s.findByKey(ctx, tx, requested)
+		existing, found, err := findByKey(ctx, q, requested)
 		if err != nil || !found {
 			return Proposal{}, false, errors.Join(ErrProposalConflict, err)
 		}
@@ -490,10 +477,10 @@ RETURNING `+proposalColumns,
 		return existing, true, nil
 	}
 	if err != nil {
-		return Proposal{}, false, err
+		return Proposal{}, false, fmt.Errorf("insert write proposal: %w", err)
 	}
-	proposalID, clientID := proposalEventIDs(created)
-	if err := recordWriteEvent(ctx, tx, proposalID, created.SubjectURN, clientID, "prepared", ""); err != nil {
+	created := proposalFromRow(row)
+	if err := recordWriteEvent(ctx, q, created, "prepared", ""); err != nil {
 		return Proposal{}, false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -502,30 +489,33 @@ RETURNING `+proposalColumns,
 	return created, false, nil
 }
 
-func (s *proposalStore) findByKey(ctx context.Context, tx pgx.Tx, p Proposal) (Proposal, bool, error) {
-	existing, err := scanProposal(tx.QueryRow(ctx, `SELECT `+proposalColumns+` FROM admin_mcp_write_proposals
-WHERE subject_urn = $1 AND oauth_client_id = $2 AND operation = $3 AND idempotency_key = $4`,
-		p.SubjectURN, p.OAuthClientID, string(p.Operation), p.IdempotencyKey))
+func findByKey(ctx context.Context, q *repo.Queries, p Proposal) (Proposal, bool, error) {
+	row, err := q.GetProposalByKey(ctx, repo.GetProposalByKeyParams{
+		SubjectUrn:     p.SubjectURN,
+		OauthClientID:  p.OAuthClientID,
+		Operation:      string(p.Operation),
+		IdempotencyKey: p.IdempotencyKey,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Proposal{}, false, nil //nolint:exhaustruct // A missing row has no proposal.
 	}
 	if err != nil {
-		return Proposal{}, false, err
+		return Proposal{}, false, fmt.Errorf("find write proposal by retry key: %w", err)
 	}
-	return existing, true, nil
+	return proposalFromRow(row), true, nil
 }
 
 // GetForSubject returns a proposal only to the staff subject that prepared it.
 // Another subject's proposal is indistinguishable from a missing one.
 func (s *proposalStore) GetForSubject(ctx context.Context, id uuid.UUID, subjectURN string) (Proposal, error) {
-	p, err := scanProposal(s.db.QueryRow(ctx, `SELECT `+proposalColumns+` FROM admin_mcp_write_proposals WHERE id = $1`, id))
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && p.SubjectURN != subjectURN) {
+	row, err := repo.New(s.db).GetProposal(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && row.SubjectUrn != subjectURN) {
 		return Proposal{}, ErrProposalNotFound
 	}
 	if err != nil {
-		return Proposal{}, err
+		return Proposal{}, fmt.Errorf("read write proposal: %w", err)
 	}
-	return p, nil
+	return proposalFromRow(row), nil
 }
 
 // GetForOwner requires the live owning connection and generation for MCP reads.
@@ -535,28 +525,33 @@ func (s *proposalStore) GetForOwner(ctx context.Context, id uuid.UUID, owner pro
 		return Proposal{}, fmt.Errorf("begin proposal lookup: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	p, err := scanProposal(tx.QueryRow(ctx, `SELECT `+proposalColumns+` FROM admin_mcp_write_proposals WHERE id = $1`, id))
+	q := repo.New(tx)
+	row, err := q.GetProposal(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Proposal{}, ErrProposalNotFound
 	}
 	if err != nil {
-		return Proposal{}, err
+		return Proposal{}, fmt.Errorf("read write proposal: %w", err)
 	}
+	p := proposalFromRow(row)
 	if p.SubjectURN != owner.SubjectURN || p.OAuthClientID != owner.ClientRowID || p.ConnectionID != owner.ConnectionID || p.Generation != owner.Generation {
 		return Proposal{}, ErrProposalNotFound
 	}
-	if err := lockActiveConnection(ctx, tx, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
+	if err := lockActiveConnection(ctx, q, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
 		return Proposal{}, err
 	}
 	return p, nil
 }
 
-func lockProposal(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Proposal, error) {
-	p, err := scanProposal(tx.QueryRow(ctx, `SELECT `+proposalColumns+` FROM admin_mcp_write_proposals WHERE id = $1 FOR UPDATE`, id))
+func lockProposal(ctx context.Context, q *repo.Queries, id uuid.UUID) (Proposal, error) {
+	row, err := q.LockProposal(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Proposal{}, ErrProposalNotFound
 	}
-	return p, err
+	if err != nil {
+		return Proposal{}, fmt.Errorf("lock write proposal: %w", err)
+	}
+	return proposalFromRow(row), nil
 }
 
 func closedError(status ProposalStatus) error {
@@ -582,21 +577,14 @@ func (s *proposalStore) closeProposal(ctx context.Context, p Proposal, status Pr
 		return
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	tag, err := tx.Exec(ctx, `
-UPDATE admin_mcp_write_proposals
-SET status = $2,
-    invalidated_at = CASE WHEN $2 = 'invalidated' THEN clock_timestamp() ELSE invalidated_at END,
-    invalidation_reason = CASE WHEN $2 = 'invalidated' THEN $3 ELSE invalidation_reason END,
-    updated_at = clock_timestamp()
-WHERE id = $1 AND status IN ('pending_approval', 'approved')
-`, p.ID, string(status), reason)
+	q := repo.New(tx)
+	closed, err := q.CloseProposal(ctx, repo.CloseProposalParams{Status: string(status), Reason: reason, ID: p.ID})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "close admin MCP proposal", attr.SlogError(err))
 		return
 	}
-	if tag.RowsAffected() == 1 {
-		proposalID, clientID := proposalEventIDs(p)
-		if err := recordWriteEvent(ctx, tx, proposalID, p.SubjectURN, clientID, string(status), reason); err != nil {
+	if closed == 1 {
+		if err := recordWriteEvent(ctx, q, p, string(status), reason); err != nil {
 			s.logger.ErrorContext(ctx, "record admin MCP proposal close", attr.SlogError(err))
 			return
 		}
@@ -607,8 +595,7 @@ WHERE id = $1 AND status IN ('pending_approval', 'approved')
 }
 
 func (s *proposalStore) recordRefusal(ctx context.Context, p Proposal, reason string) {
-	proposalID, clientID := proposalEventIDs(p)
-	if err := recordWriteEvent(context.WithoutCancel(ctx), s.db, proposalID, p.SubjectURN, clientID, "execute_refused", reason); err != nil {
+	if err := recordWriteEvent(context.WithoutCancel(ctx), repo.New(s.db), p, "execute_refused", reason); err != nil {
 		s.logger.ErrorContext(ctx, "record admin MCP refusal", attr.SlogError(err))
 	}
 }
@@ -623,7 +610,8 @@ func (s *proposalStore) Approve(ctx context.Context, id uuid.UUID, approverSubje
 		return Proposal{}, fmt.Errorf("begin proposal approval: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	p, err := lockProposal(ctx, tx, id)
+	q := repo.New(tx)
+	p, err := lockProposal(ctx, q, id)
 	if err != nil {
 		return Proposal{}, err
 	}
@@ -650,7 +638,7 @@ func (s *proposalStore) Approve(ctx context.Context, id uuid.UUID, approverSubje
 	if recomputed, err := computeProposalDigest(p); err != nil || !digestsEqual(recomputed, p.ProposalDigest) {
 		return fail(ProposalInvalidated, reasonDigestMismatch, ErrProposalInvalidated)
 	}
-	if err := lockActiveConnection(ctx, tx, p.SubjectURN, p.OAuthClientID, p.ConnectionID, p.Generation, false); err != nil {
+	if err := lockActiveConnection(ctx, q, p.SubjectURN, p.OAuthClientID, p.ConnectionID, p.Generation, false); err != nil {
 		if errors.Is(err, ErrConnectionChanged) {
 			return fail(ProposalInvalidated, reasonConnectionChanged, ErrConnectionChanged)
 		}
@@ -671,22 +659,17 @@ func (s *proposalStore) Approve(ctx context.Context, id uuid.UUID, approverSubje
 		}
 		return Proposal{}, err
 	}
-	approved, err := scanProposal(tx.QueryRow(ctx, `
-UPDATE admin_mcp_write_proposals
-SET status = 'approved', approved_by_subject_urn = $2, approved_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE id = $1
-RETURNING `+proposalColumns, p.ID, approverSubjectURN))
+	approved, err := q.ApproveProposal(ctx, repo.ApproveProposalParams{ApprovedBySubjectUrn: approverSubjectURN, ID: p.ID})
 	if err != nil {
-		return Proposal{}, err
+		return Proposal{}, fmt.Errorf("approve write proposal: %w", err)
 	}
-	proposalID, clientID := proposalEventIDs(p)
-	if err := recordWriteEvent(ctx, tx, proposalID, p.SubjectURN, clientID, "approved", ""); err != nil {
+	if err := recordWriteEvent(ctx, q, p, "approved", ""); err != nil {
 		return Proposal{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Proposal{}, fmt.Errorf("commit proposal approval: %w", err)
 	}
-	return approved, nil
+	return proposalFromRow(approved), nil
 }
 
 // Reject cancels a pending or approved, unexecuted proposal.
@@ -696,7 +679,8 @@ func (s *proposalStore) Reject(ctx context.Context, id uuid.UUID, subjectURN str
 		return Proposal{}, fmt.Errorf("begin proposal rejection: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	p, err := lockProposal(ctx, tx, id)
+	q := repo.New(tx)
+	p, err := lockProposal(ctx, q, id)
 	if err != nil {
 		return Proposal{}, err
 	}
@@ -709,22 +693,17 @@ func (s *proposalStore) Reject(ctx context.Context, id uuid.UUID, subjectURN str
 	if p.Status != ProposalPendingApproval && p.Status != ProposalApproved {
 		return Proposal{}, closedError(p.Status)
 	}
-	rejected, err := scanProposal(tx.QueryRow(ctx, `
-UPDATE admin_mcp_write_proposals
-SET status = 'rejected', rejected_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE id = $1
-RETURNING `+proposalColumns, p.ID))
+	rejected, err := q.RejectProposal(ctx, p.ID)
 	if err != nil {
-		return Proposal{}, err
+		return Proposal{}, fmt.Errorf("reject write proposal: %w", err)
 	}
-	proposalID, clientID := proposalEventIDs(p)
-	if err := recordWriteEvent(ctx, tx, proposalID, p.SubjectURN, clientID, "rejected", ""); err != nil {
+	if err := recordWriteEvent(ctx, q, p, "rejected", ""); err != nil {
 		return Proposal{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Proposal{}, fmt.Errorf("commit proposal rejection: %w", err)
 	}
-	return rejected, nil
+	return proposalFromRow(rejected), nil
 }
 
 // replay returns a committed receipt only while the owning connection is still active.
@@ -734,7 +713,8 @@ func (s *proposalStore) replay(ctx context.Context, owner proposalOwner, id uuid
 		return Proposal{}, false, fmt.Errorf("begin proposal replay: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	p, err := lockProposal(ctx, tx, id)
+	q := repo.New(tx)
+	p, err := lockProposal(ctx, q, id)
 	if err != nil {
 		return Proposal{}, false, err
 	}
@@ -744,7 +724,7 @@ func (s *proposalStore) replay(ctx context.Context, owner proposalOwner, id uuid
 	if p.Status != ProposalSucceeded {
 		return Proposal{}, false, ErrProposalChanged
 	}
-	if err := lockActiveConnection(ctx, tx, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
+	if err := lockActiveConnection(ctx, q, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
 		return Proposal{}, false, err
 	}
 	return p, true, nil
@@ -786,7 +766,8 @@ func (s *proposalStore) Execute(ctx context.Context, owner proposalOwner, id uui
 		}
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	p, err := lockProposal(ctx, tx, id)
+	q := repo.New(tx)
+	p, err := lockProposal(ctx, q, id)
 	if err != nil {
 		return Proposal{}, false, err
 	}
@@ -797,7 +778,7 @@ func (s *proposalStore) Execute(ctx context.Context, owner proposalOwner, id uui
 		if p.Generation != owner.Generation || p.ConnectionID != owner.ConnectionID {
 			return Proposal{}, false, ErrConnectionChanged
 		}
-		if err := lockActiveConnection(ctx, tx, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
+		if err := lockActiveConnection(ctx, q, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
 			return Proposal{}, false, err
 		}
 		return p, true, nil
@@ -833,7 +814,7 @@ func (s *proposalStore) Execute(ctx context.Context, owner proposalOwner, id uui
 	if lockedDigest != "" && !digestsEqual(lockedDigest, p.ProposalDigest) {
 		return fail(ProposalInvalidated, reasonDigestMismatch, ErrProposalInvalidated)
 	}
-	if err := lockActiveConnection(ctx, tx, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
+	if err := lockActiveConnection(ctx, q, owner.SubjectURN, owner.ClientRowID, owner.ConnectionID, owner.Generation, false); err != nil {
 		if errors.Is(err, ErrConnectionChanged) {
 			return fail(ProposalInvalidated, reasonConnectionChanged, ErrConnectionChanged)
 		}
@@ -857,21 +838,17 @@ func (s *proposalStore) Execute(ctx context.Context, owner proposalOwner, id uui
 			return refuse(reasonOperationFailed, fmt.Errorf("operation result is not bounded JSON: %w", err))
 		}
 	}
-	succeeded, err := scanProposal(tx.QueryRow(ctx, `
-UPDATE admin_mcp_write_proposals
-SET status = 'succeeded', executed_at = clock_timestamp(), result_code = $2, result_payload = $3, updated_at = clock_timestamp()
-WHERE id = $1 AND status = 'approved'
-RETURNING `+proposalColumns, p.ID, resultCode, resultBytes))
+	row, err := q.RecordProposalReceipt(ctx, repo.RecordProposalReceiptParams{ResultCode: resultCode, ResultPayload: resultBytes, ID: p.ID})
 	if err != nil {
 		return Proposal{}, false, fmt.Errorf("record proposal receipt: %w", err)
 	}
-	proposalID, clientID := proposalEventIDs(p)
-	if err := recordWriteEvent(ctx, tx, proposalID, p.SubjectURN, clientID, "executed", ""); err != nil {
+	if err := recordWriteEvent(ctx, q, p, "executed", ""); err != nil {
 		return Proposal{}, false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Proposal{}, false, errors.Join(ErrOutcomeUnknown, err)
 	}
+	succeeded := proposalFromRow(row)
 	if execution.AfterCommit != nil {
 		execution.AfterCommit(context.WithoutCancel(ctx), succeeded)
 	}
