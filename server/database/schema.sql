@@ -8772,6 +8772,7 @@ CREATE TABLE IF NOT EXISTS admin_mcp_write_proposals (
   CONSTRAINT admin_mcp_write_proposals_subject_urn_check CHECK (subject_urn <> ''),
   CONSTRAINT admin_mcp_write_proposals_operation_check CHECK (operation <> ''),
   CONSTRAINT admin_mcp_write_proposals_idempotency_key_check CHECK (idempotency_key <> ''),
+  CONSTRAINT admin_mcp_write_proposals_expected_state_digest_check CHECK (expected_state_digest <> ''),
   CONSTRAINT admin_mcp_write_proposals_proposal_digest_check CHECK (proposal_digest <> ''),
   CONSTRAINT admin_mcp_write_proposals_status_check CHECK (status <> ''),
   CONSTRAINT admin_mcp_write_proposals_connection_client_fkey
@@ -8817,6 +8818,8 @@ CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
   CONSTRAINT admin_mcp_write_events_pkey PRIMARY KEY (id),
   CONSTRAINT admin_mcp_write_events_subject_urn_check CHECK (subject_urn <> ''),
   CONSTRAINT admin_mcp_write_events_event_check CHECK (event <> ''),
+  CONSTRAINT admin_mcp_write_events_reason_code_check
+    CHECK (reason_code IS NULL OR reason_code ~ '^[a-z][a-z0-9_]{0,63}$'),
   CONSTRAINT admin_mcp_write_events_proposal_id_fkey
     FOREIGN KEY (proposal_id) REFERENCES admin_mcp_write_proposals (id) ON DELETE SET NULL,
   CONSTRAINT admin_mcp_write_events_oauth_client_id_fkey
@@ -8825,6 +8828,9 @@ CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
 
 CREATE INDEX IF NOT EXISTS admin_mcp_write_events_proposal_id_idx
 ON admin_mcp_write_events (proposal_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_events_oauth_client_id_idx
+ON admin_mcp_write_events (oauth_client_id) WHERE oauth_client_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS admin_mcp_write_events_subject_created_idx
 ON admin_mcp_write_events (subject_urn, created_at);
