@@ -58,7 +58,12 @@ func TestEvaluateSuccess(t *testing.T) {
 	require.NoError(t, err)
 	require.InDelta(t, 0.75, result.Probabilities["match"], 1e-9)
 	require.Equal(t, Model, result.Model)
-	request := <-requests
+	var request *http.Request
+	select {
+	case request = <-requests:
+	default:
+		t.Fatal("evaluation succeeded without issuing a request")
+	}
 	require.Equal(t, http.MethodPost, request.Method)
 	require.Equal(t, "Bearer test-key", request.Header.Get("Authorization"))
 	require.InDelta(t, 0.00042, result.CostUSD, 1e-12)
@@ -167,18 +172,6 @@ func TestOpenRouterEvaluateAcceptsBuildSuffixedModel(t *testing.T) {
 	require.InDelta(t, 0.4, result.Probabilities["match"], 1e-9)
 }
 
-func TestOpenRouterEvaluateRejectsUnrelatedModel(t *testing.T) {
-	t.Parallel()
-
-	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"model":"some-other-model","answers":{"match":{"type":"noul","noul":0.4}},"usage":{"input_tokens":5,"output_tokens":1,"cost":0.00021}}`))
-	})
-
-	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
-
-	require.ErrorContains(t, err, "invalid typesafe response metadata")
-}
-
 func TestEvaluateRejectsAdjacentModel(t *testing.T) {
 	t.Parallel()
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -268,4 +261,20 @@ func TestEvaluateRejectsNullProbability(t *testing.T) {
 	})
 	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 	require.ErrorContains(t, err, "invalid typesafe probability")
+}
+
+func TestEvaluateMissingDependencies(t *testing.T) {
+	t.Parallel()
+	client := New(nil, nil)
+	_, err := client.Evaluate(t.Context(), "org", json.RawMessage(`{}`), testQuestions())
+	require.ErrorIs(t, err, ErrUnavailable)
+	client.resolveKey = func(context.Context, string) (string, error) {
+		t.Fatal("resolver must not be called without transport")
+		return "", nil
+	}
+	_, err = client.Evaluate(t.Context(), "org", json.RawMessage(`{}`), testQuestions())
+	require.ErrorIs(t, err, ErrUnavailable)
+	client.httpClient, client.resolveKey = http.DefaultClient, nil
+	_, err = client.Evaluate(t.Context(), "org", json.RawMessage(`{}`), testQuestions())
+	require.ErrorIs(t, err, ErrUnavailable)
 }

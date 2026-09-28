@@ -209,6 +209,9 @@ func payloadDescriptors(messageType message.Type) (producedBy, bodyKind string) 
 }
 
 func payloadTool(name, mcpServer, mcpFunction string) *ToolPayload {
+	name, _ = truncatePayloadBody(name, 256)
+	mcpServer, _ = truncatePayloadBody(mcpServer, 256)
+	mcpFunction, _ = truncatePayloadBody(mcpFunction, 256)
 	if mcpServer != "" || mcpFunction != "" {
 		return &ToolPayload{MCPServer: mcpServer, MCPFunction: mcpFunction, Name: ""}
 	}

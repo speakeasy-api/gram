@@ -210,6 +210,9 @@ func batchJudgeMessage(msg batchMessage) judgemessage.Message {
 	result.ChatID = msg.ChatID
 	if msg.ContentPart {
 		result.AnchorID = msg.ParentChatMessageID
+		if result.AnchorID == uuid.Nil {
+			result.ChatID = uuid.Nil
+		}
 	} else {
 		result.AnchorID = msg.ID
 	}

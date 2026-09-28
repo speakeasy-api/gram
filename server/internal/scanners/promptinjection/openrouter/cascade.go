@@ -62,7 +62,14 @@ func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]
 	results := make([]promptinjection.Result, len(req.Messages))
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
-	bucket := gramopenrouter.ResolveJudgeRateLimitKey(ctx, c.opus.logger, c.opus.client, req.OrgID, req.ProjectID, billing.ModelUsageSourcePromptInjection, ConfirmationModel)
+	var bucket string
+	var resolveOnce sync.Once
+	resolveBucket := func(ctx context.Context) string {
+		resolveOnce.Do(func() {
+			bucket = gramopenrouter.ResolveJudgeRateLimitKey(ctx, c.opus.logger, c.opus.client, req.OrgID, req.ProjectID, billing.ModelUsageSourcePromptInjection, ConfirmationModel)
+		})
+		return bucket
+	}
 	for i, msg := range req.Messages {
 		if !msg.HasContent() {
 			results[i] = safeResult
@@ -84,21 +91,25 @@ func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]
 			if i < len(req.UserIDs) {
 				userID = req.UserIDs[i]
 			}
-			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID, bucket)
+			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID, resolveBucket)
 		})
 	}
 	wg.Wait()
 	return results, nil
 }
 
-func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID, bucket string) promptinjection.Result {
+func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, resolveBucket func(context.Context) string) promptinjection.Result {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second+ConfirmationTimeout)
 	defer cancel()
 	ctx, span := c.opus.tracer.Start(ctx, "risk.prompt_injection.cascade")
 	defer span.End()
 	prepared, content := prepareJudgePayload(msg, trajectory)
-	// Share the existing per-organization limiter across both physical stages.
-	allow, limitErr := c.opus.limiter.Allow(ctx, bucket)
+	// Jev always uses an internal platform key and has its own model capacity.
+	if ctx.Err() != nil {
+		return unavailableResult
+	}
+	jevBucket := gramopenrouter.JudgeRateLimitKey(gramopenrouter.PlatformKey(), typesafe.Model)
+	allow, limitErr := c.opus.limiter.Allow(ctx, jevBucket)
 	if limitErr == nil && !allow.Allowed {
 		return unavailableResult
 	}
@@ -132,7 +143,7 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 		c.opus.logger.WarnContext(ctx, "PI confirmation context unavailable", attr.SlogError(err))
 		return unavailableResult
 	}
-	return c.opus.classifyOne(ctx, req, msg, trajectory, userID, bucket, &window)
+	return c.opus.classifyOne(ctx, req, msg, trajectory, userID, resolveBucket(ctx), &window)
 }
 
 func injectionProbability(result typesafe.Result) (float64, error) {

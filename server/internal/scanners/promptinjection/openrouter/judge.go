@@ -257,6 +257,10 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 	return results, nil
 }
 
+// maxConfirmationPayloadBytes bounds serialized evidence, including JSON escaping
+// and decoded views; field-level rune limits alone do not bound the whole window.
+const maxConfirmationPayloadBytes = 256 << 10
+
 // classifyOne returns UNAVAILABLE for every fail-open path and SAFE only for a
 // judgement that cleared the content.
 func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, bucket string, window *judgemessage.Window) promptinjection.Result {
@@ -284,6 +288,9 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	}
 
 	contextState := observeTrajectory(trajectory)
+	if window != nil && len(window.Messages) > 1 {
+		contextState.contextPresent = true
+	}
 	ctx, span := c.tracer.Start(ctx, "risk.prompt_injection.classify.typed_event", trace.WithAttributes(
 		attr.OrganizationID(req.OrgID),
 		attr.ProjectID(req.ProjectID),
@@ -321,7 +328,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 			Window     judgemessage.Window             `json:"window"`
 			Trajectory *judgemessage.TrajectoryPayload `json:"trajectory,omitempty"`
 		}{Window: *window, Trajectory: trajectoryPayload})
-		if err != nil {
+		if err != nil || len(prepared) > maxConfirmationPayloadBytes {
 			return unavailableResult
 		}
 		for i, evidence := range window.Messages {

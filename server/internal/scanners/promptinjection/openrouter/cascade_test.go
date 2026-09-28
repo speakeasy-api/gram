@@ -4,15 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 type mockPrefilter struct{ mock.Mock }
@@ -130,4 +135,59 @@ func TestCascadeRejectsIncompleteProbabilities(t *testing.T) {
 	t.Parallel()
 	_, err := injectionProbability(typesafe.Result{Probabilities: map[string]float64{"instruction_override": 0.99}, Model: typesafe.Model, InputTokens: 0, OutputTokens: 0, CostUSD: 0})
 	require.Error(t, err)
+}
+
+func TestCascadeStagesUseSeparateCapacity(t *testing.T) {
+	t.Parallel()
+	cascade, client := testCascade(t, PrefilterThreshold, safeVerdictJSON)
+	bucket := gramopenrouter.JudgeRateLimitKey(gramopenrouter.PlatformKey(), ConfirmationModel)
+	// Leave exactly one confirmation token. Jev must not spend it.
+	admission, err := cascade.opus.limiter.AllowN(t.Context(), bucket, 49)
+	require.NoError(t, err)
+	require.True(t, admission.Allowed)
+	require.Equal(t, 1, admission.Remaining)
+	results, err := cascade.Classify(t.Context(), req("candidate"))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelSafe, results[0].Label)
+	require.EqualValues(t, 1, client.calls.Load())
+}
+
+func TestCascadeWindowMarksContextPresent(t *testing.T) {
+	t.Parallel()
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	cascade, _ := testCascade(t, PrefilterThreshold, safeVerdictJSON)
+	cascade.opus.tracer = provider.Tracer("test")
+	cascade.loadWindow = func(_ context.Context, _, _ string, target judgemessage.Message) (judgemessage.Window, error) {
+		return judgemessage.Window{Messages: []judgemessage.Payload{judgemessage.RenderPayload(judgemessage.New(message.User, "", "prior context")), judgemessage.RenderPayload(target)}, TargetIndex: 1}, nil
+	}
+	_, err := cascade.Classify(t.Context(), req("candidate"))
+	require.NoError(t, err)
+	var attrs map[attribute.Key]attribute.Value
+	for _, span := range recorder.Ended() {
+		if span.Name() == "risk.prompt_injection.classify.typed_event" {
+			attrs = make(map[attribute.Key]attribute.Value)
+			for _, kv := range span.Attributes() {
+				attrs[kv.Key] = kv.Value
+			}
+		}
+	}
+	require.NotNil(t, attrs)
+	require.True(t, attrs[spanAttrContextPresent].AsBool())
+	require.False(t, attrs[spanAttrPriorPresent].AsBool(), "trajectory attributes remain specific to the trajectory")
+}
+
+func TestCascadeOversizedWindowDoesNotCallOpus(t *testing.T) {
+	t.Parallel()
+	cascade, client := testCascade(t, PrefilterThreshold, safeVerdictJSON)
+	cascade.loadWindow = func(_ context.Context, _, _ string, target judgemessage.Message) (judgemessage.Window, error) {
+		neighbor := judgemessage.RenderPayload(judgemessage.New(message.User, "", "neighbor"))
+		neighbor.Body = strings.Repeat("<", maxConfirmationPayloadBytes/4)
+		return judgemessage.Window{Messages: []judgemessage.Payload{neighbor, judgemessage.RenderPayload(target)}, TargetIndex: 1}, nil
+	}
+	results, err := cascade.Classify(t.Context(), req("candidate"))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
+	require.Zero(t, client.calls.Load())
 }

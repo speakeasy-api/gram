@@ -1,8 +1,10 @@
 package judgemessage
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -62,14 +64,26 @@ func TestWindowUnlinkedDoesNotQuery(t *testing.T) {
 func TestWindowReportsTruncatedContext(t *testing.T) {
 	t.Parallel()
 	target := New(message.User, "", "target")
-	window, err := windowFromRows(target, []repo.GetJudgeMessageWindowRow{{ID: uuid.New(), Role: "tool", Content: strings.Repeat("a", 4001), ToolCalls: "[]"}})
+	window, err := windowFromRows(target, []repo.GetJudgeMessageWindowRow{{ID: uuid.New(), Role: "tool", Content: strings.Repeat("界", MaxTrajectoryBodyRunes+1), ToolCalls: "[]"}})
 	require.NoError(t, err)
 	require.True(t, window.Messages[0].BodyTruncated)
-	require.LessOrEqual(t, len(window.Messages[0].Body), 4000)
+	require.LessOrEqual(t, utf8.RuneCountInString(window.Messages[0].Body), MaxTrajectoryBodyRunes)
+	require.Greater(t, len(window.Messages[0].Body), MaxTrajectoryBodyRunes)
+	require.True(t, utf8.ValidString(window.Messages[0].Body))
 }
 
 func TestWindowMalformedToolContextFails(t *testing.T) {
 	t.Parallel()
 	_, err := windowFromRows(New(message.User, "", "target"), []repo.GetJudgeMessageWindowRow{{ID: uuid.New(), Role: "assistant", Content: "", ToolCalls: "[{"}})
 	require.Error(t, err)
+}
+
+func TestWindowLegacyToolCalls(t *testing.T) {
+	t.Parallel()
+	calls, err := json.Marshal(`[{"function":{"name":"read_file","arguments":"{}"}}]`)
+	require.NoError(t, err)
+	window, err := windowFromRows(New(message.User, "", "target"), []repo.GetJudgeMessageWindowRow{{ID: uuid.New(), Role: "assistant", Content: "", ToolCalls: string(calls)}})
+	require.NoError(t, err)
+	require.Equal(t, "read_file", window.Messages[0].ToolCalls[0].Tool.Name)
+	require.Equal(t, "{}", window.Messages[0].ToolCalls[0].Arguments)
 }

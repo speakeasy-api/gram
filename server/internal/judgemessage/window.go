@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -72,8 +73,19 @@ func windowFromRows(target Message, rows []repo.GetJudgeMessageWindowRow) (Windo
 				Arguments string `json:"arguments"`
 			} `json:"function"`
 		}
-		if err := json.Unmarshal([]byte(row.ToolCalls), &calls); err != nil {
+		toolCalls := row.ToolCalls
+		// Historical rows may contain an array encoded inside a JSON string.
+		if strings.HasPrefix(strings.TrimSpace(toolCalls), `"`) {
+			if err := json.Unmarshal([]byte(toolCalls), &toolCalls); err != nil {
+				return window, errors.New("invalid judge context tool calls encoding")
+			}
+		}
+		if err := json.Unmarshal([]byte(toolCalls), &calls); err != nil {
 			return window, errors.New("invalid or oversized judge context tool calls")
+		}
+		callsTruncated := len(calls) > 8
+		if callsTruncated {
+			calls = calls[:8]
 		}
 		if len(calls) > 0 {
 			msg.Type = message.ToolRequest
@@ -82,6 +94,11 @@ func windowFromRows(target Message, rows []repo.GetJudgeMessageWindowRow) (Windo
 			}
 		}
 		payload := RenderPayload(msg)
+		payload.ToolCallsTruncated = callsTruncated
+		for i := range payload.ToolCalls {
+			payload.ToolCalls[i].Arguments, payload.ToolCalls[i].ArgumentsTruncated = truncatePayloadBody(calls[i].Function.Arguments, MaxTrajectoryBodyRunes)
+			payload.ToolCalls[i].Decoded = decodedView(payload.ToolCalls[i].Arguments)
+		}
 		if payload.ProducedBy == "unknown" {
 			payload.ProducedBy = row.Role
 		}

@@ -338,7 +338,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.extraCorpus, "extra-corpus", "", "absolute path to an additional local JSONL corpus; never loaded by default")
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
-	flag.BoolVar(&opts.cascade, "cascade", false, "evaluate the production Jev >= 0.90 to Opus cascade")
+	flag.BoolVar(&opts.cascade, "cascade", false, fmt.Sprintf("evaluate the production Jev >= %.2f to Opus cascade", piopenrouter.PrefilterThreshold))
 	flag.Parse()
 	return opts
 }
@@ -371,6 +371,9 @@ func filterSources(corpus []labeledCase, spec string) []labeledCase {
 
 func run(ctx context.Context, opts options) error {
 	if opts.cascade {
+		if opts.reasoning != piopenrouter.ReasoningEffort {
+			return fmt.Errorf("cascade requires --reasoning=%s", piopenrouter.ReasoningEffort)
+		}
 		opts.judgeModel = piopenrouter.ConfirmationModel
 		opts.samples = 1
 	}

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -27,15 +29,20 @@ func newPICascade(logger *slog.Logger, tracerProvider trace.TracerProvider, mete
 		}
 		return key, nil
 	})
+	groupsCache := expirable.NewLRU[uuid.UUID, repo.GetProjectFlagGroupsRow](1024, nil, 10*time.Minute)
 	enabled := func(ctx context.Context, orgID, projectID string) bool {
 		id, err := uuid.Parse(projectID)
 		if err != nil {
 			return false
 		}
-		groups, err := repo.New(db).GetProjectFlagGroups(ctx, id)
-		if err != nil {
-			logger.WarnContext(ctx, "resolve PI cascade rollout groups", attr.SlogError(err))
-			return false
+		groups, cached := groupsCache.Get(id)
+		if !cached {
+			groups, err = repo.New(db).GetProjectFlagGroups(ctx, id)
+			if err != nil {
+				logger.WarnContext(ctx, "resolve PI cascade rollout groups", attr.SlogError(err))
+				return false
+			}
+			groupsCache.Add(id, groups)
 		}
 		on, err := flags.IsFlagEnabledLocal(ctx, feature.FlagRiskPromptInjectionCascade, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug), nil)
 		if err != nil {

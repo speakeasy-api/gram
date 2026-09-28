@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,14 +69,14 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 			scanner := promptinjection.NewScanner(logger, cascade.Classify)
 			result, verdict, err := scanner.ScanStrictWithVerdict(ctx, row.Text, benchOrgID, benchProjectID, "", row.judgeMessage(), row.trajectory())
 			results[i] = result.Findings
-			missed[i] = row.Label == "malicious" && verdict.Model == typesafe.Model && verdict.Completed && verdict.Label == promptinjection.LabelSafe
+			missed[i] = row.Label == "malicious" && (verdict.Model == typesafe.Model || strings.HasPrefix(verdict.Model, typesafe.Model+"-")) && verdict.Completed && verdict.Label == promptinjection.LabelSafe
 			if err != nil || verdict.Label == promptinjection.LabelUnavailable {
 				if err == nil {
 					err = promptinjection.ErrNoVerdict
 				}
 				// Context/metering failures need an event error even if both
 				// transports succeeded; do not count them as extra physical calls.
-				if len(observation.Calls) > 0 {
+				if len(observation.Calls) > 0 && observation.Calls[len(observation.Calls)-1].Err == nil {
 					observation.Calls[len(observation.Calls)-1].Err = err
 				}
 			}

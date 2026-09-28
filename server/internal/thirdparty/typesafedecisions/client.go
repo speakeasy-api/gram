@@ -67,6 +67,9 @@ func (c *Client) Evaluate(ctx context.Context, orgID string, state json.RawMessa
 	if !json.Valid(state) || len(questions) == 0 {
 		return result, errors.New("invalid typesafe evaluation input")
 	}
+	if c.resolveKey == nil || c.httpClient == nil {
+		return result, ErrUnavailable
+	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	apiKey, err := c.resolveKey(ctx, orgID)

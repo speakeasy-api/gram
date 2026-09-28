@@ -3,10 +3,10 @@ package promptinjection
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -134,7 +134,10 @@ func promptInjectionJudgeMessage(m *riskv1.PromptInjectionAnalysis) judgemessage
 		anchor = m.GetParentChatMessageId()
 	}
 	msg.AnchorID, _ = uuid.Parse(anchor)
-	msg.ChatID, _ = uuid.Parse(m.GetChatId())
+	// A persisted part without its parent has no trustworthy position.
+	if m.GetContentPartId() == "" || msg.AnchorID != uuid.Nil {
+		msg.ChatID, _ = uuid.Parse(m.GetChatId())
+	}
 	return msg
 }
 

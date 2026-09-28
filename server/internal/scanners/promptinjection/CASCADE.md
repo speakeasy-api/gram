@@ -15,8 +15,10 @@ Opus (`anthropic/claude-opus-5.5`) independently reviews the target and at most 
 neighbors without seeing the Jev score. Persisted events use two messages before
 and two after, ordered by creation time and sequence. Live events with a known
 chat use up to four preceding messages. Unlinked events have only the target.
-Context queries validate organization, project, and conversation boundaries; a
-missing persisted anchor fails the review. Body/tool evidence is bounded, and
+Context queries validate organization, project, conversation, and generation boundaries; a
+missing persisted anchor fails the review. Neighbors include at most eight tool calls with 4,000-rune arguments; truncation is explicit.
+Serialized confirmation evidence is capped at 256 KiB; oversized requests are unavailable.
+Body/tool evidence is bounded, and
 truncated bodies are marked. Tool invocations retain names and arguments; stored
 tool results retain their actor role, but historical rows may lack a tool name.
 
