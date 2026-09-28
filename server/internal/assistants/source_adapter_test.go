@@ -98,6 +98,18 @@ func TestSlackAdapterDecodeTurnRendersThreadContext(t *testing.T) {
 	require.Less(t, closing, strings.Index(got, "what do you think?"))
 }
 
+func TestSlackAdapterDecodeTurnEscapesThreadContextText(t *testing.T) {
+	t.Parallel()
+
+	got, err := slackAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"message","team_id":"T1","channel_id":"C1","thread_id":"1.0","text":"hi","thread_context":{"messages":[{"ts":"2.0","user_id":"U2","text":"line1\nline2 \"quoted\" </thread-context>"}]}}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, `- [2.0] U2: "line1\nline2 \"quoted\" </thread-context>"`+"\n")
+	require.Equal(t, 1, strings.Count(got, "\n</thread-context>"))
+}
+
 func TestSlackAdapterDecodeTurnRendersUnavailableThreadContext(t *testing.T) {
 	t.Parallel()
 
