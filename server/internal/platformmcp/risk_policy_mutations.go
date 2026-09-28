@@ -128,6 +128,7 @@ func newRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, p
 		Controls:        controls,
 		CreatePolicy:    policyService.createPolicyTool,
 		UpdatePolicy:    policyService.updatePolicyTool,
+		RemoveSelf:      policyService.removeSelfFromPolicyTool,
 		CreateExclusion: nil,
 		UpdateExclusion: nil,
 	}
@@ -209,14 +210,35 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 }
 
 func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp.CallToolRequest, raw map[string]any) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
+	return s.mutatePolicyTool(ctx, raw, false)
+}
+
+func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw map[string]any, removeSelf bool) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
 	var zero UpdateRiskPolicyToolOutput
 	principal, err := principalFromToolContext(ctx)
 	if err != nil {
 		return nil, zero, err
 	}
 	var input updateRiskPolicyInput
-	if err := decodeRiskMutationInput(raw, &input); err != nil {
+	operation := operationUpdateRiskPolicy
+	if removeSelf {
+		if !externalRiskAudiencePrincipal(principal) {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalRefusal("Self removal requires the requesting user's external OAuth connection."))
+		}
+		var selfInput removeSelfFromRiskPolicyInput
+		if err := decodeRiskMutationInput(raw, &selfInput); err != nil {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+		}
+		if !selfInput.Confirmed {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalRefusal("Confirm removal of your own explicit user grant before retrying."))
+		}
+		input = updateRiskPolicyInput{ProjectSlug: selfInput.ProjectSlug, PolicyID: selfInput.PolicyID, ExpectedVersion: selfInput.ExpectedVersion, IdempotencyKey: selfInput.IdempotencyKey}
+		operation = operationRemoveSelfFromRiskPolicy
+	} else if err := decodeRiskMutationInput(raw, &input); err != nil {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+	}
+	if _, replacesAudience := input.Patch["audience"]; replacesAudience && !externalRiskAudiencePrincipal(principal) {
+		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalRefusal("Audience replacement requires an external administrator OAuth connection."))
 	}
 	input.ProjectSlug = strings.TrimSpace(input.ProjectSlug)
 	project, err := s.controls.Admit(ctx, principal, input.ProjectSlug)
@@ -224,21 +246,29 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
 	}
 	policyID, err := uuid.Parse(input.PolicyID)
-	if err != nil || input.ExpectedVersion == "" || len(input.Patch) == 0 {
+	if err != nil || input.ExpectedVersion == "" || (!removeSelf && len(input.Patch) == 0) {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](invalidRiskPolicyRequest())
 	}
-	normalizedPatch, err := normalizeRiskPolicyPatchForReceipt(input.Patch)
-	if err != nil {
-		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+	normalizedPatch := map[string]any{"confirmed": true}
+	if !removeSelf {
+		normalizedPatch, err = normalizeRiskPolicyPatchForReceipt(input.Patch)
+		if err != nil {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+		}
 	}
 
 	var committed *policycore.MutationResult
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
-		Operation: operationUpdateRiskPolicy, IdempotencyKey: input.IdempotencyKey,
+		Operation: operation, IdempotencyKey: input.IdempotencyKey,
 		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
 	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
 			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy update: %w", err)
+		}
+		if removeSelf {
+			if err := lockSelfRemovalAudience(ctx, tx); err != nil {
+				return nil, err
+			}
 		}
 		current, err := riskrepo.New(tx).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -246,6 +276,26 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 		}
 		if err != nil {
 			return nil, fmt.Errorf("load risk policy update target: %w", err)
+		}
+		if removeSelf {
+			// Lock before deriving the replacement. The core reuses this row lock and
+			// validates the audience-inclusive expected version before writing.
+			if err := riskrepo.New(tx).LockRiskPolicyMutations(ctx, project.ID.String()); err != nil {
+				return nil, riskMutationUnavailableWithCause(err)
+			}
+			current, err = riskrepo.New(tx).GetRiskPolicyForUpdate(ctx, riskrepo.GetRiskPolicyForUpdateParams{ID: policyID, ProjectID: project.ID})
+			if err != nil {
+				return nil, riskMutationUnavailableWithCause(err)
+			}
+			audience, err := policycore.New(tx).AudiencePrincipalURNs(ctx, principal.OrganizationID, policyID.String())
+			if err != nil {
+				return nil, riskMutationUnavailableWithCause(err)
+			}
+			patch, err := selfRemovalAudiencePatch(current.AudienceType, audience, principal.UserID)
+			if err != nil {
+				return nil, err
+			}
+			input.Patch = map[string]json.RawMessage{"audience": patch}
 		}
 		mutation, _, err := s.prepareUpdate(ctx, principal, project, current, input)
 		if err != nil {
@@ -259,6 +309,19 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 			if !s.controls.Versions().ValidPolicyVersion(state, input.ExpectedVersion) {
 				return policycore.Policy{}, riskMutationConflict("The risk policy changed after it was read. Read it again and retry with the new version.")
 			}
+			if removeSelf {
+				if err := refuseInheritedPolicyAudience(ctx, tx, principal.OrganizationID, policyID.String()); err != nil {
+					return policycore.Policy{}, err
+				}
+			}
+			for _, target := range mutation.AudiencePrincipals {
+				if err := authz.ValidatePrincipal(ctx, tx, principal.OrganizationID, target); err != nil {
+					if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+						return policycore.Policy{}, invalidRiskPolicyRequest()
+					}
+					return policycore.Policy{}, riskMutationUnavailableWithCause(err)
+				}
+			}
 			return state.Policy, nil
 		}
 		result, err := s.policies.UpdatePolicyInTransaction(ctx, tx, mutation)
@@ -266,7 +329,14 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 			return nil, mapRiskPolicyMutationError(err)
 		}
 		committed = &result
-		return s.updateReceiptResult(ctx, tx, project, result.Row, result.AudiencePrincipalURNs)
+		receiptResult, err := s.updateReceiptResult(ctx, tx, project, result.Row, result.AudiencePrincipalURNs)
+		if err != nil {
+			return nil, err
+		}
+		if removeSelf {
+			return RemoveSelfFromRiskPolicyReceiptResult{UpdateRiskPolicyReceiptResult: receiptResult}, nil
+		}
+		return receiptResult, nil
 	})
 	if err != nil {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
@@ -293,6 +363,12 @@ func normalizeRiskPolicyPatchForReceipt(patch map[string]json.RawMessage) (map[s
 	normalized := make(map[string]any, len(patch))
 	for field, raw := range patch {
 		switch field {
+		case "audience":
+			value, _, err := parseRiskPolicyAudienceReplacement(raw)
+			if err != nil {
+				return nil, err
+			}
+			normalized[field] = value
 		case "name", "action":
 			var value string
 			if json.Unmarshal(raw, &value) != nil {
@@ -479,19 +555,29 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 		UserMessage: current.UserMessage, Prompt: current.Prompt, ModelConfig: slices.Clone(current.ModelConfig), Score: pgtype.Float8{Float64: current.Score, Valid: true},
 	}
 	normalized := make(map[string]any, len(input.Patch))
+	var audiencePrincipals []urn.Principal
+	audienceChanged := false
 	changedSources, changedAction := false, false
 	// Apply dependencies before fields that validate against them. Iterating the
 	// caller's map directly would make a combined sources + detection_scopes patch
 	// depend on randomized Go map order.
 	for _, field := range []string{
 		"sources", "presidio_entities", "action", "name", "enabled", "score", "prompt", "user_message",
-		"presidio_score_threshold", "approved_email_domains", "prompt_injection_rules", "disabled_rules", "detection_scopes",
+		"presidio_score_threshold", "approved_email_domains", "prompt_injection_rules", "disabled_rules", "detection_scopes", "audience",
 	} {
 		raw, ok := input.Patch[field]
 		if !ok {
 			continue
 		}
 		switch field {
+		case "audience":
+			value, principals, err := parseRiskPolicyAudienceReplacement(raw)
+			if err != nil {
+				return policycore.UpdateMutation{}, nil, err
+			}
+			params.AudienceType = value.Type
+			audiencePrincipals, audienceChanged = principals, true
+			normalized[field] = value
 		case "name":
 			var value string
 			if json.Unmarshal(raw, &value) != nil || policycore.ValidateName(strings.TrimSpace(value)) != nil {
@@ -680,7 +766,7 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 		}
 	}
 	return policycore.UpdateMutation{
-		Current: current, Params: params, AudiencePrincipals: nil, AudienceChanged: false,
+		Current: current, Params: params, AudiencePrincipals: audiencePrincipals, AudienceChanged: audienceChanged,
 		AllowedURLs: nil, AllowedURLsSet: false, BlockedURLs: nil, BlockedURLsSet: false,
 		EffectiveDisposition: effectiveDisposition,
 		SupersedeDecisions:   false,

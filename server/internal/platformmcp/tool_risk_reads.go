@@ -145,10 +145,11 @@ type UpdateRiskExclusionToolOutput struct {
 	Receipt RiskMutationToolReceipt `json:"receipt"`
 }
 
-// RiskMutationHandlers names the four independently selectable callbacks.
+// RiskMutationHandlers names the independently selectable callbacks.
 // Every callback has an exported success type that composition code can
 // construct, while the schemas remain owned by this package.
 type RiskMutationHandlers struct {
+	RemoveSelf      mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
 	Controls        *RiskMutationControls
 	CreatePolicy    mcp.ToolHandlerFor[map[string]any, CreateRiskPolicyToolOutput]
 	UpdatePolicy    mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
@@ -157,6 +158,7 @@ type RiskMutationHandlers struct {
 }
 
 func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog, catalogAvailable bool, handlers *RiskMutationHandlers) {
+	registerRemoveSelfFromRiskPolicy(reg, catalogAvailable, handlers)
 	createPolicySchema := fallbackCreateRiskPolicySchema()
 	updatePolicySchema := fallbackUpdateRiskPolicySchema()
 	createExclusionSchema := fallbackCreateRiskExclusionSchema()
@@ -180,7 +182,7 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 		}
 		if handlers.UpdatePolicy != nil {
 			updatePolicy = handlers.UpdatePolicy
-			updatePolicyDescription = "Patch allowlisted fields on a risk policy in an explicit project using an opaque expected version; omitted fields are preserved."
+			updatePolicyDescription = "Patch allowlisted fields on a risk policy in an explicit project using an opaque expected version; omitted fields are preserved. The audience patch is available only to external OAuth administrators and replaces positive user/role grants, requires confirm=true, and never creates exclusions. Inspect get_risk_policy first. Targeted audiences must remain nonempty; everyone requires an empty principal_urns array. Removing a direct user grant does not remove role-derived access. Never represent everyone-except-one or role exclusions as supported."
 		}
 		if handlers.CreateExclusion != nil {
 			createExclusion = handlers.CreateExclusion
@@ -377,6 +379,11 @@ func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 
 func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	patch := closedObject(map[string]*jsonschema.Schema{
+		"audience": closedObject(map[string]*jsonschema.Schema{
+			"type":           {Type: "string", Enum: []any{"everyone", "targeted"}},
+			"principal_urns": {Type: "array", Items: stringSchema("Exact organization user or role principal URN. Positive grants only.", 1, 0), MaxItems: new(100)},
+			"confirm":        {Type: "boolean", Enum: []any{true}},
+		}, []string{"type", "principal_urns", "confirm"}),
 		"name":                     stringSchema("Policy name.", 1, 100),
 		"enabled":                  {Type: "boolean"},
 		"action":                   catalogEnumSchema(catalog, catalog.Actions),

@@ -1,0 +1,41 @@
+package plugins
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/manage-risk-policy-audience/SKILL.md"
+	workflow := files["speakeasy/"+path]
+	require.NotEmpty(t, workflow)
+	require.Equal(t, workflow, files["agent-plugins/speakeasy/"+path])
+	text := string(workflow)
+	cursor := 0
+	for _, name := range []string{"list_projects", "list_risk_policies", "get_risk_policy", "remove_self_from_risk_policy", "get_risk_policy", "remove_self_from_risk_policy", "update_risk_policy", "get_risk_policy"} {
+		token := "`" + name + "`"
+		index := strings.Index(text[cursor:], token)
+		require.NotEqual(t, -1, index, "%s must appear in workflow order", name)
+		cursor += index + len(token)
+	}
+	for _, guardrail := range []string{
+		"external OAuth connection",
+		"never supply a user ID",
+		"at least one other user remaining",
+		"Never use general audience replacement to bypass a self-removal refusal",
+		"obtain confirmation again",
+		"`confirmed: true`",
+		"stable `idempotency_key`",
+		"`confirm: true`",
+		"positive user/role grants",
+		"historical commit, not current state",
+	} {
+		require.Contains(t, text, guardrail)
+	}
+	require.NotContains(t, text, "Gram")
+}

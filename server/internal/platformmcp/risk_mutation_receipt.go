@@ -79,6 +79,12 @@ func (UpdateRiskPolicyReceiptResult) riskMutationReceiptOperation() string {
 	return operationUpdateRiskPolicy
 }
 
+type RemoveSelfFromRiskPolicyReceiptResult struct{ UpdateRiskPolicyReceiptResult }
+
+func (RemoveSelfFromRiskPolicyReceiptResult) riskMutationReceiptOperation() string {
+	return operationRemoveSelfFromRiskPolicy
+}
+
 type CreateRiskExclusionReceiptResult struct {
 	Project         RiskMutationReceiptProject  `json:"project"`
 	Exclusion       RiskExclusionReceiptSummary `json:"exclusion"`
@@ -169,7 +175,7 @@ func riskMutationInputHash(operation string, normalized any) (string, error) {
 
 func riskMutationOperation(operation string) bool {
 	switch operation {
-	case operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion:
+	case operationRemoveSelfFromRiskPolicy, operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion:
 		return true
 	default:
 		return false
@@ -193,8 +199,12 @@ func encodeRiskMutationResult(operation string, result RiskMutationReceiptResult
 
 func normalizedRiskMutationReceiptResult(result RiskMutationReceiptResult) (RiskMutationReceiptResult, bool) {
 	switch typed := result.(type) {
-	case CreateRiskPolicyReceiptResult, UpdateRiskPolicyReceiptResult, CreateRiskExclusionReceiptResult, UpdateRiskExclusionReceiptResult:
+	case RemoveSelfFromRiskPolicyReceiptResult, CreateRiskPolicyReceiptResult, UpdateRiskPolicyReceiptResult, CreateRiskExclusionReceiptResult, UpdateRiskExclusionReceiptResult:
 		return typed, true
+	case *RemoveSelfFromRiskPolicyReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
 	case *CreateRiskPolicyReceiptResult:
 		if typed != nil {
 			return *typed, true
@@ -217,6 +227,8 @@ func normalizedRiskMutationReceiptResult(result RiskMutationReceiptResult) (Risk
 
 func validRiskMutationReceiptResult(result RiskMutationReceiptResult) bool {
 	switch typed := result.(type) {
+	case RemoveSelfFromRiskPolicyReceiptResult:
+		return validRiskMutationReceiptResult(typed.UpdateRiskPolicyReceiptResult)
 	case CreateRiskPolicyReceiptResult:
 		return validRiskReceiptProject(typed.Project) && validRiskPolicyReceiptSummary(typed.Policy) && validRiskReceiptVersion(typed.Version) && validRiskResultCategory(typed.ResultCategory, "created", "matched_existing")
 	case UpdateRiskPolicyReceiptResult:
