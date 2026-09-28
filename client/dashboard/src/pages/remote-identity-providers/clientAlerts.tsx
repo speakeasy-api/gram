@@ -1,5 +1,6 @@
 import { Alert } from "@/components/ui/Alert";
 import { useRBAC } from "@/hooks/useRBAC";
+import { remoteSessionScopeTier } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Link } from "react-router";
 
@@ -8,26 +9,42 @@ import { Link } from "react-router";
 // the client's scopes on the authorize redirect, so editing them here changes
 // nothing. Renders nothing when the provider has no override.
 export function IssuerScopeOverrideAlert({
-  issuerId,
-  scopeOverride,
+  issuer,
 }: {
-  issuerId: string;
-  scopeOverride: string[] | null | undefined;
+  issuer:
+    | {
+        id: string;
+        projectId?: string | null;
+        organizationId?: string | null;
+        scopeOverride?: string[] | null;
+      }
+    | undefined;
 }): JSX.Element | null {
-  if (!scopeOverride || scopeOverride.length === 0) return null;
+  if (!issuer?.scopeOverride?.length) return null;
+
   return (
-    <ScopeOverrideAlertBody issuerId={issuerId} scopeOverride={scopeOverride} />
+    <Alert variant="warning" dismissible={false} alignTop>
+      This client's remote identity provider has a scope override, so every
+      sign-in requests{" "}
+      <span className="font-mono">{issuer.scopeOverride.join(" ")}</span> and
+      changing the client's scopes has no effect.{" "}
+      {/* Platform providers have no settings page, and the organization
+          cannot edit their override. */}
+      {remoteSessionScopeTier(issuer) === "platform" ? (
+        "The platform remote identity provider sets this override, and it can't be changed from this organization."
+      ) : (
+        <EditScopeOverrideHint issuerId={issuer.id} />
+      )}
+    </Alert>
   );
 }
 
-// Split out so the routing and RBAC hooks only run when there is an override
-// to warn about.
-function ScopeOverrideAlertBody({
+// Split out so the routing and RBAC hooks only run when there is an editable
+// override to warn about.
+function EditScopeOverrideHint({
   issuerId,
-  scopeOverride,
 }: {
   issuerId: string;
-  scopeOverride: string[];
 }): JSX.Element {
   const routes = useRoutes();
   const { hasAnyScope } = useRBAC();
@@ -45,15 +62,7 @@ function ScopeOverrideAlertBody({
     "remote identity provider's settings"
   );
 
-  return (
-    <Alert variant="warning" dismissible={false} alignTop>
-      This client's remote identity provider has a scope override, so every
-      sign-in requests{" "}
-      <span className="font-mono">{scopeOverride.join(" ")}</span> and changing
-      the client's scopes has no effect. Edit the scope override in the{" "}
-      {settings} instead.
-    </Alert>
-  );
+  return <>Edit the scope override in the {settings} instead.</>;
 }
 
 // LegacyCallbackAlert flags a client registered upstream with the legacy

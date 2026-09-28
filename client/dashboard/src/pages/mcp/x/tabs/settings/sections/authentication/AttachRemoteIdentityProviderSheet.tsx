@@ -673,14 +673,7 @@ export function AttachRemoteIdentityProviderSheet({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
-          scopeWarning={
-            selectedIssuer && (
-              <IssuerScopeOverrideAlert
-                issuerId={selectedIssuer.id}
-                scopeOverride={selectedIssuer.scopeOverride}
-              />
-            )
-          }
+          scopeWarning={<IssuerScopeOverrideAlert issuer={selectedIssuer} />}
         />
       </Stack>
     );

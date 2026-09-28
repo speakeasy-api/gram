@@ -545,12 +545,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
-          scopeWarning={
-            <IssuerScopeOverrideAlert
-              issuerId={issuer.id}
-              scopeOverride={issuer.scopeOverride}
-            />
-          }
+          scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
         />
 
         {submitError && (
