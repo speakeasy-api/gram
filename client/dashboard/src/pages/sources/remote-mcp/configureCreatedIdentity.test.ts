@@ -229,6 +229,7 @@ describe("configureCreatedRemoteMcpIdentity", () => {
       message: expect.stringContaining("different issuer"),
     });
     expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.updateServer).not.toHaveBeenCalled();
   });
 
   it("does not retry a successful registration when enabling fails", async () => {
