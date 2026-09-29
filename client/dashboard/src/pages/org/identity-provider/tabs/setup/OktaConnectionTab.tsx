@@ -15,11 +15,12 @@ import { useVerifyIdentityProviderConnectionMutation } from "@gram/client/react-
 import { STEP_AFFORDANCES } from "./checklistAffordances";
 import { ConnectionChecklist } from "./ConnectionChecklist";
 import { ConnectionSetupProgress } from "./ConnectionSetupProgress";
-import { ConnectionFacts, ConnectionScopes } from "./OktaConnectionDetails";
 import {
-  CreateConnectionForm,
-  ReplaceClientSecretForm,
-} from "./OktaConnectionForms";
+  ConnectionFacts,
+  ConnectionScopes,
+  ReplaceClientSecretButton,
+} from "./OktaConnectionDetails";
+import { CreateConnectionForm } from "./OktaConnectionForms";
 import { RevokeConnectionButton } from "./RevokeConnectionButton";
 import {
   CONNECTION_STATUS,
@@ -223,10 +224,6 @@ function ConnectionCard({
         </SettingsSection.Body>
         <SettingsSection.Body className="border-t">
           <ConnectionScopes connection={connection} />
-          <ReplaceClientSecretForm
-            key={connection.id}
-            connection={connection}
-          />
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
@@ -234,6 +231,9 @@ function ConnectionCard({
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RevokeConnectionButton connection={connection} />
+            {usesClientSecret(connection) && connection.clientIdSubmitted && (
+              <ReplaceClientSecretButton connection={connection} />
+            )}
             {step === "connected" && (
               <Button
                 variant="secondary"
