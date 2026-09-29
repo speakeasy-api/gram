@@ -255,6 +255,7 @@ var SigintSensorMode = Type("SigintSensorMode", String, func() {
 })
 
 var SigintSignal = Type("SigintSignal", func() {
+	Attribute("slug", shared.Slug, "Project-scoped signal identifier for analytics and integrations")
 	Meta("struct:pkg:path", "types")
 	Description("A reusable project-scoped custom signal.")
 	Attribute("id", String, "Signal ID", func() { Format(FormatUUID) })
@@ -264,10 +265,11 @@ var SigintSignal = Type("SigintSignal", func() {
 	Attribute("classifier_criteria", String, "Optional criteria describing when this signal applies")
 	Attribute("created_at", String, "Creation time", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "Last update time", func() { Format(FormatDateTime) })
-	Required("id", "project_id", "name", "created_at", "updated_at")
+	Required("id", "project_id", "name", "slug", "created_at", "updated_at")
 })
 
 var SigintSensor = Type("SigintSensor", func() {
+	Attribute("slug", shared.Slug, "Project-scoped sensor identifier for analytics and integrations")
 	Meta("struct:pkg:path", "types")
 	Description("A project-scoped sensor with ordered live references to custom signals. signal_ids is always present, including when empty.")
 	Attribute("id", String, "Sensor ID", func() { Format(FormatUUID) })
@@ -279,10 +281,11 @@ var SigintSensor = Type("SigintSensor", func() {
 	Attribute("signal_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Ordered signal IDs. In ordered_score mode the zero-based array index is the score level.")
 	Attribute("created_at", String, "Creation time", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "Last update time", func() { Format(FormatDateTime) })
-	Required("id", "project_id", "name", "mode", "signal_ids", "created_at", "updated_at")
+	Required("id", "project_id", "name", "slug", "mode", "signal_ids", "created_at", "updated_at")
 })
 
 var CreateSignalForm = Type("CreateSigintSignalForm", func() {
+	Attribute("slug", shared.Slug, "Optional project-scoped slug; defaults to a slugified display name. Must be unique including deleted signals.")
 	Attribute("name", String, "Display name; trimmed before enforcing the 1 to 200 character limit")
 	Attribute("description", String, "Optional description; empty stores no value")
 	Attribute("classifier_criteria", String, "Optional classifier criteria; empty stores no value")
@@ -290,6 +293,7 @@ var CreateSignalForm = Type("CreateSigintSignalForm", func() {
 })
 
 var UpdateSignalForm = Type("UpdateSigintSignalForm", func() {
+	Attribute("slug", shared.Slug, "Replacement slug; omission preserves it. Changing it changes the identifier used by future exports.")
 	Attribute("id", String, "Signal ID", func() { Format(FormatUUID) })
 	Attribute("name", String, "Replacement display name; trimmed before enforcing the 1 to 200 character limit")
 	Attribute("description", String, "Replacement description; empty clears it")
@@ -298,6 +302,7 @@ var UpdateSignalForm = Type("UpdateSigintSignalForm", func() {
 })
 
 var CreateSensorForm = Type("CreateSigintSensorForm", func() {
+	Attribute("slug", shared.Slug, "Optional project-scoped slug; defaults to a slugified display name. Must be unique including deleted sensors.")
 	Attribute("name", String, "Display name; trimmed before enforcing the 1 to 200 character limit")
 	Attribute("description", String, "Optional description; empty stores no value")
 	Attribute("instructions", String, "Optional classification instructions; empty stores no value")
@@ -307,6 +312,7 @@ var CreateSensorForm = Type("CreateSigintSensorForm", func() {
 })
 
 var UpdateSensorForm = Type("UpdateSigintSensorForm", func() {
+	Attribute("slug", shared.Slug, "Replacement slug; omission preserves it. Changing it changes the identifier used by future exports.")
 	Attribute("id", String, "Sensor ID", func() { Format(FormatUUID) })
 	Attribute("name", String, "Replacement display name; trimmed before enforcing the 1 to 200 character limit")
 	Attribute("description", String, "Replacement description; empty clears it")

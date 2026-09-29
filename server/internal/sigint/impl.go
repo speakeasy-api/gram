@@ -108,6 +108,10 @@ func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPay
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid signal name").LogError(ctx, s.logger)
 	}
+	slug, err := normalizeSlug(payload.Slug, name)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid signal slug")
+	}
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate signal id").LogError(ctx, s.logger)
@@ -126,9 +130,13 @@ func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPay
 		ID:                 id,
 		ProjectID:          *authCtx.ProjectID,
 		Name:               name,
+		Slug:               slug,
 		Description:        conv.PtrToPGTextEmpty(payload.Description),
 		ClassifierCriteria: conv.PtrToPGTextEmpty(payload.ClassifierCriteria),
 	})
+	if isSlugConflict(err) {
+		return nil, oops.E(oops.CodeConflict, err, "signal slug already exists")
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create signal").LogError(ctx, s.logger)
 	}
@@ -224,6 +232,7 @@ func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPay
 		return nil, oops.E(oops.CodeUnexpected, err, "get signal for update").LogError(ctx, s.logger)
 	}
 	params := repo.UpdateSignalParams{
+		Slug:               before.Slug,
 		Name:               before.Name,
 		Description:        before.Description,
 		ClassifierCriteria: before.ClassifierCriteria,
@@ -242,7 +251,16 @@ func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPay
 	if payload.ClassifierCriteria != nil {
 		params.ClassifierCriteria = conv.PtrToPGTextEmpty(payload.ClassifierCriteria)
 	}
+	if payload.Slug != nil {
+		params.Slug, err = normalizeSlug(payload.Slug, params.Name)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid signal slug")
+		}
+	}
 	after, err := queries.UpdateSignal(ctx, params)
+	if isSlugConflict(err) {
+		return nil, oops.E(oops.CodeConflict, err, "signal slug already exists")
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update signal").LogError(ctx, s.logger)
 	}
@@ -368,6 +386,10 @@ func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPay
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor name").LogError(ctx, s.logger)
 	}
+	slug, err := normalizeSlug(payload.Slug, name)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor slug")
+	}
 	mode := string(payload.Mode)
 	if err := validateSensorConfiguration(mode, len(payload.SignalIds)); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor configuration").LogError(ctx, s.logger)
@@ -397,9 +419,13 @@ func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPay
 		return nil, oops.E(oops.CodeNotFound, nil, "signal ids are unavailable").LogError(ctx, s.logger)
 	}
 	created, err := queries.CreateSensor(ctx, repo.CreateSensorParams{
-		ID: id, ProjectID: *authCtx.ProjectID, Name: name,
+		Slug: slug,
+		ID:   id, ProjectID: *authCtx.ProjectID, Name: name,
 		Description: conv.PtrToPGTextEmpty(payload.Description), Instructions: conv.PtrToPGTextEmpty(payload.Instructions), Mode: mode,
 	})
+	if isSlugConflict(err) {
+		return nil, oops.E(oops.CodeConflict, err, "sensor slug already exists")
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create sensor").LogError(ctx, s.logger)
 	}
@@ -505,6 +531,7 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 		return nil, oops.E(oops.CodeUnexpected, err, "get sensor for update").LogError(ctx, s.logger)
 	}
 	params := repo.UpdateSensorParams{
+		Slug: beforeRow.Slug,
 		Name: beforeRow.Name, Description: beforeRow.Description, Instructions: beforeRow.Instructions,
 		Mode: beforeRow.Mode, ID: id, ProjectID: *authCtx.ProjectID,
 	}
@@ -537,7 +564,16 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 	if err := validateSensorConfiguration(params.Mode, finalCount); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor configuration").LogError(ctx, s.logger)
 	}
+	if payload.Slug != nil {
+		params.Slug, err = normalizeSlug(payload.Slug, params.Name)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor slug")
+		}
+	}
 	updated, err := queries.UpdateSensor(ctx, params)
+	if isSlugConflict(err) {
+		return nil, oops.E(oops.CodeConflict, err, "sensor slug already exists")
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update sensor").LogError(ctx, s.logger)
 	}
@@ -686,7 +722,8 @@ func sensorViewFromAffected(sensor repo.ListSensorsForSignalRow) *types.SigintSe
 		signalIDs[i] = id.String()
 	}
 	return &types.SigintSensor{
-		ID: sensor.ID.String(), ProjectID: sensor.ProjectID.String(), Name: sensor.Name,
+		Slug: types.Slug(sensor.Slug),
+		ID:   sensor.ID.String(), ProjectID: sensor.ProjectID.String(), Name: sensor.Name,
 		Description: conv.FromPGText[string](sensor.Description), Instructions: conv.FromPGText[string](sensor.Instructions),
 		Mode: types.SigintSensorMode(sensor.Mode), SignalIds: signalIDs,
 		CreatedAt: sensor.CreatedAt.Time.Format(time.RFC3339), UpdatedAt: sensor.UpdatedAt.Time.Format(time.RFC3339),

@@ -9,6 +9,8 @@ package types
 
 // SigintSensor is the result type of the sigint service createSensor method.
 type SigintSensor struct {
+	// Project-scoped sensor identifier for analytics and integrations
+	Slug Slug
 	// Sensor ID
 	ID string
 	// Owning project ID

@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	sigint "github.com/speakeasy-api/gram/server/gen/sigint"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -16,6 +18,9 @@ import (
 // CreateSignalRequestBody is the type of the "sigint" service "createSignal"
 // endpoint HTTP request body.
 type CreateSignalRequestBody struct {
+	// Optional project-scoped slug; defaults to a slugified display name. Must be
+	// unique including deleted signals.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Display name; trimmed before enforcing the 1 to 200 character limit
 	Name string `form:"name" json:"name" xml:"name"`
 	// Optional description; empty stores no value
@@ -27,6 +32,9 @@ type CreateSignalRequestBody struct {
 // UpdateSignalRequestBody is the type of the "sigint" service "updateSignal"
 // endpoint HTTP request body.
 type UpdateSignalRequestBody struct {
+	// Replacement slug; omission preserves it. Changing it changes the identifier
+	// used by future exports.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Signal ID
 	ID string `form:"id" json:"id" xml:"id"`
 	// Replacement display name; trimmed before enforcing the 1 to 200 character
@@ -41,6 +49,9 @@ type UpdateSignalRequestBody struct {
 // CreateSensorRequestBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP request body.
 type CreateSensorRequestBody struct {
+	// Optional project-scoped slug; defaults to a slugified display name. Must be
+	// unique including deleted sensors.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Display name; trimmed before enforcing the 1 to 200 character limit
 	Name string `form:"name" json:"name" xml:"name"`
 	// Optional description; empty stores no value
@@ -55,6 +66,9 @@ type CreateSensorRequestBody struct {
 // UpdateSensorRequestBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP request body.
 type UpdateSensorRequestBody struct {
+	// Replacement slug; omission preserves it. Changing it changes the identifier
+	// used by future exports.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
 	ID string `form:"id" json:"id" xml:"id"`
 	// Replacement display name; trimmed before enforcing the 1 to 200 character
@@ -73,6 +87,8 @@ type UpdateSensorRequestBody struct {
 // CreateSignalResponseBody is the type of the "sigint" service "createSignal"
 // endpoint HTTP response body.
 type CreateSignalResponseBody struct {
+	// Project-scoped signal identifier for analytics and integrations
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Signal ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Owning project ID
@@ -92,6 +108,8 @@ type CreateSignalResponseBody struct {
 // GetSignalResponseBody is the type of the "sigint" service "getSignal"
 // endpoint HTTP response body.
 type GetSignalResponseBody struct {
+	// Project-scoped signal identifier for analytics and integrations
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Signal ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Owning project ID
@@ -120,6 +138,8 @@ type ListSignalsResponseBody struct {
 // UpdateSignalResponseBody is the type of the "sigint" service "updateSignal"
 // endpoint HTTP response body.
 type UpdateSignalResponseBody struct {
+	// Project-scoped signal identifier for analytics and integrations
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Signal ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Owning project ID
@@ -139,6 +159,8 @@ type UpdateSignalResponseBody struct {
 // DeleteSignalResponseBody is the type of the "sigint" service "deleteSignal"
 // endpoint HTTP response body.
 type DeleteSignalResponseBody struct {
+	// Project-scoped signal identifier for analytics and integrations
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Signal ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Owning project ID
@@ -158,6 +180,8 @@ type DeleteSignalResponseBody struct {
 // CreateSensorResponseBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP response body.
 type CreateSensorResponseBody struct {
+	// Project-scoped sensor identifier for analytics and integrations
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Owning project ID
@@ -181,6 +205,8 @@ type CreateSensorResponseBody struct {
 // GetSensorResponseBody is the type of the "sigint" service "getSensor"
 // endpoint HTTP response body.
 type GetSensorResponseBody struct {
+	// Project-scoped sensor identifier for analytics and integrations
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Owning project ID
@@ -213,6 +239,8 @@ type ListSensorsResponseBody struct {
 // UpdateSensorResponseBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP response body.
 type UpdateSensorResponseBody struct {
+	// Project-scoped sensor identifier for analytics and integrations
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Owning project ID
@@ -236,6 +264,8 @@ type UpdateSensorResponseBody struct {
 // DeleteSensorResponseBody is the type of the "sigint" service "deleteSensor"
 // endpoint HTTP response body.
 type DeleteSensorResponseBody struct {
+	// Project-scoped sensor identifier for analytics and integrations
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Owning project ID
@@ -2066,6 +2096,8 @@ type DeleteSensorGatewayErrorResponseBody struct {
 
 // SigintSignalResponseBody is used to define fields on response body types.
 type SigintSignalResponseBody struct {
+	// Project-scoped signal identifier for analytics and integrations
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Signal ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Owning project ID
@@ -2084,6 +2116,8 @@ type SigintSignalResponseBody struct {
 
 // SigintSensorResponseBody is used to define fields on response body types.
 type SigintSensorResponseBody struct {
+	// Project-scoped sensor identifier for analytics and integrations
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Owning project ID
@@ -2112,6 +2146,10 @@ func NewCreateSignalRequestBody(p *sigint.CreateSignalPayload) *CreateSignalRequ
 		Description:        p.Description,
 		ClassifierCriteria: p.ClassifierCriteria,
 	}
+	if p.Slug != nil {
+		slug := string(*p.Slug)
+		body.Slug = &slug
+	}
 	return body
 }
 
@@ -2124,6 +2162,10 @@ func NewUpdateSignalRequestBody(p *sigint.UpdateSignalPayload) *UpdateSignalRequ
 		Description:        p.Description,
 		ClassifierCriteria: p.ClassifierCriteria,
 	}
+	if p.Slug != nil {
+		slug := string(*p.Slug)
+		body.Slug = &slug
+	}
 	return body
 }
 
@@ -2135,6 +2177,10 @@ func NewCreateSensorRequestBody(p *sigint.CreateSensorPayload) *CreateSensorRequ
 		Description:  p.Description,
 		Instructions: p.Instructions,
 		Mode:         string(p.Mode),
+	}
+	if p.Slug != nil {
+		slug := string(*p.Slug)
+		body.Slug = &slug
 	}
 	if p.SignalIds != nil {
 		body.SignalIds = make([]string, len(p.SignalIds))
@@ -2154,6 +2200,10 @@ func NewUpdateSensorRequestBody(p *sigint.UpdateSensorPayload) *UpdateSensorRequ
 		Description:  p.Description,
 		Instructions: p.Instructions,
 	}
+	if p.Slug != nil {
+		slug := string(*p.Slug)
+		body.Slug = &slug
+	}
 	if p.Mode != nil {
 		mode := string(*p.Mode)
 		body.Mode = &mode
@@ -2171,6 +2221,7 @@ func NewUpdateSensorRequestBody(p *sigint.UpdateSensorPayload) *UpdateSensorRequ
 // endpoint result from a HTTP "OK" response.
 func NewCreateSignalSigintSignalOK(body *CreateSignalResponseBody) *types.SigintSignal {
 	v := &types.SigintSignal{
+		Slug:               types.Slug(*body.Slug),
 		ID:                 *body.ID,
 		ProjectID:          *body.ProjectID,
 		Name:               *body.Name,
@@ -2337,6 +2388,7 @@ func NewCreateSignalGatewayError(body *CreateSignalGatewayErrorResponseBody) *go
 // result from a HTTP "OK" response.
 func NewGetSignalSigintSignalOK(body *GetSignalResponseBody) *types.SigintSignal {
 	v := &types.SigintSignal{
+		Slug:               types.Slug(*body.Slug),
 		ID:                 *body.ID,
 		ProjectID:          *body.ProjectID,
 		Name:               *body.Name,
@@ -2670,6 +2722,7 @@ func NewListSignalsGatewayError(body *ListSignalsGatewayErrorResponseBody) *goa.
 // endpoint result from a HTTP "OK" response.
 func NewUpdateSignalSigintSignalOK(body *UpdateSignalResponseBody) *types.SigintSignal {
 	v := &types.SigintSignal{
+		Slug:               types.Slug(*body.Slug),
 		ID:                 *body.ID,
 		ProjectID:          *body.ProjectID,
 		Name:               *body.Name,
@@ -2836,6 +2889,7 @@ func NewUpdateSignalGatewayError(body *UpdateSignalGatewayErrorResponseBody) *go
 // endpoint result from a HTTP "OK" response.
 func NewDeleteSignalSigintSignalOK(body *DeleteSignalResponseBody) *types.SigintSignal {
 	v := &types.SigintSignal{
+		Slug:               types.Slug(*body.Slug),
 		ID:                 *body.ID,
 		ProjectID:          *body.ProjectID,
 		Name:               *body.Name,
@@ -3002,6 +3056,7 @@ func NewDeleteSignalGatewayError(body *DeleteSignalGatewayErrorResponseBody) *go
 // endpoint result from a HTTP "OK" response.
 func NewCreateSensorSigintSensorOK(body *CreateSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		Slug:         types.Slug(*body.Slug),
 		ID:           *body.ID,
 		ProjectID:    *body.ProjectID,
 		Name:         *body.Name,
@@ -3173,6 +3228,7 @@ func NewCreateSensorGatewayError(body *CreateSensorGatewayErrorResponseBody) *go
 // result from a HTTP "OK" response.
 func NewGetSensorSigintSensorOK(body *GetSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		Slug:         types.Slug(*body.Slug),
 		ID:           *body.ID,
 		ProjectID:    *body.ProjectID,
 		Name:         *body.Name,
@@ -3511,6 +3567,7 @@ func NewListSensorsGatewayError(body *ListSensorsGatewayErrorResponseBody) *goa.
 // endpoint result from a HTTP "OK" response.
 func NewUpdateSensorSigintSensorOK(body *UpdateSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		Slug:         types.Slug(*body.Slug),
 		ID:           *body.ID,
 		ProjectID:    *body.ProjectID,
 		Name:         *body.Name,
@@ -3682,6 +3739,7 @@ func NewUpdateSensorGatewayError(body *UpdateSensorGatewayErrorResponseBody) *go
 // endpoint result from a HTTP "OK" response.
 func NewDeleteSensorSigintSensorOK(body *DeleteSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		Slug:         types.Slug(*body.Slug),
 		ID:           *body.ID,
 		ProjectID:    *body.ProjectID,
 		Name:         *body.Name,
@@ -3861,11 +3919,22 @@ func ValidateCreateSignalResponseBody(body *CreateSignalResponseBody) (err error
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -3894,11 +3963,22 @@ func ValidateGetSignalResponseBody(body *GetSignalResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -3946,11 +4026,22 @@ func ValidateUpdateSignalResponseBody(body *UpdateSignalResponseBody) (err error
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -3979,11 +4070,22 @@ func ValidateDeleteSignalResponseBody(body *DeleteSignalResponseBody) (err error
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -4012,6 +4114,9 @@ func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
@@ -4023,6 +4128,14 @@ func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -4059,6 +4172,9 @@ func ValidateGetSensorResponseBody(body *GetSensorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
@@ -4070,6 +4186,14 @@ func ValidateGetSensorResponseBody(body *GetSensorResponseBody) (err error) {
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -4125,6 +4249,9 @@ func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
@@ -4136,6 +4263,14 @@ func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -4172,6 +4307,9 @@ func ValidateDeleteSensorResponseBody(body *DeleteSensorResponseBody) (err error
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
@@ -4183,6 +4321,14 @@ func ValidateDeleteSensorResponseBody(body *DeleteSensorResponseBody) (err error
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -6619,11 +6765,22 @@ func ValidateSigintSignalResponseBody(body *SigintSignalResponseBody) (err error
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -6652,6 +6809,9 @@ func ValidateSigintSensorResponseBody(body *SigintSensorResponseBody) (err error
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
@@ -6663,6 +6823,14 @@ func ValidateSigintSensorResponseBody(body *SigintSensorResponseBody) (err error
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

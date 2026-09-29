@@ -13,6 +13,7 @@ type SigintCustomSignal struct {
 	ID                 uuid.UUID
 	ProjectID          uuid.UUID
 	Name               string
+	Slug               string
 	Description        pgtype.Text
 	ClassifierCriteria pgtype.Text
 	CreatedAt          pgtype.Timestamptz
@@ -25,6 +26,7 @@ type SigintSensor struct {
 	ID           uuid.UUID
 	ProjectID    uuid.UUID
 	Name         string
+	Slug         string
 	Description  pgtype.Text
 	Instructions pgtype.Text
 	Mode         string

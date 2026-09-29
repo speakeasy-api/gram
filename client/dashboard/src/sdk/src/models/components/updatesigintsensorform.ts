@@ -46,6 +46,10 @@ export type UpdateSigintSensorForm = {
    * Authoritative ordered signal IDs. Omit or send null to preserve; send [] to clear.
    */
   signalIds?: Array<string> | undefined;
+  /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  slug?: string | undefined;
 };
 
 /** @internal */
@@ -61,6 +65,7 @@ export type UpdateSigintSensorForm$Outbound = {
   mode?: string | undefined;
   name?: string | undefined;
   signal_ids?: Array<string> | undefined;
+  slug?: string | undefined;
 };
 
 /** @internal */
@@ -75,6 +80,7 @@ export const UpdateSigintSensorForm$outboundSchema: z.ZodMiniType<
     mode: z.optional(UpdateSigintSensorFormMode$outboundSchema),
     name: z.optional(z.string()),
     signalIds: z.optional(z.array(z.string())),
+    slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {

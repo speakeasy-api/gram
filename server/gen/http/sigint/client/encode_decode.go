@@ -2444,6 +2444,7 @@ func DecodeDeleteSensorResponse(decoder func(*http.Response) goahttp.Decoder, re
 // *types.SigintSignal from a value of type *SigintSignalResponseBody.
 func unmarshalSigintSignalResponseBodyToTypesSigintSignal(v *SigintSignalResponseBody) *types.SigintSignal {
 	res := &types.SigintSignal{
+		Slug:               types.Slug(*v.Slug),
 		ID:                 *v.ID,
 		ProjectID:          *v.ProjectID,
 		Name:               *v.Name,
@@ -2460,6 +2461,7 @@ func unmarshalSigintSignalResponseBodyToTypesSigintSignal(v *SigintSignalRespons
 // *types.SigintSensor from a value of type *SigintSensorResponseBody.
 func unmarshalSigintSensorResponseBodyToTypesSigintSensor(v *SigintSensorResponseBody) *types.SigintSensor {
 	res := &types.SigintSensor{
+		Slug:         types.Slug(*v.Slug),
 		ID:           *v.ID,
 		ProjectID:    *v.ProjectID,
 		Name:         *v.Name,

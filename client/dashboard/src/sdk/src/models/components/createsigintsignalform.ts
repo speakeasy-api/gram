@@ -18,6 +18,10 @@ export type CreateSigintSignalForm = {
    * Display name; trimmed before enforcing the 1 to 200 character limit
    */
   name: string;
+  /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  slug?: string | undefined;
 };
 
 /** @internal */
@@ -25,6 +29,7 @@ export type CreateSigintSignalForm$Outbound = {
   classifier_criteria?: string | undefined;
   description?: string | undefined;
   name: string;
+  slug?: string | undefined;
 };
 
 /** @internal */
@@ -36,6 +41,7 @@ export const CreateSigintSignalForm$outboundSchema: z.ZodMiniType<
     classifierCriteria: z.optional(z.string()),
     description: z.optional(z.string()),
     name: z.string(),
+    slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
