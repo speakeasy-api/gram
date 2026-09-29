@@ -1,4 +1,7 @@
+import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
+import { Switch } from "@/components/ui/Switch";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
@@ -51,6 +54,14 @@ export function SettingsTab({
   const [scope, setScope] = useState((client.scope ?? []).join(", "));
   const [audience, setAudience] = useState(client.audience ?? "");
   const [clientSecret, setClientSecret] = useState("");
+  // Undefined until a platform admin flips the switch, so the switch tracks
+  // the saved value (including a Migrate from the warning above) and a save
+  // only sends the flag when it was deliberately changed.
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const [legacyCallbackMode, setLegacyCallbackMode] = useState<
+    boolean | undefined
+  >(undefined);
+  const legacyCallbackChecked = legacyCallbackMode ?? client.legacyCallbackUrl;
   const [showDelete, setShowDelete] = useState(false);
   const [showRotate, setShowRotate] = useState(false);
   // A rotation re-registers the client at the issuer's published registration
@@ -99,6 +110,7 @@ export function SettingsTab({
         refetchType: "all",
       });
       setClientSecret("");
+      setLegacyCallbackMode(undefined);
       toast.success("Client updated");
     },
     onError: (error) => {
@@ -120,6 +132,12 @@ export function SettingsTab({
           scope: parseScopes(scope),
           audience: audience.trim() || undefined,
           clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
+          legacyCallbackUrl:
+            isPlatformAdmin &&
+            legacyCallbackMode !== undefined &&
+            legacyCallbackMode !== client.legacyCallbackUrl
+              ? legacyCallbackMode
+              : undefined,
         },
       },
     });
@@ -181,6 +199,26 @@ export function SettingsTab({
             </Text>
           </div>
         )}
+        <PlatformAdminOnlyPanel>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-3">
+              <Switch
+                aria-labelledby="legacy-callback-mode-label"
+                checked={legacyCallbackChecked}
+                onCheckedChange={setLegacyCallbackMode}
+              />
+              <Label id="legacy-callback-mode-label">
+                Legacy callback compatibility mode
+              </Label>
+            </div>
+            <Text small muted>
+              On for apps registered with the identity provider under the legacy
+              /oauth/callback URL. Turn it off once the app has the
+              /mcp/remote_login_callback URL registered. Saved with your other
+              changes.
+            </Text>
+          </div>
+        </PlatformAdminOnlyPanel>
         <div>
           <RequireScope scope="org:admin" level="component">
             <Button

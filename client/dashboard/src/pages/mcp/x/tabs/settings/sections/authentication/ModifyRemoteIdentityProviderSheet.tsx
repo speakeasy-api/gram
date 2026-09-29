@@ -145,6 +145,30 @@ function ModifyRemoteIdentityProviderSheetBody({
   const client = useSdkClient();
   const queryClient = useQueryClient();
 
+  // Migrating saves on its own, independent of the form below, the way the
+  // client detail page does it.
+  const migrate = useMutation({
+    mutationFn: async (clientId: string) => {
+      await client.remoteSessionClients.update({
+        updateRemoteSessionClientForm: {
+          id: clientId,
+          legacyCallbackUrl: false,
+        },
+      });
+    },
+    onSuccess: async () => {
+      await invalidateAllRemoteSessionClients(queryClient, {
+        refetchType: "all",
+      });
+      toast.success("Client migrated to the new callback URL");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to migrate client",
+      );
+    },
+  });
+
   // Issuer URL + endpoints + discovery state come from the shared hook. The
   // loaded record seeds the snapshot so the Discover/Reset slot and the
   // URL-change reset behave the same way the Attach sheet does, just with
@@ -506,6 +530,8 @@ function ModifyRemoteIdentityProviderSheetBody({
         {primaryClient && (
           <LegacyCallbackAlert
             legacyCallbackUrl={primaryClient.legacyCallbackUrl}
+            onMigrate={() => migrate.mutate(primaryClient.id)}
+            isMigrating={migrate.isPending}
           />
         )}
 

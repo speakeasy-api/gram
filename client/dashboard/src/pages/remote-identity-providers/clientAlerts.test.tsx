@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IssuerScopeOverrideAlert, LegacyCallbackAlert } from "./clientAlerts";
@@ -6,6 +6,7 @@ import { IssuerScopeOverrideAlert, LegacyCallbackAlert } from "./clientAlerts";
 const rbac = vi.hoisted(() => ({
   canReadOrg: true,
   requested: [] as string[][],
+  isPlatformAdmin: true,
 }));
 
 vi.mock("@/routes", () => ({
@@ -25,6 +26,20 @@ vi.mock("@/hooks/useRBAC", () => ({
     },
   }),
 }));
+vi.mock("@/contexts/Auth", () => ({
+  useIsPlatformAdmin: () => rbac.isPlatformAdmin,
+}));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => "https://app.example.com",
+}));
+vi.mock(
+  "../mcp/x/tabs/settings/sections/authentication/IssuerFormFields",
+  () => ({
+    remoteLoginCallbackURL: () =>
+      "https://app.example.com/mcp/remote_login_callback",
+  }),
+);
 vi.mock("react-router", () => ({
   Link: ({ to, children }: { to: string; children: ReactNode }) => (
     <a href={to}>{children}</a>
@@ -35,6 +50,7 @@ afterEach(() => {
   cleanup();
   rbac.canReadOrg = true;
   rbac.requested = [];
+  rbac.isPlatformAdmin = true;
 });
 
 const orgIssuer = (scopeOverride: string[] | null) => ({
@@ -102,13 +118,38 @@ describe("IssuerScopeOverrideAlert", () => {
 });
 
 describe("LegacyCallbackAlert", () => {
-  it("warns only for legacy callback clients", () => {
+  it("renders nothing for a current client or a non-admin", () => {
     const { rerender, container } = render(
-      <LegacyCallbackAlert legacyCallbackUrl={false} />,
+      <LegacyCallbackAlert legacyCallbackUrl={false} onMigrate={vi.fn()} />,
     );
     expect(container.textContent).toBe("");
 
-    rerender(<LegacyCallbackAlert legacyCallbackUrl />);
-    expect(screen.getByText(/uses the legacy callback URLs/)).toBeTruthy();
+    rbac.isPlatformAdmin = false;
+    rerender(<LegacyCallbackAlert legacyCallbackUrl onMigrate={vi.fn()} />);
+    expect(container.textContent).toBe("");
+  });
+
+  it("names both callback URLs and migrates only after confirmation", () => {
+    const onMigrate = vi.fn();
+    render(<LegacyCallbackAlert legacyCallbackUrl onMigrate={onMigrate} />);
+
+    expect(
+      screen.getByText("https://app.example.com/oauth/callback"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("https://app.example.com/mcp/remote_login_callback"),
+    ).toBeTruthy();
+    expect(screen.getByText(/runs in compatibility mode/)).toBeTruthy();
+    expect(screen.queryByText(/JSON/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Migrate" }));
+    expect(onMigrate).not.toHaveBeenCalled();
+
+    const confirm = screen
+      .getAllByRole("button", { name: "Migrate" })
+      .find((button) => button.closest("[role='dialog']"));
+    expect(confirm).toBeTruthy();
+    fireEvent.click(confirm!);
+    expect(onMigrate).toHaveBeenCalledTimes(1);
   });
 });

@@ -7,7 +7,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsTab } from "./SettingsTab";
 
 const mutation = vi.hoisted(() => ({ mutate: vi.fn() }));
+const platform = vi.hoisted(() => ({ isAdmin: false }));
 
+vi.mock("@/contexts/Auth", () => ({
+  useIsPlatformAdmin: () => platform.isAdmin,
+}));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ remoteIdentityProviders: { issuerDetail: {} } }),
 }));
@@ -81,6 +85,7 @@ vi.mock(
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  platform.isAdmin = false;
 });
 
 function client(
@@ -237,6 +242,52 @@ describe("organization client settings", () => {
         request: expect.objectContaining({
           updateRemoteSessionClientForm: expect.objectContaining({
             tokenEndpointAuthAudienceFormat: AuthAudienceFormat.TokenEndpoint,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("hides the legacy callback switch from everyone but platform admins", () => {
+    render(
+      <SettingsTab
+        client={client(AuthMethod.ClientSecretBasic)}
+        issuerId="issuer-1"
+      />,
+    );
+
+    expect(screen.queryByRole("switch")).toBeNull();
+  });
+
+  it("sends the legacy callback flag only when a platform admin changes it", () => {
+    platform.isAdmin = true;
+    const legacyClient = {
+      ...client(AuthMethod.ClientSecretBasic),
+      legacyCallbackUrl: true,
+    } as RemoteSessionClient;
+    render(<SettingsTab client={legacyClient} issuerId="issuer-1" />);
+
+    const toggle = screen.getByRole("switch");
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mutation.mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateRemoteSessionClientForm: expect.objectContaining({
+            legacyCallbackUrl: undefined,
+          }),
+        }),
+      }),
+    );
+
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mutation.mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateRemoteSessionClientForm: expect.objectContaining({
+            legacyCallbackUrl: false,
           }),
         }),
       }),

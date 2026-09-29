@@ -1,8 +1,14 @@
 import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { remoteSessionScopeTier } from "@/lib/sources";
+import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import { useState } from "react";
 import { Link } from "react-router";
+import { remoteLoginCallbackURL } from "../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 // IssuerScopeOverrideAlert warns beside a client's scope field that the parent
 // remote identity provider pins the requested scopes. The override replaces
@@ -65,21 +71,68 @@ function EditScopeOverrideHint({
   return <>Edit the scope override in the {settings} instead.</>;
 }
 
-// LegacyCallbackAlert flags a client registered upstream with the legacy
-// callback URL. Its sign-ins send that URL and a JSON state rather than the
-// current callback, so it can behave differently from its neighbors.
+// The callback URL clients registered before /mcp/remote_login_callback
+// existed. The server still mounts it and forwards into the current callback.
+function legacyCallbackURL(): string {
+  return `${getServerURL()}/oauth/callback`;
+}
+
+// LegacyCallbackAlert flags, to platform admins only, a client registered
+// upstream with the legacy callback URL. Migrating clears compatibility mode,
+// so sign-ins send the current callback URL, which must already be registered
+// with the identity provider.
 export function LegacyCallbackAlert({
   legacyCallbackUrl,
+  onMigrate,
+  isMigrating = false,
+  className,
 }: {
   legacyCallbackUrl: boolean;
+  onMigrate: () => void;
+  isMigrating?: boolean;
+  className?: string;
 }): JSX.Element | null {
-  if (!legacyCallbackUrl) return null;
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const [confirming, setConfirming] = useState(false);
+
+  if (!legacyCallbackUrl || !isPlatformAdmin) return null;
+
+  const current = remoteLoginCallbackURL();
 
   return (
-    <Alert variant="warning" dismissible={false} alignTop>
-      This client uses the legacy callback URLs. It was registered with the
-      identity provider under the legacy callback URL, so its sign-ins send that
-      URL and a JSON state instead of the current callback.
+    <Alert variant="warning" dismissible={false} alignTop className={className}>
+      <div className="flex flex-col items-start gap-3">
+        <span>
+          This app was registered with the{" "}
+          <span className="font-mono">{legacyCallbackURL()}</span> URL. New apps
+          use <span className="font-mono">{current}</span>. This app runs in
+          compatibility mode with the URL. Register the new URL in order to
+          migrate it.
+        </span>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setConfirming(true)}
+        >
+          <Button.Text>Migrate</Button.Text>
+        </Button>
+      </div>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Migrate to the new callback URL?"
+        description={
+          <>
+            Sign-ins will send <span className="font-mono">{current}</span>. If
+            that URL is not registered with the identity provider yet, sign-ins
+            will fail until it is.
+          </>
+        }
+        confirmLabel="Migrate"
+        confirmVariant="primary"
+        onConfirm={onMigrate}
+        isPending={isMigrating}
+      />
     </Alert>
   );
 }

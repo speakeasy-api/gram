@@ -10,8 +10,14 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
-import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import {
+  invalidateAllOrganizationRemoteSessionClient,
+  useOrganizationRemoteSessionClient,
+} from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
+import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { ScopeBadge } from "@/lib/remote-identity";
 import { LegacyCallbackAlert } from "./clientAlerts";
@@ -51,6 +57,20 @@ export default function RemoteSessionClientDetail(): JSX.Element {
     id: clientId,
   });
   const { data: issuer } = useOrganizationRemoteSessionIssuer({ id: issuerId });
+  const queryClient = useQueryClient();
+  const migrate = useUpdateOrganizationRemoteSessionClientMutation({
+    onSuccess: async () => {
+      await invalidateAllOrganizationRemoteSessionClient(queryClient, {
+        refetchType: "all",
+      });
+      toast.success("Client migrated to the new callback URL");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to migrate client",
+      );
+    },
+  });
 
   const activeTab = activeDetailTab(location.pathname, CLIENT_TABS);
   const tabHref = (tab: ClientTab) =>
@@ -130,10 +150,22 @@ export default function RemoteSessionClientDetail(): JSX.Element {
             </div>
 
             <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
-              {client?.legacyCallbackUrl && (
-                <div className="mb-6 max-w-3xl">
-                  <LegacyCallbackAlert legacyCallbackUrl />
-                </div>
+              {client && (
+                <LegacyCallbackAlert
+                  legacyCallbackUrl={client.legacyCallbackUrl}
+                  onMigrate={() =>
+                    migrate.mutate({
+                      request: {
+                        updateRemoteSessionClientForm: {
+                          id: client.id,
+                          legacyCallbackUrl: false,
+                        },
+                      },
+                    })
+                  }
+                  isMigrating={migrate.isPending}
+                  className="mb-6 max-w-3xl"
+                />
               )}
               <TabsContent value="overview" className="mt-0">
                 {client && <OverviewTab client={client} />}

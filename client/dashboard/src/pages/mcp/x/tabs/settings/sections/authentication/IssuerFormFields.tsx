@@ -32,7 +32,7 @@ import type { ReactNode } from "react";
 // Manual clients need it registered on the upstream's app out-of-band; DCR
 // and CIMD clients send/publish it automatically, so this only surfaces
 // where the operator has to do that registration by hand.
-function remoteLoginCallbackURL(): string {
+export function remoteLoginCallbackURL(): string {
   return `${getServerURL()}/mcp/remote_login_callback`;
 }
 
