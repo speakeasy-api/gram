@@ -19,8 +19,39 @@ const sdk = vi.hoisted(() => ({
   updateClient: vi.fn(async () => ({})),
 }));
 
+const rbac = vi.hoisted(() => ({
+  canWrite: true,
+  requested: [] as string[][],
+}));
+const fixture = vi.hoisted(() => ({ legacyCallbackUrl: false }));
+
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true }),
+  useRBAC: () => ({
+    hasAnyScope: (scopes: string[]) => {
+      rbac.requested.push(scopes);
+      return rbac.canWrite;
+    },
+  }),
+}));
+// The alert's own rendering is covered in clientAlerts.test.tsx; this stub
+// only exposes what the sheet passes it.
+vi.mock("@/pages/remote-identity-providers/clientAlerts", () => ({
+  IssuerScopeOverrideAlert: () => null,
+  LegacyCallbackAlert: ({
+    legacyCallbackUrl,
+    onMigrate,
+    canMigrate,
+  }: {
+    legacyCallbackUrl: boolean;
+    onMigrate: () => void;
+    canMigrate: boolean;
+  }) =>
+    legacyCallbackUrl ? (
+      <div>
+        legacy callback warning
+        {canMigrate && <button onClick={onMigrate}>Migrate</button>}
+      </div>
+    ) : null,
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
@@ -52,6 +83,7 @@ vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
         userSessionIssuerIds: ["user-issuer-1"],
         tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
         jsonWebKeySetId: "set-1",
+        legacyCallbackUrl: fixture.legacyCallbackUrl,
       },
     ],
     isLoading: false,
@@ -135,6 +167,64 @@ vi.mock("./IssuerFormFields", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  rbac.canWrite = true;
+  rbac.requested = [];
+  fixture.legacyCallbackUrl = false;
+});
+
+function renderSheet() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ModifyRemoteIdentityProviderSheet
+        open
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
+        issuer={
+          {
+            id: "issuer-1",
+            issuer: "https://idp.example.com",
+            slug: "idp",
+            clientIdMetadataDocumentSupported: false,
+          } as RemoteSessionIssuer
+        }
+      />
+    </QueryClientProvider>,
+  );
+}
+
+describe("ModifyRemoteIdentityProviderSheet legacy callback migration", () => {
+  it("migrates the client through the project endpoint with project:write", async () => {
+    fixture.legacyCallbackUrl = true;
+    renderSheet();
+
+    fireEvent.click(screen.getByRole("button", { name: "Migrate" }));
+
+    await waitFor(() =>
+      expect(sdk.updateClient).toHaveBeenCalledWith({
+        updateRemoteSessionClientForm: {
+          id: "client-1",
+          legacyCallbackUrl: false,
+        },
+      }),
+    );
+    expect(rbac.requested).toContainEqual(["project:write"]);
+  });
+
+  it("hides Migrate without project:write", () => {
+    fixture.legacyCallbackUrl = true;
+    rbac.canWrite = false;
+    renderSheet();
+
+    expect(screen.getByText(/legacy callback warning/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Migrate" })).toBeNull();
+    expect(rbac.requested).toContainEqual(["project:write"]);
+  });
 });
 
 describe("ModifyRemoteIdentityProviderSheet", () => {
