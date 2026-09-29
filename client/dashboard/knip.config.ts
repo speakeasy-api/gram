@@ -8,6 +8,8 @@ const config: KnipConfig = {
   // infer any of them. The consent page's entry is the stylesheet itself: that
   // build emits CSS for the server-rendered page and has no JS.
   entry: [
+    // Invoked by the Go registry HTTP integration test, outside Knip's import graph.
+    "scripts/registry-discovery-wire.ts",
     "src/theme-init.ts",
     "src/consent-tools/main.tsx",
     "src/consent-page/consent-page.css",
