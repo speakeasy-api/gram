@@ -74855,6 +74855,11 @@ components:
         subject:
           type: string
           description: The sub claim the issuer must assert, stored and compared exactly as supplied.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
       description: Form for admitting a workload subject and assigning its agent.
       required:
         - issuer
@@ -92081,8 +92086,10 @@ components:
       properties:
         allow_wildcard_admission:
           type: boolean
-          description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.
-          default: false
+          description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.
+        description:
+          type: string
+          description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.
         issuer:
           type: string
           description: The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
@@ -92100,6 +92107,11 @@ components:
           type: boolean
           description: Register the issuer for the selected project alone rather than the whole organization. Defaults to false.
           default: false
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
       description: Form for trusting an external workload issuer.
       required:
         - name
@@ -104056,6 +104068,11 @@ components:
         subject:
           type: string
           description: The sub claim, exactly as stored.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for finding the admitted workload. Empty rather than absent where none are set.
         updated_at:
           type: string
           format: date-time
@@ -104077,6 +104094,7 @@ components:
         - subject
         - match_kind
         - name
+        - tags
         - agent_id
         - agent_name
         - wildcard_active
@@ -104108,6 +104126,9 @@ components:
         created_at:
           type: string
           format: date-time
+        description:
+          type: string
+          description: What the platform is and what runs on it. Empty rather than absent where none is set.
         id:
           type: string
           description: The workload issuer id.
@@ -104127,6 +104148,11 @@ components:
         project_id:
           type: string
           description: The owning project id; empty for an organization-tier issuer.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.
         updated_at:
           type: string
           format: date-time
@@ -104138,7 +104164,9 @@ components:
         - name
         - issuer
         - jwks_uri
+        - description
         - allow_wildcard_admission
+        - tags
         - created_at
         - updated_at
     KillswitchCapabilityKey: {type: string, enum: [mcp_tool_calls]}

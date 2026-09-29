@@ -27,6 +27,7 @@ func admit(t *testing.T, ctx context.Context, ti *testInstance, subject string, 
 		Subject:          subject,
 		MatchKind:        matchKind,
 		Name:             nil,
+		Tags:             nil,
 		AgentID:          agentID.String(),
 		ProjectScoped:    false,
 	})
@@ -175,7 +176,8 @@ func TestAdmitSubject_RefusesTwoIssuersSharingAURLAtOneTier(t *testing.T) {
 			Name:                   name,
 			Issuer:                 anthropicIssuer,
 			JwksURI:                anthropicJWKS,
-			AllowWildcardAdmission: false,
+			Description:            nil,
+			AllowWildcardAdmission: new(false),
 			ProjectScoped:          true,
 		})
 		require.NoError(t, err)
@@ -191,9 +193,72 @@ func TestAdmitSubject_RefusesTwoIssuersSharingAURLAtOneTier(t *testing.T) {
 		Subject:          channelOne,
 		MatchKind:        string(workloadidentity.MatchKindExact),
 		Name:             nil,
+		Tags:             nil,
 		AgentID:          agentID.String(),
 		ProjectScoped:    true,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Contains(t, err.Error(), "same tier")
+}
+
+func admitWithTags(t *testing.T, ctx context.Context, ti *testInstance, agentID uuid.UUID, tags []string) (*gen.WorkloadIdentityPolicy, error) {
+	t.Helper()
+
+	policy, err := ti.service.AdmitSubject(ctx, &gen.AdmitSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Issuer:           anthropicIssuer,
+		Subject:          channelOne,
+		MatchKind:        string(workloadidentity.MatchKindExact),
+		Name:             nil,
+		Tags:             tags,
+		AgentID:          agentID.String(),
+		ProjectScoped:    false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("admit subject: %w", err)
+	}
+
+	return policy, nil
+}
+
+func TestAdmitSubject_StoresTagsTrimmedAndDeduplicated(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	policy, err := admitWithTags(t, ctx, ti, agentID, []string{"  support  ", "slack", "support"})
+	require.NoError(t, err)
+
+	require.Len(t, policy.Admissions, 1)
+	require.Equal(t, []string{"support", "slack"}, policy.Admissions[0].Tags)
+}
+
+func TestAdmitSubject_RendersNoTagsAsAnEmptyList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	policy, err := admitWithTags(t, ctx, ti, agentID, nil)
+	require.NoError(t, err)
+
+	require.Len(t, policy.Admissions, 1)
+	require.NotNil(t, policy.Admissions[0].Tags)
+	require.Empty(t, policy.Admissions[0].Tags)
+}
+
+func TestAdmitSubject_RefusesABlankTag(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	_, err := admitWithTags(t, ctx, ti, agentID, []string{"support", "   "})
+	requireOopsCode(t, err, oops.CodeInvalid)
 }

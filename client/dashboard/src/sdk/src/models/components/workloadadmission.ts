@@ -68,6 +68,10 @@ export type WorkloadAdmission = {
    * The sub claim, exactly as stored.
    */
   subject: string;
+  /**
+   * Free-form labels for finding the admitted workload. Empty rather than absent where none are set.
+   */
+  tags: Array<string>;
   updatedAt: Date;
   /**
    * False when this is a wildcard rule under an issuer that no longer permits wildcard matching. Such a rule is inert: it is stored, listed, and matches nothing.
@@ -104,6 +108,7 @@ export const WorkloadAdmission$inboundSchema: z.ZodMiniType<
     organization_id: z.string(),
     project_id: z.string(),
     subject: z.string(),
+    tags: z.array(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
