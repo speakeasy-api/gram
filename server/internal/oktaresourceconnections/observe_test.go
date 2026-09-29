@@ -159,7 +159,7 @@ func TestObserveAttempt_AuditsTransitionsAsTheSystem(t *testing.T) {
 	require.Equal(t, "verified", after["state"])
 	require.Equal(t, oktaresourceconnections.ObserverActorDisplayName, record.ActorDisplay)
 
-	// The same result again within the hour is neither rewritten nor audited.
+	// The same result advances the timestamp without another audit entry.
 	again := obs
 	again.StartedAt = obs.StartedAt.Add(time.Minute)
 	require.NoError(t, observer.ObserveAttempt(ctx, again))
@@ -169,7 +169,7 @@ func TestObserveAttempt_AuditsTransitionsAsTheSystem(t *testing.T) {
 	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.WithinDuration(t, obs.StartedAt, rows[0].OktaResourceConnection.ObservedAt.Time, time.Millisecond)
+	require.WithinDuration(t, again.StartedAt, rows[0].OktaResourceConnection.ObservedAt.Time, time.Millisecond)
 
 	// A later failure replaces verified and is audited.
 	missing := obs
@@ -245,17 +245,32 @@ func TestObserveAttempt_RefreshesAnUnchangedResultWithoutAuditing(t *testing.T) 
 	ctx, si := newTestService(t)
 	recordAgent(t, ctx, si, "wlp1")
 	observer := newObserver(t, si)
-	_, obs := confirmedUpstream(t, ctx, si, "Refresh")
+	f, obs := confirmedUpstream(t, ctx, si, "Refresh")
 	require.NoError(t, observer.ObserveAttempt(ctx, obs))
 
 	later := obs
-	later.StartedAt = obs.StartedAt.Add(2 * time.Hour)
+	later.StartedAt = obs.StartedAt.Add(2 * time.Minute)
 	require.NoError(t, observer.ObserveAttempt(ctx, later))
 	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.WithinDuration(t, later.StartedAt, rows[0].OktaResourceConnection.ObservedAt.Time, time.Millisecond)
 	count, err := audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionObserve)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+
+	// A contradictory attempt started between the successes but finished last.
+	older := obs
+	older.StartedAt = obs.StartedAt.Add(time.Minute)
+	older.Outcome = failure(identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, false)
+	require.NoError(t, observer.ObserveAttempt(ctx, older))
+	require.Equal(t, "verified", observedRow(t, ctx, si, f.serverID).State)
+	rows, err = si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "verified", rows[0].OktaResourceConnection.ObservedResult.String)
+	require.WithinDuration(t, later.StartedAt, rows[0].OktaResourceConnection.ObservedAt.Time, time.Millisecond)
+	count, err = audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionObserve)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
 }

@@ -31,9 +31,6 @@ const (
 )
 
 const (
-	// sameResultRefresh skips rewriting an unchanged result more often than this.
-	sameResultRefresh = time.Hour
-
 	// verifiedHold keeps a failure that may be one user's from replacing a
 	// verified result until no exchange has succeeded for this long.
 	verifiedHold = 24 * time.Hour
@@ -100,7 +97,8 @@ func providerRejection(r identitychaining.Reason) bool {
 }
 
 // supersedes reports whether result, from an attempt that started at
-// startedAt, replaces what rc records.
+// startedAt, replaces what rc records. Newer unchanged results also advance
+// observed_at so older contradictory attempts cannot replace them.
 func supersedes(rc repo.OktaResourceConnection, result Result, startedAt time.Time) bool {
 	if !startedAt.After(rc.UpdatedAt.Time) {
 		return false
@@ -113,8 +111,6 @@ func supersedes(rc repo.OktaResourceConnection, result Result, startedAt time.Ti
 	switch {
 	case age <= 0:
 		return false
-	case previous == result:
-		return age >= sameResultRefresh
 	case previous == ResultVerified && (result == ResultScopeNotAllowed || result == ResultDownstreamRejected):
 		return age >= verifiedHold
 	default:

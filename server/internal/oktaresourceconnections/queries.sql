@@ -247,7 +247,7 @@ WHERE organization_id = @organization_id
   AND resource = @resource
 FOR UPDATE;
 
--- The observer's unlocked first read, so an unchanged result costs no lock.
+-- The observer's unlocked first read rejects stale or held results without a lock.
 -- name: GetResourceConnection :one
 SELECT *
 FROM okta_resource_connections

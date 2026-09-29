@@ -475,7 +475,7 @@ type GetResourceConnectionParams struct {
 	Resource                     string
 }
 
-// The observer's unlocked first read, so an unchanged result costs no lock.
+// The observer's unlocked first read rejects stale or held results without a lock.
 func (q *Queries) GetResourceConnection(ctx context.Context, arg GetResourceConnectionParams) (OktaResourceConnection, error) {
 	row := q.db.QueryRow(ctx, getResourceConnection,
 		arg.OrganizationID,

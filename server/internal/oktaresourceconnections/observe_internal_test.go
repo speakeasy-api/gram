@@ -67,7 +67,7 @@ func TestSupersedes(t *testing.T) {
 	require.False(t, supersedes(row("", time.Time{}), ResultVerified, confirmed.Add(-time.Second)), "started before confirmation")
 	require.True(t, supersedes(row("", time.Time{}), ResultVerified, confirmed.Add(time.Second)))
 	require.False(t, supersedes(row(ResultVerified, observed), ResultConnectionMissing, observed.Add(-time.Second)), "older attempt")
-	require.False(t, supersedes(row(ResultVerified, observed), ResultVerified, observed.Add(59*time.Minute)), "unchanged within the hour")
+	require.True(t, supersedes(row(ResultVerified, observed), ResultVerified, observed.Add(time.Minute)), "unchanged results advance the observation timestamp")
 	require.True(t, supersedes(row(ResultVerified, observed), ResultVerified, observed.Add(time.Hour)), "unchanged refresh")
 	require.True(t, supersedes(row(ResultVerified, observed), ResultConnectionMissing, observed.Add(time.Second)), "org-level failure replaces verified")
 	require.True(t, supersedes(row(ResultVerified, observed), ResultClientAuthFailed, observed.Add(time.Second)))
@@ -75,4 +75,19 @@ func TestSupersedes(t *testing.T) {
 	require.False(t, supersedes(row(ResultVerified, observed), ResultScopeNotAllowed, observed.Add(23*time.Hour)))
 	require.True(t, supersedes(row(ResultVerified, observed), ResultDownstreamRejected, observed.Add(24*time.Hour)), "no success for a day")
 	require.True(t, supersedes(row(ResultDownstreamRejected, observed), ResultVerified, observed.Add(time.Second)), "success always replaces a failure")
+
+	for _, previous := range []Result{ResultVerified, ResultConnectionMissing} {
+		t.Run(string(previous)+" rejects older contradictory completion", func(t *testing.T) {
+			rc := row(previous, observed)
+			older := observed.Add(time.Minute)
+			newer := observed.Add(2 * time.Minute)
+			require.True(t, supersedes(rc, previous, newer))
+			rc.ObservedAt = conv.ToPGTimestamptz(newer)
+			contradictory := ResultVerified
+			if previous == ResultVerified {
+				contradictory = ResultConnectionMissing
+			}
+			require.False(t, supersedes(rc, contradictory, older))
+		})
+	}
 }
