@@ -127,6 +127,7 @@ vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
 vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
   useCreateRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.create,
+    reset: vi.fn(),
     isPending: false,
     error: null,
   }),
@@ -135,6 +136,7 @@ vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
 vi.mock("@gram/client/react-query/updateRemoteMcpServerHeader.js", () => ({
   useUpdateRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.update,
+    reset: vi.fn(),
     isPending: false,
     error: null,
   }),
@@ -143,6 +145,7 @@ vi.mock("@gram/client/react-query/updateRemoteMcpServerHeader.js", () => ({
 vi.mock("@gram/client/react-query/deleteRemoteMcpServerHeader.js", () => ({
   useDeleteRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.remove,
+    reset: vi.fn(),
     isPending: false,
     error: null,
   }),
@@ -978,6 +981,67 @@ describe("RemoteMcpIdentitySectionBody", () => {
         request: { id: "header-1" },
       }),
     );
+  });
+
+  it("discloses both removals when No Identity unlinks a provider and a credential", () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("unlinks the identity provider");
+    expect(dialog.textContent).toContain(
+      "removes the leftover static Authorization credential",
+    );
+  });
+
+  it("lets Custom Headers own a credential row it already removed", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(screen.getByText("Custom Headers"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove header Authorization" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    // One delete, from the header save: a second one from the identity side
+    // would fail on a row that is already gone.
+    await waitFor(() =>
+      expect(mocks.remove).toHaveBeenCalledWith({
+        request: { id: "header-1" },
+      }),
+    );
+    expect(mocks.remove).toHaveBeenCalledTimes(1);
   });
 
   it("links shared-source guidance to identity provider management", () => {

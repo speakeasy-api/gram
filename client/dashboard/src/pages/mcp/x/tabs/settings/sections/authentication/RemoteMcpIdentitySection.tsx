@@ -243,7 +243,14 @@ export function RemoteMcpIdentitySectionBody({
 
   const removeAgentCredential = async (): Promise<boolean> => {
     if (!authorizationHeader) return false;
-    await deleteHeader.mutateAsync({ request: { id: authorizationHeader.id } });
+    // Under No Identity the row is editable in Custom Headers. When the draft
+    // has already dropped it, the header save deletes it; deleting it here
+    // first would fail that save on a row that is gone and strand the rest.
+    const headerId = authorizationHeader.id;
+    if (!headerDrafts.drafts.some((draft) => draft.id === headerId)) {
+      return false;
+    }
+    await deleteHeader.mutateAsync({ request: { id: headerId } });
     const refreshed = await invalidateHeaders();
     if (!refreshed) {
       toast.warning("Credential removed, but headers could not be refreshed.");
@@ -564,9 +571,7 @@ export function RemoteMcpIdentitySectionBody({
                 : "Remove the shared credential?"}
             </Dialog.Title>
             <Dialog.Description>
-              {leavingUser
-                ? "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers."
-                : "Saving removes the static Authorization credential from the Remote MCP source. Requests will no longer authenticate upstream."}
+              {removalConsequences(leavingUser, leavingAgent)}
             </Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
@@ -596,4 +601,25 @@ export function RemoteMcpIdentitySectionBody({
       </Dialog>
     </>
   );
+}
+
+const UNLINK_PROVIDER_CONSEQUENCE =
+  "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers.";
+const REMOVE_CREDENTIAL_CONSEQUENCE =
+  "Saving removes the static Authorization credential from the Remote MCP source. Requests will no longer authenticate upstream.";
+
+/**
+ * What the confirmation discloses. A server can carry a bound client and a
+ * leftover static credential at once, and No Identity removes both, so the
+ * dialog has to name both.
+ */
+function removalConsequences(
+  leavingUser: boolean,
+  leavingAgent: boolean,
+): string {
+  if (leavingUser && leavingAgent) {
+    return `${UNLINK_PROVIDER_CONSEQUENCE} It also removes the leftover static Authorization credential from the Remote MCP source.`;
+  }
+  if (leavingUser) return UNLINK_PROVIDER_CONSEQUENCE;
+  return REMOVE_CREDENTIAL_CONSEQUENCE;
 }
