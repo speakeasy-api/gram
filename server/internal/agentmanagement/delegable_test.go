@@ -456,7 +456,9 @@ func TestListDelegableGrantsBatchOmitsUnavailableResources(t *testing.T) {
 	deleted := f.toolset(t, "org-delegable", "deleted")
 	// A live inventory wrapper can still refer to a deleted toolset.
 	f.modernServer(t, deleted.ProjectID, uuid.NullUUID{UUID: deleted.ID, Valid: true})
-	_, err := f.db.Exec(t.Context(), "UPDATE toolsets SET deleted_at = clock_timestamp() WHERE id = $1", deleted.ID)
+	_, err := toolsetsrepo.New(f.db).DeleteToolset(t.Context(), toolsetsrepo.DeleteToolsetParams{
+		Slug: deleted.Slug, ProjectID: deleted.ProjectID,
+	})
 	require.NoError(t, err)
 	seedOrganization(t, f.db, "org-other-delegable")
 	foreign := f.toolset(t, "org-other-delegable", "foreign")
@@ -475,6 +477,7 @@ func TestListDelegableGrantsBatchOmitsUnavailableResources(t *testing.T) {
 		{name: "missing resource", id: uuid.NewString()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			unavailable := tc.id
 			grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
 				AgentID: f.agentID.String(), ToolsetIds: []string{unavailable, live.ID.String()},
