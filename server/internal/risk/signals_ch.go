@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 )
@@ -492,6 +494,11 @@ func (s *Service) GetRiskMcpServerCounts(ctx context.Context, payload *gen.GetRi
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server finding counts").LogError(ctx, s.logger)
 	}
 
+	rows, err = s.filterMCPServerCountsByRead(ctx, authCtx, rows)
+	if err != nil {
+		return nil, err
+	}
+
 	servers := make([]*gen.RiskMcpServerCount, 0, len(rows))
 	for _, row := range rows {
 		servers = append(servers, &gen.RiskMcpServerCount{
@@ -501,4 +508,57 @@ func (s *Service) GetRiskMcpServerCounts(ctx context.Context, payload *gen.GetRi
 	}
 
 	return &gen.RiskMcpServerCountsResult{Servers: servers}, nil
+}
+
+// filterMCPServerCountsByRead keeps only the servers the caller can read.
+// Counts reveal a server's id and finding volume, so they follow the same
+// per-server mcp:read rule as the MCP server list; org:admin alone does not
+// imply it under scoped grants. A server that no longer exists is dropped.
+func (s *Service) filterMCPServerCountsByRead(ctx context.Context, authCtx *contextvalues.AuthContext, rows []chrepo.RiskMCPServerCount) ([]chrepo.RiskMCPServerCount, error) {
+	if len(rows) == 0 {
+		return rows, nil
+	}
+
+	servers, err := readmodel.New(s.db).ListMCPServers(ctx, *authCtx.ProjectID, mcpserversrepo.ListMCPServersByProjectIDParams{
+		ProjectID:            uuid.Nil,
+		RemoteMcpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TunneledMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UnproxiedMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for finding counts").LogError(ctx, s.logger)
+	}
+
+	// Grants key on the toolset id for toolset-backed servers, else the server id.
+	grantIDByServer := make(map[string]string, len(servers))
+	checks := make([]authz.Check, 0, len(servers))
+	for _, server := range servers {
+		grantID := server.ID.String()
+		if server.ToolsetID.Valid {
+			grantID = server.ToolsetID.UUID.String()
+		}
+		grantIDByServer[server.ID.String()] = grantID
+		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, grantID, authCtx.ProjectID.String()))
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[string]struct{}, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowed[id] = struct{}{}
+	}
+
+	kept := make([]chrepo.RiskMCPServerCount, 0, len(rows))
+	for _, row := range rows {
+		grantID, known := grantIDByServer[row.MCPServerID]
+		if !known {
+			continue
+		}
+		if _, ok := allowed[grantID]; ok {
+			kept = append(kept, row)
+		}
+	}
+	return kept, nil
 }
