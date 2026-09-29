@@ -163,15 +163,34 @@ export function useHeaderDrafts({
   const validationError = validateDrafts(drafts, identityMode, managedHeaderId);
   const fieldErrors = headerDraftErrors(drafts, identityMode, managedHeaderId);
   const isDirty = !draftsEqual(drafts, initialDrafts);
-  const saving =
+  const writing =
     createHeader.isPending || updateHeader.isPending || deleteHeader.isPending;
 
   const pristineSuggestions =
     suggestionsSeeded && draftsEqual(drafts, [...suggestedDrafts]);
 
+  // The commit ends with a refetch that replaces every row, and the writes
+  // settle (and are reset) before it lands. Held across the whole commit so the
+  // rows and Save stay shut until then: an edit typed meanwhile would be
+  // overwritten, and a second Save would recreate rows that still lack ids.
+  const [committing, setCommitting] = useState(false);
+  const committingRef = useRef(false);
+  const saving = writing || committing;
+
   const save = async (): Promise<boolean> => {
     if (readOnly || identityError || validationError || !isDirty) return false;
+    if (committingRef.current) return false;
+    committingRef.current = true;
+    setCommitting(true);
+    try {
+      return await commit();
+    } finally {
+      committingRef.current = false;
+      setCommitting(false);
+    }
+  };
 
+  const commit = async (): Promise<boolean> => {
     // Diff against what the server actually holds now, not the snapshot this
     // render was built from: identity commits first and refetches headers, so
     // the query may have moved underneath us.

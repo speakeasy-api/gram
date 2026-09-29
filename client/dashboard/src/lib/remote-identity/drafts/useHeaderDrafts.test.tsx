@@ -221,6 +221,49 @@ describe("useHeaderDrafts", () => {
     expect(result.current.drafts[0]?.staticValue).toBe("mine");
   });
 
+  it("stays locked until the post-save refresh lands", async () => {
+    let finishRefresh: (value: unknown) => void = () => {};
+    const result0 = headersResult([]);
+    result0.refetch = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = resolve;
+        }),
+    );
+    mocks.headers.mockReturnValue(result0);
+    const { result } = renderDrafts();
+
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        name: "X-Api-Key",
+        staticValue: "sk-test",
+      }),
+    );
+
+    let pending: Promise<boolean> = Promise.resolve(false);
+    await act(async () => {
+      pending = result.current.save();
+      await Promise.resolve();
+    });
+
+    // The writes have settled, but the refresh has not replaced the rows yet.
+    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+    expect(result.current.readOnly).toBe(true);
+    expect(result.current.saving).toBe(true);
+    await act(async () => {
+      await expect(result.current.save()).resolves.toBe(false);
+    });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      finishRefresh({ isError: false, data: { headers: [] } });
+      await pending;
+    });
+    expect(result.current.readOnly).toBe(false);
+  });
+
   it("drops the submitted values even when a write fails", async () => {
     mocks.create.mockRejectedValue(new Error("upstream rejected"));
     const { result } = renderDrafts();
