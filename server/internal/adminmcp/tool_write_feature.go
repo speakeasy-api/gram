@@ -20,13 +20,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// The first write slice deliberately supports only the reversible logs flag.
-// Additional features require their own side-effect review before joining this list.
-const writableFeature = productfeatures.FeatureLogs
+// writableFeatures is the reviewed allowlist for this write, mapped to the
+// side effects shown on the approval page. Each is a reversible flag that
+// organisation admins can also toggle themselves, and each takes the
+// mutator's generic single-row path. Additional features require their own
+// side-effect review before joining this list.
+var writableFeatures = map[productfeatures.Feature]string{ //nolint:exhaustive // Only reviewed features are writable.
+	productfeatures.FeatureLogs:                 "Updates the organisation's logs entitlement and its feature cache; records a tenant audit event when state changes.",
+	productfeatures.FeatureConsentToolFiltering: "Shows or hides the tool picker on this organisation's MCP consent screens and updates its feature cache; tool selections already stored are still enforced. Records a tenant audit event when state changes.",
+}
+
+func writableFeature(name string) (productfeatures.Feature, bool) {
+	feature := productfeatures.Feature(name)
+	_, ok := writableFeatures[feature]
+	return feature, ok
+}
 
 type PrepareFeatureInput struct {
 	OrganizationID string `json:"organization_id" jsonschema:"Exact canonical organization ID from find_organizations, not a slug"`
-	Feature        string `json:"feature" jsonschema:"Feature to change (currently logs only)"`
+	Feature        string `json:"feature" jsonschema:"Feature to change: logs or consent_tool_filtering"`
 	Enabled        bool   `json:"enabled" jsonschema:"Desired enabled state"`
 	RetryKey       string `json:"retry_key" jsonschema:"Unique retry key for this exact change (up to 128 characters)"`
 }
@@ -60,7 +72,7 @@ type featureWriter struct {
 	baseURL string
 }
 
-func (f *featureWriter) readState(ctx context.Context, tx pgx.Tx, organizationID string) (featureState, error) {
+func (f *featureWriter) readState(ctx context.Context, tx pgx.Tx, organizationID string, feature productfeatures.Feature) (featureState, error) {
 	id, err := featurerepo.New(tx).LockOrganizationMetadata(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && id != organizationID) {
 		return featureState{}, ErrStaleState
@@ -72,7 +84,7 @@ func (f *featureWriter) readState(ctx context.Context, tx pgx.Tx, organizationID
 	if err != nil {
 		return featureState{}, fmt.Errorf("read feature target: %w", err)
 	}
-	enabled, err := featurerepo.New(tx).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(writableFeature)})
+	enabled, err := featurerepo.New(tx).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
 	if err != nil {
 		return featureState{}, fmt.Errorf("read feature state: %w", err)
 	}
@@ -84,10 +96,14 @@ func (f *featureWriter) expectedState(ctx context.Context, tx pgx.Tx, proposal P
 		return featureState{}, featureChange{}, ErrProposalInvalidated
 	}
 	var change featureChange
-	if err := json.Unmarshal(proposal.Arguments, &change); err != nil || change.Feature != string(writableFeature) {
+	if err := json.Unmarshal(proposal.Arguments, &change); err != nil {
 		return featureState{}, featureChange{}, ErrProposalInvalidated
 	}
-	state, err := f.readState(ctx, tx, proposal.Target.OrganizationID)
+	feature, ok := writableFeature(change.Feature)
+	if !ok {
+		return featureState{}, featureChange{}, ErrProposalInvalidated
+	}
+	state, err := f.readState(ctx, tx, proposal.Target.OrganizationID, feature)
 	if err != nil {
 		return featureState{}, featureChange{}, err
 	}
@@ -112,8 +128,9 @@ func (f *featureWriter) prepare(ctx context.Context, input PrepareFeatureInput) 
 	if err != nil {
 		return ProposalOutput{}, err
 	}
-	if input.Feature != string(writableFeature) {
-		return ProposalOutput{}, errors.New("only the logs feature is available for this write")
+	feature, ok := writableFeature(input.Feature)
+	if !ok {
+		return ProposalOutput{}, errors.New("only the logs and consent_tool_filtering features are available for this write")
 	}
 	owner, err := ownerFromAuthority(authority)
 	if err != nil {
@@ -130,7 +147,7 @@ func (f *featureWriter) prepare(ctx context.Context, input PrepareFeatureInput) 
 		return ProposalOutput{}, fmt.Errorf("begin feature proposal preparation: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	state, err := f.readState(ctx, tx, input.OrganizationID)
+	state, err := f.readState(ctx, tx, input.OrganizationID, feature)
 	if err != nil {
 		return ProposalOutput{}, err
 	}
@@ -145,7 +162,7 @@ func (f *featureWriter) prepare(ctx context.Context, input PrepareFeatureInput) 
 	if err != nil {
 		return ProposalOutput{}, fmt.Errorf("encode expected feature state: %w", err)
 	}
-	preview, err := json.Marshal(featurePreview{OrganizationID: state.OrganizationID, Name: state.Name, Slug: state.Slug, Feature: input.Feature, Before: state.Enabled, After: input.Enabled, SideEffects: "Updates the organisation's logs entitlement and its feature cache; records a tenant audit event when state changes."})
+	preview, err := json.Marshal(featurePreview{OrganizationID: state.OrganizationID, Name: state.Name, Slug: state.Slug, Feature: input.Feature, Before: state.Enabled, After: input.Enabled, SideEffects: writableFeatures[feature]})
 	if err != nil {
 		return ProposalOutput{}, fmt.Errorf("encode feature preview: %w", err)
 	}
@@ -181,17 +198,32 @@ func enabledLabel(enabled bool) string {
 }
 
 // execution applies the stored feature change under the feature cache locks
-// and refreshes the cache once the change has committed.
+// and refreshes the cache once the change has committed. The lock is taken
+// for the stored feature before the transaction starts; the store's digest
+// check guarantees Run sees the same arguments, and Run re-checks anyway.
 func (f *featureWriter) execution(authority writeAuthority) ProposalExecution {
+	var locked productfeatures.Feature
 	var desired bool
 	return ProposalExecution{
 		Lock: func(ctx context.Context, proposal Proposal) (*pgxpool.Conn, func(), error) {
-			return f.mutator.LockFeatureChange(ctx, proposal.Target.OrganizationID, writableFeature)
+			var change featureChange
+			if err := json.Unmarshal(proposal.Arguments, &change); err != nil {
+				return nil, nil, ErrProposalInvalidated
+			}
+			feature, ok := writableFeature(change.Feature)
+			if !ok {
+				return nil, nil, ErrProposalInvalidated
+			}
+			locked = feature
+			return f.mutator.LockFeatureChange(ctx, proposal.Target.OrganizationID, feature)
 		},
 		Run: func(ctx context.Context, tx pgx.Tx, proposal Proposal) (string, json.RawMessage, error) {
 			_, change, err := f.expectedState(ctx, tx, proposal)
 			if err != nil {
 				return "", nil, err
+			}
+			if locked == "" || productfeatures.Feature(change.Feature) != locked {
+				return "", nil, ErrProposalInvalidated
 			}
 			desired = change.Enabled
 			ctx = contextvalues.SetActingSurface(ctx, "admin_mcp")
@@ -201,7 +233,7 @@ func (f *featureWriter) execution(authority writeAuthority) ProposalExecution {
 				name = authority.Staff.Email
 			}
 			actor := productfeatures.MutationActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, authority.Staff.OIDCSubject), DisplayName: &name}
-			changed, err := f.mutator.ApplyFeatureChangeTx(ctx, tx, proposal.Target.OrganizationID, writableFeature, change.Enabled, actor)
+			changed, err := f.mutator.ApplyFeatureChangeTx(ctx, tx, proposal.Target.OrganizationID, locked, change.Enabled, actor)
 			if err != nil {
 				return "", nil, fmt.Errorf("apply feature change: %w", err)
 			}
@@ -214,7 +246,7 @@ func (f *featureWriter) execution(authority writeAuthority) ProposalExecution {
 			return "succeeded", result, nil
 		},
 		AfterCommit: func(ctx context.Context, receipt Proposal) {
-			f.mutator.StoreCommittedFeatureChange(ctx, receipt.Target.OrganizationID, writableFeature, desired)
+			f.mutator.StoreCommittedFeatureChange(ctx, receipt.Target.OrganizationID, locked, desired)
 		},
 	}
 }
@@ -223,7 +255,7 @@ func registerFeatureWriteTool(server *mcp.Server, feature *featureWriter) {
 	if feature == nil || !feature.writes.OperationEnabled(OperationSetOrganizationFeature) {
 		return
 	}
-	mcp.AddTool(server, &mcp.Tool{Name: "prepare_set_organization_feature", Title: "Prepare Organization Logs Feature Change", Description: "Prepare an exact, single-organization logs entitlement change. Returns a server-stored before/after preview and a private staff approval URL. Does not make the change. Requires admin:write; only logs is currently supported."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareFeatureInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "prepare_set_organization_feature", Title: "Prepare Organization Feature Change", Description: "Prepare an exact, single-organization change to the logs or consent_tool_filtering feature. Returns a server-stored before/after preview and a private staff approval URL. Does not make the change. Requires admin:write; no other features are supported."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareFeatureInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := feature.prepare(ctx, input)
 		return nil, out, err
 	})
