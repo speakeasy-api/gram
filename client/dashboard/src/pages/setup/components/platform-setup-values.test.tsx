@@ -119,7 +119,9 @@ describe("usePlatformPlaceholders", () => {
         cursorObservabilityPlugin,
       };
       const { result } = renderHook(() => usePlatformPlaceholders());
-      const cursorStep = platform("cursor").setupSteps[0]!.eligibility!.personalSteps.find(({ code }) => code)!;
+      const cursorStep = platform(
+        "cursor",
+      ).setupSteps[0]!.eligibility!.personalSteps.find(({ code }) => code)!;
       expect(result.current.snippetFor(cursorStep)).toBeUndefined();
     },
   );
