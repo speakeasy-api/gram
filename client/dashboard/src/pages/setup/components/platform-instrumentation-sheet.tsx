@@ -196,6 +196,7 @@ export function PlatformInstrumentationSheet({
                   apiKeyPending={apiKeys.pending[activePlatform.id]}
                   apiKeyError={apiKeys.errors[activePlatform.id]}
                   onRetryApiKey={() => ensure(activePlatform)}
+                  eligibleAnswer={eligibility[activePlatform.id]}
                   onEligibilityAnswer={(answer) => {
                     setEligibility((prev) => ({
                       ...prev,

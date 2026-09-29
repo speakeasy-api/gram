@@ -57,7 +57,14 @@ const SETUP_AGENT_PLATFORMS: Array<{
           personalSteps: [
             {
               title: "Add the settings to each developer's Claude Code",
-              description: `For personal setup, each developer merges this block into ~/.claude/settings.json, preserving existing values. It registers the marketplace, enables the plugin, and configures logs, metrics, and beta traces for export. Higher-precedence policy can override user settings. The API key and token-bearing marketplace URL are secrets: share privately and never commit them. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+              description: [
+                "For personal setup, each developer merges this block into ",
+                {
+                  code: "~/.claude/settings.json",
+                  fallback: "~/.claude/settings.json",
+                },
+                `, preserving existing values. It registers the marketplace, enables the plugin, and configures logs, metrics, and beta traces for export. Higher-precedence policy can override user settings. The API key and token-bearing marketplace URL are secrets: share privately and never commit them. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+              ],
               code: CLAUDE_CODE_SETTINGS_JSON,
               language: "json",
               requiresApiKey: true,

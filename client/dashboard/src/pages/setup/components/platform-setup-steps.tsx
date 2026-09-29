@@ -133,6 +133,8 @@ interface PlatformSetupStepBodyProps {
   apiKeyError?: string;
   onRetryApiKey: () => void;
   onEligibilityAnswer: (eligible: boolean) => void;
+  /** The plan-check answer so far; the picked button is highlighted. */
+  eligibleAnswer?: boolean | null;
 }
 
 function ObservabilityDownloadButton({
@@ -174,6 +176,7 @@ export function PlatformSetupStepBody({
   apiKeyError,
   onRetryApiKey,
   onEligibilityAnswer,
+  eligibleAnswer,
 }: PlatformSetupStepBodyProps): JSX.Element {
   const { snippetFor, linkFor } = usePlatformPlaceholders();
   const [copied, setCopied] = useState(false);
@@ -216,7 +219,13 @@ export function PlatformSetupStepBody({
                   title: step.title,
                   code: part.code,
                 });
-                return value ? <code key={index}>{value}</code> : part.fallback;
+                return value ? (
+                  <code key={index} className="bg-muted px-1 py-0.5 text-xs">
+                    {value}
+                  </code>
+                ) : (
+                  part.fallback
+                );
               })}
         </p>
       )}
@@ -251,17 +260,19 @@ export function PlatformSetupStepBody({
           </p>
           <div className="flex gap-2">
             <Button
-              variant="primary"
+              variant={eligibleAnswer === true ? "primary" : "secondary"}
               size="sm"
               className="flex-1"
+              aria-pressed={eligibleAnswer === true}
               onClick={() => onEligibilityAnswer(true)}
             >
               <Button.Text>{step.eligibility.yesLabel ?? "Yes"}</Button.Text>
             </Button>
             <Button
-              variant="secondary"
+              variant={eligibleAnswer === false ? "primary" : "secondary"}
               size="sm"
               className="flex-1"
+              aria-pressed={eligibleAnswer === false}
               onClick={() => onEligibilityAnswer(false)}
             >
               <Button.Text>{step.eligibility.noLabel ?? "No"}</Button.Text>

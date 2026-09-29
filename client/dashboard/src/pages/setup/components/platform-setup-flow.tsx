@@ -87,6 +87,7 @@ export function PlatformSetupFlow({
           apiKeyPending={apiKeys.pending[platform.id]}
           apiKeyError={apiKeys.errors[platform.id]}
           onRetryApiKey={() => ensure(platform)}
+          eligibleAnswer={eligible}
           onEligibilityAnswer={(answer) => {
             setEligible(answer);
             onStatusChange("not_started");
