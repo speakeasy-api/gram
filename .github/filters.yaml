@@ -13,6 +13,9 @@ server:
 client:
   - ".github/**"
   - "client/**"
+  - "e2e/package.json"
+  - "e2e/registry-editor.config.ts"
+  - "e2e/tests/registry-editor.spec.ts"
   - "package.json"
   - "pnpm-lock.yaml"
   - "pnpm-workspace.yaml"
