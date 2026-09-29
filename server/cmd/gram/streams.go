@@ -33,6 +33,7 @@ import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	pluginsv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
+	productmetricsv1 "github.com/speakeasy-api/gram/infra/gen/gram/productmetrics/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
@@ -60,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ping"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productmetrics"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -85,6 +87,11 @@ func newStreamsCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
 	flags := []cli.Flag{
+		&cli.BoolFlag{
+			Name:    "product-metrics-consume",
+			Usage:   "Consume tenant metric contributions after topology and schema deployment",
+			EnvVars: []string{"GRAM_PRODUCT_METRICS_CONSUME"},
+		},
 		&cli.StringFlag{
 			Name:    "control-address",
 			Value:   ":8087",
@@ -675,6 +682,24 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
+				if c.Bool("product-metrics-consume") {
+					// Producer integrations register their code-owned definitions here.
+					// There are no production producers in the generic infrastructure layer.
+					registry, err := productmetrics.NewRegistry()
+					if err != nil {
+						return fmt.Errorf("register product metrics: %w", err)
+					}
+					writer, err := productmetrics.NewWriter(logger, meterProvider, registry, productmetrics.NewRepository(chConn, time.Now), time.Now)
+					if err != nil {
+						return fmt.Errorf("create product metrics writer: %w", err)
+					}
+					settings := pubsub.DefaultReceiveSettings
+					settings.MaxOutstandingMessages = productmetrics.BatchMaxMessages
+					settings.MaxOutstandingBytes = productmetrics.MaxOutstandingBytes
+					mustReceiveBatchWithResult(rg, &productmetricsv1.Contribution{}, &productmetricsv1.Processor{}, writer,
+						gcp.BatchReceiveSettings{MaxMessages: productmetrics.BatchMaxMessages, MaxBytes: productmetrics.BatchMaxBytes, MaxLatency: time.Second},
+						gcp.WithPubSubReceiveSettings(&settings), gcp.WithDiscardMalformedMessages())
+				}
 				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))
 
 				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(

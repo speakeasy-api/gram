@@ -61,8 +61,17 @@ type SubscriberBroker interface {
 }
 
 type psSubscriberOptions struct {
-	receiveSettings *pubsub.ReceiveSettings
-	logger          *slog.Logger
+	receiveSettings  *pubsub.ReceiveSettings
+	logger           *slog.Logger
+	discardMalformed bool
+}
+
+// WithDiscardMalformedMessages acknowledges protobuf decoding failures instead
+// of retrying them forever. Use only when malformed payloads are permanently
+// invalid and loss is preferable to redelivery (for example analytical inputs).
+// Successfully decoded messages retain the handler's normal ack/nack semantics.
+func WithDiscardMalformedMessages() SubscriberOption {
+	return func(opts *psSubscriberOptions) { opts.discardMalformed = true }
 }
 
 func WithPubSubReceiveSettings(settings *pubsub.ReceiveSettings) func(*psSubscriberOptions) {
@@ -197,6 +206,7 @@ type psSubscriber[M proto.Message] struct {
 	logger                *slog.Logger
 	topicProtoName        string
 	subscriptionProtoName string
+	discardMalformed      bool
 }
 
 func (s *psSubscriber[M]) Receive(ctx context.Context, f func(context.Context, M, MessageMetadata) error) error {
@@ -241,7 +251,9 @@ func (s *psSubscriber[M]) handle(ctx context.Context, m incomingMessage, f func(
 
 	msg := s.new()
 	if err := proto.Unmarshal(m.data, msg); err != nil {
-		m.nack()
+		if !s.discardMalformed {
+			m.nack()
+		}
 		return
 	}
 	if err := f(ctx, msg, MessageMetadata{
@@ -262,7 +274,8 @@ func (s *psSubscriber[M]) handle(ctx context.Context, m incomingMessage, f func(
 //
 // Ack/nack is all-or-nothing: when f returns nil the whole batch is acked; when
 // f returns an error (or panics) the whole batch is nacked. Messages that fail
-// to unmarshal are nacked individually and excluded from the batch handed to f.
+// to unmarshal are nacked individually (or discarded when configured) and excluded
+// from the batch handed to f.
 func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []M, []MessageMetadata) error) error {
 	return s.batchLoop(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
 		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
@@ -286,7 +299,8 @@ func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiv
 //
 // Returning nil from f commits the staged nacks and acks every other message.
 // Returning an error, panicking, or completing after ctx is cancelled nacks the
-// whole batch. Messages that fail to unmarshal are nacked individually and
+// whole batch. Messages that fail to unmarshal are nacked individually (or
+// discarded when configured) and
 // excluded from f.
 func (s *psSubscriber[M]) ReceiveBatchWithResult(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []BatchMessage[M]) error) error {
 	return s.batchLoopWithResult(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
@@ -507,9 +521,9 @@ func (s *psSubscriber[M]) handleBatch(ctx context.Context, batch []incomingMessa
 
 	// owned reports the messages this batch is responsible for acking/nacking.
 	// While every message decodes that is the whole batch, so we avoid copying it
-	// into a separate slice; once a poison message is dropped (and nacked
-	// individually) we switch to valid, which holds only the decoded messages so
-	// the dropped ones are not acked back into existence.
+	// into a separate slice; once a poison message is settled individually we
+	// switch to valid, which holds only the decoded messages. Dropped messages
+	// are not settled again by batch completion.
 	var valid []incomingMessage
 	dropped := false
 	owned := func() []incomingMessage {
@@ -570,7 +584,11 @@ func (s *psSubscriber[M]) handleBatch(ctx context.Context, batch []incomingMessa
 				valid = append(valid, batch[:i]...)
 				dropped = true
 			}
-			m.nack()
+			if s.discardMalformed {
+				m.ack()
+			} else {
+				m.nack()
+			}
 			continue
 		}
 		msgs = append(msgs, msg)
@@ -648,7 +666,11 @@ func (s *psSubscriber[M]) handleBatchWithResult(ctx context.Context, batch []inc
 				attr.SlogSubscriberMessageID(m.id),
 				attr.SlogSubscriberDeliveryAttempt(m.deliveryAttempt),
 			)
-			m.nack()
+			if s.discardMalformed {
+				m.ack()
+			} else {
+				m.nack()
+			}
 			result.outcomes[i].state = batchMessageUnmarshalFailed
 			continue
 		}
@@ -734,5 +756,6 @@ func PubSubSubscriberForMessage[M proto.Message](ctx context.Context, broker Sub
 		logger:                logger,
 		topicProtoName:        string(msgref.Descriptor().FullName()),
 		subscriptionProtoName: string(descriptor.FullName()),
+		discardMalformed:      opts.discardMalformed,
 	}, nil
 }
