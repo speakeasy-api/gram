@@ -147,15 +147,17 @@ export function SettingsTab({
           title="Display"
           description="Customize how this Remote MCP server appears in the dashboard and on its installation page."
         />
+        {/* Identity sits directly under Display: it is the first decision a
+            remote server needs. Upstream headers live inside its Custom
+            Headers disclosure; they are governed by the identity choice, not
+            a peer of it. */}
+        <AuthenticationSection mcpServer={mcpServer} />
         {remoteMcpServer ? (
           <Fragment key={remoteMcpServer.id}>
             <RemoteSourceNameSection remoteMcpServer={remoteMcpServer} />
             <UpstreamUrlSection remoteMcpServer={remoteMcpServer} />
           </Fragment>
         ) : null}
-        {/* Upstream headers live inside Identity's Custom Headers disclosure
-            they are governed by the identity choice, not a peer of it. */}
-        <AuthenticationSection mcpServer={mcpServer} />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
           endpoints={endpoints}

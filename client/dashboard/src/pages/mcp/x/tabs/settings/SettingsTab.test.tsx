@@ -127,11 +127,11 @@ describe("SettingsTab", () => {
       ),
     ).toEqual([
       "Display",
-      "Source Name",
-      "Upstream URL",
       // Upstream headers are the Identity panel's Custom Headers disclosure
       // not a section of their own.
       "Identity",
+      "Source Name",
+      "Upstream URL",
       "Server URL",
       "Network Access",
       "Sessions",
