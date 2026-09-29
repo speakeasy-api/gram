@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Start/restart worktree-managed Stripe sandbox webhook forwarding"
 //MISE quiet=true
