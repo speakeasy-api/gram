@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpoutbound"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -228,6 +229,8 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 }
 
 func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string) (platformmcp.ReadinessState, string) {
+	ctx, detach := mcpoutbound.DetachContext(ctx)
+	defer detach()
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 

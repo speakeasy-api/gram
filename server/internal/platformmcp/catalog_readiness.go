@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpoutbound"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -155,6 +156,8 @@ func (p *RemoteMCPReadinessProber) result(principal Principal, registrationID uu
 }
 
 func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, headers []remotemcprepo.RemoteMcpServerHeader, token string) (ReadinessState, string) {
+	ctx, detach := mcpoutbound.DetachContext(ctx)
+	defer detach()
 	ctx, cancel := context.WithTimeout(ctx, catalogProbeTimeout)
 	defer cancel()
 	httpClient := p.policy.Client()
