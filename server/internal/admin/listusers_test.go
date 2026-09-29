@@ -40,14 +40,26 @@ func TestListUsers(t *testing.T) {
 	for _, tt := range []struct {
 		q     string
 		count int64
+		ids   []string
 	}{
-		{"email:example.invalid", 5}, {"org:studio org:north", 0}, {"org:studio north", 1},
-		{`name:"100%_Literal"`, 1}, {`name:"Same Name"`, 2}, {"org:removed", 0}, {"org:duplicate org:users", 1},
+		{"email:example.invalid", 5, []string{"user_c", "user_d", "user_a", "user_b", "user_zero"}},
+		{"org:studio org:north", 0, []string{}},
+		{"org:studio north", 1, []string{"user_a"}},
+		{`name:"100%_Literal"`, 1, []string{"user_a"}},
+		{`name:"Same Name"`, 2, []string{"user_c", "user_d"}},
+		{"org:removed", 0, []string{}},
+		{"org:duplicate org:users", 1, []string{"user_a"}},
 	} {
 		t.Run(tt.q, func(t *testing.T) {
 			r, e := svc.ListUsers(ctx, &gen.ListUsersPayload{Q: &tt.q})
 			require.NoError(t, e)
 			require.Equal(t, tt.count, r.Total)
+			require.Len(t, r.Users, len(tt.ids))
+			ids := make([]string, 0, len(r.Users))
+			for _, user := range r.Users {
+				ids = append(ids, user.ID)
+			}
+			require.Equal(t, tt.ids, ids)
 		})
 	}
 	all, e := svc.ListUsers(ctx, &gen.ListUsersPayload{})
