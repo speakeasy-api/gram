@@ -11,7 +11,7 @@ import (
 type wireQuestion struct {
 	Type         string           `json:"type"`
 	Instructions classifier.Entry `json:"instructions"`
-	Criteria     any              `json:"criteria"`
+	Criteria     any              `json:"criteria,omitempty"`
 }
 
 type plannedQuestion struct {
@@ -65,7 +65,20 @@ func compile(q classifier.Question) (wireQuestion, error) {
 	if q.Noul != nil {
 		wire.Type = "noul"
 		wire.Instructions = q.Noul.Instructions
-		wire.Criteria = map[string]classifier.Entry{"true": q.Noul.Positive, "false": q.Noul.Negative}
+		positive, _ := json.Marshal(q.Noul.Positive)
+		negative, _ := json.Marshal(q.Noul.Negative)
+		// OpenRouter permits omitted Noul criteria, but present criteria require
+		// both entries to be non-null. Empty strings express unspecified guidance.
+		if string(positive) != "null" || string(negative) != "null" {
+			p, n := q.Noul.Positive, q.Noul.Negative
+			if string(positive) == "null" {
+				p = classifier.Text("")
+			}
+			if string(negative) == "null" {
+				n = classifier.Text("")
+			}
+			wire.Criteria = map[string]classifier.Entry{"true": p, "false": n}
+		}
 		return wire, nil
 	}
 	var options []classifier.Option
