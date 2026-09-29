@@ -21,6 +21,8 @@ const config: KnipConfig = {
     "aube",
     // Invoked from the prebuild script to build cel.wasm; not on the dep tree.
     "mise",
+    // System interpreter the Cursor install-command test spawns; not on the dep tree.
+    "python3",
   ],
   ignore: [
     // Global ambient declarations (FIXME<M> escape-hatch + JSX namespace
