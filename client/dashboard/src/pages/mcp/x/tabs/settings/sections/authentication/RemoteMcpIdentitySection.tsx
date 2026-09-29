@@ -11,7 +11,6 @@ import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
-import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
@@ -232,7 +231,10 @@ export function RemoteMcpIdentitySectionBody({
   const leavingAgent =
     (actualMode === "agent" && selectedMode !== "agent") ||
     (selectedMode === "none" && !!authorizationHeader);
-  const destructive = leavingUser || leavingAgent;
+  // Staying on User but saving a different client swaps out the one people
+  // signed in through, so they all have to sign in again.
+  const replacingClient = selectedMode === "user" && userDraft.replacesClient;
+  const destructive = leavingUser || leavingAgent || replacingClient;
 
   const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
@@ -502,19 +504,13 @@ export function RemoteMcpIdentitySectionBody({
               <UserIdentityRow
                 draft={userDraft}
                 disabled={identityReadOnly || userDraft.saving}
-                manageHref={routes.remoteIdentityProviders.href()}
                 createHref={routes.remoteIdentityProviders.href()}
-                inspectHref={mcpServerTabHref(routes, target.slug, "inspect")}
-                providerHref={(issuerId) =>
-                  routes.remoteIdentityProviders.issuerDetail.href(issuerId)
-                }
                 clientHref={(issuerId, clientId) =>
                   routes.remoteIdentityProviders.clientDetail.href(
                     issuerId,
                     clientId,
                   )
                 }
-                onSwitchToAgent={() => setSelectedMode("agent")}
               />
             </AuthRow>
           ) : null}
@@ -598,12 +594,10 @@ export function RemoteMcpIdentitySectionBody({
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>
-              {leavingUser
-                ? `Stop signing users in through ${upstreamName}?`
-                : "Remove the shared credential?"}
+              {confirmTitle(leavingUser, replacingClient, upstreamName)}
             </Dialog.Title>
             <Dialog.Description>
-              {removalConsequences(leavingUser, leavingAgent)}
+              {removalConsequences(leavingUser, leavingAgent, replacingClient)}
             </Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
@@ -637,6 +631,8 @@ export function RemoteMcpIdentitySectionBody({
 
 const UNLINK_PROVIDER_CONSEQUENCE =
   "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers.";
+const REPLACE_CLIENT_CONSEQUENCE =
+  "Saving replaces the client this server uses. Everyone signed in through the current one will have to sign in again. The old client stays available to other servers.";
 const REMOVE_CREDENTIAL_CONSEQUENCE =
   "Saving removes the static Authorization credential from the Remote MCP source. Requests will no longer authenticate upstream.";
 
@@ -648,10 +644,22 @@ const REMOVE_CREDENTIAL_CONSEQUENCE =
 function removalConsequences(
   leavingUser: boolean,
   leavingAgent: boolean,
+  replacingClient: boolean,
 ): string {
+  if (replacingClient) return REPLACE_CLIENT_CONSEQUENCE;
   if (leavingUser && leavingAgent) {
     return `${UNLINK_PROVIDER_CONSEQUENCE} ${REMOVE_CREDENTIAL_CONSEQUENCE}`;
   }
   if (leavingUser) return UNLINK_PROVIDER_CONSEQUENCE;
   return REMOVE_CREDENTIAL_CONSEQUENCE;
+}
+
+function confirmTitle(
+  leavingUser: boolean,
+  replacingClient: boolean,
+  upstreamName: string,
+): string {
+  if (replacingClient) return "Replace the connected client?";
+  if (leavingUser) return `Stop signing users in through ${upstreamName}?`;
+  return "Remove the shared credential?";
 }
