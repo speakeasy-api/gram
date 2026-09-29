@@ -820,3 +820,47 @@ export function resumeStripeSubscription(
     organizationID,
   );
 }
+
+export type AdminUserOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  disabled_at?: string;
+};
+export type AdminUser = {
+  id: string;
+  display_name: string;
+  email: string;
+  last_login?: string;
+  organizations: AdminUserOrganization[];
+  organization_count: number;
+};
+export type AdminListUsersResult = {
+  users: AdminUser[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export type AdminListUserOrganizationsResult = {
+  organizations: AdminUserOrganization[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export function listUsers(
+  params: { q?: string; page?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<AdminListUsersResult> {
+  return gramAdminFetch(`/admin/users.list?${toSearchParams(params)}`, {
+    signal,
+  });
+}
+export function listUserOrganizations(
+  params: { user_id: string; page?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<AdminListUserOrganizationsResult> {
+  return gramAdminFetch(
+    `/admin/users.organizations.list?${toSearchParams(params)}`,
+    { signal },
+  );
+}
