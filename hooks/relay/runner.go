@@ -196,6 +196,12 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	finalCreds := c
 	state := stateReady
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
+	if res.statusCode == 0 {
+		// status=0 alone cannot distinguish a dropped packet from a DNS
+		// failure or an exhausted budget, and that distinction is the whole
+		// question when a user reports intermittent hook failures.
+		r.debugf("event=%s unreachable: %s", agenthooks.EventOf(typed).NativeName, res.decision.Message)
+	}
 	if res.authRejected && c.Source == credEnv {
 		// The configured key is authoritative and a re-login can never replace
 		// it, so name it in the failure instead of pointing at the cache flow.
