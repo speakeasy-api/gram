@@ -112,6 +112,12 @@ function MemberRoleLink({
   );
 }
 
+/** A role name in the Team page's overflow tooltip, noting a mapped role. */
+function overflowRoleLabel(name: string, fromDirectory: boolean): string {
+  if (!fromDirectory) return name;
+  return `${name} (directory mapping)`;
+}
+
 type MemberMenuDeps = {
   accessMemberByUserId: Map<string, AccessMember>;
   adminCount: number;
@@ -669,7 +675,14 @@ function TeamInner() {
             ))}
             {overflow.length > 0 && (
               <SimpleTooltip
-                tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
+                tooltip={overflow
+                  .map((id) =>
+                    overflowRoleLabel(
+                      getRoleName(id),
+                      !accessMember?.roleIds.includes(id),
+                    ),
+                  )
+                  .join(", ")}
               >
                 <span className="text-muted-foreground cursor-pointer border px-1.5 py-0.5 text-xs">
                   +{overflow.length} more
