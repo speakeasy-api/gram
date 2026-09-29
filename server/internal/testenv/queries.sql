@@ -1737,3 +1737,28 @@ WHERE locks.locktype = 'advisory' AND locks.granted
 -- name: BackendPIDFixture :one
 -- Identify a holder exposed only through a transaction-enlisted query interface.
 SELECT pg_backend_pid();
+
+-- name: InsertDeploymentAssetFixture :exec
+INSERT INTO assets (id, project_id, organization_id, name, url, kind, content_type, content_length, sha256)
+VALUES (@id, @project_id, @organization_id, @name, @url, @kind, @content_type, 1, @sha256);
+
+-- name: InsertCompletedDeploymentFixture :exec
+WITH created AS (
+  INSERT INTO deployments (id, user_id, project_id, organization_id, idempotency_key)
+  VALUES (@id, @user_id, @project_id, @organization_id, @idempotency_key)
+  RETURNING id
+)
+INSERT INTO deployment_statuses (deployment_id, status)
+SELECT id, 'completed' FROM created;
+
+-- name: InsertDeploymentFunctionFixture :exec
+INSERT INTO deployments_functions (id, deployment_id, asset_id, name, slug, runtime)
+VALUES (@id, @deployment_id, @asset_id, @name, @slug, @runtime);
+
+-- name: InsertFunctionToolDefinitionFixture :exec
+INSERT INTO function_tool_definitions (tool_urn, project_id, deployment_id, function_id, runtime, name, description)
+VALUES (@tool_urn, @project_id, @deployment_id, @function_id, @runtime, @name, @description);
+
+-- name: InsertToolsetVersionFixture :exec
+INSERT INTO toolset_versions (toolset_id, version, tool_urns)
+VALUES (@toolset_id, @version, @tool_urns::TEXT[]);

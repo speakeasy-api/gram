@@ -2198,6 +2198,35 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 	return id, err
 }
 
+const insertCompletedDeploymentFixture = `-- name: InsertCompletedDeploymentFixture :exec
+WITH created AS (
+  INSERT INTO deployments (id, user_id, project_id, organization_id, idempotency_key)
+  VALUES ($1, $2, $3, $4, $5)
+  RETURNING id
+)
+INSERT INTO deployment_statuses (deployment_id, status)
+SELECT id, 'completed' FROM created
+`
+
+type InsertCompletedDeploymentFixtureParams struct {
+	ID             uuid.UUID
+	UserID         string
+	ProjectID      uuid.UUID
+	OrganizationID string
+	IdempotencyKey string
+}
+
+func (q *Queries) InsertCompletedDeploymentFixture(ctx context.Context, arg InsertCompletedDeploymentFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertCompletedDeploymentFixture,
+		arg.ID,
+		arg.UserID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.IdempotencyKey,
+	)
+	return err
+}
+
 const insertContentPartRiskResultFixture = `-- name: InsertContentPartRiskResultFixture :exec
 INSERT INTO risk_results (
   id, project_id, organization_id, risk_policy_id, risk_policy_version,
@@ -2261,6 +2290,62 @@ func (q *Queries) InsertDemoSeedPrincipalGrantFixture(ctx context.Context, arg I
 	return grant_json, err
 }
 
+const insertDeploymentAssetFixture = `-- name: InsertDeploymentAssetFixture :exec
+INSERT INTO assets (id, project_id, organization_id, name, url, kind, content_type, content_length, sha256)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8)
+`
+
+type InsertDeploymentAssetFixtureParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	Name           string
+	Url            string
+	Kind           string
+	ContentType    string
+	Sha256         string
+}
+
+func (q *Queries) InsertDeploymentAssetFixture(ctx context.Context, arg InsertDeploymentAssetFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeploymentAssetFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Url,
+		arg.Kind,
+		arg.ContentType,
+		arg.Sha256,
+	)
+	return err
+}
+
+const insertDeploymentFunctionFixture = `-- name: InsertDeploymentFunctionFixture :exec
+INSERT INTO deployments_functions (id, deployment_id, asset_id, name, slug, runtime)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertDeploymentFunctionFixtureParams struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
+	Runtime      string
+}
+
+func (q *Queries) InsertDeploymentFunctionFixture(ctx context.Context, arg InsertDeploymentFunctionFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDeploymentFunctionFixture,
+		arg.ID,
+		arg.DeploymentID,
+		arg.AssetID,
+		arg.Name,
+		arg.Slug,
+		arg.Runtime,
+	)
+	return err
+}
+
 const insertDeviceAgentDeviceSyncFixture = `-- name: InsertDeviceAgentDeviceSyncFixture :exec
 INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname, first_seen_at, last_seen_at)
 VALUES ($1, $2, $3, NULLIF($4::text, ''), $5, $5)
@@ -2298,6 +2383,34 @@ type InsertDeviceAgentSyncFixtureParams struct {
 
 func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDeviceAgentSyncFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertDeviceAgentSyncFixture, arg.OrganizationID, arg.Email, arg.SeenAt)
+	return err
+}
+
+const insertFunctionToolDefinitionFixture = `-- name: InsertFunctionToolDefinitionFixture :exec
+INSERT INTO function_tool_definitions (tool_urn, project_id, deployment_id, function_id, runtime, name, description)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type InsertFunctionToolDefinitionFixtureParams struct {
+	ToolUrn      urn.Tool
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+}
+
+func (q *Queries) InsertFunctionToolDefinitionFixture(ctx context.Context, arg InsertFunctionToolDefinitionFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertFunctionToolDefinitionFixture,
+		arg.ToolUrn,
+		arg.ProjectID,
+		arg.DeploymentID,
+		arg.FunctionID,
+		arg.Runtime,
+		arg.Name,
+		arg.Description,
+	)
 	return err
 }
 
@@ -2605,6 +2718,22 @@ func (q *Queries) InsertRemoteSessionEMABindingFixture(ctx context.Context, arg 
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertToolsetVersionFixture = `-- name: InsertToolsetVersionFixture :exec
+INSERT INTO toolset_versions (toolset_id, version, tool_urns)
+VALUES ($1, $2, $3::TEXT[])
+`
+
+type InsertToolsetVersionFixtureParams struct {
+	ToolsetID uuid.UUID
+	Version   int64
+	ToolUrns  []string
+}
+
+func (q *Queries) InsertToolsetVersionFixture(ctx context.Context, arg InsertToolsetVersionFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertToolsetVersionFixture, arg.ToolsetID, arg.Version, arg.ToolUrns)
+	return err
 }
 
 const insertUserFixture = `-- name: InsertUserFixture :exec
