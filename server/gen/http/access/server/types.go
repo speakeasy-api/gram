@@ -311,8 +311,12 @@ type UpdateMemberRolesResponseBody struct {
 	Email string `form:"email" json:"email" xml:"email"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// All role IDs assigned to this member.
+	// Role IDs assigned directly to this member.
 	RoleIds []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
+	// Role IDs this member holds through directory role mappings. They follow the
+	// member's directory groups and attributes, so updating the member's roles
+	// does not change them.
+	DirectoryRoleIds []string `form:"directory_role_ids" json:"directory_role_ids" xml:"directory_role_ids"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
 	// Department name as reported by the identity provider.
@@ -6370,8 +6374,12 @@ type AccessMemberResponseBody struct {
 	Email string `form:"email" json:"email" xml:"email"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// All role IDs assigned to this member.
+	// Role IDs assigned directly to this member.
 	RoleIds []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
+	// Role IDs this member holds through directory role mappings. They follow the
+	// member's directory groups and attributes, so updating the member's roles
+	// does not change them.
+	DirectoryRoleIds []string `form:"directory_role_ids" json:"directory_role_ids" xml:"directory_role_ids"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
 	// Department name as reported by the identity provider.
@@ -6388,6 +6396,12 @@ type ListRoleGrantResponseBody struct {
 	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
+	// The subset of this scope's selectors granted to the calling user by name
+	// rather than through a role or everyone. For allow scopes it holds only
+	// selectors naming a concrete resource, which outrank blocks inherited from
+	// roles or everyone on that resource. For blocked scopes it holds the caller's
+	// own blocks, which always apply. Omitted when empty.
+	DirectSelectors []*SelectorResponseBody `form:"direct_selectors,omitempty" json:"direct_selectors,omitempty" xml:"direct_selectors,omitempty"`
 }
 
 // ShadowMCPInventoryServerResponseBody is used to define fields on response
@@ -7089,6 +7103,14 @@ func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRol
 		}
 	} else {
 		body.RoleIds = []string{}
+	}
+	if res.DirectoryRoleIds != nil {
+		body.DirectoryRoleIds = make([]string, len(res.DirectoryRoleIds))
+		for i, val := range res.DirectoryRoleIds {
+			body.DirectoryRoleIds[i] = val
+		}
+	} else {
+		body.DirectoryRoleIds = []string{}
 	}
 	if res.Groups != nil {
 		body.Groups = make([]string, len(res.Groups))

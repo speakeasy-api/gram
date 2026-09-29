@@ -96,14 +96,10 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// normalizeResourceIdentifier canonicalizes a resource identifier from a
-// management payload: an absolute http(s) URI carrying no fragment at all
-// (RFC 8707), stored with any trailing slash trimmed from its path so one
-// server is one routing identity. Blank input stays blank, meaning unset or
-// clear per the calling form's semantics; anything else that is not a usable
-// identifier is an error rather than a silent clear. The value names a host
-// inside the customer's network and is never dialed, so it is deliberately
-// not checked against the outbound URL policy that refuses private hosts.
+// normalizeResourceIdentifier trims surrounding whitespace and validates an
+// absolute http(s) URI without a fragment. The identifier is otherwise preserved
+// for exact JWT audience matching. Blank input unsets or clears the identifier.
+// Gram never dials this address, so private hosts are allowed.
 func normalizeResourceIdentifier(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -117,16 +113,10 @@ func normalizeResourceIdentifier(raw string) (string, error) {
 	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.Contains(trimmed, "#") {
 		return "", errors.New("resource identifier must be an absolute http(s) URI without a fragment")
 	}
-	// Trim the path only: a trailing slash inside a query is data, not syntax.
-	// Work in the escaped form so an encoded separator survives — decoding it
-	// would collapse two distinct identifiers onto one routing identity.
-	escaped := strings.TrimRight(u.EscapedPath(), "/")
-	decoded, err := url.PathUnescape(escaped)
-	if err != nil {
-		return "", fmt.Errorf("unescape resource identifier path: %w", err)
+	if u.String() != trimmed || strings.ContainsAny(trimmed, " \t\r\n") {
+		return "", errors.New("resource identifier must be a percent-encoded URI")
 	}
-	u.Path, u.RawPath = decoded, escaped
-	return u.String(), nil
+	return trimmed, nil
 }
 
 func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPayload) (*gen.CreateTunneledMcpServerResult, error) {

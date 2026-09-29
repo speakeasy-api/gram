@@ -1051,6 +1051,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		},
 		AudiencePrincipals:   audiencePrincipals,
 		AudienceChanged:      audienceUpdateRequested,
+		AudienceDelta:        nil,
 		AllowedURLs:          shadowMCPAllowedURLs,
 		AllowedURLsSet:       payload.ShadowMcpAllowedUrls != nil,
 		BlockedURLs:          shadowMCPBlockedURLs,
@@ -2149,6 +2150,8 @@ func (s *Service) GetRiskRuleBreakdown(ctx context.Context, payload *gen.GetRisk
 		FromTime:  window.from,
 		ToTime:    window.to,
 		Category:  payload.Category,
+		// The dashboard renders every rule; a NULL limit is LIMIT ALL.
+		PageLimit: pgtype.Int4{Int32: 0, Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list rule breakdown").LogError(ctx, s.logger)

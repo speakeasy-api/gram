@@ -14,7 +14,7 @@ export type CreateTunneledMcpServerForm = {
    */
   name: string;
   /**
-   * RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.
+   * RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.
    */
   resourceIdentifier?: string | undefined;
 };

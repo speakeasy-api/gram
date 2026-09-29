@@ -51,12 +51,12 @@ export function CatalogDetailRoot(): JSX.Element {
   return <Outlet />;
 }
 
-// The endpoint a setup guide is looked up by. Gram installs the streamable-HTTP
-// remote, so that is the URL a guide is most likely keyed on, but guides are
-// published per server rather than per transport: an entry that only lists an
-// SSE endpoint still has one, and would find it under no other key when the
-// guide publishes no registry alias.
-function setupGuideLookupUrl(server: PulseMCPServer): string | undefined {
+// The server's own endpoint: the one shown as its Server URL and the one a
+// setup guide is looked up by. Gram installs the streamable-HTTP remote, so
+// that comes first, but guides are published per server rather than per
+// transport: an entry that only lists an SSE endpoint still has one, and would
+// find it under no other key when the guide publishes no registry alias.
+function primaryRemoteUrl(server: PulseMCPServer): string | undefined {
   return (
     filterToHttpRemotes(server).remotes?.[0]?.url ?? server.remotes?.[0]?.url
   );
@@ -143,6 +143,7 @@ export default function CatalogDetail(): JSX.Element {
 
   const meta = server?.meta?.["com.pulsemcp/server"];
   const versionMeta = server?.meta?.["com.pulsemcp/server-version"];
+  const serverUrl = server ? primaryRemoteUrl(server) : undefined;
   const isOfficial = meta?.isOfficial;
   const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
   const displayName =
@@ -248,7 +249,7 @@ export default function CatalogDetail(): JSX.Element {
       <Page.Body>
         <SetupGuideCallout
           registrySpecifier={server.registrySpecifier}
-          serverUrl={setupGuideLookupUrl(server)}
+          serverUrl={serverUrl}
           iconUrl={server.iconUrl}
         />
         {/* Container query, not a viewport one: the side panel narrows this
@@ -450,6 +451,23 @@ export default function CatalogDetail(): JSX.Element {
                     </DetailGroup>
 
                     <DetailGroup label="Registry">
+                      {serverUrl ? (
+                        <DetailRow label="Server URL">
+                          <div className="flex min-w-0 items-center gap-1">
+                            <Text
+                              className="truncate font-mono text-xs"
+                              title={serverUrl}
+                            >
+                              {serverUrl.replace(/^https?:\/\//, "")}
+                            </Text>
+                            <CopyButton
+                              text={serverUrl}
+                              size="xs"
+                              tooltip="Copy server URL"
+                            />
+                          </div>
+                        </DetailRow>
+                      ) : null}
                       <DetailRow label="Registry">
                         <div className="flex min-w-0 items-center gap-1">
                           <Text className="truncate font-mono text-xs">

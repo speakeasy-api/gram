@@ -252,21 +252,8 @@ func NewActivities(
 	remoteSessionEnricher *remotesessions.SessionEnricher,
 	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
 ) *Activities {
-	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
-	// connection get a nil repo and the activity fails loudly if scheduled.
-	var spendRulesCH *spendrulesch.Queries
-	if chConn != nil {
-		spendRulesCH = spendrulesch.New(chConn)
-	}
-
-	// The exclusion reconcile propagates flag changes into ClickHouse;
-	// workers without a ClickHouse connection — or with the kill switch set —
-	// get a nil repo and the activity degrades to its Postgres phases with a
-	// loud log.
-	var riskFindingsCH *riskchrepo.Queries
-	if chConn != nil && !disableRiskRetroReconcile {
-		riskFindingsCH = riskchrepo.New(chConn)
-	}
+	spendRulesCH := spendrulesch.New(chConn)
+	riskFindingsCH := riskchrepo.New(chConn)
 
 	riskRecorder := metering.NewRiskRecorder(publishers.MeterReadings)
 
@@ -367,7 +354,7 @@ func NewActivities(
 	// worker's own clients; workers wired without the full ingredient set
 	// (test workers) get a nil activity and no schedule.
 	var mcpApprovalRecheck *activities.McpApprovalRecheck
-	if db != nil && guardianPolicy != nil && telemetryRepo != nil && mcpRegistryClient != nil && features != nil && auditLogger != nil {
+	if db != nil && guardianPolicy != nil && mcpRegistryClient != nil && features != nil && auditLogger != nil {
 		recheckProber := remoteprobe.New(logger, guardianPolicy)
 		mcpApprovalRecheck = activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewAssembler(
 			packagemeta.NewClient(guardianPolicy.PooledClient()),
@@ -387,7 +374,7 @@ func NewActivities(
 	}
 
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
-	if db != nil && telemetryRepo != nil && chatClient != nil && skillSuggestionSignaler != nil && judgeRateLimiter != nil {
+	if db != nil && chatClient != nil && skillSuggestionSignaler != nil && judgeRateLimiter != nil {
 		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
 		if err != nil {
 			panic(fmt.Errorf("new skill suggestion engine: %w", err))
@@ -457,7 +444,7 @@ func NewActivities(
 		fetchUnanalyzedMessages:          risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                     analyzeBatch,
 		markMessagesAnalyzed:             risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
-		reconcileExclusion:               risk_exclusion.NewReconcile(logger, tracerProvider, meterProvider, db, riskFindingsCH, riskFingerprinter, assetStorage),
+		reconcileExclusion:               risk_exclusion.NewReconcile(logger, tracerProvider, meterProvider, db, riskFindingsCH, riskFingerprinter, assetStorage, disableRiskRetroReconcile),
 		skillObservationReconciler:       activities.NewSkillObservationReconciler(db, telemetryRepo),
 		cleanRiskPolicyResults:           risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:            activities.NewAdmitAssistantThreads(assistantsCore),

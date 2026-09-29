@@ -244,8 +244,12 @@ type AccessMember struct {
 	Email string
 	// Avatar URL.
 	PhotoURL *string
-	// All role IDs assigned to this member.
+	// Role IDs assigned directly to this member.
 	RoleIds []string
+	// Role IDs this member holds through directory role mappings. They follow the
+	// member's directory groups and attributes, so updating the member's roles
+	// does not change them.
+	DirectoryRoleIds []string
 	// When the member joined the organization.
 	JoinedAt string
 	// Department name as reported by the identity provider.
@@ -709,6 +713,12 @@ type ListRoleGrant struct {
 	SubScopes []string
 	// Selector constraints. Null means unrestricted.
 	Selectors []*Selector
+	// The subset of this scope's selectors granted to the calling user by name
+	// rather than through a role or everyone. For allow scopes it holds only
+	// selectors naming a concrete resource, which outrank blocks inherited from
+	// roles or everyone on that resource. For blocked scopes it holds the caller's
+	// own blocks, which always apply. Omitted when empty.
+	DirectSelectors []*Selector
 }
 
 // ListRolesPayload is the payload type of the access service listRoles method.

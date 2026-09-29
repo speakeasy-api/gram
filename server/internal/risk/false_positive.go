@@ -57,6 +57,107 @@ func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
+// FalsePositiveMutation names one manual dismissal or restore batch inside a
+// project. IDs must already be parsed and deduplicated. Ids that do not exist
+// in the project, or that are already in the requested state, match no row
+// and are skipped; the rows returned by the core are exactly the ones that
+// changed.
+type FalsePositiveMutation struct {
+	// OrganizationID scopes the audit entries and the ClickHouse mirror.
+	OrganizationID string
+
+	// ProjectID bounds the UPDATE: ids from another project never match.
+	ProjectID uuid.UUID
+
+	// IDs are the risk_results row ids to dismiss or restore.
+	IDs []uuid.UUID
+
+	// Reason is the optional free-text dismissal reason. Restores ignore it.
+	Reason *string
+
+	// Actor is the user attributed on every audit entry.
+	Actor urn.Principal
+
+	// ActorDisplayName is shown beside the actor in the audit log when known.
+	ActorDisplayName *string
+}
+
+// FalsePositiveCore applies manual false-positive marks and restores inside a
+// caller-owned transaction: the UPDATE, one audit entry per changed row, and
+// the ClickHouse mirror enqueue commit together with whatever else the caller
+// writes. The risk management API and the Platform MCP share it so both
+// surfaces dismiss and restore findings identically.
+type FalsePositiveCore struct {
+	audit *audit.Logger
+}
+
+func NewFalsePositiveCore(auditLogger *audit.Logger) *FalsePositiveCore {
+	return &FalsePositiveCore{audit: auditLogger}
+}
+
+// MarkInTransaction dismisses the still-active rows among mutation.IDs and
+// returns the rows it changed.
+func (c *FalsePositiveCore) MarkInTransaction(ctx context.Context, dbtx pgx.Tx, mutation FalsePositiveMutation) ([]repo.RiskResult, error) {
+	marked, err := repo.New(dbtx).MarkRiskResultsFalsePositive(ctx, repo.MarkRiskResultsFalsePositiveParams{
+		ProjectID: mutation.ProjectID,
+		Ids:       mutation.IDs,
+		Reason:    nullableText(payloadReason(mutation.Reason)),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mark risk results false positive: %w", err)
+	}
+
+	for _, row := range marked {
+		if err := c.audit.LogRiskResultDismiss(ctx, dbtx, audit.LogRiskResultDismissEvent{
+			OrganizationID:   mutation.OrganizationID,
+			ProjectID:        mutation.ProjectID,
+			Actor:            mutation.Actor,
+			ActorDisplayName: mutation.ActorDisplayName,
+			ActorSlug:        nil,
+			RiskResultID:     row.ID,
+		}); err != nil {
+			return nil, fmt.Errorf("log risk result dismiss: %w", err)
+		}
+	}
+
+	if err := enqueueFalsePositiveMirror(ctx, dbtx, mutation.OrganizationID, marked); err != nil {
+		return nil, fmt.Errorf("record dismissal in the findings store: %w", err)
+	}
+
+	return marked, nil
+}
+
+// UnmarkInTransaction restores the dismissed rows among mutation.IDs and
+// returns the rows it changed.
+func (c *FalsePositiveCore) UnmarkInTransaction(ctx context.Context, dbtx pgx.Tx, mutation FalsePositiveMutation) ([]repo.RiskResult, error) {
+	restored, err := repo.New(dbtx).UnmarkRiskResultsFalsePositive(ctx, repo.UnmarkRiskResultsFalsePositiveParams{
+		ProjectID: mutation.ProjectID,
+		Ids:       mutation.IDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unmark risk results false positive: %w", err)
+	}
+
+	for _, row := range restored {
+		if err := c.audit.LogRiskResultRestore(ctx, dbtx, audit.LogRiskResultRestoreEvent{
+			OrganizationID:   mutation.OrganizationID,
+			ProjectID:        mutation.ProjectID,
+			Actor:            mutation.Actor,
+			ActorDisplayName: mutation.ActorDisplayName,
+			ActorSlug:        nil,
+			RiskResultID:     row.ID,
+		}); err != nil {
+			return nil, fmt.Errorf("log risk result restore: %w", err)
+		}
+	}
+
+	if err := enqueueFalsePositiveMirror(ctx, dbtx, mutation.OrganizationID, restored); err != nil {
+		return nil, fmt.Errorf("record restore in the findings store: %w", err)
+	}
+
+	return restored, nil
+}
+
 func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen.MarkRiskResultsFalsePositivePayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -77,31 +178,15 @@ func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	marked, err := repo.New(dbtx).MarkRiskResultsFalsePositive(ctx, repo.MarkRiskResultsFalsePositiveParams{
-		ProjectID: *authCtx.ProjectID,
-		Ids:       ids,
-		Reason:    nullableText(payloadReason(payload.Reason)),
-	})
-	if err != nil {
+	if _, err := NewFalsePositiveCore(s.audit).MarkInTransaction(ctx, dbtx, FalsePositiveMutation{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		IDs:              ids,
+		Reason:           payload.Reason,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "mark risk results false positive").LogError(ctx, s.logger)
-	}
-
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-	for _, row := range marked {
-		if err := s.audit.LogRiskResultDismiss(ctx, dbtx, audit.LogRiskResultDismissEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            actor,
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			RiskResultID:     row.ID,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log risk result dismiss").LogError(ctx, s.logger)
-		}
-	}
-
-	if err := enqueueFalsePositiveMirror(ctx, dbtx, authCtx.ActiveOrganizationID, marked); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "record dismissal in the findings store").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -131,30 +216,15 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	restored, err := repo.New(dbtx).UnmarkRiskResultsFalsePositive(ctx, repo.UnmarkRiskResultsFalsePositiveParams{
-		ProjectID: *authCtx.ProjectID,
-		Ids:       ids,
-	})
-	if err != nil {
+	if _, err := NewFalsePositiveCore(s.audit).UnmarkInTransaction(ctx, dbtx, FalsePositiveMutation{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		IDs:              ids,
+		Reason:           nil,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "unmark risk results false positive").LogError(ctx, s.logger)
-	}
-
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-	for _, row := range restored {
-		if err := s.audit.LogRiskResultRestore(ctx, dbtx, audit.LogRiskResultRestoreEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            actor,
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			RiskResultID:     row.ID,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log risk result restore").LogError(ctx, s.logger)
-		}
-	}
-
-	if err := enqueueFalsePositiveMirror(ctx, dbtx, authCtx.ActiveOrganizationID, restored); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "record restore in the findings store").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

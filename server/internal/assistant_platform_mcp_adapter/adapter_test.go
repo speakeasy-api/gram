@@ -2,12 +2,15 @@ package assistant_platform_mcp_adapter
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func projectPolicy() TargetPolicy {
@@ -241,4 +244,78 @@ func TestComposedAssistantToolsetIncludesListAccessMembers(t *testing.T) {
 	require.Contains(t, schema.Properties, "role_reference")
 	require.NotContains(t, schema.Properties, "project_id")
 	require.NotContains(t, schema.Properties, "project_slug")
+}
+
+// The assistant's composed toolset follows the catalogue's audience
+// declarations: plugin reads are listed while plugin mutations stay
+// external-only.
+func TestAssistantToolsetListsPluginReadsAndWithholdsPluginMutations(t *testing.T) {
+	t.Parallel()
+
+	runtime := platformmcp.NewRuntime(testenv.NewLogger(t), nil, nil, nil, "", "", nil, nil, nil, nil, nil)
+	composed := ExternalTools(runtime.AssistantTools(), nil)
+
+	listed := map[string]platformtools.ToolDescriptor{}
+	for _, tool := range composed {
+		descriptor := tool.Executor.Descriptor()
+		listed[descriptor.Name] = descriptor
+	}
+
+	for _, name := range []string{"list_plugins", "get_plugin", "list_plugin_assignments"} {
+		require.Contains(t, listed, name, "assistant toolset lists %q", name)
+	}
+	for _, name := range []string{"set_plugin_assignments", "distribute_mcp_to_plugin", "remove_mcp_from_plugin"} {
+		require.NotContains(t, listed, name, "assistant toolset must not list %q", name)
+	}
+}
+
+// The live plugin reads take the project as an explicit argument. Composed for
+// the assistant, that field is supplied by policy: hidden from the model and
+// overwritten on every call. The schemas here are inferred from the same input
+// types the live registration infers from, so a read that stopped declaring
+// project_id would fail the precondition rather than pass vacuously.
+func TestPluginReadSchemasHideAndInjectTheAssistantProject(t *testing.T) {
+	t.Parallel()
+
+	for _, read := range []struct {
+		name  string
+		input any
+	}{
+		{name: "list_plugins", input: platformmcp.ListPluginsInput{}},
+		{name: "get_plugin", input: platformmcp.GetPluginInput{}},
+		{name: "list_plugin_assignments", input: platformmcp.ListPluginAssignmentsInput{}},
+	} {
+		inferred, err := jsonschema.ForType(reflect.TypeOf(read.input), nil)
+		require.NoError(t, err, read.name)
+		inputSchema, err := json.Marshal(inferred)
+		require.NoError(t, err, read.name)
+
+		var live struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+			Required   []string                   `json:"required"`
+		}
+		require.NoError(t, json.Unmarshal(inputSchema, &live))
+		require.Contains(t, live.Properties, "project_id", "%q declares the project it reads", read.name)
+		require.Contains(t, live.Required, "project_id", read.name)
+
+		tool := Tool{descriptor: platformmcp.Descriptor{
+			Name:        read.name,
+			InputSchema: inputSchema,
+			Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeExplicit},
+		}}
+
+		var advertised struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+			Required   []string                   `json:"required"`
+		}
+		require.NoError(t, json.Unmarshal(tool.assistantInputSchema(), &advertised))
+		require.NotContains(t, advertised.Properties, "project_id", "%q takes its project from the assistant's policy", read.name)
+		require.NotContains(t, advertised.Required, "project_id", read.name)
+
+		arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_id":"someone-elses-project"}`))
+		require.NoError(t, err)
+		var decoded map[string]any
+		require.NoError(t, json.Unmarshal(arguments, &decoded))
+		require.Equal(t, projectPolicy().ProjectID, decoded["project_id"], "%q acts in the assistant's project, not the model's", read.name)
+	}
 }

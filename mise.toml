@@ -172,6 +172,10 @@ TUNNEL_GATEWAY_PUBLIC_PORT = "8090"
 TUNNEL_GATEWAY_PUBLIC_ADDR = ":{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
 TUNNEL_GATEWAY_FORWARD_PORT = "8091"
 TUNNEL_GATEWAY_FORWARD_ADDR = ":{{env.TUNNEL_GATEWAY_FORWARD_PORT}}"
+## Caller identity assertions. `mise run zero:tunnel-identity` writes the
+## signing key pair (GRAM_AUTHZ_PRIVATE_KEY, GRAM_AUTHZ_PUBLIC_KEYS) into
+## mise.local.toml; the local tunnel gateway is the issuer.
+GRAM_AUTHZ_ISSUER_URL = "http://localhost:{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
 OPENROUTER_DEV_KEY = "unset"
 ## The dev-idp is a top-level project (dev-idp/) backed by SQLite.
 ## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.

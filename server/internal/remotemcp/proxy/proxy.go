@@ -229,6 +229,10 @@ type Proxy struct {
 	// Leave empty (default) to send no Authorization upstream.
 	AuthorizationOverride string
 
+	// CallerAssertion signs the caller's identity for each forwarded request,
+	// after headers are set. Proxies with an issuer never follow redirects.
+	CallerAssertion func(context.Context) (string, error)
+
 	// UpstreamResponseRetryer may replace the upstream target once after
 	// response headers arrive but before any response is relayed to the user.
 	// It is used by tunneled MCP to fail over stale gateway owners.
@@ -938,7 +942,7 @@ func (p *Proxy) forwardRequest(
 	}
 
 	client := p.GuardianPolicy.Client(p.GuardianClientOptions...)
-	if p.DisableRedirects {
+	if p.DisableRedirects || p.CallerAssertion != nil {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}

@@ -1935,6 +1935,64 @@ func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatFor
 	return i, err
 }
 
+const getPlatformMCPActiveNetworkIngress = `-- name: GetPlatformMCPActiveNetworkIngress :one
+SELECT
+    ingress.provider,
+    ingress.hostname,
+    ingress.endpoint_namespace_kind,
+    ingress.custom_domain_id,
+    ingress.enabled,
+    ingress.identity_required,
+    (ingress.credentials_encrypted IS NOT NULL)::boolean AS credentials_configured,
+    ingress.status,
+    ingress.dns_name,
+    ingress.last_error,
+    ingress.health_checked_at,
+    ingress.connected_since
+FROM network_ingresses ingress
+WHERE ingress.organization_id = $1
+  AND ingress.deleted IS FALSE
+ORDER BY ingress.id
+LIMIT 1
+`
+
+type GetPlatformMCPActiveNetworkIngressRow struct {
+	Provider              string
+	Hostname              string
+	EndpointNamespaceKind string
+	CustomDomainID        uuid.NullUUID
+	Enabled               bool
+	IdentityRequired      bool
+	CredentialsConfigured bool
+	Status                string
+	DnsName               pgtype.Text
+	LastError             pgtype.Text
+	HealthCheckedAt       pgtype.Timestamptz
+	ConnectedSince        pgtype.Timestamptz
+}
+
+// The organization's active private network ingress. Deliberately omits
+// provider credentials, provider resources, and attestor identities.
+func (q *Queries) GetPlatformMCPActiveNetworkIngress(ctx context.Context, organizationID string) (GetPlatformMCPActiveNetworkIngressRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPActiveNetworkIngress, organizationID)
+	var i GetPlatformMCPActiveNetworkIngressRow
+	err := row.Scan(
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsConfigured,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+	)
+	return i, err
+}
+
 const getPlatformMCPAuthorizationGrantForConsume = `-- name: GetPlatformMCPAuthorizationGrantForConsume :one
 SELECT
     auth_grant.id, auth_grant.organization_id, auth_grant.authorization_code_hash, auth_grant.oauth_client_id, auth_grant.connection_id, auth_grant.connection_generation, auth_grant.redirect_uri, auth_grant.code_challenge, auth_grant.expires_at, auth_grant.consumed_at, auth_grant.revoked_at, auth_grant.created_at, auth_grant.updated_at,
@@ -2713,6 +2771,30 @@ func (q *Queries) GetPlatformMCPLifecycle(ctx context.Context, organizationID st
 	var i GetPlatformMCPLifecycleRow
 	err := row.Scan(&i.DefaultProjectID, &i.MarketplacePublished)
 	return i, err
+}
+
+const getPlatformMCPNetworkIngressEntitlement = `-- name: GetPlatformMCPNetworkIngressEntitlement :one
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_features feature
+    WHERE feature.organization_id = $1
+      AND feature.feature_name = $2
+      AND feature.deleted IS FALSE
+) AS entitled
+`
+
+type GetPlatformMCPNetworkIngressEntitlementParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// Mirrors the uncached product feature check so a status read reflects the
+// live private-network entitlement.
+func (q *Queries) GetPlatformMCPNetworkIngressEntitlement(ctx context.Context, arg GetPlatformMCPNetworkIngressEntitlementParams) (bool, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPNetworkIngressEntitlement, arg.OrganizationID, arg.FeatureName)
+	var entitled bool
+	err := row.Scan(&entitled)
+	return entitled, err
 }
 
 const getPlatformMCPOAuthClientForUpdate = `-- name: GetPlatformMCPOAuthClientForUpdate :one

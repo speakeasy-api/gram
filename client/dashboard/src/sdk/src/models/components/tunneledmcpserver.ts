@@ -102,7 +102,7 @@ export type TunneledMcpServer = {
    */
   publicRequestRatePerSecond?: number | undefined;
   /**
-   * RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram
+   * RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>
    */
   resourceIdentifier?: string | undefined;
   /**

@@ -796,6 +796,23 @@ func TestGenerateSinglePluginPackageCodex(t *testing.T) {
 	require.Equal(t, meta.Description, meta.Interface.LongDescription)
 }
 
+// The dashboard's Cursor local-install command checks the ZIP manifest name
+// against the raw slug, so the flat package must not use the marketplace's
+// `<slug>-cursor` name.
+func TestGenerateSinglePluginPackageCursorUsesRawSlug(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{Name: "Test", Slug: "test"}
+
+	files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{OrgName: "Test Org"}, "cursor")
+	require.NoError(t, err)
+
+	var manifest struct {
+		Name string `json:"name"`
+	}
+	require.NoError(t, json.Unmarshal(files[".cursor-plugin/plugin.json"], &manifest))
+	require.Equal(t, "test", manifest.Name)
+}
+
 func TestGenerateCodexPluginDescriptions(t *testing.T) {
 	t.Parallel()
 
@@ -3131,6 +3148,30 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 }
 
+func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-mcp-from-remote-url/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	// Attachment registers a client dynamically, so an upstream that answers
+	// with a challenge but advertises no dynamic registration (an API key or
+	// Basic upstream, or OAuth without DCR) must not be offered it.
+	for _, required := range []string{
+		"`authentication: authentication_required` and `oauth_discovery: available_dcr`",
+		"`oauth_discovery: available`",
+		"incomplete or absent OAuth discovery",
+		"Service Account credential through the dashboard setup URL",
+		"do not attempt attachment",
+	} {
+		require.Contains(t, workflow, required)
+	}
+	require.NotContains(t, workflow, "when inspection reported `authentication_required`, ask for explicit confirmation")
+}
+
 func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
@@ -3179,6 +3220,83 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 	require.NotContains(t, workflow, "claude mcp add")
 	require.NotContains(t, workflow, "claude mcp remove")
+}
+
+// The workflow ships to every client package, so discovery must not assume
+// Claude Code, local servers must be reported and left alone, and the optional
+// private network step must keep its readiness gate and confirmation.
+func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-existing-mcp-servers/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, scenario := range []struct {
+		name         string
+		instructions []string
+	}{
+		{"discovery is scoped to the running client", []string{
+			"through your OWN Speakeasy connection in this client session",
+			"Name the client you are running in, and discover only that client's own MCP servers, never another client's",
+			"documented by that client's own `--help`",
+			"treat it as having the same effects as `claude mcp list`",
+			"Never invent a subcommand or flag",
+			"Never open a client's MCP configuration files yourself",
+		}},
+		{"local servers are reported and left alone", []string{
+			"**Local servers, left unchanged:**",
+			"Report each one to the user by alias and transport only",
+			"for stdio, say the command is not shown",
+			"Do not migrate, wrap, tunnel, disable or remove them, and do not offer to",
+			"List local servers left unchanged separately",
+			"with the reason `local server left unchanged`",
+		}},
+		{"private access is gated on live ingress readiness", []string{
+			"## 8. Optionally restrict migrated servers to the Tailscale private network",
+			"It is optional: declining leaves the import complete",
+			"It does not move or hide the upstream MCP server",
+			"`backend_kind: unproxied`",
+			"Call `get_network_ingress`", "`ready_for_private_access` is false",
+			"present its exact `setup_url`", "`request_private_networking`",
+			"Tailscale OAuth client credentials are entered only in that dashboard, never in chat",
+			"Do not attempt any network change while it is not ready",
+			"call `get_network_ingress` again rather than assuming it is ready",
+		}},
+		{"network changes check observed traffic first", []string{
+			"call `get_mcp_network_traffic`", "`target_kind: mcp`", "`window: \"7d\"`",
+			"zero does not prove a route is unused or that every client has migrated",
+			"require an independent client inventory from the user before proposing `private_only`",
+		}},
+		{"network changes keep settings version and confirmation", []string{
+			"do not choose for the user", "`dual` adds tailnet access and keeps public access",
+			"`private_only` refuses every client that is not on the tailnet",
+			"`get_mcp_connection_settings`", "`target_kind: mcp_server`",
+			"obtain explicit confirmation of that batch and project",
+			"call `set_mcp_network_access`", "the fresh `version` as `expected_version`", "`confirmed: true`",
+			"never silently retry with another server or mode",
+			"hand off to the `configure-private-mcp-access` workflow",
+			"the mutation receipt records a request, not publication",
+			"Never edit local client configuration to point at a new address",
+		}},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			for _, instruction := range scenario.instructions {
+				require.Contains(t, workflow, instruction)
+			}
+		})
+	}
+	require.NotEqual(t, -1, strings.Index(workflow, "## 7. Keep authentication separate"))
+	require.Less(t, strings.Index(workflow, "## 7. Keep authentication separate"), strings.Index(workflow, "## 8. Optionally restrict"))
+	require.Less(t, strings.Index(workflow, "call `get_mcp_network_traffic`"), strings.Index(workflow, "Present the choice per server"))
+	require.Less(t, strings.Index(workflow, "## 8. Optionally restrict"), strings.Index(workflow, "## 9. Record diagnostics only when the user asks"))
+	require.NotContains(t, workflow, "Claude Code session")
+	for _, forbidden := range []string{"codex mcp add", "codex mcp remove", "tailscale up", "OAuth client secret:"} {
+		require.NotContains(t, workflow, forbidden)
+	}
 }
 
 // Diagnostics are opt-in field tooling: the packaged instructions must keep the

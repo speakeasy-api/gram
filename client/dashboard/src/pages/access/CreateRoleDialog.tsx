@@ -16,6 +16,7 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
+import { useOrgRoutes } from "@/routes";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import {
@@ -38,6 +39,7 @@ import {
   Lock,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import {
   getSelectableMembers,
   isMemberLockedToRole,
@@ -182,6 +184,15 @@ export function CreateRoleDialog({
   // ─── Hooks ────────────────────────────────────────────────────
   const queryClient = useQueryClient();
   const organization = useOrganization();
+  const orgRoutes = useOrgRoutes();
+  // A directory owns assignment under SCIM, so the list shows only who it
+  // enrolled; with nobody enrolled there is nothing to show but the way there.
+  // Gated on initialization so a role still loading its members does not
+  // flash the empty state.
+  const scimWithNoMembers =
+    !!organization.scimEnabled &&
+    (!isEditing || initialized) &&
+    selectedMembers.size === 0;
   const { data: membersData } = useMembers();
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -811,7 +822,20 @@ export function CreateRoleDialog({
             />
 
             {/* ─── Assign Members (read-only when directory sync manages assignment) ─── */}
-            {!hideAssignments && (
+            {!hideAssignments && scimWithNoMembers && (
+              <div className="border-border flex items-center gap-1 border-t pt-4 pb-4">
+                <Text variant="body" className="font-medium">
+                  Assign Members
+                </Text>
+                <Link
+                  to={orgRoutes.identity.href()}
+                  className="text-muted-foreground ml-1 underline underline-offset-2"
+                >
+                  Configure directory sync
+                </Link>
+              </div>
+            )}
+            {!hideAssignments && !scimWithNoMembers && (
               <div className="border-border border-t pt-4 pb-4">
                 <button
                   type="button"
@@ -895,7 +919,10 @@ export function CreateRoleDialog({
                             </label>
                           );
                         })()}
-                      {members.map((member) => {
+                      {(organization.scimEnabled
+                        ? members.filter((m) => selectedMembers.has(m.id))
+                        : members
+                      ).map((member) => {
                         const alreadyHasRole = isMemberLockedToRole(
                           isEditing,
                           editingRole?.id,

@@ -90,8 +90,7 @@ func testRiskReadService(t *testing.T, projects riskProjectResolver, policies *s
 	require.NoError(t, err)
 	fingerprint, err := policycatalog.Fingerprint(catalog)
 	require.NoError(t, err)
-	cursor, err := newRiskCursorCodec("test-key")
-	require.NoError(t, err)
+	cursor := newRiskCursorCodec("test-key")
 	versions, err := newRiskVersionCodec("test-key")
 	require.NoError(t, err)
 	return &RiskReadService{
@@ -201,7 +200,7 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	require.NotNil(t, output.Policy.ApprovedEmailDomains)
 	require.Equal(t, "opaque-version", output.Policy.Version)
 	require.Empty(t, output.Policy.Action)
-	require.ElementsMatch(t, []string{"custom_rules", "model_config", "targeted_audience", "unknown_detector_value", "unsupported_action"}, output.Policy.Compatibility.UnsupportedFields)
+	require.ElementsMatch(t, []string{"custom_rules", "model_config", "unknown_detector_value", "unsupported_action"}, output.Policy.Compatibility.UnsupportedFields)
 
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
@@ -212,9 +211,22 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	require.NotContains(t, policyDocument, "model_config")
 	text := string(encoded)
 	require.NotContains(t, text, "temperature")
-	require.NotContains(t, text, "user:<USER_ID>")
+	require.Equal(t, []string{"user:<USER_ID>"}, output.Policy.Audience.PrincipalURNs)
 	require.NotContains(t, text, scope)
 	require.NotContains(t, text, "custom.rule")
+
+	managed := testRiskPrincipal("user")
+	managed.Surface = SurfaceProjectAssistant
+	managed.ConnectionID = ""
+	managed.Generation = ""
+	managedService := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectSlug: "project"}}}, &stubRiskPolicies{policy: policy}, &stubRiskExclusions{})
+	managedOutput, err := managedService.GetPolicy(t.Context(), managed, GetRiskPolicyInput{ProjectSlug: "project", PolicyID: policy.ID.String()})
+	require.NoError(t, err)
+	require.Nil(t, managedOutput.Policy.Audience)
+	managedJSON, err := json.Marshal(managedOutput)
+	require.NoError(t, err)
+	require.NotContains(t, string(managedJSON), "user:<USER_ID>")
+	require.NotContains(t, string(managedJSON), `"audience"`)
 }
 
 func TestRiskExclusionFingerprintIsProjectScoped(t *testing.T) {
@@ -321,7 +333,13 @@ func TestUnavailableRiskToolRegistrationSurvivesCatalogFailure(t *testing.T) {
 		})
 	})
 	require.Equal(t, 1, buildCalls)
-	require.Len(t, reg.Descriptors(), 7)
+	require.Len(t, reg.Descriptors(), 11, "three reads, six policy/exclusion writes, two finding writes")
+	for _, name := range []string{operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {
+		_, err := descriptorByName(t, reg, name).Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","finding_ids":["`+uuid.NewString()+`"],"confirmed":true,"idempotency_key":"key"}`))
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal, name)
+		require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`, name)
+	}
 
 	create := descriptorByName(t, reg, "create_risk_policy")
 	_, err := create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`))
@@ -362,12 +380,17 @@ func TestRiskToolRegistrationAndStableStubs(t *testing.T) {
 
 	wanted := map[string]ProjectScope{
 		"list_risk_policies": ProjectScopeDefaultable, "get_risk_policy": ProjectScopeDefaultable, "list_risk_exclusions": ProjectScopeDefaultable, "get_risk_analysis_status": ProjectScopeDefaultable,
-		"create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
+		"change_risk_policy_audience": ProjectScopeExplicit, "remove_self_from_risk_policy": ProjectScopeExplicit, "create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
+		"mark_risk_findings_false_positive": ProjectScopeExplicit, "unmark_risk_findings_false_positive": ProjectScopeExplicit,
 	}
 	require.Len(t, reg.Descriptors(), len(wanted))
 	for _, descriptor := range reg.Descriptors() {
 		require.Equal(t, wanted[descriptor.Name], descriptor.Meta.ProjectScope, descriptor.Name)
-		require.ElementsMatch(t, bothAudiences, descriptor.Meta.Audiences, descriptor.Name)
+		if descriptor.Name == operationRemoveSelfFromRiskPolicy || descriptor.Name == "change_risk_policy_audience" {
+			require.Equal(t, []Audience{AudienceExternal}, descriptor.Meta.Audiences)
+		} else {
+			require.ElementsMatch(t, bothAudiences, descriptor.Meta.Audiences, descriptor.Name)
+		}
 		require.NotEmpty(t, descriptor.InputSchema, descriptor.Name)
 		if strings.HasPrefix(descriptor.Name, "list_") || strings.HasPrefix(descriptor.Name, "get_") {
 			require.NotNil(t, descriptor.Annotations)

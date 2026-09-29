@@ -181,6 +181,43 @@ describe("Overview", () => {
     ).toBeNull();
   });
 
+  it("links the WorkOS org ID to the WorkOS dashboard in a new tab", async () => {
+    const link =
+      "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder";
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      workos_id: "org_workos_placeholder",
+      workos_dashboard_url: link,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const open = await screen.findByRole("link", { name: "Open in WorkOS" });
+    expect(open.getAttribute("href")).toBe(link);
+    expect(open.getAttribute("target")).toBe("_blank");
+    expect(open.getAttribute("rel")).toBe("noopener noreferrer");
+    // Beside the copy control, in the WorkOS org ID row.
+    const row = valueBeside("WorkOS org ID");
+    expect(row.contains(open)).toBe(true);
+    expect(
+      within(row).getByRole("button", { name: "Copy WorkOS org ID" }),
+    ).toBeTruthy();
+  });
+
+  it("keeps the WorkOS org ID copyable without a WorkOS link", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      workos_id: "org_workos_placeholder",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("button", { name: "Copy WorkOS org ID" });
+    expect(screen.queryByRole("link", { name: "Open in WorkOS" })).toBeNull();
+  });
+
   it("marks an organization a platform admin created", async () => {
     mocks.getOrganization.mockResolvedValue({
       ...ORG,

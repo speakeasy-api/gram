@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/stretchr/testify/require"
@@ -272,6 +273,9 @@ func TestFederatedExchangeErrorClassification(t *testing.T) {
 		{newTokenEndpointError(http.StatusRequestTimeout, "408", nil), ErrFederatedUnavailable},
 		{newTokenEndpointError(400, "400", []byte(`{"error":"invalid_client","error_description":"secret"}`)), ErrFederatedConfiguration},
 		{newTokenEndpointError(400, "400", []byte(`{"error":"invalid_grant","error_description":"secret"}`)), ErrFederatedIdentity},
+		{&tokenEndpointSigningError{err: fmt.Errorf("sign detail: %w", errClientAssertionKeyUnconfigured)}, ErrFederatedConfiguration},
+		{&tokenEndpointSigningError{err: fmt.Errorf("load active client assertion key detail: %w", pgx.ErrNoRows)}, ErrFederatedConfiguration},
+		{&tokenEndpointSigningError{err: errors.New("kms detail")}, ErrFederatedSigning},
 	} {
 		require.ErrorIs(t, classifyFederatedExchangeError(test.err), test.want)
 		require.NotContains(t, classifyFederatedExchangeError(test.err).Error(), "detail")

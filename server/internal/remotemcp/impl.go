@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -731,6 +732,9 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 	hasValueFromRequestHeader := payload.ValueFromRequestHeader != nil && *payload.ValueFromRequestHeader != ""
 	preserveStoredValue := isSecret && !hasValue && !hasValueFromRequestHeader && existing.IsSecret && existing.Value.Valid
 
+	if mcpauthz.ReservedHeader(payload.Name) || (payload.ValueFromRequestHeader != nil && mcpauthz.ReservedHeader(*payload.ValueFromRequestHeader)) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "caller assertion headers are reserved")
+	}
 	if !preserveStoredValue {
 		if err := validateHeaderValueSource(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid header").LogError(ctx, logger)
@@ -868,11 +872,18 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // pass-through header is not marked secret. Callers that want to preserve an
 // existing secret's stored value skip this check entirely; see UpdateServerHeader.
 func validateHeaderValueSource(name string, value *string, valueFromRequestHeader *string, isSecret bool) error {
+	if mcpauthz.ReservedHeader(name) || (valueFromRequestHeader != nil && mcpauthz.ReservedHeader(*valueFromRequestHeader)) {
+		return errors.New("caller assertion headers are reserved")
+	}
 	hasValue := value != nil && *value != ""
 	hasValueFromRequestHeader := valueFromRequestHeader != nil && *valueFromRequestHeader != ""
 
 	if hasValue == hasValueFromRequestHeader {
 		return fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", name)
+	}
+
+	if hasValueFromRequestHeader && proxy.IsDeniedPassThroughSource(*valueFromRequestHeader) {
+		return fmt.Errorf("header %q: %q cannot be forwarded upstream", name, *valueFromRequestHeader)
 	}
 
 	if hasValueFromRequestHeader && isSecret {

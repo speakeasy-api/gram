@@ -1225,6 +1225,248 @@ func DecodeListRemoteSessionsResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildCountRemoteSessionsRequest instantiates a HTTP request object with
+// method and path set to call the "remoteSessions" service
+// "countRemoteSessions" endpoint
+func (c *Client) BuildCountRemoteSessionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CountRemoteSessionsRemoteSessionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessions", "countRemoteSessions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCountRemoteSessionsRequest returns an encoder for requests sent to the
+// remoteSessions countRemoteSessions server.
+func EncodeCountRemoteSessionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessions.CountRemoteSessionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessions", "countRemoteSessions", "*remotesessions.CountRemoteSessionsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("remote_session_client_id", p.RemoteSessionClientID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeCountRemoteSessionsResponse returns a decoder for responses returned
+// by the remoteSessions countRemoteSessions endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeCountRemoteSessionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCountRemoteSessionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CountRemoteSessionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+			}
+			err = ValidateCountRemoteSessionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+			}
+			res := NewCountRemoteSessionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CountRemoteSessionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+			}
+			err = ValidateCountRemoteSessionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+			}
+			return nil, NewCountRemoteSessionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CountRemoteSessionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+			}
+			err = ValidateCountRemoteSessionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+			}
+			return nil, NewCountRemoteSessionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CountRemoteSessionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+			}
+			err = ValidateCountRemoteSessionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+			}
+			return nil, NewCountRemoteSessionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CountRemoteSessionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+			}
+			err = ValidateCountRemoteSessionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+			}
+			return nil, NewCountRemoteSessionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CountRemoteSessionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+			}
+			err = ValidateCountRemoteSessionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+			}
+			return nil, NewCountRemoteSessionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CountRemoteSessionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+			}
+			err = ValidateCountRemoteSessionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+			}
+			return nil, NewCountRemoteSessionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CountRemoteSessionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+			}
+			err = ValidateCountRemoteSessionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+			}
+			return nil, NewCountRemoteSessionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CountRemoteSessionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+				}
+				err = ValidateCountRemoteSessionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+				}
+				return nil, NewCountRemoteSessionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CountRemoteSessionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+				}
+				err = ValidateCountRemoteSessionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+				}
+				return nil, NewCountRemoteSessionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessions", "countRemoteSessions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CountRemoteSessionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "countRemoteSessions", err)
+			}
+			err = ValidateCountRemoteSessionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "countRemoteSessions", err)
+			}
+			return nil, NewCountRemoteSessionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessions", "countRemoteSessions", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRevokeRemoteSessionRequest instantiates a HTTP request object with
 // method and path set to call the "remoteSessions" service
 // "revokeRemoteSession" endpoint

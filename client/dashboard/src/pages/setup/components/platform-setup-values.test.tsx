@@ -105,6 +105,27 @@ describe("usePlatformPlaceholders", () => {
     );
   });
 
+  it.each([
+    "../other",
+    "plugin'; touch injected; #",
+    "{{UNRESOLVED}}",
+    "Plugin",
+    "plugin_name",
+  ])(
+    "withholds unsafe Cursor slug %s before shell interpolation",
+    (cursorObservabilityPlugin) => {
+      mocks.publishStatus = {
+        ...mocks.publishStatus!,
+        cursorObservabilityPlugin,
+      };
+      const { result } = renderHook(() => usePlatformPlaceholders());
+      const cursorStep = AGENT_PLATFORMS.find(
+        ({ id }) => id === "cursor",
+      )!.setupSteps[0]!.eligibility!.personalSteps.find(({ code }) => code)!;
+      expect(result.current.snippetFor(cursorStep)).toBeUndefined();
+    },
+  );
+
   it("withholds a plugin-slug snippet when the server reports none", () => {
     // Absent when observability is disabled for the project, or when the read
     // failed — either way the snippet would name nothing.
