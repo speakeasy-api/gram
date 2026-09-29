@@ -185,11 +185,6 @@ const (
 	// FlagOktaConnections gates the Okta integration while it is dogfooded:
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
-
-	// FlagOktaOINListing shows the Okta Integration Network setup option; on
-	// for everyone once the Speakeasy listing is published. Only the dashboard
-	// reads it.
-	FlagOktaOINListing Flag = "okta-oin-listing"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an
