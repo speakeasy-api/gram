@@ -21,6 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Role of the evaluated message, independent of its human attribution.
 type Reading_MessageRole int32
 
 const (
@@ -790,30 +791,53 @@ type Reading_builder struct {
 
 	// UUIDv5 identity of tenant, immutable logical message ID, and sensor ID.
 	// Configuration changes between attempts do not change this identity.
-	Id                  *string
+	Id *string
+	// Fresh UUID for a logical message evaluation, shared by its sensor readings.
+	// A retry gets a new attempt ID even when the logical reading ID is unchanged.
 	EvaluationAttemptId *string
-	OrganizationId      *string
-	ProjectId           *string
-	ConversationId      *string
-	MessageId           *string
-	MessageRole         *Reading_MessageRole
-	SensorId            *string
+	// Gram organization owning the source message and evaluation.
+	OrganizationId *string
+	// Gram project UUID owning the source message and sensor configuration.
+	ProjectId *string
+	// Gram conversation UUID, not the source system's session identifier.
+	ConversationId *string
+	// Persisted Gram message UUID; multiple provenance snapshots can share this ID.
+	MessageId *string
+	// Only user and assistant messages produce readings.
+	MessageRole *Reading_MessageRole
+	// Gram sensor UUID; stable across display-name, slug and definition edits.
+	SensorId *string
 	// Always populated with the sensor slug observed during evaluation.
 	SensorSlug       *string
 	MessageCreatedAt *string
 	EvaluatedAt      *string
-	// Effective configuration for traceability; not part of reading identity.
-	DefinitionHash  *string
+	// Hash of mode, instructions and ordered signal IDs/criteria. Excludes display
+	// names, slugs and actor/account attribution. Traceability metadata, not an
+	// immutable configuration revision or part of reading identity.
+	DefinitionHash *string
+	// Model requested for classification, not the model that authored the message.
 	ConfiguredModel *string
 	// A logical evaluation may span multiple provider requests/model versions.
-	Models          []string
+	// Reported models for the whole logical message evaluation, not per-sensor
+	// attribution when questions were split across provider requests.
+	Models []string
+	// Version of the sigint and classifier compilation logic used for this attempt.
 	CompilerVersion *string
-	Actor           *Reading_Actor
-	// Gram user explicitly allocated usage by ingestion. Never inferred from actor.
+	// Identity associated with the source message, preserved as observed at ingestion.
+	Actor *Reading_Actor
+	// Gram user ID to which the ingestion producer explicitly allocates usage,
+	// using the same attribution as agent-session storage metering. May differ
+	// from actor.user_id or exist without an actor (e.g. generated compaction
+	// messages allocated to the chat owner). Interpret with organization_id.
+	// This is usage attribution, not proof that a charge occurred. Absence means
+	// unassigned; consumers must not fall back to actor or an account owner.
 	BillingUserId *string
 	// Canonical ingestion source; namespaces the external actor identity.
-	Source      *string
-	Account     *Reading_Account
+	Source *string
+	// Source-session AI account context, preserved from the ingestion snapshot.
+	Account *Reading_Account
+	// Gram assistant UUID associated with the workload, supplied by the producer.
+	// Identifies an assistant resource, not a human user or provider account.
 	AssistantId *string
 	// Historical ingestion marker, not Pub/Sub redelivery.
 	Replayed *bool
@@ -947,8 +971,8 @@ func (*reading_Choice_) isReading_Result() {}
 
 func (*reading_Score_) isReading_Result() {}
 
-// Identity attached to the source message, not necessarily its author
-// (assistant messages can be attributed to a user). Missing fields are unknown.
+// Message-user attribution copied from the consumed conversation snapshot.
+// Independent of billing_user_id and account; missing fields remain unknown.
 type Reading_Actor struct {
 	state                     protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_UserId         *string                `protobuf:"bytes,1,opt,name=user_id,json=userId"`
@@ -1069,10 +1093,16 @@ func (x *Reading_Actor) ClearUserEmail() {
 type Reading_Actor_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
+	// Gram user ID attached to the persisted message. Identifies the person the
+	// message is attributed to, not necessarily its author: assistant responses
+	// can carry the requesting user's ID. Does not allocate billing usage.
 	UserId *string
-	// Interpret in the namespace of organization_id and source.
+	// Opaque user ID reported by the source system, not a Gram user/account ID.
+	// Interpret within organization_id and source. Can exist without user_id
+	// when ingestion has not resolved the external identity to a Gram user.
 	ExternalUserId *string
-	// Email observed by ingestion, not a current directory lookup.
+	// Message actor email explicitly observed by ingestion. Not a current Gram
+	// directory lookup, a billing-user email, or an inferred provider-account email.
 	UserEmail *string
 }
 
@@ -1095,7 +1125,9 @@ func (b0 Reading_Actor_builder) Build() *Reading_Actor {
 	return m0
 }
 
-// Source account attribution observed during ingestion.
+// The external AI account/credentials used for the source session, as resolved
+// by ingestion. Not the Gram user allocated usage or the organization's Gram
+// billing plan. Classification may be known without a persisted account ID.
 type Reading_Account struct {
 	state                    protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_UserAccountId *string                `protobuf:"bytes,1,opt,name=user_account_id,json=userAccountId"`
@@ -1216,10 +1248,19 @@ func (x *Reading_Account) ClearBillingMode() {
 type Reading_Account_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// Gram user_accounts UUID, not a provider-issued identifier.
+	// UUID of Gram's user_accounts record representing the external AI account.
+	// Not a Gram user ID, provider-issued account ID, or billing-user selection.
 	UserAccountId *string
-	AccountType   *string
-	// Source account billing arrangement, not the user allocated usage.
+	// Gram's ingestion-time classification: "team" for company-associated
+	// accounts/credentials, "personal" for personal accounts. May be inferred
+	// from provider organization and identity evidence or assigned by an import
+	// adapter; not necessarily a provider-reported plan or verified ownership.
+	// Absence means no classification was supplied.
+	AccountType *string
+	// How the external AI account is billed: "metered" for usage-based billing,
+	// "flat_rate" for subscription/seat billing, "unknown" when undetermined.
+	// Resolved from source-account/provider-organization configuration; absence
+	// means undeclared. Does not determine Gram pricing or select a billing user.
 	BillingMode *string
 }
 
@@ -1242,6 +1283,8 @@ func (b0 Reading_Account_builder) Build() *Reading_Account {
 	return m0
 }
 
+// One signal's classification probability. In MultiLabel it is independent
+// of other signals; in Choice/Score it is an entry in the option distribution.
 type Reading_Probability struct {
 	state                  protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_SignalId    *string                `protobuf:"bytes,1,opt,name=signal_id,json=signalId"`
@@ -1359,7 +1402,9 @@ func (x *Reading_Probability) ClearSignalSlug() {
 type Reading_Probability_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	SignalId    *string
+	// Gram custom-signal UUID from the configuration used for this evaluation.
+	SignalId *string
+	// Classifier probability in [0, 1], not a usage quantity or billing weight.
 	Probability *float64
 	// Always populated with the signal slug observed during evaluation.
 	SignalSlug *string
@@ -1384,6 +1429,7 @@ func (b0 Reading_Probability_builder) Build() *Reading_Probability {
 	return m0
 }
 
+// Independent yes/no classifications; probabilities need not sum to one.
 type Reading_MultiLabel struct {
 	state              protoimpl.MessageState  `protogen:"opaque.v1"`
 	xxx_hidden_Signals *[]*Reading_Probability `protobuf:"bytes,1,rep,name=signals"`
@@ -1432,6 +1478,8 @@ func (x *Reading_MultiLabel) SetSignals(v []*Reading_Probability) {
 type Reading_MultiLabel_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
+	// One entry for every sensor member, in configured order. Published only
+	// when every constituent classification succeeded; not just positive matches.
 	Signals []*Reading_Probability
 }
 
@@ -1443,6 +1491,7 @@ func (b0 Reading_MultiLabel_builder) Build() *Reading_MultiLabel {
 	return m0
 }
 
+// Exclusive classification choosing one signal from the sensor's members.
 type Reading_Choice struct {
 	state                         protoimpl.MessageState  `protogen:"opaque.v1"`
 	xxx_hidden_SelectedSignalId   *string                 `protobuf:"bytes,1,opt,name=selected_signal_id,json=selectedSignalId"`
@@ -1574,9 +1623,13 @@ func (x *Reading_Choice) ClearSelectedSignalSlug() {
 type Reading_Choice_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
+	// Gram custom-signal UUID selected by the classifier.
 	SelectedSignalId *string
-	Distribution     []*Reading_Probability
-	Confidence       *float64
+	// Probabilities across the configured signal options, including unselected ones.
+	Distribution []*Reading_Probability
+	// Optional classifier-reported confidence; absence means not supplied.
+	// Distinct from the selected signal's probability in distribution.
+	Confidence *float64
 	// Always populated, matching the selected signal's distribution entry.
 	SelectedSignalSlug *string
 }
@@ -1601,6 +1654,7 @@ func (b0 Reading_Choice_builder) Build() *Reading_Choice {
 	return m0
 }
 
+// Classification over ordered signal levels, from lowest to highest.
 type Reading_Score struct {
 	state                    protoimpl.MessageState  `protogen:"opaque.v1"`
 	xxx_hidden_ExpectedIndex float64                 `protobuf:"fixed64,1,opt,name=expected_index,json=expectedIndex"`
@@ -1701,10 +1755,13 @@ func (x *Reading_Score) ClearConfidence() {
 type Reading_Score_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
+	// Probability-weighted zero-based level index, not a selected signal ID.
+	// May be fractional; interpret against this reading's distribution order.
 	ExpectedIndex *float64
 	// Low-to-high level order; index defines the level score.
 	Distribution []*Reading_Probability
-	Confidence   *float64
+	// Optional classifier-reported confidence; absence means not supplied.
+	Confidence *float64
 }
 
 func (b0 Reading_Score_builder) Build() *Reading_Score {
