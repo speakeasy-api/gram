@@ -119,9 +119,8 @@ type RegisterIssuerPayload struct {
 	// Defaults to true. Re-checked on every lookup rather than at write time, so
 	// clearing it makes wildcard rules already written inert immediately.
 	AllowWildcardAdmission bool
-	// What the platform is and what runs on it, shown in place of the issuer URL
-	// wherever the issuer is listed. Trimmed on write; blank is stored as none. At
-	// most 500 characters.
+	// What the platform is and what runs on it, in the operator's words. Trimmed
+	// on write; blank is stored as none. At most 500 characters.
 	Description *string
 	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
 	// not key/value pairs. Trimmed and de-duplicated on write. At most 40.

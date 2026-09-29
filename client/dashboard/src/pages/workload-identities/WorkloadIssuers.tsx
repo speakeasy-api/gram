@@ -197,8 +197,8 @@ type IssuerView = "catalog" | "custom";
 
 function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
   const routes = useRoutes();
-  // An operator's description says which platform this is far better than its
-  // URL does; the URL moves down beside the keys when there is one.
+  // A description identifies the platform better than its URL, so it takes the
+  // URL's place and the URL sits on a labeled line beside the keys.
   const hasDescription = issuer.description !== "";
 
   return (

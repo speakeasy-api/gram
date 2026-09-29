@@ -177,7 +177,7 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Re-checked on every lookup rather than at write time, so clearing it makes wildcard rules already written inert immediately.", func() {
 		Default(true)
 	})
-	Attribute("description", String, "What the platform is and what runs on it, shown in place of the issuer URL wherever the issuer is listed. Trimmed on write; blank is stored as none. At most 500 characters.", func() {
+	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters.", func() {
 		MaxLength(500)
 	})
 	Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.", func() {

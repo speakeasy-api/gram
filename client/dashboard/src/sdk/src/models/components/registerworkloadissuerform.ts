@@ -14,7 +14,7 @@ export type RegisterWorkloadIssuerForm = {
    */
   allowWildcardAdmission?: boolean | undefined;
   /**
-   * What the platform is and what runs on it, shown in place of the issuer URL wherever the issuer is listed. Trimmed on write; blank is stored as none. At most 500 characters.
+   * What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters.
    */
   description?: string | undefined;
   /**

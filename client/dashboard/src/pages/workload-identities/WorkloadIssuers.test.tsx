@@ -157,7 +157,7 @@ it("shows a platform's description in place of its issuer URL", () => {
   expect(staging.textContent).toContain(
     "Preview deploys for every pull request",
   );
-  // The URL is still there, demoted to a labeled line beside the keys.
+  // With a description, the URL sits on a labeled line beside the keys.
   expect(staging.textContent).toContain("Issuer: https://staging.example.com");
 
   // Without a description the issuer URL stays where the description would be,
