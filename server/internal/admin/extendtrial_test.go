@@ -655,7 +655,7 @@ func TestExtendTrial_ASecondExtensionThatUnblocksOntoAnExtendedTrialSucceeds(t *
 		second <- err
 	}()
 
-	testenv.WaitForBlockedBackend(t, ctx, conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(first), 1)
 
 	// The database's own clock, not the test process's: the seeded date has to
 	// have passed where the predicate is evaluated.

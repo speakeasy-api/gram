@@ -2,16 +2,16 @@ package access
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -219,10 +219,15 @@ func TestRoleManager_MemberRoleSyncSerializesManagersAndLocksMember(t *testing.T
 				t.Fatal("first provider send did not start")
 			}
 
-			waitCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-			defer cancel()
-			other.memberRoleSync(target)(waitCtx)
-			require.ErrorIs(t, waitCtx.Err(), context.DeadlineExceeded)
+			holderPID, err := testrepo.New(ti.conn).GetAdvisoryLockHolderFixture(ctx, fmt.Sprintf(`["access.member-role-sync", %q, "user_1"]`, orgID))
+			require.NoError(t, err)
+			waitCtx, cancel := context.WithCancel(ctx)
+			otherDone := make(chan struct{})
+			go func() { other.memberRoleSync(target)(waitCtx); close(otherDone) }()
+			t.Cleanup(func() { cancel(); <-otherDone })
+			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, uint32(holderPID), 1)
+			cancel()
+			<-otherDone
 			ti.roles.AssertNumberOfCalls(t, "UpdateMemberRoles", 1)
 
 			if name == "legacy" {
@@ -230,11 +235,9 @@ func TestRoleManager_MemberRoleSyncSerializesManagersAndLocksMember(t *testing.T
 			}
 			tx := testenv.BeginTx(t, ctx, ti.conn)
 			defer func() { _ = tx.Rollback(ctx) }()
-			lockCtx, cancelLock := context.WithTimeout(ctx, 100*time.Millisecond)
-			defer cancelLock()
-			_, err := accessrepo.New(tx).LockOrganizationUserRelationship(lockCtx, accessrepo.LockOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: "local_user_1"})
-			require.Error(t, err)
-			require.ErrorIs(t, lockCtx.Err(), context.DeadlineExceeded)
+			testenv.SetLockTimeout(t, ctx, tx, 50*time.Millisecond)
+			_, err = accessrepo.New(tx).LockOrganizationUserRelationship(ctx, accessrepo.LockOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: "local_user_1"})
+			testenv.RequireLockNotAvailable(t, err)
 		})
 	}
 }

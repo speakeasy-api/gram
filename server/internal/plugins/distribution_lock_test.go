@@ -15,7 +15,9 @@ import (
 
 func TestDeleteDefaultPluginWaitsForAdmissionLock(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestPluginsService(t)
+	// probeTimeout bounds the server lock probe.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestPluginsService(t, probeTimeout)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	plugin, err := pluginsrepo.New(ti.conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
@@ -24,12 +26,7 @@ func TestDeleteDefaultPluginWaitsForAdmissionLock(t *testing.T) {
 	require.NoError(t, err)
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, admission.LockProject(ctx, tx, *authCtx.ProjectID))
-	finished := make(chan error, 1)
-	go func() {
-		finished <- ti.service.DeletePlugin(ctx, &gen.DeletePluginPayload{ID: plugin.ID.String()})
-	}()
-	require.Never(t, func() bool { return len(finished) > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	testenv.RequireLockNotAvailable(t, ti.service.DeletePlugin(ctx, &gen.DeletePluginPayload{ID: plugin.ID.String()}))
 	require.NoError(t, tx.Rollback(ctx))
-	require.Eventually(t, func() bool { return len(finished) > 0 }, 5*time.Second, 10*time.Millisecond)
-	require.NoError(t, <-finished)
+	require.NoError(t, ti.service.DeletePlugin(ctx, &gen.DeletePluginPayload{ID: plugin.ID.String()}))
 }

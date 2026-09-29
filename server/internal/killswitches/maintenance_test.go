@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -187,12 +189,10 @@ func TestExpirySweepSerializesWithLifecycleHeaderLock(t *testing.T) {
 	prescriptionID := uuid.MustParse(string(prescription))
 	maintenance := NewMaintenanceService(conn, audit.NewLogger())
 
-	//nolint:glint // notestingrawsql: transaction holds the prescription header lock the expiry sweep must wait on
-	tx, err := conn.Begin(t.Context())
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), conn)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	txQueries := repo.New(tx)
-	_, err = txQueries.LockKillswitchPrescriptionCurrent(t.Context(), repo.LockKillswitchPrescriptionCurrentParams{OrganizationID: orgID, PrescriptionID: prescriptionID})
+	_, err := txQueries.LockKillswitchPrescriptionCurrent(t.Context(), repo.LockKillswitchPrescriptionCurrentParams{OrganizationID: orgID, PrescriptionID: prescriptionID})
 	require.NoError(t, err)
 
 	type expiryResult struct {
@@ -201,15 +201,11 @@ func TestExpirySweepSerializesWithLifecycleHeaderLock(t *testing.T) {
 	}
 	resultCh := make(chan expiryResult, 1)
 	go func() {
-		recorded, recordErr := maintenance.recordExpiry(context.Background(), repo.ListDueKillswitchExpiriesRow{OrganizationID: orgID, PrescriptionID: prescriptionID, Version: 1})
+		recorded, recordErr := maintenance.recordExpiry(t.Context(), repo.ListDueKillswitchExpiriesRow{OrganizationID: orgID, PrescriptionID: prescriptionID, Version: 1})
 		resultCh <- expiryResult{recorded: recorded, err: recordErr}
 	}()
 
-	select {
-	case result := <-resultCh:
-		require.FailNow(t, "expiry recording bypassed the lifecycle header lock", "result: %+v", result)
-	case <-time.After(150 * time.Millisecond):
-	}
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), conn, testenv.BackendPID(tx), 1)
 
 	// Supersede exactly at expiry so the version is no longer eligible.
 	version, err := txQueries.GetKillswitchPrescriptionVersion(t.Context(), repo.GetKillswitchPrescriptionVersionParams{OrganizationID: orgID, PrescriptionID: prescriptionID, Version: 1})
