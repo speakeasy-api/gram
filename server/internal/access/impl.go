@@ -533,16 +533,21 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 	// copy. The roles are already committed, so a failed read only leaves the
 	// mapped roles out of the response.
 	result := *memberUpdate.After
-	members, err := s.roleMgr.ListMembers(ctx, ac.ActiveOrganizationID)
+	principals, err := repo.New(s.db).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		UserID:         result.ID,
+	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "load directory mapped roles for member role update response", attr.SlogError(err))
 		return &result, nil
 	}
-	for _, member := range members.Members {
-		if member.ID == result.ID {
-			result.DirectoryRoleIds = member.DirectoryRoleIds
-			break
+	for _, principal := range principals {
+		if !principal.FromDirectoryMapping {
+			continue
 		}
+		// A role principal URN ends in the role ID: role:<kind>:<id>.
+		roleID := principal.PrincipalUrn[strings.LastIndex(principal.PrincipalUrn, ":")+1:]
+		result.DirectoryRoleIds = append(result.DirectoryRoleIds, roleID)
 	}
 	return &result, nil
 }

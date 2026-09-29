@@ -2511,7 +2511,9 @@ mapped AS (
       )
     )
 )
-SELECT principal_urn::text AS principal_urn
+SELECT
+  principal_urn::text AS principal_urn,
+  (source_rank = 1)::boolean AS from_directory_mapping
 FROM (
   SELECT 0 AS source_rank, role_slug AS sort_key, principal_urn FROM direct
   UNION ALL
@@ -2525,6 +2527,11 @@ type ListUserRolePrincipalsParams struct {
 	UserID         string
 }
 
+type ListUserRolePrincipalsRow struct {
+	PrincipalUrn         string
+	FromDirectoryMapping bool
+}
+
 // Every role principal a member holds, in one read: direct role assignments
 // first (the same rows as ListMemberRolePrincipalsByUser), then roles granted
 // through directory role mappings. A mapping applies when its group contains
@@ -2532,20 +2539,21 @@ type ListUserRolePrincipalsParams struct {
 // profile is the directory user linked to the member, falling back to an
 // unlinked directory user with the same email. A profile linked to another
 // user never matches. Mappings that point at a deleted role are skipped. Callers
-// dedupe roles that come from both sources.
-func (q *Queries) ListUserRolePrincipals(ctx context.Context, arg ListUserRolePrincipalsParams) ([]string, error) {
+// dedupe roles that come from both sources; from_directory_mapping tells the
+// two apart.
+func (q *Queries) ListUserRolePrincipals(ctx context.Context, arg ListUserRolePrincipalsParams) ([]ListUserRolePrincipalsRow, error) {
 	rows, err := q.db.Query(ctx, listUserRolePrincipals, arg.OrganizationID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListUserRolePrincipalsRow
 	for rows.Next() {
-		var principal_urn string
-		if err := rows.Scan(&principal_urn); err != nil {
+		var i ListUserRolePrincipalsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.FromDirectoryMapping); err != nil {
 			return nil, err
 		}
-		items = append(items, principal_urn)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

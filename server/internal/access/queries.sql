@@ -1283,7 +1283,8 @@ SELECT pg_advisory_xact_lock(hashtextextended('access.directory_role_mapping:' |
 -- profile is the directory user linked to the member, falling back to an
 -- unlinked directory user with the same email. A profile linked to another
 -- user never matches. Mappings that point at a deleted role are skipped. Callers
--- dedupe roles that come from both sources.
+-- dedupe roles that come from both sources; from_directory_mapping tells the
+-- two apart.
 WITH direct AS (
   SELECT
     COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
@@ -1364,7 +1365,9 @@ mapped AS (
       )
     )
 )
-SELECT principal_urn::text AS principal_urn
+SELECT
+  principal_urn::text AS principal_urn,
+  (source_rank = 1)::boolean AS from_directory_mapping
 FROM (
   SELECT 0 AS source_rank, role_slug AS sort_key, principal_urn FROM direct
   UNION ALL
