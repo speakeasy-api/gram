@@ -77,7 +77,7 @@ export function RegisterIssuerSheet({
   // A successful registration closes the sheet through the parent's own state,
   // which never reaches handleOpenChange — so without this the next registration
   // opens prefilled with the previous issuer. The sheet stays mounted, so there
-  // is no unmount to do it for us. Same reason as AdmitSubjectSheet.
+  // is no unmount to do it for us.
   useEffect(() => {
     if (!open) {
       setValues(EMPTY);

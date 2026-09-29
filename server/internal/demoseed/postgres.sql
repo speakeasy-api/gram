@@ -1227,9 +1227,8 @@ BEGIN
     -- organization-tier issuer, so a project row here would be a policy shape
     -- the management API refuses to write.
     --
-    -- Tags overlap deliberately: the Access Hub offers one filter chip per tag
-    -- in use, so a shared tag is what shows the filter narrowing to more than a
-    -- single platform.
+    -- Tags overlap deliberately, so a tag search in the Access Hub matches more
+    -- than one platform.
     (demo.det_uuid('gram-demo-workload-issuer-1'), demo_org, NULL,
      'Acme CI', ARRAY['ci', 'build'], 'https://ci-identity.example.com',
      'https://ci-identity.example.com/.well-known/jwks.json', FALSE),

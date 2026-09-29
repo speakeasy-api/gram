@@ -9,8 +9,9 @@ function matchesAny(fields: string[], query: string): boolean {
   return fields.some((field) => field.toLowerCase().includes(needle));
 }
 
-// A free-text match rather than a picker, so an operator can type whatever they
-// remember about a platform: part of its name, its issuer URL, or a tag. Case-insensitive, and an empty query matches everything.
+// Matches whatever an operator remembers about a platform: part of its name,
+// its issuer URL, or a tag. Case-insensitive, and an empty query matches
+// everything.
 export function issuerMatches(issuer: WorkloadIssuer, query: string): boolean {
   return matchesAny([issuer.name, issuer.issuer, ...issuer.tags], query);
 }
