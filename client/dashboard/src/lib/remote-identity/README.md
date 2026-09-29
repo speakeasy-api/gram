@@ -73,7 +73,6 @@ lib/remote-identity/
     useAllRemoteSessionClients.ts  every client for one user session issuer
     useProtectedResourceMetadata.ts  what an upstream URL advertises
     useUpstreamProbe.ts     does this URL demand authentication
-    useClientSessions.ts    has anyone actually signed in
 
   components/               the shared UI of the concept
     IdentityModeCards.tsx   User Identity / Service Account / No Identity

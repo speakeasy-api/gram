@@ -11,11 +11,11 @@ import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
-import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
+import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
@@ -26,12 +26,7 @@ import {
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowUpRight,
-  ChevronDown,
-  Loader2,
-  TriangleAlert,
-} from "lucide-react";
+import { ChevronDown, Loader2, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -90,6 +85,23 @@ export function RemoteMcpIdentitySectionBody({
     { enabled: !!target.userSessionIssuerId },
   );
   const { data: issuersResult } = useRemoteSessionIssuers();
+  const {
+    data: userSessionIssuer,
+    isLoading: issuerLoading,
+    isError: issuerError,
+  } = useUserSessionIssuer(
+    { id: target.userSessionIssuerId ?? undefined },
+    undefined,
+    { enabled: !!target.userSessionIssuerId, throwOnError: false },
+  );
+  // On an organization-level issuer, a binding to an organization-owned
+  // client is shared by every project's servers on that issuer, so the server
+  // refuses to replace it from one project (ErrIdentityOrgWideBinding).
+  // Project-owned clients stay editable, so only that case locks the panel.
+  const organizationIssuer = userSessionIssuer?.projectId === "";
+  const orgSharedClient = organizationIssuer
+    ? clients.find((linked) => linked.projectId === "")
+    : undefined;
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -114,8 +126,14 @@ export function RemoteMcpIdentitySectionBody({
   // binding for its siblings — but headers do not inherit that lock.
   const headersReadOnly =
     siblingsQuery.isLoading || siblingsQuery.isError || !canWrite;
+  // Held until the issuer is classified: an organization-wide one could make
+  // Save fail with ErrIdentityOrgWideBinding, so neither a pending nor a
+  // failed lookup may leave the controls open.
   const identityReadOnly =
     sharedSource ||
+    !!orgSharedClient ||
+    issuerLoading ||
+    issuerError ||
     siblingsQuery.isLoading ||
     siblingsQuery.isError ||
     !canWrite;
@@ -220,7 +238,10 @@ export function RemoteMcpIdentitySectionBody({
   const leavingAgent =
     (actualMode === "agent" && selectedMode !== "agent") ||
     (selectedMode === "none" && !!authorizationHeader);
-  const destructive = leavingUser || leavingAgent;
+  // Staying on User but saving a different client swaps out the one people
+  // signed in through, so they all have to sign in again.
+  const replacingClient = selectedMode === "user" && userDraft.replacesClient;
+  const destructive = leavingUser || leavingAgent || replacingClient;
 
   const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
@@ -349,10 +370,37 @@ export function RemoteMcpIdentitySectionBody({
               </Alert>
             ) : null}
 
+            {orgSharedClient && !sharedSource ? (
+              <Alert variant="warning" dismissible={false}>
+                This server uses a client shared by every project on the
+                organization&apos;s session issuer, so it can&apos;t be changed
+                here. An organization admin can remove it from this server on
+                the{" "}
+                <Link
+                  className="font-medium underline underline-offset-2"
+                  to={routes.remoteIdentityProviders.clientDetail.mcpServers.href(
+                    orgSharedClient.remoteSessionIssuerId,
+                    orgSharedClient.id,
+                  )}
+                >
+                  client&apos;s MCP servers
+                </Link>
+                , or you can move this server to a project session issuer under
+                Sessions below.
+              </Alert>
+            ) : null}
+
             {siblingsQuery.isError ? (
               <Alert variant="error" dismissible={false}>
                 Could not verify whether this Remote MCP source is shared.
                 Identity editing is disabled.
+              </Alert>
+            ) : null}
+
+            {issuerError ? (
+              <Alert variant="error" dismissible={false}>
+                Could not load this server's user session issuer. Identity
+                editing is disabled.
               </Alert>
             ) : null}
 
@@ -456,40 +504,21 @@ export function RemoteMcpIdentitySectionBody({
           </div>
 
           {identityResolved && selectedMode === "user" ? (
-            <AuthRow
-              label="Identity provider"
-              hint={
-                <>
-                  Where users sign in. Speakeasy registers this server with it
-                  for you.
-                  <Link
-                    to={routes.remoteIdentityProviders.href()}
-                    className="text-muted-foreground hover:text-foreground mt-2 flex w-fit items-center gap-1 underline underline-offset-2"
-                  >
-                    Manage identity providers
-                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                  </Link>
-                </>
-              }
-            >
+            // The provider row is the whole decision, so it takes the full
+            // width rather than sitting beside a label that restates it.
+            <div className="px-6 py-5">
               <UserIdentityRow
                 draft={userDraft}
-                disabled={identityReadOnly}
-                manageHref={routes.remoteIdentityProviders.href()}
+                disabled={identityReadOnly || userDraft.saving}
                 createHref={routes.remoteIdentityProviders.href()}
-                inspectHref={mcpServerTabHref(routes, target.slug, "inspect")}
-                providerHref={(issuerId) =>
-                  routes.remoteIdentityProviders.issuerDetail.href(issuerId)
-                }
                 clientHref={(issuerId, clientId) =>
                   routes.remoteIdentityProviders.clientDetail.href(
                     issuerId,
                     clientId,
                   )
                 }
-                onSwitchToAgent={() => setSelectedMode("agent")}
               />
-            </AuthRow>
+            </div>
           ) : null}
 
           {identityResolved && selectedMode === "agent" ? (
@@ -571,12 +600,10 @@ export function RemoteMcpIdentitySectionBody({
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>
-              {leavingUser
-                ? `Stop signing users in through ${upstreamName}?`
-                : "Remove the shared credential?"}
+              {confirmTitle(leavingUser, replacingClient, upstreamName)}
             </Dialog.Title>
             <Dialog.Description>
-              {removalConsequences(leavingUser, leavingAgent)}
+              {removalConsequences(leavingUser, leavingAgent, replacingClient)}
             </Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
@@ -610,6 +637,8 @@ export function RemoteMcpIdentitySectionBody({
 
 const UNLINK_PROVIDER_CONSEQUENCE =
   "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers.";
+const REPLACE_CLIENT_CONSEQUENCE =
+  "Saving replaces the client this server uses. Everyone signed in through the current one will have to sign in again. The old client stays available to other servers.";
 const REMOVE_CREDENTIAL_CONSEQUENCE =
   "Saving removes the static Authorization credential from the Remote MCP source. Requests will no longer authenticate upstream.";
 
@@ -621,10 +650,22 @@ const REMOVE_CREDENTIAL_CONSEQUENCE =
 function removalConsequences(
   leavingUser: boolean,
   leavingAgent: boolean,
+  replacingClient: boolean,
 ): string {
+  if (replacingClient) return REPLACE_CLIENT_CONSEQUENCE;
   if (leavingUser && leavingAgent) {
     return `${UNLINK_PROVIDER_CONSEQUENCE} ${REMOVE_CREDENTIAL_CONSEQUENCE}`;
   }
   if (leavingUser) return UNLINK_PROVIDER_CONSEQUENCE;
   return REMOVE_CREDENTIAL_CONSEQUENCE;
+}
+
+function confirmTitle(
+  leavingUser: boolean,
+  replacingClient: boolean,
+  upstreamName: string,
+): string {
+  if (replacingClient) return "Replace the connected client?";
+  if (leavingUser) return `Stop signing users in through ${upstreamName}?`;
+  return "Remove the shared credential?";
 }

@@ -4,10 +4,8 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsTab } from "./SettingsTab";
 
-vi.mock("./sections/BrandingSection", () => ({
-  BrandingSection: ({ title = "Branding" }: { title?: string }) => (
-    <h2>{title}</h2>
-  ),
+vi.mock("./sections/GeneralSection", () => ({
+  GeneralSection: () => <h2>General</h2>,
 }));
 vi.mock("./sections/authentication/AuthenticationSection", () => ({
   MCP_AUTHENTICATION_SECTION_ID: "authentication",
@@ -37,15 +35,6 @@ vi.mock("./sections/ToolFilteringSection", () => ({
 
 vi.mock("./sections/NetworkAccessSection", () => ({
   NetworkAccessSection: () => <h2>Network Access</h2>,
-}));
-vi.mock("./sections/SourceNameSection", () => ({
-  MCP_SOURCE_NAME_SECTION_ID: "source-name",
-  RemoteSourceNameSection: () => <h2>Source Name</h2>,
-  TunneledSourceNameSection: () => <h2>Source Name</h2>,
-}));
-vi.mock("./sections/UpstreamUrlSection", () => ({
-  MCP_UPSTREAM_URL_SECTION_ID: "upstream-url",
-  UpstreamUrlSection: () => <h2>Upstream URL</h2>,
 }));
 vi.mock("./sections/ResourceIdentifierSection", () => ({
   MCP_RESOURCE_IDENTIFIER_SECTION_ID: "resource-identifier",
@@ -126,9 +115,7 @@ describe("SettingsTab", () => {
         }),
       ),
     ).toEqual([
-      "Display",
-      "Source Name",
-      "Upstream URL",
+      "General",
       // Upstream headers are the Identity panel's Custom Headers disclosure
       // not a section of their own.
       "Identity",
@@ -144,8 +131,7 @@ describe("SettingsTab", () => {
     expect(
       renderSettings(server({ tunneledMcpServerId: "tunneled-source-1" })),
     ).toEqual([
-      "Branding",
-      "Source Name",
+      "General",
       "Server URL",
       "Network Access",
       "Authentication",
@@ -162,6 +148,6 @@ describe("SettingsTab", () => {
   it("preserves unproxied MCP settings structure", () => {
     expect(
       renderSettings(server({ unproxiedMcpServerId: "unproxied-source-1" })),
-    ).toEqual(["Branding", "Authentication", "Danger Zone"]);
+    ).toEqual(["General", "Authentication", "Danger Zone"]);
   });
 });

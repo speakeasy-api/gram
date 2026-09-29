@@ -5,21 +5,24 @@ import {
   deriveRemoteSessionIssuerNameFromUrl,
   remoteSessionScopeTier,
 } from "@/lib/sources";
-import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import {
+  invalidateAllRemoteSessionsCount,
+  useRemoteSessionsCount,
+} from "@gram/client/react-query/remoteSessionsCount.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   preferredScopes,
   serverIdentityAuthMethod,
 } from "../model/clientConfiguration";
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
-import { useClientHasSessions } from "../queries/useClientSessions";
 import { useProtectedResourceMetadata } from "../queries/useProtectedResourceMetadata";
 
 /**
@@ -49,18 +52,106 @@ type ProviderGroup = {
   options: ProviderOption[];
 };
 
-type ClientOption = {
+export type ClientOption = {
   id: string;
   name: string;
-  connections: number;
+  /** A short tail of the provider-issued client_id, to tell clients apart. */
+  hint: string | null;
+  /** Scopes the client was registered with. Empty: it takes what the provider grants. */
+  scopes: string[];
 };
+
+/** How a server without a connected client gets one. */
+export type RegistrationChoice = "existing" | "auto" | "manual";
+
+/** Which automatic registration to use when the provider offers both. */
+export type RegistrationMethod = "cimd" | "dcr";
 
 type UserIdentityStatus =
   | { kind: "idle" }
   | { kind: "pending" }
-  | { kind: "done" }
-  | { kind: "refused"; message: string | null }
-  | { kind: "unreachable"; message: string | null };
+  | { kind: "done" };
+
+/** What a provider can do on its own, read from its metadata. */
+type AutomaticSupport = { cimd: boolean; dcr: boolean };
+
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+// The server accepts provider endpoints only as absolute https URLs, or http
+// on loopback (urls.IsAbsoluteHTTPSOrLoopback); offering automatic setup for
+// anything else would only fail at Save.
+function secureEndpoint(endpoint: string | null | undefined): boolean {
+  const trimmed = endpoint?.trim();
+  if (!trimmed) return false;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+// Mirrors the server's registration choice so the cards never offer a path
+// Save would refuse. Without both OAuth endpoints a registration would
+// persist an identity nobody can complete a login through. CIMD needs the
+// provider to accept public clients (`none`, or no methods listed), as
+// supportsCIMD does server-side.
+function automaticSupport(candidate: {
+  clientIdMetadataDocumentSupported?: boolean;
+  registrationEndpoint?: string | null;
+  authorizationEndpoint?: string | null;
+  tokenEndpoint?: string | null;
+  tokenEndpointAuthMethodsSupported?: string[] | null;
+}): AutomaticSupport {
+  if (
+    !secureEndpoint(candidate.authorizationEndpoint) ||
+    !secureEndpoint(candidate.tokenEndpoint)
+  ) {
+    return { cimd: false, dcr: false };
+  }
+  const methods = candidate.tokenEndpointAuthMethodsSupported ?? [];
+  return {
+    cimd:
+      !!candidate.clientIdMetadataDocumentSupported &&
+      (methods.length === 0 || methods.includes("none")),
+    dcr: secureEndpoint(candidate.registrationEndpoint),
+  };
+}
+
+const CLIENT_DATE = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+// A client_id is whatever the provider issued — a metadata URL for CIMD, an
+// opaque string otherwise — and means nothing to an operator picking between
+// clients. Name a client by how it came to exist and when.
+function clientOptionName(candidate: RemoteSessionClient): string {
+  const created = CLIENT_DATE.format(candidate.createdAt);
+  return candidate.clientIdMetadataUri
+    ? `Automatic client · created ${created}`
+    : `Client created ${created}`;
+}
+
+function idTail(id: string): string {
+  return id.length > 8 ? `…${id.slice(-6)}` : id;
+}
+
+// A short tail tells clients apart: a non-CIMD client's own client_id always,
+// and a CIMD client's row id only when another client shares its label.
+function clientOptionHint(
+  candidate: RemoteSessionClient,
+  labelShared: boolean,
+): string | null {
+  if (!candidate.clientIdMetadataUri) return idTail(candidate.clientId);
+  return labelShared ? idTail(candidate.id) : null;
+}
+
+function scopesFromText(text: string): string[] {
+  return [...new Set(text.split(/\s+/).filter((scope) => scope !== ""))];
+}
 
 // A provider counts as this upstream's own only on a DNS-label boundary. A
 // bare suffix test would read notgithub.com as github.com and hand that
@@ -129,27 +220,49 @@ export type UserIdentityDraft = {
   providerUnreachable: boolean;
   providerLoading: boolean;
 
-  clientOptions: ClientOption[];
   clientsLoading: boolean;
-  existingClient: ClientOption | null;
-  /** null while unknown. False means nobody has signed in through it yet. */
-  clientHasSessions: boolean | null;
-  selectClient: (id: string | null) => void;
-  clientLabel: string;
-  clientCaption: string;
-  newClientHint: string;
-  automaticAvailable: boolean;
+  /** A discovered provider's capabilities are still being read. */
+  capabilitiesLoading: boolean;
 
-  manualNeeded: boolean;
+  /** The server has a client and the operator has not cleared it. */
+  connected: boolean;
+  /** The connected client, once the provider's client list has loaded. */
+  connectedClient: ClientOption | null;
+  /** People signed in through the connected client; null while unknown. */
+  signedIn: number | null;
+  /** The server had a client and the operator cleared it. Save replaces it. */
+  cleared: boolean;
+  clear: () => void;
+  /** Back out of clearing and keep the connected client. */
+  cancelClear: () => void;
+
+  choice: RegistrationChoice;
+  selectChoice: (choice: RegistrationChoice) => void;
+  existingAvailable: boolean;
+  automaticAvailable: boolean;
+  existingOptions: ClientOption[];
+  existingClientId: string | null;
+  selectExisting: (id: string) => void;
+  /** The chosen existing client is the one already connected, so Save would change nothing. */
+  sameAsConnected: boolean;
+
+  /** The provider supports both CIMD and DCR, so the operator may pick one. */
+  methodChoiceAvailable: boolean;
+  registrationMethod: RegistrationMethod;
+  setRegistrationMethod: (method: RegistrationMethod) => void;
+
   clientId: string;
   setClientId: (value: string) => void;
   clientSecret: string;
   setClientSecret: (value: string) => void;
-  enterCredentialsManually: () => void;
+  /** Space-separated scopes for a manual client. Blank requests the defaults. */
+  scopeText: string;
+  setScopeText: (value: string) => void;
   registrationGuideUrl: string | null;
 
+  /** Save swaps the server's client for another, so everyone signs in again. */
+  replacesClient: boolean;
   status: UserIdentityStatus;
-  idleHint: string;
   canSave: boolean;
   save: () => Promise<void>;
   saving: boolean;
@@ -160,6 +273,10 @@ export type UserIdentityDraft = {
  * Remote Identity Provider, which OAuth client, and the single commit that
  * writes both. The issuer/client split stays inside here — callers see one
  * provider and one registration choice, per AIM-230.
+ *
+ * A server with a client shows it as connected. Clearing it opens the choice
+ * of an existing client, automatic registration or manual credentials; nothing
+ * changes until Save.
  */
 export function useUserIdentityDraft({
   mcpServerId,
@@ -182,15 +299,15 @@ export function useUserIdentityDraft({
   const queryClient = useQueryClient();
 
   const [providerPick, setProviderPick] = useState<string | null>(null);
-  // undefined: untouched, so the linked client shows. null: the operator
-  // explicitly asked for a new one, which must beat the linked client or the
-  // row can never leave it for Auto-Configure or manual registration.
-  const [clientPick, setClientPick] = useState<string | null | undefined>(
-    undefined,
-  );
-  const [forceManual, setForceManual] = useState(false);
+  const [cleared, setCleared] = useState(false);
+  // null: follow the default for whatever the provider offers.
+  const [choicePick, setChoicePick] = useState<RegistrationChoice | null>(null);
+  const [existingPick, setExistingPick] = useState<string | null>(null);
+  const [registrationMethod, setRegistrationMethod] =
+    useState<RegistrationMethod>("cimd");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
+  const [scopeText, setScopeText] = useState("");
   const [localStatus, setLocalStatus] = useState<UserIdentityStatus>({
     kind: "idle",
   });
@@ -291,30 +408,33 @@ export function useUserIdentityDraft({
       { remoteSessionIssuerId: selectedIssuer?.id ?? "" },
       { enabled: enabled && !!selectedIssuer },
     );
-  const clientOptions = useMemo<ClientOption[]>(
-    () =>
-      providerClients.map((candidate) => ({
-        id: candidate.id,
-        name: remoteSessionClientDisplayName(candidate),
-        connections: candidate.userSessionIssuerIds.length,
-      })),
-    [providerClients],
-  );
-  // A server that is already configured opens on the client it is linked to,
-  // not on Auto-Configure — the picker shows what is in force, and only an
-  // explicit change makes the row saveable again.
+  const clientOptions = useMemo<ClientOption[]>(() => {
+    const names = providerClients.map(clientOptionName);
+    return providerClients.map((candidate, index) => ({
+      id: candidate.id,
+      name: names[index] ?? "",
+      hint: clientOptionHint(
+        candidate,
+        names.filter((name) => name === names[index]).length > 1,
+      ),
+      scopes: candidate.scope ?? [],
+    }));
+  }, [providerClients]);
   const linkedClientId =
     linkedClients.find(
       (candidate) => candidate.remoteSessionIssuerId === selectedProviderId,
     )?.id ?? null;
-  const selectedClientId =
-    clientPick === undefined ? linkedClientId : clientPick;
-  const existingClient =
-    clientOptions.find((candidate) => candidate.id === selectedClientId) ??
-    null;
-  const clientHasSessions = useClientHasSessions(existingClient?.id, {
-    enabled,
-  });
+  const connected = !!linkedClientId && !cleared;
+  const connectedClient = connected
+    ? (clientOptions.find((candidate) => candidate.id === linkedClientId) ??
+      null)
+    : null;
+  const signedInQuery = useRemoteSessionsCount(
+    { remoteSessionClientId: linkedClientId ?? "" },
+    undefined,
+    { enabled: enabled && connected, throwOnError: false },
+  );
+  const signedIn = connected ? (signedInQuery.data?.subjects ?? null) : null;
 
   // A provider we have no record of has published no capabilities either, so
   // read its metadata before promising anything. Plenty of real upstreams —
@@ -340,61 +460,61 @@ export function useUserIdentityDraft({
   const capabilitiesLoading =
     !!selectedDiscovered && discoveredMetadataQuery.isLoading;
 
-  // A provider that publishes neither a CIMD-capable document nor a
-  // registration endpoint cannot register this server on its own.
-  const supportsAutomatic = (candidate: {
-    clientIdMetadataDocumentSupported?: boolean;
-    registrationEndpoint?: string | null;
-    authorizationEndpoint?: string | null;
-    tokenEndpoint?: string | null;
-  }): boolean => {
-    // Without both endpoints the registration would persist an identity
-    // nobody can complete a login through, so it is not on offer.
-    if (
-      !candidate.authorizationEndpoint?.trim() ||
-      !candidate.tokenEndpoint?.trim()
-    ) {
-      return false;
-    }
-    return (
-      !!candidate.clientIdMetadataDocumentSupported ||
-      !!candidate.registrationEndpoint?.trim()
-    );
-  };
-
-  let automaticAvailable = false;
-  if (selectedDiscovered) {
-    automaticAvailable =
-      !!discoveredMetadata && supportsAutomatic(discoveredMetadata);
+  let support: AutomaticSupport = { cimd: false, dcr: false };
+  if (selectedDiscovered && discoveredMetadata) {
+    support = automaticSupport(discoveredMetadata);
   } else if (selectedIssuer) {
-    automaticAvailable = supportsAutomatic(selectedIssuer);
+    support = automaticSupport(selectedIssuer);
   }
-  const manualNeeded =
-    !existingClient &&
-    !capabilitiesLoading &&
-    (forceManual || !automaticAvailable);
+  const automaticAvailable = support.cimd || support.dcr;
+  const methodChoiceAvailable = support.cimd && support.dcr;
+  const existingAvailable = clientOptions.length > 0;
+
+  // Reusing a client beats registering another, and registering beats asking
+  // for credentials by hand. A pick the provider no longer allows falls back.
+  let defaultChoice: RegistrationChoice = "manual";
+  if (existingAvailable) defaultChoice = "existing";
+  else if (automaticAvailable) defaultChoice = "auto";
+  let choice: RegistrationChoice = choicePick ?? defaultChoice;
+  if (choice === "existing" && !existingAvailable) choice = defaultChoice;
+  if (choice === "auto" && !automaticAvailable) choice = defaultChoice;
+
+  const existingClient =
+    choice === "existing"
+      ? (clientOptions.find((candidate) => candidate.id === existingPick) ??
+        clientOptions[0] ??
+        null)
+      : null;
+  const sameAsConnected =
+    !!existingClient && existingClient.id === linkedClientId;
+  const manualNeeded = choice === "manual";
+  // Any client this server holds now is replaced by the one Save picks, and the
+  // people signed in through the old one have to sign in again.
+  const replacesClient =
+    linkedClients.length > 0 && !connected && !sameAsConnected;
+
+  const resetChoice = (): void => {
+    setChoicePick(null);
+    setExistingPick(null);
+    setRegistrationMethod("cimd");
+    // Manual credentials are issued by one provider and meaningless to the
+    // next, so they leave with it rather than being saved under its successor.
+    setClientId("");
+    setClientSecret("");
+    setScopeText("");
+    setLocalStatus({ kind: "idle" });
+  };
 
   // A client belongs to exactly one provider, so choosing a provider clears
   // the client choice and any outcome from the previous one.
   const selectProvider = (id: string | null): void => {
     setProviderPick(id);
-    setClientPick(undefined);
-    setForceManual(false);
-    // Manual credentials are issued by one provider and meaningless to the
-    // next, so they leave with it rather than being saved under its successor.
-    setClientId("");
-    setClientSecret("");
-    setLocalStatus({ kind: "idle" });
+    resetChoice();
   };
 
   const commit = useMutation({
     mutationFn: async () => {
       if (!selected) throw new Error("choose an identity provider");
-      const clientMode = existingClient
-        ? "existing"
-        : manualNeeded
-          ? "manual"
-          : "auto";
 
       // A discovered provider is created from what the upstream publishes, so
       // read its metadata now and send the whole record with the commit.
@@ -446,18 +566,20 @@ export function useUserIdentityDraft({
       }
 
       let clientConfiguration: ServerIdentityClientConfiguration | undefined;
-      if (!existingClient) {
+      if (choice !== "existing") {
         // A new client asks for what this server's protected resource
         // advertises, exactly as the create flow does. Left empty, the server
         // falls back to every scope the issuer advertises — the request that
-        // broke Salesforce logins.
-        const resourceScopes =
-          prm.metadata?.scopesSupported ??
-          (await protectedResourceScopes(client, remoteMcpServerId));
-        const scopes = preferredScopes(
-          resourceScopes,
-          selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
-        );
+        // broke Salesforce logins. Scopes typed for a manual client win.
+        const typedScopes = manualNeeded ? scopesFromText(scopeText) : [];
+        const scopes =
+          typedScopes.length > 0
+            ? typedScopes
+            : preferredScopes(
+                prm.metadata?.scopesSupported ??
+                  (await protectedResourceScopes(client, remoteMcpServerId)),
+                selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
+              );
         const secret = manualNeeded ? clientSecret.trim() : "";
         clientConfiguration = {
           clientId: manualNeeded ? clientId.trim() : undefined,
@@ -481,58 +603,64 @@ export function useUserIdentityDraft({
           mcpServerId,
           providerId,
           createProvider,
-          clientMode,
+          clientMode: choice,
           existingClientId: existingClient?.id,
           clientConfiguration,
+          // Only sent when it changes something: CIMD is the server default.
+          registrationMethod:
+            choice === "auto" && methodChoiceAvailable
+              ? registrationMethod
+              : undefined,
         },
       });
     },
     onSuccess: async (result) => {
+      const providerName = selected?.name ?? "The provider";
       if (result.failure) {
-        setLocalStatus({
-          kind:
-            result.failure.outcome === "refused" ? "refused" : "unreachable",
-          message: result.failure.providerMessage ?? null,
-        });
+        setLocalStatus({ kind: "idle" });
+        toast.error(
+          result.failure.providerMessage ??
+            (result.failure.outcome === "refused"
+              ? `${providerName} refused to register this server.`
+              : `Couldn't reach ${providerName} to register this server. Save again to retry.`),
+        );
         return;
       }
       if (result.manualSetupRequired) {
         // Not a registration failure: nothing was written, and the operator
         // needs to paste credentials the provider issued out of band.
-        setForceManual(true);
+        setChoicePick("manual");
         setLocalStatus({ kind: "idle" });
+        toast.warning(
+          `${providerName} can't register this server on its own. Enter the credentials it issued.`,
+        );
         return;
       }
+      setCleared(false);
+      resetChoice();
       setLocalStatus({ kind: "done" });
-      setClientId("");
-      setClientSecret("");
       await Promise.all([
         invalidateAllRemoteSessionClients(queryClient),
         invalidateAllRemoteSessionIssuers(queryClient),
+        invalidateAllRemoteSessionsCount(queryClient),
       ]);
     },
     onError: (error: unknown) => {
-      // Dropping back to idle without a word makes Save look like it simply
-      // stopped. The reachable case is an operator with mcp:write but not
+      // The reachable case is an operator with mcp:write but not
       // project:write: the commit needs project:write to create or register a
       // client, so the button is enabled and the request is refused.
-      setLocalStatus({
-        kind: "unreachable",
-        message: error instanceof Error ? error.message : null,
-      });
+      setLocalStatus({ kind: "idle" });
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save identity",
+      );
     },
   });
 
   const { mutateAsync: runCommit, isPending } = commit;
 
   // Dirty means the selection differs from what the server holds — not that
-  // the operator opened a menu. Asking whether they interacted meant
-  // re-picking the provider already in force dropped the row out of Linked and
-  // offered a Save that re-committed an identical configuration.
-  const touched =
-    selectedProviderId !== defaultProviderId ||
-    selectedClientId !== linkedClientId ||
-    forceManual;
+  // the operator opened a menu.
+  const touched = selectedProviderId !== defaultProviderId || cleared;
   let status: UserIdentityStatus = localStatus;
   if (isPending) {
     status = { kind: "pending" };
@@ -540,47 +668,21 @@ export function useUserIdentityDraft({
     status = { kind: "done" };
   }
 
+  let choiceComplete = true;
+  if (choice === "existing")
+    choiceComplete = !!existingClient && !sameAsConnected;
+  if (choice === "manual") choiceComplete = clientId.trim() !== "";
+
   const canSave =
     !!selected &&
+    !connected &&
     !capabilitiesLoading &&
     // Saving before the client list lands would miss an existing client and
     // register a duplicate in its place.
     !clientsLoading &&
     !isPending &&
     status.kind !== "done" &&
-    (!manualNeeded || clientId.trim() !== "");
-
-  // What Save is about to do, in one clause. Written as a chain of cases
-  // rather than nested ternaries so a new state is one line to add.
-  let idleHint: string;
-  let clientLabel: string;
-  let clientCaption: string;
-  if (!selected) {
-    idleHint = "Choose a provider to continue.";
-    clientLabel = "Auto-Configure";
-    clientCaption = "Registers on save";
-  } else if (existingClient) {
-    idleHint = `Uses ${existingClient.name} when you save.`;
-    clientLabel = existingClient.name;
-    clientCaption = `${existingClient.connections} connection${existingClient.connections === 1 ? "" : "s"}`;
-  } else if (capabilitiesLoading) {
-    idleHint = "Checking how this provider registers clients…";
-    clientLabel = "Checking…";
-    clientCaption = "Reading what the provider supports";
-  } else if (manualNeeded) {
-    idleHint = "Saved with the credentials you paste.";
-    clientLabel = "New client";
-    clientCaption = "Credentials below";
-  } else if (selected.isNew) {
-    idleHint =
-      "Created from what the upstream publishes and registered when you save.";
-    clientLabel = "Auto-Configure";
-    clientCaption = "Registers on save";
-  } else {
-    idleHint = "Registered automatically when you save.";
-    clientLabel = "Auto-Configure";
-    clientCaption = "Registers on save";
-  }
+    choiceComplete;
 
   return {
     providerGroups,
@@ -589,39 +691,52 @@ export function useUserIdentityDraft({
     providerUnreachable,
     providerLoading: prm.status === "loading",
 
-    clientOptions,
     clientsLoading,
-    existingClient,
-    clientHasSessions,
-    selectClient: (id: string | null): void => {
-      setClientPick(id);
+    capabilitiesLoading,
+
+    connected,
+    connectedClient,
+    signedIn,
+    cleared,
+    clear: (): void => {
+      setCleared(true);
+      resetChoice();
+    },
+    cancelClear: (): void => {
+      setCleared(false);
+      resetChoice();
+    },
+
+    choice,
+    selectChoice: (next: RegistrationChoice): void => {
+      setChoicePick(next);
       setLocalStatus({ kind: "idle" });
     },
-    /** Label for the registration picker's trigger. */
-    clientLabel,
-    clientCaption,
-    newClientHint: manualNeeded
-      ? "Needs credentials from the provider"
-      : "Recommended. Registers automatically.",
+    existingAvailable,
     automaticAvailable,
+    existingOptions: clientOptions,
+    existingClientId: existingClient?.id ?? null,
+    selectExisting: setExistingPick,
+    sameAsConnected,
 
-    manualNeeded,
+    methodChoiceAvailable,
+    registrationMethod,
+    setRegistrationMethod,
+
     clientId,
     setClientId,
     clientSecret,
     setClientSecret,
-    enterCredentialsManually: (): void => {
-      setForceManual(true);
-      setLocalStatus({ kind: "idle" });
-    },
+    scopeText,
+    setScopeText,
     registrationGuideUrl:
       selectedIssuer?.clientSetupDocumentationUrl ??
       selectedIssuer?.serviceDocumentation ??
       discoveredMetadata?.serviceDocumentation ??
       null,
 
+    replacesClient,
     status,
-    idleHint,
     canSave,
     save: async (): Promise<void> => {
       // Awaitable so callers can sequence work after it. onError has already

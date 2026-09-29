@@ -20,8 +20,8 @@ import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
-import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
 import { UserSessionIssuerField } from "./UserSessionIssuerField";
+import { useSelectableUserSessionIssuers } from "./useSelectableUserSessionIssuers";
 import { UserIdentitySessionControls } from "./UserIdentitySessionControls";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
@@ -140,9 +140,7 @@ function StandardAuthenticationSectionBody({
 }): JSX.Element {
   const userSessionIssuerId = target.userSessionIssuerId ?? undefined;
   const issuerConfigured = !!userSessionIssuerId;
-  const effectiveIssuersQuery = useEffectiveUserSessionIssuers({
-    mcpResourceId: target.permissionResourceId,
-  });
+  const effectiveIssuersQuery = useSelectableUserSessionIssuers(target);
 
   const {
     data: userSessionIssuer,
@@ -151,26 +149,6 @@ function StandardAuthenticationSectionBody({
   } = useUserSessionIssuer({ id: userSessionIssuerId }, undefined, {
     enabled: issuerConfigured,
   });
-  const effectiveUserSessionIssuers = useMemo(() => {
-    const supportedIssuers = target.supportsOrganizationIssuers
-      ? effectiveIssuersQuery.issuers
-      : effectiveIssuersQuery.issuers.filter(
-          (issuer) => issuer.projectId !== "",
-        );
-    if (
-      !userSessionIssuer ||
-      (!target.supportsOrganizationIssuers &&
-        userSessionIssuer.projectId === "") ||
-      supportedIssuers.some((issuer) => issuer.id === userSessionIssuer.id)
-    ) {
-      return supportedIssuers;
-    }
-    return [userSessionIssuer, ...supportedIssuers];
-  }, [
-    effectiveIssuersQuery.issuers,
-    target.supportsOrganizationIssuers,
-    userSessionIssuer,
-  ]);
 
   // listRemoteSessionIssuers returns this project's own issuers, inherited
   // organization-level ones (same org), and inherited platform issuers from the
@@ -271,7 +249,7 @@ function StandardAuthenticationSectionBody({
         <div className="divide-y">
           <UserSessionIssuerField
             target={target}
-            issuers={effectiveUserSessionIssuers}
+            issuers={effectiveIssuersQuery.issuers}
             isLoading={effectiveIssuersQuery.isLoading}
             isError={effectiveIssuersQuery.isError}
           />

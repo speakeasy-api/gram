@@ -49127,6 +49127,114 @@ paths:
       x-speakeasy-name-override: commitServerIdentityConfiguration
       x-speakeasy-react-hook:
         name: CommitServerIdentityConfiguration
+  /rpc/remoteSessions.count:
+    get:
+      description: 'Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller''s project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.'
+      operationId: countRemoteSessions
+      parameters:
+        - allowEmptyValue: true
+          description: The remote_session_client whose sessions to count.
+          in: query
+          name: remote_session_client_id
+          required: true
+          schema:
+            description: The remote_session_client whose sessions to count.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountRemoteSessionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: countRemoteSessions remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: count
+      x-speakeasy-react-hook:
+        name: RemoteSessionsCount
   /rpc/remoteSessions.detachBinding:
     post:
       description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
@@ -77557,6 +77665,12 @@ components:
           type: string
           description: An existing Remote Identity Provider visible to the target project.
           format: uuid
+        registration_method:
+          type: string
+          description: Auto mode only. cimd (the default) prefers a Client ID Metadata Document when the provider supports one and falls back to dynamic client registration; dcr always uses dynamic client registration.
+          enum:
+            - cimd
+            - dcr
       description: 'A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
       required:
         - mcp_server_id
@@ -77631,6 +77745,16 @@ components:
           description: The confirmed servers with their new state.
       required:
         - servers
+    CountRemoteSessionsResult:
+      type: object
+      properties:
+        subjects:
+          type: integer
+          description: Distinct user subjects with a live remote_session through the client.
+          format: int64
+      description: Result type for counting the people signed in through a remote_session_client.
+      required:
+        - subjects
     CreateAgentForm:
       type: object
       properties:

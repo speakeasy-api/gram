@@ -2,18 +2,37 @@ import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import {
   Command,
   CommandEmpty,
   CommandGroup,
   CommandItem,
   CommandList,
 } from "@/components/ui/Command";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/HoverCard";
 import { Input } from "@/components/ui/Input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
@@ -22,93 +41,23 @@ import {
   BookOpen,
   Check,
   ChevronDown,
+  ChevronRight,
+  Info,
   KeyRound,
   Loader2,
-  Sparkles,
+  Settings,
+  X,
 } from "lucide-react";
 import type * as React from "react";
 import { useState } from "react";
 import { Link } from "react-router";
 import type {
+  ClientOption,
   ProviderOption,
+  RegistrationChoice,
+  RegistrationMethod,
   UserIdentityDraft,
 } from "../drafts/useIdentityDraft";
-
-/**
- * The issuer URL under the provider name, linked to that provider's page when
- * it is one we hold a record of. A provider that save is about to create has
- * no page to open yet.
- */
-function ProviderUrl({
-  selected,
-  providerHref,
-}: {
-  selected: ProviderOption | null;
-  providerHref: (issuerId: string) => string;
-}): JSX.Element {
-  const url = selected?.url ?? "";
-  if (!selected || selected.isNew) {
-    return (
-      <Text muted variant="small" className="block font-mono text-xs">
-        {url}
-      </Text>
-    );
-  }
-  return (
-    <Link
-      to={providerHref(selected.id)}
-      className="text-muted-foreground hover:text-foreground block font-mono text-xs hover:underline hover:underline-offset-2"
-    >
-      {url}
-    </Link>
-  );
-}
-
-/**
- * One line under the registration control. A linked client nobody has signed
- * in through points at where they would; otherwise its connection count opens
- * the client's own page, which is where those connections are listed.
- */
-function ClientCaption({
-  draft,
-  selected,
-  inspectHref,
-  clientHref,
-}: {
-  draft: UserIdentityDraft;
-  selected: ProviderOption | null;
-  inspectHref: string;
-  clientHref: (issuerId: string, clientId: string) => string;
-}): JSX.Element {
-  const caption = (
-    <Text muted variant="small" className="block text-xs">
-      {draft.clientCaption}
-    </Text>
-  );
-  if (draft.clientHasSessions === false) {
-    return (
-      <Link
-        to={inspectHref}
-        className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs"
-      >
-        <span
-          aria-hidden="true"
-          className="bg-muted-foreground/50 size-1.5 shrink-0 rounded-full"
-        />
-        No one has connected yet
-      </Link>
-    );
-  }
-  if (!draft.existingClient || !selected || selected.isNew) return caption;
-  return (
-    <Link
-      to={clientHref(selected.id, draft.existingClient.id)}
-      className="text-muted-foreground hover:text-foreground block text-xs hover:underline hover:underline-offset-2"
-    >
-      {draft.clientCaption}
-    </Link>
-  );
-}
 
 /** What the provider control says before it knows. */
 function providerLabel(
@@ -182,39 +131,34 @@ function ProviderItem({
 }
 
 /**
- * One Remote Identity Provider, one registration choice, and the outcome —
- * the whole User Identity decision on a single settings row. The issuer and
- * client records behind it stay on the Remote Identity Provider pages.
+ * One Remote Identity Provider, the client the server uses with it, and how
+ * to get a new one — the whole User Identity decision on a single settings
+ * row. A connected client reads as a status; clearing it opens the choice of
+ * an existing client, automatic registration or manual credentials. The
+ * issuer and client records behind it stay on the Remote Identity Provider
+ * pages.
  */
 export function UserIdentityRow({
   draft,
   disabled,
-  manageHref,
   createHref,
-  inspectHref,
-  providerHref,
   clientHref,
-  onSwitchToAgent,
 }: {
   draft: UserIdentityDraft;
   disabled: boolean;
-  manageHref: string;
   createHref: string;
-  inspectHref: string;
-  providerHref: (issuerId: string) => string;
   clientHref: (issuerId: string, clientId: string) => string;
-  onSwitchToAgent: () => void;
 }): JSX.Element {
   const [providerOpen, setProviderOpen] = useState(false);
-  const [clientOpen, setClientOpen] = useState(false);
-  const { selected, status } = draft;
-  // The guide URL comes from issuer metadata, so it is upstream input: only
-  // render the action once it is known to be an ordinary http(s) link.
-  const registrationGuideUrl = safeExternalHttpUrl(draft.registrationGuideUrl);
+  const { selected } = draft;
+  const connectedHref =
+    selected && draft.connectedClient
+      ? clientHref(selected.id, draft.connectedClient.id)
+      : null;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="relative flex min-w-0 items-center gap-3">
           <div className="bg-card flex size-10 shrink-0 items-center justify-center border">
             <KeyRound aria-hidden="true" className="size-4" />
@@ -289,106 +233,28 @@ export function UserIdentityRow({
                   <Badge.Text>Will be created</Badge.Text>
                 </Badge>
               ) : null}
+              <Text muted variant="small" className="font-mono text-xs">
+                {selected?.url ?? ""}
+              </Text>
             </div>
-            <ProviderUrl selected={selected} providerHref={providerHref} />
+            {selected ? (
+              <ClientStatus draft={draft} disabled={disabled} />
+            ) : null}
           </div>
         </div>
 
-        {selected ? (
-          <div className="relative flex shrink-0 flex-col items-end gap-0.5">
-            <Popover open={clientOpen} onOpenChange={setClientOpen}>
-              <PopoverTrigger asChild>
-                <ScopeTrigger disabled={disabled} ariaLabel="Registration">
-                  {!draft.existingClient && !draft.manualNeeded ? (
-                    // text-default-success is green-700 — so dark next to
-                    // muted body text that it reads as olive. The success
-                    // fill token is the brighter mark green, and it flips to
-                    // a legible shade in dark mode.
-                    <Sparkles
-                      aria-hidden="true"
-                      className="size-3.5 text-[var(--fill-success-default)]"
-                    />
-                  ) : null}
-                  <span className="text-sm">{draft.clientLabel}</span>
-                  <ChevronDown aria-hidden="true" className="size-3.5" />
-                </ScopeTrigger>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-80 p-0">
-                <Command>
-                  <CommandList>
-                    <CommandGroup>
-                      <CommandItem
-                        value="new-client"
-                        onSelect={() => {
-                          draft.selectClient(null);
-                          setClientOpen(false);
-                        }}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <span className="flex min-w-0 flex-col">
-                          <span className="flex items-center gap-1.5">
-                            {draft.manualNeeded ? (
-                              "New client"
-                            ) : (
-                              <>
-                                <Sparkles
-                                  aria-hidden="true"
-                                  className="size-3.5"
-                                />
-                                Auto-Configure
-                              </>
-                            )}
-                          </span>
-                          <span className="text-muted-foreground font-mono text-xs">
-                            {draft.newClientHint}
-                          </span>
-                        </span>
-                        {!draft.existingClient ? (
-                          <Check className="size-4 shrink-0" />
-                        ) : null}
-                      </CommandItem>
-                    </CommandGroup>
-                    <CommandGroup heading={`Existing on ${selected.name}`}>
-                      {draft.clientOptions.length === 0 ? (
-                        <Text muted variant="small" className="px-2 py-1.5">
-                          {draft.clientsLoading ? "Loading…" : "None yet"}
-                        </Text>
-                      ) : (
-                        draft.clientOptions.map((option) => (
-                          <CommandItem
-                            key={option.id}
-                            value={option.name}
-                            onSelect={() => {
-                              draft.selectClient(option.id);
-                              setClientOpen(false);
-                            }}
-                            className="flex items-center justify-between gap-2"
-                          >
-                            <span className="flex min-w-0 flex-col">
-                              <span className="truncate">{option.name}</span>
-                              <span className="text-muted-foreground font-mono text-xs">
-                                {option.connections} connection
-                                {option.connections === 1 ? "" : "s"}
-                              </span>
-                            </span>
-                            {draft.existingClient?.id === option.id ? (
-                              <Check className="size-4 shrink-0" />
-                            ) : null}
-                          </CommandItem>
-                        ))
-                      )}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            <ClientCaption
-              draft={draft}
-              selected={selected}
-              inspectHref={inspectHref}
-              clientHref={clientHref}
-            />
-          </div>
+        {draft.connected ? (
+          <ConnectedSummary draft={draft} advancedHref={connectedHref} />
+        ) : null}
+        {draft.cleared ? (
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={disabled}
+            onClick={draft.cancelClear}
+          >
+            <Button.Text>Cancel</Button.Text>
+          </Button>
         ) : null}
       </div>
 
@@ -399,61 +265,18 @@ export function UserIdentityRow({
         </Alert>
       ) : null}
 
-      {draft.manualNeeded && selected ? (
-        <div className="space-y-3">
-          <Text muted small className="block">
-            This provider can&apos;t register the server on its own. Register
-            one with {selected.name} and paste what it gives you.
-          </Text>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Text muted small className="block">
-                Client ID
-              </Text>
-              <Input
-                value={draft.clientId}
-                onChange={draft.setClientId}
-                placeholder={`from ${selected.name}`}
-                disabled={disabled}
-                aria-label="Client ID"
-                noAutofill
-              />
-            </div>
-            <div className="space-y-1">
-              <Text muted small className="block">
-                Client secret
-              </Text>
-              <Input
-                type="password"
-                value={draft.clientSecret}
-                onChange={draft.setClientSecret}
-                placeholder="Optional"
-                disabled={disabled}
-                aria-label="Client secret"
-                noAutofill
-              />
-            </div>
-          </div>
-          {registrationGuideUrl ? (
-            <Button variant="secondary" size="sm" asChild>
-              <a href={registrationGuideUrl} target="_blank" rel="noreferrer">
-                <Button.LeftIcon>
-                  <BookOpen aria-hidden="true" className="size-3.5" />
-                </Button.LeftIcon>
-                <Button.Text>Open registration guide</Button.Text>
-              </a>
-            </Button>
-          ) : null}
+      {selected && !draft.connected ? (
+        <div className="space-y-4 pl-[52px]">
+          <RegistrationChoices draft={draft} disabled={disabled} />
+          <ChoiceDetails
+            draft={draft}
+            disabled={disabled}
+            providerName={selected.name}
+          />
         </div>
       ) : null}
 
-      {status.kind === "idle" ? (
-        <Text muted small className="block">
-          {draft.idleHint}
-        </Text>
-      ) : null}
-
-      {status.kind === "pending" ? (
+      {draft.status.kind === "pending" ? (
         <div className="flex items-center gap-2">
           <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
           <Text muted small>
@@ -461,44 +284,413 @@ export function UserIdentityRow({
           </Text>
         </div>
       ) : null}
+    </div>
+  );
+}
 
-      {status.kind === "refused" ? (
-        <Alert variant="error" dismissible={false}>
-          <div className="space-y-2">
-            <Text small className="block font-medium">
-              {selected?.name ?? "The provider"} refused to register this server
-              automatically.
-            </Text>
-            <Text muted small className="block">
-              {status.message ??
-                "That is on the provider's side, not something to retry. Pick a way forward:"}
-            </Text>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="secondary" size="sm" onClick={onSwitchToAgent}>
-                <Button.Text>Switch to Service Account</Button.Text>
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={draft.enterCredentialsManually}
-              >
-                <Button.Text>Enter credentials manually</Button.Text>
-              </Button>
-              <Button variant="tertiary" size="sm" asChild>
-                <Link to={manageHref}>
-                  <Button.Text>Manage identity providers</Button.Text>
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </Alert>
+const STATUS_DOT = "size-2 shrink-0 rounded-full";
+
+/**
+ * The line under the provider: whether the server has a client, and the way
+ * to clear it. Clearing only changes the draft; Save is what replaces it.
+ */
+function ClientStatus({
+  draft,
+  disabled,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+}): JSX.Element {
+  if (draft.connected) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span
+          aria-hidden="true"
+          className={cn(STATUS_DOT, "bg-[var(--fill-success-default)]")}
+        />
+        <Text small>Connected</Text>
+        <Button
+          variant="tertiary"
+          size="xs"
+          aria-label="Clear connection"
+          tooltip="Clear connection"
+          disabled={disabled}
+          onClick={draft.clear}
+          className="w-7 px-0"
+        >
+          <Button.LeftIcon>
+            <X aria-hidden="true" />
+          </Button.LeftIcon>
+        </Button>
+      </span>
+    );
+  }
+  if (draft.cleared) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span aria-hidden="true" className={cn(STATUS_DOT, "bg-warning-500")} />
+        <Text small warning>
+          Unconfigured client
+        </Text>
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1.5">
+      <span
+        aria-hidden="true"
+        className={cn(STATUS_DOT, "border-muted-foreground border")}
+      />
+      <Text small muted>
+        Not connected
+      </Text>
+    </span>
+  );
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** Who is using the connected client, and the way into its settings. */
+function ConnectedSummary({
+  draft,
+  advancedHref,
+}: {
+  draft: UserIdentityDraft;
+  advancedHref: string | null;
+}): JSX.Element {
+  const scopes = draft.connectedClient?.scopes ?? [];
+  return (
+    <div className="flex items-center gap-4">
+      <Text small muted>
+        {draft.signedIn !== null ? (
+          <>
+            <span className="text-foreground">
+              {plural(draft.signedIn, "person", "people")}
+            </span>{" "}
+            signed in
+          </>
+        ) : null}
+        {draft.signedIn !== null && scopes.length > 0 ? (
+          <span className="mx-1.5">·</span>
+        ) : null}
+        {scopes.length > 0 ? <ScopeList scopes={scopes} /> : null}
+      </Text>
+      {advancedHref ? (
+        <Button variant="tertiary" size="sm" asChild>
+          <Link to={advancedHref}>
+            <Button.LeftIcon>
+              <Settings aria-hidden="true" />
+            </Button.LeftIcon>
+            <Button.Text>Advanced</Button.Text>
+          </Link>
+        </Button>
       ) : null}
+    </div>
+  );
+}
 
-      {status.kind === "unreachable" ? (
-        <Alert variant="warning" dismissible={false}>
-          {status.message ??
-            `Couldn't reach ${selected?.name ?? "the provider"} to register this server. Save again to retry.`}
-        </Alert>
+/**
+ * The connected client's scopes: a count that opens the list. The count is
+ * the summary; which scopes were requested is the detail an operator checks
+ * when a tool call comes back forbidden.
+ */
+function ScopeList({ scopes }: { scopes: string[] }): JSX.Element {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="hover:text-foreground underline decoration-dotted underline-offset-3"
+        >
+          <span className="text-foreground">{scopes.length}</span>{" "}
+          {scopes.length === 1 ? "scope" : "scopes"}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 p-3">
+        <Text small muted className="text-eyebrow mb-2 block">
+          Requested scopes
+        </Text>
+        <ul className="space-y-1">
+          {scopes.map((scope) => (
+            <li key={scope} className="font-mono text-xs break-all">
+              {scope}
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Why a card is unavailable, behind an info mark on its title. */
+function UnavailableReason({ reason }: { reason: string }): JSX.Element {
+  return (
+    <HoverCard openDelay={150}>
+      <HoverCardTrigger asChild>
+        <span className="inline-flex cursor-help items-center gap-1">
+          Not available
+          <Info aria-label={reason} className="size-3" />
+        </span>
+      </HoverCardTrigger>
+      <HoverCardContent align="start" className="w-72">
+        <Text small className="block">
+          {reason}
+        </Text>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+/** The three ways to give a server a client, as one radio group. */
+function RegistrationChoices({
+  draft,
+  disabled,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+}): JSX.Element {
+  const name = draft.selected?.name ?? "the provider";
+  const loading = draft.clientsLoading || draft.capabilitiesLoading;
+  return (
+    <RadioCardGroup
+      orientation="horizontal"
+      value={draft.choice}
+      disabled={disabled || loading}
+      onValueChange={(value) => draft.selectChoice(value as RegistrationChoice)}
+      className="grid-flow-row grid-cols-1 md:grid-flow-col md:grid-cols-none"
+    >
+      <RadioCard
+        value="existing"
+        title="Existing client"
+        disabled={!draft.existingAvailable}
+      >
+        {draft.existingAvailable ? (
+          `Reuse a client already registered with ${name}.`
+        ) : (
+          <UnavailableReason
+            reason={`No clients are registered with ${name} yet. Auto-Configure or Manual creates the first one.`}
+          />
+        )}
+      </RadioCard>
+      <RadioCard
+        value="auto"
+        title="Auto-Configure"
+        disabled={!draft.automaticAvailable}
+      >
+        {draft.automaticAvailable ? (
+          `Speakeasy registers a new client with ${name} when you save.`
+        ) : (
+          <UnavailableReason
+            reason={`${name} supports neither a Client ID Metadata Document nor dynamic client registration, so Speakeasy can't register a client automatically.`}
+          />
+        )}
+      </RadioCard>
+      <RadioCard value="manual" title="Manual">
+        {`Paste a client ID and secret issued by ${name}.`}
+      </RadioCard>
+    </RadioCardGroup>
+  );
+}
+
+/** The fields the selected choice needs, under the cards. */
+function ChoiceDetails({
+  draft,
+  disabled,
+  providerName,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+  providerName: string;
+}): JSX.Element | null {
+  switch (draft.choice) {
+    case "existing":
+      return <ExistingClientField draft={draft} disabled={disabled} />;
+    case "auto":
+      return draft.methodChoiceAvailable ? (
+        <AdvancedOptions>
+          <RegistrationMethodField draft={draft} disabled={disabled} />
+        </AdvancedOptions>
+      ) : null;
+    case "manual":
+      return (
+        <ManualCredentialsFields
+          draft={draft}
+          disabled={disabled}
+          providerName={providerName}
+        />
+      );
+  }
+}
+
+function ExistingClientField({
+  draft,
+  disabled,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+}): JSX.Element {
+  return (
+    <div className="max-w-md space-y-1.5">
+      <Text small className="block font-medium">
+        Client
+      </Text>
+      <Select
+        value={draft.existingClientId ?? undefined}
+        onValueChange={draft.selectExisting}
+        disabled={disabled}
+      >
+        <SelectTrigger aria-label="Client">
+          <SelectValue placeholder="Choose a client" />
+        </SelectTrigger>
+        <SelectContent>
+          {draft.existingOptions.map((option: ClientOption) => (
+            <SelectItem key={option.id} value={option.id}>
+              {option.name}
+              {option.hint ? (
+                <span className="text-muted-foreground ml-2 font-mono text-xs">
+                  {option.hint}
+                </span>
+              ) : null}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {draft.sameAsConnected ? (
+        <Text muted small className="block">
+          This is the client the server already uses. Choose another to replace
+          it.
+        </Text>
+      ) : null}
+    </div>
+  );
+}
+
+/** A collapsed disclosure for settings most people leave alone. */
+function AdvancedOptions({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger className="group text-foreground flex items-center gap-1.5 text-sm">
+        <ChevronRight
+          aria-hidden="true"
+          className="size-3.5 transition-transform group-data-[state=open]:rotate-90"
+        />
+        Advanced
+      </CollapsibleTrigger>
+      <CollapsibleContent className="max-w-md space-y-1.5 pt-3 pl-5">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+const REGISTRATION_METHOD_OPTIONS: {
+  value: RegistrationMethod;
+  label: string;
+}[] = [
+  { value: "cimd", label: "CIMD" },
+  { value: "dcr", label: "DCR" },
+];
+
+function RegistrationMethodField({
+  draft,
+  disabled,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+}): JSX.Element {
+  return (
+    <>
+      <Text small className="block font-medium">
+        Registration method
+      </Text>
+      <SegmentedControl
+        value={draft.registrationMethod}
+        onChange={draft.setRegistrationMethod}
+        options={REGISTRATION_METHOD_OPTIONS}
+        disabled={disabled}
+      />
+      <Text muted small className="block">
+        CIMD publishes the client from Speakeasy; DCR registers it with the
+        provider.
+      </Text>
+    </>
+  );
+}
+
+function ManualCredentialsFields({
+  draft,
+  disabled,
+  providerName,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+  providerName: string;
+}): JSX.Element {
+  // The guide URL comes from issuer metadata, so it is upstream input: only
+  // render the action once it is known to be an ordinary http(s) link.
+  const registrationGuideUrl = safeExternalHttpUrl(draft.registrationGuideUrl);
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Text muted small className="block">
+            Client ID
+          </Text>
+          <Input
+            value={draft.clientId}
+            onChange={draft.setClientId}
+            placeholder={`from ${providerName}`}
+            disabled={disabled}
+            aria-label="Client ID"
+            noAutofill
+          />
+        </div>
+        <div className="space-y-1">
+          <Text muted small className="block">
+            Client secret
+          </Text>
+          <Input
+            type="password"
+            value={draft.clientSecret}
+            onChange={draft.setClientSecret}
+            placeholder="Optional"
+            disabled={disabled}
+            aria-label="Client secret"
+            noAutofill
+          />
+        </div>
+      </div>
+      <AdvancedOptions>
+        <Text small className="block font-medium">
+          Scope
+        </Text>
+        <Input
+          value={draft.scopeText}
+          onChange={draft.setScopeText}
+          placeholder="read write"
+          disabled={disabled}
+          aria-label="Scope"
+        />
+        <Text muted small className="block">
+          Space-separated. Leave blank to request the scopes {providerName}{" "}
+          advertises.
+        </Text>
+      </AdvancedOptions>
+      {registrationGuideUrl ? (
+        <Button variant="secondary" size="sm" asChild>
+          <a href={registrationGuideUrl} target="_blank" rel="noreferrer">
+            <Button.LeftIcon>
+              <BookOpen aria-hidden="true" className="size-3.5" />
+            </Button.LeftIcon>
+            <Button.Text>Open registration guide</Button.Text>
+          </a>
+        </Button>
       ) : null}
     </div>
   );

@@ -281,37 +281,6 @@ export function McpServerCardStatus({
   );
 }
 
-function SidebarUrl({
-  label,
-  url,
-  copyTooltip,
-}: {
-  label: string;
-  url: string;
-  copyTooltip: string;
-}): React.JSX.Element {
-  return (
-    <div className="flex flex-col gap-1">
-      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
-      <div className="flex items-start gap-1">
-        <Text
-          variant="small"
-          muted
-          className="line-clamp-2 font-mono text-xs break-all"
-        >
-          {url.replace(/^https?:\/\//, "")}
-        </Text>
-        <CopyButton
-          text={url}
-          size="xs"
-          tooltip={copyTooltip}
-          className="mt-[-2px] shrink-0"
-        />
-      </div>
-    </div>
-  );
-}
-
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
   const location = useLocation();
@@ -643,12 +612,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         />
       ) : null}
 
-      {mcpUrl ? (
-        <SidebarUrlRow label="URL" url={mcpUrl} copyTooltip="Copy URL" />
-      ) : null}
-
       {publicRoutesEnabled && mcpUrl && (
-        <SidebarUrl
+        <SidebarUrlRow
           label={privateRoutesEnabled ? "Public URL" : "URL"}
           url={mcpUrl}
           copyTooltip="Copy public URL"
@@ -657,7 +622,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
       {privateRoutesEnabled &&
         privateMcpUrls.map((url, index) => (
-          <SidebarUrl
+          <SidebarUrlRow
             key={url}
             label={index === 0 ? "Private URL" : "Private URL (additional)"}
             url={url}
@@ -680,18 +645,11 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         </div>
       )}
 
-      {upstreamUrl && (
-        <SidebarUrl
-          label="Upstream URL"
-          url={upstreamUrl}
-          copyTooltip="Copy upstream URL"
-        />
-      )}
       {upstreamUrl ? (
         <SidebarUrlRow
-          label="Upstream URL"
+          label="Remote URL"
           url={upstreamUrl}
-          copyTooltip="Copy upstream URL"
+          copyTooltip="Copy remote URL"
         />
       ) : null}
 
