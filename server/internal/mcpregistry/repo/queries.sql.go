@@ -29,7 +29,7 @@ SELECT
     $1::jsonb,
     true
 WHERE octet_length($1::jsonb::text) <= $2::bigint
-RETURNING id, data, published, created_at, updated_at
+RETURNING id, data, published, published_at, created_at, updated_at
 `
 
 type CreateEntryParams struct {
@@ -44,6 +44,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (McpRe
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -145,7 +146,7 @@ func (q *Queries) DiscoverEntries(ctx context.Context, arg DiscoverEntriesParams
 }
 
 const discoverVersion = `-- name: DiscoverVersion :one
-SELECT id, data, published, created_at, updated_at FROM mcp_registry_entries
+SELECT id, data, published, published_at, created_at, updated_at FROM mcp_registry_entries
 WHERE published
 AND data #>> '{server,name}' = $1::text
 AND ($2::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
@@ -165,6 +166,7 @@ func (q *Queries) DiscoverVersion(ctx context.Context, arg DiscoverVersionParams
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -172,7 +174,7 @@ func (q *Queries) DiscoverVersion(ctx context.Context, arg DiscoverVersionParams
 }
 
 const getEntry = `-- name: GetEntry :one
-SELECT id, data, published, created_at, updated_at
+SELECT id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
 WHERE id = $1
 `
@@ -184,6 +186,7 @@ func (q *Queries) GetEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry,
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -191,7 +194,7 @@ func (q *Queries) GetEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry,
 }
 
 const getEntryByName = `-- name: GetEntryByName :one
-SELECT id, data, published, created_at, updated_at
+SELECT id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
 WHERE data #>> '{server,name}' = $1::text
 `
@@ -203,6 +206,7 @@ func (q *Queries) GetEntryByName(ctx context.Context, name string) (McpRegistryE
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -366,7 +370,7 @@ func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]Lis
 }
 
 const lockEntry = `-- name: LockEntry :one
-SELECT id, data, published, created_at, updated_at
+SELECT id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
 WHERE id = $1
 FOR UPDATE
@@ -379,6 +383,7 @@ func (q *Queries) LockEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -413,7 +418,7 @@ SET
     published = $1,
     updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
 WHERE id = $2
-RETURNING id, data, published, created_at, updated_at
+RETURNING id, data, published, published_at, created_at, updated_at
 `
 
 type SetEntryPublishedParams struct {
@@ -428,6 +433,7 @@ func (q *Queries) SetEntryPublished(ctx context.Context, arg SetEntryPublishedPa
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -441,7 +447,7 @@ SET
     updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
 WHERE id = $2
 AND octet_length($1::jsonb::text) <= $3::bigint
-RETURNING id, data, published, created_at, updated_at
+RETURNING id, data, published, published_at, created_at, updated_at
 `
 
 type UpdateEntryParams struct {
@@ -457,6 +463,7 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) (McpRe
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
