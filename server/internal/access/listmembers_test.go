@@ -165,3 +165,26 @@ func TestService_ListMembers_RejectsProjectFromAnotherActiveOrganization(t *test
 	require.ErrorAs(t, err, &shareableErr)
 	require.Equal(t, oops.CodeNotFound, shareableErr.Code)
 }
+
+func TestService_ListMembers_EmailFallbackIgnoresProfileLinkedToAnotherUser(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_user_a", "a@test.com", "User A", "user_a", "membership_a")
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_user_b", "b@test.com", "User B", "user_b", "membership_b")
+	// User A's directory profile carries user B's email address.
+	seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_user_a", "b@test.com", `{"department_name":"Sales"}`)
+
+	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	require.NoError(t, err)
+
+	byID := map[string]*gen.AccessMember{}
+	for _, member := range result.Members {
+		byID[member.ID] = member
+	}
+	require.Equal(t, new("Sales"), byID["local_user_a"].Department)
+	require.Nil(t, byID["local_user_b"].Department, "a profile linked to another user must not match by email")
+}
