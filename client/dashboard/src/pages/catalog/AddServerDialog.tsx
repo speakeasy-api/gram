@@ -218,7 +218,9 @@ export function AddServerDialog({
       mcpScoped &&
       !autoStartInstall &&
       !headless &&
-      hasScope("org:admin", organization.id),
+      hasScope("org:admin", organization.id) &&
+      // Unproxied servers (e.g. Figma) never pass through Gram.
+      enrichedServers.some((server) => !isFigmaCatalogServer(server)),
   });
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");
   const autoStartRef = useRef(false);

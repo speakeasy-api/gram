@@ -16,7 +16,7 @@ export const SERVER_GUARDRAIL_CATEGORIES: RuleCategory[] = [
   "prompt_injection",
 ];
 
-export const DEFAULT_SERVER_GUARDRAIL_SCORE = 7;
+const DEFAULT_SERVER_GUARDRAIL_SCORE = 7;
 
 export interface ServerTool {
   name: string;
@@ -24,7 +24,7 @@ export interface ServerTool {
 }
 
 export type ServerToolMode = "all" | "selected";
-export type ServerGuardrailAudience = "everyone" | "targeted";
+type ServerGuardrailAudience = "everyone" | "targeted";
 
 export interface ServerGuardrailState {
   categories: Set<RuleCategory>;
@@ -135,6 +135,11 @@ export function buildServerGuardrailRequest(
     mode: DetectorMode;
   },
 ): CreateRiskPolicyRequestBody {
+  // An empty server list is read by the backend as an unrestricted scope, which
+  // would turn a server guardrail into an org-wide policy.
+  if (options.mcpServerIds.length === 0) {
+    throw new Error("A server guardrail needs at least one MCP server.");
+  }
   const { sources, presidioEntities, promptInjectionRules, disabledRules } =
     categoriesToPayload(state.categories, new Set(), new Set(), options.mode);
   const message = state.userMessage.trim();

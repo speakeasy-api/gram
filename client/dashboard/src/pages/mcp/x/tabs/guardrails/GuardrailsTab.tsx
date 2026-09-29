@@ -107,6 +107,10 @@ function PoliciesView({ mcpServer }: { mcpServer: McpServer }): JSX.Element {
           <Text small muted>
             Loading policies…
           </Text>
+        ) : policiesQuery.isError ? (
+          <Text small className="text-destructive" role="alert">
+            {policiesQuery.error.message}
+          </Text>
         ) : scoped.length === 0 ? (
           <div className="border-border border border-dashed p-6 text-center">
             <Text small muted>
@@ -135,7 +139,7 @@ function PoliciesView({ mcpServer }: { mcpServer: McpServer }): JSX.Element {
             .
           </Text>
         </div>
-        {inherited.length === 0 ? (
+        {policiesQuery.isError ? null : inherited.length === 0 ? (
           <Text small muted>
             No org-wide policies apply to this server.
           </Text>

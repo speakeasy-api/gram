@@ -83,7 +83,12 @@ function CreateRemoteMcpForm() {
   const upstreamName =
     name.trim() || deriveRemoteSessionIssuerNameFromUrl(url) || "This server";
 
-  const isPending = createRemote.isPending || createUnproxied.isPending;
+  // Covers the whole submit, including the guardrail created after the server:
+  // the server mutations settle first, and a second click in that gap would
+  // create a duplicate server.
+  const [submitting, setSubmitting] = useState(false);
+  const isPending =
+    createRemote.isPending || createUnproxied.isPending || submitting;
   // Read from the mutation the current mode would run, so switching Connection
   // after a failure doesn't leave the other backend's error standing.
   const activeCreate = mode === "unproxied" ? createUnproxied : createRemote;
@@ -142,9 +147,11 @@ function CreateRemoteMcpForm() {
       return;
     }
     if (issuerSelectionBlocked) return;
-    if (mode === "proxied" && !newGuardrail.validation.ok) return;
+    if (mode === "proxied" && isVerified && !newGuardrail.validation.ok) return;
+    if (submitting) return;
 
     const trimmedName = name.trim();
+    setSubmitting(true);
     try {
       if (mode === "unproxied" && !flow.gatewayId) {
         const { mcpServer } = await createUnproxied.mutateAsync({
@@ -209,6 +216,8 @@ function CreateRemoteMcpForm() {
       const message =
         error instanceof Error ? error.message : "Failed to add MCP server";
       toast.error(message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -405,7 +414,9 @@ function CreateRemoteMcpForm() {
                   isVerified &&
                   identityMode === "user" &&
                   !canCreateIdentity) ||
-                (mode === "proxied" && !newGuardrail.validation.ok) ||
+                (mode === "proxied" &&
+                  isVerified &&
+                  !newGuardrail.validation.ok) ||
                 issuerSelectionBlocked
               }
             >

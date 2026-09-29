@@ -82,6 +82,16 @@ describe("validateServerGuardrail", () => {
 });
 
 describe("buildServerGuardrailRequest", () => {
+  it("refuses an empty server list, which the backend reads as org-wide", () => {
+    expect(() =>
+      buildServerGuardrailRequest(defaultServerGuardrailState(), {
+        mcpServerIds: [],
+        name: "x",
+        mode: "presidio",
+      }),
+    ).toThrow("at least one MCP server");
+  });
+
   it("builds a scoped, enabled standard policy", () => {
     const state = catalogPresetState(tools);
     state.userMessage = "  careful  ";

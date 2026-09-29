@@ -96,6 +96,7 @@ export function ServerGuardrailsForm({
               disabledRules={NO_DISABLED_RULES}
               onToggle={(checked) => toggleCategory(category, checked)}
               onCustomize={() => undefined}
+              hideCustomize
             />
           ))}
         </div>
@@ -264,7 +265,12 @@ function SelectedTools({
   );
   return (
     <div className="space-y-2">
-      <Input placeholder="Search tools…" value={search} onChange={setSearch} />
+      <Input
+        aria-label="Search tools"
+        placeholder="Search tools…"
+        value={search}
+        onChange={setSearch}
+      />
       <div className="border-border max-h-64 overflow-y-auto border">
         {visible.length === 0 ? (
           <Text small muted className="p-3">

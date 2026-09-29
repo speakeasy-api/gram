@@ -136,9 +136,23 @@ function CreateTunneledMcpForm() {
         <Stack gap={6}>
           <GatewayAttachmentStatus flow={flow} />
           {guardrailOutcome?.status === "failed" ? (
-            <Alert variant="error" dismissible={false}>
-              {guardrailFailureMessage(guardrailOutcome)}
-            </Alert>
+            <Stack gap={2}>
+              <Alert variant="error" dismissible={false}>
+                {guardrailFailureMessage(guardrailOutcome)}
+              </Alert>
+              <div>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    routes.mcp.x.guardrails.goTo(
+                      mcpServerRouteParam(created.mcpServer),
+                    )
+                  }
+                >
+                  <Button.Text>Open Guardrails</Button.Text>
+                </Button>
+              </div>
+            </Stack>
           ) : null}
           {guardrailOutcome?.status === "created" ? (
             <Alert variant="success" dismissible={false}>

@@ -3,7 +3,10 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
 import { ruleCategoryMeta } from "@/pages/security/policy-data";
 import { ServerGuardrailsForm } from "@/pages/security/server-guardrails/ServerGuardrailsForm";
-import { effectiveAction } from "@/pages/security/server-guardrails/server-guardrail-policy";
+import {
+  effectiveAction,
+  validateServerGuardrail,
+} from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { useDetectorMode } from "@/pages/security/use-detector-mode";
 import { useState } from "react";
 import type { GuardrailsPhase } from "./useRemoteMcpInstallWorkflow";
@@ -108,7 +111,7 @@ export function CatalogGuardrailsPhase({
             <Button.Text>Skip for now</Button.Text>
           </Button>
           <Button
-            disabled={guardrail.categories.size === 0}
+            disabled={!validateServerGuardrail(guardrail).ok}
             onClick={() => void releaseState.installWithGuardrail()}
           >
             <Button.Text>Add to Project</Button.Text>

@@ -80,7 +80,7 @@ interface MultiRemoteServerConfig {
 }
 
 /** How the optional guardrail for an install ended. */
-export type GuardrailOutcome =
+type GuardrailOutcome =
   | { status: "created"; name: string }
   | { status: "failed"; name: string; error: string };
 
@@ -881,7 +881,11 @@ export function useRemoteMcpInstallWorkflow({
           iconPersistences.push(result.iconPersistence);
           anyAuthConfigured ||= result.authConfigured;
           anyUnproxiedInstalled ||= isFigmaCatalogServer(target.server);
-          installedServerIds.push(result.mcpServer.id);
+          // Unproxied servers never pass through Gram, so there is no traffic
+          // for a guardrail to inspect.
+          if (!isFigmaCatalogServer(target.server)) {
+            installedServerIds.push(result.mcpServer.id);
+          }
           const identitySetupRequired =
             result.identityConfiguration?.status === "setup-required";
           setStatusAt(index, {
@@ -949,7 +953,14 @@ export function useRemoteMcpInstallWorkflow({
       if (options?.guardrail) {
         const installedIds = installedServerIds;
         const name = guardrailNameFor(targets.map((target) => target.name));
-        if (installedIds.length > 0) {
+        if (installedIds.length === 0) {
+          setGuardrailOutcome({
+            status: "failed",
+            name,
+            error:
+              "No server that Gram proxies was added, so there was nothing to scope it to.",
+          });
+        } else {
           try {
             await client.risk.policies.create(
               {

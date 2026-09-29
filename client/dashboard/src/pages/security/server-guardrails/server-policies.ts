@@ -40,6 +40,9 @@ export function scopedToolsLabel(
   mcpServerId: string,
 ): string {
   const tools = scopeEntry(policy, mcpServerId)?.tools;
-  if (!tools || tools.includes(ALL_TOOLS_WILDCARD)) return "All tools";
+  // An empty list matches every tool, like the wildcard.
+  if (!tools || tools.length === 0 || tools.includes(ALL_TOOLS_WILDCARD)) {
+    return "All tools";
+  }
   return tools.length === 1 ? "1 tool" : `${tools.length} tools`;
 }

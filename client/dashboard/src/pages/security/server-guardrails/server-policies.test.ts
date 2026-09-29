@@ -39,6 +39,12 @@ describe("scopedToolsLabel", () => {
     ).toBe("All tools");
     expect(
       scopedToolsLabel(
+        policy("a", { servers: [{ mcpServerId: "s", tools: [] }] }),
+        "s",
+      ),
+    ).toBe("All tools");
+    expect(
+      scopedToolsLabel(
         policy("a", { servers: [{ mcpServerId: "s", tools: ["x"] }] }),
         "s",
       ),
