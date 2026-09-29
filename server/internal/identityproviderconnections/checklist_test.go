@@ -77,18 +77,20 @@ func TestOktaChecklist_ConnectStepsThenAgentSteps(t *testing.T) {
 func TestOktaChecklist_OINSecretRejectedLeavesAppUnobserved(t *testing.T) {
 	t.Parallel()
 	items := idpc.OktaChecklist(remotesessions.TokenEndpointAuthMethodBasic, idpc.ChecklistSignal{
-		Checked:           true,
+		Checked:           false,
 		ClientIDSubmitted: true,
 		Reasons:           []string{idpc.ReasonSecretRejected},
 		MissingScopes:     []string{},
 	})
+	completed := make(map[string]*bool, len(items))
 	for _, item := range items {
-		if item.Key == idpc.ChecklistKeyAddOINApp {
-			require.Nil(t, item.Completed)
-			return
-		}
+		completed[item.Key] = item.Completed
 	}
-	require.Fail(t, "missing add_oin_app step")
+	require.Contains(t, completed, idpc.ChecklistKeyAddOINApp)
+	require.Nil(t, completed[idpc.ChecklistKeyAddOINApp])
+	require.Contains(t, completed, idpc.ChecklistKeyGrantScopes)
+	require.Nil(t, completed[idpc.ChecklistKeyGrantScopes])
+	require.Equal(t, new(true), completed[idpc.ChecklistKeySubmitClientID])
 }
 
 func TestOktaChecklist_Completion(t *testing.T) {

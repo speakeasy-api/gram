@@ -147,7 +147,7 @@ export const VERIFICATION_REASON_LABELS: Record<VerificationReasons, string> = {
 
 export const LAST_ERROR_LABELS: Record<LastError, string> = {
   credential_rejected:
-    "Okta rejected the connection. Check the Client ID and that the app uses the public key URL (JWKS) on the Okta Setup tab.",
+    "Okta rejected the connection's credentials. Check the Client ID, and either the client secret (Okta Integration Network installs) or that the app uses the public key URL (JWKS).",
   okta_unreachable: "Okta could not be reached during the last verification.",
 };
 

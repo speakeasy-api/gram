@@ -80,6 +80,19 @@ func TestClient_ClientSecretBasic_BearerTokenSkipsProof(t *testing.T) {
 	}, tc.stub.recordedResourceRequests())
 }
 
+func TestClient_ClientSecretBasic_BearerRetries429(t *testing.T) {
+	t.Parallel()
+	tc := newTestClient(t, testenv.NewTracerProvider(t), testenv.NewLogger(t), basicTestConfig("stub-secret"))
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setTokenType("Bearer")
+	tc.stub.setPending429(1)
+	tc.stub.setRateLimit(100, 0, tc.clock.Now().Add(7*time.Second).Unix())
+
+	require.Len(t, listApps(t, tc), 1)
+	require.Equal(t, []time.Duration{7*time.Second + maxRateLimitJitter/2}, tc.sleeper.Waits())
+	require.Len(t, tc.stub.recordedResourceRequests(), 2)
+}
+
 func TestClient_ClientSecretBasic_RequireDPoPRefusesBearer(t *testing.T) {
 	t.Parallel()
 	cfg := basicTestConfig("stub-secret")
@@ -275,6 +288,27 @@ func TestFake_RequireClientSecret(t *testing.T) {
 	_, err = client.VerifyScopes(t.Context(), []string{"okta.apps.read"})
 	require.NoError(t, err, "only client_secret_basic configs are checked")
 	require.Equal(t, remotesessions.TokenEndpointAuthMethodPrivateKeyJWT, fake.LastAuthMethod())
+}
+
+func TestFakeFactory_ClientsKeepTheirOwnConfig(t *testing.T) {
+	t.Parallel()
+	const orgURL = "https://a.okta.com"
+	factory := NewFakeFactory(map[string]Fixtures{orgURL: {Users: nil, Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: []string{"okta.apps.read"}}})
+	factory.Fake(orgURL).RequireClientSecret("stub-secret", &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
+
+	good := basicTestConfig("stub-secret")
+	good.OrgURL = orgURL
+	goodClient, err := factory.Client(good)
+	require.NoError(t, err)
+	bad := good
+	bad.ClientSecretEncrypted = stubCiphertextPrefix + "wrong-secret"
+	badClient, err := factory.Client(bad)
+	require.NoError(t, err)
+
+	_, err = goodClient.VerifyScopes(t.Context(), []string{"okta.apps.read"})
+	require.NoError(t, err, "a later client for the same org does not change this client's secret")
+	_, err = badClient.VerifyScopes(t.Context(), []string{"okta.apps.read"})
+	require.Error(t, err)
 }
 
 func TestFake_SetBearerOnly(t *testing.T) {

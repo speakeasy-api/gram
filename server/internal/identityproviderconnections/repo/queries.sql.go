@@ -215,6 +215,30 @@ func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg 
 	return i, err
 }
 
+const forceManagedClientAuthMethodFixture = `-- name: ForceManagedClientAuthMethodFixture :execrows
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = $1
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id IS NULL
+`
+
+type ForceManagedClientAuthMethodFixtureParams struct {
+	TokenEndpointAuthMethod pgtype.Text
+	ID                      uuid.UUID
+	OrganizationID          pgtype.Text
+}
+
+// TEST FIXTURE ONLY. Plants an auth method on a managed client without its
+// matching credential material, which no production path produces.
+func (q *Queries) ForceManagedClientAuthMethodFixture(ctx context.Context, arg ForceManagedClientAuthMethodFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceManagedClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getConnectionIssuerBySlug = `-- name: GetConnectionIssuerBySlug :one
 SELECT id
 FROM remote_session_issuers
@@ -371,7 +395,7 @@ WHERE c.organization_id = $1
   AND c.project_id IS NULL
   AND c.identity_provider_connection_id = $2
   AND c.deleted IS FALSE
-  AND (c.json_web_key_set_id IS NULL OR s.id IS NOT NULL)
+  AND (s.id IS NOT NULL OR (c.json_web_key_set_id IS NULL AND c.token_endpoint_auth_method = 'client_secret_basic'))
 `
 
 type GetManagedClientParams struct {

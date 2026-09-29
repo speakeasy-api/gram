@@ -95,7 +95,9 @@ func verifyConnection(ctx context.Context, client okta.Client, method remotesess
 		outcome.Reasons = append(outcome.Reasons, ReasonDPoPNotBound)
 	}
 
-	if len(outcome.Granted) > 0 {
+	// A DPoP-pinned client refuses to present an unbound token, so reads would only add read_failed noise.
+	skipReads := dpopPinned && !scopes.DPoPBound
+	if len(outcome.Granted) > 0 && !skipReads {
 		failed, err := confirmReads(ctx, client, outcome.Granted)
 		if err != nil {
 			return nil, err

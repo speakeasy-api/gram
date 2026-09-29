@@ -36,8 +36,8 @@ type Fixtures struct {
 }
 
 // Fake is an in-memory Client for tests and local development. It matches
-// on Query, Status, and Search only. A Fake handed out by FakeFactory
-// authenticates with the Config it was last requested with.
+// on Query, Status, and Search only. Called directly it skips credential
+// checks; clients from FakeFactory authenticate with their own Config.
 type Fake struct {
 	mu         sync.Mutex
 	fixtures   Fixtures
@@ -46,7 +46,6 @@ type Fake struct {
 	methodErrs map[string]error
 	appErrs    map[string]map[string]error
 
-	cfg            *Config
 	requiredSecret string
 	decrypter      SecretDecrypter
 	bearerOnly     bool
@@ -69,7 +68,6 @@ func NewFake(fixtures Fixtures) *Fake {
 		err:            nil,
 		methodErrs:     map[string]error{},
 		appErrs:        map[string]map[string]error{},
-		cfg:            nil,
 		requiredSecret: "",
 		decrypter:      nil,
 		bearerOnly:     false,
@@ -104,19 +102,13 @@ func (f *Fake) LastAuthMethod() remotesessions.TokenEndpointAuthMethod {
 	return f.lastAuthMethod
 }
 
-func (f *Fake) useConfig(cfg Config) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.cfg = &cfg
-}
-
 // credentialError mirrors the token endpoint's refusal of a bad client
-// secret. Callers must hold f.mu.
-func (f *Fake) credentialError() error {
-	if f.cfg == nil {
+// secret; a nil cfg skips the check. Callers must hold f.mu.
+func (f *Fake) credentialError(cfg *Config) error {
+	if cfg == nil {
 		return nil
 	}
-	method := f.cfg.AuthMethod
+	method := cfg.AuthMethod
 	if method == "" {
 		method = remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
 	}
@@ -125,10 +117,10 @@ func (f *Fake) credentialError() error {
 		return nil
 	}
 	rejected := &APIError{Method: http.MethodPost, Path: tokenEndpointPath, StatusCode: http.StatusUnauthorized, ErrorCode: oautherr.CodeInvalidClient, Summary: "Client authentication failed."}
-	if f.decrypter == nil || f.cfg.ClientSecretEncrypted == "" {
+	if f.decrypter == nil || cfg.ClientSecretEncrypted == "" {
 		return rejected
 	}
-	secret, err := f.decrypter.Decrypt(f.cfg.ClientSecretEncrypted)
+	secret, err := f.decrypter.Decrypt(cfg.ClientSecretEncrypted)
 	if err != nil {
 		return fmt.Errorf("decrypt okta client secret: %w: %w", ErrClientSecretUndecryptable, err)
 	}
@@ -204,21 +196,21 @@ func (f *Fake) Calls() []string {
 	return slices.Clone(f.calls)
 }
 
-func (f *Fake) record(name string) error {
+func (f *Fake) record(name string, cfg *Config) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, name)
 	if f.err != nil {
 		return f.err
 	}
-	if err := f.credentialError(); err != nil {
+	if err := f.credentialError(cfg); err != nil {
 		return err
 	}
 	return f.methodErrs[name]
 }
 
-func (f *Fake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {
-	if err := f.record("ListApps"); err != nil {
+func (f *Fake) listApps(cfg *Config, req ListAppsRequest) ([]App, error) {
+	if err := f.record("ListApps", cfg); err != nil {
 		return nil, err
 	}
 	f.mu.Lock()
@@ -236,8 +228,8 @@ func (f *Fake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {
 	return out, nil
 }
 
-func (f *Fake) GetApp(_ context.Context, appID string) (*App, error) {
-	if err := f.record("GetApp"); err != nil {
+func (f *Fake) getApp(cfg *Config, appID string) (*App, error) {
+	if err := f.record("GetApp", cfg); err != nil {
 		return nil, err
 	}
 	if err := validateAppID(appID); err != nil {
@@ -260,8 +252,8 @@ func cloneApp(app App) App {
 	return app
 }
 
-func (f *Fake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUser, error) {
-	if err := f.record("ListAppUsers"); err != nil {
+func (f *Fake) listAppUsers(cfg *Config, req ListAppUsersRequest) ([]AppUser, error) {
+	if err := f.record("ListAppUsers", cfg); err != nil {
 		return nil, err
 	}
 	if err := validateAppID(req.AppID); err != nil {
@@ -275,8 +267,8 @@ func (f *Fake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUs
 	return slices.Clone(f.fixtures.AppUsers[req.AppID]), nil
 }
 
-func (f *Fake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
-	if err := f.record("ListAppGroups"); err != nil {
+func (f *Fake) listAppGroups(cfg *Config, req ListAppGroupsRequest) ([]AppGroup, error) {
+	if err := f.record("ListAppGroups", cfg); err != nil {
 		return nil, err
 	}
 	if err := validateAppID(req.AppID); err != nil {
@@ -290,8 +282,8 @@ func (f *Fake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]App
 	return slices.Clone(f.fixtures.AppGroups[req.AppID]), nil
 }
 
-func (f *Fake) ListGroups(_ context.Context, req ListGroupsRequest) ([]Group, error) {
-	if err := f.record("ListGroups"); err != nil {
+func (f *Fake) listGroups(cfg *Config, req ListGroupsRequest) ([]Group, error) {
+	if err := f.record("ListGroups", cfg); err != nil {
 		return nil, err
 	}
 	f.mu.Lock()
@@ -306,8 +298,8 @@ func (f *Fake) ListGroups(_ context.Context, req ListGroupsRequest) ([]Group, er
 	return out, nil
 }
 
-func (f *Fake) VerifyScopes(_ context.Context, required []string) (*ScopeVerification, error) {
-	if err := f.record("VerifyScopes"); err != nil {
+func (f *Fake) verifyScopes(cfg *Config, required []string) (*ScopeVerification, error) {
+	if err := f.record("VerifyScopes", cfg); err != nil {
 		return nil, err
 	}
 	f.mu.Lock()
@@ -333,8 +325,8 @@ func (f *Fake) VerifyScopes(_ context.Context, required []string) (*ScopeVerific
 	return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: !f.bearerOnly, ExpiresAt: time.Now().Add(time.Hour)}, nil
 }
 
-func (f *Fake) ListUsers(_ context.Context, req ListUsersRequest) ([]User, error) {
-	if err := f.record("ListUsers"); err != nil {
+func (f *Fake) listUsers(cfg *Config, req ListUsersRequest) ([]User, error) {
+	if err := f.record("ListUsers", cfg); err != nil {
 		return nil, err
 	}
 	f.mu.Lock()
@@ -344,4 +336,70 @@ func (f *Fake) ListUsers(_ context.Context, req ListUsersRequest) ([]User, error
 		users = users[:req.Limit]
 	}
 	return slices.Clone(users), nil
+}
+
+// configuredFake is a FakeFactory client: it shares its org's Fake but
+// authenticates with the Config it was requested with.
+type configuredFake struct {
+	fake *Fake
+
+	cfg Config
+}
+
+var _ Client = (*configuredFake)(nil)
+
+func (f *Fake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {
+	return f.listApps(nil, req)
+}
+
+func (f *Fake) GetApp(_ context.Context, appID string) (*App, error) {
+	return f.getApp(nil, appID)
+}
+
+func (f *Fake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUser, error) {
+	return f.listAppUsers(nil, req)
+}
+
+func (f *Fake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
+	return f.listAppGroups(nil, req)
+}
+
+func (f *Fake) ListGroups(_ context.Context, req ListGroupsRequest) ([]Group, error) {
+	return f.listGroups(nil, req)
+}
+
+func (f *Fake) VerifyScopes(_ context.Context, required []string) (*ScopeVerification, error) {
+	return f.verifyScopes(nil, required)
+}
+
+func (f *Fake) ListUsers(_ context.Context, req ListUsersRequest) ([]User, error) {
+	return f.listUsers(nil, req)
+}
+
+func (c *configuredFake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {
+	return c.fake.listApps(&c.cfg, req)
+}
+
+func (c *configuredFake) GetApp(_ context.Context, appID string) (*App, error) {
+	return c.fake.getApp(&c.cfg, appID)
+}
+
+func (c *configuredFake) ListAppUsers(_ context.Context, req ListAppUsersRequest) ([]AppUser, error) {
+	return c.fake.listAppUsers(&c.cfg, req)
+}
+
+func (c *configuredFake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]AppGroup, error) {
+	return c.fake.listAppGroups(&c.cfg, req)
+}
+
+func (c *configuredFake) ListGroups(_ context.Context, req ListGroupsRequest) ([]Group, error) {
+	return c.fake.listGroups(&c.cfg, req)
+}
+
+func (c *configuredFake) VerifyScopes(_ context.Context, required []string) (*ScopeVerification, error) {
+	return c.fake.verifyScopes(&c.cfg, required)
+}
+
+func (c *configuredFake) ListUsers(_ context.Context, req ListUsersRequest) ([]User, error) {
+	return c.fake.listUsers(&c.cfg, req)
 }

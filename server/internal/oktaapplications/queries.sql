@@ -46,7 +46,8 @@ JOIN okta_identity_provider_connections AS o
  AND o.organization_id = c.organization_id
  AND o.deleted IS FALSE
 JOIN remote_session_clients AS rc
-  ON rc.organization_id = c.organization_id
+  ON rc.id = o.remote_session_client_id
+ AND rc.organization_id = c.organization_id
  AND rc.project_id IS NULL
  AND rc.identity_provider_connection_id = c.id
  AND rc.deleted IS FALSE
