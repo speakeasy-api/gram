@@ -277,17 +277,20 @@ func (s *Service) metaValidationTarget(
 		projectID:    endpoint.ProjectID,
 		metaServerID: endpoint.MetaMcpServerID.UUID,
 		// Consent probes a stored gateway; agent keys reach no consent page.
-		agentID:         uuid.Nil,
-		organizationID:  endpoint.OrganizationID,
-		tokens:          selectedTokens,
-		toolSelection:   nil,
-		authenticated:   subject.Kind != urn.SessionSubjectKindAnonymous,
-		sessionID:       sessionID,
-		chatID:          "",
-		userID:          "",
-		externalUserID:  "",
-		apiKeyID:        "",
-		protocolVersion: mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
+		agentID:        uuid.Nil,
+		organizationID: endpoint.OrganizationID,
+		tokens:         selectedTokens,
+		// Consent probes never acquire credentials by identity chaining.
+		userSessionIssuerID: uuid.Nil,
+		chainUpstream:       nil,
+		toolSelection:       nil,
+		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
+		sessionID:           sessionID,
+		chatID:              "",
+		userID:              "",
+		externalUserID:      "",
+		apiKeyID:            "",
+		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:

@@ -1107,11 +1107,9 @@ type ForceRemoteSessionClientAuthMethodFixtureParams struct {
 	ProjectID               uuid.NullUUID
 }
 
-// TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
-// accept, which no production path can produce. private_key_jwt arrives with
-// AIM-156; until then planting the value directly is the only way to exercise
-// requireDetachableKeySet and requirePrivateKeyJWTKeySet, the rules that guard
-// it.
+// TEST FIXTURE ONLY. Plants a token_endpoint_auth_method directly, bypassing
+// the management API's key-set checks, so tests can build states those checks
+// (requireDetachableKeySet, requirePrivateKeyJWTKeySet) must then refuse.
 func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context, arg ForceRemoteSessionClientAuthMethodFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, forceRemoteSessionClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID, arg.ProjectID)
 	if err != nil {

@@ -359,7 +359,7 @@ func (m *ChallengeManager) verifyFederatedIdentityMode(ctx context.Context, p *F
 		// Keep dependency failures distinguishable without exposing upstream URLs,
 		// bodies, or claims. Missing/mismatched keys and bad signatures are not
 		// tagged by the resolver as key-set unavailability.
-		if errors.Is(err, errJWTKeySetUnavailable) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		if errors.Is(err, ErrJWTKeySetUnavailable) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return nil, ErrFederatedUnavailable
 		}
 		return nil, ErrFederatedIdentity

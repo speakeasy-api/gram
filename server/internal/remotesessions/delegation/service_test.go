@@ -225,11 +225,13 @@ func TestDelegationServiceConcurrentRefresh(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, store.claims)
 	require.Equal(t, int64(3), c.generation)
+	require.Equal(t, c.obtainedAt, result.assertion.ObtainedAt(), "a refresh keeps the sign-in the credential came from")
 	require.Equal(t, uuid.Nil, c.claim)
 	require.Equal(t, "new-refresh", delegationPlain(t, s, c.refresh))
 	a, err := s.Resolve(t.Context(), b, allow)
 	require.NoError(t, err)
 	require.Equal(t, "new-id", a.Value())
+	require.Equal(t, c.obtainedAt, a.ObtainedAt(), "a cached assertion carries the persisted sign-in time")
 	require.Equal(t, int64(1), posts.Load())
 }
 
