@@ -397,6 +397,13 @@ export function RemoteMcpIdentitySectionBody({
               </Alert>
             ) : null}
 
+            {issuerError ? (
+              <Alert variant="error" dismissible={false}>
+                Could not load this server's user session issuer. Identity
+                editing is disabled.
+              </Alert>
+            ) : null}
+
             {identityQueryError ? (
               <Alert variant="error" dismissible={false}>
                 Could not determine the current identity configuration

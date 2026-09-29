@@ -1187,6 +1187,20 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.queryByRole("radio", { name: /No Identity/ })).toBeNull();
   });
 
+  it("says why identity is locked when the issuer fails to load", () => {
+    mocks.userSessionIssuer.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+
+    renderIdentity();
+
+    expect(
+      screen.getByText(/Could not load this server's user session issuer/i),
+    ).toBeDefined();
+  });
+
   it("fails closed without the target-specific mcp:write grant", () => {
     mocks.rbac.mockReturnValue({
       isLoading: false,
