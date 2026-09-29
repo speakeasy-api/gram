@@ -330,9 +330,13 @@ func TestSearchToolCalls_ForwardsFiltersToTheToolLogsQuery(t *testing.T) {
 		{Path: "gram.hook.error", Op: "contains", Values: []string{"timeout"}},
 		{Path: "@region", Op: "eq", Values: []string{"eu"}},
 	}, reader.traceParams.Filters)
+	// This search names no MCP, so it pins only that a project-wide search
+	// leaves every target selector unset rather than accidentally scoping
+	// itself. What an mcp_id search selects is pinned against a real
+	// configured server by
+	// TestSearchToolCallsNarrowsToOneServerWithoutReportedNames.
 	require.Empty(t, reader.traceParams.HostedToolsetSlugs)
 	require.Empty(t, reader.traceParams.MCPServerTargetIDs)
-	// No search ever selects a shadow row by the name a calling app reported.
 	require.Empty(t, reader.traceParams.ShadowServerNames)
 	require.Empty(t, reader.traceParams.UserFilters)
 	require.Zero(t, reader.traceParams.CursorTimeUnixNano)
@@ -537,29 +541,29 @@ func TestToolLogsTargets_OmitsClientReportedNames(t *testing.T) {
 	}
 	targets := identity.toolLogsTargets()
 
-	// Every selector the search can build from a configured server, so a new
-	// one cannot be added without this assertion being revisited.
-	params := telemetryrepo.ListToolUsageTracesParams{
-		HostedToolsetSlugs: targets.hostedToolsetSlugs,
-		MCPServerTargetIDs: targets.mcpServerTargetIDs,
-		ShadowServerNames:  nil,
-	}
-	require.Equal(t, []string{"billing-toolset"}, params.HostedToolsetSlugs)
-	require.Equal(t, []string{"billing", serverID}, params.MCPServerTargetIDs)
-	require.Empty(t, params.ShadowServerNames,
-		"a configured server must never select shadow rows by a client-reported name")
+	// The platform-stamped spellings are carried, asserted positively so that
+	// dropping the slug is a failure too: it is what the matcher stamps on a
+	// proxied call, and the query admits it only under target types a client
+	// cannot choose.
+	require.Equal(t, []string{"billing", serverID}, targets.mcpServerTargetIDs)
+	require.Equal(t, []string{"billing-toolset"}, targets.hostedToolsetSlugs)
 
-	// The display name and the plugin-routed name the summary reads match on
-	// reach no selector at all, under any target type.
+	// Every spelling only an agent vouched for reaches no selector, under any
+	// target type. The slug and the id are excepted because the platform
+	// stamps those itself; both are asserted positively above.
 	for _, reported := range identity.toolSources {
 		if reported == "billing" || reported == serverID {
-			// Also a platform-stamped spelling; matched as a target id under
-			// the hosted and tunneled types only, never as a shadow name.
 			continue
 		}
-		require.NotContains(t, params.MCPServerTargetIDs, reported)
-		require.NotContains(t, params.HostedToolsetSlugs, reported)
+		require.NotContains(t, targets.mcpServerTargetIDs, reported)
+		require.NotContains(t, targets.hostedToolsetSlugs, reported)
 	}
+
+	// There is deliberately no shadow selector on toolLogsTargets for the
+	// search to pass on, which is a compile-time guarantee rather than
+	// something to assert here. That the search really leaves
+	// ShadowServerNames unset is pinned against a real configured server by
+	// TestSearchToolCallsNarrowsToOneServerWithoutReportedNames.
 
 	// An identity with nothing the platform stamped is empty, so the search
 	// reports attribution unavailable rather than dropping the target filter

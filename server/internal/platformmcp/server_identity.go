@@ -160,12 +160,20 @@ func (t toolLogsTargets) empty() bool {
 // the platform itself stamped: the target id a matcher folds a proxied call
 // onto, and the toolset slug a direct or URL-resolved call carries.
 //
-// Unlike outcomeParams and activeCountsParams it omits toolSources, and that
-// omission is the point. A row matched by tool source is a shadow row whose
-// target id is the name the agent reported, which nothing verifies, so
-// including it would attribute a personal server that happens to share this
-// server's name to the corporate one. A trace-level read returns the calls
-// themselves rather than a count, so a stray row is somebody's tool call
+// The configured slug is deliberately one of them and must stay. It is trusted
+// for where it is matched rather than for how it reads: the matcher stamps it
+// as a proxied call's target id, and the query admits it only under the hosted
+// and tunneled target types, which nothing client-side can choose. Removing it
+// on the grounds that it looks like a name would silently stop attributing
+// this server's own proxied traffic.
+//
+// What is dropped is toolSources, which outcomeParams and activeCountsParams
+// do pass, and that omission is the point. Those are the display name and
+// every other spelling only an agent vouched for, and a row matched by them is
+// a shadow row whose target id is whatever the calling app said. Including
+// them would attribute a personal server that happens to share this server's
+// name to the corporate one. A trace-level read hands back the calls
+// themselves rather than a count, so a stray row is somebody else's tool call
 // history rather than an inflated number. Hook-observed calls this server can
 // be held to are unaffected, because the query classifies a call whose URL
 // resolved under the toolset slug rather than as shadow.
