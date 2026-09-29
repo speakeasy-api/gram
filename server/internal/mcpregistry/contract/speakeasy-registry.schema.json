@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Gram registry metadata extensions",
+  "title": "Speakeasy AI Control Plane metadata extensions",
   "type": "object",
   "properties": {
     "_meta": {

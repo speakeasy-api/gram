@@ -86,7 +86,7 @@ it("resolves only bundled local references and does not fetch document schemas",
   }
 });
 
-it("validates Gram documentation URLs alongside the unchanged upstream schema", async () => {
+it("validates Speakeasy registry documentation URLs alongside the unchanged upstream schema", async () => {
   const raw = JSON.stringify({
     server: { name: "example.test/docs", description: "Docs", version: "1" },
     _meta: {

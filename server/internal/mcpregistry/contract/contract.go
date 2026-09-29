@@ -12,8 +12,8 @@ import (
 //go:embed record.schema.json
 var Schema []byte
 
-//go:embed gram.schema.json
-var GramSchema []byte
+//go:embed speakeasy-registry.schema.json
+var SpeakeasyRegistrySchema []byte
 
 func decode(raw []byte) (any, error) {
 	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
@@ -29,7 +29,7 @@ func Compile(raw []byte) (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	overlay, err := decode(GramSchema)
+	overlay, err := decode(SpeakeasyRegistrySchema)
 	if err != nil {
 		return nil, err
 	}

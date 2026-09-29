@@ -1,9 +1,9 @@
 import type { DiagnosticsOptions } from "monaco-editor/languages/features/json/register.js";
 import upstream from "../../../../../server/internal/mcpregistry/contract/record.schema.json";
 
-import gram from "../../../../../server/internal/mcpregistry/contract/gram.schema.json";
+import speakeasyRegistry from "../../../../../server/internal/mcpregistry/contract/speakeasy-registry.schema.json";
 
-const schema = { ...upstream, allOf: [gram] };
+const schema = { ...upstream, allOf: [speakeasyRegistry] };
 
 // The same offline asset embedded by Go; imported only through the lazy editor.
 // Monaco assists editing; Go's format and mutation checks remain authoritative.

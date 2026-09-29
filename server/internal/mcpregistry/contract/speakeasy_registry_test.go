@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestGramMetadataOverlay(t *testing.T) {
+func TestSpeakeasyRegistryMetadataOverlay(t *testing.T) {
 	t.Parallel()
 	s, err := Compile(Schema)
 	require.NoError(t, err)
