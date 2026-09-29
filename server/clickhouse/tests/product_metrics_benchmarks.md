@@ -51,6 +51,20 @@ series cardinality. This is neither a unique-message count nor a production SLA.
 Read latency/memory acceptance and expected concurrent reads remain an explicit
 review question. Benchmarks report evidence rather than claiming an unagreed SLA.
 
+## Migration and aggregate validation
+
+Atlas `migrate validate --env clickhouse` replayed the Atlas history against its
+configured sandbox. The repository's `clickhouse:migrate --engine golang-migrate`
+task replayed all local migrations against a fresh database provisioned with the
+standard local principals. Both completed successfully.
+
+`product_metrics_rollups.sql` passed against the migrated database. It checks
+duplicate inserts across blocks, exact sums beyond int64, typed attributes and
+tenant/project/resource/scope separation, weighted histogram means across minute
+buckets, and identity preservation after merges. Serving assertions use explicit
+aggregates without `FINAL`. The fixture's `OPTIMIZE ... FINAL` is only a test
+operation to force background-merge-equivalent compaction.
+
 ## Deployment prerequisites
 
 Infrastructure owns the database, application credentials, and roles. The existing
