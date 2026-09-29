@@ -1913,6 +1913,7 @@ func newStartCommand() *cli.Command {
 				riskchrepo.New(chDB),
 				assetStorage,
 				metering.NewRiskRecorder(publishers.MeterReadings),
+				platformToolsets,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)

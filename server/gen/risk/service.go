@@ -21,6 +21,8 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
+	// List code-owned Platform MCP toolsets available as risk policy scope targets.
+	ListMCPPlatformToolsets(context.Context, *ListMCPPlatformToolsetsPayload) (res *ListMCPPlatformToolsetsResult, err error)
 	// List enabled MCP-scoped risk policies that apply to an MCP server and
 	// optional tool. Policies without an MCP scope are excluded.
 	ListRiskPoliciesForMcpServer(context.Context, *ListRiskPoliciesForMcpServerPayload) (res *ListRiskPoliciesResult, err error)
@@ -211,7 +213,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [52]string{"createRiskPolicy", "listRiskPolicies", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [53]string{"createRiskPolicy", "listRiskPolicies", "listMCPPlatformToolsets", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -695,6 +697,21 @@ type ListDismissedRiskResultsPayload struct {
 	Reasons []string
 }
 
+// ListMCPPlatformToolsetsPayload is the payload type of the risk service
+// listMCPPlatformToolsets method.
+type ListMCPPlatformToolsetsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListMCPPlatformToolsetsResult is the result type of the risk service
+// listMCPPlatformToolsets method.
+type ListMCPPlatformToolsetsResult struct {
+	// The available Platform MCP policy scope targets.
+	Toolsets []*RiskMCPPlatformToolset
+}
+
 // ListRiskCategoriesPayload is the payload type of the risk service
 // listRiskCategories method.
 type ListRiskCategoriesPayload struct {
@@ -1118,6 +1135,24 @@ type RiskExposureSlice struct {
 	Findings int64
 	// Fraction of the window's findings in this category (0-1).
 	Share float64
+}
+
+type RiskMCPPlatformTool struct {
+	// The Platform MCP tool name.
+	Name string
+	// MCP behavior annotations from the code-owned descriptor.
+	Annotations *types.ToolAnnotations
+}
+
+type RiskMCPPlatformToolset struct {
+	// The stable policy-scope identity for this Platform MCP toolset.
+	ID string
+	// The reserved Platform MCP toolset slug.
+	Slug string
+	// The display name for this Platform MCP toolset.
+	Name string
+	// The code-owned tools in this Platform MCP toolset.
+	Tools []*RiskMCPPlatformTool
 }
 
 type RiskMcpServerCount struct {

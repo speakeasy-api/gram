@@ -20,7 +20,7 @@ import (
 
 type fixedMCPPolicyLookup []policycore.Policy
 
-func (p fixedMCPPolicyLookup) ListEnabledForMCPServer(context.Context, string, uuid.UUID, uuid.UUID, string) ([]policycore.Policy, error) {
+func (p fixedMCPPolicyLookup) ListEnabledForMCP(context.Context, string, uuid.UUID, policycore.MCPTarget) ([]policycore.Policy, error) {
 	return p, nil
 }
 

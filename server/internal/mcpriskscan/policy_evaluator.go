@@ -54,7 +54,7 @@ var DefaultPolicyConfig = PolicyConfig{
 
 // PolicyLookup resolves enabled policies for one concrete MCP subject.
 type PolicyLookup interface {
-	ListEnabledForMCPServer(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, toolName string) ([]policycore.Policy, error)
+	ListEnabledForMCP(ctx context.Context, organizationID string, projectID uuid.UUID, target policycore.MCPTarget) ([]policycore.Policy, error)
 }
 
 // PolicyDetector runs one policy through the shared synchronous detector set.
@@ -125,7 +125,12 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 
 	scanCtx, cancel := context.WithTimeout(ctx, p.config.Deadline)
 	defer cancel()
-	policies, err := p.lookup.ListEnabledForMCPServer(scanCtx, event.OrganizationID, projectID, serverID, event.ToolName)
+	policies, err := p.lookup.ListEnabledForMCP(scanCtx, event.OrganizationID, projectID, policycore.MCPTarget{
+		ServerID:        serverID,
+		ToolName:        event.ToolName,
+		ToolAnnotations: event.ToolAnnotations,
+		PlatformToolset: event.Surface == SurfacePlatformMCP,
+	})
 	if err != nil {
 		return p.resolveIndeterminate(ctx, fmt.Errorf("list MCP policies: %w", err))
 	}

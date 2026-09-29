@@ -571,6 +571,7 @@ trackedFiles:
   src/funcs/riskPoliciesGet.ts: {}
   src/funcs/riskPoliciesList.ts: {}
   src/funcs/riskPoliciesListForMcpServer.ts: {}
+  src/funcs/riskPoliciesListMcpPlatformToolsets.ts: {}
   src/funcs/riskPoliciesStatus.ts: {}
   src/funcs/riskPoliciesTrigger.ts: {}
   src/funcs/riskPoliciesUpdate.ts: {}
@@ -1262,6 +1263,7 @@ trackedFiles:
   src/models/components/listkeysresult.ts: {}
   src/models/components/listmanageddevicesresult.ts: {}
   src/models/components/listmcpendpointsresult.ts: {}
+  src/models/components/listmcpplatformtoolsetsresult.ts: {}
   src/models/components/listmcpserversresult.ts: {}
   src/models/components/listmembersresponsebody.ts: {}
   src/models/components/listmembersresult.ts: {}
@@ -1541,6 +1543,8 @@ trackedFiles:
   src/models/components/riskexclusion.ts: {}
   src/models/components/riskexposureslice.ts: {}
   src/models/components/riskidrequestbody.ts: {}
+  src/models/components/riskmcpplatformtool.ts: {}
+  src/models/components/riskmcpplatformtoolset.ts: {}
   src/models/components/riskmcpscope.ts: {}
   src/models/components/riskmcpservercount.ts: {}
   src/models/components/riskmcpservercountsresult.ts: {}
@@ -2308,6 +2312,7 @@ trackedFiles:
   src/models/operations/listmcpapprovalrequests.ts: {}
   src/models/operations/listmcpcatalog.ts: {}
   src/models/operations/listmcpendpoints.ts: {}
+  src/models/operations/listmcpplatformtoolsets.ts: {}
   src/models/operations/listmcpregistries.ts: {}
   src/models/operations/listmcpservers.ts: {}
   src/models/operations/listmcpserversfororg.ts: {}
@@ -3400,6 +3405,8 @@ trackedFiles:
   src/react-query/riskListEvalReviews.ts: {}
   src/react-query/riskListExclusions.core.ts: {}
   src/react-query/riskListExclusions.ts: {}
+  src/react-query/riskListMcpPlatformToolsets.core.ts: {}
+  src/react-query/riskListMcpPlatformToolsets.ts: {}
   src/react-query/riskListPolicies.core.ts: {}
   src/react-query/riskListPolicies.ts: {}
   src/react-query/riskListPoliciesForMcpServer.core.ts: {}
@@ -8809,6 +8816,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listMCPPlatformToolsets:
+    speakeasy-default-list-MCP-platform-toolsets:
+      responses:
+        "200":
+          application/json: {"toolsets": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listMCPRegistries:
     speakeasy-default-list-MCP-registries:
       responses:

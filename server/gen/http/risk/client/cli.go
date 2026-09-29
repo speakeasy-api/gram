@@ -190,6 +190,35 @@ func BuildListRiskPoliciesPayload(riskListRiskPoliciesApikeyToken string, riskLi
 	return v, nil
 }
 
+// BuildListMCPPlatformToolsetsPayload builds the payload for the risk
+// listMCPPlatformToolsets endpoint from CLI flags.
+func BuildListMCPPlatformToolsetsPayload(riskListMCPPlatformToolsetsApikeyToken string, riskListMCPPlatformToolsetsSessionToken string, riskListMCPPlatformToolsetsProjectSlugInput string) (*risk.ListMCPPlatformToolsetsPayload, error) {
+	var apikeyToken *string
+	{
+		if riskListMCPPlatformToolsetsApikeyToken != "" {
+			apikeyToken = &riskListMCPPlatformToolsetsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListMCPPlatformToolsetsSessionToken != "" {
+			sessionToken = &riskListMCPPlatformToolsetsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListMCPPlatformToolsetsProjectSlugInput != "" {
+			projectSlugInput = &riskListMCPPlatformToolsetsProjectSlugInput
+		}
+	}
+	v := &risk.ListMCPPlatformToolsetsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListRiskPoliciesForMcpServerPayload builds the payload for the risk
 // listRiskPoliciesForMcpServer endpoint from CLI flags.
 func BuildListRiskPoliciesForMcpServerPayload(riskListRiskPoliciesForMcpServerMcpServerID string, riskListRiskPoliciesForMcpServerToolName string, riskListRiskPoliciesForMcpServerApikeyToken string, riskListRiskPoliciesForMcpServerSessionToken string, riskListRiskPoliciesForMcpServerProjectSlugInput string) (*risk.ListRiskPoliciesForMcpServerPayload, error) {

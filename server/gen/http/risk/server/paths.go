@@ -17,6 +17,11 @@ func ListRiskPoliciesRiskPath() string {
 	return "/rpc/risk.listPolicies"
 }
 
+// ListMCPPlatformToolsetsRiskPath returns the URL path to the risk service listMCPPlatformToolsets HTTP endpoint.
+func ListMCPPlatformToolsetsRiskPath() string {
+	return "/rpc/risk.listMCPPlatformToolsets"
+}
+
 // ListRiskPoliciesForMcpServerRiskPath returns the URL path to the risk service listRiskPoliciesForMcpServer HTTP endpoint.
 func ListRiskPoliciesForMcpServerRiskPath() string {
 	return "/rpc/risk.listRiskPoliciesForMcpServer"

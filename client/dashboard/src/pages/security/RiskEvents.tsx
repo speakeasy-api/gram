@@ -28,6 +28,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskMcpServerCounts } from "@gram/client/react-query/riskMcpServerCounts.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
+import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskListMcpPlatformToolsets.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -286,6 +287,15 @@ export default function RiskEvents(): JSX.Element {
     [mcpScoped, mcpServers],
   );
 
+  const { data: platformToolsetsData } = useRiskListMcpPlatformToolsets(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
+  const platformToolsets = useMemo(
+    () => platformToolsetsData?.toolsets ?? [],
+    [platformToolsetsData?.toolsets],
+  );
   // Powers the rule_id filter autocomplete: surface only rules that actually
   // have findings in this project's recent window.
   const { data: overviewData } = useRiskOverview({}, undefined, {
@@ -351,17 +361,23 @@ export default function RiskEvents(): JSX.Element {
         label: p.enabled === false ? `${p.name} (inactive)` : p.name,
         value: p.id,
       })),
-      mcp_server_id: mcpServers.map((server) => {
-        const findings = findingsByServer.get(server.id);
-        const name = mcpServerDisplayName(server);
-        return {
-          label:
-            mcpScoped && findings != null
-              ? `${name} · ${findings.toLocaleString()} findings`
-              : name,
-          value: server.id,
-        };
-      }),
+      mcp_server_id: [
+        ...mcpServers.map((server) => {
+          const findings = findingsByServer.get(server.id);
+          const name = mcpServerDisplayName(server);
+          return {
+            label:
+              mcpScoped && findings != null
+                ? `${name} · ${findings.toLocaleString()} findings`
+                : name,
+            value: server.id,
+          };
+        }),
+        ...platformToolsets.map((toolset) => ({
+          label: `${toolset.name} (Platform MCP)`,
+          value: toolset.id,
+        })),
+      ],
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
       assistant: [
         { label: "No assistant", value: NO_ASSISTANT },
@@ -371,6 +387,7 @@ export default function RiskEvents(): JSX.Element {
     [
       policies,
       mcpServers,
+      platformToolsets,
       mcpScoped,
       findingsByServer,
       ruleSuggestions,

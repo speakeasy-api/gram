@@ -25,6 +25,10 @@ type Client struct {
 	// listRiskPolicies endpoint.
 	ListRiskPoliciesDoer goahttp.Doer
 
+	// ListMCPPlatformToolsets Doer is the HTTP client used to make requests to the
+	// listMCPPlatformToolsets endpoint.
+	ListMCPPlatformToolsetsDoer goahttp.Doer
+
 	// ListRiskPoliciesForMcpServer Doer is the HTTP client used to make requests
 	// to the listRiskPoliciesForMcpServer endpoint.
 	ListRiskPoliciesForMcpServerDoer goahttp.Doer
@@ -247,6 +251,7 @@ func NewClient(
 	return &Client{
 		CreateRiskPolicyDoer:               doer,
 		ListRiskPoliciesDoer:               doer,
+		ListMCPPlatformToolsetsDoer:        doer,
 		ListRiskPoliciesForMcpServerDoer:   doer,
 		ListBuiltinExclusionsDoer:          doer,
 		GetRiskPolicyDoer:                  doer,
@@ -348,6 +353,30 @@ func (c *Client) ListRiskPolicies() goa.Endpoint {
 		resp, err := c.ListRiskPoliciesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskPolicies", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMCPPlatformToolsets returns an endpoint that makes HTTP requests to the
+// risk service listMCPPlatformToolsets server.
+func (c *Client) ListMCPPlatformToolsets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMCPPlatformToolsetsRequest(c.encoder)
+		decodeResponse = DecodeListMCPPlatformToolsetsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMCPPlatformToolsetsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMCPPlatformToolsetsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listMCPPlatformToolsets", err)
 		}
 		return decodeResponse(resp)
 	}

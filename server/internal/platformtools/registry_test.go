@@ -126,3 +126,12 @@ func TestBuildToolsetsIncludesPlatformMCPReadToolset(t *testing.T) {
 	require.Len(t, ts.Tools, 1)
 	require.Equal(t, ToolNameListProjects, ts.Tools[0].Executor.Descriptor().Name)
 }
+
+func TestPlatformToolsetIdentityIsStableAndDistinct(t *testing.T) {
+	t.Parallel()
+
+	assistantsID := PlatformToolsetID(AssistantsPlatformToolsetSlug)
+	require.Equal(t, assistantsID, PlatformToolsetID(AssistantsPlatformToolsetSlug))
+	require.NotEqual(t, assistantsID, PlatformToolsetID(ManagedAssistantPlatformToolsetSlug))
+	require.Equal(t, "Gram assistant tools", PlatformToolsetName(AssistantsPlatformToolsetSlug))
+}

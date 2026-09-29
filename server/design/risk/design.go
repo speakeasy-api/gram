@@ -111,6 +111,31 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicies"}`)
 	})
 
+	Method("listMCPPlatformToolsets", func() {
+		Description("List code-owned Platform MCP toolsets available as risk policy scope targets.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListMCPPlatformToolsetsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listMCPPlatformToolsets")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMCPPlatformToolsets")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMcpPlatformToolsets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListMcpPlatformToolsets"}`)
+	})
+
 	Method("listRiskPoliciesForMcpServer", func() {
 		Description("List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.")
 
@@ -1887,6 +1912,27 @@ var TestDetectionRuleResult = Type("TestDetectionRuleResult", func() {
 var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 	Attribute("policies", ArrayOf(shared.RiskPolicy), "The list of risk policies.")
 	Required("policies")
+})
+
+var RiskMCPPlatformTool = Type("RiskMCPPlatformTool", func() {
+	Attribute("name", String, "The Platform MCP tool name.")
+	Attribute("annotations", shared.ToolAnnotations, "MCP behavior annotations from the code-owned descriptor.")
+	Required("name")
+})
+
+var RiskMCPPlatformToolset = Type("RiskMCPPlatformToolset", func() {
+	Attribute("id", String, "The stable policy-scope identity for this Platform MCP toolset.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("slug", String, "The reserved Platform MCP toolset slug.")
+	Attribute("name", String, "The display name for this Platform MCP toolset.")
+	Attribute("tools", ArrayOf(RiskMCPPlatformTool), "The code-owned tools in this Platform MCP toolset.")
+	Required("id", "slug", "name", "tools")
+})
+
+var ListMCPPlatformToolsetsResult = Type("ListMCPPlatformToolsetsResult", func() {
+	Attribute("toolsets", ArrayOf(RiskMCPPlatformToolset), "The available Platform MCP policy scope targets.")
+	Required("toolsets")
 })
 
 var BuiltinExclusionEntry = Type("BuiltinExclusionEntry", func() {

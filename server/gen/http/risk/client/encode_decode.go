@@ -500,6 +500,245 @@ func DecodeListRiskPoliciesResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildListMCPPlatformToolsetsRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "listMCPPlatformToolsets"
+// endpoint
+func (c *Client) BuildListMCPPlatformToolsetsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListMCPPlatformToolsetsRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "listMCPPlatformToolsets", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListMCPPlatformToolsetsRequest returns an encoder for requests sent to
+// the risk listMCPPlatformToolsets server.
+func EncodeListMCPPlatformToolsetsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.ListMCPPlatformToolsetsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "listMCPPlatformToolsets", "*risk.ListMCPPlatformToolsetsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListMCPPlatformToolsetsResponse returns a decoder for responses
+// returned by the risk listMCPPlatformToolsets endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListMCPPlatformToolsetsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListMCPPlatformToolsetsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListMCPPlatformToolsetsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+			}
+			err = ValidateListMCPPlatformToolsetsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+			}
+			res := NewListMCPPlatformToolsetsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListMCPPlatformToolsetsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+			}
+			err = ValidateListMCPPlatformToolsetsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+			}
+			return nil, NewListMCPPlatformToolsetsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListMCPPlatformToolsetsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+			}
+			err = ValidateListMCPPlatformToolsetsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+			}
+			return nil, NewListMCPPlatformToolsetsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListMCPPlatformToolsetsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+			}
+			err = ValidateListMCPPlatformToolsetsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+			}
+			return nil, NewListMCPPlatformToolsetsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListMCPPlatformToolsetsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+			}
+			err = ValidateListMCPPlatformToolsetsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+			}
+			return nil, NewListMCPPlatformToolsetsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListMCPPlatformToolsetsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+			}
+			err = ValidateListMCPPlatformToolsetsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+			}
+			return nil, NewListMCPPlatformToolsetsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListMCPPlatformToolsetsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+			}
+			err = ValidateListMCPPlatformToolsetsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+			}
+			return nil, NewListMCPPlatformToolsetsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListMCPPlatformToolsetsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+			}
+			err = ValidateListMCPPlatformToolsetsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+			}
+			return nil, NewListMCPPlatformToolsetsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListMCPPlatformToolsetsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+				}
+				err = ValidateListMCPPlatformToolsetsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+				}
+				return nil, NewListMCPPlatformToolsetsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListMCPPlatformToolsetsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+				}
+				err = ValidateListMCPPlatformToolsetsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+				}
+				return nil, NewListMCPPlatformToolsetsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "listMCPPlatformToolsets", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListMCPPlatformToolsetsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listMCPPlatformToolsets", err)
+			}
+			err = ValidateListMCPPlatformToolsetsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listMCPPlatformToolsets", err)
+			}
+			return nil, NewListMCPPlatformToolsetsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "listMCPPlatformToolsets", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRiskPoliciesForMcpServerRequest instantiates a HTTP request object
 // with method and path set to call the "risk" service
 // "listRiskPoliciesForMcpServer" endpoint
@@ -12912,6 +13151,59 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 	}
 	if v.ModelConfig != nil {
 		res.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(v.ModelConfig)
+	}
+
+	return res
+}
+
+// unmarshalRiskMCPPlatformToolsetResponseBodyToRiskRiskMCPPlatformToolset
+// builds a value of type *risk.RiskMCPPlatformToolset from a value of type
+// *RiskMCPPlatformToolsetResponseBody.
+func unmarshalRiskMCPPlatformToolsetResponseBodyToRiskRiskMCPPlatformToolset(v *RiskMCPPlatformToolsetResponseBody) *risk.RiskMCPPlatformToolset {
+	res := &risk.RiskMCPPlatformToolset{
+		ID:   *v.ID,
+		Slug: *v.Slug,
+		Name: *v.Name,
+	}
+	res.Tools = make([]*risk.RiskMCPPlatformTool, len(v.Tools))
+	for i, val := range v.Tools {
+		if val == nil {
+			res.Tools[i] = nil
+			continue
+		}
+		res.Tools[i] = unmarshalRiskMCPPlatformToolResponseBodyToRiskRiskMCPPlatformTool(val)
+	}
+
+	return res
+}
+
+// unmarshalRiskMCPPlatformToolResponseBodyToRiskRiskMCPPlatformTool builds a
+// value of type *risk.RiskMCPPlatformTool from a value of type
+// *RiskMCPPlatformToolResponseBody.
+func unmarshalRiskMCPPlatformToolResponseBodyToRiskRiskMCPPlatformTool(v *RiskMCPPlatformToolResponseBody) *risk.RiskMCPPlatformTool {
+	res := &risk.RiskMCPPlatformTool{
+		Name: *v.Name,
+	}
+	if v.Annotations != nil {
+		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
+	}
+
+	return res
+}
+
+// unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations builds a value of
+// type *types.ToolAnnotations from a value of type
+// *ToolAnnotationsResponseBody.
+func unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v *ToolAnnotationsResponseBody) *types.ToolAnnotations {
+	if v == nil {
+		return nil
+	}
+	res := &types.ToolAnnotations{
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
 	}
 
 	return res
