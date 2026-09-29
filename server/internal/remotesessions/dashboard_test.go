@@ -41,14 +41,15 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 	require.NoError(t, err)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       nil,
-		CreateProvider:   serverIdentityProviderForm("manual-provider", nil, false),
-		ClientMode:       "manual",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     serverIdentityProviderForm("manual-provider", nil, false),
+		ClientMode:         "manual",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("manual-client"),
 			ClientSecret:            conv.PtrEmpty("manual-secret"),
@@ -321,6 +322,7 @@ func TestCommitServerIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t *tes
 		ProviderID:          conv.PtrEmpty(providerID.String()),
 		CreateProvider:      nil,
 		ClientMode:          "existing",
+		RegistrationMethod:  nil,
 		ExistingClientID:    conv.PtrEmpty(client.ID.String()),
 		ClientConfiguration: nil,
 	})
@@ -330,14 +332,15 @@ func TestCommitServerIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t *tes
 	require.Equal(t, []string{userIssuerID.String()}, result.Client.UserSessionIssuerIds)
 
 	_, err = ti.service.CommitServerIdentityConfiguration(restrictedCtx, &gen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       nil,
-		CreateProvider:   serverIdentityProviderForm("denied-provider", nil, false),
-		ClientMode:       "manual",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     serverIdentityProviderForm("denied-provider", nil, false),
+		ClientMode:         "manual",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("denied-client"),
 			ClientSecret:            nil,
@@ -357,6 +360,7 @@ func TestCommitServerIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t *tes
 		ProviderID:          conv.PtrEmpty(providerID.String()),
 		CreateProvider:      nil,
 		ClientMode:          "existing",
+		RegistrationMethod:  nil,
 		ExistingClientID:    conv.PtrEmpty(client.ID.String()),
 		ClientConfiguration: nil,
 	})
@@ -373,14 +377,15 @@ func TestCommitServerIdentityConfigurationAllowsDuplicateClientIDs(t *testing.T)
 
 	create := func(targetID uuid.UUID) *gen.CommitServerIdentityConfigurationPayload {
 		return &gen.CommitServerIdentityConfigurationPayload{
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-			McpServerID:      targetID.String(),
-			ProviderID:       conv.PtrEmpty(providerID.String()),
-			CreateProvider:   nil,
-			ClientMode:       "manual",
-			ExistingClientID: nil,
+			SessionToken:       nil,
+			ApikeyToken:        nil,
+			ProjectSlugInput:   nil,
+			McpServerID:        targetID.String(),
+			ProviderID:         conv.PtrEmpty(providerID.String()),
+			CreateProvider:     nil,
+			ClientMode:         "manual",
+			RegistrationMethod: nil,
+			ExistingClientID:   nil,
 			ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 				ClientID:                conv.PtrEmpty("shared-upstream-client-id"),
 				ClientSecret:            nil,
@@ -406,14 +411,15 @@ func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *tes
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "replace-target")
 
 	initial, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       nil,
-		CreateProvider:   serverIdentityProviderForm("replace-initial-provider", nil, false),
-		ClientMode:       "manual",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     serverIdentityProviderForm("replace-initial-provider", nil, false),
+		ClientMode:         "manual",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("replace-initial-client"),
 			ClientSecret:            nil,
@@ -446,6 +452,7 @@ func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *tes
 		ProviderID:          conv.PtrEmpty(replacementProviderID.String()),
 		CreateProvider:      nil,
 		ClientMode:          "existing",
+		RegistrationMethod:  nil,
 		ExistingClientID:    conv.PtrEmpty(replacementClient.ID.String()),
 		ClientConfiguration: nil,
 	})
@@ -505,6 +512,7 @@ func TestCommitServerIdentityConfigurationLocksUserSessionIssuerBeforeReplacingB
 			ProviderID:          conv.PtrEmpty(providerID.String()),
 			CreateProvider:      nil,
 			ClientMode:          "existing",
+			RegistrationMethod:  nil,
 			ExistingClientID:    conv.PtrEmpty(client.ID.String()),
 			ClientConfiguration: nil,
 		})
@@ -576,14 +584,15 @@ func createServerIdentityProvider(t *testing.T, ctx context.Context, ti *testIns
 
 func autoServerIdentityPayload(targetID, providerID uuid.UUID) *gen.CommitServerIdentityConfigurationPayload {
 	return &gen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       conv.PtrEmpty(providerID.String()),
-		CreateProvider:   nil,
-		ClientMode:       "auto",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         conv.PtrEmpty(providerID.String()),
+		CreateProvider:     nil,
+		ClientMode:         "auto",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                nil,
 			ClientSecret:            nil,
@@ -686,6 +695,7 @@ func TestCommitServerIdentityConfigurationRequiresWriteOnEveryServerSharingTheIs
 			ProviderID:          conv.PtrEmpty(providerID.String()),
 			CreateProvider:      nil,
 			ClientMode:          "existing",
+			RegistrationMethod:  nil,
 			ExistingClientID:    conv.PtrEmpty(client.ID.String()),
 			ClientConfiguration: nil,
 		}
@@ -777,6 +787,7 @@ func TestCommitServerIdentityConfigurationLocksProviderBeforeCommitting(t *testi
 			ProviderID:          conv.PtrEmpty(providerID.String()),
 			CreateProvider:      nil,
 			ClientMode:          "existing",
+			RegistrationMethod:  nil,
 			ExistingClientID:    conv.PtrEmpty(client.ID.String()),
 			ClientConfiguration: nil,
 		})
@@ -928,14 +939,15 @@ func TestCommitServerIdentityConfigurationReplacesProjectClientOnOrgIssuer(t *te
 	projectClientID := bindServerIdentityClient(t, ctx, ti, "org-project-client", currentProviderID, userIssuerID, false)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      targetID.String(),
-		ProviderID:       nil,
-		CreateProvider:   serverIdentityProviderForm("org-project-next", nil, false),
-		ClientMode:       "manual",
-		ExistingClientID: nil,
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     serverIdentityProviderForm("org-project-next", nil, false),
+		ClientMode:         "manual",
+		RegistrationMethod: nil,
+		ExistingClientID:   nil,
 		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("org-project-next-client"),
 			ClientSecret:            conv.PtrEmpty("org-project-next-secret"),
@@ -965,6 +977,7 @@ func existingServerIdentityPayload(targetID, providerID, clientID uuid.UUID) *ge
 		ProviderID:          conv.PtrEmpty(providerID.String()),
 		CreateProvider:      nil,
 		ClientMode:          "existing",
+		RegistrationMethod:  nil,
 		ExistingClientID:    conv.PtrEmpty(clientID.String()),
 		ClientConfiguration: nil,
 	}
@@ -1122,4 +1135,65 @@ func TestCommitServerIdentityConfigurationFallsBackToNowWhenProviderOmitsClientI
 	// usable timestamp rather than a zero one.
 	require.True(t, stored.RemoteSessionClient.ClientIDIssuedAt.Valid)
 	require.True(t, stored.RemoteSessionClient.ClientIDIssuedAt.Time.UTC().After(before))
+}
+
+func TestCommitServerIdentityConfigurationAutoUsesDCRWhenRequested(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-requested-target")
+	var requests atomic.Int64
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "dcr-requested-client",
+			"client_secret":              "dcr-requested-secret",
+			"token_endpoint_auth_method": "client_secret_post",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+
+	// The provider is CIMD-capable (it supports CIMD and accepts the public
+	// "none" method), so without the request auto mode would pick CIMD and
+	// never reach the registration endpoint.
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-requested-provider", registrationServer.URL, true, []string{"none", "client_secret_post"})
+	payload := autoServerIdentityPayload(targetID, providerID)
+	payload.RegistrationMethod = conv.PtrEmpty("dcr")
+	payload.ClientConfiguration.TokenEndpointAuthMethod = conv.PtrEmpty("client_secret_post")
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), requests.Load())
+	require.Equal(t, "dcr", *result.RegistrationMethod)
+	require.Equal(t, "dcr-requested-client", result.Client.ClientID)
+}
+
+func TestCommitServerIdentityConfigurationRejectsRegistrationMethodOutsideAuto(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "method-manual-target")
+
+	_, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		McpServerID:        targetID.String(),
+		ProviderID:         nil,
+		CreateProvider:     serverIdentityProviderForm("method-manual-provider", nil, false),
+		ClientMode:         "manual",
+		RegistrationMethod: conv.PtrEmpty("dcr"),
+		ExistingClientID:   nil,
+		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
+			ClientID:                conv.PtrEmpty("manual-client"),
+			ClientSecret:            nil,
+			TokenEndpointAuthMethod: conv.PtrEmpty("none"),
+			Scope:                   nil,
+			Audience:                nil,
+		},
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }

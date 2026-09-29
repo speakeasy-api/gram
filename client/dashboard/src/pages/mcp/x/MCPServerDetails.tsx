@@ -348,7 +348,7 @@ export function MCPServerStatusDropdown({
               key={option.value}
               disabled={optionBlocked}
               onSelect={() => {
-                if (publicBlocked) return;
+                if (optionBlocked) return;
                 updateVisibility(option.value);
               }}
               className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"

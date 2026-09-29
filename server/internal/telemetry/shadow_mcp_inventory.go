@@ -35,7 +35,7 @@ type BackfillShadowMCPInventoryURLsResult struct {
 }
 
 func (l *Logger) UpsertShadowMCPInventoryURLs(ctx context.Context, inventoryURLs []ShadowMCPInventoryURL) error {
-	if len(inventoryURLs) == 0 || l.chConn == nil {
+	if len(inventoryURLs) == 0 {
 		return nil
 	}
 

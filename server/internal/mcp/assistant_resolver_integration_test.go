@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -145,10 +146,11 @@ func TestServePublic_AssistantTokenWithoutRemoteSessionChallenges(t *testing.T) 
 
 	assistantToken := mintAssistantBearerForOwner(t, ti, authCtx)
 	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), assistantToken, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unauthorized")
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
 		"assistant-token fallback must still 401 when the owner has no remote_session for the issuer")
+	require.NotContains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`,
+		"an assistant-runtime token cannot be replaced by reauthorizing, so it must not be told to drop it")
 }
 
 func TestServePublic_AssistantTokenFromForeignProjectChallenges(t *testing.T) {

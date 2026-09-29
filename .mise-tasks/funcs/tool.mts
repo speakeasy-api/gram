@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Call a tool on a local Gram Functions runner."
 //MISE quiet=true

@@ -32,7 +32,7 @@ import { Link } from "react-router";
 /** What the lock on a row the identity section owns says when you ask it. */
 const MANAGED_BY_USER = "Managed by User Identity";
 const DISABLED_BY_USER = "Disabled by User Identity";
-const MANAGED_BY_AGENT = "Managed by Agent Identity";
+const MANAGED_BY_AGENT = "Managed by Service Account";
 
 /**
  * A row that exists on the server under the current mode. Under User Identity
@@ -288,7 +288,7 @@ function HeaderDraftRow({
         {legacyPassThroughAuthorization ? (
           <Alert variant="warning" dismissible={false}>
             Legacy pass-through Authorization. Remove this row before using
-            Agent Identity or relying on No Identity.
+            Service Account or relying on No Identity.
           </Alert>
         ) : null}
 

@@ -60,13 +60,20 @@ export function headerDraftFromServer(
   };
 }
 
+// Inbound headers a pass-through row may not read from; mirrors the proxy.
+// Authorization is deliberately absent: forwarding the caller's own upstream
+// credential is what pass-through identity is for.
+const DENIED_PASS_THROUGH_SOURCES = new Set([
+  "cookie",
+  "set-cookie",
+  "proxy-authorization",
+]);
+
 // A saved secret shows its redacted placeholder (`***`) in the value field. As
 // long as the user leaves that placeholder untouched, we keep the existing
 // secret rather than overwriting it with the literal redaction string.
-function isUnchangedSecret(draft: HeaderDraft): boolean {
-  return (
-    draft.isSecret && draft.hadSecret && draft.staticValue === REDACTED_SECRET
-  );
+function isUntouchedSecret(draft: HeaderDraft): boolean {
+  return draft.hadSecret && draft.staticValue === REDACTED_SECRET;
 }
 
 export function draftsEqual(a: HeaderDraft[], b: HeaderDraft[]): boolean {
@@ -144,19 +151,41 @@ export function headerDraftErrors(
       }
     }
 
-    if (draft.source === "request" && !draft.valueFromRequestHeader.trim()) {
-      errors.set(draft.key, {
-        field: "value",
-        message: `Header "${name}" needs an inbound request header name.`,
-      });
+    if (draft.source === "request") {
+      const source = draft.valueFromRequestHeader.trim();
+      if (!source) {
+        errors.set(draft.key, {
+          field: "value",
+          message: `Header "${name}" needs an inbound request header name.`,
+        });
+        continue;
+      }
+      // Mirrors the proxy, which is the control that actually holds: these
+      // carry the dashboard's own session rather than anything meant for the
+      // upstream. Checked here so the refusal arrives while editing instead of
+      // as a failed request later.
+      if (DENIED_PASS_THROUGH_SOURCES.has(source.toLowerCase())) {
+        errors.set(draft.key, {
+          field: "value",
+          message: `"${source}" cannot be forwarded upstream.`,
+        });
+        continue;
+      }
+    }
+
+    if (draft.source === "static" && isUntouchedSecret(draft)) {
+      // Never write the literal placeholder as the credential, and never ask
+      // the server to reveal the stored secret as plain text.
+      if (!draft.isSecret) {
+        errors.set(draft.key, {
+          field: "value",
+          message: `Enter a new value for "${name}" to store it as non-secret.`,
+        });
+      }
       continue;
     }
 
-    if (
-      draft.source === "static" &&
-      !isUnchangedSecret(draft) &&
-      draft.staticValue.trim() === ""
-    ) {
+    if (draft.source === "static" && draft.staticValue.trim() === "") {
       errors.set(draft.key, {
         field: "value",
         message: `Header "${name}" needs a static value.`,
@@ -236,11 +265,15 @@ export function headerDraftToWriteFields(
     };
   }
 
-  if (isUnchangedSecret(draft)) {
-    return {
-      ...base,
-      isSecret: true,
-    };
+  if (isUntouchedSecret(draft)) {
+    // The server keeps a stored value only for a row that stays secret, and
+    // never reveals one as plain text. Omitting `value` keeps it; un-ticking
+    // Secret needs a fresh value, which headerDraftErrors already demands —
+    // refuse here too so the placeholder can never become the credential.
+    if (!draft.isSecret) {
+      throw new Error(`Header "${base.name}" needs a new value.`);
+    }
+    return { ...base, isSecret: true };
   }
 
   return {

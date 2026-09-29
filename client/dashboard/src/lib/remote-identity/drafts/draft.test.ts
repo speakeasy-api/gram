@@ -24,6 +24,21 @@ describe("seedDraft", () => {
 });
 
 describe("reconcileDraft", () => {
+  it("does not call an unchanged refetch a conflict", () => {
+    const dirty = {
+      ...seedDraft({ name: "linear" }, noBlank),
+      values: { name: "mine" },
+      isDirty: true,
+    };
+
+    // Same baseline arriving again is a poll or an invalidation landing
+    // mid-edit, not somebody else's write.
+    const next = reconcileDraft(dirty, { name: "linear" }, noBlank);
+
+    expect(next.conflict).toBe(false);
+    expect(next.values).toEqual({ name: "mine" });
+  });
+
   it("adopts fresher server state when there is nothing to lose", () => {
     const draft = seedDraft({ name: "linear" }, noBlank);
     const next = reconcileDraft(draft, { name: "renamed" }, noBlank);

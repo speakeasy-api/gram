@@ -32,6 +32,11 @@ func ListRemoteSessionsRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.list"
 }
 
+// CountRemoteSessionsRemoteSessionsPath returns the URL path to the remoteSessions service countRemoteSessions HTTP endpoint.
+func CountRemoteSessionsRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.count"
+}
+
 // RevokeRemoteSessionRemoteSessionsPath returns the URL path to the remoteSessions service revokeRemoteSession HTTP endpoint.
 func RevokeRemoteSessionRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.revoke"

@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/memory"
@@ -125,6 +126,11 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	if err := validateServerURL(serverURL, c.String("environment")); err != nil {
 		return nil, err
+	}
+
+	callerAssertions, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), c.String("authz-issuer-url"), c.String("environment") == "local")
+	if err != nil {
+		return nil, fmt.Errorf("configure caller assertions: %w", err)
 	}
 
 	enc, err := encryption.New(c.String("encryption-key"))
@@ -246,7 +252,8 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	r.cleanup = append(r.cleanup, func(context.Context) error { remoteSessionDeps.Refresher.Shutdown(); return nil })
 	challengeManager := remoteSessionDeps.Challenges
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
-		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
+		CallerAssertions: callerAssertions,
+		Logger:           logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
 		Sessions: sessionManager, ChatSessions: chatSessions, Environment: env,
 		Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,

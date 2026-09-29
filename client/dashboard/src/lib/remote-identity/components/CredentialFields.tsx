@@ -6,7 +6,7 @@ import { Eye, EyeOff } from "lucide-react";
 import type { AgentCredentialFields } from "../drafts/useCredentialDraft";
 
 /**
- * The Agent Identity credential form: one format toggle, the fields that
+ * The Service Account credential form: one format toggle, the fields that
  * format needs, and a preview of the exact header the upstream receives.
  */
 export function AgentIdentityRow({

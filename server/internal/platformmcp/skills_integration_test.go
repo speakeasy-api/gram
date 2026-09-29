@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	skillsservice "github.com/speakeasy-api/gram/server/internal/skills"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -147,6 +149,57 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 	})
 	require.Equal(t, distributed.DistributionID, repeat.DistributionID)
 	require.Len(t, listSkillDistributions(t, ctx, fixture.conn, fixture.project.ID, created.Skill.ID), 1)
+
+	// The listing names the plugin the distribution resolved to and says the
+	// distribution follows the skill's latest version, since nothing was pinned.
+	listed := callSkillsTool[ListSkillDistributionsOutput](t, ctx, session, "list_skill_distributions", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+		"plugin":       "Marketing",
+	})
+	require.Len(t, listed.Distributions, 1)
+	require.Equal(t, distributed.DistributionID, listed.Distributions[0].ID)
+	require.Equal(t, SkillTarget{Kind: SkillTargetPlugin, ID: fixture.marketingPluginID.String(), Name: "Marketing"}, listed.Distributions[0].Target)
+	require.True(t, listed.Distributions[0].FollowsLatest)
+	require.Empty(t, listed.Distributions[0].PinnedVersionID)
+	require.Equal(t, revised.Version.ID, listed.Distributions[0].ResolvedVersionID)
+	require.Empty(t, listed.NextCursor)
+
+	// Taking the skill back is gated on the user's explicit confirmation, and
+	// an unconfirmed call revokes nothing.
+	unconfirmed := callSkillsRefusal(t, ctx, session, "undistribute_skill", map[string]any{
+		"project_slug":    fixture.project.Slug,
+		"skill_id":        created.Skill.ID,
+		"plugin":          "marketing",
+		"confirmed":       false,
+		"idempotency_key": "revoke-marketing",
+	})
+	require.Equal(t, "confirmation_required", unconfirmed.Code)
+	require.Len(t, listSkillDistributions(t, ctx, fixture.conn, fixture.project.ID, created.Skill.ID), 1)
+
+	revoked := callSkillsTool[UndistributeSkillOutput](t, ctx, session, "undistribute_skill", map[string]any{
+		"project_slug":    fixture.project.Slug,
+		"skill_id":        created.Skill.ID,
+		"plugin":          "marketing",
+		"confirmed":       true,
+		"idempotency_key": "revoke-marketing",
+	})
+	require.Equal(t, distributed.Target, revoked.Target)
+	require.Equal(t, created.Skill.ID, revoked.SkillID)
+	require.Empty(t, listSkillDistributions(t, ctx, fixture.conn, fixture.project.ID, created.Skill.ID))
+
+	// A repeat finds nothing left to revoke and reports the same end state.
+	again := callSkillsTool[UndistributeSkillOutput](t, ctx, session, "undistribute_skill", map[string]any{
+		"project_slug":    fixture.project.Slug,
+		"skill_id":        created.Skill.ID,
+		"plugin":          "marketing",
+		"confirmed":       true,
+		"idempotency_key": "revoke-marketing",
+	})
+	require.Equal(t, revoked, again)
+	require.Empty(t, callSkillsTool[ListSkillDistributionsOutput](t, ctx, session, "list_skill_distributions", map[string]any{
+		"project_slug": fixture.project.Slug,
+	}).Distributions)
 }
 
 // A skill lives in one project, and naming another project's plugin must not
@@ -375,6 +428,21 @@ func TestPlatformMCPSkillWriterCanAuthorButCannotDistribute(t *testing.T) {
 		"plugin":       "marketing",
 	})
 	require.Equal(t, "permission_denied", refusal.Code)
+
+	listed := callSkillsTool[ListSkillDistributionsOutput](t, ctx, fixture.session, "list_skill_distributions", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+	})
+	require.Empty(t, listed.Distributions)
+
+	revocation := callSkillsRefusal(t, ctx, fixture.session, "undistribute_skill", map[string]any{
+		"project_slug":    fixture.project.Slug,
+		"skill_id":        created.Skill.ID,
+		"plugin":          "marketing",
+		"confirmed":       true,
+		"idempotency_key": "revoke-as-writer",
+	})
+	require.Equal(t, "permission_denied", revocation.Code)
 }
 
 func TestPlatformMCPSkillsToolsRefuseAUserWithoutGrants(t *testing.T) {
@@ -396,6 +464,11 @@ func TestPlatformMCPSkillsToolsRefuseAUserWithoutGrants(t *testing.T) {
 		{name: "list_skill_feedback", arguments: map[string]any{"project_slug": fixture.project.Slug, "skill_id": uuid.NewString()}},
 		{name: "list_skill_suggestions", arguments: map[string]any{"project_slug": fixture.project.Slug}},
 		{name: "list_skill_suggestion_feedback", arguments: map[string]any{"project_slug": fixture.project.Slug, "change_id": uuid.NewString()}},
+		{name: "list_skill_distributions", arguments: map[string]any{"project_slug": fixture.project.Slug}},
+		// An existing plugin and a missing one refuse identically, so the
+		// refusal cannot be used to learn which plugins the project has.
+		{name: "list_skill_distributions", arguments: map[string]any{"project_slug": fixture.project.Slug, "plugin": "marketing"}},
+		{name: "list_skill_distributions", arguments: map[string]any{"project_slug": fixture.project.Slug, "plugin": "nowhere"}},
 	} {
 		refusal = callSkillsRefusal(t, ctx, fixture.session, call.name, call.arguments)
 		require.Equal(t, "forbidden", refusal.Code, call.name)
@@ -412,6 +485,44 @@ type skillsVerticalFixture struct {
 	project           ResolvedProject
 	session           *mcp.ClientSession
 	marketingPluginID uuid.UUID
+
+	// insights stands in for ClickHouse behind the insight tools. The two
+	// counters are the connection and organization buckets of the diagnostics
+	// budget it is metered on: an OperationBudget charges both buckets on every
+	// permitted call from a connection-bearing principal, so they are counted
+	// apart rather than through one shared limiter that would read as two
+	// charges per call.
+	insights                 *stubSkillInsightsReader
+	insightsConnectionLane   *countingLimiter
+	insightsOrganizationLane *countingLimiter
+}
+
+// countingLimiter always allows and counts what it was charged. It is safe to
+// read from the test while the fixture's server charges it on its own
+// goroutine.
+type countingLimiter struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (l *countingLimiter) Allow(context.Context, string) (ratelimit.Result, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls++
+	return ratelimit.Result{Allowed: true}, nil
+}
+
+func (l *countingLimiter) AllowN(context.Context, string, int) (ratelimit.Result, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls++
+	return ratelimit.Result{Allowed: true}, nil
+}
+
+func (l *countingLimiter) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.calls
 }
 
 // newSkillsVerticalFixture composes the production wiring against a real
@@ -533,6 +644,9 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
 	require.NoError(t, err)
 	allow := func() Limiter { return &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}} }
+	insights := &stubSkillInsightsReader{}
+	insightsConnectionLane := &countingLimiter{}
+	insightsOrganizationLane := &countingLimiter{}
 	skillsSurface := NewSkillsService(
 		skills,
 		NewPostgresSkillTargets(conn),
@@ -540,7 +654,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		authzEngine,
 		NewCatalogRegistrationGate(testGate{enabled: options.capabilityEnabled}),
 		OperationBudget{Connection: allow(), Organization: allow()},
-	)
+	).WithInsights(insights, OperationBudget{Connection: insightsConnectionLane, Organization: insightsOrganizationLane})
 
 	runtimeAuthorizer := Authorizer(&testAuthorizer{})
 	if options.grantAdmin || options.grantSkillRead || options.grantSkillWrite {
@@ -568,12 +682,136 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	t.Cleanup(func() { _ = session.Close() })
 
 	return &skillsVerticalFixture{
-		conn:              conn,
-		principal:         principal,
-		project:           project,
-		session:           session,
-		marketingPluginID: marketing.ID,
+		conn:                     conn,
+		principal:                principal,
+		project:                  project,
+		session:                  session,
+		marketingPluginID:        marketing.ID,
+		insights:                 insights,
+		insightsConnectionLane:   insightsConnectionLane,
+		insightsOrganizationLane: insightsOrganizationLane,
 	}
+}
+
+// insightsLaneCharges reports how often each bucket of the diagnostics budget
+// was charged, connection then organization.
+func (f *skillsVerticalFixture) insightsLaneCharges() (int, int) {
+	return f.insightsConnectionLane.count(), f.insightsOrganizationLane.count()
+}
+
+// createInsightsSkillVersion records one immutable version so the registry has
+// something real for the insight tools to resolve.
+func createInsightsSkillVersion(t *testing.T, ctx context.Context, conn *pgxpool.Pool, fixture *skillsVerticalFixture, skillID uuid.UUID, body string) skillsrepo.SkillVersion {
+	t.Helper()
+
+	version, err := skillsrepo.New(conn).CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content:          skillsFixtureManifest("measured", "Measured by the judge.", body),
+		CanonicalSha256:  uuid.NewString(),
+		RawSha256:        uuid.NewString(),
+		Description:      pgtype.Text{String: "Measured by the judge.", Valid: true},
+		Metadata:         []byte(`{}`),
+		SpecValid:        true,
+		ValidationErrors: []byte(`[]`),
+		CreatedByUserID:  fixture.principal.UserID,
+		ProjectID:        fixture.project.ID,
+		SkillID:          skillID,
+	})
+	require.NoError(t, err)
+	return version
+}
+
+// The insight tools resolve which skills to report through the registry under
+// the caller's real grants and then read ClickHouse for exactly those IDs. This
+// drives both tools through the endpoint as an organization admin against a
+// real skill and checks the ClickHouse read was scoped to what the registry
+// returned.
+func TestPlatformMCPSkillInsightsRankAndCompareUnderRealGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	fixture := newSkillsVerticalFixture(t, ctx, "platform_mcp_skill_insights_admin", skillsVerticalOptions{capabilityEnabled: true, grantAdmin: true})
+	skill, err := skillsrepo.New(fixture.conn).CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID:   fixture.project.ID,
+		Name:        "measured",
+		DisplayName: "Measured",
+		Summary:     pgtype.Text{String: "Measured by the judge.", Valid: true},
+	})
+	require.NoError(t, err)
+	older := createInsightsSkillVersion(t, ctx, fixture.conn, fixture, skill.ID, "First body.")
+	newer := createInsightsSkillVersion(t, ctx, fixture.conn, fixture, skill.ID, "Second body.")
+	fixture.insights.SetRows([]telemetryrepo.SkillInsightBucket{{
+		SkillID: skill.ID.String(), SkillVersionID: newer.ID.String(),
+		ActivationCount: 3, ActivatedSessions: 2, TotalSessionCost: 1.5,
+		ScoredSessions: 1, ScoreSum: 0.8, EstimatedMinutesSavedSum: 12, EstimatedMinutesSamples: 1,
+	}})
+
+	ranked := callSkillsTool[ListSkillInsightsOutput](t, ctx, fixture.session, "list_skill_insights", map[string]any{
+		"project_slug": fixture.project.Slug,
+	})
+	require.Len(t, ranked.Skills, 1)
+	require.Equal(t, skill.ID.String(), ranked.Skills[0].ID)
+	require.Equal(t, "measured", ranked.Skills[0].Name)
+	require.EqualValues(t, 3, ranked.Skills[0].Metrics.Activations)
+	require.NotNil(t, ranked.Skills[0].Metrics.Efficacy)
+	require.EqualValues(t, 1, ranked.Skills[0].Metrics.Efficacy.EstimatedMinutesSavedSamples)
+	params := fixture.insights.LastParams()
+	require.NotNil(t, params)
+	require.Equal(t, fixture.principal.OrganizationID, params.OrganizationID)
+	require.Equal(t, fixture.project.ID.String(), params.ProjectID)
+	require.Equal(t, []string{skill.ID.String()}, params.SkillIDs)
+
+	compared := callSkillsTool[CompareSkillVersionsOutput](t, ctx, fixture.session, "compare_skill_versions", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     skill.ID.String(),
+	})
+	require.Equal(t, skill.ID.String(), compared.SkillID)
+	require.Equal(t, "measured", compared.SkillName)
+	// The skill's own figures are the same whichever tool reported them.
+	require.Equal(t, ranked.Skills[0].Metrics.Activations, compared.Metrics.Activations)
+	require.Len(t, compared.Versions, 2, "comparison lists every registry version, used or not")
+	byID := map[string]SkillVersionInsight{}
+	for _, version := range compared.Versions {
+		byID[version.ID] = version
+	}
+	require.EqualValues(t, 3, byID[newer.ID.String()].Metrics.Activations)
+	require.Zero(t, byID[older.ID.String()].Metrics.Activations)
+	require.NotEmpty(t, byID[older.ID.String()].CreatedAt, "creation time comes from the registry")
+	connectionCharges, organizationCharges := fixture.insightsLaneCharges()
+	require.Equal(t, 2, connectionCharges, "each read charges the diagnostics lane's connection bucket once")
+	require.Equal(t, 2, organizationCharges, "each read charges the diagnostics lane's organization bucket once")
+}
+
+// A caller's grants decide what the insight tools may read. A member holding
+// no role reaches the handler and is refused by the skills service's own RBAC,
+// so ClickHouse is never read; a member holding only skill:read is turned back
+// at the organization-admin gate before the handler spends anything at all.
+func TestPlatformMCPSkillInsightsRefuseCallersWithoutTheRightGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	ungranted := newSkillsVerticalFixture(t, ctx, "platform_mcp_skill_insights_ungranted", skillsVerticalOptions{capabilityEnabled: true})
+	refusal := callSkillsRefusal(t, ctx, ungranted.session, "list_skill_insights", map[string]any{
+		"project_slug": ungranted.project.Slug,
+	})
+	require.Equal(t, "forbidden", refusal.Code)
+	require.Nil(t, ungranted.insights.LastParams(), "ClickHouse is never read for a caller the registry refuses")
+	// The lane is charged before the registry refuses, as every skills call
+	// charges its allowance before RBAC: an unauthorized caller cannot probe
+	// for free, and the refusal reveals nothing about what it would have read.
+	connectionCharges, organizationCharges := ungranted.insightsLaneCharges()
+	require.Equal(t, 1, connectionCharges, "the refused call charged the connection bucket once")
+	require.Equal(t, 1, organizationCharges, "the refused call charged the organization bucket once")
+
+	readerOnly := newSkillsVerticalFixture(t, ctx, "platform_mcp_skill_insights_reader", skillsVerticalOptions{capabilityEnabled: true, grantSkillRead: true})
+	refusal = callSkillsRefusal(t, ctx, readerOnly.session, "compare_skill_versions", map[string]any{
+		"project_slug": readerOnly.project.Slug,
+		"skill_id":     uuid.NewString(),
+	})
+	require.Equal(t, "permission_denied", refusal.Code)
+	require.Nil(t, readerOnly.insights.LastParams())
+	connectionCharges, organizationCharges = readerOnly.insightsLaneCharges()
+	require.Zero(t, connectionCharges, "the admin gate refuses before the handler charges the connection bucket")
+	require.Zero(t, organizationCharges, "the admin gate refuses before the handler charges the organization bucket")
 }
 
 // callSkillsTool calls one tool and decodes its structured result, failing the

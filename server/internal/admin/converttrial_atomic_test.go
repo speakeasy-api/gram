@@ -190,7 +190,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	require.NoError(t, proto.Unmarshal(envelope, &event))
 	var payload events.AuditLogCreatedPayloadV1
 	require.NoError(t, json.Unmarshal(event.GetPayload(), &payload))
-	require.Equal(t, record.ActorID, payload.ActorID)
+	require.Empty(t, payload.ActorID, "staff actor ID must not appear in customer webhooks")
 	require.Equal(t, audit.SpeakeasyTeamActorLabel, payload.ActorDisplayName)
 	require.Equal(t, string(audit.ActionOrganizationEnterpriseTrialConverted), payload.Action)
 	require.NotEmpty(t, payload.BeforeSnapshot)
