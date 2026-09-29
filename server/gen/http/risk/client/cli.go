@@ -1457,7 +1457,7 @@ func BuildGetRiskRuleBreakdownPayload(riskGetRiskRuleBreakdownCategory string, r
 
 // BuildGetRiskSignalsPayload builds the payload for the risk getRiskSignals
 // endpoint from CLI flags.
-func BuildGetRiskSignalsPayload(riskGetRiskSignalsFrom string, riskGetRiskSignalsTo string, riskGetRiskSignalsApikeyToken string, riskGetRiskSignalsSessionToken string, riskGetRiskSignalsProjectSlugInput string) (*risk.GetRiskSignalsPayload, error) {
+func BuildGetRiskSignalsPayload(riskGetRiskSignalsFrom string, riskGetRiskSignalsTo string, riskGetRiskSignalsMcpServerID string, riskGetRiskSignalsApikeyToken string, riskGetRiskSignalsSessionToken string, riskGetRiskSignalsProjectSlugInput string) (*risk.GetRiskSignalsPayload, error) {
 	var err error
 	var from *string
 	{
@@ -1474,6 +1474,16 @@ func BuildGetRiskSignalsPayload(riskGetRiskSignalsFrom string, riskGetRiskSignal
 		if riskGetRiskSignalsTo != "" {
 			to = &riskGetRiskSignalsTo
 			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var mcpServerID *string
+	{
+		if riskGetRiskSignalsMcpServerID != "" {
+			mcpServerID = &riskGetRiskSignalsMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -1498,6 +1508,59 @@ func BuildGetRiskSignalsPayload(riskGetRiskSignalsFrom string, riskGetRiskSignal
 		}
 	}
 	v := &risk.GetRiskSignalsPayload{}
+	v.From = from
+	v.To = to
+	v.McpServerID = mcpServerID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetRiskMcpServerCountsPayload builds the payload for the risk
+// getRiskMcpServerCounts endpoint from CLI flags.
+func BuildGetRiskMcpServerCountsPayload(riskGetRiskMcpServerCountsFrom string, riskGetRiskMcpServerCountsTo string, riskGetRiskMcpServerCountsApikeyToken string, riskGetRiskMcpServerCountsSessionToken string, riskGetRiskMcpServerCountsProjectSlugInput string) (*risk.GetRiskMcpServerCountsPayload, error) {
+	var err error
+	var from *string
+	{
+		if riskGetRiskMcpServerCountsFrom != "" {
+			from = &riskGetRiskMcpServerCountsFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskGetRiskMcpServerCountsTo != "" {
+			to = &riskGetRiskMcpServerCountsTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetRiskMcpServerCountsApikeyToken != "" {
+			apikeyToken = &riskGetRiskMcpServerCountsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskMcpServerCountsSessionToken != "" {
+			sessionToken = &riskGetRiskMcpServerCountsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskMcpServerCountsProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskMcpServerCountsProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskMcpServerCountsPayload{}
 	v.From = from
 	v.To = to
 	v.ApikeyToken = apikeyToken

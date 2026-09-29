@@ -98,6 +98,7 @@ func TestRiskFindingListValidation(t *testing.T) {
 		{PolicyID: "not-a-uuid"},
 		{ChatID: "not-a-uuid"},
 		{AssistantID: "not-a-uuid"},
+		{MCPServerID: "not-a-uuid"},
 		{AssistantID: uuid.NewString(), NonAssistant: true},
 		{Category: "unknown-category"},
 		{RuleID: strings.Repeat("r", 129)},
@@ -595,4 +596,16 @@ func TestRiskFindingListBudgetPreservesServiceError(t *testing.T) {
 	_, err := limited.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{Limit: 99})
 	require.ErrorIs(t, err, ErrRiskReadInvalid)
 	require.ErrorContains(t, err, "list risk finding page")
+}
+
+func TestRiskFindingListMCPServerFilter(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.NewString()
+
+	f := newFindingListFixture(t)
+	_, err := f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{MCPServerID: strings.ToUpper(serverID)})
+	require.NoError(t, err)
+	require.Len(t, f.clickhouse.list, 1)
+	require.Equal(t, serverID, f.clickhouse.list[0].MCPServerID, "the analytics store filters on the canonical server id")
 }

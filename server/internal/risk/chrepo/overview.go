@@ -18,6 +18,9 @@ type RiskOverviewWindowParams struct {
 	ProjectID      string
 	From           time.Time
 	To             time.Time
+	// MCPServerID narrows the read to one concrete MCP server. Empty means no
+	// narrowing.
+	MCPServerID string
 }
 
 // overviewFindings returns the base builder every overview read shares:
@@ -45,7 +48,7 @@ func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.Se
 		Where("created_at >= ?", p.From).
 		Where("created_at < ?", p.To)
 
-	return sq.Select(columns...).
+	sb := sq.Select(columns...).
 		FromSelect(latest, "latest").
 		Where("rn = 1").
 		Where("dead_letter_reason = ''").
@@ -54,6 +57,7 @@ func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.Se
 		// false_positive_at-only rows written before the suppression
 		// convergence age out under the table's 90-day TTL.
 		Where("false_positive_at IS NULL")
+	return withMCPServerFilter(sb, p.MCPServerID)
 }
 
 // RiskOverviewFindingCounts are the window-wide headline stats.

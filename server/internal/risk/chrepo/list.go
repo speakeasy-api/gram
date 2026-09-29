@@ -209,6 +209,16 @@ func withMCPServerCond(sb squirrel.SelectBuilder, p ListRiskFindingsParams) squi
 	return sb.Where("mcp_server_id = ?", p.MCPServerID)
 }
 
+// withMCPServerFilter is the params-free form of withMCPServerCond for the
+// overview and signal builders, which apply it after their latest-copy dedup
+// for the same reason.
+func withMCPServerFilter(sb squirrel.SelectBuilder, mcpServerID string) squirrel.SelectBuilder {
+	if mcpServerID == "" {
+		return sb
+	}
+	return sb.Where("mcp_server_id = ?", mcpServerID)
+}
+
 // liveStateCond gates the latest copy of a finding to live rows only — not
 // suppressed, not marked a false positive. Applied after the per-id dedup.
 //

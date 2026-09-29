@@ -22,9 +22,9 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  GetRiskSignalsRequest,
-  GetRiskSignalsSecurity,
-} from "../models/operations/getrisksignals.js";
+  GetRiskMcpServerCountsRequest,
+  GetRiskMcpServerCountsSecurity,
+} from "../models/operations/getriskmcpservercounts.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -32,19 +32,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildRiskSignalsQuery,
-  prefetchRiskSignals,
-  queryKeyRiskSignals,
-  RiskSignalsQueryData,
-} from "./riskSignals.core.js";
+  buildRiskMcpServerCountsQuery,
+  prefetchRiskMcpServerCounts,
+  queryKeyRiskMcpServerCounts,
+  RiskMcpServerCountsQueryData,
+} from "./riskMcpServerCounts.core.js";
 export {
-  buildRiskSignalsQuery,
-  prefetchRiskSignals,
-  queryKeyRiskSignals,
-  type RiskSignalsQueryData,
+  buildRiskMcpServerCountsQuery,
+  prefetchRiskMcpServerCounts,
+  queryKeyRiskMcpServerCounts,
+  type RiskMcpServerCountsQueryData,
 };
 
-export type RiskSignalsQueryError =
+export type RiskMcpServerCountsQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -56,19 +56,22 @@ export type RiskSignalsQueryError =
   | SDKValidationError;
 
 /**
- * getRiskSignals risk
+ * getRiskMcpServerCounts risk
  *
  * @remarks
- * Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.
+ * Get live finding counts per concrete MCP server over a window, largest first. Powers the MCP server filter pickers on Risk Events and Watchdog. Served from the ClickHouse findings store.
  */
-export function useRiskSignals(
-  request?: GetRiskSignalsRequest | undefined,
-  security?: GetRiskSignalsSecurity | undefined,
-  options?: QueryHookOptions<RiskSignalsQueryData, RiskSignalsQueryError>,
-): UseQueryResult<RiskSignalsQueryData, RiskSignalsQueryError> {
+export function useRiskMcpServerCounts(
+  request?: GetRiskMcpServerCountsRequest | undefined,
+  security?: GetRiskMcpServerCountsSecurity | undefined,
+  options?: QueryHookOptions<
+    RiskMcpServerCountsQueryData,
+    RiskMcpServerCountsQueryError
+  >,
+): UseQueryResult<RiskMcpServerCountsQueryData, RiskMcpServerCountsQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildRiskSignalsQuery(
+    ...buildRiskMcpServerCountsQuery(
       client,
       request,
       security,
@@ -79,22 +82,25 @@ export function useRiskSignals(
 }
 
 /**
- * getRiskSignals risk
+ * getRiskMcpServerCounts risk
  *
  * @remarks
- * Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.
+ * Get live finding counts per concrete MCP server over a window, largest first. Powers the MCP server filter pickers on Risk Events and Watchdog. Served from the ClickHouse findings store.
  */
-export function useRiskSignalsSuspense(
-  request?: GetRiskSignalsRequest | undefined,
-  security?: GetRiskSignalsSecurity | undefined,
+export function useRiskMcpServerCountsSuspense(
+  request?: GetRiskMcpServerCountsRequest | undefined,
+  security?: GetRiskMcpServerCountsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    RiskSignalsQueryData,
-    RiskSignalsQueryError
+    RiskMcpServerCountsQueryData,
+    RiskMcpServerCountsQueryError
   >,
-): UseSuspenseQueryResult<RiskSignalsQueryData, RiskSignalsQueryError> {
+): UseSuspenseQueryResult<
+  RiskMcpServerCountsQueryData,
+  RiskMcpServerCountsQueryError
+> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildRiskSignalsQuery(
+    ...buildRiskMcpServerCountsQuery(
       client,
       request,
       security,
@@ -104,32 +110,30 @@ export function useRiskSignalsSuspense(
   });
 }
 
-export function setRiskSignalsData(
+export function setRiskMcpServerCountsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
       from?: Date | undefined;
       to?: Date | undefined;
-      mcpServerId?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
-  data: RiskSignalsQueryData,
-): RiskSignalsQueryData | undefined {
-  const key = queryKeyRiskSignals(...queryKeyBase);
+  data: RiskMcpServerCountsQueryData,
+): RiskMcpServerCountsQueryData | undefined {
+  const key = queryKeyRiskMcpServerCounts(...queryKeyBase);
 
-  return client.setQueryData<RiskSignalsQueryData>(key, data);
+  return client.setQueryData<RiskMcpServerCountsQueryData>(key, data);
 }
 
-export function invalidateRiskSignals(
+export function invalidateRiskMcpServerCounts(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       from?: Date | undefined;
       to?: Date | undefined;
-      mcpServerId?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -139,16 +143,16 @@ export function invalidateRiskSignals(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "signals", "get", ...queryKeyBase],
+    queryKey: ["@gram/client", "signals", "mcpServerCounts", ...queryKeyBase],
   });
 }
 
-export function invalidateAllRiskSignals(
+export function invalidateAllRiskMcpServerCounts(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "signals", "get"],
+    queryKey: ["@gram/client", "signals", "mcpServerCounts"],
   });
 }
