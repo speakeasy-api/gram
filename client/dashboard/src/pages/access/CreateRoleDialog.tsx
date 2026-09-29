@@ -62,8 +62,10 @@ import {
 } from "./roleDialogState";
 import {
   applyRemoveRule,
+  blockOnlyScopes,
   diffGrants,
   grantsFromRole,
+  isBlockOnlyGrant,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
 
@@ -87,6 +89,9 @@ function getAllowLevel(
   rules: ScopeRule[],
 ): "all" | "project" | "server" | "tool" | "annotation" | null {
   const allows = rules.filter((r) => r.effect === "allow");
+  // A row of nothing but blocks subtracts from whatever the member's other
+  // roles allow, which is anything, so its blocks can name anything too.
+  if (allows.length === 0 && rules.length > 0) return "all";
   if (allows.length === 0) return null;
   if (allows.some((r) => r.selectors === null)) return "all";
   const allSels = allows.flatMap((r) => r.selectors ?? []);
@@ -365,7 +370,21 @@ export function CreateRoleDialog({
   const toggleScope = (scope: Scope) => {
     updateGrants((prev) => {
       const next = { ...prev };
-      if (next[scope]) {
+      const existing = next[scope];
+      // A role holding only blocks on a permission does not hold the
+      // permission, so picking it adds one rather than taking the block away —
+      // the row then reads "Applies to All servers except …". A block covering
+      // everything cannot survive that: together they allow nothing, which is
+      // not what picking the permission asked for.
+      if (existing && isBlockOnlyGrant(existing)) {
+        next[scope] = {
+          ...existing,
+          rules: [
+            { id: crypto.randomUUID(), effect: "allow", selectors: null },
+            ...existing.rules.filter((rule) => rule.selectors !== null),
+          ],
+        };
+      } else if (existing) {
         delete next[scope];
       } else {
         next[scope] = {
@@ -375,6 +394,15 @@ export function CreateRoleDialog({
           ],
         };
       }
+      return next;
+    });
+  };
+
+  /** The row's own dismiss: the permission comes off, blocks included. */
+  const removeScope = (scope: Scope) => {
+    updateGrants((prev) => {
+      const next = { ...prev };
+      delete next[scope];
       return next;
     });
   };
@@ -405,6 +433,26 @@ export function CreateRoleDialog({
       }
     }
     setDialogStep("rule-editor");
+  };
+
+  /**
+   * Narrow one exception. A block covering everything is stored as null
+   * selectors, which the picker reads as its "All" option — and that option is
+   * hidden for an exception, so the picker would jump to the project list and
+   * drop what the rule named. Starting the draft at "nothing chosen" opens it
+   * on the list the menu entry promised; discarding still leaves the rule as
+   * it was.
+   */
+  const editException = (scopeSlug: Scope, ruleIndex: number) => {
+    const rule = grants[scopeSlug]?.rules[ruleIndex];
+    if (rule?.selectors === null) {
+      setEditingScopeSlug(scopeSlug);
+      setEditingRuleIndex(ruleIndex);
+      setDraftRule({ ...rule, selectors: [] });
+      setDialogStep("rule-editor");
+      return;
+    }
+    openRuleEditor(scopeSlug, ruleIndex);
   };
 
   // Escape, the X, and the backdrop mean "leave it as it was", so they close
@@ -481,6 +529,24 @@ export function CreateRoleDialog({
           ...grant,
           rules: grant.rules.map((rule) =>
             rule.effect === "allow" ? { ...rule, selectors: null } : rule,
+          ),
+        },
+      };
+    });
+  };
+
+  // A block covering everything is stored the same way an unrestricted allow
+  // is, as null selectors, so widening one is the same edit in reverse.
+  const resetExceptionToAll = (scopeSlug: string, ruleIndex: number) => {
+    updateGrants((prev) => {
+      const grant = prev[scopeSlug];
+      if (!grant) return prev;
+      return {
+        ...prev,
+        [scopeSlug]: {
+          ...grant,
+          rules: grant.rules.map((rule, index) =>
+            index === ruleIndex ? { ...rule, selectors: null } : rule,
           ),
         },
       };
@@ -751,9 +817,11 @@ export function CreateRoleDialog({
             <RolePermissionsSection
               groups={scopeGroups}
               selectedScopes={new Set(Object.keys(grants))}
+              blockedScopes={blockOnlyScopes(grants)}
               disabled={false}
               markAgentIneligible={selectedAgents.size > 0}
               onToggleScope={toggleScope}
+              onRemoveScope={removeScope}
               renderScopeRule={(scopeDef) => {
                 const grant = grants[scopeDef.slug];
                 if (!grant) return null;
@@ -772,6 +840,34 @@ export function CreateRoleDialog({
                 const denyRules = grant.rules
                   .map((rule, index) => ({ rule, index }))
                   .filter(({ rule }) => rule.effect === "deny");
+                // Nothing but blocks: there is no allow rule to hang the
+                // sentence on, so the control states the blocks themselves.
+                if (allowRules.length === 0) {
+                  return (
+                    <PermissionScopeControl
+                      allowRule={undefined}
+                      denyRules={denyRules}
+                      resourceType={scopeDef.resourceType}
+                      denyLabel={(rule) =>
+                        computeRuleLabel(
+                          rule.selectors,
+                          scopeDef.resourceType,
+                          projectList,
+                        )
+                      }
+                      disabled={false}
+                      onEditException={(index) =>
+                        editException(scopeDef.slug, index)
+                      }
+                      onRemoveException={(index) =>
+                        removeRule(scopeDef.slug, index)
+                      }
+                      onResetExceptionToAll={(index) =>
+                        resetExceptionToAll(scopeDef.slug, index)
+                      }
+                    />
+                  );
+                }
                 return allowRules.map(
                   ({ rule: allowRule, index: allowIndex }, position) => (
                     <PermissionScopeControl
@@ -810,7 +906,7 @@ export function CreateRoleDialog({
                       onResetToAll={() => resetRuleToAll(scopeDef.slug)}
                       onAddException={() => openRuleEditor(scopeDef.slug, -1)}
                       onEditException={(index) =>
-                        openRuleEditor(scopeDef.slug, index)
+                        editException(scopeDef.slug, index)
                       }
                       onRemoveException={(index) =>
                         removeRule(scopeDef.slug, index)

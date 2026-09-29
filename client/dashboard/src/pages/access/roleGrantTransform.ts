@@ -14,6 +14,34 @@ import type {
 } from "./types";
 import { DISPOSITION_TO_ANNOTATION } from "./types";
 
+/**
+ * A permission the role holds nothing but exceptions to.
+ *
+ * Exceptions are stored as grants on a separate exclusion scope —
+ * `mcp:blocked_read` for `mcp:read` — and `grantsFromRole` folds them back onto
+ * the permission they subtract from so the editor can state them as one
+ * sentence. With no allow rule beside it the fold is not that permission at
+ * all: the role takes the access away and gives none, which is what a block
+ * written from an MCP server's access list leaves behind.
+ */
+export function isBlockOnlyGrant(grant: RoleGrant): boolean {
+  return (
+    grant.rules.length > 0 &&
+    grant.rules.every((rule) => rule.effect === "deny")
+  );
+}
+
+/** The scope keys whose grants are blocks rather than permissions. */
+export function blockOnlyScopes(
+  grants: Record<string, RoleGrant>,
+): Set<string> {
+  return new Set(
+    Object.entries(grants)
+      .filter(([, grant]) => isBlockOnlyGrant(grant))
+      .map(([scope]) => scope),
+  );
+}
+
 function blocklistScopeByScope(scopes: ScopeDefinition[]): Map<Scope, Scope> {
   const result = new Map<Scope, Scope>();
   for (const scope of scopes) {
@@ -181,7 +209,8 @@ type GrantIdentity = {
   selector?: Selector;
 };
 
-function selectorKey(selector: Selector | undefined): string {
+/** One selector as a stable string, so two of them can be compared by value. */
+export function selectorKey(selector: Selector | undefined): string {
   if (!selector) return "*";
   return JSON.stringify({
     disposition: selector.disposition ?? "",

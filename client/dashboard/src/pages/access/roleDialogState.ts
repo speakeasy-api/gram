@@ -1,5 +1,6 @@
 import { isProjectSelectableResourceType } from "./types";
 import type { PolicyEffect, ResourceType, RoleGrant } from "./types";
+import { selectorKey } from "./roleGrantTransform";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
 type ProjectRef = { id: string; name: string };
@@ -63,7 +64,9 @@ export function membersHaveChanged(
 }
 
 /** Sorted, comma-joined grant keys for cheap equality check.
- *  Encodes each rule's effect and selector count so any change marks dirty. */
+ *  Encodes each rule's effect and the selectors it names so any change marks
+ *  dirty. Counting the selectors instead left one server swapped for another
+ *  reading as unchanged, which kept Save disabled on a real edit. */
 export function grantKeysString(grants: Record<string, RoleGrant>): string {
   return Object.entries(grants)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -71,7 +74,9 @@ export function grantKeysString(grants: Record<string, RoleGrant>): string {
       const summary = g.rules
         .map((r) => {
           const selKey =
-            r.selectors === null ? "*" : String(r.selectors.length);
+            r.selectors === null
+              ? "*"
+              : r.selectors.map(selectorKey).sort().join("|");
           return `${r.effect}:${selKey}`;
         })
         .sort()

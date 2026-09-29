@@ -34,6 +34,14 @@ export interface ScopeGroup {
 }
 
 /**
+ * What a permission the role only takes away does. An exclusion grant is
+ * subtracted from every grant a request loads, the member's other roles
+ * included, and confers nothing itself.
+ */
+const BLOCK_DESCRIPTION =
+  "Blocks this access even where another role allows it. It grants nothing on its own.";
+
+/**
  * The permissions a role carries, as a list you build rather than a tree you
  * walk: pick permissions from one searchable menu, then narrow each one on its
  * own row. MCP permissions are separated from the rest because they are the
@@ -42,16 +50,28 @@ export interface ScopeGroup {
 export function RolePermissionsSection({
   groups,
   selectedScopes,
+  blockedScopes,
   disabled,
   onToggleScope,
+  onRemoveScope,
   renderScopeRule,
   subjectLabel = "this role",
   markAgentIneligible = false,
 }: {
   groups: ScopeGroup[];
   selectedScopes: Set<string>;
+  /**
+   * The scopes the role holds only exceptions to. These are stored as the
+   * permission's exclusion scope, so the row is named and described as that
+   * grant instead: naming it after the permission claimed access the role does
+   * not give, and the menu hid the block behind a permission row with nothing
+   * in it.
+   */
+  blockedScopes?: Set<string>;
   disabled?: boolean;
   onToggleScope: (scope: Scope) => void;
+  /** Taking a permission off the role. Defaults to toggling it. */
+  onRemoveScope?: (scope: Scope) => void;
   /** Right-hand side of a row: the rule chips that narrow this permission. */
   renderScopeRule: (scope: ScopeDefinition) => ReactNode;
   /** What the empty states call the thing being given permissions. */
@@ -68,6 +88,14 @@ export function RolePermissionsSection({
   const [pickerOpen, setPickerOpen] = useState(false);
   // A pick from the empty state waits here until the picker has closed.
   const pendingScope = useRef<Scope | null>(null);
+
+  const isBlocked = (scope: ScopeDefinition) =>
+    blockedScopes?.has(scope.slug) ?? false;
+  // The name the row is stored under, which is the exclusion scope when the
+  // role holds nothing but exceptions to the permission.
+  const displaySlug = (scope: ScopeDefinition) =>
+    isBlocked(scope) ? (scope.exclusionScope ?? scope.slug) : scope.slug;
+  const removeScope = onRemoveScope ?? onToggleScope;
 
   const mcpGroups = groups.filter((group) => group.resourceType === "mcp");
   const otherGroups = groups.filter((group) => group.resourceType !== "mcp");
@@ -163,15 +191,19 @@ export function RolePermissionsSection({
                             </div>
                           </div>
                           {/* A tick marks what the role already has; a
-                                checkbox implied a second, separate state. */}
-                          {selectedScopes.has(scope.slug) && (
-                            <>
-                              {/* cmdk owns aria-selected on its items, so
+                                checkbox implied a second, separate state. A
+                                permission the role only blocks is not one it
+                                has, so it stays unticked and picking it adds
+                                the permission beside the block. */}
+                          {selectedScopes.has(scope.slug) &&
+                            !isBlocked(scope) && (
+                              <>
+                                {/* cmdk owns aria-selected on its items, so
                                     ownership is spoken as text instead. */}
-                              <span className="sr-only">Already added</span>
-                              <Check className="mt-0.5 h-4 w-4 shrink-0" />
-                            </>
-                          )}
+                                <span className="sr-only">Already added</span>
+                                <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                              </>
+                            )}
                         </CommandItem>
                       ))}
                     </CommandGroup>
@@ -203,6 +235,7 @@ export function RolePermissionsSection({
               <div className="divide-border divide-y">
                 {activeSelected.map((scope) => {
                   const rule = renderScopeRule(scope);
+                  const blocked = isBlocked(scope);
                   return (
                     <div
                       key={scope.slug}
@@ -214,8 +247,13 @@ export function RolePermissionsSection({
                             variant="body"
                             className="font-mono text-sm font-medium"
                           >
-                            {scope.slug}
+                            {displaySlug(scope)}
                           </Text>
+                          {blocked && (
+                            <Badge variant="warning" size="sm">
+                              Blocked
+                            </Badge>
+                          )}
                           {markAgentIneligible &&
                             scope.agentEligible === false && (
                               <Badge variant="neutral" size="sm">
@@ -224,7 +262,7 @@ export function RolePermissionsSection({
                             )}
                         </div>
                         <Text muted small>
-                          {scope.description}
+                          {blocked ? BLOCK_DESCRIPTION : scope.description}
                         </Text>
                         {/* Only permissions that can be narrowed carry a control;
                           an empty container left the row taller than its
@@ -239,8 +277,8 @@ export function RolePermissionsSection({
                         variant="tertiary"
                         size="sm"
                         disabled={disabled}
-                        onClick={() => onToggleScope(scope.slug as Scope)}
-                        aria-label={`Remove ${scope.slug}`}
+                        onClick={() => removeScope(scope.slug as Scope)}
+                        aria-label={`Remove ${displaySlug(scope)}`}
                       >
                         <Button.LeftIcon>
                           <X className="h-4 w-4" />

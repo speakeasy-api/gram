@@ -4,8 +4,10 @@ import type { ScopeDefinition } from "@gram/client/models/components/scopedefini
 import type { RoleGrant } from "./types";
 import {
   applyRemoveRule,
+  blockOnlyScopes,
   diffGrants,
   grantsFromRole,
+  isBlockOnlyGrant,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
 
@@ -17,6 +19,14 @@ const scopeDefinitions = [
     visibility: "user_visible",
     agentEligible: true,
     exclusionScope: "project:blocked_write",
+  },
+  {
+    slug: "mcp:read",
+    description: "View MCP servers and configuration.",
+    resourceType: "mcp",
+    visibility: "user_visible",
+    agentEligible: true,
+    exclusionScope: "mcp:blocked_read",
   },
   {
     slug: "mcp:write",
@@ -158,6 +168,54 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
         ],
       },
     ]);
+  });
+
+  it("round-trips a block held without the permission it subtracts from", () => {
+    // What revoking one server's access leaves on a role whose members reach it
+    // through another role: a block and nothing else. The fold puts it under
+    // mcp:read, so the editor has to be able to tell the two apart.
+    const r = role([
+      {
+        scope: "mcp:blocked_read",
+        selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+      },
+    ]);
+
+    const rules = grantsFromRole(r, scopeDefinitions);
+
+    expect(rules["mcp:read"]?.rules).toEqual([
+      expect.objectContaining({
+        effect: "deny",
+        selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+      }),
+    ]);
+    expect(isBlockOnlyGrant(rules["mcp:read"]!)).toBe(true);
+    expect(blockOnlyScopes(rules)).toEqual(new Set(["mcp:read"]));
+    expect(sdkGrantsFromForm(rules, scopeDefinitions)).toEqual([
+      {
+        scope: "mcp:blocked_read",
+        selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+      },
+    ]);
+  });
+
+  it("does not call a permission with an allow beside its block a block", () => {
+    const rules = grantsFromRole(
+      role([
+        {
+          scope: "mcp:read",
+          selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+        },
+        {
+          scope: "mcp:blocked_read",
+          selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+        },
+      ]),
+      scopeDefinitions,
+    );
+
+    expect(isBlockOnlyGrant(rules["mcp:read"]!)).toBe(false);
+    expect(blockOnlyScopes(rules)).toEqual(new Set());
   });
 
   it("round-trips project-selectable skill rules and exceptions", () => {

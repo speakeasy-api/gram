@@ -154,6 +154,43 @@ describe("grantKeysString", () => {
   it("empty grants → empty string", () => {
     expect(grantKeysString({})).toBe("");
   });
+
+  it("distinguishes rules naming the same number of different resources", () => {
+    // Swapping which server an exception names is a real edit. A key counting
+    // selectors read it as unchanged, so Save stayed disabled.
+    const exception = (resourceId: string): Record<string, RoleGrant> => ({
+      "mcp:read": {
+        scope: "mcp:read",
+        rules: [
+          {
+            id: "block",
+            effect: "deny",
+            selectors: [{ resourceKind: "mcp", resourceId }],
+          },
+        ],
+      },
+    });
+
+    expect(grantKeysString(exception("srv_1"))).not.toBe(
+      grantKeysString(exception("srv_2")),
+    );
+    expect(grantKeysString(exception("srv_1"))).toBe(
+      grantKeysString(exception("srv_1")),
+    );
+  });
+
+  it("ignores the order selectors are listed in", () => {
+    const rules = (selectors: Selector[]): Record<string, RoleGrant> => ({
+      "mcp:read": {
+        scope: "mcp:read",
+        rules: [{ id: "allow", effect: "allow", selectors }],
+      },
+    });
+    const a = { resourceKind: "mcp" as const, resourceId: "srv_1" };
+    const b = { resourceKind: "mcp" as const, resourceId: "srv_2" };
+
+    expect(grantKeysString(rules([a, b]))).toBe(grantKeysString(rules([b, a])));
+  });
 });
 
 // --- hasFormChanges ---

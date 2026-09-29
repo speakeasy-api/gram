@@ -12,6 +12,9 @@ import type { ResourceType, ScopeRule } from "./types";
  * keeps everything else in its menu. The earlier row put a chip, a chip
  * dismiss, an "Except…" link and a row dismiss side by side, where two of the
  * four removed different things.
+ *
+ * A permission the role only takes away has no allow rule to narrow, so the
+ * sentence starts from the block instead: "Excludes All servers".
  */
 export function PermissionScopeControl({
   allowRule,
@@ -26,22 +29,28 @@ export function PermissionScopeControl({
   onAddException,
   onEditException,
   onRemoveException,
+  onResetExceptionToAll,
 }: {
   allowRule: ScopeRule | undefined;
   denyRules: { rule: ScopeRule; index: number }[];
-  allowLabel: string;
+  /** Label for the allow rule. Unread by a row that has none. */
+  allowLabel?: string;
   /** Label per exception, in the same order as denyRules. */
   denyLabel: (rule: ScopeRule) => string;
   resourceType: ResourceType;
-  canAddException: boolean;
+  canAddException?: boolean;
   disabled?: boolean;
-  onChooseSpecific: () => void;
-  onResetToAll: () => void;
-  onAddException: () => void;
+  // The three below narrow, widen and except the allow rule, so a row with no
+  // allow rule has nothing to pass for them.
+  onChooseSpecific?: () => void;
+  onResetToAll?: () => void;
+  onAddException?: () => void;
   onEditException: (index: number) => void;
   onRemoveException: (index: number) => void;
+  /** Widen one exception back to everything, for a row that is only blocks. */
+  onResetExceptionToAll?: (index: number) => void;
 }): JSX.Element | null {
-  if (!allowRule) return null;
+  if (!allowRule && denyRules.length === 0) return null;
 
   const everything = isProjectScoped(resourceType)
     ? "All projects"
@@ -50,22 +59,61 @@ export function PermissionScopeControl({
     ? "Specific projects…"
     : "Specific servers…";
 
+  // A row that only blocks reads the other way round: "Excludes All servers",
+  // with the same menu behind it. Left to the exception clause below it had no
+  // sentence to be a clause of, so the block was invisible and unreachable.
+  if (!allowRule) {
+    return (
+      <>
+        {denyRules.map(({ rule, index }, position) => (
+          <span key={rule.id} className="flex items-center gap-1">
+            <InlineChoice
+              lead={position === 0 ? "Excludes" : "and"}
+              value={denyLabel(rule)}
+              disabled={disabled}
+              options={[
+                {
+                  label: everything,
+                  onSelect: () => onResetExceptionToAll?.(index),
+                },
+                { label: specific, onSelect: () => onEditException(index) },
+              ]}
+            />
+            {/* One block is the whole row, so the row's own dismiss already
+                removes it; a second control beside it removed the same thing. */}
+            {denyRules.length > 1 && (
+              <button
+                type="button"
+                onClick={() => onRemoveException(index)}
+                disabled={disabled}
+                aria-label="Remove exception"
+                className="text-muted-foreground hover:text-foreground disabled:cursor-not-allowed"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </span>
+        ))}
+      </>
+    );
+  }
+
   return (
     // One sentence: "Applies to All servers except 1 server". The exception is
     // a clause in that sentence, not a second row.
     <>
       <InlineChoice
         lead="Applies to"
-        value={allowLabel}
+        value={allowLabel ?? ""}
         disabled={disabled}
         options={[
-          { label: everything, onSelect: onResetToAll },
-          { label: specific, onSelect: onChooseSpecific },
+          { label: everything, onSelect: () => onResetToAll?.() },
+          { label: specific, onSelect: () => onChooseSpecific?.() },
           ...(canAddException
             ? [
                 {
                   label: "Add an exception…",
-                  onSelect: onAddException,
+                  onSelect: () => onAddException?.(),
                   separatorBefore: true,
                 },
               ]
