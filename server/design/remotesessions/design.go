@@ -83,7 +83,7 @@ var _ = Service("remoteSessions", func() {
 	})
 
 	Method("countRemoteSessions", func() {
-		Description("Count the distinct people holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer and client are reachable from the caller's project count. A client shared by several MCP servers counts people across all of them.")
+		Description("Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller's project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.")
 
 		Payload(func() {
 			Attribute("remote_session_client_id", String, "The remote_session_client whose sessions to count.", func() {
@@ -385,7 +385,7 @@ var RemoteSession = Type("RemoteSession", func() {
 var CountRemoteSessionsResult = Type("CountRemoteSessionsResult", func() {
 	Description("Result type for counting the people signed in through a remote_session_client.")
 
-	Attribute("subjects", Int64, "Distinct subjects with a live remote_session through the client.")
+	Attribute("subjects", Int64, "Distinct user subjects with a live remote_session through the client.")
 
 	Required("subjects")
 })

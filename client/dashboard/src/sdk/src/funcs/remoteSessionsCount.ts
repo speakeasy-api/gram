@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * countRemoteSessions remoteSessions
  *
  * @remarks
- * Count the distinct people holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer and client are reachable from the caller's project count. A client shared by several MCP servers counts people across all of them.
+ * Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller's project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.
  */
 export function remoteSessionsCount(
   client: GramCore,

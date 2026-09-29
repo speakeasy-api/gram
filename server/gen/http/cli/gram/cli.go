@@ -23421,7 +23421,7 @@ func remoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    detach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
 	fmt.Fprintln(os.Stderr, `    commit-server-identity-configuration: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.`)
 	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
-	fmt.Fprintln(os.Stderr, `    count-remote-sessions: Count the distinct people holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer and client are reachable from the caller's project count. A client shared by several MCP servers counts people across all of them.`)
+	fmt.Fprintln(os.Stderr, `    count-remote-sessions: Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller's project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.`)
 	fmt.Fprintln(os.Stderr, `    revoke-remote-session: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -23564,7 +23564,7 @@ func remoteSessionsCountRemoteSessionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Count the distinct people holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer and client are reachable from the caller's project count. A client shared by several MCP servers counts people across all of them.`)
+	fmt.Fprintln(os.Stderr, `Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller's project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -remote-session-client-id STRING: `)

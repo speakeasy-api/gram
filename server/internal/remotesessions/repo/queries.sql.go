@@ -1040,11 +1040,15 @@ const countRemoteSessionSubjectsByClientID = `-- name: CountRemoteSessionSubject
 SELECT COUNT(DISTINCT s.subject_urn)::bigint AS subjects
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN remote_session_issuers AS ri ON ri.id = c.remote_session_issuer_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 WHERE (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
   AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text)))
+  AND (ri.project_id = $1::uuid OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = $2::text)))
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
+  AND ri.deleted IS FALSE
+  AND s.subject_urn LIKE 'user:%'
   AND s.remote_session_client_id = $3::uuid
 `
 
@@ -1054,9 +1058,10 @@ type CountRemoteSessionSubjectsByClientIDParams struct {
 	RemoteSessionClientID uuid.UUID
 }
 
-// Distinct people signed in through one client. Scoped exactly like
-// ListRemoteSessionsByProjectID so a count never reveals sessions the list
-// would hide from this project.
+// Distinct people signed in through one client. Scoped like
+// ListRemoteSessionsByProjectID, plus the client's own live, reachable remote
+// issuer, so a count never reveals sessions this project cannot see. Only
+// human user: subjects count; API keys and anonymous callers are not people.
 func (q *Queries) CountRemoteSessionSubjectsByClientID(ctx context.Context, arg CountRemoteSessionSubjectsByClientIDParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countRemoteSessionSubjectsByClientID, arg.ProjectID, arg.OrganizationID, arg.RemoteSessionClientID)
 	var subjects int64

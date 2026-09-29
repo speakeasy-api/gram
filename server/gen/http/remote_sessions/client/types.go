@@ -115,7 +115,7 @@ type ListRemoteSessionsResponseBody struct {
 // CountRemoteSessionsResponseBody is the type of the "remoteSessions" service
 // "countRemoteSessions" endpoint HTTP response body.
 type CountRemoteSessionsResponseBody struct {
-	// Distinct subjects with a live remote_session through the client.
+	// Distinct user subjects with a live remote_session through the client.
 	Subjects *int64 `form:"subjects,omitempty" json:"subjects,omitempty" xml:"subjects,omitempty"`
 }
 

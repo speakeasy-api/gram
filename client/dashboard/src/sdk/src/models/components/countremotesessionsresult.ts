@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type CountRemoteSessionsResult = {
   /**
-   * Distinct subjects with a live remote_session through the client.
+   * Distinct user subjects with a live remote_session through the client.
    */
   subjects: number;
 };

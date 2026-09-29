@@ -50,9 +50,10 @@ type Service interface {
 	// and refresh_token_encrypted are never returned — only metadata
 	// (access_expires_at, refresh_expires_at, scopes).
 	ListRemoteSessions(context.Context, *ListRemoteSessionsPayload) (res *ListRemoteSessionsResult, err error)
-	// Count the distinct people holding a live remote_session minted through one
-	// remote_session_client. Scoped like listRemoteSessions: only sessions whose
-	// issuer and client are reachable from the caller's project count. A client
+	// Count the distinct people (user subjects) holding a live remote_session
+	// minted through one remote_session_client. Scoped like listRemoteSessions:
+	// only sessions whose issuer, client and remote issuer are reachable from the
+	// caller's project count; API-key and anonymous subjects do not. A client
 	// shared by several MCP servers counts people across all of them.
 	CountRemoteSessions(context.Context, *CountRemoteSessionsPayload) (res *CountRemoteSessionsResult, err error)
 	// Drop a remote_session row. The next /mcp call by that principal triggers a
@@ -159,7 +160,7 @@ type CountRemoteSessionsPayload struct {
 // CountRemoteSessionsResult is the result type of the remoteSessions service
 // countRemoteSessions method.
 type CountRemoteSessionsResult struct {
-	// Distinct subjects with a live remote_session through the client.
+	// Distinct user subjects with a live remote_session through the client.
 	Subjects int64
 }
 
