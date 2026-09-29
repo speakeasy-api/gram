@@ -182,14 +182,22 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 	t.Run("current version replacement", func(t *testing.T) {
 		old, err := s.Get(ctx, id)
 		require.NoError(t, err)
-		_, err = s.SetPublished(ctx, id, Token(old), true)
+		published, err := s.SetPublished(ctx, id, Token(old), true)
 		require.NoError(t, err)
-		_, err = repo.New(db).UpdateEntry(ctx, repo.UpdateEntryParams{StoredRecordLimit: StoredRecordByteLimit, ID: id, Data: []byte(`{"server":{"name":"io.example/test","version":"2","description":"synthetic record"}}`)})
+		firstPublication := publicationDate(t, published.Data)
+		require.NotEmpty(t, firstPublication)
+		for _, status := range []bool{false, true} {
+			published, err = s.SetPublished(ctx, id, Token(published), status)
+			require.NoError(t, err)
+			require.Equal(t, firstPublication, publicationDate(t, published.Data))
+		}
+		replacement, err := s.Save(ctx, id, Token(published), []byte(`{"server":{"name":"io.example/test","version":"2","description":"synthetic record"}}`))
 		require.NoError(t, err)
 		require.Equal(t, 404, send(path+"1", key, "").Code)
 		w := send(path+"latest", key, "")
 		require.Equal(t, 200, w.Code)
-		require.JSONEq(t, `{"server":{"name":"io.example/test","version":"2","description":"synthetic record"}}`, w.Body.String())
+		require.JSONEq(t, string(replacement.Data), w.Body.String())
+		require.Equal(t, firstPublication, publicationDate(t, w.Body.Bytes()))
 		w = send(strings.TrimSuffix(path, "/"), key, "")
 		require.Equal(t, 200, w.Code)
 		var page struct {
@@ -294,12 +302,18 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 			t.Fatalf("dashboard SDK wire test requires installed tsx (aube install): %v: %s", err, output)
 		}
 
+		expectedPublications := make(map[string]string)
 		for _, name := range []string{"io.example/sdk-a", "io.example/sdk-z"} {
 			data, err := json.Marshal(map[string]any{"server": map[string]any{"name": name, "version": "v/1+2", "description": "synthetic record", "extension": map[string]any{"nested": "retained"}}, "_meta": map[string]any{"extension": "retained", "com.speakeasy.ai/catalog": map[string]any{"documentationUrl": "https://example.test/docs"}}})
 			require.NoError(t, err)
 			require.Empty(t, s.validator.Validate(data))
-			_, err = s.Create(ctx, data)
+			e, err := s.Create(ctx, data)
 			require.NoError(t, err)
+			expectedPublications[name] = publicationDate(t, e.Data)
+			for _, status := range []bool{false, true} {
+				e, err = s.SetPublished(ctx, e.ID, Token(e), status)
+				require.NoError(t, err)
+			}
 		}
 		other, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "wire-other", Slug: "wire-other", OrganizationID: ac.ActiveOrganizationID})
 		require.NoError(t, err)
@@ -309,7 +323,9 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 		defer cancel()
 		cmd := exec.CommandContext(commandCtx, "mise", "exec", "--", "aube", "exec", "--no-install", "tsx", "--", "client/dashboard/scripts/registry-discovery-wire.ts")
 		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "REGISTRY_TEST_URL="+server.URL, "REGISTRY_TEST_KEY="+key, "REGISTRY_TEST_PROJECT="+*ac.ProjectSlug, "REGISTRY_TEST_OTHER_PROJECT="+other.Slug, "REGISTRY_TEST_INSUFFICIENT_KEY="+insufficient)
+		expectedJSON, err := json.Marshal(expectedPublications)
+		require.NoError(t, err)
+		cmd.Env = append(os.Environ(), "REGISTRY_TEST_PUBLICATIONS="+string(expectedJSON), "REGISTRY_TEST_URL="+server.URL, "REGISTRY_TEST_KEY="+key, "REGISTRY_TEST_PROJECT="+*ac.ProjectSlug, "REGISTRY_TEST_OTHER_PROJECT="+other.Slug, "REGISTRY_TEST_INSUFFICIENT_KEY="+insufficient)
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err, string(output))
 		t.Log(string(output))

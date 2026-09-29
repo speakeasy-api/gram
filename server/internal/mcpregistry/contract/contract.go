@@ -37,7 +37,15 @@ func Compile(raw []byte) (*jsonschema.Schema, error) {
 	if !ok {
 		return nil, fmt.Errorf("registry contract must be an object")
 	}
-	root["allOf"] = []any{overlay}
+	if existing, present := root["allOf"]; present {
+		allOf, ok := existing.([]any)
+		if !ok || len(allOf) == 0 {
+			return nil, fmt.Errorf("registry contract allOf must be a nonempty array")
+		}
+		root["allOf"] = append(allOf, overlay)
+	} else {
+		root["allOf"] = []any{overlay}
+	}
 	c := jsonschema.NewCompiler()
 	c.AssertFormat()
 	if err := c.AddResource("record.schema.json", value); err != nil {

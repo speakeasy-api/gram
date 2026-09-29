@@ -26,8 +26,8 @@
             "documentationUrl": {
               "type": "string",
               "format": "uri",
-              "pattern": "^https?://[^/?#\\s]+",
-              "description": "Public documentation URL."
+              "pattern": "^https?://([^/?#@\\s]+@)?[^/?#@:\\s][^/?#@\\s]*([/?#]\\S*)?$",
+              "description": "Public documentation URL. HTTP and HTTPS are supported; HTTPS is recommended. Never include secrets."
             }
           }
         }

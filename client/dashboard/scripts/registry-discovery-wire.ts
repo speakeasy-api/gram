@@ -46,6 +46,10 @@ assert.ok(
     Date.parse(record._meta["com.speakeasy.ai/registry"].publishedAt),
   ),
 );
+assert.equal(
+  record._meta["com.speakeasy.ai/registry"].publishedAt,
+  JSON.parse(process.env.REGISTRY_TEST_PUBLICATIONS!)[serverName],
+);
 assert.deepEqual(first.servers[0]._meta, record._meta);
 
 const versions = await client.discoverVersions(security, { serverName });

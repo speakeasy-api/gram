@@ -15,12 +15,16 @@ import (
 func publicationDate(t *testing.T, data json.RawMessage) string {
 	t.Helper()
 	var root struct {
-		Meta map[string]struct {
-			PublishedAt string `json:"publishedAt"`
-		} `json:"_meta"`
+		Meta map[string]json.RawMessage `json:"_meta"`
 	}
 	require.NoError(t, json.Unmarshal(data, &root))
-	return root.Meta["com.speakeasy.ai/registry"].PublishedAt
+	var owned struct {
+		PublishedAt string `json:"publishedAt"`
+	}
+	if raw := root.Meta[publicationNamespace]; len(raw) > 0 {
+		require.NoError(t, json.Unmarshal(raw, &owned))
+	}
+	return owned.PublishedAt
 }
 
 func TestPublicationMetadataLifecycle(t *testing.T) {
@@ -38,6 +42,10 @@ func TestPublicationMetadataLifecycle(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, first, publicationDate(t, e.Data))
 		e, err = s.Save(ctx, e.ID, Token(e), e.Data)
+		require.NoError(t, err)
+		require.Equal(t, first, publicationDate(t, e.Data))
+		// Publishers may omit the backend-owned namespace on subsequent saves.
+		e, err = s.Save(ctx, e.ID, Token(e), json.RawMessage(basicRecord))
 		require.NoError(t, err)
 		require.Equal(t, first, publicationDate(t, e.Data))
 	}
@@ -86,9 +94,9 @@ func TestCatalogDocumentationMetadata(t *testing.T) {
 	t.Parallel()
 	v, err := LoadValidator()
 	require.NoError(t, err)
-	for _, url := range []string{"https://example.test/docs", "http://example.test/docs", "ftp://example.test/docs", "not a url", "https:///missing-host"} {
+	for _, url := range []string{"https://example.test/docs", "http://example.test/docs", "ftp://example.test/docs", "not a url", "https:///missing-host", "https://example.test /x", "https:/foo", "http:///", "https://?query", "https://@/docs", "https://:80/docs", "https://example.test/docs?q=v#section"} {
 		raw := strings.TrimSuffix(basicRecord, "}") + `,"_meta":{"com.speakeasy.ai/catalog":{"documentationUrl":` + strconv.Quote(url) + `}}}`
-		if strings.HasPrefix(url, "https://example.test") || strings.HasPrefix(url, "http://example.test") {
+		if url == "https://example.test/docs" || url == "http://example.test/docs" || url == "https://example.test/docs?q=v#section" {
 			require.Empty(t, v.Validate([]byte(raw)))
 		} else {
 			require.NotEmpty(t, v.Validate([]byte(raw)))
@@ -141,5 +149,37 @@ func TestPublicationMetadataCountsTowardPageBudget(t *testing.T) {
 	require.Empty(t, next.NextCursor)
 	for _, raw := range append(page.Records, next.Records...) {
 		require.NotEmpty(t, publicationDate(t, raw))
+	}
+}
+
+func TestMetadataUnicodeAdmission(t *testing.T) {
+	t.Parallel()
+	ctx, s, db := newTestService(t)
+	existing, err := s.Create(ctx, json.RawMessage(basicRecord))
+	require.NoError(t, err)
+	for _, key := range []string{string([]byte{0xff}), string([]byte{0xed, 0xa0, 0x80}), `\ud800`, `\udc00`} {
+		for _, member := range []string{`"` + key + `":true`, `"value":"` + key + `"`} {
+			raw := []byte(strings.TrimSuffix(basicRecord, "}") + `,"_meta":{` + member + `}}`)
+			require.Error(t, repo.New(db).InsertRegistryEntryFixture(ctx, repo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: raw, Published: false}))
+			_, err := s.Create(ctx, raw)
+			require.ErrorAs(t, err, new(*InvalidError), "%q", raw)
+			_, err = s.Save(ctx, existing.ID, Token(existing), raw)
+			require.ErrorAs(t, err, new(*InvalidError), "%q", raw)
+		}
+	}
+	for _, member := range []string{`"😀":"�"`, `"\ud83d\ude00":"\ud83d\ude00"`, `"\\ud800":"\\ud800"`} {
+		raw := []byte(strings.TrimSuffix(basicRecord, "}") + `,"_meta":{` + member + `}}`)
+		raw = []byte(strings.ReplaceAll(string(raw), "example.test/demo", "example.test/"+uuid.NewString()))
+		e, err := s.Create(ctx, raw)
+		require.NoError(t, err)
+		var before, after map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(raw, &before))
+		require.NoError(t, json.Unmarshal(e.Data, &after))
+		var meta map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(after["_meta"], &meta))
+		delete(meta, publicationNamespace)
+		actual, err := json.Marshal(meta)
+		require.NoError(t, err)
+		require.JSONEq(t, string(before["_meta"]), string(actual))
 	}
 }

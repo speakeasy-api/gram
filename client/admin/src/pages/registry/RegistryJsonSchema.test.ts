@@ -95,8 +95,32 @@ it("validates Speakeasy registry documentation URLs alongside the unchanged upst
       },
     },
   });
-  expect(await worker(raw).doValidation(uri)).not.toEqual([]);
-  expect(
-    await worker(raw.replace("ftp://", "https://")).doValidation(uri),
-  ).toEqual([]);
+  for (const url of [
+    "ftp://example.test/docs",
+    "https:///missing-host",
+    "https:/foo",
+    "http:///",
+    "https://?query",
+    "https://@/docs",
+    "https://:80/docs",
+    "https://example.test /x",
+  ]) {
+    expect(
+      await worker(raw.replace("ftp://example.test/docs", url)).doValidation(
+        uri,
+      ),
+      url,
+    ).not.toEqual([]);
+  }
+  for (const url of [
+    "https://example.test/docs",
+    "http://example.test/docs",
+    "https://example.test/docs?q=v#section",
+  ]) {
+    expect(
+      await worker(raw.replace("ftp://example.test/docs", url)).doValidation(
+        uri,
+      ),
+    ).toEqual([]);
+  }
 });
