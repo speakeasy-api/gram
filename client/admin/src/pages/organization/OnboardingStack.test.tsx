@@ -57,20 +57,28 @@ type Saved = {
 };
 const fetchMock = vi.fn();
 let saved: Saved = recorded;
-let optionsFailures = 0;
+/** How many of the next requests of each kind answer 500. */
+const failures = { options: 0, stack: 0, save: 0 };
+function failing(kind: keyof typeof failures): boolean {
+  if (failures[kind] === 0) return false;
+  failures[kind] -= 1;
+  return true;
+}
 beforeEach(() => {
   saved = structuredClone(recorded);
-  optionsFailures = 0;
+  failures.options = 0;
+  failures.stack = 0;
+  failures.save = 0;
   fetchMock.mockReset().mockImplementation(async (request: Request) => {
     const path = new URL(request.url).pathname;
     if (path === "/admin/onboarding.stackOptions") {
-      if (optionsFailures > 0) {
-        optionsFailures -= 1;
-        return new Response("{}", { status: 500 });
-      }
+      if (failing("options")) return new Response("{}", { status: 500 });
       return json(options);
     }
     expect(path).toBe("/admin/organization.onboardingStack");
+    if (failing(request.method === "POST" ? "save" : "stack")) {
+      return new Response("{}", { status: 500 });
+    }
     if (request.method === "POST") {
       const body = await request.clone().json();
       saved = {
@@ -217,11 +225,61 @@ describe("OnboardingStack", () => {
     expect(writes()).toHaveLength(0);
   });
 
-  it("reports load failures and retries", async () => {
-    optionsFailures = 1;
+  it("keeps the name of other software within the server's limit", async () => {
     await renderWithApp(<OnboardingStack organizationId="org_stack_test" />);
-    await screen.findByText("Unable to load the stack.");
-    fireEvent.click(screen.getByRole("button", { name: "Retry stack" }));
-    await screen.findByRole("checkbox", { name: "Anthropic" });
+    const software = await screen.findByRole("combobox", {
+      name: "Device management software",
+    });
+    fireEvent.keyDown(software, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Other" }));
+    const name = screen.getByRole("textbox", {
+      name: "Device management software name",
+    });
+    expect(name.getAttribute("maxlength")).toBe("200");
+    fireEvent.change(name, { target: { value: "x".repeat(201) } });
+    const save = screen.getByRole("button", {
+      name: "Save stack",
+    }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Keep the device management software name to 200 characters.",
+      ),
+    ).toBeTruthy();
+    fireEvent.change(name, { target: { value: "x".repeat(200) } });
+    expect(save.disabled).toBe(false);
+    expect(writes()).toHaveLength(0);
   });
+
+  it("reports a failed save, keeps the draft and saves it on retry", async () => {
+    failures.save = 1;
+    await renderWithApp(<OnboardingStack organizationId="org_stack_test" />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "OpenCode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save stack" }));
+    await screen.findByRole("alert");
+    expect(screen.queryByText("Stack saved.")).toBeNull();
+    expect(
+      screen
+        .getByRole("checkbox", { name: "OpenCode" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Save stack" }));
+    await screen.findByText("Stack saved.");
+    expect(writes()).toHaveLength(2);
+    expect((await lastWrite()).vendors).toEqual([
+      { vendor: "Anthropic", plan_slug: "anthropic-team" },
+      { vendor: "OpenCode" },
+    ]);
+  });
+
+  it.each(["options", "stack"] as const)(
+    "reports a failed %s load and retries",
+    async (kind) => {
+      failures[kind] = 1;
+      await renderWithApp(<OnboardingStack organizationId="org_stack_test" />);
+      await screen.findByText("Unable to load the stack.");
+      fireEvent.click(screen.getByRole("button", { name: "Retry stack" }));
+      await screen.findByRole("checkbox", { name: "Anthropic" });
+    },
+  );
 });

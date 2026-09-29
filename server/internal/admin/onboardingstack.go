@@ -57,6 +57,10 @@ func (s *Service) SetOrganizationOnboardingStack(ctx context.Context, payload *g
 	}
 	input := organizations.OnboardingStackInput{Vendors: make([]organizations.OnboardingStackVendorInput, 0, len(payload.Vendors)), MdmVendor: payload.MdmVendor, MdmVendorName: payload.MdmVendorName}
 	for _, vendor := range payload.Vendors {
+		// Generated validation skips a null element rather than rejecting it.
+		if vendor == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "vendors cannot contain null")
+		}
 		input.Vendors = append(input.Vendors, organizations.OnboardingStackVendorInput{Vendor: vendor.Vendor, PlanSlug: vendor.PlanSlug})
 	}
 	actor, name, _ := adminActor(ctx)

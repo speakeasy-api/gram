@@ -25,6 +25,8 @@ import {
 const NO_MDM = "none";
 /** The server's answer for software the form does not list. */
 const OTHER_MDM = "other";
+/** The server's bound on the name of other software. */
+const MDM_VENDOR_NAME_MAX_LENGTH = 200;
 
 /**
  * What the form holds while staff edit. A selected vendor maps to the plan
@@ -85,12 +87,14 @@ function draftProblem(
   if (draft.mdm && !draft.mdmVendor) {
     return "Choose the device management software.";
   }
-  if (
-    draft.mdm &&
-    draft.mdmVendor === OTHER_MDM &&
-    !draft.mdmVendorName.trim()
-  ) {
-    return "Name the device management software.";
+  if (draft.mdm && draft.mdmVendor === OTHER_MDM) {
+    const name = draft.mdmVendorName.trim();
+    if (!name) {
+      return "Name the device management software.";
+    }
+    if (name.length > MDM_VENDOR_NAME_MAX_LENGTH) {
+      return `Keep the device management software name to ${MDM_VENDOR_NAME_MAX_LENGTH} characters.`;
+    }
   }
   return null;
 }
@@ -278,6 +282,7 @@ function OnboardingStackEditor({
                 aria-label="Device management software name"
                 placeholder="Software name"
                 className="w-64"
+                maxLength={MDM_VENDOR_NAME_MAX_LENGTH}
                 value={current.mdmVendorName}
                 disabled={mutation.isPending}
                 onChange={(event) =>

@@ -179,6 +179,18 @@ func SaveOnboardingStack(ctx context.Context, db *pgxpool.Pool, logger *audit.Lo
 	if err != nil {
 		return nil, err
 	}
+	// The insert resolves each plan against the catalog as it stands inside
+	// the transaction, so a plan retired since validation would be recorded
+	// as none. Refuse the save rather than record less than was asked.
+	for _, vendor := range input.Vendors {
+		if vendor.PlanSlug == nil {
+			continue
+		}
+		index := slices.IndexFunc(after.Vendors, func(saved *admingen.AdminOnboardingStackVendor) bool { return saved.Vendor == vendor.Vendor })
+		if index < 0 || after.Vendors[index].PlanSlug == nil {
+			return nil, oops.E(oops.CodeConflict, nil, "plan %q of vendor %q is no longer in the support matrix", *vendor.PlanSlug, vendor.Vendor)
+		}
+	}
 	if err := logger.LogOrganizationOnboardingStackUpdated(ctx, tx, audit.LogOrganizationOnboardingStackUpdatedEvent{
 		OrganizationID: organizationID, Actor: actor, ActorDisplayName: displayName,
 		OrganizationName: org.Name, OrganizationSlug: org.Slug,
