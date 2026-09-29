@@ -105,6 +105,22 @@ func TestCreateServerHeader_SecretPassThroughRejected(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+// The proxy never reads these sources, so a row naming one is refused at
+// write time rather than stored as a header that can never be populated.
+func TestCreateServerHeader_DeniedPassThroughSourceRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Session", func(p *gen.CreateServerHeaderPayload) {
+		p.IsSecret = new(false)
+		p.ValueFromRequestHeader = new("Cookie")
+	}))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 // A live name collision must surface as a conflict, not a 500 and not a silent
 // overwrite of the existing header.
 func TestCreateServerHeader_DuplicateNameConflicts(t *testing.T) {

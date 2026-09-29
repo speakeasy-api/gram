@@ -89,6 +89,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
+	Attribute("network_access_mode", NetworkAccessMode, "The hosted MCP network access mode; public_only by default")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("origin", ToolsetOrigin, "The registry lineage for toolsets installed from an external MCP catalog")

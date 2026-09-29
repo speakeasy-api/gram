@@ -25,6 +25,10 @@ const state = vi.hoisted(() => ({
   createServer: vi.fn(),
   listServers: vi.fn(),
   navigate: vi.fn(),
+  verifyResult: vi.fn(),
+  // Route helper `goTo` and the router's own navigate are separate calls; the
+  // setup-required path uses the latter to land on Settings > Identity.
+  routerNavigate: vi.fn(),
 }));
 vi.mock("@/pages/mcp/gateway/useGatewayCreation", async (importOriginal) => ({
   ...(await importOriginal<
@@ -41,12 +45,23 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
       add: { goTo: state.navigate },
-      x: { overview: { goTo: state.navigate } },
+      x: {
+        overview: { goTo: state.navigate },
+        settings: { href: () => "/mcp/x/server/settings" },
+      },
       details: { tools: { goTo: state.navigate } },
     },
   }),
 }));
-vi.mock("@/contexts/Auth", () => ({ useIsSpeakeasyStaff: () => true }));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => true, isLoading: false }),
+}));
+vi.mock("@/contexts/Auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/contexts/Auth")>()),
+  useIsSpeakeasyStaff: () => true,
+  useProject: () => ({ id: "project-1" }),
+  useIsPlatformAdmin: () => false,
+}));
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => true }),
 }));
@@ -69,7 +84,7 @@ vi.mock("@/pages/sources/tunneled-mcp/hooks", () => ({
 }));
 vi.mock("@/pages/sources/remote-mcp/useVerifyRemoteMcpUrl", () => ({
   useVerifyRemoteMcpUrl: () => ({
-    result: { verified: true },
+    result: state.verifyResult(),
     trigger: vi.fn(),
   }),
 }));
@@ -119,9 +134,11 @@ vi.mock("@/hooks/toolTypes", () => ({
 vi.mock("react-router", () => ({
   useSearchParams: () => [new URLSearchParams()],
   Navigate: () => null,
+  useNavigate: () => state.routerNavigate,
 }));
 beforeEach(() => {
   vi.clearAllMocks();
+  state.verifyResult.mockReturnValue({ verified: true });
   Object.assign(state.flow, {
     gatewayId: "gateway",
     createdServerId: null,
@@ -133,7 +150,7 @@ beforeEach(() => {
   state.flow.retry.mockResolvedValue(undefined);
   state.create.mockResolvedValue({
     mcpServer: { id: "server", slug: "server" },
-    authAutoConfig: { status: "skipped" },
+    identityConfiguration: { status: "configured" },
     tunneledMcpServer: { id: "tunnel", slug: "tunnel" },
     tunnelKey: "test-key",
   });
@@ -285,6 +302,36 @@ it("disables direct connections only in gateway context", () => {
       .getByRole("radio", { name: /Clients connect directly/ })
       .hasAttribute("disabled"),
   ).toBe(false);
+});
+
+it("preselects User Identity only when the challenge advertised OAuth", () => {
+  // A bare 401 from a Basic or API-key upstream reports the same outcome as an
+  // OAuth challenge. Only the advertised metadata URL tells them apart, and
+  // defaulting the wrong one to User walks the operator into a setup that
+  // cannot complete.
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    outcome: "authentication_required",
+  });
+  const view = render(<CreateRemoteMcp />);
+  expect(
+    screen
+      .getByRole("radio", { name: /No Identity/ })
+      .getAttribute("data-state"),
+  ).toBe("checked");
+
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    outcome: "authentication_required",
+    protectedResourceMetadataUrl:
+      "https://example.com/.well-known/oauth-protected-resource",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    screen
+      .getByRole("radio", { name: /User Identity/ })
+      .getAttribute("data-state"),
+  ).toBe("checked");
 });
 
 it("can cancel from the tunnel key screen without attaching", async () => {

@@ -1653,6 +1653,46 @@ CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
 ON trigger_instances (project_id, target_ref)
 WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
 
+-- trigger_thread_routes records how events on one external conversation (a
+-- trigger correlation id such as a Slack thread) reach a trigger target:
+-- whether the target is subscribed to it, and which of the target's
+-- conversations its events are delivered under.
+CREATE TABLE IF NOT EXISTS trigger_thread_routes (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  target_kind TEXT NOT NULL CHECK (target_kind <> '' AND CHAR_LENGTH(target_kind) <= 60),
+  target_ref TEXT NOT NULL CHECK (target_ref <> '' AND CHAR_LENGTH(target_ref) <= 255),
+  correlation_id TEXT NOT NULL CHECK (correlation_id <> '' AND CHAR_LENGTH(correlation_id) <= 300),
+  -- Correlation id that events on this conversation are delivered under. NULL
+  -- delivers them under correlation_id.
+  route_to_correlation_id TEXT CHECK (route_to_correlation_id <> '' AND CHAR_LENGTH(route_to_correlation_id) <= 300),
+  state TEXT NOT NULL,
+  -- Source-specific position of the newest event on this conversation that was
+  -- delivered to the target (a Slack message ts).
+  last_seen_cursor TEXT CHECK (last_seen_cursor <> '' AND CHAR_LENGTH(last_seen_cursor) <= 64),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT trigger_thread_routes_pkey PRIMARY KEY (id),
+  CONSTRAINT trigger_thread_routes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- Serves the project_id foreign key's cascade, which also reaches soft-deleted
+-- rows that the partial indexes below leave out.
+CREATE INDEX IF NOT EXISTS trigger_thread_routes_project_id_idx
+ON trigger_thread_routes (project_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_thread_routes_target_correlation_id_key
+ON trigger_thread_routes (project_id, target_kind, target_ref, correlation_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS trigger_thread_routes_route_to_correlation_id_idx
+ON trigger_thread_routes (project_id, target_kind, target_ref, route_to_correlation_id)
+WHERE route_to_correlation_id IS NOT NULL AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
@@ -4682,6 +4722,11 @@ ON directory_groups (organization_id);
 CREATE UNIQUE INDEX IF NOT EXISTS directory_groups_workos_directory_group_id_key
 ON directory_groups (workos_directory_group_id);
 
+-- Composite-FK target so tenant-scoped children (directory_role_mappings) can
+-- pin a group reference to their own organization.
+CREATE UNIQUE INDEX IF NOT EXISTS directory_groups_organization_id_id_key
+ON directory_groups (organization_id, id);
+
 CREATE TABLE IF NOT EXISTS directory_users (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -4866,6 +4911,110 @@ WHERE workos_user_id IS NOT NULL AND deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS organization_user_relationships_user_org_active_idx
 ON organization_user_relationships (user_id, organization_id)
 WHERE deleted IS FALSE;
+
+-- Slack directory data belongs to the organization. Disconnecting a workspace
+-- or deactivating a member preserves its source IDs. To hard-delete a parent,
+-- remove its dependent rows first; the required foreign keys prevent deletion.
+CREATE TABLE IF NOT EXISTS slack_directory_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  slack_team_id TEXT NOT NULL,
+  slack_team_name TEXT,
+  -- Store a versioned token bundle encrypted by the application, including
+  -- refresh credentials when present. Clear it on disconnect and exclude it
+  -- from directory API responses.
+  credentials_encrypted TEXT,
+  granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Replace this value on disconnect, reconnect, or replacement authorization
+  -- so an earlier sync cannot write into the new connection state.
+  generation uuid NOT NULL DEFAULT generate_uuidv7(),
+  health TEXT NOT NULL DEFAULT 'pending',
+  disconnected_at timestamptz,
+  last_sync_started_at timestamptz,
+  -- Set these together after publishing a complete directory snapshot. After
+  -- reconnect, require a completed sync whose generation matches the connection.
+  last_full_sync_generation uuid,
+  last_full_sync_succeeded_at timestamptz,
+  last_sync_failed_at timestamptz,
+  -- Store a typed failure code and omit the raw provider response.
+  last_error_code TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT slack_directory_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL
+);
+
+-- Reconnect the same workspace in place; disconnection does not release its key.
+CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_connections_org_team_key
+ON slack_directory_connections (organization_id, slack_team_id);
+
+-- Store verified members of the connected workspace. Seeing an external Slack
+-- Connect user in a shared channel does not establish membership. Full syncs
+-- upsert these rows in place and preserve mapping_revision.
+CREATE TABLE IF NOT EXISTS slack_directory_memberships (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  slack_team_id TEXT NOT NULL,
+  slack_user_id TEXT NOT NULL,
+  display_name TEXT,
+  -- The profile email can change. Use it to suggest matches for an administrator
+  -- to confirm; it cannot identify an account or prove ownership.
+  email TEXT,
+  -- The application validates directory state and member type. Missing provider
+  -- fields stay unknown and cannot establish eligibility for delegation.
+  status TEXT NOT NULL DEFAULT 'unknown',
+  member_type TEXT NOT NULL DEFAULT 'unknown',
+  provider_updated_at timestamptz,
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- Increment under the membership row lock on every mapping change. This
+  -- rejects stale dialogs even if an account was mapped and then unmapped again.
+  mapping_revision bigint NOT NULL DEFAULT 0,
+  mapping_conflict_reason TEXT,
+  mapping_conflict_detected_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT slack_directory_memberships_pkey PRIMARY KEY (id),
+  CONSTRAINT slack_directory_memberships_connection_fkey FOREIGN KEY (organization_id, slack_team_id) REFERENCES slack_directory_connections (organization_id, slack_team_id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_memberships_org_team_user_key
+ON slack_directory_memberships (organization_id, slack_team_id, slack_user_id);
+
+-- Map a Slack member to an existing person in the same organization. Reassign
+-- by revoking the old row and inserting a new one to preserve the previous owner.
+-- created_at records confirmation. Write the actor and reason to the audit log
+-- in the same transaction. A mapping does not grant permissions.
+CREATE TABLE IF NOT EXISTS slack_identity_mappings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  slack_team_id TEXT NOT NULL,
+  slack_user_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  revoked_at timestamptz,
+
+  CONSTRAINT slack_identity_mappings_pkey PRIMARY KEY (id),
+  CONSTRAINT slack_identity_mappings_membership_fkey FOREIGN KEY (organization_id, slack_team_id, slack_user_id) REFERENCES slack_directory_memberships (organization_id, slack_team_id, slack_user_id) ON DELETE SET NULL,
+  CONSTRAINT slack_identity_mappings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
+  -- The relationship's user_id has no FK to users, so check both references.
+  CONSTRAINT slack_identity_mappings_organization_id_user_id_fkey FOREIGN KEY (organization_id, user_id) REFERENCES organization_user_relationships (organization_id, user_id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS slack_identity_mappings_current_key
+ON slack_identity_mappings (organization_id, slack_team_id, slack_user_id)
+WHERE revoked_at IS NULL;
+
+-- History reads and membership FK checks also need revoked rows.
+CREATE INDEX IF NOT EXISTS slack_identity_mappings_membership_history_idx
+ON slack_identity_mappings (organization_id, slack_team_id, slack_user_id, created_at DESC);
+
+-- Supports personal identity lookups and FK checks against users and their
+-- organization relationships.
+CREATE INDEX IF NOT EXISTS slack_identity_mappings_user_org_idx
+ON slack_identity_mappings (user_id, organization_id);
 
 CREATE TABLE IF NOT EXISTS agents (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
@@ -5055,6 +5204,49 @@ WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS organization_role_assignments_org_user_idx
 ON organization_role_assignments (organization_id, user_id)
 WHERE user_id IS NOT NULL;
+
+-- directory_role_mappings grants a role to every member of a directory group,
+-- or to every directory user whose attribute key has a given value. The roles
+-- are added to a user's principals at access-check time, on top of the roles
+-- WorkOS assigns, and are never written back to WorkOS. `source_kind` is
+-- 'group' (directory_group_id set) or 'attribute' (attribute_key and
+-- attribute_value set). Each group or attribute value maps to one role. The
+-- group reference is pinned to the mapping's organization by a composite FK.
+-- Directory sync soft-deletes groups, and a mapping to a soft-deleted group
+-- stops matching; the FK cascade only fires when the organization is removed.
+CREATE TABLE IF NOT EXISTS directory_role_mappings (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  source_kind TEXT NOT NULL,
+  directory_group_id UUID,
+  attribute_key TEXT,
+  attribute_value TEXT,
+  role_urn TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT directory_role_mappings_pkey PRIMARY KEY (id),
+  CONSTRAINT directory_role_mappings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT directory_role_mappings_directory_group_fkey FOREIGN KEY (organization_id, directory_group_id) REFERENCES directory_groups (organization_id, id) ON DELETE CASCADE,
+  -- Structural shape only; which kinds exist is validated in application code.
+  -- An attribute rule needs both key and value, and a row never carries both a
+  -- group and an attribute.
+  CONSTRAINT directory_role_mappings_source_columns_check CHECK (
+    (attribute_key IS NULL) = (attribute_value IS NULL)
+    AND NOT (directory_group_id IS NOT NULL AND attribute_key IS NOT NULL)
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_group_key
+ON directory_role_mappings (organization_id, directory_group_id)
+WHERE deleted IS FALSE AND directory_group_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_attribute_key
+ON directory_role_mappings (organization_id, attribute_key, attribute_value)
+WHERE deleted IS FALSE AND attribute_key IS NOT NULL;
 
 -- agent_role_assignments stores which roles each agent principal holds within an org.
 -- It is the agent counterpart to organization_role_assignments. Agents have no WorkOS
@@ -8572,6 +8764,117 @@ CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_replaced_by_session_id_key
 ON admin_mcp_sessions (replaced_by_session_id)
 WHERE replaced_by_session_id IS NOT NULL;
 
+-- Staff Admin MCP write proposals. Each row binds one staff subject, client
+-- and connection generation to one exact target and change. The proposal ID is
+-- the execution idempotency key; the terminal result doubles as the receipt.
+-- Foreign keys cascade, matching the other admin_mcp tables: nulling
+-- organization_id on delete would make a tenant proposal look platform-global.
+CREATE TABLE IF NOT EXISTS admin_mcp_write_proposals (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  subject_urn TEXT NOT NULL,
+  oauth_client_id uuid NOT NULL,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  operation TEXT NOT NULL,
+  operation_schema_version INTEGER NOT NULL,
+  -- Global operations (issuers, support matrix) have no tenant target.
+  platform_global boolean NOT NULL,
+  organization_id TEXT,
+  project_id uuid,
+  resource_kind TEXT,
+  resource_id TEXT,
+  idempotency_key TEXT NOT NULL,
+  arguments JSONB NOT NULL,
+  expected_state_digest TEXT NOT NULL,
+  proposal_digest TEXT NOT NULL,
+  -- Safe, bounded before/after preview rendered by the approval UI.
+  preview JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending_approval',
+  expires_at timestamptz NOT NULL,
+  approved_by_subject_urn TEXT,
+  approved_at timestamptz,
+  rejected_at timestamptz,
+  invalidated_at timestamptz,
+  invalidation_reason TEXT,
+  executed_at timestamptz,
+  result_code TEXT,
+  result_payload JSONB,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_write_proposals_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_write_proposals_target_scope_check CHECK (
+    (platform_global AND organization_id IS NULL AND project_id IS NULL)
+    OR (NOT platform_global AND organization_id IS NOT NULL)
+  ),
+  CONSTRAINT admin_mcp_write_proposals_resource_pair_check
+    CHECK ((resource_kind IS NULL) = (resource_id IS NULL)),
+  CONSTRAINT admin_mcp_write_proposals_subject_urn_check CHECK (subject_urn <> ''),
+  CONSTRAINT admin_mcp_write_proposals_operation_check CHECK (operation <> ''),
+  CONSTRAINT admin_mcp_write_proposals_idempotency_key_check CHECK (idempotency_key <> ''),
+  CONSTRAINT admin_mcp_write_proposals_expected_state_digest_check CHECK (expected_state_digest <> ''),
+  CONSTRAINT admin_mcp_write_proposals_proposal_digest_check CHECK (proposal_digest <> ''),
+  CONSTRAINT admin_mcp_write_proposals_status_check CHECK (status <> ''),
+  CONSTRAINT admin_mcp_write_proposals_connection_client_fkey
+    FOREIGN KEY (connection_id, oauth_client_id)
+    REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_write_proposals_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_write_proposals_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+-- Retry keys belong to the stable staff subject and client, not the
+-- connection generation, so reconsent cannot mint a second proposal.
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_write_proposals_idempotency_key
+ON admin_mcp_write_proposals (subject_urn, oauth_client_id, operation, idempotency_key);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_pending_idx
+ON admin_mcp_write_proposals (subject_urn, oauth_client_id)
+WHERE status = 'pending_approval';
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_expires_at_idx
+ON admin_mcp_write_proposals (expires_at);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_organization_id_idx
+ON admin_mcp_write_proposals (organization_id) WHERE organization_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_connection_idx
+ON admin_mcp_write_proposals (connection_id);
+
+-- Staff-only lifecycle and refusal trail. Survives rolled-back writes. Stores
+-- bounded reason codes only: no prompts, arguments, results or credentials.
+CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  proposal_id uuid,
+  subject_urn TEXT NOT NULL,
+  oauth_client_id uuid,
+  event TEXT NOT NULL,
+  reason_code TEXT,
+  request_id TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_write_events_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_write_events_subject_urn_check CHECK (subject_urn <> ''),
+  CONSTRAINT admin_mcp_write_events_event_check CHECK (event <> ''),
+  CONSTRAINT admin_mcp_write_events_reason_code_check
+    CHECK (reason_code IS NULL OR reason_code ~ '^[a-z][a-z0-9_]{0,63}$'),
+  CONSTRAINT admin_mcp_write_events_proposal_id_fkey
+    FOREIGN KEY (proposal_id) REFERENCES admin_mcp_write_proposals (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_write_events_oauth_client_id_fkey
+    FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_events_proposal_id_idx
+ON admin_mcp_write_events (proposal_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_events_oauth_client_id_idx
+ON admin_mcp_write_events (oauth_client_id) WHERE oauth_client_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_events_subject_created_idx
+ON admin_mcp_write_events (subject_urn, created_at);
+
 -- Typed milestone rows are durable product evidence. Event names and allowed
 -- target fields are validated by the owning application contract, not SQL enums.
 CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
@@ -9436,6 +9739,73 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_claim_key ON remot
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_client_idx ON remote_session_ema_bindings (remote_session_client_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_issuer_idx ON remote_session_ema_bindings (remote_session_issuer_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_user_issuer_idx ON remote_session_ema_bindings (user_session_issuer_id);
+
+-- Downstream access credentials acquired by identity chaining, separate from
+-- interactive remote_sessions and their scheduled refresh/recheck selectors.
+-- Expand-only storage: no reader exists until the AIM-62 executor is deployed.
+-- Consumers require live tenant, issuer, client and delegation references;
+-- NULL required references or soft-deleted parents make a credential unusable.
+-- client_selection records the selection mode, not binding reference nullness:
+-- implicit selection needs no binding; binding selection requires a live binding
+-- with the recorded generation. Changed selection or requested scopes invalidate reuse.
+-- Writers must erase access_token_encrypted when soft-deleting. FK actions and
+-- deleted_at alone do not erase ciphertext; AIM-62 owns erasure and bounded cleanup.
+CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  project_id uuid,
+  user_session_issuer_id uuid,
+  remote_session_issuer_id uuid,
+  remote_session_client_id uuid,
+  -- Canonical RFC 9728 resource; preserve its trailing slash.
+  resource TEXT NOT NULL,
+  -- Provisioned Gram human (user:<id>), never an agent, workload or external sub.
+  subject_urn TEXT NOT NULL,
+  -- binding or implicit, validated by the application.
+  client_selection TEXT NOT NULL,
+  remote_session_ema_binding_id uuid,
+  ema_binding_generation bigint,
+  trusted_issuer_session_id uuid,
+  requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  access_token_encrypted TEXT,
+  -- Consumers cap or skip unknown provider expiry; never store indefinite access.
+  access_expires_at timestamptz NOT NULL,
+  -- Capability observation only; downstream refresh tokens and ID-JAGs are discarded.
+  downstream_refresh_token_observed boolean NOT NULL DEFAULT FALSE,
+  last_used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT remote_session_ema_credentials_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_ema_credentials_project_ref_check CHECK ((organization_id IS NULL) = (project_id IS NULL)),
+  CONSTRAINT remote_session_ema_credentials_client_ref_check CHECK ((remote_session_client_id IS NULL) = (remote_session_issuer_id IS NULL)),
+  CONSTRAINT remote_session_ema_credentials_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_binding_id_fkey FOREIGN KEY (remote_session_ema_binding_id) REFERENCES remote_session_ema_bindings (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_trusted_issuer_session_id_fkey FOREIGN KEY (trusted_issuer_session_id) REFERENCES trusted_issuer_sessions (id) ON DELETE SET NULL
+);
+
+-- Selection mode does not create a second live slot; switching modes retires the old row.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_credentials_subject_key
+ON remote_session_ema_credentials (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn)
+WHERE deleted IS FALSE;
+
+-- Non-partial indexes support FK actions on live and soft-deleted rows alike.
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_project_id_idx
+ON remote_session_ema_credentials (project_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_user_session_issuer_id_idx
+ON remote_session_ema_credentials (user_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_remote_session_client_id_idx
+ON remote_session_ema_credentials (remote_session_client_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_binding_id_idx
+ON remote_session_ema_credentials (remote_session_ema_binding_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_trusted_issuer_session_id_idx
+ON remote_session_ema_credentials (trusted_issuer_session_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_access_expires_at_idx
+ON remote_session_ema_credentials (access_expires_at, id);
 
 -- Global support matrix: admin catalog data, not project-owned configuration.
 -- Catalog identities are retained by soft deletion; required references prevent

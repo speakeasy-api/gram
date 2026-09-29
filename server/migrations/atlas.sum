@@ -1,4 +1,4 @@
-h1:wiI8yaeyWX1MTmq8SOg1SK2zHlaNPwNElYNwUBqBxRE=
+h1:P2u69LJcy7FLWPFFGsEby68TRrkPmM5LJ0ULBCV1hQQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -434,3 +434,8 @@ h1:wiI8yaeyWX1MTmq8SOg1SK2zHlaNPwNElYNwUBqBxRE=
 20260924165809_admin-mcp-oauth-state.sql h1:U2AXTjGOoQMqYPKjqw988iukHF+SIOQjlq4wS6yCdW8=
 20260924212827_mcp_registry_entries.sql h1:rQtJz2bg62abspSfiJOI5DXdmJLpDPqFH9GkKbB3vA8=
 20260925003323_workload-admission-match-kind.sql h1:JlUI87MI6Zg6TGW/Pk+tH0MTxBvllCSJkahnAwKoDiw=
+20260925164527_directory-role-mappings.sql h1:tsvCc28RZeYHPlSXWliZRVi8BSTHg1Is0FPZPpvkK/g=
+20260925192954_slack_identity_mappings.sql h1:A2KN73NAHtx0UpVCVK3kj4OVWY67CCwB2KB/+PJjJu4=
+20260927185929_trigger-thread-routes.sql h1:jyVG+nXirOsIje+xGPZtmlRYpVzhKH5Ul3SuK0pkSXw=
+20260928165815_remote-session-ema-credentials.sql h1:+zSRmu+9zmYfpbz7Bm5oX0Qr3a5m2W/Y/ywwTkBX8Xg=
+20260928221953_admin-mcp-write-proposals.sql h1:JgECOO/C2KFXYJJSmaWBw49LGu4GwIBWP+zYW0Y1REQ=

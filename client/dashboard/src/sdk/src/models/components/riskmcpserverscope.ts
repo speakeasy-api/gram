@@ -14,7 +14,7 @@ export type RiskMCPServerScope = {
    */
   mcpServerId: string;
   /**
-   * Custom tool names for this server. Omit to follow the policy tool rule.
+   * Custom tool names for this server. Omit to follow the policy tool rule; an empty list matches every tool on this server, unconditionally.
    */
   tools?: Array<string> | undefined;
 };

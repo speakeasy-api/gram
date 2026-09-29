@@ -3,14 +3,11 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -19,7 +16,6 @@ import (
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 type initializeResult struct {
@@ -60,7 +56,7 @@ func parseInitializeParams(raw json.RawMessage) (initializeParams, []string, err
 	return params, slices.Sorted(maps.Keys(params.Capabilities)), nil
 }
 
-func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, toolsetsRepoParam *toolsets_repo.Queries, metadataRepoParam *metadata_repo.Queries, clientInfoStore sessionClientInfoStore) (json.RawMessage, error) {
+func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, metadataRepoParam *metadata_repo.Queries, clientInfoStore sessionClientInfoStore) (json.RawMessage, error) {
 	params, capabilities, err := parseInitializeParams(req.Params)
 	validParams := err == nil
 	if err != nil {
@@ -75,9 +71,13 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpme
 	// is the one request whose in-effect revision is established mid-handling
 	// — the entry-time value is provisional — and anything downstream of
 	// dispatch must see the negotiated value. The body's requested version
-	// wins over any MCP-Protocol-Version header a nonconforming client sent
-	// on initialize: the body is the negotiation.
-	negotiated := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedHostedToolset())
+	// wins over a pre-2026-07-28 MCP-Protocol-Version header a nonconforming
+	// client sent on initialize. Declarations of 2026-07-28 or later are
+	// validated before dispatch.
+	negotiated, ok := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedHostedToolset())
+	if !ok {
+		return nil, unavailableMethod(req)
+	}
 	payload.protocolVersion.InEffect = negotiated
 
 	// The error wrapper reads its own holder after the handler returns, and it
@@ -113,22 +113,13 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpme
 		}
 	}
 
-	instructions := fetchInstructions(ctx, logger, toolsetsRepoParam, metadataRepoParam, payload.toolset, payload.projectID)
+	description := describeHostedServer(ctx, logger, metadataRepoParam, payload)
 
 	result := &result[initializeResult]{
 		ID:             req.ID,
 		serverIdentity: serverInfoHostedToolset,
 		cacheHints:     nil,
-		Result: initializeResult{
-			ProtocolVersion: negotiated,
-			Capabilities: map[string]json.RawMessage{
-				"tools":     json.RawMessage("{}"),
-				"prompts":   json.RawMessage("{}"),
-				"resources": json.RawMessage("{}"),
-			},
-			ServerInfo:   serverInfoHostedToolset,
-			Instructions: instructions,
-		},
+		Result:         description.initializeResult(negotiated),
 	}
 
 	bs, err := json.Marshal(result)
@@ -137,33 +128,4 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpme
 	}
 
 	return bs, nil
-}
-
-// fetchInstructions will attempt to find an MCP servers' instructions. If it can't it will just return an empty string.
-func fetchInstructions(ctx context.Context, logger *slog.Logger, toolsetsRepo *toolsets_repo.Queries, metadataRepo *metadata_repo.Queries, toolsetSlug string, projectID uuid.UUID) string {
-	toolset, err := toolsetsRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
-		Slug:      toolsetSlug,
-		ProjectID: projectID,
-	})
-	if err != nil {
-		// not finding a toolset is OK - any other errors are unexpected and should be logged
-		if !errors.Is(err, pgx.ErrNoRows) {
-			logger.WarnContext(ctx, "failed to fetch toolset for instructions", attr.SlogError(err))
-		}
-		return ""
-	}
-
-	metadata, err := metadataRepo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
-	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
-			logger.WarnContext(ctx, "failed to fetch MCP metadata for instructions", attr.SlogError(err))
-		}
-		return ""
-	}
-
-	if !metadata.Instructions.Valid {
-		return ""
-	}
-
-	return metadata.Instructions.String
 }

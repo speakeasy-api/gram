@@ -61,3 +61,38 @@ func TestMCPServerOf(t *testing.T) {
 		})
 	}
 }
+
+// TestClaudeMCPServerPrefix is calibrated against the real prefixes observed in
+// a live Claude Code session for the `claude mcp list` entries named here. The
+// convention is undocumented, so these cases are the specification.
+func TestClaudeMCPServerPrefix(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		source string
+		plugin string
+		raw    string
+		want   string
+	}{
+		{"claude.ai simple", toolref.ClaudeMCPSourceClaudeAI, "", "Slack", "claude_ai_Slack"},
+		{"claude.ai with parens", toolref.ClaudeMCPSourceClaudeAI, "", "Linear (Speakeasy)", "claude_ai_Linear_Speakeasy"},
+		{"claude.ai multi-word + parens", toolref.ClaudeMCPSourceClaudeAI, "", "HubSpot (Speakeasy MCP Platform)", "claude_ai_HubSpot_Speakeasy_MCP_Platform"},
+		{"claude.ai parens with multi-word inner", toolref.ClaudeMCPSourceClaudeAI, "", "Speakeasy MCP Server (Read only)", "claude_ai_Speakeasy_MCP_Server_Read_only"},
+		{"claude.ai with hyphens", toolref.ClaudeMCPSourceClaudeAI, "", "la-growth-machine", "claude_ai_la-growth-machine"},
+		{"plugin double name", toolref.ClaudeMCPSourcePlugin, "slack", "slack", "plugin_slack_slack"},
+		{"plugin distinct name", toolref.ClaudeMCPSourcePlugin, "github", "octocat-mcp", "plugin_github_octocat-mcp"},
+		{"plugin hyphenated slug and spaced display name", toolref.ClaudeMCPSourcePlugin, "acme-tools", "External Acme Chat", "plugin_acme-tools_External_Acme_Chat"},
+		{"local plain", "local", "", "gram", "gram"},
+		{"local with hyphen", "local", "", "notion-local", "notion-local"},
+	}
+	for _, tc := range cases {
+		require.Equal(t, tc.want, toolref.ClaudeMCPServerPrefix(tc.source, tc.plugin, tc.raw), tc.name)
+	}
+}
+
+func TestSanitizeClaudeMCPName(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "External_Acme_Chat", toolref.SanitizeClaudeMCPName("  External  Acme Chat "))
+	require.Equal(t, "Linear_Speakeasy", toolref.SanitizeClaudeMCPName("Linear (Speakeasy)"))
+	require.Empty(t, toolref.SanitizeClaudeMCPName("()"))
+}

@@ -20,8 +20,8 @@ func (p *onboardingPresetInput) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &value); err != nil {
 		return fmt.Errorf("decode onboarding preset: %w", err)
 	}
-	if value != "gateway" && value != "security" {
-		return fmt.Errorf("preset must be gateway or security; omit it to preserve the saved preset")
+	if !organizations.IsOnboardingPreset(value) {
+		return fmt.Errorf("preset must be a known onboarding preset; omit it to preserve the saved preset")
 	}
 	*p = onboardingPresetInput(value)
 	return nil

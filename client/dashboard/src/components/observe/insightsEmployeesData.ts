@@ -3,6 +3,7 @@ import { mergeUserSummaries } from "@/components/observe/mergeUserSummaries";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
+import { allMemberRoleIds } from "@/lib/member-roles";
 
 type EmployeeStatus = "enrolled" | "not_enrolled";
 
@@ -281,8 +282,9 @@ export function buildEmployees(
     );
     // Display fields (last activity) come from the most-recent matched summary.
     const primary = mostRecentSummary(matched);
+    const roleIds = allMemberRoleIds(member);
     const role =
-      member.roleIds
+      roleIds
         .map((id) => roleNameById.get(id))
         .filter(Boolean)
         .join(", ") || "Unknown";
@@ -305,7 +307,7 @@ export function buildEmployees(
       accounts,
       mostRecentAccount: mostRecentAccount(accounts),
       hasPersonalAccount: accounts.some((a) => a.accountType === "personal"),
-      roleIds: member.roleIds,
+      roleIds,
       department: member.department ?? "",
       teams: member.groups ?? [],
     };

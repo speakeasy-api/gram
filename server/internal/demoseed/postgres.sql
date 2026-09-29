@@ -508,6 +508,15 @@ BEGIN
   FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac']) AS f
   ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
+  -- Unlike demo entitlements, preserve an explicit fail-closed choice on reseed.
+  INSERT INTO organization_features (organization_id, feature_name)
+  SELECT demo_org, 'hooks_fail_open'
+  WHERE NOT EXISTS (
+    SELECT 1 FROM organization_features
+    WHERE organization_id = demo_org AND feature_name = 'hooks_fail_open'
+  )
+  ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+
   FOR i IN 1 .. array_length(demo_user_ids, 1) LOOP
     INSERT INTO users (id, email, display_name, workos_id)
     VALUES (demo_user_ids[i], demo_user_emails[i], demo_user_names[i],
@@ -522,9 +531,7 @@ BEGIN
   INSERT INTO organization_setup_tasks
     (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
   VALUES
-    (demo_org, 'identity-provider', 'todo', NULL, NULL, now()),
-    (demo_org, 'connect-idp', 'todo', NULL, NULL, NULL),
-    (demo_org, 'directory-sync', 'todo', NULL, NULL, NULL),
+    (demo_org, 'identity-provider', 'todo', NULL, NULL, NULL),
     (demo_org, 'create-marketplace', 'todo', NULL, NULL, NULL),
     (demo_org, 'distribute-servers', 'todo', NULL, NULL, NULL),
     (demo_org, 'enable-logging', 'todo', NULL, NULL, NULL),
@@ -548,6 +555,7 @@ BEGIN
     AND principal_urn LIKE 'agent:%';
   -- Agents RESTRICT owner membership deletion and are not project children.
   DELETE FROM agents WHERE organization_id = demo_org;
+  DELETE FROM slack_identity_mappings WHERE organization_id = demo_org;
   DELETE FROM organization_user_relationships WHERE organization_id = demo_org;
   FOR i IN 1 .. array_length(demo_user_ids, 1) LOOP
     INSERT INTO organization_user_relationships
@@ -701,8 +709,60 @@ BEGIN
       SELECT 'role:organization:' || id FROM organization_roles
       WHERE organization_id = demo_org AND workos_slug = 'read-only-tools');
 
+  -- Synthetic workspace history has no usable credentials or claimed authorization.
+  DELETE FROM slack_directory_memberships WHERE organization_id = demo_org;
+  DELETE FROM slack_directory_connections WHERE organization_id = demo_org;
+  INSERT INTO slack_directory_connections
+    (id, organization_id, slack_team_id, slack_team_name, generation, health, disconnected_at)
+  VALUES
+    (demo.det_uuid('gram-demo-slackconn-1'), demo_org, 'T0DEMO0001', 'Acme Engineering',
+     gen_random_uuid(), 'pending', NULL),
+    (demo.det_uuid('gram-demo-slackconn-2'), demo_org, 'T0DEMO0002', 'Acme Operations',
+     gen_random_uuid(), 'pending', NULL);
+
+  -- Synthetic retained snapshots illustrate history, not a live Slack sync.
+  UPDATE slack_directory_connections
+  SET last_full_sync_generation = gen_random_uuid(),
+      last_full_sync_succeeded_at = now() - interval '3 days',
+      last_sync_started_at = now() - interval '3 days 1 minute'
+  WHERE organization_id = demo_org;
+  INSERT INTO slack_directory_memberships
+    (id, organization_id, slack_team_id, slack_user_id, display_name, email,
+     status, member_type, last_seen_at)
+  SELECT demo.det_uuid('gram-demo-slackmember-' || v.n), demo_org,
+    v.team_id, 'U0DEMO' || lpad(v.n::text, 5, '0'), v.display_name, v.email,
+    v.status, v.member_type,
+    now() - CASE WHEN v.n = 5 THEN interval '5 days' ELSE interval '3 days' END
+  FROM (VALUES
+    (1, 'T0DEMO0001', 'Amara Okafor', 'amara@demo.getgram.ai', 'active', 'person'),
+    (2, 'T0DEMO0001', 'Jonas Lindqvist', 'jonas@demo.getgram.ai', 'active', 'person'),
+    (3, 'T0DEMO0001', 'Priya Raman', NULL, 'active', 'guest'),
+    (4, 'T0DEMO0001', 'Release Helper', NULL, 'active', 'bot'),
+    (5, 'T0DEMO0001', 'Mateo Alvarez', 'mateo@demo.getgram.ai', 'unknown', 'person'),
+    (6, 'T0DEMO0002', 'Amara Okafor', 'amara@demo.getgram.ai', 'active', 'person'),
+    (7, 'T0DEMO0002', 'Hana Sato', 'hana@demo.getgram.ai', 'deactivated', 'person'),
+    (8, 'T0DEMO0002', 'Taylor Reed', NULL, 'invited', 'unknown'),
+    (9, 'T0DEMO0002', 'Lucas Meyer', NULL, 'active', 'single_channel_guest'),
+    (10, 'T0DEMO0001', 'Amara Okafor (guest)', NULL, 'deactivated', 'guest')
+  ) AS v(n, team_id, display_name, email, status, member_type);
+
+  -- Synthetic admin decisions remain visible in disconnected directory history.
+  INSERT INTO slack_identity_mappings (id, organization_id, slack_team_id, slack_user_id, user_id)
+  SELECT demo.det_uuid('gram-demo-slackmapping-' || v.n), demo_org, m.slack_team_id, m.slack_user_id, demo_user_ids[v.person]
+  FROM (VALUES (1, 1), (3, 3), (5, 4), (6, 1), (7, 5), (10, 1)) AS v(n, person)
+  JOIN slack_directory_memberships m ON m.organization_id = demo_org AND m.id = demo.det_uuid('gram-demo-slackmember-' || v.n);
+  UPDATE slack_directory_memberships SET mapping_revision = 1,
+    mapping_conflict_reason = CASE slack_user_id
+      WHEN 'U0DEMO00003' THEN 'member_deactivated'
+      WHEN 'U0DEMO00005' THEN 'member_absent'
+      WHEN 'U0DEMO00007' THEN 'member_deactivated'
+      WHEN 'U0DEMO00010' THEN 'member_deactivated' END,
+    mapping_conflict_detected_at = CASE WHEN slack_user_id IN ('U0DEMO00003', 'U0DEMO00005', 'U0DEMO00007', 'U0DEMO00010') THEN now() - interval '2 days' END
+  WHERE organization_id = demo_org AND slack_user_id IN ('U0DEMO00001', 'U0DEMO00003', 'U0DEMO00005', 'U0DEMO00006', 'U0DEMO00007', 'U0DEMO00010');
+
   -- Directory profiles: feed spend-rule audiences, enrollment attributes, and
   -- mirror the user.attributes.* identity on the ClickHouse telemetry.
+  DELETE FROM directory_role_mappings WHERE organization_id = demo_org;
   DELETE FROM directory_user_group_memberships WHERE directory_group_id IN
     (SELECT id FROM directory_groups WHERE organization_id = demo_org);
   DELETE FROM directory_users WHERE organization_id = demo_org;
@@ -735,6 +795,23 @@ BEGIN
     WHERE du.workos_directory_user_id = 'demo_dir_' || demo_user_ids[i]
       AND dg.organization_id = demo_org AND dg.name = demo_teams[i];
   END LOOP;
+
+  -- Directory role mappings: one of each source kind, so the mapping page
+  -- shows a group row and an attribute row, each granting a custom role on
+  -- top of what its members already hold.
+  INSERT INTO directory_role_mappings
+    (organization_id, source_kind, directory_group_id, role_urn)
+  SELECT demo_org, 'group', dg.id, 'role:organization:' || r.id
+  FROM directory_groups dg, organization_roles r
+  WHERE dg.organization_id = demo_org AND dg.name = 'Infra'
+    AND r.organization_id = demo_org AND r.workos_slug = 'collaborator';
+
+  INSERT INTO directory_role_mappings
+    (organization_id, source_kind, attribute_key, attribute_value, role_urn)
+  SELECT demo_org, 'attribute', 'department_name', 'Support Engineering',
+         'role:organization:' || r.id
+  FROM organization_roles r
+  WHERE r.organization_id = demo_org AND r.workos_slug = 'analyst';
 
   -- AI provider accounts (the identity pages' Accounts column and panel):
   -- everyone has a team account under one shared fake provider org, and three
@@ -1283,6 +1360,64 @@ BEGIN
 
   -- Leave instructions NULL so Settings starts with the editable built-in
   -- instructions, matching the gateway's initialize and server/discover text.
+  -- Remote MCP identity modes: Linear uses per-user OAuth through a
+  -- project-scoped CIMD client, Slack carries one inert shared Service Account
+  -- credential, and GitHub intentionally has no upstream identity. The demo
+  -- values are display fixtures only and cannot authenticate to any service.
+  INSERT INTO remote_session_issuers
+    (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+     token_endpoint, jwks_uri, scopes_supported, grant_types_supported,
+     response_types_supported, token_endpoint_auth_methods_supported,
+     code_challenge_methods_supported, client_id_metadata_document_supported,
+     name)
+  VALUES
+    (demo.det_uuid('gram-demo-remote-identity-provider-linear'), proj_a, demo_org,
+     'example-workspace-identity', 'https://identity.example.com',
+     'https://identity.example.com/oauth/authorize',
+     'https://identity.example.com/oauth/token',
+     'https://identity.example.com/.well-known/jwks.json',
+     ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+     ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
+     'Example Workspace Identity');
+
+  INSERT INTO remote_session_clients
+    (id, project_id, organization_id, remote_session_issuer_id, client_id,
+     client_id_metadata_uri, client_id_issued_at, token_endpoint_auth_method,
+     scope)
+  VALUES
+    (demo.det_uuid('gram-demo-remote-identity-client-linear'), proj_a, demo_org,
+     demo.det_uuid('gram-demo-remote-identity-provider-linear'),
+     'https://clients.example.com/gram-demo-linear.json',
+     'https://clients.example.com/gram-demo-linear.json', clock_timestamp(), 'none',
+     ARRAY['read', 'write']);
+
+  INSERT INTO remote_session_client_user_session_issuers
+    (remote_session_client_id, user_session_issuer_id)
+  VALUES
+    (demo.det_uuid('gram-demo-remote-identity-client-linear'),
+     demo.det_uuid('gram-demo-issuer-linear'));
+
+  -- mcp_servers.remote_session_issuer_id is denormalized from the live client
+  -- bindings, and the app recomputes it after the commit that writes them
+  -- (ResyncMCPServerRemoteSessionIssuers). Seeding the binding in SQL never
+  -- goes through that path, so stamp what the resync would derive: exactly one
+  -- remote issuer is bound to this server's user session issuer (the
+  -- attachment fixture's client below sits under the same one). Left NULL,
+  -- upstream token routing fails closed and Linear reads as having no identity.
+  UPDATE mcp_servers
+  SET remote_session_issuer_id =
+        demo.det_uuid('gram-demo-remote-identity-provider-linear')
+  WHERE id = demo.det_uuid('gram-demo-mcpserver-linear')
+    AND project_id = proj_a;
+
+  INSERT INTO remote_mcp_server_headers
+    (id, remote_mcp_server_id, name, description, is_required, is_secret, value)
+  VALUES
+    (demo.det_uuid('gram-demo-agent-identity-header-slack'),
+     demo.det_uuid('gram-demo-remotemcp-slack'), 'Authorization',
+     'Inert demo Service Account credential', TRUE, FALSE,
+     'Bearer DEMO-NONFUNCTIONAL-TOKEN');
+
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                                 user_session_issuer_id) VALUES
     (demo.det_uuid('gram-demo-metamcp-1'), demo_org, proj_a, 'Acme Agent Gateway',
@@ -1393,20 +1528,16 @@ BEGIN
   -- Inert upstream account, owned by the human on Linear session 6. Both
   -- active release agents share that human owner. The explicit client link
   -- makes this exact session reachable from the requesting session's issuer.
-  -- Reserved .invalid endpoints, an invalid ciphertext and no refresh token
+  -- The client sits under Linear's own remote identity provider: every client
+  -- bound to one user session issuer must share a remote issuer, or the
+  -- mcp_servers.remote_session_issuer_id derivation above would come out NULL.
+  -- Reserved example endpoints, an invalid ciphertext and no refresh token
   -- prevent this display fixture from becoming a usable upstream credential.
-  INSERT INTO remote_session_issuers
-    (id, project_id, organization_id, slug, issuer, name, authorization_grant_profiles_supported)
-  VALUES (demo.det_uuid('gram-demo-attachment-issuer'), proj_a, demo_org,
-          'fictional-release-account', 'https://release.example.invalid',
-          -- Administrator-declared capability only: not a discovery visit or client grant.
-          'Fictional release account', ARRAY['urn:ietf:params:oauth:grant-profile:id-jag']);
-
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,
      token_endpoint_auth_method)
   VALUES (demo.det_uuid('gram-demo-attachment-client'), proj_a, demo_org,
-          demo.det_uuid('gram-demo-attachment-issuer'),
+          demo.det_uuid('gram-demo-remote-identity-provider-linear'),
           demo.det_uuid('gram-demo-attachment-client')::text, 'none');
 
   INSERT INTO remote_session_client_user_session_issuers
@@ -2452,15 +2583,16 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   FROM organization_user_relationships WHERE organization_id = demo_org AND deleted_at IS NULL;
   SELECT count(*) INTO stray FROM organization_setup_tasks
   WHERE organization_id = demo_org;
-  IF stray <> 13 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 13 setup task selections, found %', stray;
+  IF stray <> 11 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 11 setup task selections, found %', stray;
   END IF;
   IF (SELECT preset FROM organization_onboarding WHERE organization_id = demo_org) IS DISTINCT FROM 'security'
-    OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = demo_org AND hidden_at IS NULL) <> 10
+    OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = demo_org AND hidden_at IS NULL) <> 9
     OR EXISTS (SELECT 1 FROM organization_setup_tasks WHERE organization_id = demo_org
-      AND ((task_key IN ('identity-provider', 'anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL))) THEN
+      AND ((task_key IN ('anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL))) THEN
     RAISE EXCEPTION 'demo seed postflight: expected customized Security onboarding selection';
   END IF;
+
   SELECT count(*) INTO stray FROM organization_features
   WHERE organization_id = demo_org AND feature_name = 'network_ingress';
   IF stray <> 0 THEN
@@ -3085,6 +3217,59 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: expected 8 registered agents, found %', stray;
   END IF;
 
+  -- Linear's remote identity provider and the identity chaining example.
+  SELECT count(*) INTO stray FROM remote_session_issuers
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 project remote session issuers, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_session_clients
+  WHERE project_id = proj_a AND organization_id = demo_org
+    AND client_id_issued_at IS NOT NULL AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP identity client, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM remote_session_client_user_session_issuers link
+  JOIN user_session_issuers usi ON usi.id = link.user_session_issuer_id
+  WHERE usi.project_id = proj_a;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 Remote MCP User Identity bindings, found %', stray;
+  END IF;
+
+  -- The stamp has to be what ResyncMCPServerRemoteSessionIssuers would derive:
+  -- every live client bound to Linear's user session issuer names one remote
+  -- issuer, and it is the stamped one.
+  SELECT count(*) INTO stray
+  FROM remote_session_client_user_session_issuers link
+  JOIN remote_session_clients c ON c.id = link.remote_session_client_id
+  WHERE link.user_session_issuer_id = demo.det_uuid('gram-demo-issuer-linear')
+    AND c.deleted IS FALSE
+  HAVING bool_and(c.remote_session_issuer_id
+                  = demo.det_uuid('gram-demo-remote-identity-provider-linear'));
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'demo seed postflight: Linear user session issuer must bind clients of exactly one remote issuer, its stamped provider';
+  END IF;
+
+  SELECT count(*) INTO stray FROM mcp_servers
+  WHERE project_id = proj_a
+    AND remote_session_issuer_id
+        = demo.det_uuid('gram-demo-remote-identity-provider-linear');
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM remote_mcp_server_headers header
+  JOIN remote_mcp_servers remote ON remote.id = header.remote_mcp_server_id
+  WHERE remote.project_id = proj_a AND header.deleted IS FALSE
+    AND lower(header.name) = 'authorization' AND header.value IS NOT NULL;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP Service Account header, found %', stray;
+  END IF;
+
   -- Managed-agent credentials are a separate surface from ordinary MCP
   -- connections, even though both fixtures belong to the same project.
   SELECT count(*) INTO stray FROM user_sessions
@@ -3254,6 +3439,25 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org AND status NOT IN ('approved', 'blocked');
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % AI tool rows carry a status other than approved or blocked', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM directory_role_mappings
+  WHERE organization_id = demo_org AND deleted IS FALSE;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 directory role mappings, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM slack_identity_mappings WHERE organization_id = demo_org AND revoked_at IS NULL;
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 Slack mapping examples, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM slack_directory_memberships WHERE organization_id = demo_org;
+  IF stray <> 10 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 10 Slack workspace memberships, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM slack_directory_connections WHERE organization_id = demo_org;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 Slack workspace connections, found %', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',

@@ -1008,26 +1008,31 @@ FROM (
       AND m.deleted IS FALSE
 ) AS inventory;
 
--- name: ListPlatformMCPInventoryDistributions :many
+-- plugin_servers is the attachment authority, so plugin membership is read from
+-- it and keyed by MCP server. platform_mcp_distributions only records the
+-- lifecycle of memberships this flow created, so it joins in for state and
+-- leaves a dashboard-created membership with no lifecycle of its own.
+-- name: ListPlatformMCPInventoryPluginMemberships :many
 SELECT
-    distribution.registration_id,
-    COALESCE(distribution.plugin_id, distribution.default_plugin_id) AS plugin_id,
+    plugin_server.mcp_server_id,
+    plugin.id AS plugin_id,
+    plugin.name AS plugin_name,
+    plugin.slug AS plugin_slug,
     distribution.state,
     distribution.publication_state
-FROM platform_mcp_distributions AS distribution
-JOIN projects AS project
-  ON project.id = distribution.project_id
- AND project.organization_id = distribution.organization_id
- AND project.deleted IS FALSE
-JOIN platform_mcp_catalog_registrations AS registration
-  ON registration.id = distribution.registration_id
- AND registration.organization_id = distribution.organization_id
- AND registration.project_id = distribution.project_id
- AND registration.deleted IS FALSE
-WHERE distribution.organization_id = @organization_id
-  AND (sqlc.narg(project_id)::uuid IS NULL OR distribution.project_id = sqlc.narg(project_id)::uuid)
-  AND distribution.registration_id = ANY(@registration_ids::uuid[])
-ORDER BY distribution.registration_id, distribution.id ASC;
+FROM plugin_servers AS plugin_server
+JOIN plugins AS plugin
+  ON plugin.id = plugin_server.plugin_id
+ AND plugin.deleted IS FALSE
+LEFT JOIN platform_mcp_distributions AS distribution
+  ON distribution.plugin_server_id = plugin_server.id
+ AND distribution.organization_id = plugin.organization_id
+ AND distribution.project_id = plugin.project_id
+WHERE plugin_server.deleted IS FALSE
+  AND plugin_server.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND plugin.organization_id = @organization_id
+  AND (sqlc.narg(project_id)::uuid IS NULL OR plugin.project_id = sqlc.narg(project_id)::uuid)
+ORDER BY plugin_server.mcp_server_id, plugin_server.id ASC;
 
 -- name: GetPlatformMCPCatalogRegistrationForLifecycle :one
 -- Registrations are project desired state, not permanently owned by the OAuth
@@ -2679,38 +2684,80 @@ WHERE assistants.project_id = @project_id
 ORDER BY assistants.name ASC
 LIMIT @result_limit;
 
--- name: GetPlatformMCPDiagnosticsTarget :one
--- Resolves one configured MCP to the identities its telemetry is recorded
--- under: the toolset slug that calls arriving directly at Gram carry, and the
--- MCP slug that appears in the URL an agent-hook-observed client called.
--- Scoped to the organization's own project, so a caller cannot diagnose an MCP
--- it cannot already see through the inventory.
+-- name: ListPlatformMCPServerIdentities :many
+-- Lists the names an agent hook can report one configured MCP server under,
+-- for every live MCP server in one of the organization's projects: its id,
+-- slug, name, hosted toolset slug, and each plugin membership's plugin slug and
+-- display name (the key the plugin's mcp.json ships it under). One row per
+-- (server, membership); a server with no membership yields one row with empty
+-- plugin columns. Hosted servers are also reached through memberships attached
+-- by toolset, so those memberships are included for the server fronting that
+-- toolset. Memberships are gathered from the project's live plugins through the
+-- (plugin_id, backend) indexes, one arm per backend kind: a live membership has
+-- exactly one backend, so the arms never repeat a row.
+WITH server AS (
+    SELECT
+        m.id,
+        m.toolset_id,
+        COALESCE(m.name, '')::text AS mcp_name,
+        COALESCE(m.slug, '')::text AS mcp_slug,
+        COALESCE(toolset.slug, '')::text AS toolset_slug
+    FROM mcp_servers AS m
+    JOIN projects AS project
+      ON project.id = m.project_id
+     AND project.organization_id = @organization_id
+     AND project.deleted IS FALSE
+    LEFT JOIN toolsets AS toolset
+      ON toolset.id = m.toolset_id
+     AND toolset.project_id = m.project_id
+     AND toolset.deleted IS FALSE
+    WHERE m.project_id = @project_id
+      AND m.deleted IS FALSE
+),
+membership AS (
+    SELECT
+        plugin_server.id AS membership_id,
+        plugin_server.mcp_server_id,
+        plugin_server.toolset_id,
+        plugin.slug AS plugin_slug,
+        plugin_server.display_name
+    FROM plugins AS plugin
+    JOIN plugin_servers AS plugin_server
+      ON plugin_server.plugin_id = plugin.id
+     AND plugin_server.deleted IS FALSE
+    WHERE plugin.project_id = @project_id
+      AND plugin.deleted IS FALSE
+),
+server_membership AS (
+    SELECT
+        membership.mcp_server_id AS server_id,
+        membership.membership_id,
+        membership.plugin_slug,
+        membership.display_name
+    FROM membership
+    WHERE membership.mcp_server_id IS NOT NULL
+    UNION ALL
+    SELECT
+        server.id AS server_id,
+        membership.membership_id,
+        membership.plugin_slug,
+        membership.display_name
+    FROM server
+    JOIN membership
+      ON membership.toolset_id = server.toolset_id
+    WHERE server.toolset_id IS NOT NULL
+)
 SELECT
-    m.id AS mcp_server_id,
-    m.project_id,
-    COALESCE(m.slug, '') AS mcp_slug,
-    COALESCE(toolset.slug, '') AS toolset_slug,
-    COUNT(*) FILTER (
-      WHERE sibling.id IS NOT NULL
-        AND sibling.deleted IS FALSE
-    )::bigint AS toolset_mcp_count
-FROM mcp_servers AS m
-JOIN projects AS project
-  ON project.id = m.project_id
- AND project.organization_id = @organization_id
- AND project.deleted IS FALSE
-LEFT JOIN toolsets AS toolset
-  ON toolset.id = m.toolset_id
-  AND toolset.project_id = m.project_id
-  AND toolset.organization_id = @organization_id
-  AND toolset.deleted IS FALSE
-LEFT JOIN mcp_servers AS sibling
-  ON sibling.project_id = m.project_id
-  AND sibling.toolset_id = m.toolset_id
-WHERE m.id = @mcp_server_id
-  AND m.project_id = @project_id
-  AND m.deleted IS FALSE
-GROUP BY m.id, m.project_id, m.slug, toolset.slug;
+    server.id AS mcp_server_id,
+    server.mcp_name,
+    server.mcp_slug,
+    server.toolset_slug,
+    COALESCE(server_membership.plugin_slug, '')::text AS plugin_slug,
+    COALESCE(server_membership.display_name, '')::text AS plugin_display_name
+FROM server
+LEFT JOIN server_membership
+  ON server_membership.server_id = server.id
+ORDER BY server.id, server_membership.membership_id;
 
 -- Session recall (list_my_sessions / continue_session). Every read below
 -- fuses tenancy and ownership into the row filter — organization, owner
@@ -3105,6 +3152,39 @@ WHERE project.id = @project_id
   AND project.deleted IS FALSE
   AND ((@target_kind::text = 'mcp_server' AND server.id IS NOT NULL)
     OR (@target_kind::text = 'gateway' AND gateway.id IS NOT NULL));
+
+-- name: GetPlatformMCPNetworkIngressEntitlement :one
+-- Mirrors the uncached product feature check so a status read reflects the
+-- live private-network entitlement.
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_features feature
+    WHERE feature.organization_id = @organization_id
+      AND feature.feature_name = @feature_name
+      AND feature.deleted IS FALSE
+) AS entitled;
+
+-- name: GetPlatformMCPActiveNetworkIngress :one
+-- The organization's active private network ingress. Deliberately omits
+-- provider credentials, provider resources, and attestor identities.
+SELECT
+    ingress.provider,
+    ingress.hostname,
+    ingress.endpoint_namespace_kind,
+    ingress.custom_domain_id,
+    ingress.enabled,
+    ingress.identity_required,
+    (ingress.credentials_encrypted IS NOT NULL)::boolean AS credentials_configured,
+    ingress.status,
+    ingress.dns_name,
+    ingress.last_error,
+    ingress.health_checked_at,
+    ingress.connected_since
+FROM network_ingresses ingress
+WHERE ingress.organization_id = @organization_id
+  AND ingress.deleted IS FALSE
+ORDER BY ingress.id
+LIMIT 1;
 
 -- name: GetPlatformMCPPluginInventoryItem :one
 SELECT

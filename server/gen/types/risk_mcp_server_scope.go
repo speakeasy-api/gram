@@ -10,6 +10,7 @@ package types
 type RiskMCPServerScope struct {
 	// The selected MCP server or gateway ID.
 	McpServerID string
-	// Custom tool names for this server. Omit to follow the policy tool rule.
+	// Custom tool names for this server. Omit to follow the policy tool rule; an
+	// empty list matches every tool on this server, unconditionally.
 	Tools []string
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -167,7 +168,7 @@ func (s *StaffOAuthTokens) exchangeCode(w http.ResponseWriter, ctx context.Conte
 		staffTokenError(w, err)
 		return
 	}
-	staffJSON(w, http.StatusOK, map[string]any{"access_token": access, "refresh_token": refresh, "token_type": "Bearer", "expires_in": int64(session.ExpiresAt.Sub(now).Seconds()), "scope": "admin:read"})
+	staffJSON(w, http.StatusOK, map[string]any{"access_token": access, "refresh_token": refresh, "token_type": "Bearer", "expires_in": int64(session.ExpiresAt.Sub(now).Seconds()), "scope": strings.Join(connection.Scopes, " ")})
 }
 
 func (s *StaffOAuthTokens) refresh(w http.ResponseWriter, ctx context.Context, clientID string, request *usersessions.RefreshTokenRequest) {
@@ -191,7 +192,7 @@ func (s *StaffOAuthTokens) refresh(w http.ResponseWriter, ctx context.Context, c
 		staffTokenError(w, err)
 		return
 	}
-	staffJSON(w, http.StatusOK, map[string]any{"access_token": access, "refresh_token": refresh, "token_type": "Bearer", "expires_in": int64(session.ExpiresAt.Sub(now).Seconds()), "scope": "admin:read"})
+	staffJSON(w, http.StatusOK, map[string]any{"access_token": access, "refresh_token": refresh, "token_type": "Bearer", "expires_in": int64(session.ExpiresAt.Sub(now).Seconds()), "scope": strings.Join(connection.Scopes, " ")})
 }
 
 func (s *StaffOAuthTokens) verifyConnection(ctx context.Context, connection staffTokenConnection) error {

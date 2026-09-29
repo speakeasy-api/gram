@@ -13,6 +13,7 @@ import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import type { RiskMCPServerScope } from "@gram/client/models/components/riskmcpserverscope.js";
 import {
+  ALL_TOOLS_WILDCARD,
   type PolicyMCPScopeValue,
   type ToolAnnotation,
 } from "./policy-mcp-scope";
@@ -45,6 +46,7 @@ type PickerServer = {
 type ServerSelection =
   | { kind: "off" }
   | { kind: "rule"; derived: boolean }
+  | { kind: "wildcard" }
   | { kind: "custom"; tools: string[] };
 
 const TOOL_ANNOTATIONS: Array<{
@@ -188,6 +190,18 @@ export function PolicyMCPScopePicker({
   const selectionFor = (server: PickerServer): ServerSelection => {
     const stored = storedByID.get(server.id);
     if (stored?.tools !== undefined) {
+      // An empty tools list means "every tool on this server", the same as
+      // never picking one — not "no tools". The server normalizes it the
+      // same way on save, but persists it as the single-element sentinel
+      // list `["*"]` (length 1, not 0) — see AllToolsWildcard in
+      // server/internal/risk/policycore/types.go — so both representations
+      // must be recognized here.
+      if (
+        stored.tools.length === 0 ||
+        (stored.tools.length === 1 && stored.tools[0] === ALL_TOOLS_WILDCARD)
+      ) {
+        return { kind: "wildcard" };
+      }
       return { kind: "custom", tools: stored.tools };
     }
     if (stored) return { kind: "rule", derived: false };
@@ -211,6 +225,11 @@ export function PolicyMCPScopePicker({
     onChange({ ...value, servers });
   };
   const removeServer = (server: PickerServer) => {
+    // Deselecting must not lose the pane: without this, focus falls back to
+    // whichever server happens to be first in the list once this one drops
+    // out of storedByID, stranding the user on an unrelated server's (often
+    // empty) tool list instead of the one they just deselected.
+    setFocusedServerID(server.id);
     if (value.allServers && server.kind === "server") {
       const customByID = new Map(
         value.servers
@@ -239,6 +258,7 @@ export function PolicyMCPScopePicker({
     replaceServer(server.id, null);
   };
   const selectRule = (server: PickerServer) => {
+    setFocusedServerID(server.id);
     if (value.allServers && server.kind === "server") {
       replaceServer(server.id, null);
       return;
@@ -246,6 +266,7 @@ export function PolicyMCPScopePicker({
     replaceServer(server.id, { mcpServerId: server.id });
   };
   const toggleServer = (server: PickerServer) => {
+    setFocusedServerID(server.id);
     const selection = selectionFor(server);
     if (selection.kind === "off") selectRule(server);
     else removeServer(server);
@@ -261,36 +282,42 @@ export function PolicyMCPScopePicker({
       onChange({ ...value, allServers: true, servers: retained });
       return;
     }
-    const existingByID = new Map(
-      value.servers.map((entry) => [entry.mcpServerId, entry]),
-    );
-    const materialized = concreteServers.map(
-      (server) => existingByID.get(server.id) ?? { mcpServerId: server.id },
-    );
-    const gateways = value.servers.filter((entry) =>
-      pickerServers.some(
-        (server) =>
-          server.id === entry.mcpServerId && server.kind === "gateway",
-      ),
-    );
-    onChange({
-      ...value,
-      allServers: false,
-      servers: [...materialized, ...gateways],
-    });
+    onChange({ ...value, allServers: false, servers: [] });
   };
   const toggleTool = (server: PickerServer, toolName: string) => {
+    setFocusedServerID(server.id);
     const selection = selectionFor(server);
-    if (selection.kind === "off") return;
     const ruleSelection = ruleTools(server);
     const current =
-      selection.kind === "custom" ? selection.tools : ruleSelection;
+      selection.kind === "custom"
+        ? selection.tools
+        : selection.kind === "wildcard"
+          ? server.tools.map((tool) => tool.name)
+          : selection.kind === "rule"
+            ? ruleSelection
+            : [];
     const next = current.includes(toolName)
       ? current.filter((name) => name !== toolName)
       : [...current, toolName];
     next.sort();
     if (next.length === 0) {
-      removeServer(server);
+      if (
+        (selection.kind === "custom" || selection.kind === "wildcard") &&
+        value.toolAnnotations.length === 0
+      ) {
+        // Unchecking the last tool of an explicit selection means "every tool
+        // on this server", not "no tools" — keep the server in scope as a
+        // wildcard. A rule-derived selection (kind: "rule") must NOT take this
+        // path: it can be narrowed by the policy's top-level ToolAnnotations,
+        // and wildcarding here would silently widen past that rule. When a
+        // top-level rule IS set, the server can't wildcard past it either —
+        // NormalizeMCPScope rejects an empty tool list in that case — so
+        // fall through to dropping the server rather than saving a payload
+        // the backend will reject.
+        replaceServer(server.id, { mcpServerId: server.id, tools: [] });
+      } else {
+        removeServer(server);
+      }
     } else if (
       next.length === ruleSelection.length &&
       next.every((name, index) => name === ruleSelection[index])
@@ -307,6 +334,7 @@ export function PolicyMCPScopePicker({
   const toolsInScope = pickerServers.reduce((total, server) => {
     const selection = selectionFor(server);
     if (selection.kind === "custom") return total + selection.tools.length;
+    if (selection.kind === "wildcard") return total + server.tools.length;
     if (selection.kind === "rule") return total + ruleTools(server).length;
     return total;
   }, 0);
@@ -536,11 +564,13 @@ export function PolicyMCPScopePicker({
                           : "ALL"
                       : selection.kind === "off"
                         ? `0/${server.tools.length}`
-                        : selection.kind === "custom"
-                          ? `${selection.tools.length}/${server.tools.length}`
-                          : value.toolAnnotations.length === 0
-                            ? "ALL"
-                            : `${ruleTools(server).length}/${server.tools.length}`;
+                        : selection.kind === "wildcard"
+                          ? "ALL"
+                          : selection.kind === "custom"
+                            ? `${selection.tools.length}/${server.tools.length}`
+                            : value.toolAnnotations.length === 0
+                              ? "ALL"
+                              : `${ruleTools(server).length}/${server.tools.length}`;
                   return (
                     <div
                       key={server.id}
@@ -673,16 +703,23 @@ function FocusedServerPane({
 }): JSX.Element {
   const selected = selection.kind !== "off";
   const custom = selection.kind === "custom";
-  const selectedTools = custom ? selection.tools : ruleTools;
+  const wildcard = selection.kind === "wildcard";
+  const selectedTools = custom
+    ? selection.tools
+    : wildcard
+      ? server.tools.map((tool) => tool.name)
+      : ruleTools;
   const followingAnnotationRule =
     selection.kind === "rule" && toolAnnotations.length > 0;
   const note = !selected
     ? "Not in scope"
     : custom
       ? `Custom · ${selectedTools.length} of ${server.tools.length}`
-      : toolAnnotations.length === 0
-        ? "All tools, including ones added later"
-        : `Following the tool rule · ${selectedTools.length} of ${server.tools.length}`;
+      : wildcard
+        ? "All tools, unconditionally — including ones added later"
+        : toolAnnotations.length === 0
+          ? "All tools, including ones added later"
+          : `Following the tool rule · ${selectedTools.length} of ${server.tools.length}`;
 
   return (
     <div className="space-y-4">
@@ -769,7 +806,7 @@ function FocusedServerPane({
             <span className="text-muted-foreground ml-auto text-xs">
               {note}
             </span>
-            {custom ? (
+            {custom || wildcard ? (
               <button
                 type="button"
                 onClick={onUseRule}
@@ -803,9 +840,9 @@ function FocusedServerPane({
                   <Checkbox
                     aria-label={tool.name}
                     checked={checked}
-                    disabled={!selected}
                     className={cn(
                       !custom &&
+                        !wildcard &&
                         checked &&
                         "data-[state=checked]:border-muted-foreground data-[state=checked]:bg-muted-foreground",
                     )}

@@ -42,6 +42,12 @@ func localAccountConfig() (localaccounts.Config, error) {
 		}
 		return uint16(v)
 	}
+	// Match compose.yml's explicit default, not the checkout directory name.
+	// Validate still requires actual container project and canonical-root labels.
+	composeProject := os.Getenv("COMPOSE_PROJECT_NAME")
+	if composeProject == "" {
+		composeProject = "gram"
+	}
 	external := stripeclient.IsConfigured(os.Getenv("STRIPE_API_KEY"))
 	for _, name := range []string{"POLAR_API_KEY", "TEMPORAL_CLIENT_CERT", "TEMPORAL_CLIENT_KEY"} {
 		if os.Getenv(name) != "" {
@@ -55,7 +61,7 @@ func localAccountConfig() (localaccounts.Config, error) {
 		DatabaseURL: os.Getenv("GRAM_DATABASE_URL"), IDPDatabase: os.Getenv("GRAM_DEVIDP_DB"), IDPURL: os.Getenv("GRAM_IDP_BASE_URL"),
 		ExpectedDatabasePort: port("DB_PORT"), ExpectedIDPPort: port("GRAM_DEVIDP_PORT"),
 		RedisAddress: os.Getenv("GRAM_REDIS_CACHE_ADDR"), ExpectedRedisPort: port("GRAM_REDIS_CACHE_PORT"),
-		ComposeProject: os.Getenv("COMPOSE_PROJECT_NAME"), TemporalAddress: os.Getenv("TEMPORAL_ADDRESS"),
+		ComposeProject: composeProject, TemporalAddress: os.Getenv("TEMPORAL_ADDRESS"),
 		TemporalNamespace: os.Getenv("TEMPORAL_NAMESPACE"), TemporalTaskQueue: os.Getenv("TEMPORAL_TASK_QUEUE"),
 	}, nil
 }

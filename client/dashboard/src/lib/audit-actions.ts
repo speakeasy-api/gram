@@ -8,6 +8,13 @@ import { assertNever } from "@/lib/utils";
  * the moment the string lands in this list.
  */
 export const AUDIT_ACTIONS = [
+  "slack-directory-connection:authorize",
+  "slack-directory-connection:disconnect",
+  "slack-directory-connection:sync",
+  "slack-identity-mapping:confirm",
+  "slack-identity-mapping:reassign",
+  "slack-identity-mapping:reconfirm",
+  "slack-identity-mapping:unmap",
   "access_challenge:resolve",
   "access_member:update_role",
   "access_role:create",
@@ -66,6 +73,8 @@ export const AUDIT_ACTIONS = [
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
   "device_integration:upsert",
+  "directory_role_mapping:delete",
+  "directory_role_mapping:set",
   "environment:create",
   "environment:delete",
   "environment:update",
@@ -292,6 +301,20 @@ export function isAuditAction(action: string): action is AuditAction {
  */
 export function staticActionPhrase(action: AuditAction): string {
   switch (action) {
+    case "slack-identity-mapping:confirm":
+      return "confirmed the Slack mapping for";
+    case "slack-identity-mapping:reassign":
+      return "reassigned the Slack mapping for";
+    case "slack-identity-mapping:reconfirm":
+      return "reviewed and confirmed the Slack mapping for";
+    case "slack-identity-mapping:unmap":
+      return "removed the Slack mapping for";
+    case "slack-directory-connection:sync":
+      return "synced Slack directory";
+    case "slack-directory-connection:authorize":
+      return "authorized Slack workspace";
+    case "slack-directory-connection:disconnect":
+      return "disconnected Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
     case "access_member:update_role":
@@ -472,6 +495,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated device integration schedule";
     case "device_integration:retry_schedule":
       return "retried device integration sync";
+
+    case "directory_role_mapping:set":
+      return "set directory role mapping";
+    case "directory_role_mapping:delete":
+      return "removed directory role mapping";
 
     case "environment:create":
       return "created environment";

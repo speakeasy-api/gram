@@ -28,6 +28,10 @@
 //	POST   /authorization/organizations/{id}/roles
 //	PATCH  /authorization/organizations/{id}/roles/{slug}
 //	DELETE /authorization/organizations/{id}/roles/{slug}
+//	GET    /directory_groups                                                 (?directory, ?user, ?after, ?limit)
+//	GET    /directory_groups/{id}
+//	GET    /directory_users                                                  (?directory, ?group, ?after, ?limit)
+//	GET    /directory_users/{id}
 package mockworkos
 
 import (
@@ -113,6 +117,10 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /connections", h.handleWorkosListConnections)
 	mux.HandleFunc("GET /directories", h.handleWorkosListDirectories)
+	mux.HandleFunc("GET /directory_groups", h.handleWorkosListDirectoryGroups)
+	mux.HandleFunc("GET /directory_groups/{id}", h.handleWorkosGetDirectoryGroup)
+	mux.HandleFunc("GET /directory_users", h.handleWorkosListDirectoryUsers)
+	mux.HandleFunc("GET /directory_users/{id}", h.handleWorkosGetDirectoryUser)
 }
 
 // =============================================================================

@@ -66,7 +66,6 @@ func TestOnboardingAuditFailureRollsBackPresetUpdate(t *testing.T) {
 func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	queries := orgrepo.New(ti.conn)
@@ -89,7 +88,11 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 			visible = append(visible, task.Key)
 		}
 	}
-	require.ElementsMatch(t, []string{"domain-verification", "identity-provider", "instrument-agents", "additional-agent-config", "platform-mcp"}, visible)
+	require.ElementsMatch(t, []string{
+		"identity-provider", "enable-logging", "instrument-agents", "additional-agent-config",
+		"confirm-traffic", "create-marketplace", "distribute-servers", "platform-mcp",
+		"anthropic-admin-controls", "configure-policies",
+	}, visible)
 	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 	require.Len(t, listed.Tasks, len(visible))
@@ -109,11 +112,8 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 			keys = append(keys, task.Key)
 		}
 		require.ElementsMatch(t, preset.VisibleTaskKeys, keys)
-		require.Nil(t, setupTask(listed.Tasks, "identity-provider"), "presets must not duplicate the split identity tasks")
 		if preset.Key == "security" {
-			require.NotNil(t, setupTask(listed.Tasks, "domain-verification"))
-			require.Equal(t, []string{"domain-verification"}, setupTask(listed.Tasks, "connect-idp").BlockedBy)
-			require.Empty(t, setupTask(listed.Tasks, "directory-sync").BlockedBy)
+			require.Empty(t, setupTask(listed.Tasks, "identity-provider").BlockedBy)
 		}
 	}
 }
@@ -121,7 +121,6 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 func TestOnboardingPreservesRawProgressAndAssignment(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsServiceWithEmail(t)
-	stubUnverifiedDomainPolicy(ti)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	queries := orgrepo.New(ti.conn)
@@ -208,7 +207,6 @@ func TestOnboardingSerializesWithTaskUpdates(t *testing.T) {
 func TestOnboardingAuditsFactCompletionAndResolvedAssignee(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsService(t)
-	stubUnverifiedDomainPolicy(ti)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	_, err := orgrepo.New(ti.conn).UpsertOrganizationSetupTask(ctx, orgrepo.UpsertOrganizationSetupTaskParams{

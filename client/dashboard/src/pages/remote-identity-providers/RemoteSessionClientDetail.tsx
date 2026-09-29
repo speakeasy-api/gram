@@ -13,7 +13,7 @@ import { useRoutes } from "@/routes";
 import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
-import { ScopeBadge } from "./ScopeBadge";
+import { ScopeBadge } from "@/lib/remote-identity";
 import { remoteSessionClientDisplayName } from "./clientDisplay";
 import { issuerDisplayName } from "./issuerDisplay";
 import { OverviewTab } from "./tabs/client/OverviewTab";

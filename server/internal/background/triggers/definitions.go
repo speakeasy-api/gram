@@ -89,6 +89,10 @@ type Task struct {
 	CorrelationID     string
 	EventJSON         []byte
 	RawPayload        []byte
+
+	// ThreadBackfill, when set, asks Dispatch to add conversation messages the
+	// target has not seen to EventJSON before delivery.
+	ThreadBackfill *ThreadBackfill
 }
 
 type cronTriggerConfig struct {
@@ -473,6 +477,14 @@ func withArrayItemsEnum(propertyName string, values ...any) inputSchemaOption {
 	}
 }
 
+func withPropertyEnum(propertyName string, values ...any) inputSchemaOption {
+	return func(config *inputSchemaConfig) {
+		config.propertyMutators[propertyName] = append(config.propertyMutators[propertyName], func(prop *gjsonschema.Schema) {
+			prop.Enum = values
+		})
+	}
+}
+
 func absInt64(value int64) int64 {
 	if value < 0 {
 		return -value
@@ -502,7 +514,7 @@ func celTypeName(t reflect.Type) string {
 	return path.Base(t.PkgPath()) + "." + t.Name()
 }
 
-func toAnySlice(ss []string) []any {
+func toAnySlice[T any](ss []T) []any {
 	out := make([]any, len(ss))
 	for i, s := range ss {
 		out[i] = s

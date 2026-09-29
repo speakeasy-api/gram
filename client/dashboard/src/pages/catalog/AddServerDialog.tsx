@@ -1,8 +1,12 @@
 import { catalogLogoClassName } from "./logo";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
+import { useAgentCredentialFields } from "@/lib/remote-identity";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
@@ -21,6 +25,7 @@ import {
   Plus,
   Server as ServerIcon,
   Settings,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -38,6 +43,7 @@ import {
   collectibleHeaders,
   filterToHttpRemotes,
   getRemoteDisplayInfo,
+  isFigmaCatalogServer,
 } from "./remotes";
 
 export interface AddServerDialogProps {
@@ -700,6 +706,10 @@ function ConfigurePhaseContent({
   bulk?: boolean;
   onClose: () => void;
 }) {
+  const project = useProject();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canCreateIdentity =
+    !rbacLoading && hasScope("project:write", project.id);
   // Multi-remote servers were already named in the selectRemotes phase; only
   // servers with a single endpoint still need a name input here.
   const singleRemoteConfigs = releaseState.serverConfigs.filter(
@@ -708,6 +718,9 @@ function ConfigurePhaseContent({
   const effectiveIsSingle = singleRemoteConfigs.length === 1;
   const hasHeaderInputs = releaseState.serverConfigs.some(
     (config) => configCollectibleHeaderCount(config) > 0,
+  );
+  const hasIdentityChoices = releaseState.serverConfigs.some(
+    (config) => !isFigmaCatalogServer(config.server),
   );
   // Headers the upstream marks required gate the primary button, but a Skip
   // action always lets the user install now and fill values in from the
@@ -721,9 +734,15 @@ function ConfigurePhaseContent({
   // When every server came through the selectRemotes phase and none needs
   // header values, there is nothing left to configure — install immediately.
   const nothingToConfigure =
-    singleRemoteConfigs.length === 0 && !hasHeaderInputs;
+    singleRemoteConfigs.length === 0 && !hasHeaderInputs && !hasIdentityChoices;
 
-  const canSubmit = releaseState.canInstall && missingRequiredHeaders === 0;
+  const userIdentityPermissionBlocked =
+    !canCreateIdentity &&
+    releaseState.serverConfigs.some((config) => config.identityMode === "user");
+  const canSubmit =
+    releaseState.canInstall &&
+    missingRequiredHeaders === 0 &&
+    !userIdentityPermissionBlocked;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && canSubmit) {
@@ -770,6 +789,11 @@ function ConfigurePhaseContent({
             singleRemoteConfigs={singleRemoteConfigs}
           />
         )}
+        <IdentityConfigurations
+          releaseState={releaseState}
+          canCreateIdentity={canCreateIdentity}
+          rbacLoading={rbacLoading}
+        />
         {!bulk && <HeaderValueSections releaseState={releaseState} />}
         {releaseState.installBlockedReason && (
           <InstallBlockedWarning reason={releaseState.installBlockedReason} />
@@ -790,7 +814,11 @@ function ConfigurePhaseContent({
           {missingRequiredHeaders > 0 && (
             <Button
               variant="secondary"
-              disabled={!releaseState.canInstall}
+              // Skipping header values is not a way around the identity
+              // permission check: the same install runs either way.
+              disabled={
+                !releaseState.canInstall || userIdentityPermissionBlocked
+              }
               onClick={() => {
                 void releaseState.startInstall();
               }}
@@ -808,6 +836,98 @@ function ConfigurePhaseContent({
           </Button>
         </div>
       </Dialog.Footer>
+    </div>
+  );
+}
+
+function IdentityConfigurations({
+  releaseState,
+  canCreateIdentity,
+  rbacLoading,
+}: {
+  releaseState: ConfigurePhase;
+  canCreateIdentity: boolean;
+  rbacLoading: boolean;
+}) {
+  const configs = releaseState.serverConfigs.filter(
+    (config) => !isFigmaCatalogServer(config.server),
+  );
+  if (configs.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-4 border-t pt-4">
+      {configs.map((config) => (
+        <CatalogServerIdentity
+          key={config.server.registrySpecifier}
+          config={config}
+          showServerName={configs.length > 1}
+          index={configIndexOf(releaseState, config)}
+          releaseState={releaseState}
+          canCreateIdentity={canCreateIdentity}
+          rbacLoading={rbacLoading}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One server's identity decision. Split out so each row owns the credential
+ * form's own state — the shared choice is the same block Add-by-URL shows.
+ */
+function CatalogServerIdentity({
+  config,
+  showServerName,
+  index,
+  releaseState,
+  canCreateIdentity,
+  rbacLoading,
+}: {
+  config: ServerConfig;
+  showServerName: boolean;
+  index: number;
+  releaseState: ConfigurePhase;
+  canCreateIdentity: boolean;
+  rbacLoading: boolean;
+}) {
+  const credential = useAgentCredentialFields();
+  const authorizationValue = credential.authorizationValue;
+  // releaseState is rebuilt every render; its updater is not, so depend on the
+  // updater alone or this re-runs on every parent render.
+  const { updateServerConfig } = releaseState;
+
+  // The credential form owns the value; the workflow config carries it to the
+  // install RPC.
+  useEffect(() => {
+    if (config.agentAuthorization !== authorizationValue) {
+      updateServerConfig(index, { agentAuthorization: authorizationValue });
+    }
+  }, [
+    authorizationValue,
+    config.agentAuthorization,
+    index,
+    updateServerConfig,
+  ]);
+
+  return (
+    <div className="space-y-2">
+      {showServerName ? (
+        <Text small className="font-medium">
+          {config.name}
+        </Text>
+      ) : null}
+      <CreationIdentityChoice
+        value={config.identityMode}
+        onChange={(identityMode) =>
+          releaseState.updateServerConfig(index, { identityMode })
+        }
+        credential={credential}
+        upstreamName={config.name || "this server"}
+        advertisesOAuth={!!config.server.supportsDcr}
+        authenticationRequired={false}
+        canCreateIdentity={canCreateIdentity}
+        rbacLoading={rbacLoading}
+      />
     </div>
   );
 }
@@ -1234,6 +1354,38 @@ function InstallStatusRow({
 }) {
   const routes = useTargetRoutes(releaseState);
   const isCompleted = status.status === "completed" && status.mcpServerParam;
+  const setupRequired =
+    status.status === "failed" && status.mcpServerParam
+      ? status.setupRequired
+      : undefined;
+
+  if (setupRequired) {
+    // Created, but held disabled until identity is finished: a next step,
+    // not a failure, so it reads in warning tones and says what to do.
+    return (
+      <routes.mcp.x.settings.Link
+        params={[status.mcpServerParam!]}
+        hash="authentication"
+        className="block no-underline transition-opacity hover:no-underline hover:opacity-80"
+      >
+        <div className="flex items-start gap-3 border p-2">
+          <TriangleAlert className="text-default-warning mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <Text small className="truncate">
+              {status.name}
+            </Text>
+            <Text small muted>
+              Added, but disabled until identity is set up. {setupRequired}
+            </Text>
+          </div>
+          <span className="text-foreground flex shrink-0 items-center gap-1 text-xs font-medium">
+            Finish setup
+            <ArrowRight className="h-3 w-3" />
+          </span>
+        </div>
+      </routes.mcp.x.settings.Link>
+    );
+  }
 
   const content = (
     <div className="flex items-center gap-3 border p-2">

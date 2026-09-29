@@ -49,7 +49,7 @@ export type ProviderTier = ClosedEnum<typeof ProviderTier>;
 /**
  * How the client was obtained. Present on success and registration failure.
  */
-export const RegistrationMethod = {
+export const CommitServerIdentityConfigurationResultRegistrationMethod = {
   Cimd: "cimd",
   Dcr: "dcr",
   Manual: "manual",
@@ -58,7 +58,8 @@ export const RegistrationMethod = {
 /**
  * How the client was obtained. Present on success and registration failure.
  */
-export type RegistrationMethod = ClosedEnum<typeof RegistrationMethod>;
+export type CommitServerIdentityConfigurationResultRegistrationMethod =
+  ClosedEnum<typeof CommitServerIdentityConfigurationResultRegistrationMethod>;
 
 /**
  * Successful commit status. Present only after local commit.
@@ -113,7 +114,9 @@ export type CommitServerIdentityConfigurationResult = {
   /**
    * How the client was obtained. Present on success and registration failure.
    */
-  registrationMethod?: RegistrationMethod | undefined;
+  registrationMethod?:
+    | CommitServerIdentityConfigurationResultRegistrationMethod
+    | undefined;
   /**
    * Successful commit status. Present only after local commit.
    */
@@ -129,9 +132,10 @@ export const ProviderTier$inboundSchema: z.ZodMiniEnum<typeof ProviderTier> = z
   .enum(ProviderTier);
 
 /** @internal */
-export const RegistrationMethod$inboundSchema: z.ZodMiniEnum<
-  typeof RegistrationMethod
-> = z.enum(RegistrationMethod);
+export const CommitServerIdentityConfigurationResultRegistrationMethod$inboundSchema:
+  z.ZodMiniEnum<
+    typeof CommitServerIdentityConfigurationResultRegistrationMethod
+  > = z.enum(CommitServerIdentityConfigurationResultRegistrationMethod);
 
 /** @internal */
 export const CommitServerIdentityConfigurationResultStatus$inboundSchema:
@@ -151,7 +155,9 @@ export const CommitServerIdentityConfigurationResult$inboundSchema:
       provider: z.optional(RemoteSessionIssuer$inboundSchema),
       provider_path: z.optional(z.string()),
       provider_tier: z.optional(ProviderTier$inboundSchema),
-      registration_method: z.optional(RegistrationMethod$inboundSchema),
+      registration_method: z.optional(
+        CommitServerIdentityConfigurationResultRegistrationMethod$inboundSchema,
+      ),
       status: z.optional(
         CommitServerIdentityConfigurationResultStatus$inboundSchema,
       ),

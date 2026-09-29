@@ -27,6 +27,7 @@ const members = [
     joinedAt: new Date(),
     principalUrn: "user:user-1",
     roleIds: [],
+    directoryRoleIds: [],
   },
 ];
 const servers = [

@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -60,6 +61,7 @@ import (
 )
 
 type Service struct {
+	registry             *mcpregistry.Service
 	remoteSessions       *remotesessions.Service
 	assets               *assets.Service
 	tracer               trace.Tracer
@@ -77,6 +79,9 @@ type Service struct {
 	// URLs are built on. Nil leaves those URLs out.
 	mcpServerURL *url.URL
 
+	// workosEnvironmentID scopes WorkOS dashboard links. Empty leaves them out.
+	workosEnvironmentID string
+
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
@@ -92,6 +97,8 @@ type Service struct {
 
 	trial   trialemails.Notifier
 	billing BillingOperations
+
+	supportCoverage SupportCoverageReader
 }
 
 type BillingOperations interface {
@@ -195,7 +202,9 @@ func NewService(
 	chatAnalysisSignaler analysis.Signaler,
 	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
+	supportCoverage SupportCoverageReader,
 	dashboardURL *url.URL,
+	registry *mcpregistry.Service,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -213,7 +222,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil,
+	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", registry: registry,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:         logger,
 		db:             db,
@@ -237,8 +246,9 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:   trialNotifier,
-		billing: billing,
+		trial:           trialNotifier,
+		billing:         billing,
+		supportCoverage: supportCoverage,
 	}
 }
 
@@ -415,6 +425,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetGlobalIssuerMigratePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerMigratePreflight)
 	server.MigrateToGlobalIssuer = service.strictAdminJSON(server.MigrateToGlobalIssuer, func() any { return new(adminserver.MigrateToGlobalIssuerRequestBody) })
 	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
+	server.ListRegistryEntries = service.preauthorizeAdmin(server.ListRegistryEntries)
+	server.GetRegistryEntry = service.preauthorizeAdmin(server.GetRegistryEntry)
+	server.CreateRegistryEntry = service.strictAdminJSONLimit(server.CreateRegistryEntry, func() any { return new(adminserver.CreateRegistryEntryRequestBody) }, 16<<20)
+	server.SaveRegistryEntry = service.strictAdminJSONLimit(server.SaveRegistryEntry, func() any { return new(adminserver.SaveRegistryEntryRequestBody) }, 16<<20)
+	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
 	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
 	adminserver.Mount(mux, server)
@@ -445,7 +460,8 @@ func (w *adminCallbackWriter) WriteHeader(status int) {
 				HttpOnly: true,
 				SameSite: http.SameSiteLaxMode,
 			}
-			if strings.HasPrefix(w.Header().Get("Location"), "/admin-mcp/connect?state=") {
+			location := w.Header().Get("Location")
+			if strings.HasPrefix(location, "/admin-mcp/connect?state=") || strings.HasPrefix(location, "/admin-mcp/proposals/") {
 				mcpCookie.Value = cookie.Value
 			} else {
 				mcpCookie.MaxAge = -1
@@ -491,12 +507,16 @@ func (s *Service) preauthorizeAdmin(next http.Handler) http.Handler {
 const maxAdminJSONBodyBytes = 1 << 20
 
 func (s *Service) strictAdminJSON(next http.Handler, body func() any) http.Handler {
+	return s.strictAdminJSONLimit(next, body, maxAdminJSONBodyBytes)
+}
+
+func (s *Service) strictAdminJSONLimit(next http.Handler, body func() any, maxBytes int64) http.Handler {
 	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
 		ctx, err := s.authorizeAdminRequest(r)
 		if err != nil {
 			return err
 		}
-		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAdminJSONBodyBytes))
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBytes))
 		if err != nil {
 			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 				return oops.E(oops.CodeRequestTooLarge, err, "read admin request body")
@@ -881,7 +901,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 
 	orgs := make([]*gen.AdminOrganization, len(rows))
 	for i := range rows {
-		orgs[i] = adminOrganizationFromRow(rows[i])
+		orgs[i] = s.adminOrganizationFromRow(rows[i])
 	}
 
 	return &gen.AdminListOrganizationsResult{
@@ -1192,6 +1212,69 @@ func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrg
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
 }
 
+// TrialExtension is the trial end-date transition an extension wrote.
+type TrialExtension struct {
+	PreviousEndsAt time.Time
+	EndsAt         time.Time
+}
+
+// ErrTrialNotRunning reports that an organization has no running enterprise
+// trial to extend.
+var ErrTrialNotRunning = errors.New("organization has no running enterprise trial to extend")
+
+// TrialActor is who the trial extension audit entry names.
+type TrialActor struct {
+	Principal   urn.Principal
+	DisplayName *string
+}
+
+// ExtendTrialTx extends a running enterprise trial by days and records its
+// audit entry inside the caller's transaction; the caller commits. It returns
+// ErrTrialNotRunning when there is no running trial to extend. The admin API
+// passes the session operator, and the staff Admin MCP passes its own actor.
+func ExtendTrialTx(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, logger *slog.Logger, organizationID string, days int, actor TrialActor) (TrialExtension, error) {
+	// Checked on the wide value before narrowing; see ExtendTrial.
+	if days < constants.MinTrialExtensionDays || days > constants.MaxTrialExtensionDays {
+		return TrialExtension{}, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialExtensionDays, constants.MaxTrialExtensionDays)
+	}
+
+	extended, err := trialsRepo.New(tx).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
+		OrganizationID: organizationID,
+		ExtendByDays:   int32(days),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return TrialExtension{}, ErrTrialNotRunning
+	case err != nil:
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
+	}
+
+	// The customer's feed names the organization, not only its id, and extend
+	// writes nothing on organization_metadata to get those columns back from.
+	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organizationID,
+		AllowSlug: false,
+	})
+	if err != nil {
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
+	}
+
+	if err := auditLogger.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
+		OrganizationID:      organizationID,
+		Actor:               actor.Principal,
+		ActorDisplayName:    actor.DisplayName,
+		ActorSlug:           nil,
+		OrganizationName:    organization.Name,
+		OrganizationSlug:    organization.Slug,
+		ExtendedByDays:      days,
+		PreviousTrialEndsAt: extended.PreviousEndsAt.Time,
+		TrialEndsAt:         extended.EndsAt.Time,
+	}); err != nil {
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "log trial extension").LogError(ctx, logger)
+	}
+	return TrialExtension{PreviousEndsAt: extended.PreviousEndsAt.Time, EndsAt: extended.EndsAt.Time}, nil
+}
+
 func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPayload) (*gen.AdminOrganization, error) {
 	// The design bounds this too, but that validation is generated into the
 	// request decoder and only runs at the HTTP boundary. Repeating it here is
@@ -1215,12 +1298,10 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	extended, err := trialsRepo.New(tx).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
-		OrganizationID: payload.ID,
-		ExtendByDays:   int32(payload.Days),
-	})
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
+	_, err = ExtendTrialTx(ctx, tx, s.audit, logger, payload.ID, payload.Days, TrialActor{Principal: actor, DisplayName: actorDisplayName})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, ErrTrialNotRunning):
 		// rejectTrialChange reads on the pool, so this connection goes back
 		// before it asks for a second one. The deferred rollback is idempotent.
 		_ = tx.Rollback(ctx)
@@ -1228,32 +1309,7 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 			"look up organization after unextended trial",
 			"organization has no running enterprise trial to extend")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
-	}
-
-	// The customer's feed names the organization, not only its id, and extend
-	// writes nothing on organization_metadata to get those columns back from.
-	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID:        payload.ID,
-		AllowSlug: false,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
-	}
-
-	actor, actorDisplayName, operatorEmail := adminActor(ctx)
-	if err := s.audit.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
-		OrganizationID:      payload.ID,
-		Actor:               actor,
-		ActorDisplayName:    actorDisplayName,
-		ActorSlug:           nil,
-		OrganizationName:    organization.Name,
-		OrganizationSlug:    organization.Slug,
-		ExtendedByDays:      payload.Days,
-		PreviousTrialEndsAt: extended.PreviousEndsAt.Time,
-		TrialEndsAt:         extended.EndsAt.Time,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log trial extension").LogError(ctx, logger)
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1814,7 +1870,7 @@ func (s *Service) readOrganizationAfterWrite(ctx context.Context, id string, err
 		return nil, oops.E(oops.CodeUnexpected, err, "%s", errMsg).LogError(ctx, s.logger)
 	}
 
-	return adminOrganizationFromGetRow(row), nil
+	return s.adminOrganizationFromGetRow(row), nil
 }
 
 func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizationPayload) (*gen.AdminOrganization, error) {
@@ -1828,16 +1884,17 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization by id or slug").LogError(ctx, s.logger)
 	}
-	return adminOrganizationFromGetRow(row), nil
+	return s.adminOrganizationFromGetRow(row), nil
 }
 
-func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
+func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
 		ID:                   row.ID,
 		Name:                 row.Name,
 		Slug:                 row.Slug,
 		AccountType:          row.AccountType,
 		WorkosID:             conv.FromPGText[string](row.WorkosID),
+		WorkosDashboardURL:   s.workosDashboardURL(row.WorkosID),
 		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
 		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
 		Whitelisted:          row.Whitelisted,
@@ -1854,13 +1911,14 @@ func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrg
 	}
 }
 
-func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
+func (s *Service) adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
 		ID:                   row.ID,
 		Name:                 row.Name,
 		Slug:                 row.Slug,
 		AccountType:          row.AccountType,
 		WorkosID:             conv.FromPGText[string](row.WorkosID),
+		WorkosDashboardURL:   s.workosDashboardURL(row.WorkosID),
 		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
 		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
 		Whitelisted:          row.Whitelisted,

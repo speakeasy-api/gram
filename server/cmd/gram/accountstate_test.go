@@ -145,3 +145,14 @@ func TestAccountStateUnsafeConfigDoesNotManageDaemons(t *testing.T) {
 		require.ErrorIs(t, err, os.ErrNotExist)
 	}
 }
+
+func TestLocalAccountConfigComposeDefault(t *testing.T) {
+	t.Setenv("COMPOSE_PROJECT_NAME", "")
+	c, err := localAccountConfig()
+	require.NoError(t, err)
+	require.Equal(t, "gram", c.ComposeProject, "must match compose.yml's default")
+	t.Setenv("COMPOSE_PROJECT_NAME", "gram-secondary")
+	c, err = localAccountConfig()
+	require.NoError(t, err)
+	require.Equal(t, "gram-secondary", c.ComposeProject)
+}

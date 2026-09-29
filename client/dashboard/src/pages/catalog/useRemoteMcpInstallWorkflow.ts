@@ -1,10 +1,4 @@
-import { useFetcher } from "@/contexts/Fetcher";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
-import {
-  useProjectSlugForRequests,
-  useSdkClient,
-  useSlugs,
-} from "@/contexts/Sdk";
+import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
   createDefaultMcpEndpoint,
   DEFAULT_ENDPOINT_FAILED_MESSAGE,
@@ -18,7 +12,11 @@ import {
   isFigmaCatalogServer,
   normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
-import { autoConfigureRemoteMcpAuth } from "@/pages/sources/remote-mcp/autoConfigureAuth";
+import {
+  configureCreatedRemoteMcpIdentity,
+  type ConfigureCreatedIdentityResult,
+  type RemoteMcpCreationIdentity,
+} from "@/pages/sources/remote-mcp/configureCreatedIdentity";
 import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
@@ -60,6 +58,8 @@ export interface ServerConfig {
   remotes: ExternalMCPRemote[];
   /** User-entered header values, keyed by [headerValueKey]. */
   headerValues: Record<string, string>;
+  identityMode: RemoteMcpCreationIdentity;
+  agentAuthorization: string;
 }
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
@@ -81,6 +81,12 @@ export interface ServerInstallStatus {
   /** Public URL of the pre-staged default MCP endpoint, when one was created. */
   mcpEndpointUrl?: string;
   error?: string;
+  /**
+   * Set when the server was created but kept disabled because its identity
+   * still needs a step in Settings. The install counts as failed for callers
+   * that tally results, but the dialog shows it as a next step, not an error.
+   */
+  setupRequired?: string;
 }
 
 interface WorkflowBase {
@@ -116,7 +122,9 @@ export interface ConfigurePhase extends WorkflowBase {
   serverConfigs: ServerConfig[];
   updateServerConfig: (
     index: number,
-    updates: Partial<Pick<ServerConfig, "name">>,
+    updates: Partial<
+      Pick<ServerConfig, "name" | "identityMode" | "agentAuthorization">
+    >,
   ) => void;
   setHeaderValue: (
     index: number,
@@ -180,6 +188,8 @@ function buildServerConfig(
     name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
     remotes: server.remotes ?? [],
     headerValues: {},
+    identityMode: server.supportsDcr ? "user" : "none",
+    agentAuthorization: "",
   };
 }
 
@@ -193,6 +203,8 @@ interface InstallTarget {
   remote: ExternalMCPRemote;
   name: string;
   headers: Array<{ header: ExternalMCPRemoteHeader; value: string }>;
+  identityMode: RemoteMcpCreationIdentity;
+  agentAuthorization: string;
 }
 
 function buildInstallTargets(config: ServerConfig): InstallTarget[] {
@@ -208,6 +220,8 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
         config.headerValues[headerValueKey(remote.url, header.name)]?.trim();
       return value ? [{ header, value }] : [];
     }),
+    identityMode: config.identityMode,
+    agentAuthorization: config.agentAuthorization,
   }));
 }
 
@@ -268,6 +282,7 @@ async function installUnproxiedTarget(
   mcpServer: McpServer;
   mcpEndpointUrl?: string;
   authConfigured: boolean;
+  identityConfiguration?: ConfigureCreatedIdentityResult;
   iconPersistence: Promise<boolean>;
 }> {
   const unproxiedMcpServer = await client.unproxiedMcp.createServer(
@@ -350,15 +365,9 @@ export function useRemoteMcpInstallWorkflow({
   serverNameSuffix = "",
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
-  const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
-  const currentProjectSlug = useProjectSlugForRequests();
-  const isPlatformAdmin = useIsPlatformAdmin();
-  const targetProjectSlug = projectSlug ?? currentProjectSlug;
-  const issuerQuery = useEffectiveUserSessionIssuers({
-    projectSlug: targetProjectSlug,
-  });
+  const issuerQuery = useEffectiveUserSessionIssuers({});
   const defaultOrganizationIssuerId = issuerQuery.organizationIssuers[0]?.id;
 
   // Informational "already installed" signal: a remote MCP server with a
@@ -450,7 +459,12 @@ export function useRemoteMcpInstallWorkflow({
   }, [partitionServers]);
 
   const updateServerConfig = useCallback(
-    (index: number, updates: Partial<Pick<ServerConfig, "name">>) => {
+    (
+      index: number,
+      updates: Partial<
+        Pick<ServerConfig, "name" | "identityMode" | "agentAuthorization">
+      >,
+    ) => {
       setServerConfigs((prev) =>
         prev.map((config, i) => {
           if (i !== index) return config;
@@ -527,6 +541,8 @@ export function useRemoteMcpInstallWorkflow({
             currentConfig.selectedRemoteUrls.has(r.url),
           ),
           headerValues: {},
+          identityMode: currentConfig.server.supportsDcr ? "user" : "none",
+          agentAuthorization: "",
         },
       ]);
     }
@@ -556,6 +572,9 @@ export function useRemoteMcpInstallWorkflow({
       !issuerQuery.isLoading &&
       installBlockedReason === undefined &&
       serverConfigs.every((c) => c.name.trim() !== "") &&
+      serverConfigs.every(
+        (c) => c.identityMode !== "agent" || c.agentAuthorization.trim() !== "",
+      ) &&
       serverConfigs.some((c) => c.remotes.length > 0)
     );
   }, [installBlockedReason, issuerQuery.isLoading, serverConfigs]);
@@ -583,12 +602,28 @@ export function useRemoteMcpInstallWorkflow({
       mcpServer: McpServer;
       mcpEndpointUrl?: string;
       authConfigured: boolean;
+      identityConfiguration?: ConfigureCreatedIdentityResult;
       iconPersistence: Promise<boolean>;
     }> => {
       if (isFigmaCatalogServer(target.server)) {
         return installUnproxiedTarget(client, target, reqOpts);
       }
 
+      const probe = await client.remoteMcp.probeURL(
+        { probeURLForm: { url: target.remote.url } },
+        undefined,
+        reqOpts,
+      );
+      if (
+        probe.outcome === "unreachable" ||
+        probe.outcome === "invalid_mcp_response"
+      ) {
+        throw new Error(
+          probe.outcome === "unreachable"
+            ? "The Remote MCP server is unreachable."
+            : "The URL did not return a valid MCP response.",
+        );
+      }
       const remoteMcpServer = await client.remoteMcp.createServer(
         {
           createServerForm: {
@@ -612,11 +647,8 @@ export function useRemoteMcpInstallWorkflow({
               // Catalog installs are noninteractive, so prefer the first
               // organization issuer and retain the project-specific fallback
               // when the organization has none.
-              // Private (user-session gated) rather than the sources flow's
-              // "disabled": catalog installs promise a usable server, and the
-              // pre-staged endpoint must actually serve. Public would expose
-              // any stored upstream API-key headers to anyone with the URL.
-              visibility: "private",
+              // Identity setup is completed before this is made available.
+              visibility: "disabled",
             },
           },
           undefined,
@@ -685,22 +717,26 @@ export function useRemoteMcpInstallWorkflow({
         reqOpts,
       );
 
-      const authAutoConfig = await autoConfigureRemoteMcpAuth({
+      const identityConfiguration = await configureCreatedRemoteMcpIdentity({
         client,
-        authedFetch,
         remoteMcpServer,
         mcpServer,
-        isPlatformAdmin,
-        projectSlug: targetProjectSlug,
+        identityMode: target.identityMode,
+        // Already the whole header value: the credential form assembles the
+        // Bearer/Basic prefix so the operator can see exactly what is sent.
+        agentAuthorization:
+          target.identityMode === "agent"
+            ? target.agentAuthorization.trim()
+            : undefined,
         // Organization issuers are administered at the organization level;
-        // auto-config must not attach this project's upstream client to one.
+        // setup must not attach this project's upstream client to one.
         organizationOwnedUserSessionIssuer:
           defaultOrganizationIssuerId !== undefined,
         options: reqOpts,
       });
       const configuredMcpServer =
-        authAutoConfig.status === "configured"
-          ? authAutoConfig.mcpServer
+        identityConfiguration.status === "configured"
+          ? identityConfiguration.mcpServer
           : mcpServer;
 
       // Pre-stage a default endpoint so the user doesn't have to create one
@@ -722,18 +758,12 @@ export function useRemoteMcpInstallWorkflow({
         mcpEndpointUrl: endpoint
           ? `${getServerURL()}/mcp/${endpoint.slug}`
           : undefined,
-        authConfigured: authAutoConfig.status === "configured",
+        authConfigured: !!identityConfiguration.userIdentity?.status,
+        identityConfiguration,
         iconPersistence,
       };
     },
-    [
-      authedFetch,
-      client,
-      defaultOrganizationIssuerId,
-      isPlatformAdmin,
-      orgSlug,
-      targetProjectSlug,
-    ],
+    [client, defaultOrganizationIssuerId, orgSlug],
   );
 
   const startInstall = useCallback(async () => {
@@ -790,11 +820,21 @@ export function useRemoteMcpInstallWorkflow({
         iconPersistences.push(result.iconPersistence);
         anyAuthConfigured ||= result.authConfigured;
         anyUnproxiedInstalled ||= isFigmaCatalogServer(target.server);
+        const identitySetupRequired =
+          result.identityConfiguration?.status === "setup-required";
         setStatusAt(index, {
-          status: "completed",
+          status: identitySetupRequired ? "failed" : "completed",
           mcpServerId: result.mcpServer.id,
           mcpServerParam: mcpServerRouteParam(result.mcpServer),
           mcpEndpointUrl: result.mcpEndpointUrl,
+          error:
+            result.identityConfiguration?.status === "setup-required"
+              ? `Server retained disabled. ${result.identityConfiguration.message}`
+              : undefined,
+          setupRequired:
+            result.identityConfiguration?.status === "setup-required"
+              ? result.identityConfiguration.message
+              : undefined,
         });
       } catch (err) {
         setStatusAt(index, {

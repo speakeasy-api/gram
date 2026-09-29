@@ -159,14 +159,6 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 		projectIDs = append(projectIDs, p.ID.String())
 	}
 
-	// The worker may be started without a ClickHouse connection (see
-	// NewActivities); fail the activity loudly rather than dereferencing a nil
-	// repo, so the scheduled sweep surfaces the misconfiguration instead of
-	// panicking the worker.
-	if a.chQueries == nil {
-		return fmt.Errorf("spend rule evaluation requires a ClickHouse connection")
-	}
-
 	actorWindowSpend, err := chrepo.LoadActorWindowSpend(ctx, a.chQueries, projectIDs, now)
 	if err != nil {
 		return fmt.Errorf("load actor window spend: %w", err)
@@ -227,10 +219,6 @@ func (a *EvaluateOrg) RefreshActor(ctx context.Context, args EvaluateActorArgs) 
 	actor, ok := findActor(actors, args.UserID, args.Email)
 	if !ok || actor.UserID == "" {
 		return nil
-	}
-
-	if a.chQueries == nil {
-		return fmt.Errorf("spend rule actor refresh requires a ClickHouse connection")
 	}
 
 	projects, err := projectsRepo.New(a.db).ListProjectsByOrganization(ctx, args.OrganizationID)

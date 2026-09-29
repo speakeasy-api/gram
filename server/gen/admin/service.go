@@ -211,6 +211,20 @@ type Service interface {
 	GetSupportMatrix(context.Context, *GetSupportMatrixPayload) (res *SupportMatrix, err error)
 	// Save coverage against the last read revision; rejects concurrent changes.
 	UpdateSupportMatrix(context.Context, *UpdateSupportMatrixPayload) (res *SupportMatrix, err error)
+	// Observed support coverage for one organization: per-surface evidence for
+	// session activity, policy enforcement, identity attribution, token usage and
+	// shadow MCP exposure.
+	GetSupportCoverage(context.Context, *GetSupportCoveragePayload) (res *SupportCoverageResult, err error)
+	// Staff-only registry administration.
+	ListRegistryEntries(context.Context, *ListRegistryEntriesPayload) (res *AdminRegistryPage, err error)
+	// Staff-only registry administration.
+	GetRegistryEntry(context.Context, *GetRegistryEntryPayload) (res *AdminRegistryEntry, err error)
+	// Staff-only registry administration.
+	CreateRegistryEntry(context.Context, *CreateRegistryEntryPayload) (res *AdminRegistryEntry, err error)
+	// Staff-only registry administration.
+	SaveRegistryEntry(context.Context, *SaveRegistryEntryPayload) (res *AdminRegistryEntry, err error)
+	// Staff-only registry administration.
+	SetRegistryEntryPublished(context.Context, *SetRegistryEntryPublishedPayload) (res *AdminRegistryEntry, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -233,7 +247,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [56]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix"}
+var MethodNames = [62]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -394,6 +408,7 @@ type AdminOnboardingConfiguration struct {
 
 type AdminOnboardingPreset struct {
 	Key             string
+	Title           string
 	VisibleTaskKeys []string
 }
 
@@ -417,6 +432,10 @@ type AdminOrganization struct {
 	AccountType string
 	// WorkOS organization ID, if linked.
 	WorkosID *string
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string
 	// Current Stripe subscription ID, if subscribed.
@@ -539,6 +558,39 @@ type AdminProjectDetail struct {
 	AssistantCount int
 	CreatedAt      string
 	UpdatedAt      string
+}
+
+// AdminRegistryEntry is the result type of the admin service getRegistryEntry
+// method.
+type AdminRegistryEntry struct {
+	ID string
+	// Complete lossless registry record JSON
+	DataJSON  string
+	Published bool
+	CreatedAt string
+	// Opaque write precondition; echo unchanged
+	UpdatedAt string
+	Issues    []*AdminRegistryIssue
+}
+
+type AdminRegistryIssue struct {
+	Path    string
+	Message string
+}
+
+// AdminRegistryPage is the result type of the admin service
+// listRegistryEntries method.
+type AdminRegistryPage struct {
+	Entries    []*AdminRegistrySummary
+	NextCursor *string
+}
+
+type AdminRegistrySummary struct {
+	ID        string
+	Name      string
+	Published bool
+	UpdatedAt string
+	Issues    []*AdminRegistryIssue
 }
 
 // AdminSession is the result type of the admin service getSession method.
@@ -792,6 +844,15 @@ type CreateOrganizationPayload struct {
 	OwnershipConfirmed bool
 }
 
+// CreateRegistryEntryPayload is the payload type of the admin service
+// createRegistryEntry method.
+type CreateRegistryEntryPayload struct {
+	AdminSessionToken *string
+	// Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced
+	// by the server on incoming writes. Stored records remain readable for repair.
+	DataJSON string
+}
+
 // DeleteGlobalIssuerPayload is the payload type of the admin service
 // deleteGlobalIssuer method.
 type DeleteGlobalIssuerPayload struct {
@@ -943,6 +1004,13 @@ type GetProjectPayload struct {
 	OrganizationIDOrSlug *string
 }
 
+// GetRegistryEntryPayload is the payload type of the admin service
+// getRegistryEntry method.
+type GetRegistryEntryPayload struct {
+	AdminSessionToken *string
+	ID                string
+}
+
 // GetSessionPayload is the payload type of the admin service getSession method.
 type GetSessionPayload struct {
 	AdminSessionToken *string
@@ -975,6 +1043,16 @@ type GetStripeCustomerPayload struct {
 type GetStripeSubscriptionPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// GetSupportCoveragePayload is the payload type of the admin service
+// getSupportCoverage method.
+type GetSupportCoveragePayload struct {
+	AdminSessionToken *string
+	// Organization to report coverage for.
+	OrganizationID string
+	// Observation window in days.
+	WindowDays int
 }
 
 // GetSupportMatrixPayload is the payload type of the admin service
@@ -1205,6 +1283,20 @@ type ListProjectMcpServersPayload struct {
 	ProjectID string
 }
 
+// ListRegistryEntriesPayload is the payload type of the admin service
+// listRegistryEntries method.
+type ListRegistryEntriesPayload struct {
+	AdminSessionToken *string
+	// Search query; at most 1024 UTF-8 bytes (enforced by the server).
+	Query     *string
+	Published *bool
+	// Opaque continuation cursor from next_cursor; at most 8192 UTF-8 bytes
+	// (enforced by the server).
+	Cursor *string
+	// Page size; zero uses the server default of 25.
+	Limit *int32
+}
+
 // LoginPayload is the payload type of the admin service login method.
 type LoginPayload struct {
 	// Optional URL to return the user to after login. Relative paths and absolute
@@ -1368,6 +1460,17 @@ type ResumeStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// SaveRegistryEntryPayload is the payload type of the admin service
+// saveRegistryEntry method.
+type SaveRegistryEntryPayload struct {
+	AdminSessionToken *string
+	ID                string
+	UpdatedAt         string
+	// Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced
+	// by the server on incoming writes. Stored records remain readable for repair.
+	DataJSON string
+}
+
 // ServeImageForm is the payload type of the admin service serveImage method.
 type ServeImageForm struct {
 	// The ID of the asset to serve
@@ -1418,8 +1521,18 @@ type SetOrganizationOnboardingPayload struct {
 	OrganizationID    string
 	// Complete explicit selection; an empty array selects no tasks.
 	VisibleTaskKeys []string
-	// Omit to preserve the saved preset. Null/reset is not supported.
+	// A key from presets. Omit to preserve the saved preset. Null/reset is not
+	// supported.
 	Preset *string
+}
+
+// SetRegistryEntryPublishedPayload is the payload type of the admin service
+// setRegistryEntryPublished method.
+type SetRegistryEntryPublishedPayload struct {
+	AdminSessionToken *string
+	ID                string
+	UpdatedAt         string
+	Published         bool
 }
 
 // SetStripeCustomerPayload is the payload type of the admin service
@@ -1470,6 +1583,48 @@ type SupportCapability struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Group string `json:"group"`
+}
+
+// Observed evidence for one capability on one surface.
+type SupportCoverageCell struct {
+	// Capability the cell reports on.
+	Capability string
+	// Consuming surface the cell reports on.
+	Surface string
+	// Whether evidence was found, absent, or not answerable yet.
+	Status string
+	// Primary measure: sessions, tokens, blocks, attributed sessions or distinct
+	// shadow servers depending on the capability. Zero unless observed.
+	Value int64
+	// Short qualifier rendered under the value. Empty when there is nothing to
+	// qualify.
+	Detail string
+	// RFC3339 timestamp of the most recent supporting evidence. Absent unless
+	// observed.
+	LastSeen *string
+}
+
+// SupportCoverageResult is the result type of the admin service
+// getSupportCoverage method.
+type SupportCoverageResult struct {
+	// One cell per (capability, surface) pair. Always fully populated.
+	Cells []*SupportCoverageCell
+	// Activity whose hook_source folded to no surface.
+	Unmapped []*SupportCoverageUnmapped
+	// Length of the observation window in days.
+	WindowDays int
+	// RFC3339 start of the observation window.
+	From string
+	// RFC3339 end of the observation window.
+	To string
+}
+
+// A hook_source the surface fold did not recognize.
+type SupportCoverageUnmapped struct {
+	// The raw, unrecognized hook_source.
+	HookSource string
+	// Sessions observed under it inside the window.
+	Sessions int64
 }
 
 type SupportDraft struct {

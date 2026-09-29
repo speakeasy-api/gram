@@ -11,6 +11,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -19,9 +21,10 @@ import (
 )
 
 type tunnelManager struct {
-	routes       route.Store
-	forwardToken string
-	proxyManager *remotemcp.ProxyManager
+	routes           route.Store
+	forwardToken     string
+	proxyManager     *remotemcp.ProxyManager
+	callerAssertions *mcpauthz.Issuer
 	// gatewayCIDRs are the CIDR blocks tunnel gateway advertise addresses live
 	// in (typically the cluster pod range). They are allowlisted past the
 	// guardian egress policy for tunnel forwards only — gateway addresses come
@@ -31,33 +34,57 @@ type tunnelManager struct {
 	gatewayCIDRs []string
 }
 
-func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string) *tunnelManager {
+func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string, callerAssertions *mcpauthz.Issuer) *tunnelManager {
 	return &tunnelManager{
-		routes:       routes,
-		forwardToken: forwardToken,
-		proxyManager: proxyManager,
-		gatewayCIDRs: gatewayCIDRs,
+		routes:           routes,
+		forwardToken:     forwardToken,
+		proxyManager:     proxyManager,
+		gatewayCIDRs:     gatewayCIDRs,
+		callerAssertions: callerAssertions,
 	}
 }
 
+type buildProxyParams struct {
+	// ClientAffinityKey pins route selection, forwarding headers, and retry to
+	// a stable client identity: runtime callers derive it from the request,
+	// while consent-time enumeration derives it from the challenge state so
+	// every request of one enumeration session lands on the same gateway.
+	ClientAffinityKey string
+
+	// ProjectID is the destination server's project.
+	ProjectID uuid.UUID
+
+	// OrganizationID is the destination server's owning organization.
+	OrganizationID string
+
+	// MCPServer is the tunneled destination server.
+	MCPServer *mcpserversrepo.McpServer
+
+	// ResourceIdentifier is the saved audience for caller assertions; empty
+	// uses the tunneled server ID.
+	ResourceIdentifier string
+
+	// UpstreamAuth is the Authorization value forwarded upstream. Empty
+	// forwards none; the incoming Authorization header is always dropped.
+	UpstreamAuth string
+
+	// WWWAuthenticate replaces the upstream's challenge on 401/403. Empty
+	// relays the upstream challenge verbatim.
+	WWWAuthenticate string
+
+	// Selection restricts the tools exposed through this proxy.
+	Selection *toolfilter.SessionSelection
+}
+
 // buildProxy constructs the tunnel-backed proxy for one request.
-// clientAffinityKey pins route selection, forwarding headers, and retry to a
-// stable client identity: runtime callers derive it from the request, while
-// consent-time enumeration derives it from the challenge state so every
-// request of one enumeration session lands on the same gateway.
 func (m *tunnelManager) buildProxy(
 	ctx context.Context,
-	clientAffinityKey string,
 	logger *slog.Logger,
-	projectID uuid.UUID,
-	organizationID string,
-	mcpServer *mcpserversrepo.McpServer,
-	upstreamAuth string,
-	wwwAuthenticate string,
-	selection *toolfilter.SessionSelection,
+	params buildProxyParams,
 	options ...remotemcp.BuildOption,
 ) (*proxy.Proxy, error) {
-	if m == nil || m.proxyManager == nil {
+	mcpServer := params.MCPServer
+	if m.proxyManager == nil {
 		return nil, oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
 	}
 
@@ -70,7 +97,7 @@ func (m *tunnelManager) buildProxy(
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "list tunnel routes").LogError(ctx, logger)
 	}
-	addr, ok := tunnelrouting.SelectRoute(clientAffinityKey, candidates, nil)
+	addr, ok := tunnelrouting.SelectRoute(params.ClientAffinityKey, candidates, nil)
 	if !ok {
 		// Nowhere to route the request. Tunnel outages are likely customer-side
 		// rather than something the platform administrators can control. While
@@ -96,16 +123,27 @@ func (m *tunnelManager) buildProxy(
 			MetaMCPServerID:     "",
 		},
 		gatewayURL,
-		tunnelrouting.Headers(tunnelID, m.forwardToken, clientAffinityKey),
+		tunnelrouting.Headers(tunnelID, m.forwardToken, params.ClientAffinityKey),
 		mcpServer.Visibility,
-		organizationID,
-		projectID.String(),
-		upstreamAuth,
-		wwwAuthenticate,
-		selection,
+		params.OrganizationID,
+		params.ProjectID.String(),
+		params.UpstreamAuth,
+		params.WWWAuthenticate,
+		params.Selection,
 		options...,
 	)
-	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
+	if mcpServer.Visibility == mcpservers.VisibilityPrivate {
+		target := mcpauthz.Target{
+			OrganizationID:     params.OrganizationID,
+			ProjectID:          params.ProjectID,
+			TunnelID:           mcpServer.TunneledMcpServerID.UUID,
+			ResourceIdentifier: params.ResourceIdentifier,
+		}
+		p.CallerAssertion = func(ctx context.Context) (string, error) {
+			return m.callerAssertions.Mint(ctx, target)
+		}
+	}
+	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, params.ClientAffinityKey, m.forwardToken)
 	p.UpstreamResponseInterceptor = func(_ context.Context, resp *http.Response) error {
 		if rejection := tunnelrouting.GatewayFailureRejection(resp); rejection != nil {
 			return rejection

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Interactive TUI over `wt status`: live boot states, per-worktree logs, multi-select remove"
 //MISE dir="{{ config_root }}"
@@ -17,6 +17,7 @@
 
 import { execFile as execFileCb, spawn } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -217,6 +218,32 @@ async function bootState(
   return "";
 }
 
+// `wt list` builds its URL from the per-branch `siteport` var, which a plain
+// `git checkout` inside the worktree leaves behind (falling back to :5173).
+// The port itself belongs to the worktree: `zero:remap-ports` writes it to
+// mise.local.toml, and the parker listens on it. Read it from there.
+function sitePort(wtPath: string): string | undefined {
+  try {
+    const toml = fs.readFileSync(path.join(wtPath, "mise.local.toml"), "utf8");
+    return /^\s*GRAM_SITE_PORT\s*=\s*"?(\d+)"?/m.exec(toml)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function listening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: "127.0.0.1", port });
+    const done = (up: boolean) => {
+      socket.destroy();
+      resolve(up);
+    };
+    socket.setTimeout(1000, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
 async function collect(): Promise<Row[]> {
   const { stdout } = await execFile(
     "wt",
@@ -229,21 +256,25 @@ async function collect(): Promise<Row[]> {
   const rows: Row[] = [];
   for (const item of list) {
     if (!item.url) continue;
+    const port = sitePort(item.path);
+    const url = port ? `https://localhost:${port}` : item.url;
+    const urlActive =
+      url === item.url ? !!item.url_active : await listening(Number(port));
     const boot = await bootState(item.path);
     let state: string;
-    if (boot === "booting") state = item.url_active ? "seeding" : "booting";
+    if (boot === "booting") state = urlActive ? "seeding" : "booting";
     else if (boot === "failed") state = "failed";
-    // Outranks url_active: a paused worktree's site port is held by the
+    // Outranks urlActive: a paused worktree's site port is held by the
     // parker (`mise run park`), which answers with a wake page, not the
     // dashboard.
     else if (boot === "paused") state = "paused";
-    else state = item.url_active ? "up" : "down";
+    else state = urlActive ? "up" : "down";
     rows.push({
       branch: item.branch,
       path: item.path,
       isCurrent: !!item.is_current,
-      url: item.url,
-      urlActive: !!item.url_active,
+      url,
+      urlActive,
       state,
       dirty: !!(
         item.working_tree &&

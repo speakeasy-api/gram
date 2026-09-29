@@ -71,6 +71,10 @@ func logGlobalMutation(ctx context.Context, logger *slog.Logger, authCtx globalA
 // CreateGlobalIssuer creates a global remote_session_issuer (project_id NULL,
 // organization_id NULL), reusing CreateRemoteSessionIssuer with NULL scoping.
 func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.CreateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
+	return s.createGlobalIssuer(ctx, payload, nil)
+}
+
+func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.CreateGlobalIssuerPayload, callerTx pgx.Tx) (*types.RemoteSessionIssuer, error) {
 	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -123,11 +127,15 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	dbtx := callerTx
+	if dbtx == nil {
+		ownTx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+		}
+		defer o11y.NoLogDefer(func() error { return ownTx.Rollback(ctx) })
+		dbtx = ownTx
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	issuer, err := repo.New(dbtx).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -180,6 +188,10 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 			return nil, oops.E(oops.CodeConflict, err, "a global issuer with this slug already exists").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session issuer").LogError(ctx, logger)
+	}
+
+	if callerTx != nil {
+		return mv.BuildRemoteSessionIssuerView(issuer), nil
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -309,6 +321,10 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 
 // UpdateGlobalIssuer patches a global remote_session_issuer.
 func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload) (*types.RemoteSessionIssuer, error) {
+	return s.updateGlobalIssuer(ctx, payload, nil)
+}
+
+func (s *Service) updateGlobalIssuer(ctx context.Context, payload *adminrsgen.UpdateGlobalIssuerPayload, callerTx pgx.Tx) (*types.RemoteSessionIssuer, error) {
 	authCtx, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
 		return nil, err
@@ -384,11 +400,15 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider URL").LogError(ctx, logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	dbtx := callerTx
+	if dbtx == nil {
+		ownTx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+		}
+		defer o11y.NoLogDefer(func() error { return ownTx.Rollback(ctx) })
+		dbtx = ownTx
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
 	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
@@ -461,6 +481,10 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 			return nil, oops.E(oops.CodeBadRequest, err, "update would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "validate clients that trust global remote session issuer").LogError(ctx, logger)
+	}
+
+	if callerTx != nil {
+		return mv.BuildRemoteSessionIssuerView(updated), nil
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

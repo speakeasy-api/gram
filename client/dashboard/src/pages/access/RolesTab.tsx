@@ -33,6 +33,7 @@ import type { Action } from "@/components/ui/MoreActions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
+import { allMemberRoleIds } from "@/lib/member-roles";
 
 // Single source of truth for the per-role actions: the "⋯" dropdown and the
 // row's right-click context menu both render from this list. Edit always;
@@ -105,6 +106,7 @@ type RowMember = {
   email: string;
   photoUrl?: string;
   roleIds: string[];
+  directoryRoleIds: string[];
 };
 
 function RoleRow({
@@ -121,7 +123,7 @@ function RoleRow({
   onDelete: () => void;
 }): JSX.Element {
   const roleMembers = members
-    .filter((m) => m.roleIds.includes(role.id))
+    .filter((m) => allMemberRoleIds(m).includes(role.id))
     .map((m) => ({
       id: m.id,
       name: m.name,

@@ -274,12 +274,11 @@ Tasks may define inputs as flags. It is CRITICAL that you leverage flags and not
 Many of the aspects of task configuration for bash tasks also apply to TypeScript tasks. The main things to change over:
 
 - All typescript tasks in `.mise-tasks/**/*.mts` must end in `.mts`
-- All typescript tasks must use the shebang: `#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types`
 
 The general layout of a TypeScript task should look like this:
 
 ```ts
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Description of the task goes here"
 //MISE dir="{{ config_root }}"

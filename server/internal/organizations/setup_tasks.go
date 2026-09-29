@@ -35,10 +35,6 @@ const (
 	setupTaskStatusDone            = "done"
 )
 
-// setupDomainCheckTimeout bounds the live WorkOS domain check that
-// ListSetupTasks runs for orgs with no stored verified domains.
-const setupDomainCheckTimeout = 3 * time.Second
-
 type setupTaskDefinition struct {
 	Key           string
 	Title         string
@@ -49,22 +45,30 @@ type setupTaskDefinition struct {
 	HiddenByDefault bool
 }
 
+// setupTaskCatalog lists every setup card in wizard order. To add a card:
+//  1. Add an entry here (usually HiddenByDefault: true).
+//  2. Add its content to SETUP_CARDS in client/dashboard/src/pages/setup/setup-cards.tsx.
+//  3. Add its key to any onboardingPresets entry that should show it.
+//  4. Optionally mark it done from organization facts in projectSetupTasks.
+//
+// Tests on both sides fail if the catalog, SETUP_CARDS, and presets disagree.
 var setupTaskCatalog = []setupTaskDefinition{
-	{Key: "domain-verification", Title: "Verify your domain", Description: "Prove the organization owns its email domain. Single sign-on cannot be set up until a domain is verified.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "connect-idp", Title: "Connect identity provider", Description: "Configure single sign-on for the organization.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: true},
-	{Key: "directory-sync", Title: "Set up directory sync", Description: "Sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: false},
+	// Identity
+	{Key: "identity-provider", Title: "Set up identity provider", Description: "Verify a domain, connect single sign-on, and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false},
+	// Observe
+	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: true},
-	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: true},
-	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: false},
+	// Distribute
+	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: false},
+	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: false},
+	// Secure
+	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: false},
 }
 
 var validSetupTaskStatuses = []string{
@@ -84,25 +88,6 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 	}
 
 	repo := orgrepo.New(s.db)
-	org, err := repo.GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get organization for setup tasks").LogError(ctx, s.logger)
-	}
-	// Orgs verified in WorkOS before the event sync tracked domains have an
-	// empty stored list. Filling it here keeps the identity provider card
-	// from showing blocked until someone opens the onboarding status. Active
-	// SSO already completes the domain task, so it needs no check.
-	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
-	// The check is best effort, so a slow WorkOS cannot hold up the board.
-	if workosOrgID != "" && !org.SsoEnabled.Bool {
-		refreshCtx, cancel := context.WithTimeout(ctx, setupDomainCheckTimeout)
-		_, err := s.refreshVerifiedDomains(refreshCtx, org.ID, workosOrgID, org.VerifiedDomains)
-		cancel()
-		if err != nil {
-			s.logger.WarnContext(ctx, "setup tasks: check domain verification", attr.SlogError(err), attr.SlogWorkOSOrganizationID(workosOrgID))
-		}
-	}
-
 	tasks, err := projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks").LogError(ctx, s.logger)
@@ -365,16 +350,8 @@ func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationI
 		// who skips directory sync marks the card done by hand.
 		var completedByFact bool
 		switch definition.Key {
-		case "domain-verification":
-			// An active SSO connection proves a domain was verified, even for
-			// orgs set up before verified_domains was tracked.
-			completedByFact = facts.DomainVerified || facts.SsoConfigured
 		case "identity-provider":
 			completedByFact = facts.SsoConfigured && facts.DsyncConfigured
-		case "connect-idp":
-			completedByFact = facts.SsoConfigured
-		case "directory-sync":
-			completedByFact = facts.DsyncConfigured
 		case "create-marketplace":
 			completedByFact = facts.MarketplacePublished
 		case "enable-logging":
@@ -479,4 +456,27 @@ func setupTaskAuditSnapshot(task *gen.SetupTask) *audit.OrganizationSetupTaskSna
 		Key: task.Key, Title: task.Title, Description: task.Description, Status: task.Status,
 		Assignee: assignee, BlockedBy: task.BlockedBy, Hidden: task.Hidden,
 	}
+}
+
+// SubmitOnboardingSurvey applies the default playbook for the survey's use
+// case through the same path staff use in the admin dashboard. Callers never
+// pick tasks.
+func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.SubmitOnboardingSurveyPayload) (*gen.ListSetupTasksResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	preset := defaultPlaybookForUseCase(payload.UseCase)
+	if preset == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unknown onboarding use case").LogError(ctx, s.logger)
+	}
+	presetKey := preset.Key
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
+	if _, err := SaveOnboardingConfiguration(ctx, s.db, s.audit, ac.ActiveOrganizationID, preset.TaskKeys, &presetKey, actor, ac.Email); err != nil {
+		return nil, fmt.Errorf("save onboarding survey result: %w", err)
+	}
+	return s.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: nil, SessionToken: payload.SessionToken})
 }

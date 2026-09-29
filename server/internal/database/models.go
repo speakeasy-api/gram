@@ -82,6 +82,50 @@ type AdminMcpSession struct {
 	UpdatedAt            pgtype.Timestamptz
 }
 
+type AdminMcpWriteEvent struct {
+	ID            uuid.UUID
+	ProposalID    uuid.NullUUID
+	SubjectUrn    string
+	OauthClientID uuid.NullUUID
+	Event         string
+	ReasonCode    pgtype.Text
+	RequestID     pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type AdminMcpWriteProposal struct {
+	ID                     uuid.UUID
+	SubjectUrn             string
+	OauthClientID          uuid.UUID
+	ConnectionID           uuid.UUID
+	ConnectionGeneration   uuid.UUID
+	Operation              string
+	OperationSchemaVersion int32
+	PlatformGlobal         bool
+	OrganizationID         pgtype.Text
+	ProjectID              uuid.NullUUID
+	ResourceKind           pgtype.Text
+	ResourceID             pgtype.Text
+	IdempotencyKey         string
+	Arguments              []byte
+	ExpectedStateDigest    string
+	ProposalDigest         string
+	Preview                []byte
+	Status                 string
+	ExpiresAt              pgtype.Timestamptz
+	ApprovedBySubjectUrn   pgtype.Text
+	ApprovedAt             pgtype.Timestamptz
+	RejectedAt             pgtype.Timestamptz
+	InvalidatedAt          pgtype.Timestamptz
+	InvalidationReason     pgtype.Text
+	ExecutedAt             pgtype.Timestamptz
+	ResultCode             pgtype.Text
+	ResultPayload          []byte
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+}
+
 type Agent struct {
 	ID                          uuid.UUID
 	OrganizationID              string
@@ -856,6 +900,20 @@ type DirectoryGroup struct {
 	WorkosDeletedAt        pgtype.Timestamptz
 	WorkosDeleted          bool
 	WorkosLastEventID      pgtype.Text
+}
+
+type DirectoryRoleMapping struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+	AttributeKey     pgtype.Text
+	AttributeValue   pgtype.Text
+	RoleUrn          string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type DirectoryUser struct {
@@ -2549,6 +2607,31 @@ type RemoteSessionEmaBinding struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
+type RemoteSessionEmaCredential struct {
+	ID                             uuid.UUID
+	OrganizationID                 pgtype.Text
+	ProjectID                      uuid.NullUUID
+	UserSessionIssuerID            uuid.NullUUID
+	RemoteSessionIssuerID          uuid.NullUUID
+	RemoteSessionClientID          uuid.NullUUID
+	Resource                       string
+	SubjectUrn                     string
+	ClientSelection                string
+	RemoteSessionEmaBindingID      uuid.NullUUID
+	EmaBindingGeneration           pgtype.Int8
+	TrustedIssuerSessionID         uuid.NullUUID
+	RequestedScopes                []string
+	GrantedScopes                  []string
+	AccessTokenEncrypted           pgtype.Text
+	AccessExpiresAt                pgtype.Timestamptz
+	DownstreamRefreshTokenObserved bool
+	LastUsedAt                     pgtype.Timestamptz
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+	DeletedAt                      pgtype.Timestamptz
+	Deleted                        bool
+}
+
 type RemoteSessionIssuer struct {
 	ID                                         uuid.UUID
 	ProjectID                                  uuid.NullUUID
@@ -3007,6 +3090,54 @@ type SlackAppToolset struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type SlackDirectoryConnection struct {
+	ID                      uuid.UUID
+	OrganizationID          string
+	SlackTeamID             string
+	SlackTeamName           pgtype.Text
+	CredentialsEncrypted    pgtype.Text
+	GrantedScopes           []string
+	Generation              uuid.UUID
+	Health                  string
+	DisconnectedAt          pgtype.Timestamptz
+	LastSyncStartedAt       pgtype.Timestamptz
+	LastFullSyncGeneration  uuid.NullUUID
+	LastFullSyncSucceededAt pgtype.Timestamptz
+	LastSyncFailedAt        pgtype.Timestamptz
+	LastErrorCode           pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
+type SlackDirectoryMembership struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	SlackTeamID               string
+	SlackUserID               string
+	DisplayName               pgtype.Text
+	Email                     pgtype.Text
+	Status                    string
+	MemberType                string
+	ProviderUpdatedAt         pgtype.Timestamptz
+	LastSeenAt                pgtype.Timestamptz
+	MappingRevision           int64
+	MappingConflictReason     pgtype.Text
+	MappingConflictDetectedAt pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+type SlackIdentityMapping struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SlackTeamID    string
+	SlackUserID    string
+	UserID         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
+}
+
 type SlackRegistration struct {
 	ID             uuid.UUID
 	SlackAppID     uuid.UUID
@@ -3395,6 +3526,21 @@ type TriggerInstance struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type TriggerThreadRoute struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	TargetKind           string
+	TargetRef            string
+	CorrelationID        string
+	RouteToCorrelationID pgtype.Text
+	State                string
+	LastSeenCursor       pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 type TrustedIssuerSession struct {

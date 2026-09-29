@@ -31,7 +31,7 @@ func TestListProjectsDescriptionDoesNotAdvertiseHiddenResourceSignals(t *testing
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
@@ -227,7 +227,7 @@ func TestExternalResourceRegistrationRequiresAuthorizationPolicy(t *testing.T) {
 func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	byName := map[string]ExternalAuthorization{}
 	for _, descriptor := range registrar.For(AudienceExternal) {
 		require.Contains(t, []ExternalAuthorization{ExternalAuthorizationMember, ExternalAuthorizationOrgAdmin}, descriptor.Meta.Authorization, descriptor.Name)
@@ -236,15 +236,16 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	for _, name := range []string{
 		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
 		"request_mcp_review", "get_my_mcp_review_request",
-		"get_project_overview", "get_mcp_diagnostics", "list_recent_tool_calls",
+		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls",
 		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
-		"create_skill", "add_skill_version", "update_skill_metadata",
+		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
 		"list_my_sessions", "continue_session",
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
 	}
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["distribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["undistribute_skill"])
 	for _, resource := range registrar.resources {
 		if resource.Meta.servesAudience(AudienceExternal) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
@@ -388,23 +389,23 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
 		admitted[descriptor.Name] = true
 	}
 
-	// Named-plugin distribution is intentionally unavailable until
-	// compatibility deployment. Session recall stays external-only because it
-	// contains user-personal cross-project transcripts. Data exports stay
-	// external-only because creation can send future project data off-platform.
+	// Named-plugin distribution and assignment changes are intentionally
+	// unavailable until compatibility deployment. Session recall stays
+	// external-only because it contains user-personal cross-project
+	// transcripts. Data exports stay external-only because creation can send
+	// future project data off-platform. Network ingress status stays with
+	// connection-scoped org administration.
 	for _, name := range []string{
+		"get_network_ingress",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
-		"list_plugin_assignments",
-		"list_plugins",
-		"get_plugin",
 		operationSetPluginAssignments,
 		"list_my_sessions",
 		"continue_session",
@@ -417,13 +418,18 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// The reads, registration paths, and persisted readiness projections are
 	// connection-less end to end. get_setup_handoff is admitted because the
 	// handoff only carries the caller to the dashboard, which completes setup
-	// under its own session.
+	// under its own session. Plugin reads are admitted so the assistant can
+	// resolve a plugin by name before distributing a skill to it.
 	for _, name := range []string{
 		"get_platform_context",
 		"list_projects",
 		"find_mcp",
 		"get_mcp",
+		"list_plugins",
+		"get_plugin",
+		"list_plugin_assignments",
 		"list_recent_tool_calls",
+		"get_tool_usage_summary",
 		"list_organization_events",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
@@ -446,10 +452,16 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_watchdog_findings",
 		"list_risk_presets",
 		"suggest_risk_policy",
+		"list_risk_findings",
+		"list_risk_findings_by_chat",
+		"get_risk_rule_breakdown",
 		"create_risk_policy",
 		"update_risk_policy",
 		"create_risk_exclusion",
 		"update_risk_exclusion",
+		"list_access_members",
+		"mark_risk_findings_false_positive",
+		"unmark_risk_findings_false_positive",
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
@@ -461,7 +473,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 

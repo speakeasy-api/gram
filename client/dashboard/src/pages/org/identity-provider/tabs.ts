@@ -1,4 +1,8 @@
-export const IDENTITY_TABS = ["sso", "enterprise-managed-auth"] as const;
+export const IDENTITY_TABS = [
+  "sso",
+  "enterprise-managed-auth",
+  "slack-workspaces",
+] as const;
 export type IdentityPageTab = (typeof IDENTITY_TABS)[number];
 
 export const PROVIDER_IDS = ["okta"] as const;

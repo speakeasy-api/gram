@@ -1,17 +1,18 @@
 import type { AriaAttributes, JSX } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useMatchRoute } from "@tanstack/react-router";
+import { DemoOrganizationNavItem } from "@/components/demo-organization-nav-item";
 import {
   BuildingIcon,
   ChevronLeftIcon,
   CreditCardIcon,
   FolderIcon,
   HistoryIcon,
+  LayoutGridIcon,
+  PlugZapIcon,
   ServerIcon,
   SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
-
+import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -21,9 +22,11 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { organizationProjectsQuery } from "@/lib/adminQueries";
+
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
+import { organizationProjectsQuery } from "@/lib/adminQueries";
+import { useQuery } from "@tanstack/react-query";
 
 // Indexed as a plain string record, for the reason `Trial` gives: the server
 // can send a state this build has never heard of.
@@ -114,6 +117,10 @@ export function RecordNav({
   });
   const onFeatures = !!matchRoute({
     to: "/organizations/$idOrSlug/features",
+    params: { idOrSlug },
+  });
+  const onCoverage = !!matchRoute({
+    to: "/organizations/$idOrSlug/coverage",
     params: { idOrSlug },
   });
 
@@ -282,6 +289,23 @@ export function RecordNav({
             </SidebarMenuItem>
 
             <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onCoverage}
+                tooltip="Coverage"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/coverage"
+                  params={{ idOrSlug }}
+                  {...currentProps(onCoverage)}
+                >
+                  <LayoutGridIcon />
+                  <span>Coverage</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={onMembers} tooltip="Members">
                 <Link
                   to="/organizations/$idOrSlug/members"
@@ -296,6 +320,21 @@ export function RecordNav({
                   record. */}
               <SidebarMenuBadge>{org.member_count}</SidebarMenuBadge>
             </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+      <SidebarGroup>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Admin MCP">
+                <Link to="/mcp-setup" {...currentProps(false)}>
+                  <PlugZapIcon />
+                  <span>Admin MCP</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <DemoOrganizationNavItem />
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>

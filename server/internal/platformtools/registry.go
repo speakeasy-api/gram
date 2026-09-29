@@ -54,7 +54,11 @@ var registry = []toolFactory{
 		return platformslack.NewScheduleMessageTool(deps.SlackHTTPClient)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
-		return platformslack.NewSendMessageTool(deps.SlackHTTPClient)
+		var router platformslack.ThreadRouter
+		if deps.TriggerApp != nil {
+			router = deps.TriggerApp
+		}
+		return platformslack.NewSendMessageTool(deps.SlackHTTPClient, router)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewAddReactionTool(deps.SlackHTTPClient)

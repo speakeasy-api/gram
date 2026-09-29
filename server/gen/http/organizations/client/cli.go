@@ -397,3 +397,28 @@ func BuildUpdateSetupTaskPayload(organizationsUpdateSetupTaskBody string, organi
 
 	return v, nil
 }
+
+// BuildSubmitOnboardingSurveyPayload builds the payload for the organizations
+// submitOnboardingSurvey endpoint from CLI flags.
+func BuildSubmitOnboardingSurveyPayload(organizationsSubmitOnboardingSurveyBody string, organizationsSubmitOnboardingSurveySessionToken string) (*organizations.SubmitOnboardingSurveyPayload, error) {
+	var err error
+	var body SubmitOnboardingSurveyRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsSubmitOnboardingSurveyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"use_case\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsSubmitOnboardingSurveySessionToken != "" {
+			sessionToken = &organizationsSubmitOnboardingSurveySessionToken
+		}
+	}
+	v := &organizations.SubmitOnboardingSurveyPayload{
+		UseCase: body.UseCase,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

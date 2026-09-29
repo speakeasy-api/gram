@@ -3,7 +3,6 @@ package platformmcp
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -48,15 +47,12 @@ type RiskFindingsService struct {
 }
 
 func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) *RiskFindingsService {
-	codec, err := newRiskCursorCodec(key)
-	if db == nil || findings == nil || organizations == nil || err != nil {
-		return nil
-	}
+	codec := newRiskCursorCodec(key)
 	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}
 }
 
 func (s *RiskFindingsService) valid() bool {
-	return s != nil && s.projects != nil && s.organizations != nil && s.policies != nil && s.findings != nil && s.cursor != nil && s.now != nil
+	return s != nil
 }
 
 type ListRiskFindingsInput struct {
@@ -171,15 +167,6 @@ func findingLabel(value string) string {
 	}
 	hash := sha256.Sum256([]byte(value))
 	return string(runes) + "…#" + hex.EncodeToString(hash[:8])
-}
-
-func (s *RiskFindingsService) userReference(org, value string) string {
-	if value == "" {
-		return ""
-	}
-	mac := hmac.New(sha256.New, s.cursor.key)
-	_, _ = mac.Write([]byte("watchdog-user:" + org + "\x00" + value))
-	return "user:" + hex.EncodeToString(mac.Sum(nil)[:16])
 }
 
 func (s *RiskFindingsService) List(ctx context.Context, principal Principal, input ListRiskFindingsInput) (ListRiskFindingsOutput, error) {
@@ -301,7 +288,7 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 			for _, bucket := range buckets {
 				value := findingLabel(bucket.Value)
 				if dimension == "user" {
-					value = s.userReference(principal.OrganizationID, bucket.Value)
+					value = riskUserReference(s.cursor.key, principal.OrganizationID, bucket.Value)
 				}
 				byRule[bucket.RuleID] = append(byRule[bucket.RuleID], RiskFindingGroup{Value: value, Count: bucket.Count})
 			}

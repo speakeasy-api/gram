@@ -1,3 +1,4 @@
+import { RiskSetupEmptyState } from "@/components/setup-empty-state";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import {
   StatTile,
@@ -449,6 +450,12 @@ function WatchdogContent(): JSX.Element {
               </div>
               <SignalsBody
                 isLoading={signalsQuery.isLoading}
+                filtered={
+                  severityFilter.length > 0 ||
+                  categoryFilter.length > 0 ||
+                  ["15m", "1h", "4h"].includes(dateRange) ||
+                  !!customRange
+                }
                 groups={groups}
                 groupMode={groupMode}
                 selectedSignalKey={selectedSignalKey}
@@ -704,6 +711,7 @@ function KPIRow({
 
 function SignalsBody({
   isLoading,
+  filtered,
   groups,
   groupMode,
   selectedSignalKey,
@@ -711,6 +719,7 @@ function SignalsBody({
   onSelect,
 }: {
   isLoading: boolean;
+  filtered: boolean;
   groups: ReturnType<typeof groupSignals>;
   groupMode: SignalGroupMode;
   selectedSignalKey: string | null;
@@ -728,13 +737,7 @@ function SignalsBody({
   }
   if (groups.length === 0) {
     return (
-      <div className="bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-8 py-16 text-center">
-        <Text className="font-medium">No open signals</Text>
-        <Text small muted className="mt-1 max-w-md">
-          No live findings match this window and filter. Widen the time range or
-          clear the severity filter.
-        </Text>
-      </div>
+      <RiskSetupEmptyState heading="No open signals" filtered={filtered} />
     );
   }
   return (
