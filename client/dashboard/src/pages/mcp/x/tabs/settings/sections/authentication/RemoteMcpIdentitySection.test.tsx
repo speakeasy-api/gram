@@ -866,6 +866,39 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.queryByRole("radio", { name: /Existing client/ })).toBeNull();
   });
 
+  it("does not offer Auto-Configure against a plain-http token endpoint", () => {
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+              registrationEndpoint: "https://mcp.linear.app/register",
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "http://mcp.linear.app/token",
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /Auto-Configure/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
   it("offers DCR under Advanced when the provider supports both", async () => {
     mocks.issuers.mockReturnValue({
       data: {

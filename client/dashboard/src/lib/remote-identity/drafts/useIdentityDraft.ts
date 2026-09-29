@@ -77,10 +77,10 @@ type AutomaticSupport = { cimd: boolean; dcr: boolean };
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-// The server registers only against an absolute https endpoint, or http on
-// loopback (urls.IsAbsoluteHTTPSOrLoopback); offering DCR for anything else
-// would only fail at Save.
-function registrableEndpoint(endpoint: string | null | undefined): boolean {
+// The server accepts provider endpoints only as absolute https URLs, or http
+// on loopback (urls.IsAbsoluteHTTPSOrLoopback); offering automatic setup for
+// anything else would only fail at Save.
+function secureEndpoint(endpoint: string | null | undefined): boolean {
   const trimmed = endpoint?.trim();
   if (!trimmed) return false;
   try {
@@ -105,8 +105,8 @@ function automaticSupport(candidate: {
   tokenEndpointAuthMethodsSupported?: string[] | null;
 }): AutomaticSupport {
   if (
-    !candidate.authorizationEndpoint?.trim() ||
-    !candidate.tokenEndpoint?.trim()
+    !secureEndpoint(candidate.authorizationEndpoint) ||
+    !secureEndpoint(candidate.tokenEndpoint)
   ) {
     return { cimd: false, dcr: false };
   }
@@ -115,7 +115,7 @@ function automaticSupport(candidate: {
     cimd:
       !!candidate.clientIdMetadataDocumentSupported &&
       (methods.length === 0 || methods.includes("none")),
-    dcr: registrableEndpoint(candidate.registrationEndpoint),
+    dcr: secureEndpoint(candidate.registrationEndpoint),
   };
 }
 
