@@ -68,6 +68,9 @@ func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, o
 			msg.SetFinishReason(p.FinishReason.String)
 		}
 		provenance := &conversationv1.Message_Provenance{}
+		if write.BillingUserID != "" {
+			provenance.SetBillingUserId(write.BillingUserID)
+		}
 		if p.Source.Valid {
 			provenance.SetSource(CanonicalSource(p.Source.String))
 		}

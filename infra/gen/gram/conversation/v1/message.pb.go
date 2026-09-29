@@ -664,6 +664,7 @@ type Message_Provenance struct {
 	xxx_hidden_UserAgent         *string                `protobuf:"bytes,12,opt,name=user_agent,json=userAgent"`
 	xxx_hidden_UserEmail         *string                `protobuf:"bytes,13,opt,name=user_email,json=userEmail"`
 	xxx_hidden_Account           *Message_Account       `protobuf:"bytes,14,opt,name=account"`
+	xxx_hidden_BillingUserId     *string                `protobuf:"bytes,15,opt,name=billing_user_id,json=billingUserId"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -829,73 +830,88 @@ func (x *Message_Provenance) GetAccount() *Message_Account {
 	return nil
 }
 
+func (x *Message_Provenance) GetBillingUserId() string {
+	if x != nil {
+		if x.xxx_hidden_BillingUserId != nil {
+			return *x.xxx_hidden_BillingUserId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Message_Provenance) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 15)
 }
 
 func (x *Message_Provenance) SetExternalMessageId(v string) {
 	x.xxx_hidden_ExternalMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 15)
 }
 
 func (x *Message_Provenance) SetUserId(v string) {
 	x.xxx_hidden_UserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 15)
 }
 
 func (x *Message_Provenance) SetExternalUserId(v string) {
 	x.xxx_hidden_ExternalUserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 15)
 }
 
 func (x *Message_Provenance) SetAssistantId(v string) {
 	x.xxx_hidden_AssistantId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 15)
 }
 
 func (x *Message_Provenance) SetProvider(v string) {
 	x.xxx_hidden_Provider = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 15)
 }
 
 func (x *Message_Provenance) SetModel(v string) {
 	x.xxx_hidden_Model = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 15)
 }
 
 func (x *Message_Provenance) SetReplayed(v bool) {
 	x.xxx_hidden_Replayed = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 15)
 }
 
 func (x *Message_Provenance) SetAdapter(v string) {
 	x.xxx_hidden_Adapter = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 15)
 }
 
 func (x *Message_Provenance) SetHookSource(v string) {
 	x.xxx_hidden_HookSource = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 15)
 }
 
 func (x *Message_Provenance) SetHostname(v string) {
 	x.xxx_hidden_Hostname = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 15)
 }
 
 func (x *Message_Provenance) SetUserAgent(v string) {
 	x.xxx_hidden_UserAgent = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 15)
 }
 
 func (x *Message_Provenance) SetUserEmail(v string) {
 	x.xxx_hidden_UserEmail = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 15)
 }
 
 func (x *Message_Provenance) SetAccount(v *Message_Account) {
 	x.xxx_hidden_Account = v
+}
+
+func (x *Message_Provenance) SetBillingUserId(v string) {
+	x.xxx_hidden_BillingUserId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 15)
 }
 
 func (x *Message_Provenance) HasSource() bool {
@@ -996,6 +1012,13 @@ func (x *Message_Provenance) HasAccount() bool {
 	return x.xxx_hidden_Account != nil
 }
 
+func (x *Message_Provenance) HasBillingUserId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 14)
+}
+
 func (x *Message_Provenance) ClearSource() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Source = nil
@@ -1065,6 +1088,11 @@ func (x *Message_Provenance) ClearAccount() {
 	x.xxx_hidden_Account = nil
 }
 
+func (x *Message_Provenance) ClearBillingUserId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 14)
+	x.xxx_hidden_BillingUserId = nil
+}
+
 type Message_Provenance_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -1088,6 +1116,9 @@ type Message_Provenance_builder struct {
 	// Observed actor email; not inferred from the provider account.
 	UserEmail *string
 	Account   *Message_Account
+	// Gram user explicitly allocated usage by the ingestion producer.
+	// Independent of user_id; absence means no billing user was assigned.
+	BillingUserId *string
 }
 
 func (b0 Message_Provenance_builder) Build() *Message_Provenance {
@@ -1095,58 +1126,62 @@ func (b0 Message_Provenance_builder) Build() *Message_Provenance {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 15)
 		x.xxx_hidden_Source = b.Source
 	}
 	if b.ExternalMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 15)
 		x.xxx_hidden_ExternalMessageId = b.ExternalMessageId
 	}
 	if b.UserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 15)
 		x.xxx_hidden_UserId = b.UserId
 	}
 	if b.ExternalUserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 15)
 		x.xxx_hidden_ExternalUserId = b.ExternalUserId
 	}
 	if b.AssistantId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 15)
 		x.xxx_hidden_AssistantId = b.AssistantId
 	}
 	if b.Provider != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 15)
 		x.xxx_hidden_Provider = b.Provider
 	}
 	if b.Model != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 15)
 		x.xxx_hidden_Model = b.Model
 	}
 	if b.Replayed != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 15)
 		x.xxx_hidden_Replayed = *b.Replayed
 	}
 	if b.Adapter != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 15)
 		x.xxx_hidden_Adapter = b.Adapter
 	}
 	if b.HookSource != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 15)
 		x.xxx_hidden_HookSource = b.HookSource
 	}
 	if b.Hostname != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 15)
 		x.xxx_hidden_Hostname = b.Hostname
 	}
 	if b.UserAgent != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 15)
 		x.xxx_hidden_UserAgent = b.UserAgent
 	}
 	if b.UserEmail != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 15)
 		x.xxx_hidden_UserEmail = b.UserEmail
 	}
 	x.xxx_hidden_Account = b.Account
+	if b.BillingUserId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 15)
+		x.xxx_hidden_BillingUserId = b.BillingUserId
+	}
 	return m0
 }
 
@@ -2143,7 +2178,7 @@ var File_gram_conversation_v1_message_proto protoreflect.FileDescriptor
 
 const file_gram_conversation_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"\"gram/conversation/v1/message.proto\x12\x14gram.conversation.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x9a\x11\n" +
+	"\"gram/conversation/v1/message.proto\x12\x14gram.conversation.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xc2\x11\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x1d\n" +
@@ -2165,7 +2200,7 @@ const file_gram_conversation_v1_message_proto_rawDesc = "" +
 	"\x04body\x18\v \x01(\v2\".gram.conversation.v1.Message.BodyH\x00R\x04body\x12W\n" +
 	"\x0ebody_reference\x18\f \x01(\v2..gram.conversation.v1.Message.ContentReferenceH\x00R\rbodyReference\x12%\n" +
 	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\x12d\n" +
-	"\x14conversation_context\x18\x0e \x01(\v21.gram.conversation.v1.Message.ConversationContextR\x13conversationContext\x1a\xde\x03\n" +
+	"\x14conversation_context\x18\x0e \x01(\v21.gram.conversation.v1.Message.ConversationContextR\x13conversationContext\x1a\x86\x04\n" +
 	"\n" +
 	"Provenance\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12.\n" +
@@ -2185,7 +2220,8 @@ const file_gram_conversation_v1_message_proto_rawDesc = "" +
 	"user_agent\x18\f \x01(\tR\tuserAgent\x12\x1d\n" +
 	"\n" +
 	"user_email\x18\r \x01(\tR\tuserEmail\x12?\n" +
-	"\aaccount\x18\x0e \x01(\v2%.gram.conversation.v1.Message.AccountR\aaccount\x1aw\n" +
+	"\aaccount\x18\x0e \x01(\v2%.gram.conversation.v1.Message.AccountR\aaccount\x12&\n" +
+	"\x0fbilling_user_id\x18\x0f \x01(\tR\rbillingUserId\x1aw\n" +
 	"\aAccount\x12&\n" +
 	"\x0fuser_account_id\x18\x01 \x01(\tR\ruserAccountId\x12!\n" +
 	"\faccount_type\x18\x02 \x01(\tR\vaccountType\x12!\n" +

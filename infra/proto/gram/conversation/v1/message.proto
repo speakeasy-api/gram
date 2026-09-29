@@ -46,6 +46,9 @@ message Message {
     // Observed actor email; not inferred from the provider account.
     string user_email = 13;
     Account account = 14;
+    // Gram user explicitly allocated usage by the ingestion producer.
+    // Independent of user_id; absence means no billing user was assigned.
+    string billing_user_id = 15;
   }
 
   // Observed provider-account attribution. Classification may be known even
