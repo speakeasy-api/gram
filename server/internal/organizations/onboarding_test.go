@@ -88,7 +88,11 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 			visible = append(visible, task.Key)
 		}
 	}
-	require.ElementsMatch(t, []string{"identity-provider", "instrument-agents", "additional-agent-config", "platform-mcp"}, visible)
+	require.ElementsMatch(t, []string{
+		"identity-provider", "enable-logging", "instrument-agents", "additional-agent-config",
+		"confirm-traffic", "create-marketplace", "distribute-servers", "platform-mcp",
+		"anthropic-admin-controls", "configure-policies",
+	}, visible)
 	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 	require.Len(t, listed.Tasks, len(visible))

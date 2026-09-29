@@ -167,8 +167,9 @@ func compareStrings(a, b string) int {
 }
 
 // riskPolicyVersionState loads every grant-backed part of a policy definition
-// from the caller's database snapshot. Sensitive URLs, principals, selectors,
-// and standing decisions contribute only to the HMAC and are never returned.
+// from the caller's database snapshot. URL grant principals, selectors, URLs,
+// and standing decisions contribute only to the HMAC. Policy audience grants
+// are also exposed separately by the administrator-only policy detail read.
 // Mutation callers acquire the project enforcement lock before domain locks;
 // read-only detail projections use one repeatable-read snapshot.
 func riskPolicyVersionState(ctx context.Context, db riskrepo.DBTX, policy policycore.Policy) (RiskPolicyVersionState, error) {

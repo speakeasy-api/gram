@@ -104,8 +104,15 @@ function CreateRemoteMcpForm() {
       return;
     }
     if (!identityChoiceTouched && verify.result.verified) {
+      // Only preselect User Identity when the challenge actually advertised
+      // OAuth. A bare 401 from a Basic or API-key upstream reports the same
+      // outcome, and defaulting it to User walks the operator into an OAuth
+      // setup that cannot complete, leaving the server disabled.
       setIdentityMode(
-        verify.result.outcome === "authentication_required" ? "user" : "none",
+        verify.result.outcome === "authentication_required" &&
+          !!verify.result.protectedResourceMetadataUrl
+          ? "user"
+          : "none",
       );
     }
   }, [identityChoiceTouched, verify.result]);

@@ -141,7 +141,8 @@ func (r *RoleManager) GetRoleByIDTx(ctx context.Context, tx pgx.Tx, gramOrgID, i
 	return roleViewFromLocalRoleAndGrants(role, view), nil
 }
 
-// ListMembers returns locally known organization members and includes a role ID only when a local assignment exists.
+// ListMembers returns locally known organization members with their directly
+// assigned role IDs and the role IDs they hold through directory role mappings.
 func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.ListMembersResult, error) {
 	rows, err := repo.New(r.db).ListAccessMembers(ctx, gramOrgID)
 	if err != nil {
@@ -160,7 +161,9 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 				Email:        row.Email,
 				PhotoURL:     conv.FromPGText[string](row.PhotoUrl),
 				RoleIds:      nil,
-				JoinedAt:     conv.FromPGTimestamptz(row.JoinedAt),
+				// Every row for a member carries the same mapped roles.
+				DirectoryRoleIds: row.DirectoryRoleIds,
+				JoinedAt:         conv.FromPGTimestamptz(row.JoinedAt),
 				// Null when no directory row was matched, or when the row
 				// reports no non-empty department — the query collapses both
 				// to an empty string, so the two cannot be told apart here.
@@ -180,6 +183,14 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 	}
 
 	return &gen.ListMembersResult{Members: result}, nil
+}
+
+// memberRoleIDs returns every role a member holds, assigned directly or
+// through a directory role mapping, each once.
+func memberRoleIDs(member *gen.AccessMember) []string {
+	ids := slices.Concat(member.RoleIds, member.DirectoryRoleIds)
+	slices.Sort(ids)
+	return slices.Compact(ids)
 }
 
 // RoleCreateResult is the safe local result of creating a role.
@@ -883,26 +894,28 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		// roles and nothing the directory owns: a profile this update cannot
 		// alter would read as part of the diff.
 		Before: &gen.AccessMember{
-			ID:           connectedUser.ID,
-			PrincipalUrn: memberPrincipalURN,
-			Name:         memberName,
-			Email:        connectedUser.Email,
-			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:      existingRoleIDs,
-			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
-			Department:   nil,
-			Groups:       nil,
+			ID:               connectedUser.ID,
+			PrincipalUrn:     memberPrincipalURN,
+			Name:             memberName,
+			Email:            connectedUser.Email,
+			PhotoURL:         conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:          existingRoleIDs,
+			JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:       nil,
+			Groups:           nil,
+			DirectoryRoleIds: nil,
 		},
 		After: &gen.AccessMember{
-			ID:           connectedUser.ID,
-			PrincipalUrn: memberPrincipalURN,
-			Name:         memberName,
-			Email:        connectedUser.Email,
-			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:      afterRoleIDs,
-			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
-			Department:   nil,
-			Groups:       nil,
+			ID:               connectedUser.ID,
+			PrincipalUrn:     memberPrincipalURN,
+			Name:             memberName,
+			Email:            connectedUser.Email,
+			PhotoURL:         conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:          afterRoleIDs,
+			JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
+			Department:       nil,
+			Groups:           nil,
+			DirectoryRoleIds: nil,
 		},
 	}
 
@@ -1050,15 +1063,16 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 
 	memberName := conv.Default(connected.DisplayName, connected.Email)
 	after := &gen.AccessMember{
-		ID:           connected.ID,
-		PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, connected.ID).String(),
-		Name:         memberName,
-		Email:        connected.Email,
-		PhotoURL:     conv.FromPGText[string](connected.PhotoUrl),
-		RoleIds:      afterRoleIDs,
-		JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
-		Department:   nil,
-		Groups:       nil,
+		ID:               connected.ID,
+		PrincipalUrn:     urn.NewPrincipal(urn.PrincipalTypeUser, connected.ID).String(),
+		Name:             memberName,
+		Email:            connected.Email,
+		PhotoURL:         conv.FromPGText[string](connected.PhotoUrl),
+		RoleIds:          afterRoleIDs,
+		JoinedAt:         conv.FromPGTimestamptz(existing.CreatedAt),
+		Department:       nil,
+		Groups:           nil,
+		DirectoryRoleIds: nil,
 	}
 	safeAfter := MemberRoleState{
 		MemberID:         connected.ID,

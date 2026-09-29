@@ -15,6 +15,7 @@ function member(overrides: Partial<AccessMember>): AccessMember {
     joinedAt: new Date(0),
     principalUrn: "principal:user:gram-user-id",
     roleIds: [],
+    directoryRoleIds: [],
     ...overrides,
   };
 }

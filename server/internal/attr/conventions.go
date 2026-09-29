@@ -12,6 +12,8 @@ import (
 type Key = attribute.Key
 
 const (
+	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
+	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -416,6 +418,18 @@ const (
 
 	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
 	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
+
+	// OAuthExpectedAudienceKey records the audience Gram required of an upstream JWT access token.
+	OAuthExpectedAudienceKey = attribute.Key("gram.oauth.expected_audience")
+
+	// OAuthTokenAudienceKey records the aud values an upstream JWT access token carried.
+	OAuthTokenAudienceKey = attribute.Key("gram.oauth.token_audience")
+
+	// OAuthRefreshTokenRotatedKey records whether an upstream refresh grant returned a new refresh token.
+	OAuthRefreshTokenRotatedKey = attribute.Key("gram.oauth.refresh_token_rotated")
+
+	// OAuthRefreshTokenLifetimeKey records the refresh-token lifetime in seconds an upstream reported, when it reported one.
+	OAuthRefreshTokenLifetimeKey = attribute.Key("gram.oauth.refresh_token_lifetime_seconds")
 
 	// OAuthAssertionExpiresAtKey records a verified client assertion's expiry.
 	OAuthAssertionExpiresAtKey = attribute.Key("gram.oauth.assertion_expires_at")
@@ -1877,6 +1891,22 @@ func SlogOAuthAssertionAudience(v string) slog.Attr {
 	return slog.String(string(OAuthAssertionAudienceKey), v)
 }
 
+func SlogOAuthExpectedAudience(v string) slog.Attr {
+	return slog.String(string(OAuthExpectedAudienceKey), v)
+}
+
+func SlogOAuthTokenAudience(v []string) slog.Attr {
+	return slog.Any(string(OAuthTokenAudienceKey), v)
+}
+
+func SlogOAuthRefreshTokenRotated(v bool) slog.Attr {
+	return slog.Bool(string(OAuthRefreshTokenRotatedKey), v)
+}
+
+func SlogOAuthRefreshTokenLifetime(seconds int64) slog.Attr {
+	return slog.Int64(string(OAuthRefreshTokenLifetimeKey), seconds)
+}
+
 func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
 	return slog.Time(string(OAuthAssertionExpiresAtKey), v)
 }
@@ -3149,3 +3179,6 @@ func SlogInferenceInputCount(v int) slog.Attr {
 func SlogInferenceAcceptedMessages(v int) slog.Attr {
 	return slog.Int(string(InferenceAcceptedMessagesKey), v)
 }
+
+func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }
+func SlogRegistryUpdatedAt(v string) slog.Attr { return slog.String(string(RegistryUpdatedAtKey), v) }

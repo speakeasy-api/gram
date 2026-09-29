@@ -78,7 +78,11 @@ describe("copyable setup values", () => {
     expect(
       screen.getByText("Gram-Project=default,Gram-Key=••••••••"),
     ).toBeTruthy();
-    expect(screen.getByText("Save the settings in Claude.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Save the settings and start a new Cowork session to verify receipt. The native exporter automatically allowlists the collector hostname.",
+      ),
+    ).toBeTruthy();
     for (const [label, value] of [
       ["endpoint", "https://app.getgram.ai/rpc/hooks.otel"],
       ["protocol", "http/json"],
@@ -201,9 +205,7 @@ describe("inline setup identifiers", () => {
       expect(container.textContent).toContain(
         `Find ${pluginName ?? "the observability plugin"} in the plugin list and set Default access → Required.`,
       );
-      expect(container.textContent).toContain(
-        "prevents them from disabling it",
-      );
+      expect(container.textContent).toContain("prevents disabling or removal");
       expect(container.textContent).not.toContain("{{GRAM_");
       expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
       expect(container.querySelector("pre")).toBeNull();

@@ -49127,6 +49127,114 @@ paths:
       x-speakeasy-name-override: commitServerIdentityConfiguration
       x-speakeasy-react-hook:
         name: CommitServerIdentityConfiguration
+  /rpc/remoteSessions.count:
+    get:
+      description: 'Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller''s project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.'
+      operationId: countRemoteSessions
+      parameters:
+        - allowEmptyValue: true
+          description: The remote_session_client whose sessions to count.
+          in: query
+          name: remote_session_client_id
+          required: true
+          schema:
+            description: The remote_session_client whose sessions to count.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountRemoteSessionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: countRemoteSessions remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: count
+      x-speakeasy-react-hook:
+        name: RemoteSessionsCount
   /rpc/remoteSessions.detachBinding:
     post:
       description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
@@ -73620,6 +73728,373 @@ paths:
       x-speakeasy-name-override: withdrawSubject
       x-speakeasy-react-hook:
         name: WithdrawWorkloadSubject
+  /v0.1/servers:
+    get:
+      operationId: discoverServers
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: include_deleted
+          schema:
+            default: false
+            type: boolean
+        - allowEmptyValue: true
+          description: 'Unsupported: any supplied value returns 400'
+          in: query
+          name: updated_since
+          schema:
+            description: 'Unsupported: any supplied value returns 400'
+            type: string
+        - allowEmptyValue: true
+          description: Search query; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+          in: query
+          name: search
+          schema:
+            description: Search query; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+            type: string
+        - allowEmptyValue: true
+          description: Version filter; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+          in: query
+          name: version
+          schema:
+            description: Version filter; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: cursor
+          schema:
+            maxLength: 8192
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: limit
+          schema:
+            default: 25
+            format: int32
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryDiscoveryPage'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+      summary: discoverServers registryDiscovery
+      tags:
+        - registryDiscovery
+      x-speakeasy-name-override: discoverServers
+  /v0.1/servers/{serverName}/versions:
+    get:
+      operationId: discoverVersions
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: include_deleted
+          schema:
+            default: false
+            type: boolean
+        - allowEmptyValue: true
+          description: 'Unsupported: any supplied value returns 400'
+          in: query
+          name: updated_since
+          schema:
+            description: 'Unsupported: any supplied value returns 400'
+            type: string
+        - in: path
+          name: serverName
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryDiscoveryPage'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+      summary: discoverVersions registryDiscovery
+      tags:
+        - registryDiscovery
+      x-speakeasy-name-override: discoverVersions
+  /v0.1/servers/{serverName}/versions/{version}:
+    get:
+      operationId: discoverVersion
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: include_deleted
+          schema:
+            default: false
+            type: boolean
+        - allowEmptyValue: true
+          description: 'Unsupported: any supplied value returns 400'
+          in: query
+          name: updated_since
+          schema:
+            description: 'Unsupported: any supplied value returns 400'
+            type: string
+        - in: path
+          name: serverName
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: version
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+      summary: discoverVersion registryDiscovery
+      tags:
+        - registryDiscovery
+      x-speakeasy-name-override: discoverVersion
 components:
   schemas:
     AIDetection:
@@ -73904,6 +74379,11 @@ components:
         department:
           type: string
           description: Department name as reported by the identity provider.
+        directory_role_ids:
+          type: array
+          items:
+            type: string
+          description: Role IDs this member holds through directory role mappings. They follow the member's directory groups and attributes, so updating the member's roles does not change them.
         email:
           type: string
           description: Email address.
@@ -73932,13 +74412,14 @@ components:
           type: array
           items:
             type: string
-          description: All role IDs assigned to this member.
+          description: Role IDs assigned directly to this member.
       required:
         - id
         - principal_urn
         - name
         - email
         - role_ids
+        - directory_role_ids
         - joined_at
     AccessibleMCPServer:
       type: object
@@ -77190,6 +77671,12 @@ components:
           type: string
           description: An existing Remote Identity Provider visible to the target project.
           format: uuid
+        registration_method:
+          type: string
+          description: Auto mode only. cimd (the default) prefers a Client ID Metadata Document when the provider supports one and falls back to dynamic client registration; dcr always uses dynamic client registration.
+          enum:
+            - cimd
+            - dcr
       description: 'A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
       required:
         - mcp_server_id
@@ -77264,6 +77751,16 @@ components:
           description: The confirmed servers with their new state.
       required:
         - servers
+    CountRemoteSessionsResult:
+      type: object
+      properties:
+        subjects:
+          type: integer
+          description: Distinct user subjects with a live remote_session through the client.
+          format: int64
+      description: Result type for counting the people signed in through a remote_session_client.
+      required:
+        - subjects
     CreateAgentForm:
       type: object
       properties:
@@ -79003,7 +79500,7 @@ components:
           description: Human-readable display name for the tunneled MCP server
         resource_identifier:
           type: string
-          description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.
+          description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.
       description: Form for creating a new tunneled MCP server source
       required:
         - name
@@ -83798,7 +84295,7 @@ components:
           type: array
           items:
             type: string
-          description: Sub-steps, in order. Empty when the description says it all.
+          description: 'Supporting lines under the description: ordered sub-steps for the public-key step, otherwise notes or the values to enter. Empty when the description says it all.'
         group:
           type: string
           description: 'Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).'
@@ -91603,6 +92100,35 @@ components:
         - name
         - issuer
         - jwks_uri
+    RegistryDiscoveryMetadata:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+        nextCursor:
+          type: string
+      required:
+        - count
+    RegistryDiscoveryPage:
+      type: object
+      properties:
+        metadata:
+          $ref: '#/components/schemas/RegistryDiscoveryMetadata'
+        servers:
+          type: array
+          items: {}
+          description: Complete registry record envelopes, including server and _meta extensions
+      required:
+        - servers
+        - metadata
+    RegistryDiscoverydiscoverServersResponseBody:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
     RemoteMcpServer:
       type: object
       properties:
@@ -93095,7 +93621,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom tool names for this server. Omit to follow the policy tool rule.
+          description: Custom tool names for this server. Omit to follow the policy tool rule; an empty list matches every tool on this server, unconditionally.
       required:
         - mcp_server_id
     RiskOverviewCategory:
@@ -100519,7 +101045,7 @@ components:
           format: int64
         resource_identifier:
           type: string
-          description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram
+          description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>
         status:
           type: string
           description: Stored lifecycle status for a tunneled MCP server source
@@ -102244,7 +102770,7 @@ components:
           maximum: 100000
         resource_identifier:
           type: string
-          description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Pass an empty string to clear. Omit to leave unchanged.
+          description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Pass an empty string to clear. Omit to leave unchanged.
       description: Form for updating a tunneled MCP server source
       required:
         - id
@@ -103788,6 +104314,8 @@ tags:
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
+  - name: registryDiscovery
+    description: 'Authenticated discovery-only preview. Current records only: no version history, incremental synchronization or mirror guarantees. Uses Gram credentials, not generic-client OAuth. Discovery errors use the pinned standard error envelope; authorization uses Gram security.'
   - name: mcpServers
     description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
   - name: metaMcp

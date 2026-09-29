@@ -264,7 +264,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 		if mcpServer.RemoteMcpServerID.Valid {
 			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
 		}
-		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
+		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamResource, upstreamToken, wwwAuthenticate, sessionToolSelection)
 	case mcpServer.ToolsetID.Valid:
 		// Wrapper-governed dispatch (AIS-633): visibility, issuer gating, the
 		// RBAC resource id, and the variation-group override come from the
@@ -616,9 +616,9 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 }
 
 // resolveUpstreamResource derives the RFC 8707 resource indicator for an
-// mcp_server's upstream (sans trailing slash): the remote backend URL for
-// remote-backed servers, the recorded resource identifier for tunneled
-// servers (empty when none is recorded), empty for other backends.
+// mcp_server's upstream: the remote backend URL without trailing slashes, or
+// the tunneled backend's saved resource identifier verbatim. Other backends
+// have no upstream resource.
 func (s *Service) resolveUpstreamResource(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -649,7 +649,7 @@ func (s *Service) resolveUpstreamResource(
 		case err != nil:
 			return "", oops.E(oops.CodeUnexpected, err, "load tunneled mcp server").LogError(ctx, logger)
 		}
-		return strings.TrimRight(tunneled.ResourceIdentifier.String, "/"), nil
+		return tunneled.ResourceIdentifier.String, nil
 	default:
 		return "", nil
 	}
@@ -765,6 +765,7 @@ func (s *Service) serveTunneledBackend(
 	logger *slog.Logger,
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
+	resourceIdentifier string,
 	upstreamAuth string,
 	wwwAuthenticate string,
 	selection *toolfilter.SessionSelection,
@@ -781,7 +782,23 @@ func (s *Service) serveTunneledBackend(
 		return err
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, organizationID, mcpServer, upstreamAuth, wwwAuthenticate, selection)
+	if !mcpServer.UserSessionIssuerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPrivate {
+		resourceIdentifier, err = s.resolveUpstreamResource(ctx, logger, endpoint.ProjectID, mcpServer)
+		if err != nil {
+			return err
+		}
+	}
+
+	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
+		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
+		ProjectID:          endpoint.ProjectID,
+		OrganizationID:     organizationID,
+		MCPServer:          mcpServer,
+		ResourceIdentifier: resourceIdentifier,
+		UpstreamAuth:       upstreamAuth,
+		WWWAuthenticate:    wwwAuthenticate,
+		Selection:          selection,
+	})
 	if err != nil {
 		return err
 	}

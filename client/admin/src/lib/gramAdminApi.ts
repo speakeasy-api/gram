@@ -253,6 +253,9 @@ export type AdminOrganization = {
   slug: string;
   account_type: string;
   workos_id?: string;
+  // Absent unless the organization is linked to WorkOS and the deployment knows
+  // its WorkOS environment.
+  workos_dashboard_url?: string;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
   whitelisted: boolean;

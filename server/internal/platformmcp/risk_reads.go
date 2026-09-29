@@ -201,6 +201,7 @@ type RiskDetectionScope struct {
 }
 
 type RiskPolicyDetail struct {
+	Audience *RiskPolicyAudience `json:"audience,omitempty"`
 	RiskPolicySummary
 	Version                string               `json:"version"`
 	PresidioEntities       []string             `json:"presidio_entities"`
@@ -333,6 +334,14 @@ func (s *RiskReadService) GetPolicy(ctx context.Context, principal Principal, in
 	}
 	detail := s.policyDetail(policy.policy, policy.shadowDecisions)
 	detail.Version = version
+	if externalRiskAudiencePrincipal(principal) {
+		principals := []string{}
+		if policy.policy.AudienceType != "everyone" {
+			principals = append(principals, policy.policy.AudiencePrincipalURNs...)
+		}
+		// Everyone's internal user:all grant is not a targeted audience identity.
+		detail.Audience = &RiskPolicyAudience{Type: policy.policy.AudienceType, PrincipalURNs: principals}
+	}
 	return GetRiskPolicyOutput{Project: riskProject(project), CatalogVersion: s.catalog.Schema, CatalogFingerprint: s.catalogFingerprint, Policy: detail}, nil
 }
 
@@ -421,6 +430,7 @@ func (s *RiskReadService) policySummary(policy policycore.Policy, shadowDecision
 func (s *RiskReadService) policyDetail(policy policycore.Policy, shadowDecisions *ShadowPolicyDecisions) RiskPolicyDetail {
 	detectionScopes, _ := s.projectDetectionScopes(policy)
 	detail := RiskPolicyDetail{
+		Audience:               nil,
 		RiskPolicySummary:      s.policySummary(policy, shadowDecisions),
 		Version:                "",
 		PresidioEntities:       allowlisted(policy.PresidioEntities, s.catalog.PresidioEntities),
@@ -444,8 +454,8 @@ func (s *RiskReadService) policyUnsupported(policy policycore.Policy) []string {
 	if !s.policyActionSupported(policy) {
 		unsupported = append(unsupported, "unsupported_action")
 	}
-	if policy.AudienceType != "everyone" {
-		unsupported = append(unsupported, "targeted_audience")
+	if policy.AudienceType != "everyone" && policy.AudienceType != "targeted" {
+		unsupported = append(unsupported, "unsupported_audience")
 	}
 	if len(policy.CustomRuleIDs) > 0 {
 		unsupported = append(unsupported, "custom_rules")

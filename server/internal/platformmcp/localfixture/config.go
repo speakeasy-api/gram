@@ -5,6 +5,7 @@ package localfixture
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -157,7 +158,7 @@ func (c *Config) RegistryDetailsPath() string {
 	if err != nil {
 		return ""
 	}
-	return "/" + registryURL.JoinPath("v0.1", "servers", url.PathEscape(CanonicalRef), "versions", "latest").EscapedPath()
+	return "/" + strings.TrimPrefix(registryURL.JoinPath("v0.1", "servers", url.PathEscape(CanonicalRef), "versions", "latest").EscapedPath(), "/")
 }
 
 // SetupResources returns the fixture's own guide. It is kept alongside the
@@ -222,4 +223,10 @@ func (c *Config) CatalogDescriptor() platformmcp.CatalogDescriptor {
 		AllowedRemoteURL: c.remoteURL,
 		SetupIntent:      SetupIntent,
 	}
+}
+
+// SetRegistryPrefix isolates the fixture registry when the discovery preview owns
+// the standard root routes. Call before constructing fixture clients.
+func (c *Config) SetRegistryPrefix(prefix string) {
+	c.registry.URL = c.origin.JoinPath(prefix).String()
 }

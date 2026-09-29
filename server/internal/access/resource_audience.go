@@ -698,7 +698,7 @@ func (s *Service) audienceReach(ctx context.Context, organizationID string) (map
 		roleURNByID[role.ID.String()] = role.RoleUrn
 	}
 	for _, member := range members.Members {
-		for _, roleID := range member.RoleIds {
+		for _, roleID := range memberRoleIDs(member) {
 			roleURN, ok := roleURNByID[roleID]
 			if !ok {
 				continue

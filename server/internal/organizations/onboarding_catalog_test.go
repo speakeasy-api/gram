@@ -35,6 +35,14 @@ func TestSetupTaskCatalogKeysAreUniqueAndPrerequisitesExist(t *testing.T) {
 	}
 }
 
+func TestDefaultOnboardingSelectionOnlyHidesLiteLLM(t *testing.T) {
+	t.Parallel()
+
+	for _, task := range setupTaskCatalog {
+		require.Equal(t, task.Key == "litellm", task.HiddenByDefault, task.Key)
+	}
+}
+
 func TestIdentitySetupUsesOneCombinedTask(t *testing.T) {
 	t.Parallel()
 	identity := setupTaskDefinitionForKey("identity-provider")

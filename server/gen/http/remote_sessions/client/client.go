@@ -37,6 +37,10 @@ type Client struct {
 	// listRemoteSessions endpoint.
 	ListRemoteSessionsDoer goahttp.Doer
 
+	// CountRemoteSessions Doer is the HTTP client used to make requests to the
+	// countRemoteSessions endpoint.
+	CountRemoteSessionsDoer goahttp.Doer
+
 	// RevokeRemoteSession Doer is the HTTP client used to make requests to the
 	// revokeRemoteSession endpoint.
 	RevokeRemoteSessionDoer goahttp.Doer
@@ -67,6 +71,7 @@ func NewClient(
 		DetachBindingDoer:                     doer,
 		CommitServerIdentityConfigurationDoer: doer,
 		ListRemoteSessionsDoer:                doer,
+		CountRemoteSessionsDoer:               doer,
 		RevokeRemoteSessionDoer:               doer,
 		RestoreResponseBody:                   restoreBody,
 		scheme:                                scheme,
@@ -192,6 +197,30 @@ func (c *Client) ListRemoteSessions() goa.Endpoint {
 		resp, err := c.ListRemoteSessionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteSessions", "listRemoteSessions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CountRemoteSessions returns an endpoint that makes HTTP requests to the
+// remoteSessions service countRemoteSessions server.
+func (c *Client) CountRemoteSessions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCountRemoteSessionsRequest(c.encoder)
+		decodeResponse = DecodeCountRemoteSessionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCountRemoteSessionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CountRemoteSessionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "countRemoteSessions", err)
 		}
 		return decodeResponse(resp)
 	}

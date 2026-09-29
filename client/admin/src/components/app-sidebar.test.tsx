@@ -177,6 +177,25 @@ function navState(): Record<string, { active: boolean; current: boolean }> {
 }
 
 describe("AppSidebar", () => {
+  it("renders the existing MCP logo as the decorative Registry icon", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const link = within(sidebar()).getByRole("link", {
+      name: "MCP Registry",
+    });
+    const icon = link.querySelector("svg");
+    expect(icon?.getAttribute("viewBox")).toBe("0 0 195 195");
+    expect(icon?.getAttribute("stroke")).toBe("currentColor");
+    expect(icon?.getAttribute("aria-hidden")).toBe("true");
+    expect(icon?.querySelectorAll("path")).toHaveLength(3);
+    expect(link.getAttribute("href")).toBe("/registry");
+    expect(
+      within(sidebar())
+        .getByRole("link", { name: "Support matrix" })
+        .querySelector("svg")
+        ?.classList.contains("lucide-grid-2x2"),
+    ).toBe(true);
+  });
+
   it("renders the global nav outside a record", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
@@ -202,9 +221,14 @@ describe("AppSidebar", () => {
       {
         label: "Platform Management",
         links: [
+          { label: "MCP Registry", href: "/registry" },
           { label: "Support matrix", href: "/integration-coverage" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
           { label: "Admin MCP", href: "/mcp-setup" },
+          {
+            label: "Demo organization",
+            href: "https://app.getgram.ai/explore-demo",
+          },
         ],
       },
     ]);
@@ -247,6 +271,13 @@ describe("AppSidebar", () => {
     // The record nav replaces the global one, but still offers setup.
     expect(hrefs()).not.toContain("/projects");
     expect(hrefs()).toContain("/mcp-setup");
+
+    const demoLink = screen.getByRole("link", { name: "Demo organization" });
+    expect(demoLink.getAttribute("href")).toBe(
+      "https://app.getgram.ai/explore-demo",
+    );
+    expect(demoLink.getAttribute("target")).toBe("_blank");
+    expect(demoLink.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
   it("falls back to the global nav when the record fails to load", async () => {

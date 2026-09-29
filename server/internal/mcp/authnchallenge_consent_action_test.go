@@ -136,7 +136,7 @@ func mintConsentEndpointState(t *testing.T, ctx context.Context, ti *testInstanc
 		UserSessionIssuerID: shared,
 	}
 
-	subject := urn.NewUserSubject(uuid.NewString())
+	subject := createTestUser(t, ctx, ti, uuid.NewString())
 	stateID := uuid.NewString()
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  stateID,

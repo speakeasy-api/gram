@@ -55,5 +55,23 @@ export function reconcileDraft<T>(
   validate?: (values: T) => readonly DraftError[],
 ): Draft<T> {
   if (!draft.isDirty) return seedDraft(incoming, validate);
+  // A refetch that returns what we already had is not someone else's edit.
+  // Reporting it as a conflict would send the operator through a reload for
+  // nothing, every time a poll or an invalidation happened to land mid-edit.
+  if (sameBaseline(draft.baseline, incoming)) return draft;
   return { ...draft, baseline: incoming, conflict: true };
+}
+
+/**
+ * Baselines here are plain server records — no cycles, no class instances, no
+ * undefined-vs-missing distinction that matters — so a structural compare is
+ * both sufficient and cheaper to reason about than a hand-written one per T.
+ */
+function sameBaseline<T>(a: T, b: T): boolean {
+  if (Object.is(a, b)) return true;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
 }
