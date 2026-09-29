@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -226,6 +227,102 @@ func TestRiskScan_HostedHTTPPreservesPayloadAndErrorResult(t *testing.T) {
 	require.Equal(t, "scan_http", events[0][attr.ToolNameKey])
 	require.Equal(t, mcpriskscan.MethodToolsCall, events[0]["gram.mcp.risk.scan.method"])
 	require.Equal(t, mcpriskscan.PhaseRequest, events[0]["gram.mcp.risk.scan.phase"])
+}
+
+func TestRiskScan_LegacyToolsetRouteResolvesWrapperServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "scan-legacy-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
+	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "legacy_scan")
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	_, err := ti.service.HandleToolsCall(ctx, &mcp.McpInputs{
+		ProjectID:       *authCtx.ProjectID,
+		Toolset:         toolset.Slug,
+		McpEnvVariables: map[string]string{"TEST_SERVER_URL": upstream.URL},
+		Mode:            mcp.ToolModeStatic,
+	}, "legacy_scan", json.RawMessage(`{}`))
+	require.NoError(t, err)
+
+	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
+	require.Len(t, events, 1)
+	require.Equal(t, server.ID.String(), events[0][attr.McpServerIDKey])
+	require.Equal(t, toolset.ID.String(), events[0][attr.ToolsetIDKey])
+}
+
+func TestRiskScan_LegacyToolsetRouteSkipsDisabledWrapperServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "scan-legacy-disabled-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "disabled", uuid.NullUUID{}, uuid.Nil)
+	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "legacy_scan_disabled")
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	_, err := ti.service.HandleToolsCall(ctx, &mcp.McpInputs{
+		ProjectID:       *authCtx.ProjectID,
+		Toolset:         toolset.Slug,
+		McpEnvVariables: map[string]string{"TEST_SERVER_URL": upstream.URL},
+		Mode:            mcp.ToolModeStatic,
+	}, "legacy_scan_disabled", json.RawMessage(`{}`))
+	require.NoError(t, err)
+
+	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
+	require.Len(t, events, 1)
+	require.Empty(t, events[0][attr.McpServerIDKey])
+	require.Equal(t, toolset.ID.String(), events[0][attr.ToolsetIDKey])
+}
+
+func TestRiskScan_LegacyToolsetRouteLeavesAmbiguousWrapperUnattributed(t *testing.T) {
+	t.Parallel()
+	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "scan-legacy-ambiguous-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug+"-one", "public", uuid.NullUUID{}, uuid.Nil)
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug+"-two", "public", uuid.NullUUID{}, uuid.Nil)
+	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "legacy_scan_ambiguous")
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	_, err := ti.service.HandleToolsCall(ctx, &mcp.McpInputs{
+		ProjectID:       *authCtx.ProjectID,
+		Toolset:         toolset.Slug,
+		McpEnvVariables: map[string]string{"TEST_SERVER_URL": upstream.URL},
+		Mode:            mcp.ToolModeStatic,
+	}, "legacy_scan_ambiguous", json.RawMessage(`{}`))
+	require.NoError(t, err, "an ambiguous wrapper must not fail the call")
+
+	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
+	require.Len(t, events, 1)
+	require.Empty(t, events[0][attr.McpServerIDKey])
 }
 
 func TestRiskScan_HostedScopedBlockPolicyOnlyStopsMatchingServer(t *testing.T) {

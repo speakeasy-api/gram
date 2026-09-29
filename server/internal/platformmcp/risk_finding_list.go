@@ -2,6 +2,7 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -94,21 +95,32 @@ type ListRiskFindingPageInput struct {
 // deliberately absent: for prompt-policy and destructive-action sources it is
 // a rationale that can quote the scanned content verbatim.
 type RiskFinding struct {
-	ID               string   `json:"id"`
-	PolicyID         string   `json:"policy_id"`
-	PolicyVersion    int64    `json:"policy_version"`
-	ChatID           string   `json:"chat_id,omitempty"`
-	ChatMessageID    string   `json:"chat_message_id,omitempty"`
-	UserReference    string   `json:"user_reference,omitempty"`
-	Source           string   `json:"source"`
-	RuleID           string   `json:"rule_id"`
-	Category         string   `json:"category"`
-	Severity         string   `json:"severity"`
-	Score            float64  `json:"score"`
-	MatchRedacted    string   `json:"match_redacted"`
-	Confidence       float64  `json:"confidence"`
-	Tags             []string `json:"tags"`
-	MessageCreatedAt string   `json:"message_created_at"`
+	ID                 string   `json:"id"`
+	PolicyID           string   `json:"policy_id"`
+	PolicyVersion      int64    `json:"policy_version"`
+	ExecutionID        string   `json:"execution_id,omitempty"`
+	MCPServerID        string   `json:"mcp_server_id,omitempty"`
+	MetaMCPServerID    string   `json:"meta_mcp_server_id,omitempty"`
+	ToolsetID          string   `json:"toolset_id,omitempty"`
+	ToolName           string   `json:"tool_name,omitempty"`
+	Phase              string   `json:"phase,omitempty"`
+	MediationSurface   string   `json:"mediation_surface,omitempty"`
+	MCPMethod          string   `json:"mcp_method,omitempty"`
+	PrincipalKind      string   `json:"principal_kind,omitempty"`
+	IdentityStamped    bool     `json:"identity_stamped,omitempty"`
+	EnforcementOutcome string   `json:"enforcement_outcome,omitempty"`
+	ChatID             string   `json:"chat_id,omitempty"`
+	ChatMessageID      string   `json:"chat_message_id,omitempty"`
+	UserReference      string   `json:"user_reference,omitempty"`
+	Source             string   `json:"source"`
+	RuleID             string   `json:"rule_id"`
+	Category           string   `json:"category"`
+	Severity           string   `json:"severity"`
+	Score              float64  `json:"score"`
+	MatchRedacted      string   `json:"match_redacted"`
+	Confidence         float64  `json:"confidence"`
+	Tags               []string `json:"tags"`
+	MessageCreatedAt   string   `json:"message_created_at"`
 }
 
 type ListRiskFindingPageOutput struct {
@@ -165,7 +177,7 @@ type GetRiskRuleBreakdownOutput struct {
 }
 
 const (
-	riskFindingListLimitations   = "Individual live findings ordered by message time (newest first); dismissed and excluded findings and matches from deleted policies are omitted, while disabled policies' historical matches are included. match_redacted is the canonical redaction marker, never the matched value; its length and hash describe the stored display sample. user_reference is an organization-scoped pseudonym shared with list_watchdog_findings. Severity uses the current policy score with the dashboard category fallback. Scanner descriptions and chat titles are withheld because they can quote scanned content; labels are untrusted and bounded. Late ingestion or suppression can change pages; this is not a snapshot. Use get_risk_rule_breakdown to size a finding set instead of paginating."
+	riskFindingListLimitations   = "Individual live findings ordered by message time (newest first); dismissed and excluded findings and matches from deleted policies are omitted, while disabled policies' historical matches are included. MCP findings include execution attribution and can be filtered by concrete mcp_server_id even when they have no chat. match_redacted is the canonical redaction marker, never the matched value; its length and hash describe the stored display sample. user_reference is an organization-scoped pseudonym shared with list_watchdog_findings. Severity uses the current policy score with the dashboard category fallback. Scanner descriptions and chat titles are withheld because they can quote scanned content; labels are untrusted and bounded. Late ingestion or suppression can change pages; this is not a snapshot. Use get_risk_rule_breakdown to size a finding cluster before paging."
 	riskFindingByChatLimitations = "Chats with at least one live finding under a non-deleted policy, including disabled ones, walked by chat id (newest ids first), not by activity. Findings with no chat attribution are not listed. latest_detected_at is detection time and may trail the message time. user_reference is an organization-scoped pseudonym shared with list_watchdog_findings. Use list_risk_findings with chat_id to read one chat's findings."
 	riskRuleBreakdownLimitations = "Live finding counts per rule and detection source for one category, keyed on detection time in [from,to). Counts include every non-deleted policy's findings, disabled ones included. At most 1000 rules are returned; truncated reports when more exist, and total covers only the returned rules."
 )
@@ -411,9 +423,20 @@ func (s *RiskFindingListService) listFindings(ctx context.Context, principal Pri
 		finding := s.finding(policies, row.RiskPolicyID, row.Source, row.RuleID, string(categories.Classify(row.Source, row.RuleID)), row.Tags, row.Confidence, row.MessageCreatedAt)
 		finding.ID = row.ID.String()
 		finding.PolicyVersion = row.RiskPolicyVersion
+		finding.ExecutionID = row.ExecutionID
+		finding.MCPServerID = row.MCPServerID
+		finding.MetaMCPServerID = row.MetaMCPServerID
+		finding.ToolsetID = row.ToolsetID
+		finding.ToolName = findingLabel(row.ToolName)
+		finding.Phase = findingLabel(row.Phase)
+		finding.MediationSurface = findingLabel(row.MediationSurface)
+		finding.MCPMethod = findingLabel(row.MCPMethod)
+		finding.PrincipalKind = findingLabel(row.PrincipalKind)
+		finding.IdentityStamped = row.IdentityStamped
+		finding.EnforcementOutcome = findingLabel(row.EnforcementOutcome)
 		finding.ChatID = row.ChatID
 		finding.ChatMessageID = row.ChatMessageID
-		finding.UserReference = riskUserReference(s.cursor.key, principal.OrganizationID, row.ExternalUserID)
+		finding.UserReference = riskUserReference(s.cursor.key, principal.OrganizationID, cmp.Or(row.ExternalUserID, row.UserID))
 		// The store holds a partial-mask display string with real boundary
 		// characters; only the canonical marker passes through verbatim.
 		finding.MatchRedacted = findingEvidence(row.MatchRedacted, principal.OrganizationID)

@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
@@ -192,6 +193,32 @@ func handleToolsCall(
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
+	}
+
+	// Legacy /mcp/<toolset slug> calls do not carry the wrapper server id in
+	// their route payload. Attribute only when exactly one enabled wrapper
+	// exists. Disabled wrappers do not serve, and choosing among multiple live
+	// wrappers would apply an arbitrary server's policy and telemetry identity.
+	// Keep the payload unchanged because its nil server id still identifies the
+	// legacy authorization path.
+	attributedMCPServerID := payload.mcpServerID
+	if attributedMCPServerID == nil {
+		servers, lookupErr := mcpservers_repo.New(db).ListEnabledMCPServersByToolsetID(ctx, mcpservers_repo.ListEnabledMCPServersByToolsetIDParams{
+			ToolsetID: toolsetID,
+			ProjectID: uuid.UUID(projectID),
+		})
+		if lookupErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, lookupErr, "resolve MCP server for toolset").LogError(ctx, logger)
+		}
+		switch len(servers) {
+		case 0:
+		case 1:
+			serverID := servers[0].ID
+			attributedMCPServerID = &serverID
+		default:
+			// Ambiguous wrappers leave the call unattributed rather than failing it.
+			logger.WarnContext(ctx, "multiple enabled MCP servers wrap the legacy toolset; skipping server attribution", attr.SlogToolsetID(toolsetID.String()))
+		}
 	}
 
 	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
@@ -414,8 +441,8 @@ func handleToolsCall(
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
 		logAttrs.RecordToolsetSlug(payload.toolset)
-		if payload.mcpServerID != nil {
-			logAttrs[attr.McpServerIDKey] = payload.mcpServerID.String()
+		if attributedMCPServerID != nil {
+			logAttrs[attr.McpServerIDKey] = attributedMCPServerID.String()
 		}
 		if payload.metaMcpServerID != "" {
 			logAttrs[attr.MetaMcpServerIDKey] = payload.metaMcpServerID
@@ -440,8 +467,8 @@ func handleToolsCall(
 	}()
 
 	serverID := ""
-	if payload.mcpServerID != nil {
-		serverID = payload.mcpServerID.String()
+	if attributedMCPServerID != nil {
+		serverID = attributedMCPServerID.String()
 	}
 	toolName := descriptor.Name
 	if plan.Kind == gateway.ToolKindExternalMCP {
