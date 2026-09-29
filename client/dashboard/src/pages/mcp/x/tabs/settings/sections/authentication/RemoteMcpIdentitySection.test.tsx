@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   discoverProtectedResource: vi.fn(),
   commit: vi.fn(),
   detach: vi.fn(),
+  userSessionIssuer: vi.fn(),
   toastSuccess: vi.fn(),
 }));
 
@@ -102,6 +103,10 @@ vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
 vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
   useRemoteSessionIssuers: () => mocks.issuers(),
   invalidateAllRemoteSessionIssuers: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
+  useUserSessionIssuer: () => mocks.userSessionIssuer(),
 }));
 
 vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
@@ -200,6 +205,9 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
+  mocks.userSessionIssuer.mockReturnValue({
+    data: { id: "user-session-issuer-1", projectId: "project-1" },
+  });
   mocks.headers.mockReturnValue({
     data: { headers: [] },
     isLoading: false,
@@ -895,6 +903,23 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       screen.getAllByText(/legacy pass-through Authorization header/i),
     ).toHaveLength(1);
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /Service Account/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("locks identity when the session issuer is organization-wide", () => {
+    mocks.userSessionIssuer.mockReturnValue({
+      data: { id: "user-session-issuer-1", projectId: "" },
+    });
+
+    renderIdentity();
+
+    expect(screen.getByText(/organization-wide session issuer/i)).toBeDefined();
     expect(
       (
         screen.getByRole("radio", {

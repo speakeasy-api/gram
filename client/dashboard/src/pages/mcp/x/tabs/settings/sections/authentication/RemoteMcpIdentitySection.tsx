@@ -16,6 +16,7 @@ import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
+import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
@@ -90,6 +91,16 @@ export function RemoteMcpIdentitySectionBody({
     { enabled: !!target.userSessionIssuerId },
   );
   const { data: issuersResult } = useRemoteSessionIssuers();
+  const { data: userSessionIssuer } = useUserSessionIssuer(
+    { id: target.userSessionIssuerId ?? undefined },
+    undefined,
+    { enabled: !!target.userSessionIssuerId, throwOnError: false },
+  );
+  // An organization-owned issuer governs servers across projects, so its
+  // bindings are managed at the organization, not from one server. The server
+  // refuses the change anyway (ErrIdentityOrgWideBinding); locking here says
+  // so before Save instead of after.
+  const organizationIssuer = userSessionIssuer?.projectId === "";
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -116,6 +127,7 @@ export function RemoteMcpIdentitySectionBody({
     siblingsQuery.isLoading || siblingsQuery.isError || !canWrite;
   const identityReadOnly =
     sharedSource ||
+    organizationIssuer ||
     siblingsQuery.isLoading ||
     siblingsQuery.isError ||
     !canWrite;
@@ -339,6 +351,21 @@ export function RemoteMcpIdentitySectionBody({
                 Editing is disabled here so one server cannot change the
                 credential used by the others. Manage linked providers and
                 clients in{" "}
+                <Link
+                  className="font-medium underline underline-offset-2"
+                  to={routes.remoteIdentityProviders.href()}
+                >
+                  Remote Identity Providers
+                </Link>
+                .
+              </Alert>
+            ) : null}
+
+            {organizationIssuer && !sharedSource ? (
+              <Alert variant="warning" dismissible={false}>
+                This server uses an organization-wide session issuer, so its
+                identity is managed for the whole organization rather than from
+                here. Manage it in{" "}
                 <Link
                   className="font-medium underline underline-offset-2"
                   to={routes.remoteIdentityProviders.href()}
