@@ -137,8 +137,9 @@ its credential. The original three agent lifecycle fixtures remain unchanged.
 The account has invalid ciphertext, no refresh token and auto-refresh disabled.
 Its client sits under Linear's remote identity provider (reserved example
 endpoints), so Linear's user session issuer binds clients of one remote issuer
-and the `mcp_servers.remote_session_issuer_id` stamp stays derivable. It is display-only, not a live OAuth
-integration. All IDs reuse `Spec.NameSeed` and retarget with the tenant.
+and the `mcp_servers.remote_session_issuer_id` stamp stays derivable. It is
+display-only, not a live OAuth integration. All IDs reuse `Spec.NameSeed` and
+retarget with the tenant.
 Reseeding deletes bindings before sessions, issuers, agents and projects.
 Browser verification: `[~]` (not yet verified); see check 18 in `verify.md`.
 

@@ -262,6 +262,8 @@ describe("useHeaderDrafts", () => {
       await pending;
     });
     expect(result.current.readOnly).toBe(false);
+    // The refresh is what the lock protects: it replaces the rows wholesale.
+    expect(result.current.drafts).toHaveLength(0);
   });
 
   it("drops the submitted values even when a write fails", async () => {
