@@ -13,11 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // writableFeatures is the reviewed allowlist for this write, mapped to the
@@ -136,11 +134,8 @@ func (f *featureWriter) prepare(ctx context.Context, input PrepareFeatureInput) 
 	if err != nil {
 		return ProposalOutput{}, err
 	}
-	if input.OrganizationID == "" || len(input.OrganizationID) > 128 || input.OrganizationID != strings.TrimSpace(input.OrganizationID) {
-		return ProposalOutput{}, errors.New("provide an exact organization ID")
-	}
-	if input.RetryKey == "" || len(input.RetryKey) > maxIdempotencyKeyLength {
-		return ProposalOutput{}, errors.New("provide a retry key of at most 128 characters")
+	if err := checkPrepareTarget(input.OrganizationID, input.RetryKey); err != nil {
+		return ProposalOutput{}, err
 	}
 	tx, err := f.store.db.Begin(ctx)
 	if err != nil {
@@ -226,13 +221,8 @@ func (f *featureWriter) execution(authority writeAuthority) ProposalExecution {
 				return "", nil, ErrProposalInvalidated
 			}
 			desired = change.Enabled
-			ctx = contextvalues.SetActingSurface(ctx, "admin_mcp")
-			ctx = contextvalues.SetOAuthClientID(ctx, authority.Principal.ClientID)
-			name := authority.Staff.Name
-			if name == "" {
-				name = authority.Staff.Email
-			}
-			actor := productfeatures.MutationActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, authority.Staff.OIDCSubject), DisplayName: &name}
+			ctx, principal, name := staffMutation(ctx, authority)
+			actor := productfeatures.MutationActor{Principal: principal, DisplayName: name}
 			changed, err := f.mutator.ApplyFeatureChangeTx(ctx, tx, proposal.Target.OrganizationID, locked, change.Enabled, actor)
 			if err != nil {
 				return "", nil, fmt.Errorf("apply feature change: %w", err)
@@ -251,12 +241,9 @@ func (f *featureWriter) execution(authority writeAuthority) ProposalExecution {
 	}
 }
 
-func registerFeatureWriteTool(server *mcp.Server, feature *featureWriter) {
-	if feature == nil || !feature.writes.OperationEnabled(OperationSetOrganizationFeature) {
-		return
-	}
+func (f *featureWriter) registerPrepare(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{Name: "prepare_set_organization_feature", Title: "Prepare Organization Feature Change", Description: "Prepare an exact, single-organization change to the logs or consent_tool_filtering feature. Returns a server-stored before/after preview and a private staff approval URL. Does not make the change. Requires admin:write; no other features are supported."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareFeatureInput) (*mcp.CallToolResult, ProposalOutput, error) {
-		out, err := feature.prepare(ctx, input)
+		out, err := f.prepare(ctx, input)
 		return nil, out, err
 	})
 }

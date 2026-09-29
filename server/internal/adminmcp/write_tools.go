@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +14,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type ProposalIDInput struct {
@@ -61,6 +64,33 @@ type approvableOperation interface {
 type operationWriter interface {
 	approvableOperation
 	execution(authority writeAuthority) ProposalExecution
+	// registerPrepare adds the operation's prepare tool.
+	registerPrepare(server *mcp.Server)
+}
+
+// checkPrepareTarget validates the arguments every prepare tool shares. The
+// organization ID is resolved against the database afterwards.
+func checkPrepareTarget(organizationID, retryKey string) error {
+	if organizationID == "" || len(organizationID) > 128 || organizationID != strings.TrimSpace(organizationID) {
+		return errors.New("provide an exact organization ID")
+	}
+	if retryKey == "" || len(retryKey) > maxIdempotencyKeyLength {
+		return errors.New("provide a retry key of at most 128 characters")
+	}
+	return nil
+}
+
+// staffMutation marks ctx as an Admin MCP change made through the caller's
+// OAuth client, so audit records the admin_mcp surface that customer feeds
+// mask, and returns the staff actor for the domain mutator.
+func staffMutation(ctx context.Context, authority writeAuthority) (context.Context, urn.Principal, *string) {
+	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceAdminMCP))
+	ctx = contextvalues.SetOAuthClientID(ctx, authority.Principal.ClientID)
+	name := authority.Staff.Name
+	if name == "" {
+		name = authority.Staff.Email
+	}
+	return ctx, urn.NewPrincipal(urn.PrincipalTypeUser, authority.Staff.OIDCSubject), &name
 }
 
 // proposalView is the readable form of a stored preview on the approval page.
@@ -166,11 +196,15 @@ func (t *writeTools) status(ctx context.Context, input ProposalIDInput) (Proposa
 	return proposalOutput(loaded.proposal, true, t.baseURL), nil
 }
 
-func registerWriteTools(server *mcp.Server, tools *writeTools, feature *featureWriter) {
+func registerWriteTools(server *mcp.Server, tools *writeTools) {
 	if tools == nil || !tools.available() {
 		return
 	}
-	registerFeatureWriteTool(server, feature)
+	for _, op := range AllWriteOperations {
+		if writer := tools.writers[op]; writer != nil && tools.writes.OperationEnabled(op) {
+			writer.registerPrepare(server)
+		}
+	}
 	mcp.AddTool(server, &mcp.Tool{Name: "execute_admin_proposal", Title: "Execute Approved Staff Proposal", Description: "Execute an exact stored staff change once, after it was separately approved in the admin site. Takes only its proposal ID, no target or replacement arguments. A committed receipt replays without writing again."}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProposalIDInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := tools.execute(ctx, input)
 		return nil, out, err
@@ -188,9 +222,11 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 	if runtime == nil || oauth == nil || oauth.Approval == nil || features == nil {
 		return errors.New("staff write tools are not configured")
 	}
-	feature := &featureWriter{store: oauth.Approval.store, mutator: productfeatures.NewMutator(features, audit.NewLogger()), writes: writes, baseURL: oauth.Resource()}
-	tools := newWriteTools(oauth.Approval.store, writes, oauth.Resource(), map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.
-		OperationSetOrganizationFeature: feature,
+	auditLogger := audit.NewLogger()
+	store := oauth.Approval.store
+	tools := newWriteTools(store, writes, oauth.Resource(), map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.
+		OperationSetOrganizationFeature:    &featureWriter{store: store, mutator: productfeatures.NewMutator(features, auditLogger), writes: writes, baseURL: oauth.Resource()},
+		OperationSetOrganizationOnboarding: &onboardingWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
 	})
 	for _, op := range writes.EnabledOperations() {
 		if tools.writers[op] == nil {
@@ -202,6 +238,6 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 		approvals[op] = writer
 	}
 	oauth.Approval.operations = approvals
-	registerWriteTools(runtime.server, tools, feature)
+	registerWriteTools(runtime.server, tools)
 	return nil
 }
