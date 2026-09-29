@@ -365,6 +365,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
               clientIdMetadataDocumentSupported: true,
               authorizationEndpoint: "https://mcp.linear.app/authorize",
               tokenEndpoint: "https://mcp.linear.app/token",
+              // client_secret_post rules CIMD out, so this registers by DCR.
+              registrationEndpoint: "https://mcp.linear.app/register",
               scopesSupported: ["read", "write", "admin", "refresh_token"],
               tokenEndpointAuthMethodsSupported: ["client_secret_post"],
             },

@@ -75,13 +75,34 @@ type UserIdentityStatus =
 /** What a provider can do on its own, read from its metadata. */
 type AutomaticSupport = { cimd: boolean; dcr: boolean };
 
-// Without both endpoints a registration would persist an identity nobody can
-// complete a login through, so neither automatic path is on offer.
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+// The server registers only against an absolute https endpoint, or http on
+// loopback (urls.IsAbsoluteHTTPSOrLoopback); offering DCR for anything else
+// would only fail at Save.
+function registrableEndpoint(endpoint: string | null | undefined): boolean {
+  const trimmed = endpoint?.trim();
+  if (!trimmed) return false;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+// Mirrors the server's registration choice so the cards never offer a path
+// Save would refuse. Without both OAuth endpoints a registration would
+// persist an identity nobody can complete a login through. CIMD needs the
+// provider to accept public clients (`none`, or no methods listed), as
+// supportsCIMD does server-side.
 function automaticSupport(candidate: {
   clientIdMetadataDocumentSupported?: boolean;
   registrationEndpoint?: string | null;
   authorizationEndpoint?: string | null;
   tokenEndpoint?: string | null;
+  tokenEndpointAuthMethodsSupported?: string[] | null;
 }): AutomaticSupport {
   if (
     !candidate.authorizationEndpoint?.trim() ||
@@ -89,9 +110,12 @@ function automaticSupport(candidate: {
   ) {
     return { cimd: false, dcr: false };
   }
+  const methods = candidate.tokenEndpointAuthMethodsSupported ?? [];
   return {
-    cimd: !!candidate.clientIdMetadataDocumentSupported,
-    dcr: !!candidate.registrationEndpoint?.trim(),
+    cimd:
+      !!candidate.clientIdMetadataDocumentSupported &&
+      (methods.length === 0 || methods.includes("none")),
+    dcr: registrableEndpoint(candidate.registrationEndpoint),
   };
 }
 
@@ -103,8 +127,7 @@ const CLIENT_DATE = new Intl.DateTimeFormat("en-US", {
 
 // A client_id is whatever the provider issued — a metadata URL for CIMD, an
 // opaque string otherwise — and means nothing to an operator picking between
-// clients. Name a client by how it came to exist and when; a short tail of a
-// non-CIMD client_id is kept only to tell two clients apart.
+// clients. Name a client by how it came to exist and when.
 function clientOptionName(candidate: RemoteSessionClient): string {
   const created = CLIENT_DATE.format(candidate.createdAt);
   return candidate.clientIdMetadataUri
@@ -112,10 +135,18 @@ function clientOptionName(candidate: RemoteSessionClient): string {
     : `Client created ${created}`;
 }
 
-function clientOptionHint(candidate: RemoteSessionClient): string | null {
-  if (candidate.clientIdMetadataUri) return null;
-  const id = candidate.clientId;
+function idTail(id: string): string {
   return id.length > 8 ? `…${id.slice(-6)}` : id;
+}
+
+// A short tail tells clients apart: a non-CIMD client's own client_id always,
+// and a CIMD client's row id only when another client shares its label.
+function clientOptionHint(
+  candidate: RemoteSessionClient,
+  labelShared: boolean,
+): string | null {
+  if (!candidate.clientIdMetadataUri) return idTail(candidate.clientId);
+  return labelShared ? idTail(candidate.id) : null;
 }
 
 function scopesFromText(text: string): string[] {
@@ -377,16 +408,18 @@ export function useUserIdentityDraft({
       { remoteSessionIssuerId: selectedIssuer?.id ?? "" },
       { enabled: enabled && !!selectedIssuer },
     );
-  const clientOptions = useMemo<ClientOption[]>(
-    () =>
-      providerClients.map((candidate) => ({
-        id: candidate.id,
-        name: clientOptionName(candidate),
-        hint: clientOptionHint(candidate),
-        scopes: candidate.scope ?? [],
-      })),
-    [providerClients],
-  );
+  const clientOptions = useMemo<ClientOption[]>(() => {
+    const names = providerClients.map(clientOptionName);
+    return providerClients.map((candidate, index) => ({
+      id: candidate.id,
+      name: names[index] ?? "",
+      hint: clientOptionHint(
+        candidate,
+        names.filter((name) => name === names[index]).length > 1,
+      ),
+      scopes: candidate.scope ?? [],
+    }));
+  }, [providerClients]);
   const linkedClientId =
     linkedClients.find(
       (candidate) => candidate.remoteSessionIssuerId === selectedProviderId,
