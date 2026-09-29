@@ -79,6 +79,9 @@ type Service struct {
 	// URLs are built on. Nil leaves those URLs out.
 	mcpServerURL *url.URL
 
+	// workosEnvironmentID scopes WorkOS dashboard links. Empty leaves them out.
+	workosEnvironmentID string
+
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
@@ -219,7 +222,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, registry: registry,
+	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", registry: registry,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:         logger,
 		db:             db,
@@ -897,7 +900,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 
 	orgs := make([]*gen.AdminOrganization, len(rows))
 	for i := range rows {
-		orgs[i] = adminOrganizationFromRow(rows[i])
+		orgs[i] = s.adminOrganizationFromRow(rows[i])
 	}
 
 	return &gen.AdminListOrganizationsResult{
@@ -1830,7 +1833,7 @@ func (s *Service) readOrganizationAfterWrite(ctx context.Context, id string, err
 		return nil, oops.E(oops.CodeUnexpected, err, "%s", errMsg).LogError(ctx, s.logger)
 	}
 
-	return adminOrganizationFromGetRow(row), nil
+	return s.adminOrganizationFromGetRow(row), nil
 }
 
 func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizationPayload) (*gen.AdminOrganization, error) {
@@ -1844,16 +1847,17 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization by id or slug").LogError(ctx, s.logger)
 	}
-	return adminOrganizationFromGetRow(row), nil
+	return s.adminOrganizationFromGetRow(row), nil
 }
 
-func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
+func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
 		ID:                   row.ID,
 		Name:                 row.Name,
 		Slug:                 row.Slug,
 		AccountType:          row.AccountType,
 		WorkosID:             conv.FromPGText[string](row.WorkosID),
+		WorkosDashboardURL:   s.workosDashboardURL(row.WorkosID),
 		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
 		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
 		Whitelisted:          row.Whitelisted,
@@ -1870,13 +1874,14 @@ func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrg
 	}
 }
 
-func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
+func (s *Service) adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
 		ID:                   row.ID,
 		Name:                 row.Name,
 		Slug:                 row.Slug,
 		AccountType:          row.AccountType,
 		WorkosID:             conv.FromPGText[string](row.WorkosID),
+		WorkosDashboardURL:   s.workosDashboardURL(row.WorkosID),
 		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
 		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
 		Whitelisted:          row.Whitelisted,

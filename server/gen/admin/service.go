@@ -432,6 +432,10 @@ type AdminOrganization struct {
 	AccountType string
 	// WorkOS organization ID, if linked.
 	WorkosID *string
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string
 	// Current Stripe subscription ID, if subscribed.

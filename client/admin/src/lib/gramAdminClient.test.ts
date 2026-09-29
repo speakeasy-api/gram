@@ -569,6 +569,8 @@ describe("organizationFromSdk", () => {
         slug: "placeholder-one",
         accountType: "enterprise",
         workosId: "org_workos_placeholder",
+        workosDashboardUrl:
+          "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder",
         stripeCustomerId: "cus_placeholder",
         stripeSubscriptionId: "sub_placeholder",
         whitelisted: true,
@@ -589,6 +591,8 @@ describe("organizationFromSdk", () => {
       slug: "placeholder-one",
       account_type: "enterprise",
       workos_id: "org_workos_placeholder",
+      workos_dashboard_url:
+        "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder",
       stripe_customer_id: "cus_placeholder",
       stripe_subscription_id: "sub_placeholder",
       whitelisted: true,
@@ -626,6 +630,7 @@ describe("organizationFromSdk", () => {
     expect(record.trial_converted_at).toBeUndefined();
     expect(record.trial_demoted_at).toBeUndefined();
     expect(record.workos_id).toBeUndefined();
+    expect(record.workos_dashboard_url).toBeUndefined();
     expect(record.stripe_customer_id).toBeUndefined();
     expect(record.creation_source).toBeUndefined();
   });

@@ -15113,6 +15113,7 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 		Slug:                 *v.Slug,
 		AccountType:          *v.AccountType,
 		WorkosID:             v.WorkosID,
+		WorkosDashboardURL:   v.WorkosDashboardURL,
 		StripeCustomerID:     v.StripeCustomerID,
 		StripeSubscriptionID: v.StripeSubscriptionID,
 		Whitelisted:          *v.Whitelisted,

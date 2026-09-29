@@ -300,6 +300,7 @@ export function organizationFromSdk(
     slug: org.slug,
     account_type: org.accountType,
     workos_id: org.workosId,
+    workos_dashboard_url: org.workosDashboardUrl,
     stripe_customer_id: org.stripeCustomerId,
     stripe_subscription_id: org.stripeSubscriptionId,
     whitelisted: org.whitelisted,

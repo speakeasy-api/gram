@@ -5569,6 +5569,10 @@ components:
         whitelisted:
           type: boolean
           description: Whether the organization is whitelisted for full access.
+        workos_dashboard_url:
+          type: string
+          description: Link to the organization in the WorkOS dashboard. Absent when the organization is not linked to WorkOS or the deployment has no WorkOS environment configured.
+          format: uri
         workos_id:
           type: string
           description: WorkOS organization ID, if linked.
