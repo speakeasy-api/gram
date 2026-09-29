@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -73,6 +74,20 @@ func NewAuthorizer(engine authorizationEngine) *Authorizer {
 // ordinary validated Gram session with an active membership is accepted.
 func (a *Authorizer) RequireHuman(ctx context.Context, dbtx repo.DBTX) (HumanContext, error) {
 	return a.requireHumanWithMemberships(ctx, dbtx)
+}
+
+// RequireListReader permits ordinary demo visitors to read synthetic inventory.
+// It never authorizes a selected-agent read, credential access, or mutation.
+func (a *Authorizer) RequireListReader(ctx context.Context, dbtx repo.DBTX) (HumanContext, bool, error) {
+	authCtx, err := ordinaryHumanAuth(ctx)
+	if err != nil {
+		return HumanContext{}, false, err
+	}
+	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
+		return HumanContext{Auth: authCtx, grants: nil}, true, nil
+	}
+	human, err := a.requireHumanWithMemberships(ctx, dbtx)
+	return human, false, err
 }
 
 // ordinaryHumanAuth validates the session without acquiring any database locks.

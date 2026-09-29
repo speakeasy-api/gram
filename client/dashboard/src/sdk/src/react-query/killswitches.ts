@@ -32,6 +32,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   KillswitchesListRequest,
   KillswitchesListSecurity,
+  PrincipalKind,
 } from "../models/operations/killswitcheslist.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -192,6 +193,8 @@ export function setKillswitchesData(
     parameters: {
       capabilityKey?: KillswitchCapabilityKey | undefined;
       userId?: string | undefined;
+      agentId?: string | undefined;
+      principalKind?: PrincipalKind | undefined;
       status?: KillswitchListStatus | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;
@@ -211,6 +214,8 @@ export function invalidateKillswitches(
     [parameters: {
       capabilityKey?: KillswitchCapabilityKey | undefined;
       userId?: string | undefined;
+      agentId?: string | undefined;
+      principalKind?: PrincipalKind | undefined;
       status?: KillswitchListStatus | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;

@@ -37,6 +37,7 @@ export interface ProjectNavRoute {
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
+  const fleetFlag = useFeatureFlag(FEATURE_FLAGS.fleet);
   const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
   const userSessionsFlag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
   const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
@@ -114,6 +115,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.costs, scope: observe },
       ...(isExploreEnabled ? [{ route: routes.explore, scope: observe }] : []),
       { route: routes.insights, scope: observe },
+      ...(fleetFlag.status === "enabled"
+        ? [{ route: routes.fleet, scope: read }]
+        : []),
       { route: routes.agentSessions, scope: observe },
       ...(isOrgMemoryEnabled
         ? [{ route: routes.orgMemory, scope: observe }]
@@ -124,6 +128,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   }, [
     routes,
     agentManagementFlag.status,
+    fleetFlag.status,
     userSessionsFlag.status,
     projectId,
     isAssistantsEnabled,

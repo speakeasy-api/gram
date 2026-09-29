@@ -8,6 +8,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+var PrincipalKind = Type("KillswitchPrincipalKind", String, func() { Enum("user", "agent") })
+
 var CapabilityKey = Type("KillswitchCapabilityKey", String, func() { Enum("mcp_tool_calls") })
 var ScopeType = Type("KillswitchScopeType", String, func() { Enum("all_servers", "selected_servers") })
 var ScheduleStart = Type("KillswitchScheduleStart", String, func() { Enum("now", "scheduled") })
@@ -50,11 +52,13 @@ var Schedule = Type("KillswitchSchedule", func() {
 })
 
 var Summary = Type("KillswitchSummary", func() {
-	Required("id", "capability_key", "capability_label", "user_id", "version", "status", "scope", "schedule")
+	Required("id", "capability_key", "capability_label", "principal_kind", "version", "status", "scope", "schedule")
 	Attribute("id", String, func() { Format(FormatUUID) })
 	Attribute("capability_key", CapabilityKey)
 	Attribute("capability_label", String)
-	Attribute("user_id", String)
+	Attribute("user_id", String, "Present only for user restrictions")
+	Attribute("agent_id", String, "Present only for registered-agent restrictions", func() { Format(FormatUUID) })
+	Attribute("principal_kind", PrincipalKind)
 	Attribute("version", Int64)
 	Attribute("status", Status)
 	Attribute("scope", CustomerScope)
@@ -127,12 +131,17 @@ func mutationIdentityPayload() {
 	Required("operation_id")
 }
 
+func targetPayload() {
+	Attribute("user_id", String, "Target user. Supply exactly one of user_id or agent_id.")
+	Attribute("agent_id", String, "Target registered agent, independent of its owner. Applies across all credential sessions in the organization.", func() { Format(FormatUUID) })
+}
+
 var CreateForm = Type("KillswitchCreateRequest", func() {
 	mutationIdentityPayload()
 	Attribute("capability_key", CapabilityKey)
-	Attribute("user_id", String)
+	targetPayload()
 	desiredPayload()
-	Required("capability_key", "user_id")
+	Required("capability_key")
 })
 
 var EditForm = Type("KillswitchEditRequest", func() {
@@ -153,10 +162,28 @@ var LiftForm = Type("KillswitchLiftRequest", func() {
 var PreviewOverlapsForm = Type("KillswitchPreviewOverlapsRequest", func() {
 	Attribute("id", String, func() { Format(FormatUUID) })
 	Attribute("capability_key", CapabilityKey)
-	Attribute("user_id", String)
+	targetPayload()
 	Attribute("scope", CustomerScope)
 	Attribute("schedule", Schedule)
-	Required("capability_key", "user_id", "scope", "schedule")
+	Required("capability_key", "scope", "schedule")
+})
+
+var AgentBadge = Type("KillswitchAgentBadge", func() {
+	Required("agent_id", "affected", "affected_now", "scheduled")
+	Attribute("agent_id", String, func() { Format(FormatUUID) })
+	Attribute("affected", Boolean)
+	Attribute("affected_now", Boolean)
+	Attribute("scheduled", Boolean)
+})
+
+var BatchAgentBadgesForm = Type("KillswitchBatchAgentBadgesRequest", func() {
+	Attribute("agent_ids", ArrayOf(String, func() { Format(FormatUUID) }), func() { MinLength(1); MaxLength(100) })
+	Required("agent_ids")
+})
+
+var BatchAgentBadgesResult = Type("KillswitchBatchAgentBadgesResult", func() {
+	Required("badges")
+	Attribute("badges", ArrayOf(AgentBadge))
 })
 
 var BatchUserBadgesForm = Type("KillswitchBatchUserBadgesRequest", func() {
@@ -234,7 +261,7 @@ func declareHTTPErrorResponses() {
 }
 
 var _ = Service("killswitches", func() {
-	Description("Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.")
+	Description("Manage MCP tool-call killswitches for users and registered agents in the active organization. Requires an ordinary live organization-administrator session.")
 	Security(security.Session)
 	declareErrors()
 	HTTP(func() {
@@ -267,7 +294,8 @@ var _ = Service("killswitches", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("capability_key", CapabilityKey)
-			Attribute("user_id", String)
+			targetPayload()
+			Attribute("principal_kind", PrincipalKind, "Defaults to user; agent_id selects agent when omitted")
 			Attribute("status", Status)
 			Attribute("limit", Int32, func() { Minimum(1); Maximum(100) })
 			Attribute("cursor", String)
@@ -277,6 +305,8 @@ var _ = Service("killswitches", func() {
 			GET("/rpc/killswitches.list")
 			Param("capability_key")
 			Param("user_id")
+			Param("agent_id")
+			Param("principal_kind")
 			Param("status")
 			Param("limit")
 			Param("cursor")
@@ -391,4 +421,21 @@ var _ = Service("killswitches", func() {
 			Response(StatusOK)
 		})
 	})
+	Method("batchAgentBadges", func() {
+		Meta("openapi:operationId", "batchKillswitchAgentBadges")
+		Meta("openapi:extension:x-speakeasy-name-override", "batchAgentBadges")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "BatchKillswitchAgentBadges"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(BatchAgentBadgesForm)
+		})
+		Result(BatchAgentBadgesResult)
+		HTTP(func() {
+			POST("/rpc/killswitches.batchAgentBadges")
+			security.SessionHeader()
+			Body(BatchAgentBadgesForm)
+			Response(StatusOK)
+		})
+	})
+
 })

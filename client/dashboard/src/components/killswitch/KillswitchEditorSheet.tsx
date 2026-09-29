@@ -23,6 +23,7 @@ import type { KillswitchPreviewOverlapsResult } from "@gram/client/models/compon
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import {
+  affectedServerNames,
   conflictName,
   draftToSchedule,
   draftToScope,
@@ -37,6 +38,7 @@ import {
 } from "./killswitch-view-model";
 
 type Props = {
+  agentTarget?: { id: string; name: string };
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
@@ -85,11 +87,15 @@ function toLocalInput(value: Date): string {
 function initialDraft(
   initial?: KillswitchDetail,
   createContext?: KillswitchCreateContext,
+  agentTarget?: { id: string; name: string },
 ): EditorDraft {
   if (!initial) {
     return {
-      userId: createContext?.userId ?? "",
-      capabilityKey: createContext?.capabilityKey ?? "",
+      userId: agentTarget ? "" : (createContext?.userId ?? ""),
+      agentId: agentTarget?.id,
+      capabilityKey: agentTarget
+        ? "mcp_tool_calls"
+        : (createContext?.capabilityKey ?? ""),
       scopeType: "",
       serverIds: [],
       startType: "now",
@@ -101,7 +107,8 @@ function initialDraft(
     };
   }
   return {
-    userId: initial.userId,
+    userId: initial.principalKind === "user" ? (initial.userId ?? "") : "",
+    agentId: initial.agentId,
     capabilityKey: initial.capabilityKey,
     scopeType: initial.scope.type,
     serverIds:
@@ -139,7 +146,7 @@ export function KillswitchEditorSheet(props: Props): JSX.Element {
     <Sheet open={props.open} onOpenChange={handleOpenChange}>
       {props.open && (
         <EditorContents
-          key={`${props.mode}-${props.initial?.id ?? "new"}-${props.createContext?.userId ?? ""}-${props.createContext?.capabilityKey ?? ""}-${props.createContext?.originatingMcpServerId ?? ""}`}
+          key={`${props.mode}-${props.initial?.id ?? "new"}-${props.agentTarget?.id ?? props.createContext?.userId ?? ""}-${props.createContext?.capabilityKey ?? ""}-${props.createContext?.originatingMcpServerId ?? ""}`}
           {...props}
           onOpenChange={handleOpenChange}
           isSubmitting={isSubmitting}
@@ -152,6 +159,7 @@ export function KillswitchEditorSheet(props: Props): JSX.Element {
 
 function EditorContents({
   onOpenChange,
+  agentTarget,
   mode,
   members,
   servers,
@@ -172,7 +180,7 @@ function EditorContents({
   setIsSubmitting,
 }: EditorContentsProps): JSX.Element {
   const [draft, setDraft] = useState<EditorDraft>(() =>
-    initialDraft(initial, createContext),
+    initialDraft(initial, createContext, agentTarget),
   );
   const [errors, setErrors] = useState<DraftErrors>({});
   const [operationId, setOperationId] = useState(newOperationId);
@@ -200,9 +208,16 @@ function EditorContents({
   const catalogUnavailable =
     mode === "create" &&
     (Boolean(capabilitiesLoading) || Boolean(capabilitiesError));
+  const targetName = agentTarget?.name;
   const member = members.find((item) => item.id === draft.userId);
   const serverNames = useMemo(
-    () => new Map(servers.map((server) => [server.id, server.name])),
+    () =>
+      new Map(
+        servers.map((server) => [
+          server.id,
+          `${server.name} (${server.projectName})`,
+        ]),
+      ),
     [servers],
   );
   const diff = comparisonBaseline
@@ -418,7 +433,7 @@ function EditorContents({
               onClick={() => {
                 const retainedUser = draft.userId;
                 const nextDraft = {
-                  ...initialDraft(undefined, createContext),
+                  ...initialDraft(undefined, createContext, agentTarget),
                   userId: retainedUser,
                 };
                 draftRef.current = nextDraft;
@@ -431,11 +446,12 @@ function EditorContents({
                 setPreviewFingerprint("");
               }}
             >
-              Add another killswitch for {member?.name || "this member"}
+              Add another killswitch for{" "}
+              {targetName ?? member?.name ?? "this member"}
             </Button>
           )}
           <Button onClick={() => onView?.(receipt.id)}>View killswitch</Button>
-          {mcpSessionsHref && (
+          {mcpSessionsHref && !draft.agentId && (
             <Button variant="secondary" asChild>
               <Link to={mcpSessionsHref(draft.userId)}>
                 View this member in MCP Sessions
@@ -455,8 +471,8 @@ function EditorContents({
             {mode === "create" ? "New killswitch" : "Edit killswitch"}
           </SheetTitle>
           <SheetDescription>
-            One member and one capability create one independently managed
-            killswitch.
+            One target and one capability create one independently managed
+            restriction.
           </SheetDescription>
         </SheetHeader>
 
@@ -467,9 +483,9 @@ function EditorContents({
         >
           <fieldset className="space-y-3">
             <legend className="font-medium">Who</legend>
-            {mode === "edit" || createContext ? (
+            {mode === "edit" || createContext || agentTarget ? (
               <p>
-                {member?.name ?? "Deleted member"}
+                {targetName ?? member?.name ?? "Deleted member"}
                 {member?.email ? ` — ${member.email}` : ""}
               </p>
             ) : (
@@ -728,7 +744,11 @@ function EditorContents({
 
           <NoteField
             id="killswitch-external-note"
-            label="Public message shown to the member"
+            label={
+              draft.agentId
+                ? "Public message returned to the caller"
+                : "Public message shown to the member"
+            }
             description="Shown exactly as plain text. Do not include confidential internal details."
             value={draft.externalNote}
             max={500}
@@ -762,7 +782,7 @@ function EditorContents({
                   {diff.removed.length > 0 && (
                     <p>
                       {draft.startType === "now"
-                        ? "Removed servers regain access immediately."
+                        ? "This restriction no longer covers removed servers. Other access controls still apply."
                         : "Removed servers remain available when this Killswitch starts."}
                     </p>
                   )}
@@ -775,8 +795,26 @@ function EditorContents({
 
           <div className="border bg-muted/30 p-3 text-sm">
             <div className="font-medium">Impact summary</div>
+            {draft.agentId && (
+              <p className="my-2">
+                Target: <strong>{targetName ?? draft.agentId}</strong> ·
+                Registered agent <code>{draft.agentId}</code>. Blocks covered
+                MCP tools/call at Gram-hosted and private MCP checkpoints across
+                all this agent’s credential sessions in the organization,
+                including future sessions. In-flight calls, processes, and
+                external credentials are unaffected.
+              </p>
+            )}
+            {draft.scopeType && (
+              <p>
+                Named servers:{" "}
+                {affectedServerNames(draftToScope(draft), serverNames)}.{" "}
+                {draft.scopeType === "all_servers" &&
+                  "Future eligible servers are also covered."}
+              </p>
+            )}
             <p className="text-muted-foreground">
-              Overlaps include only Killswitches for this member and capability
+              Overlaps include only Killswitches for this target and capability
               whose server scope and schedule intersect.
             </p>
             <p>

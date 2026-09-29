@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -28,17 +29,35 @@ func (customerLifecycleValidator) ValidateCurrent(ctx context.Context, dbtx kill
 	// Lock the principal first, then resources in canonical UUID order. Every
 	// lifecycle mutation uses this order to avoid cross-operation deadlocks.
 	if batch.Principal != nil {
-		if batch.Principal.Kind != PrincipalKindUser {
-			return fmt.Errorf("%w: unsupported user reference", killswitches.ErrInvalidReference)
-		}
-		_, err := orgrepo.New(dbtx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{
-			UserID: pgtype.Text{String: string(batch.Principal.Key), Valid: true}, OrganizationID: string(batch.OrganizationID),
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("%w: user is not available", killswitches.ErrInvalidReference)
-		}
-		if err != nil {
-			return fmt.Errorf("lock current organization user: %w", err)
+		switch batch.Principal.Kind {
+		case PrincipalKindUser:
+			_, err := orgrepo.New(dbtx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{
+				UserID: pgtype.Text{String: string(batch.Principal.Key), Valid: true}, OrganizationID: string(batch.OrganizationID),
+			})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("%w: user is not available", killswitches.ErrInvalidReference)
+			}
+			if err != nil {
+				return fmt.Errorf("lock current organization user: %w", err)
+			}
+		case PrincipalKindAgent:
+			id, err := uuid.Parse(string(batch.Principal.Key))
+			if err != nil || id == uuid.Nil || id.String() != string(batch.Principal.Key) {
+				return fmt.Errorf("%w: agent is not available", killswitches.ErrInvalidReference)
+			}
+			agent, err := agentsrepo.New(dbtx).GetAgentByIDForUpdate(ctx, agentsrepo.GetAgentByIDForUpdateParams{
+				OrganizationID: string(batch.OrganizationID), ID: id,
+			})
+			if errors.Is(err, pgx.ErrNoRows) || (err == nil && !AgentAvailableForRestriction(agent)) {
+				return fmt.Errorf("%w: agent is not available", killswitches.ErrInvalidReference)
+			}
+			if err != nil {
+				return fmt.Errorf("lock current organization agent: %w", err)
+			}
+			// Suspended agents may be restricted before they resume. Owner loss
+			// and suspension remain independent admission gates.
+		default:
+			return fmt.Errorf("%w: unsupported principal reference", killswitches.ErrInvalidReference)
 		}
 	}
 
@@ -93,4 +112,10 @@ func canonicalResourceIDs(keys []killswitches.ResourceKey) ([]uuid.UUID, bool) {
 		ids[i] = id
 	}
 	return ids, true
+}
+
+// AgentAvailableForRestriction permits blocking before resume or owner reassignment.
+// Revoked and deleted agents cannot receive new restrictions; existing ones remain releasable.
+func AgentAvailableForRestriction(agent agentsrepo.Agent) bool {
+	return !agent.Deleted && !agent.RevokedAt.Valid
 }

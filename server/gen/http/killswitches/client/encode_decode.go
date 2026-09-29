@@ -513,6 +513,12 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		if p.UserID != nil {
 			values.Add("user_id", *p.UserID)
 		}
+		if p.AgentID != nil {
+			values.Add("agent_id", *p.AgentID)
+		}
+		if p.PrincipalKind != nil {
+			values.Add("principal_kind", string(*p.PrincipalKind))
+		}
 		if p.Status != nil {
 			values.Add("status", string(*p.Status))
 		}
@@ -2218,6 +2224,240 @@ func DecodeBatchUserBadgesResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildBatchAgentBadgesRequest instantiates a HTTP request object with method
+// and path set to call the "killswitches" service "batchAgentBadges" endpoint
+func (c *Client) BuildBatchAgentBadgesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BatchAgentBadgesKillswitchesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("killswitches", "batchAgentBadges", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeBatchAgentBadgesRequest returns an encoder for requests sent to the
+// killswitches batchAgentBadges server.
+func EncodeBatchAgentBadgesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*killswitches.BatchAgentBadgesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("killswitches", "batchAgentBadges", "*killswitches.BatchAgentBadgesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewBatchAgentBadgesRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("killswitches", "batchAgentBadges", err)
+		}
+		return nil
+	}
+}
+
+// DecodeBatchAgentBadgesResponse returns a decoder for responses returned by
+// the killswitches batchAgentBadges endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeBatchAgentBadgesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeBatchAgentBadgesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body BatchAgentBadgesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+			}
+			err = ValidateBatchAgentBadgesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+			}
+			res := NewBatchAgentBadgesKillswitchBatchAgentBadgesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body BatchAgentBadgesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+			}
+			err = ValidateBatchAgentBadgesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+			}
+			return nil, NewBatchAgentBadgesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body BatchAgentBadgesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+			}
+			err = ValidateBatchAgentBadgesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+			}
+			return nil, NewBatchAgentBadgesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body BatchAgentBadgesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+			}
+			err = ValidateBatchAgentBadgesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+			}
+			return nil, NewBatchAgentBadgesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body BatchAgentBadgesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+			}
+			err = ValidateBatchAgentBadgesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+			}
+			return nil, NewBatchAgentBadgesNotFound(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body BatchAgentBadgesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+			}
+			err = ValidateBatchAgentBadgesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+			}
+			return nil, NewBatchAgentBadgesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body BatchAgentBadgesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+			}
+			err = ValidateBatchAgentBadgesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+			}
+			return nil, NewBatchAgentBadgesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body BatchAgentBadgesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+				}
+				err = ValidateBatchAgentBadgesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+				}
+				return nil, NewBatchAgentBadgesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body BatchAgentBadgesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+				}
+				err = ValidateBatchAgentBadgesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+				}
+				return nil, NewBatchAgentBadgesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("killswitches", "batchAgentBadges", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body BatchAgentBadgesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+			}
+			err = ValidateBatchAgentBadgesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+			}
+			return nil, NewBatchAgentBadgesGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body BatchAgentBadgesUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("killswitches", "batchAgentBadges", err)
+			}
+			err = ValidateBatchAgentBadgesUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("killswitches", "batchAgentBadges", err)
+			}
+			return nil, NewBatchAgentBadgesUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("killswitches", "batchAgentBadges", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalKillswitchCapabilityResponseBodyToKillswitchesKillswitchCapability
 // builds a value of type *killswitches.KillswitchCapability from a value of
 // type *KillswitchCapabilityResponseBody.
@@ -2263,7 +2503,9 @@ func unmarshalKillswitchSummaryResponseBodyToKillswitchesKillswitchSummary(v *Ki
 		ID:              *v.ID,
 		CapabilityKey:   killswitches.KillswitchCapabilityKey(*v.CapabilityKey),
 		CapabilityLabel: *v.CapabilityLabel,
-		UserID:          *v.UserID,
+		UserID:          v.UserID,
+		AgentID:         v.AgentID,
+		PrincipalKind:   killswitches.KillswitchPrincipalKind(*v.PrincipalKind),
 		Version:         *v.Version,
 		Status:          killswitches.KillswitchStatus(*v.Status),
 	}
@@ -2420,6 +2662,20 @@ func unmarshalKillswitchOverlapResponseBodyToKillswitchesKillswitchOverlap(v *Ki
 func unmarshalKillswitchUserBadgeResponseBodyToKillswitchesKillswitchUserBadge(v *KillswitchUserBadgeResponseBody) *killswitches.KillswitchUserBadge {
 	res := &killswitches.KillswitchUserBadge{
 		UserID:      *v.UserID,
+		Affected:    *v.Affected,
+		AffectedNow: *v.AffectedNow,
+		Scheduled:   *v.Scheduled,
+	}
+
+	return res
+}
+
+// unmarshalKillswitchAgentBadgeResponseBodyToKillswitchesKillswitchAgentBadge
+// builds a value of type *killswitches.KillswitchAgentBadge from a value of
+// type *KillswitchAgentBadgeResponseBody.
+func unmarshalKillswitchAgentBadgeResponseBodyToKillswitchesKillswitchAgentBadge(v *KillswitchAgentBadgeResponseBody) *killswitches.KillswitchAgentBadge {
+	res := &killswitches.KillswitchAgentBadge{
+		AgentID:     *v.AgentID,
 		Affected:    *v.Affected,
 		AffectedNow: *v.AffectedNow,
 		Scheduled:   *v.Scheduled,

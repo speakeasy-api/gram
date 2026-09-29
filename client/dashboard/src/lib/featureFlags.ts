@@ -8,6 +8,7 @@ export const FEATURE_FLAGS = {
   deviceIntegrations: "gram-device-integrations",
   experimentalChat: "gram-experimental-chat",
   explore: "gram-explore",
+  fleet: "gram-fleet",
   functions: "gram-functions",
   gatewayEndpoints: "gram-gateway-endpoints",
   headlessModeSwitcher: "headless-mode-switcher",

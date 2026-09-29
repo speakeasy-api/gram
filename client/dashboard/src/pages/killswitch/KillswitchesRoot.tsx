@@ -1,3 +1,10 @@
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import {
+  AgentRestrictions,
+  AgentRestrictionRecord,
+} from "@/pages/fleet/AgentRestrictions";
+import { Link, useNavigate } from "react-router";
 import { killswitchRecordHref } from "@/components/killswitch/killswitch-routing";
 import { useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -7,7 +14,7 @@ import { withIdentityWindow } from "@/lib/identity-urn";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { useRoutes } from "@/routes";
 import { useKillswitch } from "@gram/client/react-query/killswitch.js";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
 
 /** A standing message on a route that no longer renders a page of its own. */
@@ -56,8 +63,7 @@ export function KillswitchesRoot(): JSX.Element {
  * project comes from the same slug org-scoped pages already send on their
  * requests — this route carries none in its path. The roster is a project:read
  * surface while Killswitch is gated on org:admin, and a custom role can grant
- * one without the other: those readers are told where killswitches went rather
- * than forwarded onto a screen that refuses them.
+ * one without the other. Agent restrictions remain recoverable at this route.
  */
 function useIdentitiesHref(): string | null {
   const projectSlug = useProjectSlugForRequests();
@@ -79,13 +85,28 @@ function KillswitchesMovedNotice(): JSX.Element {
 }
 
 /**
- * Where the killswitch roster used to be. There is no longer a list of
- * restrictions to land on, so the reader is sent to the people they are placed
- * on.
+ * Preserve the person-directory entry point, with an agent recovery list for
+ * administrators who cannot open project-scoped Fleet.
  */
 export function KillswitchIndexRedirect(): JSX.Element {
   const identitiesHref = useIdentitiesHref();
-  if (!identitiesHref) return <KillswitchesMovedNotice />;
+  const fleetFlag = useFeatureFlag(FEATURE_FLAGS.fleet);
+  if (fleetFlag.status === "loading")
+    return <div className="p-8 text-sm">Loading restriction navigation…</div>;
+  if (!identitiesHref || fleetFlag.status !== "enabled")
+    return (
+      <div className="p-4 sm:p-8">
+        {identitiesHref && (
+          <Link
+            className="text-sm underline underline-offset-4"
+            to={identitiesHref}
+          >
+            Manage people’s restrictions in Identities
+          </Link>
+        )}
+        <AgentRestrictions agents={[]} inventoryAvailable={false} />
+      </div>
+    );
   return <Navigate to={identitiesHref} replace />;
 }
 
@@ -99,6 +120,12 @@ export function KillswitchIndexRedirect(): JSX.Element {
  */
 export function KillswitchRecordRedirect(): JSX.Element {
   const { killswitchId = "" } = useParams();
+  const navigate = useNavigate();
+  const { hasScope } = useRBAC();
+  const projectSlug = useProjectSlugForRequests();
+  const fleetHref = useRoutes({ projectSlug }).fleet.href();
+  const fleetFlag = useFeatureFlag(FEATURE_FLAGS.fleet);
+  const [pendingClose, setPendingClose] = useState(false);
   const session = useSession();
   const identityAccessHref = useIdentityHrefBuilder("access");
   const identitiesHref = useIdentitiesHref();
@@ -108,6 +135,17 @@ export function KillswitchRecordRedirect(): JSX.Element {
     { throwOnError: false, enabled: killswitchId !== "" },
   );
 
+  useEffect(() => {
+    if (!pendingClose || fleetFlag.status === "loading") return;
+    setPendingClose(false);
+    void navigate(
+      hasScope("project:read") && fleetFlag.status === "enabled"
+        ? `${fleetHref}?tab=restrictions`
+        : "..",
+      { relative: "path" },
+    );
+  }, [fleetFlag.status, fleetHref, hasScope, navigate, pendingClose]);
+
   if (detailQuery.isLoading) {
     return (
       <div className="p-8 text-sm text-muted-foreground">
@@ -116,7 +154,42 @@ export function KillswitchRecordRedirect(): JSX.Element {
     );
   }
 
-  const userId = detailQuery.data?.userId;
+  if (detailQuery.data?.principalKind === "agent") {
+    return (
+      <div className="p-4 sm:p-8">
+        <AgentRestrictionRecord
+          id={killswitchId}
+          agents={[]}
+          inventoryAvailable={false}
+          onSelect={(id) => {
+            void navigate(`../${id}`);
+          }}
+          onClose={() => {
+            if (fleetFlag.status === "loading") {
+              setPendingClose(true);
+              return;
+            }
+            void navigate(
+              hasScope("project:read") && fleetFlag.status === "enabled"
+                ? `${fleetHref}?tab=restrictions`
+                : "..",
+              { relative: "path" },
+            );
+          }}
+        />
+      </div>
+    );
+  }
+  if (detailQuery.data && detailQuery.data.principalKind !== "user")
+    return (
+      <KillswitchNotice title="Unsupported restriction target">
+        This restriction cannot be managed here.
+      </KillswitchNotice>
+    );
+  const userId =
+    detailQuery.data?.principalKind === "user"
+      ? detailQuery.data.userId
+      : undefined;
   const accessHref = userId ? identityAccessHref({ userId }) : null;
   if (accessHref) {
     return (

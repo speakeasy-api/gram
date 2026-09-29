@@ -118,6 +118,7 @@ var Agent = Type("ManagedAgent", func() {
 	Attribute("project_id", String, "The optional project this agent is scoped to; absent for an organization-wide agent", func() { Format(FormatUUID) })
 	Attribute("lifecycle", Lifecycle)
 	Attribute("permissions", Permissions)
+	Attribute("last_credential_used_at", String, "Latest recorded credential-session or API-key authentication for this agent at Gram in this organization. Recording is best-effort and updates are coalesced. Includes credentials since revoked or expired. Populated by agents.list for callers who can manage the agent's credentials, and in the read-only synthetic demo organization; absent otherwise or when no authentication was recorded. Not run, process, or tool-call activity.", func() { Format(FormatDateTime) })
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
 })

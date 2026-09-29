@@ -20,23 +20,31 @@ import {
 } from "./killswitchscope.js";
 
 export type KillswitchCreateRequest = {
+  /**
+   * Target registered agent, independent of its owner. Applies across all credential sessions in the organization.
+   */
+  agentId?: string | undefined;
   externalNote: string;
   internalNote: string;
   operationId: string;
   schedule: KillswitchSchedule;
   scope: KillswitchScope;
-  userId: string;
+  /**
+   * Target user. Supply exactly one of user_id or agent_id.
+   */
+  userId?: string | undefined;
   capabilityKey: KillswitchCapabilityKey;
 };
 
 /** @internal */
 export type KillswitchCreateRequest$Outbound = {
+  agent_id?: string | undefined;
   external_note: string;
   internal_note: string;
   operation_id: string;
   schedule: KillswitchSchedule$Outbound;
   scope: KillswitchScope$Outbound;
-  user_id: string;
+  user_id?: string | undefined;
   capability_key: string;
 };
 
@@ -46,16 +54,18 @@ export const KillswitchCreateRequest$outboundSchema: z.ZodMiniType<
   KillswitchCreateRequest
 > = z.pipe(
   z.object({
+    agentId: z.optional(z.string()),
     externalNote: z.string(),
     internalNote: z.string(),
     operationId: z.string(),
     schedule: KillswitchSchedule$outboundSchema,
     scope: KillswitchScope$outboundSchema,
-    userId: z.string(),
+    userId: z.optional(z.string()),
     capabilityKey: KillswitchCapabilityKey$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      agentId: "agent_id",
       externalNote: "external_note",
       internalNote: "internal_note",
       operationId: "operation_id",

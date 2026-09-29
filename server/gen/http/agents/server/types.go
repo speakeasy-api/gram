@@ -155,8 +155,15 @@ type CreateResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
+	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetResponseBody is the type of the "agents" service "get" endpoint HTTP
@@ -177,8 +184,15 @@ type GetResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
+	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RenameResponseBody is the type of the "agents" service "rename" endpoint
@@ -199,8 +213,15 @@ type RenameResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
+	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListDelegableGrantsResponseBody is the type of the "agents" service
@@ -251,8 +272,15 @@ type TransferResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
+	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ReassignResponseBody is the type of the "agents" service "reassign" endpoint
@@ -273,8 +301,15 @@ type ReassignResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
+	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // SuspendResponseBody is the type of the "agents" service "suspend" endpoint
@@ -295,8 +330,15 @@ type SuspendResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
+	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ResumeResponseBody is the type of the "agents" service "resume" endpoint
@@ -317,8 +359,15 @@ type ResumeResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
+	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RevokeResponseBody is the type of the "agents" service "revoke" endpoint
@@ -339,8 +388,15 @@ type RevokeResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
+	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListSessionsUnauthorizedResponseBody is the type of the "agents" service
@@ -3457,8 +3513,15 @@ type ManagedAgentResponse struct {
 	ProjectID   *string                   `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                    `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponse `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt   string                    `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                    `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
+	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AgentOwnerProfileResponse is used to define fields on response body types.
@@ -3647,6 +3710,7 @@ func NewCreateResponseBody(res *agents.ManagedAgent) *CreateResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		LastCredentialUsedAt:        res.LastCredentialUsedAt,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -3670,6 +3734,7 @@ func NewGetResponseBody(res *agents.ManagedAgent) *GetResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		LastCredentialUsedAt:        res.LastCredentialUsedAt,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -3693,6 +3758,7 @@ func NewRenameResponseBody(res *agents.ManagedAgent) *RenameResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		LastCredentialUsedAt:        res.LastCredentialUsedAt,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -3776,6 +3842,7 @@ func NewTransferResponseBody(res *agents.ManagedAgent) *TransferResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		LastCredentialUsedAt:        res.LastCredentialUsedAt,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -3799,6 +3866,7 @@ func NewReassignResponseBody(res *agents.ManagedAgent) *ReassignResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		LastCredentialUsedAt:        res.LastCredentialUsedAt,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -3822,6 +3890,7 @@ func NewSuspendResponseBody(res *agents.ManagedAgent) *SuspendResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		LastCredentialUsedAt:        res.LastCredentialUsedAt,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -3845,6 +3914,7 @@ func NewResumeResponseBody(res *agents.ManagedAgent) *ResumeResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		LastCredentialUsedAt:        res.LastCredentialUsedAt,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
@@ -3868,6 +3938,7 @@ func NewRevokeResponseBody(res *agents.ManagedAgent) *RevokeResponseBody {
 		Name:                        res.Name,
 		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
+		LastCredentialUsedAt:        res.LastCredentialUsedAt,
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
 	}
