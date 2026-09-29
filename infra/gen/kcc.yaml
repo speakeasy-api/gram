@@ -872,6 +872,61 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-productmetrics-v1-contribution
+    name: gram-productmetrics-v1-contribution
+    spec:
+      definition: |
+        edition = "2024";
+        message Contribution {
+          string organization_id = 1;
+          string project_id = 2;
+          Definition definition = 3;
+          int64 event_time_unix_nano = 4;
+          int64 observed_at_unix_nano = 5;
+          repeated Attribute resource_attributes = 6;
+          repeated Attribute scope_attributes = 7;
+          repeated Attribute point_attributes = 8;
+          Number value = 9;
+          string contribution_id = 10;
+          message Definition {
+            string scope_name = 1;
+            string scope_version = 2;
+            string name = 3;
+            string description = 4;
+            string unit = 5;
+            string instrument = 6;
+            string temporality = 7;
+          }
+          message Number {
+            oneof value {
+              int64 integer = 1;
+              double floating = 2;
+            }
+          }
+          message Attribute {
+            string key = 1;
+            Value value = 2;
+          }
+          message Value {
+            oneof value {
+              string text = 1;
+              bool boolean = 2;
+              int64 integer = 3;
+              double floating = 4;
+              StringArray strings = 5;
+              BoolArray booleans = 6;
+              IntArray integers = 7;
+              DoubleArray doubles = 8;
+            }
+          }
+          message StringArray { repeated string values = 1; }
+          message BoolArray { repeated bool values = 1; }
+          message IntArray { repeated int64 values = 1; }
+          message DoubleArray { repeated double values = 1; }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analysis
     spec:
@@ -1672,6 +1727,20 @@ pubsub:
         name: gram-plugins-v1-publication-requested
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-productmetrics-v1-processor
+      topic_proto_message: gram-productmetrics-v1-contribution
+    name: gram-productmetrics-v1-processor
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-productmetrics-v1-contribution
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analyzer
       topic_proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analyzer
@@ -2146,6 +2215,16 @@ pubsub:
     name: gram-plugins-v1-publication-scheduler-dlq
     spec:
       messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-productmetrics-v1-contribution
+    name: gram-productmetrics-v1-contribution
+    spec:
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-productmetrics-v1-contribution
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
