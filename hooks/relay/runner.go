@@ -136,9 +136,9 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("event=%s config-error path=%s err=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ConfigPath, r.cfg.ConfigError)
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks cannot read the plugin config at %q. Reinstall the Speakeasy hooks plugin.", r.cfg.ConfigPath)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateNeverAuthed
 	}
 
 	// Refuse to send credentials over plaintext HTTP before resolving them,
@@ -148,23 +148,23 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ServerURL)
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks refused insecure Gram server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateNeverAuthed
 	}
 
 	c, ok := resolveAuth(r.cfg)
 	if !ok {
 		if reauthNeeded() {
 			r.debugf("event=%s no-creds state=reauth-needed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateReauthNeeded
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateReauthNeeded
 		}
 		if authEstablished() {
 			r.debugf("event=%s no-creds state=broken authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateBroken
 		}
 		r.debugf("event=%s no-creds state=never-authed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateNeverAuthed
 	}
 
 	payload := buildEnvelope(typed, hostname())
@@ -195,7 +195,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	res := r.send(ctx, c, payload, idemKey)
 	finalCreds := c
 	state := stateReady
-	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
+	r.debugf("event=%s type=%s server=%s authfile=%s status=%d cause=%s denied=%t detail=%s", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.cause, res.decision.denied(), res.causeDetail)
 	if res.authRejected && c.Source == credEnv {
 		// The configured key is authoritative and a re-login can never replace
 		// it, so name it in the failure instead of pointing at the cache flow.
@@ -227,7 +227,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 			finalCreds = orgCreds
 			res = r.send(ctx, orgCreds, payload, idemKey)
 			state = stateReady
-			r.debugf("event=%s auth-retry=org status=%d denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.decision.denied())
+			r.debugf("event=%s auth-retry=org status=%d cause=%s denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause, res.decision.denied())
 		}
 	}
 	// The exchange is final: an unsent payload (unreachable/5xx/429/408) is
@@ -257,15 +257,16 @@ func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequ
 }
 
 // evaluate delivers a gating event and resolves the block decision under the
-// ratchet and the org's fail-open posture, bounded by gateSendBudget so the
+// ratchet and the org's fail-open posture, bounded by gateBudget so the
 // verdict beats the provider-side gate deadline.
 func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(ctx, gateSendBudget)
+	budget := gateBudget(ctx)
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	v := r.gateVerdict(ctx, typed)
-	r.debugf("gate event=%s elapsed_ms=%d block=%v",
-		agenthooks.EventOf(typed).NativeName, time.Since(start).Milliseconds(), v.block)
+	r.debugf("gate event=%s budget_ms=%d elapsed_ms=%d block=%v",
+		agenthooks.EventOf(typed).NativeName, budget.Milliseconds(), time.Since(start).Milliseconds(), v.block)
 	return v
 }
 
@@ -319,7 +320,7 @@ func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 	// key lands here as stateReady, and honoring fail-open for it would turn
 	// a broken credential into an enforcement bypass.
 	if (res.statusCode == 0 || res.statusCode >= 500) && failOpenAllowed(r.cfg) {
-		r.debugf("event=%s fail-open engaged status=%d", agenthooks.EventOf(typed).NativeName, res.statusCode)
+		r.debugf("event=%s fail-open engaged status=%d cause=%s", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause)
 		return verdict{block: false, message: "", nudge: false, blockEffect: nil}
 	}
 	return verdict{block: true, message: httpMessage(res), nudge: false, blockEffect: nil}
