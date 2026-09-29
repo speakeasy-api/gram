@@ -268,13 +268,18 @@ export function RemoteMcpIdentitySectionBody({
         await agentDraft.save();
       } else if (selectedMode === "user") {
         await userDraft.save();
-      } else if (destructive) {
-        toast.success("Identity removed");
       }
       // Headers last: identity may have just written or removed the
       // Authorization row, and these rows are diffed against what the server
       // holds once that has landed.
-      if (await headerDrafts.save()) {
+      const headersSaved = await headerDrafts.save();
+      // Reported only once the headers have landed: when the draft already
+      // dropped the credential, the header save is what deletes it, and a
+      // failure there must not follow a claim that it is gone.
+      if (selectedMode === "none" && destructive) {
+        toast.success("Identity removed");
+      }
+      if (headersSaved) {
         toast.success("Upstream headers updated");
       }
     } catch (error) {

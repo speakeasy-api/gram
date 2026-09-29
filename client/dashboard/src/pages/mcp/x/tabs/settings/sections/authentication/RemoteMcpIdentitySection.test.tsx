@@ -32,6 +32,15 @@ const mocks = vi.hoisted(() => ({
   discoverProtectedResource: vi.fn(),
   commit: vi.fn(),
   detach: vi.fn(),
+  toastSuccess: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: mocks.toastSuccess,
+    error: vi.fn(),
+    warning: vi.fn(),
+  },
 }));
 
 vi.mock("@/routes", () => ({
@@ -1042,6 +1051,31 @@ describe("RemoteMcpIdentitySectionBody", () => {
       }),
     );
     expect(mocks.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report the identity removed when the deferred delete fails", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    mocks.remove.mockRejectedValue(new Error("delete refused"));
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(screen.getByText("Custom Headers"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove header Authorization" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    // The header save owns this delete; until it lands the credential is
+    // still live upstream, so success must not be claimed.
+    await waitFor(() => expect(mocks.remove).toHaveBeenCalledOnce());
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith("Identity removed");
   });
 
   it("links shared-source guidance to identity provider management", () => {
