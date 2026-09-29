@@ -78,7 +78,7 @@ func TestIdentityChainingRequest_OnlyValidatedHumans(t *testing.T) {
 		}, true, issuer, false},
 		{"api key", func(t *testing.T) context.Context {
 			t.Helper()
-			ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context())
+			ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context(), "api-key-1")
 			return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: "user-1", ActiveOrganizationID: chainingTestOrg, OrganizationSlug: "chaining"})
 		}, true, issuer, false},
 		{"auth context for another user", func(t *testing.T) context.Context {
