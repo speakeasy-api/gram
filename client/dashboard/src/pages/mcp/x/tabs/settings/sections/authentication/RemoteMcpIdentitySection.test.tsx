@@ -734,7 +734,11 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     expect(screen.getByText("Connected")).toBeDefined();
     expect(screen.getByText("3 people")).toBeDefined();
-    expect(screen.getByTitle("read write")).toBeDefined();
+    // The count opens the list of what the client asks for.
+    fireEvent.click(screen.getByRole("button", { name: "2 scopes" }));
+    expect(screen.getByText("Requested scopes")).toBeDefined();
+    expect(screen.getByText("read")).toBeDefined();
+    expect(screen.getByText("write")).toBeDefined();
     // The issuer URL is context, not a way in; the client's own page is.
     expect(screen.queryByRole("link", { name: "id.example" })).toBeNull();
     expect(

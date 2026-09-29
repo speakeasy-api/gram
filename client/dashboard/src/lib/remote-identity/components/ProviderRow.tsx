@@ -379,15 +379,7 @@ function ConnectedSummary({
         {draft.signedIn !== null && scopes.length > 0 ? (
           <span className="mx-1.5">·</span>
         ) : null}
-        {scopes.length > 0 ? (
-          <span
-            title={scopes.join(" ")}
-            className="cursor-help underline decoration-dotted underline-offset-3"
-          >
-            <span className="text-foreground">{scopes.length}</span>{" "}
-            {scopes.length === 1 ? "scope" : "scopes"}
-          </span>
-        ) : null}
+        {scopes.length > 0 ? <ScopeList scopes={scopes} /> : null}
       </Text>
       {advancedHref ? (
         <Button variant="tertiary" size="sm" asChild>
@@ -400,6 +392,39 @@ function ConnectedSummary({
         </Button>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The connected client's scopes: a count that opens the list. The count is
+ * the summary; which scopes were requested is the detail an operator checks
+ * when a tool call comes back forbidden.
+ */
+function ScopeList({ scopes }: { scopes: string[] }): JSX.Element {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="hover:text-foreground underline decoration-dotted underline-offset-3"
+        >
+          <span className="text-foreground">{scopes.length}</span>{" "}
+          {scopes.length === 1 ? "scope" : "scopes"}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 p-3">
+        <Text small muted className="text-eyebrow mb-2 block">
+          Requested scopes
+        </Text>
+        <ul className="space-y-1">
+          {scopes.map((scope) => (
+            <li key={scope} className="font-mono text-xs break-all">
+              {scope}
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 
