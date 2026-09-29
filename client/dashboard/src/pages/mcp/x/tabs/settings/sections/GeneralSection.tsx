@@ -34,12 +34,12 @@ import {
   SettingsSection,
 } from "@/components/detail/settings-section";
 
-// The display name shares the mcp_servers.name column, whose CHECK caps length
-// at 40 (see schema.sql / MCP_SERVER_NAME_MAX_LENGTH on the legacy page).
+// Matches MCP_SERVER_NAME_MAX_LENGTH on the legacy page. The limit is enforced
+// here, not by the mcp_servers.name column.
 const NAME_MAX_LENGTH = 40;
 
-// Iterating a string walks code points, which is what Postgres char_length
-// counts; .length would count UTF-16 units and flag emoji early.
+// Iterating a string walks code points, so an emoji counts once; .length would
+// count UTF-16 units and flag it early.
 function codePointLength(value: string): number {
   let count = 0;
   for (const _ of value) count++;
@@ -132,8 +132,6 @@ function GeneralSectionContent({
   );
 
   const trimmedDraft = nameDraft.trim();
-  // Code points, not UTF-16 units: the column's check uses char_length, so an
-  // emoji counts once here as it does in Postgres.
   const nameTooLong = codePointLength(trimmedDraft) > NAME_MAX_LENGTH;
   const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
   const upstreamDirty = !!upstream?.dirty;
