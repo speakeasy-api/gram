@@ -1333,9 +1333,10 @@ type Message_Account_builder struct {
 	// Absence means no classification was supplied.
 	AccountType *string
 	// How the external AI account is billed: "metered" for usage-based billing,
-	// "flat_rate" for subscription/seat billing, "unknown" when undetermined.
-	// Resolved from source-account/provider-organization configuration; absence
-	// means undeclared. Does not determine Gram pricing or select a billing user.
+	// "flat_rate" for subscription/seat billing; "unknown" may be supplied when
+	// undetermined. Resolved from account/provider-organization configuration;
+	// absence means no mode was resolved or supplied. Does not determine Gram
+	// pricing or select a billing user.
 	BillingMode *string
 }
 
