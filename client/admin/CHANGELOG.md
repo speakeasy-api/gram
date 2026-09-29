@@ -1,5 +1,12 @@
 # admin
 
+## 0.6.1
+
+### Patch Changes
+
+- d0945f1: Add a Demo organization link to the admin sidebar that opens the explore demo org in a new tab.
+- d24e7a1: Add an "Open in WorkOS" link beside the WorkOS org ID on the admin organization record. It appears when the organization is linked to WorkOS and the admin API has `WORKOS_ENVIRONMENT_ID` set.
+
 ## 0.6.0
 
 ### Minor Changes
