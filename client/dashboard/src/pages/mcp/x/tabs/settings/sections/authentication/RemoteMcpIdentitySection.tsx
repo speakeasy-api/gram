@@ -480,17 +480,9 @@ export function RemoteMcpIdentitySectionBody({
           </div>
 
           {identityResolved && selectedMode === "user" ? (
-            <AuthRow
-              label="Identity provider"
-              // Custom providers are created from the provider menu's own
-              // link, so the hint carries no separate way there.
-              hint={
-                <span className="text-muted-foreground/70">
-                  Where users sign in. Speakeasy registers this server with it
-                  for you.
-                </span>
-              }
-            >
+            // The provider row is the whole decision, so it takes the full
+            // width rather than sitting beside a label that restates it.
+            <div className="px-6 py-5">
               <UserIdentityRow
                 draft={userDraft}
                 disabled={identityReadOnly || userDraft.saving}
@@ -502,7 +494,7 @@ export function RemoteMcpIdentitySectionBody({
                   )
                 }
               />
-            </AuthRow>
+            </div>
           ) : null}
 
           {identityResolved && selectedMode === "agent" ? (
