@@ -792,6 +792,9 @@ type UnmaskRiskResultResponseBody struct {
 	// The plaintext matched secret or sensitive data for this result. Empty string
 	// when the finding has no top-level match (e.g. a spans-only finding).
 	Match string `form:"match" json:"match" xml:"match"`
+	// Whether plaintext was revealed or the MCP finding evidence is unavailable or
+	// expired.
+	RevealState string `form:"reveal_state" json:"reveal_state" xml:"reveal_state"`
 }
 
 // ListRiskResultsByChatResponseBody is the type of the "risk" service
@@ -12541,8 +12544,9 @@ func NewListRiskResultsForAgentResponseBody(res *risk.ListRiskResultsForAgentRes
 // result of the "unmaskRiskResult" endpoint of the "risk" service.
 func NewUnmaskRiskResultResponseBody(res *risk.RiskUnmaskResultResult) *UnmaskRiskResultResponseBody {
 	body := &UnmaskRiskResultResponseBody{
-		ID:    res.ID,
-		Match: res.Match,
+		ID:          res.ID,
+		Match:       res.Match,
+		RevealState: res.RevealState,
 	}
 	return body
 }

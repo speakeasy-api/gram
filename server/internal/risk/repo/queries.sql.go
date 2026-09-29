@@ -299,6 +299,32 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 	return i, err
 }
 
+const cleanupExpiredMCPFindingEvidenceBatch = `-- name: CleanupExpiredMCPFindingEvidenceBatch :execrows
+WITH expired AS (
+  SELECT organization_id, project_id, finding_id
+  FROM risk_finding_evidence
+  WHERE expires_at <= clock_timestamp()
+  ORDER BY expires_at, organization_id, project_id, finding_id
+  LIMIT $1::integer
+  FOR UPDATE SKIP LOCKED
+)
+DELETE FROM risk_finding_evidence AS evidence
+USING expired
+WHERE evidence.organization_id = expired.organization_id
+  AND evidence.project_id = expired.project_id
+  AND evidence.finding_id = expired.finding_id
+`
+
+// Privileged global maintenance query. The Temporal activity bounds each
+// transaction and repeats batches up to its per-run limit.
+func (q *Queries) CleanupExpiredMCPFindingEvidenceBatch(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, cleanupExpiredMCPFindingEvidenceBatch, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countAllFindings = `-- name: CountAllFindings :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results rr
@@ -1834,6 +1860,34 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getMCPFindingEvidence = `-- name: GetMCPFindingEvidence :one
+SELECT match_encrypted
+FROM risk_finding_evidence
+WHERE organization_id = $1
+  AND project_id = $2
+  AND finding_id = $3
+  AND expires_at > $4
+`
+
+type GetMCPFindingEvidenceParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	FindingID      uuid.UUID
+	Now            pgtype.Timestamptz
+}
+
+func (q *Queries) GetMCPFindingEvidence(ctx context.Context, arg GetMCPFindingEvidenceParams) (string, error) {
+	row := q.db.QueryRow(ctx, getMCPFindingEvidence,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.FindingID,
+		arg.Now,
+	)
+	var match_encrypted string
+	err := row.Scan(&match_encrypted)
+	return match_encrypted, err
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
@@ -5777,6 +5831,54 @@ func (q *Queries) UpdateToolCallBlockFeedback(ctx context.Context, arg UpdateToo
 		&i.PolicyName,
 	)
 	return i, err
+}
+
+const upsertMCPFindingEvidence = `-- name: UpsertMCPFindingEvidence :exec
+INSERT INTO risk_finding_evidence (
+    finding_id
+  , organization_id
+  , project_id
+  , match_encrypted
+  , created_at
+  , updated_at
+  , expires_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , clock_timestamp()
+  , $6
+)
+ON CONFLICT (organization_id, project_id, finding_id) DO UPDATE
+SET
+    match_encrypted = EXCLUDED.match_encrypted
+  , created_at = EXCLUDED.created_at
+  , updated_at = clock_timestamp()
+  , expires_at = EXCLUDED.expires_at
+`
+
+type UpsertMCPFindingEvidenceParams struct {
+	FindingID      uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	MatchEncrypted string
+	CreatedAt      pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertMCPFindingEvidence(ctx context.Context, arg UpsertMCPFindingEvidenceParams) error {
+	_, err := q.db.Exec(ctx, upsertMCPFindingEvidence,
+		arg.FindingID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.MatchEncrypted,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
 }
 
 const upsertRiskPolicyBypassRequest = `-- name: UpsertRiskPolicyBypassRequest :one
