@@ -505,7 +505,16 @@ BEGIN
   -- own-sessions-only, hiding every seeded chat (owned by user_demo_*).
   INSERT INTO organization_features (organization_id, feature_name)
   SELECT demo_org, f
-  FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'hooks_fail_open', 'skills', 'rbac']) AS f
+  FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac']) AS f
+  ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+
+  -- Unlike demo entitlements, preserve an explicit fail-closed choice on reseed.
+  INSERT INTO organization_features (organization_id, feature_name)
+  SELECT demo_org, 'hooks_fail_open'
+  WHERE NOT EXISTS (
+    SELECT 1 FROM organization_features
+    WHERE organization_id = demo_org AND feature_name = 'hooks_fail_open'
+  )
   ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
   FOR i IN 1 .. array_length(demo_user_ids, 1) LOOP
