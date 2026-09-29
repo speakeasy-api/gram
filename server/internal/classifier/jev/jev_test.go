@@ -422,3 +422,17 @@ func TestDecodeAnswerRejectsInvalidDistributions(t *testing.T) {
 		require.Nil(t, decodeAnswer(planned, answer), raw)
 	}
 }
+
+func TestNoulCriteriaMatchOpenRouterSchema(t *testing.T) {
+	t.Parallel()
+	without, err := compile(classifier.Noul("q", classifier.Text("Evaluate")))
+	require.NoError(t, err)
+	encoded, err := json.Marshal(without)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"type":"noul","instructions":"Evaluate"}`, string(encoded))
+	positiveOnly, err := compile(classifier.Noul("q", classifier.Text("Evaluate"), classifier.WithPositive(classifier.Text("Positive"))))
+	require.NoError(t, err)
+	encoded, err = json.Marshal(positiveOnly)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"type":"noul","instructions":"Evaluate","criteria":{"true":"Positive","false":""}}`, string(encoded))
+}
