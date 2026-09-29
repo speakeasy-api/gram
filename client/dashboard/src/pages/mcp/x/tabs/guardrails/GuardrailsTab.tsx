@@ -9,10 +9,12 @@ import { SeverityBadge } from "@/pages/security/risk-ui";
 import {
   policiesForMcpServer,
   scopedToolsLabel,
+  serverGuardrailPolicies,
 } from "@/pages/security/server-guardrails/server-policies";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskListPoliciesForMcpServer } from "@gram/client/react-query/riskListPoliciesForMcpServer.js";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -88,16 +90,33 @@ function PoliciesView({ mcpServer }: { mcpServer: McpServer }): JSX.Element {
   const routes = useRoutes();
   // The server resolves what applies here, including gateway membership, so
   // the tab never re-derives scope rules on the client.
-  const policiesQuery = useRiskListPoliciesForMcpServer(
+  const applicableQuery = useRiskListPoliciesForMcpServer(
     { mcpServerId: mcpServer.id },
     undefined,
     { throwOnError: false },
   );
+  // The server-scoped endpoint returns enabled policies only; the full list
+  // supplies the disabled ones so they stay visible and can be re-enabled.
+  const allQuery = useRiskListPolicies(undefined, undefined, {
+    throwOnError: false,
+  });
+  const policiesQuery = {
+    isLoading: applicableQuery.isLoading || allQuery.isLoading,
+    isError: applicableQuery.isError || allQuery.isError,
+    error: applicableQuery.error ?? allQuery.error,
+  };
   const [adding, setAdding] = useState(false);
   const { scoped, inherited } = useMemo(
     () =>
-      policiesForMcpServer(policiesQuery.data?.policies ?? [], mcpServer.id),
-    [policiesQuery.data?.policies, mcpServer.id],
+      policiesForMcpServer(
+        serverGuardrailPolicies(
+          applicableQuery.data?.policies ?? [],
+          allQuery.data?.policies ?? [],
+          mcpServer.id,
+        ),
+        mcpServer.id,
+      ),
+    [applicableQuery.data?.policies, allQuery.data?.policies, mcpServer.id],
   );
 
   return (
@@ -115,7 +134,7 @@ function PoliciesView({ mcpServer }: { mcpServer: McpServer }): JSX.Element {
           </Text>
         ) : policiesQuery.isError ? (
           <Text small className="text-destructive" role="alert">
-            {policiesQuery.error.message}
+            {policiesQuery.error?.message ?? "Failed to load policies"}
           </Text>
         ) : scoped.length === 0 ? (
           <div className="border-border border border-dashed p-6 text-center">

@@ -14,6 +14,27 @@ function scopeEntry(policy: RiskPolicy, mcpServerId: string) {
   );
 }
 
+/** The policies to list on a server's Guardrails tab: the enabled ones the
+ *  server resolves as applying (including gateway membership), plus disabled
+ *  ones that name this server or every server, so they can be re-enabled.
+ *  Disabled policies scoped only through a gateway are not listed: resolving
+ *  gateway membership happens server-side and covers enabled policies only. */
+export function serverGuardrailPolicies(
+  applicable: RiskPolicy[],
+  all: RiskPolicy[],
+  mcpServerId: string,
+): RiskPolicy[] {
+  const seen = new Set(applicable.map((policy) => policy.id));
+  const disabled = all.filter(
+    (policy) =>
+      !policy.enabled &&
+      !seen.has(policy.id) &&
+      (policy.mcpScope?.allServers === true ||
+        scopeEntry(policy, mcpServerId) !== undefined),
+  );
+  return [...applicable, ...disabled];
+}
+
 /** Splits the policies that apply to `mcpServerId` (as resolved by the
  *  server, including gateway membership) into those scoped to it and those
  *  inherited from an all-servers scope. A per-server entry under an
