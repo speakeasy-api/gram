@@ -63,8 +63,10 @@ type CreateServerPayload struct {
 	ProjectSlugInput *string
 	// Human-readable display name for the tunneled MCP server
 	Name string
-	// RFC 9728 protected resource identifier of the tunneled server, used only for
-	// exact-match credential routing and never dialed by Gram. Omit unless the
+	// RFC 9728 protected resource identifier of the tunneled server, used for
+	// credential routing and as the signed caller assertion audience; never dialed
+	// by Gram. The exact identifier is preserved, including trailing slashes. When
+	// unset, caller assertions use tunneled-mcp-server:<ID>. Omit unless the
 	// identifier is already known; it is usually recorded later, once the tunnel
 	// is up.
 	ResourceIdentifier *string
@@ -154,9 +156,11 @@ type UpdateServerPayload struct {
 	// Consent to serve this source through a public, anonymous MCP endpoint.
 	// Disabling revokes all live anonymous sessions. Omit to leave unchanged.
 	AllowPublic *bool
-	// RFC 9728 protected resource identifier of the tunneled server, used only for
-	// exact-match credential routing and never dialed by Gram. Pass an empty
-	// string to clear. Omit to leave unchanged.
+	// RFC 9728 protected resource identifier of the tunneled server, used for
+	// credential routing and as the signed caller assertion audience; never dialed
+	// by Gram. The exact identifier is preserved, including trailing slashes. When
+	// unset, caller assertions use tunneled-mcp-server:<ID>. Pass an empty string
+	// to clear. Omit to leave unchanged.
 	ResourceIdentifier *string
 	// Sustained anonymous MCP requests per second admitted when this source is
 	// served through a public MCP endpoint. Applies to every MCP interaction; one

@@ -81,7 +81,7 @@ func TestRiskScan_ProxiedMetaMember(t *testing.T) {
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, slug, issuerID)
 	upstream := newRecordingUpstream(t, "ping")
 	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Scan member", "scan-member", 0, upstream.url)
-	subject := urn.NewUserSubject("scan-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "scan-user-"+uuid.NewString())
 	bearer := mintMetaIssuerBearer(t, ti, slug, issuerID, subject)
 
 	rpc := executeMetaTool(t, ti, slug, bearer, "scan-member--ping")

@@ -144,6 +144,7 @@ type ValidatedSession struct {
 	jti       string
 	clientID  string
 	validated bool
+	expiresAt time.Time
 }
 
 // Subject returns the verified session subject.
@@ -154,6 +155,9 @@ func (s ValidatedSession) JTI() string { return s.jti }
 
 // ClientID returns the verified OAuth client ID, if present.
 func (s ValidatedSession) ClientID() string { return s.clientID }
+
+// ExpiresAt returns the verified expiration time.
+func (s ValidatedSession) ExpiresAt() time.Time { return s.expiresAt }
 
 // Valid reports whether this value was produced by ValidateBearer and still
 // contains a well-formed subject and token identifier.
@@ -217,7 +221,7 @@ func validatedBearerFromClaims(ctx context.Context, claims *SessionClaims, revoc
 	if err != nil {
 		return ValidatedSession{}, fmt.Errorf("parse session subject: %w", err)
 	}
-	return ValidatedSession{subject: subject, jti: claims.ID, clientID: claims.ClientID, validated: true}, nil
+	return ValidatedSession{subject: subject, jti: claims.ID, clientID: claims.ClientID, validated: true, expiresAt: claims.ExpiresAt.Time}, nil
 }
 
 func validSuppliedJTI(jti string) bool {
