@@ -181,7 +181,7 @@ func UsageCommands() []string {
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|list-remote-sessions|count-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"slack-directory-connections (list|sync|list-members|list-person-accounts|get-member|set-mapping|begin|disconnect)",
@@ -2913,6 +2913,11 @@ func ParseEndpoint(
 		riskListRiskPoliciesSessionTokenFlag     = riskListRiskPoliciesFlags.String("session-token", "", "")
 		riskListRiskPoliciesProjectSlugInputFlag = riskListRiskPoliciesFlags.String("project-slug-input", "", "")
 
+		riskListMCPPlatformToolsetsFlags                = flag.NewFlagSet("list-mcp-platform-toolsets", flag.ExitOnError)
+		riskListMCPPlatformToolsetsApikeyTokenFlag      = riskListMCPPlatformToolsetsFlags.String("apikey-token", "", "")
+		riskListMCPPlatformToolsetsSessionTokenFlag     = riskListMCPPlatformToolsetsFlags.String("session-token", "", "")
+		riskListMCPPlatformToolsetsProjectSlugInputFlag = riskListMCPPlatformToolsetsFlags.String("project-slug-input", "", "")
+
 		riskListRiskPoliciesForMcpServerFlags                = flag.NewFlagSet("list-risk-policies-for-mcp-server", flag.ExitOnError)
 		riskListRiskPoliciesForMcpServerMcpServerIDFlag      = riskListRiskPoliciesForMcpServerFlags.String("mcp-server-id", "REQUIRED", "")
 		riskListRiskPoliciesForMcpServerToolNameFlag         = riskListRiskPoliciesForMcpServerFlags.String("tool-name", "", "")
@@ -5254,6 +5259,7 @@ func ParseEndpoint(
 	riskFlags.Usage = riskUsage
 	riskCreateRiskPolicyFlags.Usage = riskCreateRiskPolicyUsage
 	riskListRiskPoliciesFlags.Usage = riskListRiskPoliciesUsage
+	riskListMCPPlatformToolsetsFlags.Usage = riskListMCPPlatformToolsetsUsage
 	riskListRiskPoliciesForMcpServerFlags.Usage = riskListRiskPoliciesForMcpServerUsage
 	riskListBuiltinExclusionsFlags.Usage = riskListBuiltinExclusionsUsage
 	riskGetRiskPolicyFlags.Usage = riskGetRiskPolicyUsage
@@ -7586,6 +7592,9 @@ func ParseEndpoint(
 
 			case "list-risk-policies":
 				epf = riskListRiskPoliciesFlags
+
+			case "list-mcp-platform-toolsets":
+				epf = riskListMCPPlatformToolsetsFlags
 
 			case "list-risk-policies-for-mcp-server":
 				epf = riskListRiskPoliciesForMcpServerFlags
@@ -10401,6 +10410,9 @@ func ParseEndpoint(
 			case "list-risk-policies":
 				endpoint = c.ListRiskPolicies()
 				data, err = riskc.BuildListRiskPoliciesPayload(*riskListRiskPoliciesApikeyTokenFlag, *riskListRiskPoliciesSessionTokenFlag, *riskListRiskPoliciesProjectSlugInputFlag)
+			case "list-mcp-platform-toolsets":
+				endpoint = c.ListMCPPlatformToolsets()
+				data, err = riskc.BuildListMCPPlatformToolsetsPayload(*riskListMCPPlatformToolsetsApikeyTokenFlag, *riskListMCPPlatformToolsetsSessionTokenFlag, *riskListMCPPlatformToolsetsProjectSlugInputFlag)
 			case "list-risk-policies-for-mcp-server":
 				endpoint = c.ListRiskPoliciesForMcpServer()
 				data, err = riskc.BuildListRiskPoliciesForMcpServerPayload(*riskListRiskPoliciesForMcpServerMcpServerIDFlag, *riskListRiskPoliciesForMcpServerToolNameFlag, *riskListRiskPoliciesForMcpServerApikeyTokenFlag, *riskListRiskPoliciesForMcpServerSessionTokenFlag, *riskListRiskPoliciesForMcpServerProjectSlugInputFlag)
@@ -23660,6 +23672,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-risk-policy: Create a new risk analysis policy for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-policies: List all risk analysis policies for the current project.`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-platform-toolsets: List code-owned Platform MCP toolsets available as risk policy scope targets.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-policies-for-mcp-server: List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.`)
 	fmt.Fprintln(os.Stderr, `    list-builtin-exclusions: List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy: Get a risk analysis policy by ID.`)
@@ -23758,6 +23771,28 @@ func riskListRiskPoliciesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-policies --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListMCPPlatformToolsetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-mcp-platform-toolsets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List code-owned Platform MCP toolsets available as risk policy scope targets.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-mcp-platform-toolsets --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesForMcpServerUsage() {

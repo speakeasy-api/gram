@@ -475,6 +475,223 @@ func EncodeListRiskPoliciesError(encoder func(context.Context, http.ResponseWrit
 	}
 }
 
+// EncodeListMCPPlatformToolsetsResponse returns an encoder for responses
+// returned by the risk listMCPPlatformToolsets endpoint.
+func EncodeListMCPPlatformToolsetsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*risk.ListMCPPlatformToolsetsResult)
+		enc := encoder(ctx, w)
+		body := NewListMCPPlatformToolsetsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListMCPPlatformToolsetsRequest returns a decoder for requests sent to
+// the risk listMCPPlatformToolsets endpoint.
+func DecodeListMCPPlatformToolsetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.ListMCPPlatformToolsetsPayload, error) {
+	return func(r *http.Request) (*risk.ListMCPPlatformToolsetsPayload, error) {
+		var payload *risk.ListMCPPlatformToolsetsPayload
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewListMCPPlatformToolsetsPayload(apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListMCPPlatformToolsetsError returns an encoder for errors returned by
+// the listMCPPlatformToolsets risk endpoint.
+func EncodeListMCPPlatformToolsetsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMCPPlatformToolsetsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMCPPlatformToolsetsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMCPPlatformToolsetsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMCPPlatformToolsetsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMCPPlatformToolsetsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMCPPlatformToolsetsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMCPPlatformToolsetsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMCPPlatformToolsetsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMCPPlatformToolsetsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListMCPPlatformToolsetsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListRiskPoliciesForMcpServerResponse returns an encoder for responses
 // returned by the risk listRiskPoliciesForMcpServer endpoint.
 func EncodeListRiskPoliciesForMcpServerResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -12473,6 +12690,63 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 	}
 	if v.ModelConfig != nil {
 		res.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(v.ModelConfig)
+	}
+
+	return res
+}
+
+// marshalRiskRiskMCPPlatformToolsetToRiskMCPPlatformToolsetResponseBody builds
+// a value of type *RiskMCPPlatformToolsetResponseBody from a value of type
+// *risk.RiskMCPPlatformToolset.
+func marshalRiskRiskMCPPlatformToolsetToRiskMCPPlatformToolsetResponseBody(v *risk.RiskMCPPlatformToolset) *RiskMCPPlatformToolsetResponseBody {
+	res := &RiskMCPPlatformToolsetResponseBody{
+		ID:   v.ID,
+		Slug: v.Slug,
+		Name: v.Name,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]*RiskMCPPlatformToolResponseBody, len(v.Tools))
+		for i, val := range v.Tools {
+			if val == nil {
+				res.Tools[i] = nil
+				continue
+			}
+			res.Tools[i] = marshalRiskRiskMCPPlatformToolToRiskMCPPlatformToolResponseBody(val)
+		}
+	} else {
+		res.Tools = []*RiskMCPPlatformToolResponseBody{}
+	}
+
+	return res
+}
+
+// marshalRiskRiskMCPPlatformToolToRiskMCPPlatformToolResponseBody builds a
+// value of type *RiskMCPPlatformToolResponseBody from a value of type
+// *risk.RiskMCPPlatformTool.
+func marshalRiskRiskMCPPlatformToolToRiskMCPPlatformToolResponseBody(v *risk.RiskMCPPlatformTool) *RiskMCPPlatformToolResponseBody {
+	res := &RiskMCPPlatformToolResponseBody{
+		Name: v.Name,
+	}
+	if v.Annotations != nil {
+		res.Annotations = marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v.Annotations)
+	}
+
+	return res
+}
+
+// marshalTypesToolAnnotationsToToolAnnotationsResponseBody builds a value of
+// type *ToolAnnotationsResponseBody from a value of type
+// *types.ToolAnnotations.
+func marshalTypesToolAnnotationsToToolAnnotationsResponseBody(v *types.ToolAnnotations) *ToolAnnotationsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ToolAnnotationsResponseBody{
+		Title:           v.Title,
+		ReadOnlyHint:    v.ReadOnlyHint,
+		DestructiveHint: v.DestructiveHint,
+		IdempotentHint:  v.IdempotentHint,
+		OpenWorldHint:   v.OpenWorldHint,
 	}
 
 	return res

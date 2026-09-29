@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
@@ -104,6 +105,7 @@ type Service struct {
 	db                           *pgxpool.Pool
 	repo                         *repo.Queries
 	policies                     *policycore.Core
+	platformToolsets             map[string]platformtools.Toolset
 	exclusions                   *exclusioncore.Core
 	auth                         *auth.Auth
 	authz                        *authz.Engine
@@ -176,6 +178,7 @@ func NewObserver(
 		db:                           db,
 		repo:                         repo.New(db),
 		policies:                     policycore.New(db),
+		platformToolsets:             nil,
 		exclusions:                   exclusioncore.New(db),
 		auth:                         nil,
 		authz:                        nil,
@@ -230,6 +233,7 @@ func NewService(
 	findingsCH *chrepo.Queries,
 	assetStorage blobio.Reader,
 	riskRecorder *metering.RiskRecorder,
+	platformToolsets map[string]platformtools.Toolset,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -280,6 +284,7 @@ func NewService(
 		findingsCH:                   findingsCH,
 		assetStorage:                 assetStorage,
 		riskRecorder:                 riskRecorder,
+		platformToolsets:             platformToolsets,
 		stokenCodec:                  stokens.NewCodec(),
 	}
 }
@@ -564,6 +569,44 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 	return &gen.ListRiskPoliciesResult{Policies: result}, nil
 }
 
+func (s *Service) ListMCPPlatformToolsets(ctx context.Context, _ *gen.ListMCPPlatformToolsetsPayload) (*gen.ListMCPPlatformToolsetsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	toolsets := make([]*gen.RiskMCPPlatformToolset, 0, len(s.platformToolsets))
+	for slug, toolset := range s.platformToolsets {
+		tools := make([]*gen.RiskMCPPlatformTool, 0, len(toolset.Tools))
+		for _, tool := range toolset.Tools {
+			if tool.Executor == nil {
+				continue
+			}
+			descriptor := tool.Executor.Descriptor()
+			tools = append(tools, &gen.RiskMCPPlatformTool{
+				Name:        descriptor.Name,
+				Annotations: descriptor.Annotations,
+			})
+		}
+		slices.SortFunc(tools, func(a, b *gen.RiskMCPPlatformTool) int {
+			return cmp.Compare(a.Name, b.Name)
+		})
+		toolsets = append(toolsets, &gen.RiskMCPPlatformToolset{
+			ID:    platformtools.PlatformToolsetID(slug).String(),
+			Slug:  slug,
+			Name:  platformtools.PlatformToolsetName(slug),
+			Tools: tools,
+		})
+	}
+	slices.SortFunc(toolsets, func(a, b *gen.RiskMCPPlatformToolset) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+	return &gen.ListMCPPlatformToolsetsResult{Toolsets: toolsets}, nil
+}
+
 func (s *Service) ListRiskPoliciesForMcpServer(ctx context.Context, payload *gen.ListRiskPoliciesForMcpServerPayload) (*gen.ListRiskPoliciesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -577,12 +620,21 @@ func (s *Service) ListRiskPoliciesForMcpServer(ctx context.Context, payload *gen
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
 	}
-	policies, err := s.policies.ListEnabledForMCPServer(
+	target := policycore.MCPTarget{
+		ServerID:        serverID,
+		ToolName:        conv.PtrValOr(payload.ToolName, ""),
+		ToolAnnotations: nil,
+		PlatformToolset: false,
+	}
+	if toolset, ok := s.platformToolsetByID(serverID); ok {
+		target.PlatformToolset = true
+		target.ToolAnnotations = platformToolAnnotations(toolset, target.ToolName)
+	}
+	policies, err := s.policies.ListEnabledForMCP(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		*authCtx.ProjectID,
-		serverID,
-		conv.PtrValOr(payload.ToolName, ""),
+		target,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies for MCP server").LogError(ctx, s.logger)
@@ -2636,7 +2688,7 @@ func (s *Service) normalizeMCPScope(
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "validate MCP policy scope").LogError(ctx, s.logger)
 	}
-	if err := policycore.ValidateMCPScopeOwnership(scope, projectServerIDs); err != nil {
+	if err := policycore.ValidateMCPScopeOwnership(scope, projectServerIDs, s.platformToolsetIDs()); err != nil {
 		return nil, nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	raw, err := json.Marshal(scope)
@@ -2644,6 +2696,39 @@ func (s *Service) normalizeMCPScope(
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "encode MCP policy scope").LogError(ctx, s.logger)
 	}
 	return scope, raw, nil
+}
+
+func (s *Service) platformToolsetIDs() []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(s.platformToolsets))
+	for slug := range s.platformToolsets {
+		ids = append(ids, platformtools.PlatformToolsetID(slug))
+	}
+	return ids
+}
+
+func (s *Service) platformToolsetByID(id uuid.UUID) (platformtools.Toolset, bool) {
+	for slug, toolset := range s.platformToolsets {
+		if platformtools.PlatformToolsetID(slug) == id {
+			return toolset, true
+		}
+	}
+	return platformtools.Toolset{
+		Slug:  "",
+		Tools: nil,
+	}, false
+}
+
+func platformToolAnnotations(toolset platformtools.Toolset, toolName string) *types.ToolAnnotations {
+	for _, tool := range toolset.Tools {
+		if tool.Executor == nil {
+			continue
+		}
+		descriptor := tool.Executor.Descriptor()
+		if descriptor.Name == toolName {
+			return descriptor.Annotations
+		}
+	}
+	return nil
 }
 
 func validateCustomDetectionRule(eng *celenv.Engine, ruleID, title, detectionExpr, severity string) error {

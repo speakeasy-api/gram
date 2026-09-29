@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	CreateRiskPolicy               goa.Endpoint
 	ListRiskPolicies               goa.Endpoint
+	ListMCPPlatformToolsets        goa.Endpoint
 	ListRiskPoliciesForMcpServer   goa.Endpoint
 	ListBuiltinExclusions          goa.Endpoint
 	GetRiskPolicy                  goa.Endpoint
@@ -77,6 +78,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		CreateRiskPolicy:               NewCreateRiskPolicyEndpoint(s, a.APIKeyAuth),
 		ListRiskPolicies:               NewListRiskPoliciesEndpoint(s, a.APIKeyAuth),
+		ListMCPPlatformToolsets:        NewListMCPPlatformToolsetsEndpoint(s, a.APIKeyAuth),
 		ListRiskPoliciesForMcpServer:   NewListRiskPoliciesForMcpServerEndpoint(s, a.APIKeyAuth),
 		ListBuiltinExclusions:          NewListBuiltinExclusionsEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicy:                  NewGetRiskPolicyEndpoint(s, a.APIKeyAuth),
@@ -134,6 +136,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRiskPolicy = m(e.CreateRiskPolicy)
 	e.ListRiskPolicies = m(e.ListRiskPolicies)
+	e.ListMCPPlatformToolsets = m(e.ListMCPPlatformToolsets)
 	e.ListRiskPoliciesForMcpServer = m(e.ListRiskPoliciesForMcpServer)
 	e.ListBuiltinExclusions = m(e.ListBuiltinExclusions)
 	e.GetRiskPolicy = m(e.GetRiskPolicy)
@@ -301,6 +304,65 @@ func NewListRiskPoliciesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.ListRiskPolicies(ctx, p)
+	}
+}
+
+// NewListMCPPlatformToolsetsEndpoint returns an endpoint function that calls
+// the method "listMCPPlatformToolsets" of service "risk".
+func NewListMCPPlatformToolsetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListMCPPlatformToolsetsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListMCPPlatformToolsets(ctx, p)
 	}
 }
 

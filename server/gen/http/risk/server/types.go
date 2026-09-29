@@ -520,6 +520,13 @@ type ListRiskPoliciesResponseBody struct {
 	Policies []*RiskPolicyResponseBody `form:"policies" json:"policies" xml:"policies"`
 }
 
+// ListMCPPlatformToolsetsResponseBody is the type of the "risk" service
+// "listMCPPlatformToolsets" endpoint HTTP response body.
+type ListMCPPlatformToolsetsResponseBody struct {
+	// The available Platform MCP policy scope targets.
+	Toolsets []*RiskMCPPlatformToolsetResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+}
+
 // ListRiskPoliciesForMcpServerResponseBody is the type of the "risk" service
 // "listRiskPoliciesForMcpServer" endpoint HTTP response body.
 type ListRiskPoliciesForMcpServerResponseBody struct {
@@ -1758,6 +1765,196 @@ type ListRiskPoliciesUnexpectedResponseBody struct {
 // ListRiskPoliciesGatewayErrorResponseBody is the type of the "risk" service
 // "listRiskPolicies" endpoint HTTP response body for the "gateway_error" error.
 type ListRiskPoliciesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMCPPlatformToolsetsUnauthorizedResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListMCPPlatformToolsetsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMCPPlatformToolsetsForbiddenResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "forbidden" error.
+type ListMCPPlatformToolsetsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMCPPlatformToolsetsBadRequestResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "bad_request" error.
+type ListMCPPlatformToolsetsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMCPPlatformToolsetsNotFoundResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "not_found" error.
+type ListMCPPlatformToolsetsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMCPPlatformToolsetsConflictResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "conflict" error.
+type ListMCPPlatformToolsetsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMCPPlatformToolsetsUnsupportedMediaResponseBody is the type of the
+// "risk" service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListMCPPlatformToolsetsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMCPPlatformToolsetsInvalidResponseBody is the type of the "risk" service
+// "listMCPPlatformToolsets" endpoint HTTP response body for the "invalid"
+// error.
+type ListMCPPlatformToolsetsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMCPPlatformToolsetsInvariantViolationResponseBody is the type of the
+// "risk" service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListMCPPlatformToolsetsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMCPPlatformToolsetsUnexpectedResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "unexpected" error.
+type ListMCPPlatformToolsetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMCPPlatformToolsetsGatewayErrorResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListMCPPlatformToolsetsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -11248,6 +11445,45 @@ type RiskPolicyResponseBody struct {
 	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
+// RiskMCPPlatformToolsetResponseBody is used to define fields on response body
+// types.
+type RiskMCPPlatformToolsetResponseBody struct {
+	// The stable policy-scope identity for this Platform MCP toolset.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The reserved Platform MCP toolset slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The display name for this Platform MCP toolset.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The code-owned tools in this Platform MCP toolset.
+	Tools []*RiskMCPPlatformToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+}
+
+// RiskMCPPlatformToolResponseBody is used to define fields on response body
+// types.
+type RiskMCPPlatformToolResponseBody struct {
+	// The Platform MCP tool name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// MCP behavior annotations from the code-owned descriptor.
+	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// ToolAnnotationsResponseBody is used to define fields on response body types.
+type ToolAnnotationsResponseBody struct {
+	// Human-readable display name for the tool
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// If true, the tool does not modify its environment
+	ReadOnlyHint *bool `form:"read_only_hint,omitempty" json:"read_only_hint,omitempty" xml:"read_only_hint,omitempty"`
+	// If true, the tool may perform destructive updates (only meaningful when
+	// read_only_hint is false)
+	DestructiveHint *bool `form:"destructive_hint,omitempty" json:"destructive_hint,omitempty" xml:"destructive_hint,omitempty"`
+	// If true, repeated calls with same arguments have no additional effect (only
+	// meaningful when read_only_hint is false)
+	IdempotentHint *bool `form:"idempotent_hint,omitempty" json:"idempotent_hint,omitempty" xml:"idempotent_hint,omitempty"`
+	// If true, the tool interacts with external entities beyond its local
+	// environment
+	OpenWorldHint *bool `form:"open_world_hint,omitempty" json:"open_world_hint,omitempty" xml:"open_world_hint,omitempty"`
+}
+
 // BuiltinExclusionCategoryResponseBody is used to define fields on response
 // body types.
 type BuiltinExclusionCategoryResponseBody struct {
@@ -11973,6 +12209,25 @@ func NewListRiskPoliciesResponseBody(res *risk.ListRiskPoliciesResult) *ListRisk
 		}
 	} else {
 		body.Policies = []*RiskPolicyResponseBody{}
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsResponseBody builds the HTTP response body from
+// the result of the "listMCPPlatformToolsets" endpoint of the "risk" service.
+func NewListMCPPlatformToolsetsResponseBody(res *risk.ListMCPPlatformToolsetsResult) *ListMCPPlatformToolsetsResponseBody {
+	body := &ListMCPPlatformToolsetsResponseBody{}
+	if res.Toolsets != nil {
+		body.Toolsets = make([]*RiskMCPPlatformToolsetResponseBody, len(res.Toolsets))
+		for i, val := range res.Toolsets {
+			if val == nil {
+				body.Toolsets[i] = nil
+				continue
+			}
+			body.Toolsets[i] = marshalRiskRiskMCPPlatformToolsetToRiskMCPPlatformToolsetResponseBody(val)
+		}
+	} else {
+		body.Toolsets = []*RiskMCPPlatformToolsetResponseBody{}
 	}
 	return body
 }
@@ -13294,6 +13549,156 @@ func NewListRiskPoliciesUnexpectedResponseBody(res *goa.ServiceError) *ListRiskP
 // from the result of the "listRiskPolicies" endpoint of the "risk" service.
 func NewListRiskPoliciesGatewayErrorResponseBody(res *goa.ServiceError) *ListRiskPoliciesGatewayErrorResponseBody {
 	body := &ListRiskPoliciesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listMCPPlatformToolsets" endpoint of the "risk"
+// service.
+func NewListMCPPlatformToolsetsUnauthorizedResponseBody(res *goa.ServiceError) *ListMCPPlatformToolsetsUnauthorizedResponseBody {
+	body := &ListMCPPlatformToolsetsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsForbiddenResponseBody builds the HTTP response
+// body from the result of the "listMCPPlatformToolsets" endpoint of the "risk"
+// service.
+func NewListMCPPlatformToolsetsForbiddenResponseBody(res *goa.ServiceError) *ListMCPPlatformToolsetsForbiddenResponseBody {
+	body := &ListMCPPlatformToolsetsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsBadRequestResponseBody builds the HTTP response
+// body from the result of the "listMCPPlatformToolsets" endpoint of the "risk"
+// service.
+func NewListMCPPlatformToolsetsBadRequestResponseBody(res *goa.ServiceError) *ListMCPPlatformToolsetsBadRequestResponseBody {
+	body := &ListMCPPlatformToolsetsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsNotFoundResponseBody builds the HTTP response body
+// from the result of the "listMCPPlatformToolsets" endpoint of the "risk"
+// service.
+func NewListMCPPlatformToolsetsNotFoundResponseBody(res *goa.ServiceError) *ListMCPPlatformToolsetsNotFoundResponseBody {
+	body := &ListMCPPlatformToolsetsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsConflictResponseBody builds the HTTP response body
+// from the result of the "listMCPPlatformToolsets" endpoint of the "risk"
+// service.
+func NewListMCPPlatformToolsetsConflictResponseBody(res *goa.ServiceError) *ListMCPPlatformToolsetsConflictResponseBody {
+	body := &ListMCPPlatformToolsetsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listMCPPlatformToolsets" endpoint of
+// the "risk" service.
+func NewListMCPPlatformToolsetsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListMCPPlatformToolsetsUnsupportedMediaResponseBody {
+	body := &ListMCPPlatformToolsetsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsInvalidResponseBody builds the HTTP response body
+// from the result of the "listMCPPlatformToolsets" endpoint of the "risk"
+// service.
+func NewListMCPPlatformToolsetsInvalidResponseBody(res *goa.ServiceError) *ListMCPPlatformToolsetsInvalidResponseBody {
+	body := &ListMCPPlatformToolsetsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listMCPPlatformToolsets" endpoint of
+// the "risk" service.
+func NewListMCPPlatformToolsetsInvariantViolationResponseBody(res *goa.ServiceError) *ListMCPPlatformToolsetsInvariantViolationResponseBody {
+	body := &ListMCPPlatformToolsetsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listMCPPlatformToolsets" endpoint of the "risk"
+// service.
+func NewListMCPPlatformToolsetsUnexpectedResponseBody(res *goa.ServiceError) *ListMCPPlatformToolsetsUnexpectedResponseBody {
+	body := &ListMCPPlatformToolsetsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMCPPlatformToolsetsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listMCPPlatformToolsets" endpoint of the "risk"
+// service.
+func NewListMCPPlatformToolsetsGatewayErrorResponseBody(res *goa.ServiceError) *ListMCPPlatformToolsetsGatewayErrorResponseBody {
+	body := &ListMCPPlatformToolsetsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -20731,6 +21136,17 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 // payload.
 func NewListRiskPoliciesPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskPoliciesPayload {
 	v := &risk.ListRiskPoliciesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsPayload builds a risk service
+// listMCPPlatformToolsets endpoint payload.
+func NewListMCPPlatformToolsetsPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListMCPPlatformToolsetsPayload {
+	v := &risk.ListMCPPlatformToolsetsPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -21,6 +21,7 @@ type Server struct {
 	Mounts                         []*MountPoint
 	CreateRiskPolicy               http.Handler
 	ListRiskPolicies               http.Handler
+	ListMCPPlatformToolsets        http.Handler
 	ListRiskPoliciesForMcpServer   http.Handler
 	ListBuiltinExclusions          http.Handler
 	GetRiskPolicy                  http.Handler
@@ -102,6 +103,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"CreateRiskPolicy", "POST", "/rpc/risk.createPolicy"},
 			{"ListRiskPolicies", "GET", "/rpc/risk.listPolicies"},
+			{"ListMCPPlatformToolsets", "GET", "/rpc/risk.listMCPPlatformToolsets"},
 			{"ListRiskPoliciesForMcpServer", "GET", "/rpc/risk.listRiskPoliciesForMcpServer"},
 			{"ListBuiltinExclusions", "GET", "/rpc/risk.listBuiltinExclusions"},
 			{"GetRiskPolicy", "GET", "/rpc/risk.getPolicy"},
@@ -155,6 +157,7 @@ func New(
 		},
 		CreateRiskPolicy:               NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		ListRiskPolicies:               NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
+		ListMCPPlatformToolsets:        NewListMCPPlatformToolsetsHandler(e.ListMCPPlatformToolsets, mux, decoder, encoder, errhandler, formatter),
 		ListRiskPoliciesForMcpServer:   NewListRiskPoliciesForMcpServerHandler(e.ListRiskPoliciesForMcpServer, mux, decoder, encoder, errhandler, formatter),
 		ListBuiltinExclusions:          NewListBuiltinExclusionsHandler(e.ListBuiltinExclusions, mux, decoder, encoder, errhandler, formatter),
 		GetRiskPolicy:                  NewGetRiskPolicyHandler(e.GetRiskPolicy, mux, decoder, encoder, errhandler, formatter),
@@ -215,6 +218,7 @@ func (s *Server) Service() string { return "risk" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRiskPolicy = m(s.CreateRiskPolicy)
 	s.ListRiskPolicies = m(s.ListRiskPolicies)
+	s.ListMCPPlatformToolsets = m(s.ListMCPPlatformToolsets)
 	s.ListRiskPoliciesForMcpServer = m(s.ListRiskPoliciesForMcpServer)
 	s.ListBuiltinExclusions = m(s.ListBuiltinExclusions)
 	s.GetRiskPolicy = m(s.GetRiskPolicy)
@@ -274,6 +278,7 @@ func (s *Server) MethodNames() []string { return risk.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRiskPolicyHandler(mux, h.CreateRiskPolicy)
 	MountListRiskPoliciesHandler(mux, h.ListRiskPolicies)
+	MountListMCPPlatformToolsetsHandler(mux, h.ListMCPPlatformToolsets)
 	MountListRiskPoliciesForMcpServerHandler(mux, h.ListRiskPoliciesForMcpServer)
 	MountListBuiltinExclusionsHandler(mux, h.ListBuiltinExclusions)
 	MountGetRiskPolicyHandler(mux, h.GetRiskPolicy)
@@ -414,6 +419,59 @@ func NewListRiskPoliciesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskPolicies")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListMCPPlatformToolsetsHandler configures the mux to serve the "risk"
+// service "listMCPPlatformToolsets" endpoint.
+func MountListMCPPlatformToolsetsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.listMCPPlatformToolsets", f)
+}
+
+// NewListMCPPlatformToolsetsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "listMCPPlatformToolsets" endpoint.
+func NewListMCPPlatformToolsetsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListMCPPlatformToolsetsRequest(mux, decoder)
+		encodeResponse = EncodeListMCPPlatformToolsetsResponse(encoder)
+		encodeError    = EncodeListMCPPlatformToolsetsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listMCPPlatformToolsets")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

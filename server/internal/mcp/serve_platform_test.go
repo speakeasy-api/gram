@@ -232,6 +232,51 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	require.Equal(t, "[REDACTED]", params["api_token"], "secret-shaped params must be scrubbed")
 }
 
+func TestServePlatformToolset_RiskScanUsesStableToolsetIdentityAndAnnotations(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	scanner := consumeRiskScanPayloads(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID := createAssistant(t, ti, authCtx, "Managed")
+	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	})
+	require.NoError(t, err)
+
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": platformtools.ToolNameSearchLogs,
+			"arguments": map[string]any{
+				"query": "errors",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	token := mintAssistantToken(t, ti, authCtx, managedID)
+	w, err := servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, body, token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Len(t, scanner.events, 1)
+
+	event := scanner.events[0]
+	require.Equal(t, mcpriskscan.SurfacePlatformMCP, event.Surface)
+	require.Equal(t, platformtools.PlatformToolsetID(platformtools.ManagedAssistantPlatformToolsetSlug).String(), event.ServerID)
+	require.Equal(t, platformtools.ManagedAssistantPlatformToolsetSlug, event.ToolsetID)
+	require.Equal(t, platformtools.ToolNameSearchLogs, event.ToolName)
+	require.NotNil(t, event.ToolAnnotations)
+	require.NotNil(t, event.ToolAnnotations.ReadOnlyHint)
+	require.True(t, *event.ToolAnnotations.ReadOnlyHint)
+}
+
 func createAssistant(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, name string) uuid.UUID {
 	t.Helper()
 	a, err := assistantsrepo.New(ti.conn).CreateAssistant(t.Context(), assistantsrepo.CreateAssistantParams{
@@ -477,8 +522,8 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 		require.Equal(t, authCtx.ActiveOrganizationID, event[attr.OrganizationIDKey])
 		require.Equal(t, authCtx.ProjectID.String(), event[attr.ProjectIDKey])
 		require.Equal(t, "list_projects", event[attr.ToolNameKey])
-		require.Empty(t, event[attr.McpServerIDKey])
-		require.Empty(t, event[attr.ToolsetIDKey])
+		require.Equal(t, platformtools.PlatformToolsetID(platformtools.PlatformMCPReadToolsetSlug).String(), event[attr.McpServerIDKey])
+		require.Equal(t, platformtools.PlatformMCPReadToolsetSlug, event[attr.ToolsetIDKey])
 		require.Equal(t, mcpriskscan.MethodToolsCall, event["gram.mcp.risk.scan.method"])
 		require.Equal(t, mcpriskscan.PhaseRequest, event["gram.mcp.risk.scan.phase"])
 		require.Equal(t, "false", event["gram.mcp.risk.scan.identity_stamped"], "platform auth does not fabricate MCP principal provenance from AuthContext.UserID")

@@ -518,6 +518,13 @@ type ListRiskPoliciesResponseBody struct {
 	Policies []*RiskPolicyResponseBody `form:"policies,omitempty" json:"policies,omitempty" xml:"policies,omitempty"`
 }
 
+// ListMCPPlatformToolsetsResponseBody is the type of the "risk" service
+// "listMCPPlatformToolsets" endpoint HTTP response body.
+type ListMCPPlatformToolsetsResponseBody struct {
+	// The available Platform MCP policy scope targets.
+	Toolsets []*RiskMCPPlatformToolsetResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+}
+
 // ListRiskPoliciesForMcpServerResponseBody is the type of the "risk" service
 // "listRiskPoliciesForMcpServer" endpoint HTTP response body.
 type ListRiskPoliciesForMcpServerResponseBody struct {
@@ -1756,6 +1763,196 @@ type ListRiskPoliciesUnexpectedResponseBody struct {
 // ListRiskPoliciesGatewayErrorResponseBody is the type of the "risk" service
 // "listRiskPolicies" endpoint HTTP response body for the "gateway_error" error.
 type ListRiskPoliciesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMCPPlatformToolsetsUnauthorizedResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListMCPPlatformToolsetsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMCPPlatformToolsetsForbiddenResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "forbidden" error.
+type ListMCPPlatformToolsetsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMCPPlatformToolsetsBadRequestResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "bad_request" error.
+type ListMCPPlatformToolsetsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMCPPlatformToolsetsNotFoundResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "not_found" error.
+type ListMCPPlatformToolsetsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMCPPlatformToolsetsConflictResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "conflict" error.
+type ListMCPPlatformToolsetsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMCPPlatformToolsetsUnsupportedMediaResponseBody is the type of the
+// "risk" service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListMCPPlatformToolsetsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMCPPlatformToolsetsInvalidResponseBody is the type of the "risk" service
+// "listMCPPlatformToolsets" endpoint HTTP response body for the "invalid"
+// error.
+type ListMCPPlatformToolsetsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMCPPlatformToolsetsInvariantViolationResponseBody is the type of the
+// "risk" service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListMCPPlatformToolsetsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMCPPlatformToolsetsUnexpectedResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "unexpected" error.
+type ListMCPPlatformToolsetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListMCPPlatformToolsetsGatewayErrorResponseBody is the type of the "risk"
+// service "listMCPPlatformToolsets" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListMCPPlatformToolsetsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -11290,6 +11487,45 @@ type RiskPolicyResponseBody struct {
 	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
+// RiskMCPPlatformToolsetResponseBody is used to define fields on response body
+// types.
+type RiskMCPPlatformToolsetResponseBody struct {
+	// The stable policy-scope identity for this Platform MCP toolset.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The reserved Platform MCP toolset slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The display name for this Platform MCP toolset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The code-owned tools in this Platform MCP toolset.
+	Tools []*RiskMCPPlatformToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
+// RiskMCPPlatformToolResponseBody is used to define fields on response body
+// types.
+type RiskMCPPlatformToolResponseBody struct {
+	// The Platform MCP tool name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// MCP behavior annotations from the code-owned descriptor.
+	Annotations *ToolAnnotationsResponseBody `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// ToolAnnotationsResponseBody is used to define fields on response body types.
+type ToolAnnotationsResponseBody struct {
+	// Human-readable display name for the tool
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// If true, the tool does not modify its environment
+	ReadOnlyHint *bool `form:"read_only_hint,omitempty" json:"read_only_hint,omitempty" xml:"read_only_hint,omitempty"`
+	// If true, the tool may perform destructive updates (only meaningful when
+	// read_only_hint is false)
+	DestructiveHint *bool `form:"destructive_hint,omitempty" json:"destructive_hint,omitempty" xml:"destructive_hint,omitempty"`
+	// If true, repeated calls with same arguments have no additional effect (only
+	// meaningful when read_only_hint is false)
+	IdempotentHint *bool `form:"idempotent_hint,omitempty" json:"idempotent_hint,omitempty" xml:"idempotent_hint,omitempty"`
+	// If true, the tool interacts with external entities beyond its local
+	// environment
+	OpenWorldHint *bool `form:"open_world_hint,omitempty" json:"open_world_hint,omitempty" xml:"open_world_hint,omitempty"`
+}
+
 // BuiltinExclusionCategoryResponseBody is used to define fields on response
 // body types.
 type BuiltinExclusionCategoryResponseBody struct {
@@ -12795,6 +13031,172 @@ func NewListRiskPoliciesUnexpected(body *ListRiskPoliciesUnexpectedResponseBody)
 // NewListRiskPoliciesGatewayError builds a risk service listRiskPolicies
 // endpoint gateway_error error.
 func NewListRiskPoliciesGatewayError(body *ListRiskPoliciesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsResultOK builds a "risk" service
+// "listMCPPlatformToolsets" endpoint result from a HTTP "OK" response.
+func NewListMCPPlatformToolsetsResultOK(body *ListMCPPlatformToolsetsResponseBody) *risk.ListMCPPlatformToolsetsResult {
+	v := &risk.ListMCPPlatformToolsetsResult{}
+	v.Toolsets = make([]*risk.RiskMCPPlatformToolset, len(body.Toolsets))
+	for i, val := range body.Toolsets {
+		if val == nil {
+			v.Toolsets[i] = nil
+			continue
+		}
+		v.Toolsets[i] = unmarshalRiskMCPPlatformToolsetResponseBodyToRiskRiskMCPPlatformToolset(val)
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsUnauthorized builds a risk service
+// listMCPPlatformToolsets endpoint unauthorized error.
+func NewListMCPPlatformToolsetsUnauthorized(body *ListMCPPlatformToolsetsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsForbidden builds a risk service
+// listMCPPlatformToolsets endpoint forbidden error.
+func NewListMCPPlatformToolsetsForbidden(body *ListMCPPlatformToolsetsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsBadRequest builds a risk service
+// listMCPPlatformToolsets endpoint bad_request error.
+func NewListMCPPlatformToolsetsBadRequest(body *ListMCPPlatformToolsetsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsNotFound builds a risk service
+// listMCPPlatformToolsets endpoint not_found error.
+func NewListMCPPlatformToolsetsNotFound(body *ListMCPPlatformToolsetsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsConflict builds a risk service
+// listMCPPlatformToolsets endpoint conflict error.
+func NewListMCPPlatformToolsetsConflict(body *ListMCPPlatformToolsetsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsUnsupportedMedia builds a risk service
+// listMCPPlatformToolsets endpoint unsupported_media error.
+func NewListMCPPlatformToolsetsUnsupportedMedia(body *ListMCPPlatformToolsetsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsInvalid builds a risk service
+// listMCPPlatformToolsets endpoint invalid error.
+func NewListMCPPlatformToolsetsInvalid(body *ListMCPPlatformToolsetsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsInvariantViolation builds a risk service
+// listMCPPlatformToolsets endpoint invariant_violation error.
+func NewListMCPPlatformToolsetsInvariantViolation(body *ListMCPPlatformToolsetsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsUnexpected builds a risk service
+// listMCPPlatformToolsets endpoint unexpected error.
+func NewListMCPPlatformToolsetsUnexpected(body *ListMCPPlatformToolsetsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListMCPPlatformToolsetsGatewayError builds a risk service
+// listMCPPlatformToolsets endpoint gateway_error error.
+func NewListMCPPlatformToolsetsGatewayError(body *ListMCPPlatformToolsetsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -21389,6 +21791,22 @@ func ValidateListRiskPoliciesResponseBody(body *ListRiskPoliciesResponseBody) (e
 	return
 }
 
+// ValidateListMCPPlatformToolsetsResponseBody runs the validations defined on
+// ListMCPPlatformToolsetsResponseBody
+func ValidateListMCPPlatformToolsetsResponseBody(body *ListMCPPlatformToolsetsResponseBody) (err error) {
+	if body.Toolsets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
+	}
+	for _, e := range body.Toolsets {
+		if e != nil {
+			if err2 := ValidateRiskMCPPlatformToolsetResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateListRiskPoliciesForMcpServerResponseBody runs the validations
 // defined on ListRiskPoliciesForMcpServerResponseBody
 func ValidateListRiskPoliciesForMcpServerResponseBody(body *ListRiskPoliciesForMcpServerResponseBody) (err error) {
@@ -23296,6 +23714,248 @@ func ValidateListRiskPoliciesUnexpectedResponseBody(body *ListRiskPoliciesUnexpe
 // ValidateListRiskPoliciesGatewayErrorResponseBody runs the validations
 // defined on listRiskPolicies_gateway_error_response_body
 func ValidateListRiskPoliciesGatewayErrorResponseBody(body *ListRiskPoliciesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMCPPlatformToolsetsUnauthorizedResponseBody runs the validations
+// defined on listMCPPlatformToolsets_unauthorized_response_body
+func ValidateListMCPPlatformToolsetsUnauthorizedResponseBody(body *ListMCPPlatformToolsetsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMCPPlatformToolsetsForbiddenResponseBody runs the validations
+// defined on listMCPPlatformToolsets_forbidden_response_body
+func ValidateListMCPPlatformToolsetsForbiddenResponseBody(body *ListMCPPlatformToolsetsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMCPPlatformToolsetsBadRequestResponseBody runs the validations
+// defined on listMCPPlatformToolsets_bad_request_response_body
+func ValidateListMCPPlatformToolsetsBadRequestResponseBody(body *ListMCPPlatformToolsetsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMCPPlatformToolsetsNotFoundResponseBody runs the validations
+// defined on listMCPPlatformToolsets_not_found_response_body
+func ValidateListMCPPlatformToolsetsNotFoundResponseBody(body *ListMCPPlatformToolsetsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMCPPlatformToolsetsConflictResponseBody runs the validations
+// defined on listMCPPlatformToolsets_conflict_response_body
+func ValidateListMCPPlatformToolsetsConflictResponseBody(body *ListMCPPlatformToolsetsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMCPPlatformToolsetsUnsupportedMediaResponseBody runs the
+// validations defined on
+// listMCPPlatformToolsets_unsupported_media_response_body
+func ValidateListMCPPlatformToolsetsUnsupportedMediaResponseBody(body *ListMCPPlatformToolsetsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMCPPlatformToolsetsInvalidResponseBody runs the validations
+// defined on listMCPPlatformToolsets_invalid_response_body
+func ValidateListMCPPlatformToolsetsInvalidResponseBody(body *ListMCPPlatformToolsetsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMCPPlatformToolsetsInvariantViolationResponseBody runs the
+// validations defined on
+// listMCPPlatformToolsets_invariant_violation_response_body
+func ValidateListMCPPlatformToolsetsInvariantViolationResponseBody(body *ListMCPPlatformToolsetsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMCPPlatformToolsetsUnexpectedResponseBody runs the validations
+// defined on listMCPPlatformToolsets_unexpected_response_body
+func ValidateListMCPPlatformToolsetsUnexpectedResponseBody(body *ListMCPPlatformToolsetsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListMCPPlatformToolsetsGatewayErrorResponseBody runs the validations
+// defined on listMCPPlatformToolsets_gateway_error_response_body
+func ValidateListMCPPlatformToolsetsGatewayErrorResponseBody(body *ListMCPPlatformToolsetsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -35567,6 +36227,43 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRiskMCPPlatformToolsetResponseBody runs the validations defined on
+// RiskMCPPlatformToolsetResponseBody
+func ValidateRiskMCPPlatformToolsetResponseBody(body *RiskMCPPlatformToolsetResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateRiskMCPPlatformToolResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateRiskMCPPlatformToolResponseBody runs the validations defined on
+// RiskMCPPlatformToolResponseBody
+func ValidateRiskMCPPlatformToolResponseBody(body *RiskMCPPlatformToolResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }
