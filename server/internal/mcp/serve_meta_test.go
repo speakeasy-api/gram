@@ -209,14 +209,11 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	served := func(method string) string {
-		params := map[string]any{}
-		if method == "initialize" {
-			params = map[string]any{"protocolVersion": mcpversions.Version20250326}
-		}
-		w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, method, params), "", nil)
+	served := func() string {
+		params := map[string]any{"protocolVersion": mcpversions.Version20250326}
+		w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodInitialize, params), "", nil)
 		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, w.Code, "method=%s body=%s", method, w.Body.String())
+		require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 
 		envelope := decodeRPCResponse(t, w)
 		var result struct {
@@ -236,13 +233,11 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 	} {
 		// Exercise setting and resetting the same endpoint sequentially.
 		setInstructions(tc.stored)
-		for _, method := range []string{"initialize", "server/discover"} {
-			require.Equal(t, tc.want, served(method), "case=%s method=%s", tc.name, method)
-		}
+		require.Equal(t, tc.want, served(), "case=%s", tc.name)
 	}
 }
 
-func TestServePublic_MetaEndpoint_ServerDiscover(t *testing.T) {
+func TestServePublic_MetaEndpoint_ServerDiscoverRequires20260728(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -253,23 +248,21 @@ func TestServePublic_MetaEndpoint_ServerDiscover(t *testing.T) {
 	slug := "meta-" + uuid.NewString()
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
-	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "server/discover", nil), "", nil)
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodServerDiscover, nil), "", nil)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
-
+	require.Equal(t, http.StatusOK, w.Code)
 	envelope := decodeRPCResponse(t, w)
-	var result struct {
-		ProtocolVersions []string `json:"protocolVersions"`
-		ServerInfo       struct {
-			Name string `json:"name"`
-		} `json:"serverInfo"`
+	var rpcError struct {
+		Code int `json:"code"`
 	}
-	require.NoError(t, json.Unmarshal(envelope["result"], &result))
-	require.Equal(t, mcpversions.SupportedMetaServer(), result.ProtocolVersions)
-	require.Equal(t, "Gram Gateway", result.ServerInfo.Name)
+	require.NoError(t, json.Unmarshal(envelope["error"], &rpcError))
+	require.Equal(t, -32601, rpcError.Code)
+	require.Empty(t, w.Header().Get("Mcp-Session-Id"))
 
-	// The self-description is assembled from constants, so it is shareable.
-	requireCacheHints(t, envelope["result"], "public")
+	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodServerDiscover, nil), "", map[string]string{mcpversions.HTTPHeader: mcpversions.Version20260728})
+	require.NoError(t, err)
+	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedMetaServer())
+	require.Empty(t, w.Header().Get("Mcp-Session-Id"))
 }
 
 func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
@@ -283,7 +276,7 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 	slug := "meta-" + uuid.NewString()
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
-	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 
@@ -321,7 +314,7 @@ func TestServePublic_MetaEndpoint_ListServers_ReturnsOrderedMembers(t *testing.T
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member second", secondSlug, 2, mcpservers.VisibilityPrivate)
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member first", firstSlug, 1, mcpservers.VisibilityPrivate)
 
-	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsCall, map[string]any{
 		"name":      "list_servers",
 		"arguments": map[string]any{},
 	}), "", nil)
@@ -369,7 +362,7 @@ func TestServePublic_MetaEndpoint_ListServers_HidesDisabledMembers(t *testing.T)
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member live", liveSlug, 1, mcpservers.VisibilityPrivate)
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member dark", darkSlug, 2, mcpservers.VisibilityDisabled)
 
-	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsCall, map[string]any{
 		"name":      "list_servers",
 		"arguments": map[string]any{},
 	}), "", nil)
@@ -400,7 +393,7 @@ func TestServePublic_MetaEndpoint_UnsupportedDeclaredVersion(t *testing.T) {
 	slug := "meta-" + uuid.NewString()
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
-	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", map[string]string{
 		mcpversions.HTTPHeader: "2031-01-01",
 	})
 	require.NoError(t, err)
@@ -423,7 +416,7 @@ func TestServePublic_MetaEndpoint_OlderKnownDeclaredVersionAccepted(t *testing.T
 	slug := "meta-" + uuid.NewString()
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
-	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", map[string]string{
 		mcpversions.HTTPHeader: mcpversions.Version20250326,
 	})
 	require.NoError(t, err)
@@ -433,7 +426,7 @@ func TestServePublic_MetaEndpoint_OlderKnownDeclaredVersionAccepted(t *testing.T
 	require.NotContains(t, envelope, "error", "an older served revision must be accepted")
 	require.Equal(t, mcpversions.Version20250326, w.Header().Get(mcpversions.HTTPHeader))
 
-	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{
+	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", map[string]string{
 		mcpversions.HTTPHeader: mcpversions.Version20251125,
 	})
 	require.NoError(t, err)
@@ -444,7 +437,7 @@ func TestServePublic_MetaEndpoint_OlderKnownDeclaredVersionAccepted(t *testing.T
 
 	// A recognized-but-unserved declaration (2026-07-28 before the
 	// platform-wide flip) is rejected like any other unserved revision.
-	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{
+	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", map[string]string{
 		mcpversions.HTTPHeader: mcpversions.Version20260728,
 	})
 	require.NoError(t, err)
@@ -467,7 +460,7 @@ func TestServePublic_MetaEndpoint_UnsanitizableDeclaredVersion(t *testing.T) {
 	slug := "meta-" + uuid.NewString()
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
-	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", map[string]string{
 		mcpversions.HTTPHeader: "2026-07-28\x00hostile",
 	})
 	require.NoError(t, err)
@@ -501,7 +494,7 @@ func TestServePublic_MetaEndpoint_MistypedMetaVersionDeclaration(t *testing.T) {
 	slug := "meta-" + uuid.NewString()
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
-	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{
 		"_meta": map[string]any{
 			"io.modelcontextprotocol/protocolVersion": 20260728,
 		},
@@ -525,7 +518,7 @@ func TestServePublic_MetaEndpoint_ConflictingVersionDeclarations(t *testing.T) {
 	slug := "meta-" + uuid.NewString()
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
-	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{
 		"_meta": map[string]any{
 			"io.modelcontextprotocol/protocolVersion": mcpversions.Version20251125,
 		},
@@ -596,7 +589,7 @@ func TestServePublic_MetaEndpoint_UnsupportedVersionPrecedesIssuerAuthentication
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
 
-	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", map[string]string{
 		mcpversions.HTTPHeader: mcpversions.Version20260728,
 	})
 	require.NoError(t, err)

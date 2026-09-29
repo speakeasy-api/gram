@@ -78,7 +78,7 @@ export function RemoteMcpIdentitySectionBody({
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
     undefined,
-    { enabled: remoteMcpServerId !== "" },
+    { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
   const {
     items: clients,
@@ -213,7 +213,13 @@ export function RemoteMcpIdentitySectionBody({
   // leaving User means unbinding the client and leaving Agent means deleting
   // the credential; both are what Save has to do, not the card click.
   const leavingUser = actualMode === "user" && selectedMode !== "user";
-  const leavingAgent = actualMode === "agent" && selectedMode !== "agent";
+  // A server can carry a bound client and a leftover static credential at
+  // once, and the client wins the derived mode. No Identity has to clear both
+  // or the credential alone would make the server read as Agent again — and
+  // unlike under User, nothing overrides it on the way upstream.
+  const leavingAgent =
+    (actualMode === "agent" && selectedMode !== "agent") ||
+    (selectedMode === "none" && !!authorizationHeader);
   const destructive = leavingUser || leavingAgent;
 
   const detachUserIdentity = async (): Promise<boolean> => {
@@ -237,7 +243,14 @@ export function RemoteMcpIdentitySectionBody({
 
   const removeAgentCredential = async (): Promise<boolean> => {
     if (!authorizationHeader) return false;
-    await deleteHeader.mutateAsync({ request: { id: authorizationHeader.id } });
+    // Under No Identity the row is editable in Custom Headers. When the draft
+    // has already dropped it, the header save deletes it; deleting it here
+    // first would fail that save on a row that is gone and strand the rest.
+    const headerId = authorizationHeader.id;
+    if (!headerDrafts.drafts.some((draft) => draft.id === headerId)) {
+      return false;
+    }
+    await deleteHeader.mutateAsync({ request: { id: headerId } });
     const refreshed = await invalidateHeaders();
     if (!refreshed) {
       toast.warning("Credential removed, but headers could not be refreshed.");
@@ -254,14 +267,19 @@ export function RemoteMcpIdentitySectionBody({
       if (selectedMode === "agent") {
         await agentDraft.save();
       } else if (selectedMode === "user") {
-        userDraft.save();
-      } else if (destructive) {
-        toast.success("Identity removed");
+        await userDraft.save();
       }
       // Headers last: identity may have just written or removed the
       // Authorization row, and these rows are diffed against what the server
       // holds once that has landed.
-      if (await headerDrafts.save()) {
+      const headersSaved = await headerDrafts.save();
+      // Reported only once the headers have landed: when the draft already
+      // dropped the credential, the header save is what deletes it, and a
+      // failure there must not follow a claim that it is gone.
+      if (selectedMode === "none" && destructive) {
+        toast.success("Identity removed");
+      }
+      if (headersSaved) {
         toast.success("Upstream headers updated");
       }
     } catch (error) {
@@ -276,7 +294,7 @@ export function RemoteMcpIdentitySectionBody({
   // that card says so rather than a banner underneath the choice.
   const noneWarning =
     noneProbeStatus === "authentication-required"
-      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose User or Agent Identity."
+      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose User Identity or a Service Account."
       : null;
   const cards = identityModeCards(upstreamName);
 
@@ -288,8 +306,12 @@ export function RemoteMcpIdentitySectionBody({
     identityCanSave = userDraft.canSave;
   } else if (selectedMode === "agent") {
     // Moving to Agent needs a credential; without one there is nothing for
-    // the mode to actually be.
-    identityCanSave = agentDraft.canSave;
+    // the mode to actually be. One already on the server counts: in the
+    // legacy state where a bound client outranks a static header, detaching
+    // the client is the whole change, and demanding a fresh secret would ask
+    // the operator to retype one they cannot read.
+    identityCanSave =
+      agentDraft.canSave || (leavingUser && !!authorizationHeader);
   } else {
     // No Identity commits only the removal it implies.
     identityCanSave = destructive;
@@ -344,7 +366,7 @@ export function RemoteMcpIdentitySectionBody({
             {passThroughAuthorization ? (
               <Alert variant="warning" dismissible={false}>
                 A legacy pass-through Authorization header is still configured.
-                Remove it in Custom Headers before selecting Agent Identity or
+                Remove it in Custom Headers before selecting Service Account or
                 relying on No Identity.
               </Alert>
             ) : null}
@@ -472,7 +494,7 @@ export function RemoteMcpIdentitySectionBody({
 
           {identityResolved && selectedMode === "agent" ? (
             <AuthRow
-              label="Agent credential"
+              label="Service Account credential"
               hint={`One credential every caller shares. Speakeasy sends it to ${upstreamName} as the Authorization header.`}
             >
               <AgentIdentityRow
@@ -554,9 +576,7 @@ export function RemoteMcpIdentitySectionBody({
                 : "Remove the shared credential?"}
             </Dialog.Title>
             <Dialog.Description>
-              {leavingUser
-                ? "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers."
-                : "Saving removes the static Authorization credential from the Remote MCP source. Requests will no longer authenticate upstream."}
+              {removalConsequences(leavingUser, leavingAgent)}
             </Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
@@ -586,4 +606,25 @@ export function RemoteMcpIdentitySectionBody({
       </Dialog>
     </>
   );
+}
+
+const UNLINK_PROVIDER_CONSEQUENCE =
+  "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers.";
+const REMOVE_CREDENTIAL_CONSEQUENCE =
+  "Saving removes the static Authorization credential from the Remote MCP source. Requests will no longer authenticate upstream.";
+
+/**
+ * What the confirmation discloses. A server can carry a bound client and a
+ * leftover static credential at once, and No Identity removes both, so the
+ * dialog has to name both.
+ */
+function removalConsequences(
+  leavingUser: boolean,
+  leavingAgent: boolean,
+): string {
+  if (leavingUser && leavingAgent) {
+    return `${UNLINK_PROVIDER_CONSEQUENCE} ${REMOVE_CREDENTIAL_CONSEQUENCE}`;
+  }
+  if (leavingUser) return UNLINK_PROVIDER_CONSEQUENCE;
+  return REMOVE_CREDENTIAL_CONSEQUENCE;
 }

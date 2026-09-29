@@ -54,6 +54,8 @@ type UpdateToolsetRequestBody struct {
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Where the hosted MCP is accessible: public_only, dual, or private_only
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The mode to use for tool selection
@@ -142,6 +144,8 @@ type CreateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -228,6 +232,8 @@ type UpdateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -300,6 +306,8 @@ type GetToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -400,6 +408,8 @@ type CloneToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -472,6 +482,8 @@ type AddExternalOAuthServerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -544,6 +556,8 @@ type UpdateExternalOAuthServerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -616,6 +630,8 @@ type RemoveOAuthServerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -688,6 +704,8 @@ type SetUserSessionIssuerResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -760,6 +778,8 @@ type SetToolVariationsGroupResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
 	// The ID of the custom domain to use for the toolset
@@ -4296,6 +4316,10 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -4471,6 +4495,10 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -4607,6 +4635,10 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -4800,6 +4832,10 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -4936,6 +4972,10 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -5075,6 +5115,10 @@ func NewUpdateExternalOAuthServerResponseBody(res *types.Toolset) *UpdateExterna
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -5211,6 +5255,10 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -5349,6 +5397,10 @@ func NewSetUserSessionIssuerResponseBody(res *types.Toolset) *SetUserSessionIssu
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
 	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
+	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
 		body.UserSessionIssuerSlug = &userSessionIssuerSlug
@@ -5485,6 +5537,10 @@ func NewSetToolVariationsGroupResponseBody(res *types.Toolset) *SetToolVariation
 	if res.McpSlug != nil {
 		mcpSlug := string(*res.McpSlug)
 		body.McpSlug = &mcpSlug
+	}
+	if res.NetworkAccessMode != nil {
+		networkAccessMode := string(*res.NetworkAccessMode)
+		body.NetworkAccessMode = &networkAccessMode
 	}
 	if res.UserSessionIssuerSlug != nil {
 		userSessionIssuerSlug := string(*res.UserSessionIssuerSlug)
@@ -7841,6 +7897,10 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 		mcpSlug := types.Slug(*body.McpSlug)
 		v.McpSlug = &mcpSlug
 	}
+	if body.NetworkAccessMode != nil {
+		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
+		v.NetworkAccessMode = &networkAccessMode
+	}
 	if body.PromptTemplateNames != nil {
 		v.PromptTemplateNames = make([]string, len(body.PromptTemplateNames))
 		for i, val := range body.PromptTemplateNames {
@@ -8045,6 +8105,11 @@ func ValidateUpdateToolsetRequestBody(body *UpdateToolsetRequestBody) (err error
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+		}
+	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
 	}
 	return

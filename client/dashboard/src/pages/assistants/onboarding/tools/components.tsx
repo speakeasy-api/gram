@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Icon } from "@/components/ui/Icon";
 import {
-  AlertTriangle,
   Check,
   Copy,
   ExternalLink,
@@ -27,9 +26,14 @@ import {
 } from "../personalities";
 import { buildSlackManifest } from "../slackManifest";
 import {
+  DEFAULT_SLACK_REPLY_MODE,
   SLACK_CAPABILITY_GROUPS,
   SLACK_EVENT_GROUPS,
+  isSlackReplyMode,
+  slackReplyModeLabel,
+  type SlackReplyMode,
 } from "../slackCapabilities";
+import { SlackReplyModeOptions } from "../SlackReplyModeOptions";
 
 type Status = ToolCallMessagePartProps["status"];
 
@@ -487,7 +491,9 @@ export function ProposeNameComponent({
 
   const isPending = isExecuting(status);
   const settled = !isPending;
-  const r = result as { ok?: boolean; name?: string } | undefined;
+  const r = result as
+    | { ok?: boolean; cancelled?: boolean; name?: string }
+    | undefined;
 
   useEffect(() => {
     if (!isPending) return;
@@ -499,7 +505,7 @@ export function ProposeNameComponent({
     };
   }, [draft, toolCallId, isPending]);
 
-  if (settled && r?.ok) {
+  if (settled && r?.ok && !r.cancelled) {
     return (
       <ToolCard
         title="Name set"
@@ -607,7 +613,7 @@ export function ProposePersonalityComponent({
 
   const isPending = isExecuting(status);
   const settled = !isPending;
-  const r = result as { ok?: boolean } | undefined;
+  const r = result as { ok?: boolean; cancelled?: boolean } | undefined;
 
   useEffect(() => {
     if (!isPending) return;
@@ -619,7 +625,7 @@ export function ProposePersonalityComponent({
     };
   }, [draft, toolCallId, isPending]);
 
-  if (settled && r?.ok) {
+  if (settled && r?.ok && !r.cancelled) {
     return (
       <ToolCard
         title="Personality set"
@@ -880,6 +886,8 @@ export function ProposePersonalityComponent({
 type SlackSetupArgs = {
   preselected_capabilities?: string[];
   preselected_events?: string[];
+  reply_mode?: SlackReplyMode;
+  skip_slack_events?: boolean;
 };
 
 type SlackSetupSubmit = {
@@ -887,6 +895,7 @@ type SlackSetupSubmit = {
   cancelled?: boolean;
   capabilities?: string[];
   events?: string[];
+  reply_mode?: SlackReplyMode;
 };
 
 type SlackSetupResult = {
@@ -898,6 +907,118 @@ type SlackSetupResult = {
   error?: string;
 };
 
+/**
+ * Resolves the pending tool call with a cancellation if the card unmounts
+ * while the user has not answered.
+ */
+function useCancelPendingOnUnmount(toolCallId: string, isPending: boolean) {
+  const draft = useAssistantDraft();
+  useEffect(() => {
+    if (!isPending) return;
+    return () => {
+      draft.resolvePending(toolCallId, { success: false, cancelled: true });
+    };
+  }, [draft, toolCallId, isPending]);
+}
+
+function toggleInSet(prev: Set<string>, slug: string): Set<string> {
+  const next = new Set(prev);
+  if (next.has(slug)) next.delete(slug);
+  else next.add(slug);
+  return next;
+}
+
+function CheckboxOptionGrid({
+  idPrefix,
+  options,
+  selected,
+  onToggle,
+}: {
+  idPrefix: string;
+  options: readonly { slug: string; label: string; description: string }[];
+  selected: Set<string>;
+  onToggle: (slug: string) => void;
+}): JSX.Element {
+  return (
+    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+      {options.map((g) => {
+        const id = `${idPrefix}-${g.slug}`;
+        const checked = selected.has(g.slug);
+        return (
+          <label
+            key={g.slug}
+            htmlFor={id}
+            className={cn(
+              "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 border p-2 transition-colors",
+              checked && "border-primary bg-primary/5",
+            )}
+          >
+            <Checkbox
+              id={id}
+              checked={checked}
+              onCheckedChange={() => onToggle(g.slug)}
+              className="mt-0.5"
+            />
+            <div className="flex-1">
+              <Text small className="font-medium">
+                {g.label}
+              </Text>
+              <Text small muted className="mt-0.5">
+                {g.description}
+              </Text>
+            </div>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+const SECTION_LABEL_CLASS =
+  "mb-2 block text-xs font-medium tracking-wide uppercase";
+
+/**
+ * The reply-mode section of the Slack setup card. A reply mode the user
+ * already stated shows as a summary they can reopen; otherwise the options
+ * are shown up front.
+ */
+function SlackSetupReplySection({
+  assistantName,
+  stated,
+  value,
+  onChange,
+}: {
+  assistantName: string;
+  stated: SlackReplyMode | undefined;
+  value: SlackReplyMode;
+  onChange: (value: SlackReplyMode) => void;
+}): JSX.Element {
+  const [editing, setEditing] = useState(stated === undefined);
+  return (
+    <section>
+      <Label className={SECTION_LABEL_CLASS}>
+        When should {assistantName} reply?
+      </Label>
+      {editing ? (
+        <SlackReplyModeOptions
+          idPrefix="slack-setup-reply"
+          value={value}
+          onChange={onChange}
+        />
+      ) : (
+        <div className="border-border flex items-start justify-between gap-2 border p-3">
+          <Text small className="font-medium">
+            {slackReplyModeLabel(value)}
+          </Text>
+          <Button variant="tertiary" size="sm" onClick={() => setEditing(true)}>
+            Change
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function ProposeSlackSetupComponent({
   args,
   status,
@@ -907,6 +1028,10 @@ export function ProposeSlackSetupComponent({
   const draft = useAssistantDraft();
   const a = (args ?? {}) as Partial<SlackSetupArgs>;
   const assistantName = draft.assistant?.name ?? "this assistant";
+  const listens = a.skip_slack_events !== true;
+  const statedReplyMode = isSlackReplyMode(a.reply_mode)
+    ? a.reply_mode
+    : undefined;
 
   const [caps, setCaps] = useState<Set<string>>(
     () =>
@@ -920,22 +1045,25 @@ export function ProposeSlackSetupComponent({
     () =>
       new Set(Array.isArray(a.preselected_events) ? a.preselected_events : []),
   );
+  const [replyMode, setReplyMode] = useState<SlackReplyMode>(
+    statedReplyMode ?? DEFAULT_SLACK_REPLY_MODE,
+  );
 
   const isPending = isExecuting(status);
-  const settled = !isPending;
   const r = result as SlackSetupResult | undefined;
+  useCancelPendingOnUnmount(toolCallId, isPending);
 
-  useEffect(() => {
-    if (!isPending) return;
-    return () => {
-      draft.resolvePending(toolCallId, {
-        success: false,
-        cancelled: true,
-      } satisfies SlackSetupSubmit);
-    };
-  }, [draft, toolCallId, isPending]);
+  if (!isPending && r?.cancelled) {
+    return (
+      <ToolCard title="Slack setup — skipped">
+        <Text small muted>
+          You can come back to this anytime — just ask me to set up Slack.
+        </Text>
+      </ToolCard>
+    );
+  }
 
-  if (settled && r?.ok) {
+  if (!isPending && r?.ok) {
     return (
       <ToolCard
         title="Slack setup saved"
@@ -949,17 +1077,7 @@ export function ProposeSlackSetupComponent({
     );
   }
 
-  if (settled && r?.cancelled) {
-    return (
-      <ToolCard title="Slack setup — skipped">
-        <Text small muted>
-          You can come back to this anytime — just ask me to set up Slack.
-        </Text>
-      </ToolCard>
-    );
-  }
-
-  if (settled) {
+  if (!isPending) {
     return (
       <ToolCard title="Slack setup — error">
         <Text small className="text-red-600">
@@ -969,29 +1087,12 @@ export function ProposeSlackSetupComponent({
     );
   }
 
-  const toggleCap = (slug: string) =>
-    setCaps((prev) => {
-      const next = new Set(prev);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
-      return next;
-    });
-  const toggleEvent = (slug: string) =>
-    setEvents((prev) => {
-      const next = new Set(prev);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
-      return next;
-    });
-
-  const anySelected = caps.size > 0 || events.size > 0;
-  const anyEvent = events.size > 0;
-
   const submit = () =>
     draft.resolvePending(toolCallId, {
       success: true,
       capabilities: Array.from(caps),
-      events: Array.from(events),
+      events: listens ? Array.from(events) : [],
+      reply_mode: listens ? replyMode : undefined,
     } satisfies SlackSetupSubmit);
 
   const cancel = () =>
@@ -1006,100 +1107,44 @@ export function ProposeSlackSetupComponent({
       icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
     >
       <Text small muted className="mb-3">
-        Pick what {assistantName} can do in Slack and what wakes it up. You can
-        adjust this later from the assistant's settings.
+        Pick what {assistantName} can do in Slack and when it should reply. You
+        can adjust this later from the assistant's settings.
       </Text>
 
       <div className="space-y-4">
         <section>
-          <Label className="mb-2 block text-xs font-medium tracking-wide uppercase">
+          <Label className={SECTION_LABEL_CLASS}>
             What can {assistantName} do?
           </Label>
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-            {SLACK_CAPABILITY_GROUPS.map((g) => {
-              const id = `slack-cap-${g.slug}`;
-              const checked = caps.has(g.slug);
-              return (
-                <label
-                  key={g.slug}
-                  htmlFor={id}
-                  className={cn(
-                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 border p-2 transition-colors",
-                    checked && "border-primary bg-primary/5",
-                  )}
-                >
-                  <Checkbox
-                    id={id}
-                    checked={checked}
-                    onCheckedChange={() => toggleCap(g.slug)}
-                    className="mt-0.5"
-                  />
-                  <div className="flex-1">
-                    <Text small className="font-medium">
-                      {g.label}
-                    </Text>
-                    <Text small muted className="mt-0.5">
-                      {g.description}
-                    </Text>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
+          <CheckboxOptionGrid
+            idPrefix="slack-cap"
+            options={SLACK_CAPABILITY_GROUPS}
+            selected={caps}
+            onToggle={(slug) => setCaps((prev) => toggleInSet(prev, slug))}
+          />
         </section>
 
-        <section>
-          <Label className="mb-2 block text-xs font-medium tracking-wide uppercase">
-            When should {assistantName} wake up?
-          </Label>
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-            {SLACK_EVENT_GROUPS.map((g) => {
-              const id = `slack-event-${g.slug}`;
-              const checked = events.has(g.slug);
-              return (
-                <label
-                  key={g.slug}
-                  htmlFor={id}
-                  className={cn(
-                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 border p-2 transition-colors",
-                    checked && "border-primary bg-primary/5",
-                  )}
-                >
-                  <Checkbox
-                    id={id}
-                    checked={checked}
-                    onCheckedChange={() => toggleEvent(g.slug)}
-                    className="mt-0.5"
-                  />
-                  <div className="flex-1">
-                    <Text small className="font-medium">
-                      {g.label}
-                    </Text>
-                    <Text small muted className="mt-0.5">
-                      {g.description}
-                    </Text>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        </section>
+        {listens && (
+          <SlackSetupReplySection
+            assistantName={assistantName}
+            stated={statedReplyMode}
+            value={replyMode}
+            onChange={setReplyMode}
+          />
+        )}
 
-        {anyEvent && (
-          <div className="flex items-start gap-2 border border-amber-300/40 bg-amber-50/40 px-3 py-2 dark:bg-amber-950/20">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <div className="flex-1">
-              <Text small className="font-medium">
-                Heads up: {assistantName} will be always on
-              </Text>
-              <Text small muted className="mt-0.5">
-                It reacts every time one of these happens, in every channel it's
-                in. If that's too much, we can narrow it down together after —
-                just say things like &ldquo;only when @-mentioned&rdquo; or
-                &ldquo;only in #support&rdquo;.
-              </Text>
-            </div>
-          </div>
+        {listens && (
+          <section>
+            <Label className={SECTION_LABEL_CLASS}>
+              Also wake {assistantName} up when… (optional)
+            </Label>
+            <CheckboxOptionGrid
+              idPrefix="slack-event"
+              options={SLACK_EVENT_GROUPS}
+              selected={events}
+              onToggle={(slug) => setEvents((prev) => toggleInSet(prev, slug))}
+            />
+          </section>
         )}
       </div>
 
@@ -1107,7 +1152,115 @@ export function ProposeSlackSetupComponent({
         <Button variant="tertiary" onClick={() => void cancel()}>
           Skip
         </Button>
-        <Button onClick={() => void submit()} disabled={!anySelected}>
+        <Button
+          onClick={() => void submit()}
+          disabled={caps.size === 0 && !listens}
+        >
+          Save
+        </Button>
+      </div>
+    </ToolCard>
+  );
+}
+
+type ChooseSlackReplyModeArgs = {
+  preselected?: SlackReplyMode;
+};
+
+type ChooseSlackReplyModeSubmit = {
+  success: boolean;
+  cancelled?: boolean;
+  reply_mode?: SlackReplyMode;
+};
+
+type ChooseSlackReplyModeResult = {
+  ok?: boolean;
+  cancelled?: boolean;
+  reply_mode?: SlackReplyMode;
+  error?: string;
+};
+
+export function ChooseSlackReplyModeComponent({
+  args,
+  status,
+  result,
+  toolCallId,
+}: ToolCallMessagePartProps): JSX.Element {
+  const draft = useAssistantDraft();
+  const a = (args ?? {}) as Partial<ChooseSlackReplyModeArgs>;
+  const assistantName = draft.assistant?.name ?? "this assistant";
+  const [replyMode, setReplyMode] = useState<SlackReplyMode>(
+    isSlackReplyMode(a.preselected) ? a.preselected : DEFAULT_SLACK_REPLY_MODE,
+  );
+
+  const isPending = isExecuting(status);
+  const r = result as ChooseSlackReplyModeResult | undefined;
+  useCancelPendingOnUnmount(toolCallId, isPending);
+
+  if (!isPending && r?.cancelled) {
+    return (
+      <ToolCard title="Slack replies — unchanged">
+        <Text small muted>
+          Nothing changed. Ask me anytime to change when it replies.
+        </Text>
+      </ToolCard>
+    );
+  }
+
+  if (!isPending && r?.ok) {
+    return (
+      <ToolCard
+        title="Slack replies saved"
+        tone="success"
+        icon={<Check className="text-emerald-600" size={16} />}
+      >
+        <Text small muted>
+          {`${assistantName} replies ${(slackReplyModeLabel(r.reply_mode) ?? "").toLowerCase()}.`}
+        </Text>
+      </ToolCard>
+    );
+  }
+
+  if (!isPending) {
+    return (
+      <ToolCard title="Slack replies — error">
+        <Text small className="text-red-600">
+          {r?.error ?? "Could not save the change."}
+        </Text>
+      </ToolCard>
+    );
+  }
+
+  return (
+    <ToolCard
+      title={`When should ${assistantName} reply in Slack?`}
+      icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
+    >
+      <SlackReplyModeOptions
+        idPrefix="slack-reply-mode"
+        value={replyMode}
+        onChange={setReplyMode}
+      />
+      <div className="mt-4 flex justify-end gap-2">
+        <Button
+          variant="tertiary"
+          onClick={() => {
+            draft.resolvePending(toolCallId, {
+              success: false,
+              cancelled: true,
+            } satisfies ChooseSlackReplyModeSubmit);
+          }}
+        >
+          Skip
+        </Button>
+        <Button
+          onClick={() => {
+            draft.resolvePending(toolCallId, {
+              success: true,
+              reply_mode: replyMode,
+            } satisfies ChooseSlackReplyModeSubmit);
+          }}
+        >
           Save
         </Button>
       </div>

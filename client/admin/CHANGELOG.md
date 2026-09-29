@@ -1,5 +1,22 @@
 # admin
 
+## 0.6.0
+
+### Minor Changes
+
+- f480067: Add an MCP Servers view to the admin organization navigator that lists a project's MCP servers with their URL, visibility, source and creation date, and copies a server's URL in one click.
+- f01aad0: Add an observed support coverage matrix to the staff admin app, on each organization's record.
+  
+  A new `admin.getSupportCoverage` endpoint reports, per consuming surface, evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Policy enforcement joins `tool_call_blocks` to session summaries via `chat_id`; identity counts sessions bound to a named user separately from those bound only to a device hostname; shadow exposure is derived from `trace_summaries`, which already carries the MCP server URL and hook_source on the same trace.
+  
+  Every `(capability, surface)` pair is returned with an explicit status so evidence found and evidence absent stay distinct, and hook sources the fold does not recognize are reported rather than dropped. Folding a raw `hook_source` onto a surface now happens server-side in `internal/agentsurface`.
+  
+  The integration cards beside the matrix read from the operator-editable support matrix catalog, ranked by how much of that organization's missing coverage each method would close.
+
+### Patch Changes
+
+- 35060d1: Protect active identity-chaining bindings during issuer lifecycle changes. Block unsafe issuer deletion and consolidation, and show binding counts and explicit unlinking guidance in the dashboard and admin migration review.
+
 ## 0.5.2
 
 ### Patch Changes

@@ -3171,6 +3171,417 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/registry.create:
+        post:
+            description: Staff-only registry administration.
+            operationId: adminCreateRegistryEntry
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRegistryEntryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryEntry'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: createRegistryEntry admin
+            tags:
+                - admin
+            x-speakeasy-name-override: createRegistryEntry
+    /admin/registry.get:
+        get:
+            description: Staff-only registry administration.
+            operationId: adminGetRegistryEntry
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryEntry'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getRegistryEntry admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getRegistryEntry
+    /admin/registry.list:
+        get:
+            description: Staff-only registry administration.
+            operationId: adminListRegistryEntries
+            parameters:
+                - allowEmptyValue: true
+                  description: Search query; at most 1024 UTF-8 bytes (enforced by the server).
+                  in: query
+                  name: query
+                  schema:
+                    description: Search query; at most 1024 UTF-8 bytes (enforced by the server).
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: published
+                  schema:
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Opaque continuation cursor from next_cursor; at most 8192 UTF-8 bytes (enforced by the server).
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Opaque continuation cursor from next_cursor; at most 8192 UTF-8 bytes (enforced by the server).
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size; zero uses the server default of 25.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size; zero uses the server default of 25.
+                    format: int32
+                    maximum: 50
+                    minimum: 0
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryPage'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listRegistryEntries admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listRegistryEntries
+    /admin/registry.save:
+        post:
+            description: Staff-only registry administration.
+            operationId: adminSaveRegistryEntry
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SaveRegistryEntryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryEntry'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: saveRegistryEntry admin
+            tags:
+                - admin
+            x-speakeasy-name-override: saveRegistryEntry
+    /admin/registry.setPublished:
+        post:
+            description: Staff-only registry administration.
+            operationId: adminSetRegistryEntryPublished
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetRegistryEntryPublishedRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryEntry'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setRegistryEntryPublished admin
+            tags:
+                - admin
+            x-speakeasy-name-override: setRegistryEntryPublished
     /admin/remote-session-issuers.createGlobalIssuer:
         post:
             description: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
@@ -64661,6 +65072,111 @@ paths:
             x-speakeasy-react-hook:
                 name: GetHooksSummary
                 type: query
+    /rpc/telemetry.getMcpNetworkTraffic:
+        post:
+            description: Observed inbound public and private MCP request counts for a server or gateway over a recent window
+            operationId: getMcpNetworkTraffic
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetMcpNetworkTrafficPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetMcpNetworkTrafficResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getMcpNetworkTraffic telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getMcpNetworkTraffic
+            x-speakeasy-react-hook:
+                name: GetMcpNetworkTraffic
+                type: query
     /rpc/telemetry.getMcpServerActivity:
         post:
             description: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.
@@ -77633,6 +78149,373 @@ paths:
             x-speakeasy-name-override: withdrawSubject
             x-speakeasy-react-hook:
                 name: WithdrawWorkloadSubject
+    /v0.1/servers:
+        get:
+            operationId: discoverServers
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: include_deleted
+                  schema:
+                    default: false
+                    type: boolean
+                - allowEmptyValue: true
+                  description: 'Unsupported: any supplied value returns 400'
+                  in: query
+                  name: updated_since
+                  schema:
+                    description: 'Unsupported: any supplied value returns 400'
+                    type: string
+                - allowEmptyValue: true
+                  description: Search query; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+                  in: query
+                  name: search
+                  schema:
+                    description: Search query; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+                    type: string
+                - allowEmptyValue: true
+                  description: Version filter; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+                  in: query
+                  name: version
+                  schema:
+                    description: Version filter; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: cursor
+                  schema:
+                    maxLength: 8192
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: limit
+                  schema:
+                    default: 25
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoveryPage'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: discoverServers registryDiscovery
+            tags:
+                - registryDiscovery
+            x-speakeasy-name-override: discoverServers
+    /v0.1/servers/{serverName}/versions:
+        get:
+            operationId: discoverVersions
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: include_deleted
+                  schema:
+                    default: false
+                    type: boolean
+                - allowEmptyValue: true
+                  description: 'Unsupported: any supplied value returns 400'
+                  in: query
+                  name: updated_since
+                  schema:
+                    description: 'Unsupported: any supplied value returns 400'
+                    type: string
+                - in: path
+                  name: serverName
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoveryPage'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: discoverVersions registryDiscovery
+            tags:
+                - registryDiscovery
+            x-speakeasy-name-override: discoverVersions
+    /v0.1/servers/{serverName}/versions/{version}:
+        get:
+            operationId: discoverVersion
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: include_deleted
+                  schema:
+                    default: false
+                    type: boolean
+                - allowEmptyValue: true
+                  description: 'Unsupported: any supplied value returns 400'
+                  in: query
+                  name: updated_since
+                  schema:
+                    description: 'Unsupported: any supplied value returns 400'
+                    type: string
+                - in: path
+                  name: serverName
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: version
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema: {}
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: discoverVersion registryDiscovery
+            tags:
+                - registryDiscovery
+            x-speakeasy-name-override: discoverVersion
 components:
     schemas:
         AIDetection:
@@ -78783,6 +79666,10 @@ components:
                 whitelisted:
                     type: boolean
                     description: Whether the organization is whitelisted for full access.
+                workos_dashboard_url:
+                    type: string
+                    description: Link to the organization in the WorkOS dashboard. Absent when the organization is not linked to WorkOS or the deployment has no WorkOS environment configured.
+                    format: uri
                 workos_id:
                     type: string
                     description: WorkOS organization ID, if linked.
@@ -78993,6 +79880,74 @@ components:
                 - assistant_count
                 - created_at
                 - updated_at
+        AdminRegistryEntry:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                data_json:
+                    type: string
+                    description: Complete lossless registry record JSON
+                id:
+                    type: string
+                issues:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminRegistryIssue'
+                published:
+                    type: boolean
+                updated_at:
+                    type: string
+                    description: Opaque write precondition; echo unchanged
+            required:
+                - id
+                - data_json
+                - published
+                - created_at
+                - updated_at
+                - issues
+        AdminRegistryIssue:
+            type: object
+            properties:
+                message:
+                    type: string
+                path:
+                    type: string
+            required:
+                - path
+                - message
+        AdminRegistryPage:
+            type: object
+            properties:
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminRegistrySummary'
+                next_cursor:
+                    type: string
+            required:
+                - entries
+        AdminRegistrySummary:
+            type: object
+            properties:
+                id:
+                    type: string
+                issues:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminRegistryIssue'
+                name:
+                    type: string
+                published:
+                    type: boolean
+                updated_at:
+                    type: string
+            required:
+                - id
+                - name
+                - published
+                - updated_at
+                - issues
         AdminSession:
             type: object
             properties:
@@ -83335,6 +84290,14 @@ components:
                 - name
                 - dataset
                 - spec
+        CreateRegistryEntryRequestBody:
+            type: object
+            properties:
+                data_json:
+                    type: string
+                    description: Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced by the server on incoming writes. Stored records remain readable for repair.
+            required:
+                - data_json
         CreateRemoteSessionClientForm:
             type: object
             properties:
@@ -87368,6 +88331,55 @@ components:
             properties:
                 metadata:
                     $ref: '#/components/schemas/McpMetadata'
+        GetMcpNetworkTrafficPayload:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: MCP server ID (mutually exclusive with meta_mcp_server_id)
+                    format: uuid
+                meta_mcp_server_id:
+                    type: string
+                    description: Gateway ID (mutually exclusive with mcp_server_id)
+                    format: uuid
+                window:
+                    type: string
+                    description: Recent traffic window
+                    enum:
+                        - 24h
+                        - 7d
+            description: Provide exactly one of mcp_server_id or meta_mcp_server_id, and a recent window.
+            required:
+                - window
+        GetMcpNetworkTrafficResult:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start of the window
+                    format: date-time
+                last_private_at:
+                    type: string
+                    description: Most recent observed private request in the window
+                    format: date-time
+                last_public_at:
+                    type: string
+                    description: Most recent observed public request in the window
+                    format: date-time
+                points:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpNetworkTrafficPoint'
+                    description: Hourly request counts
+                to:
+                    type: string
+                    description: End of the window
+                    format: date-time
+            description: Observed resolved inbound MCP requests, not a guarantee of every client. No observations does not prove a route is unused.
+            required:
+                - from
+                - to
+                - points
         GetMcpServerActivityPayload:
             type: object
             properties:
@@ -88993,7 +90005,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Sub-steps, in order. Empty when the description says it all.
+                    description: 'Supporting lines under the description: ordered sub-steps for the public-key step, otherwise notes or the values to enter. Empty when the description says it all.'
                 group:
                     type: string
                     description: 'Which phase the step belongs to: connect (the service app the connection authenticates with) or cross_app_access (the AI agent).'
@@ -93087,6 +94099,25 @@ components:
                 - id
                 - created_at
                 - updated_at
+        McpNetworkTrafficPoint:
+            type: object
+            properties:
+                bucket_start:
+                    type: string
+                    description: Start of the UTC hour
+                    format: date-time
+                private_requests:
+                    type: integer
+                    description: Observed private requests
+                    format: int64
+                public_requests:
+                    type: integer
+                    description: Observed public requests
+                    format: int64
+            required:
+                - bucket_start
+                - public_requests
+                - private_requests
         McpServer:
             type: object
             properties:
@@ -97046,6 +98077,45 @@ components:
                 - name
                 - issuer
                 - jwks_uri
+        RegistryDiscoveryError:
+            type: object
+            properties:
+                error:
+                    type: string
+                name:
+                    type: string
+            required:
+                - name
+                - error
+        RegistryDiscoveryMetadata:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    format: int64
+                nextCursor:
+                    type: string
+            required:
+                - count
+        RegistryDiscoveryPage:
+            type: object
+            properties:
+                metadata:
+                    $ref: '#/components/schemas/RegistryDiscoveryMetadata'
+                servers:
+                    type: array
+                    items: {}
+                    description: Complete registry record envelopes, including server and _meta extensions
+            required:
+                - servers
+                - metadata
+        RegistryDiscoverydiscoverServersResponseBody:
+            type: object
+            properties:
+                error:
+                    type: string
+            required:
+                - error
         RemoteMcpServer:
             type: object
             properties:
@@ -98542,7 +99612,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Custom tool names for this server. Omit to follow the policy tool rule.
+                    description: Custom tool names for this server. Omit to follow the policy tool rule; an empty list matches every tool on this server, unconditionally.
             required:
                 - mcp_server_id
         RiskOverviewCategory:
@@ -99834,6 +100904,21 @@ components:
             required:
                 - server
                 - tunnel_key
+        SaveRegistryEntryRequestBody:
+            type: object
+            properties:
+                data_json:
+                    type: string
+                    description: Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced by the server on incoming writes. Stored records remain readable for repair.
+                id:
+                    type: string
+                    format: uuid
+                updated_at:
+                    type: string
+            required:
+                - id
+                - updated_at
+                - data_json
         SaveRiskEvalReviewRequestBody:
             type: object
             properties:
@@ -101247,6 +102332,20 @@ components:
                     $ref: '#/components/schemas/Project'
             required:
                 - project
+        SetRegistryEntryPublishedRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                published:
+                    type: boolean
+                updated_at:
+                    type: string
+            required:
+                - id
+                - updated_at
+                - published
         SetRemoteSessionAutoRefreshPolicyRequestBody:
             type: object
             properties:
@@ -105784,6 +106883,13 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 oauth_enablement_metadata:
                     $ref: '#/components/schemas/OAuthEnablementMetadata'
                 organization_id:
@@ -108409,6 +109515,13 @@ components:
                 name:
                     type: string
                     description: The new name of the toolset
+                network_access_mode:
+                    type: string
+                    description: The network surfaces through which a Gram-hosted MCP server may be reached.
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 project_slug_input:
                     type: string
                 prompt_template_names:
@@ -108464,6 +109577,13 @@ components:
                 name:
                     type: string
                     description: The new name of the toolset
+                network_access_mode:
+                    type: string
+                    description: 'Where the hosted MCP is accessible: public_only, dual, or private_only'
+                    enum:
+                        - public_only
+                        - dual
+                        - private_only
                 prompt_template_names:
                     type: array
                     items:
@@ -110122,6 +111242,8 @@ tags:
       description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
     - name: mcpMetadata
       description: Manages metadata for the MCP install page shown to users.
+    - name: registryDiscovery
+      description: 'Authenticated discovery-only preview. Current records only: no version history, incremental synchronization or mirror guarantees. Uses Gram credentials, not generic-client OAuth. Discovery errors use the pinned standard error envelope; authorization uses Gram security.'
     - name: mcpServers
       description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
     - name: metaMcp

@@ -35,6 +35,13 @@ where a value is expected.
    mutation section. Confirm there is no ingress row, credential, or related
    console/network error.
 
+0a. **Inbound MCP network traffic seed**: after `mise run seed:demo`, confirm
+`mcp_network_traffic_hourly_summaries` has public and private rows for both
+`mcp` and `meta` server kinds in the demo project, with non-zero request
+counts and recent `last_seen` timestamps. This is a data check only: the
+demo org has no `network_ingress` entitlement, so the Network access panel
+remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
+
 1. **Agent sessions list** — sessions list shows ~180 sessions with varied
    titles ("Incident triage… #10xx"), spread over the last ~2 weeks, owners
    `*@demo.getgram.ai`.
@@ -314,11 +321,16 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 19. **Remote MCP identity settings** — open the settings page for each seeded
     Remote MCP server. Linear shows the **User** identity pill, the Example
     Workspace Identity provider, and the Session length / Client access controls
-    in Sessions. Slack shows **Agent** with the inert demo Authorization
-    credential managed under Identity. GitHub shows **None** with no provider or
-    static Authorization header. All three use the Display, Identity, Server URL,
-    Sessions, Tool Filtering, Danger Zone order, with Advanced Headers directly
-    after the Identity controls.
+    in Sessions. Slack shows **Service Account** with the inert demo
+    Authorization credential managed under Identity. GitHub shows **None** with
+    no provider or static Authorization header. All three use the Display,
+    Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
+    Custom Headers directly after the Identity controls. In Postgres, only the
+    Linear row in `mcp_servers` has `remote_session_issuer_id` set, to the
+    Example Workspace Identity provider, and every client bound to Linear's
+    user session issuer (the identity client and the attachment fixture's
+    client) sits under that same provider, so the stamp matches what
+    `ResyncMCPServerRemoteSessionIssuers` would derive.
 
 20. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,

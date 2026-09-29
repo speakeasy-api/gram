@@ -110,6 +110,7 @@ import {
 import { MCPOverviewTab } from "./overview/MCPOverviewTab";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
 import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
+import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/NetworkAccessSection";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
 // Mirrors the sidenav'd shell (no hero, no top tab strip) and roughly the
@@ -1593,6 +1594,8 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           </BlockInner>
         </Block>
       </PageSection>
+
+      <NetworkAccessSection toolset={toolset} />
 
       <MCPToolFilteringSection
         className="mb-8"

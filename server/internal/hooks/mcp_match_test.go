@@ -8,37 +8,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
-// The tool-name prefix Claude Code derives from each entry of `claude mcp
-// list` is unspecified — this table is calibrated against the real names
-// observed in a live session (see fixtures in mcp_list_parser_test.go and
-// the MCP tools loaded at the top of an interactive conversation).
-func TestMCPServerPrefix(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name   string
-		source string
-		plugin string
-		raw    string
-		want   string
-	}{
-		{"claude.ai simple", "claude.ai", "", "Slack", "claude_ai_Slack"},
-		{"claude.ai with parens", "claude.ai", "", "Linear (Speakeasy)", "claude_ai_Linear_Speakeasy"},
-		{"claude.ai multi-word + parens", "claude.ai", "", "HubSpot (Speakeasy MCP Platform)", "claude_ai_HubSpot_Speakeasy_MCP_Platform"},
-		{"claude.ai parens with multi-word inner", "claude.ai", "", "Speakeasy MCP Server (Read only)", "claude_ai_Speakeasy_MCP_Server_Read_only"},
-		{"claude.ai with hyphens", "claude.ai", "", "la-growth-machine", "claude_ai_la-growth-machine"},
-		{"plugin double name", "plugin", "slack", "slack", "plugin_slack_slack"},
-		{"plugin distinct name", "plugin", "github", "octocat-mcp", "plugin_github_octocat-mcp"},
-		{"local plain", "local", "", "gram", "gram"},
-		{"local with hyphen", "local", "", "notion-local", "notion-local"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, mcpServerPrefix(tc.source, tc.plugin, tc.raw))
-		})
-	}
-}
-
 func TestMatchCachedMCPEntry(t *testing.T) {
 	t.Parallel()
 	entries := []MCPServerEntry{

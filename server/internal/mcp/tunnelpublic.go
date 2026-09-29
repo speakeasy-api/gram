@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -575,7 +576,7 @@ func peekIsInitialize(r *http.Request) bool {
 	if err := json.Unmarshal(body, &probe); err != nil {
 		return false
 	}
-	return probe.Method == "initialize"
+	return probe.Method == mcpversions.MethodInitialize
 }
 
 // isValidBackendSessionID enforces the MCP spec's constraint that a session

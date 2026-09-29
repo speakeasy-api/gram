@@ -357,7 +357,7 @@ func (s *Service) SetStripeCustomer(ctx context.Context, payload *gen.SetStripeC
 		return nil, oops.E(oops.CodeUnexpected, err, "commit Stripe customer transaction").LogError(ctx, s.logger)
 	}
 
-	return adminOrganizationFromGetRow(organization), nil
+	return s.adminOrganizationFromGetRow(organization), nil
 }
 
 func (s *Service) GetStripeSubscription(ctx context.Context, payload *gen.GetStripeSubscriptionPayload) (*gen.AdminStripeSubscription, error) {

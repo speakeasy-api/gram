@@ -31,6 +31,16 @@ vi.mock(
     }),
   }),
 );
+vi.mock(
+  "@gram/client/react-query/submitIdentityProviderConnectionClientId.js",
+  () => ({
+    useSubmitIdentityProviderConnectionClientIdMutation: () => ({
+      mutate: vi.fn(),
+      isPending: false,
+      error: null,
+    }),
+  }),
+);
 afterEach(() => {
   cleanup();
   scrollIntoView.mockClear();
@@ -235,6 +245,36 @@ describe("ConnectionChecklist", () => {
     expect((screen.getByLabelText("Agent ID") as HTMLInputElement).value).toBe(
       "draft-agent",
     );
+  });
+
+  it("places the client ID form inside its checklist step until the ID is submitted", () => {
+    const checklist = [
+      item("create_api_services_app", "connect"),
+      item("public_key_auth", "connect"),
+      item("submit_client_id", "connect"),
+      item("record_ai_agent", "cross_app_access"),
+    ];
+    const { unmount } = renderChecklist(
+      makeConnection({
+        status: "pending",
+        clientIdSubmitted: false,
+        checklist,
+      }),
+    );
+    const step = screen.getByText("Step submit_client_id").closest("li")!;
+    expect(within(step).getByLabelText("Client ID")).toBeTruthy();
+    expect(
+      within(step).getByRole("button", { name: "Submit and verify" }),
+    ).toBeTruthy();
+    unmount();
+
+    renderChecklist(
+      makeConnection({ status: "pending", clientIdSubmitted: true, checklist }),
+    );
+    expect(screen.queryByLabelText("Client ID")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Submit and verify" }),
+    ).toBeNull();
   });
 
   it("opens the agent step for an initial hash link even while pending", () => {

@@ -14,7 +14,7 @@ export function RemoteMcpSessionsSection({
   const issuerQuery = useUserSessionIssuer(
     { id: userSessionIssuerId },
     undefined,
-    { enabled: !!userSessionIssuerId },
+    { enabled: !!userSessionIssuerId, throwOnError: false },
   );
   const clientsQuery = useAllRemoteSessionClients(
     { userSessionIssuerId },

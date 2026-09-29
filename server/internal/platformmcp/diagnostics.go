@@ -9,12 +9,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -29,6 +27,12 @@ const maxDiagnosticClients = 10
 
 // maxOverviewServers bounds the top-server list on a project overview.
 const maxOverviewServers = 10
+
+// overviewServerFetchLimit bounds how many hook-reported server names the
+// overview reads before folding them onto configured servers. One configured
+// server can be reported under several names, so more rows are read than are
+// returned; the fold is what the cap applies to.
+const overviewServerFetchLimit = maxOverviewServers * 5
 
 // maxOverviewProjects bounds the organization-wide scope comparison. When an
 // organization has more projects than this, the comparison covers a subset and
@@ -89,6 +93,7 @@ type DiagnosticsService struct {
 	db              *pgxpool.Pool
 	telemetry       DiagnosticsTelemetryReader
 	drilldown       DrilldownTelemetryReader
+	toolUsage       ToolUsageBreakdownReader
 	references      *subjectReferenceCodec
 	sensitiveBudget OperationBudget
 	volume          DrilldownVolumeBudget
@@ -180,8 +185,16 @@ type GetProjectOverviewInput struct {
 
 // ProjectOverviewServer is one MCP server's share of the project's tool calls.
 type ProjectOverviewServer struct {
-	Name      string `json:"name"`
-	ToolCalls int64  `json:"tool_calls"`
+	// Name is the configured MCP server's name when the reported name resolved
+	// to one, and otherwise the name the calling agent used for the server.
+	Name string `json:"name"`
+
+	// MCPID is the configured MCP server the calls were attributed to, usable
+	// with get_mcp and the diagnostics tools. Empty when no configured server
+	// is known by the reported name.
+	MCPID string `json:"mcp_id,omitempty"`
+
+	ToolCalls int64 `json:"tool_calls"`
 }
 
 // GetProjectOverviewOutput is the Platform subset of the project overview: the
@@ -260,39 +273,36 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		GramProjectID: input.ProjectID,
 		TimeStart:     start,
 		TimeEnd:       end,
-		Limit:         maxOverviewServers,
+		Limit:         overviewServerFetchLimit,
 	})
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview top servers: %w", err)
+	}
+	// Hook telemetry names a server the way the calling agent did, so one
+	// configured server arrives as a plugin-routed prefix, a bare slug, a
+	// display name, or an id. Folding onto the configured server is what lets
+	// the overview's names line up with the ids the other tools take.
+	resolver, err := s.serverNameResolver(ctx, principal.OrganizationID, input.ProjectID)
+	if err != nil {
+		return GetProjectOverviewOutput{}, fmt.Errorf("resolve project overview server names: %w", err)
 	}
 	watermark, err := s.telemetry.GetTelemetryWatermark(ctx, telemetryrepo.GetTelemetryWatermarkParams{GramProjectIDs: projectIDs})
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview watermark: %w", err)
 	}
 
-	output := GetProjectOverviewOutput{
-		ProjectID: input.ProjectID,
-		// A project overview is project-scoped, so the watermark and the result
-		// answer for the same scope; observation is still taken from the
-		// result rather than inferred from the watermark.
-		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window, summary != nil && summary.TotalToolCalls > 0),
-		MetricsMode: metricsMode(sessionMode),
-		TopServers:  make([]ProjectOverviewServer, 0, len(servers)),
-	}
-	if summary != nil {
-		output.ToolCalls = boundedCount(summary.TotalToolCalls)
-		output.FailedToolCalls = boundedCount(summary.FailedToolCalls)
-	}
+	topServers := attributeTopServers(servers, resolver, maxOverviewServers)
+	var activeUsers int64
 	if counts != nil {
-		output.ActiveServers = boundedCount(counts.ActiveServersCount)
-		output.ActiveUsers = NewSubjectCount(boundedCount(counts.ActiveUsersCount))
+		activeUsers = boundedCount(counts.ActiveUsersCount)
 	}
 	if sessionMode {
 		// Under session capture the active-user count is a count of chat
 		// participants held in PostgreSQL. Reporting ClickHouse's tool-call
 		// actors here would answer a different question than metrics_mode says
-		// this number answers.
-		activeUsers, err := s.sessions.GetActiveUserCountByMessages(ctx, chatrepo.GetActiveUserCountByMessagesParams{
+		// this number answers. It is read before the envelope is built so a
+		// window with chat participants and no tool calls is observed.
+		activeUsers, err = s.sessions.GetActiveUserCountByMessages(ctx, chatrepo.GetActiveUserCountByMessagesParams{
 			ProjectID: projectUUID,
 			TimeStart: conv.ToPGTimestamptz(window.start),
 			TimeEnd:   conv.ToPGTimestamptz(window.end),
@@ -300,15 +310,43 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		if err != nil {
 			return GetProjectOverviewOutput{}, fmt.Errorf("read project overview active users: %w", err)
 		}
-		output.ActiveUsers = NewSubjectCount(activeUsers)
 	}
-	for _, server := range servers {
-		output.TopServers = append(output.TopServers, ProjectOverviewServer{
-			Name:      server.ServerName,
-			ToolCalls: boundedCount(server.ToolCallCount),
-		})
+	output := GetProjectOverviewOutput{
+		ProjectID: input.ProjectID,
+		// A project overview is project-scoped, so the watermark and the result
+		// answer for the same scope; observation is still taken from the
+		// result rather than inferred from the watermark.
+		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window, overviewObserved(summary, counts, topServers, activeUsers)),
+		MetricsMode: metricsMode(sessionMode),
+		ActiveUsers: NewSubjectCount(activeUsers),
+		TopServers:  topServers,
+	}
+	if summary != nil {
+		output.ToolCalls = boundedCount(summary.TotalToolCalls)
+		output.FailedToolCalls = boundedCount(summary.FailedToolCalls)
+	}
+	if counts != nil {
+		output.ActiveServers = boundedCount(counts.ActiveServersCount)
 	}
 	return output, nil
+}
+
+// overviewObserved reports whether the window holds any observation the
+// overview goes on to report. The gateway summary counts proxied and hosted
+// calls; hook-observed servers reach the overview only through the active
+// server count and the top-server list; under session capture the active-user
+// count is chat participants, whom no tool-call read sees. activeUsers is the
+// count the overview reports, whichever source it came from. Any of them being
+// nonzero is an observation, so no_observations is never asserted beside a
+// nonzero metric.
+func overviewObserved(summary *telemetryrepo.OverviewSummary, counts *telemetryrepo.ActiveCounts, topServers []ProjectOverviewServer, activeUsers int64) bool {
+	if summary != nil && (summary.TotalToolCalls > 0 || summary.FailedToolCalls > 0) {
+		return true
+	}
+	if counts != nil && (counts.ActiveServersCount > 0 || counts.ActiveUsersCount > 0) {
+		return true
+	}
+	return activeUsers > 0 || len(topServers) > 0
 }
 
 // GetMCPDiagnosticsInput names one configured MCP, using the same identity
@@ -395,7 +433,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}
-	target, err := s.diagnosticsTarget(ctx, principal.OrganizationID, input.ProjectID, input.MCPID)
+	identity, err := s.serverIdentity(ctx, principal.OrganizationID, input.ProjectID, input.MCPID)
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}
@@ -406,19 +444,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	}
 	start, end := window.start.UnixNano(), window.end.UnixNano()
 
-	toolsetSlugs := nonEmpty(target.ToolsetSlug)
-	if target.ToolsetMcpCount > 1 {
-		toolsetSlugs = nil
-	}
-	serverRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, telemetryrepo.GetMCPOutcomeBreakdownParams{
-		GramProjectIDs:       []string{input.ProjectID},
-		ToolsetSlugs:         toolsetSlugs,
-		MCPServerURLSuffixes: mcpURLSuffixes(target.McpSlug),
-		CanonicalIdentityOrg: "",
-		TimeStart:            start,
-		TimeEnd:              end,
-		Limit:                0,
-	})
+	serverRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, identity.outcomeParams(input.ProjectID, start, end))
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read mcp outcome breakdown: %w", err)
 	}
@@ -426,6 +452,8 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		GramProjectIDs:       projectIDs,
 		ToolsetSlugs:         nil,
 		MCPServerURLSuffixes: nil,
+		MCPServerIDs:         nil,
+		ToolSources:          nil,
 		CanonicalIdentityOrg: "",
 		TimeStart:            start,
 		TimeEnd:              end,
@@ -472,29 +500,6 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		ClientsTruncated:            truncated,
 		Attribution:                 attribution,
 	}, nil
-}
-
-func (s *DiagnosticsService) diagnosticsTarget(ctx context.Context, organizationID, projectID, mcpID string) (platformrepo.GetPlatformMCPDiagnosticsTargetRow, error) {
-	parsedProject, err := uuid.Parse(projectID)
-	if err != nil {
-		return platformrepo.GetPlatformMCPDiagnosticsTargetRow{}, fmt.Errorf("parse project id: %w", err)
-	}
-	parsedMCP, err := uuid.Parse(mcpID)
-	if err != nil {
-		return platformrepo.GetPlatformMCPDiagnosticsTargetRow{}, fmt.Errorf("parse mcp id: %w", err)
-	}
-	row, err := platformrepo.New(s.db).GetPlatformMCPDiagnosticsTarget(ctx, platformrepo.GetPlatformMCPDiagnosticsTargetParams{
-		OrganizationID: organizationID,
-		McpServerID:    parsedMCP,
-		ProjectID:      parsedProject,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return platformrepo.GetPlatformMCPDiagnosticsTargetRow{}, ErrDiagnosticsTargetNotFound
-	}
-	if err != nil {
-		return platformrepo.GetPlatformMCPDiagnosticsTargetRow{}, fmt.Errorf("resolve diagnostics target: %w", err)
-	}
-	return row, nil
 }
 
 // organizationProjectIDs collects the projects the scope comparison spans, and

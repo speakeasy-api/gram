@@ -77,6 +77,7 @@ import (
 	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
+	registrydiscoveryc "github.com/speakeasy-api/gram/server/gen/http/registry_discovery/client"
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
 	remotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/remote_session_clients/client"
 	remotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/remote_session_issuers/client"
@@ -153,6 +154,7 @@ func UsageCommands() []string {
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
+		"registry-discovery (discover-servers|discover-versions|discover-version)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
@@ -184,7 +186,7 @@ func UsageCommands() []string {
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"slack-directory-connections (list|sync|list-members|list-person-accounts|get-member|set-mapping|begin|disconnect)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-meta-mcp-server-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-mcp-network-traffic|get-meta-mcp-server-usage|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-clients|get-tool-usage-client-tool-breakdown|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
@@ -193,7 +195,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -1741,6 +1743,36 @@ func ParseEndpoint(
 		mcpMetadataExportMcpMetadataApikeyTokenFlag      = mcpMetadataExportMcpMetadataFlags.String("apikey-token", "", "")
 		mcpMetadataExportMcpMetadataSessionTokenFlag     = mcpMetadataExportMcpMetadataFlags.String("session-token", "", "")
 		mcpMetadataExportMcpMetadataProjectSlugInputFlag = mcpMetadataExportMcpMetadataFlags.String("project-slug-input", "", "")
+
+		registryDiscoveryFlags = flag.NewFlagSet("registry-discovery", flag.ContinueOnError)
+
+		registryDiscoveryDiscoverServersFlags                = flag.NewFlagSet("discover-servers", flag.ExitOnError)
+		registryDiscoveryDiscoverServersIncludeDeletedFlag   = registryDiscoveryDiscoverServersFlags.String("include-deleted", "", "")
+		registryDiscoveryDiscoverServersUpdatedSinceFlag     = registryDiscoveryDiscoverServersFlags.String("updated-since", "", "")
+		registryDiscoveryDiscoverServersSearchFlag           = registryDiscoveryDiscoverServersFlags.String("search", "", "")
+		registryDiscoveryDiscoverServersVersionFlag          = registryDiscoveryDiscoverServersFlags.String("version", "", "")
+		registryDiscoveryDiscoverServersCursorFlag           = registryDiscoveryDiscoverServersFlags.String("cursor", "", "")
+		registryDiscoveryDiscoverServersLimitFlag            = registryDiscoveryDiscoverServersFlags.String("limit", "25", "")
+		registryDiscoveryDiscoverServersSessionTokenFlag     = registryDiscoveryDiscoverServersFlags.String("session-token", "", "")
+		registryDiscoveryDiscoverServersApikeyTokenFlag      = registryDiscoveryDiscoverServersFlags.String("apikey-token", "", "")
+		registryDiscoveryDiscoverServersProjectSlugInputFlag = registryDiscoveryDiscoverServersFlags.String("project-slug-input", "", "")
+
+		registryDiscoveryDiscoverVersionsFlags                = flag.NewFlagSet("discover-versions", flag.ExitOnError)
+		registryDiscoveryDiscoverVersionsServerNameFlag       = registryDiscoveryDiscoverVersionsFlags.String("server-name", "REQUIRED", "")
+		registryDiscoveryDiscoverVersionsIncludeDeletedFlag   = registryDiscoveryDiscoverVersionsFlags.String("include-deleted", "", "")
+		registryDiscoveryDiscoverVersionsUpdatedSinceFlag     = registryDiscoveryDiscoverVersionsFlags.String("updated-since", "", "")
+		registryDiscoveryDiscoverVersionsSessionTokenFlag     = registryDiscoveryDiscoverVersionsFlags.String("session-token", "", "")
+		registryDiscoveryDiscoverVersionsApikeyTokenFlag      = registryDiscoveryDiscoverVersionsFlags.String("apikey-token", "", "")
+		registryDiscoveryDiscoverVersionsProjectSlugInputFlag = registryDiscoveryDiscoverVersionsFlags.String("project-slug-input", "", "")
+
+		registryDiscoveryDiscoverVersionFlags                = flag.NewFlagSet("discover-version", flag.ExitOnError)
+		registryDiscoveryDiscoverVersionServerNameFlag       = registryDiscoveryDiscoverVersionFlags.String("server-name", "REQUIRED", "")
+		registryDiscoveryDiscoverVersionVersionFlag          = registryDiscoveryDiscoverVersionFlags.String("version", "REQUIRED", "")
+		registryDiscoveryDiscoverVersionIncludeDeletedFlag   = registryDiscoveryDiscoverVersionFlags.String("include-deleted", "", "")
+		registryDiscoveryDiscoverVersionUpdatedSinceFlag     = registryDiscoveryDiscoverVersionFlags.String("updated-since", "", "")
+		registryDiscoveryDiscoverVersionSessionTokenFlag     = registryDiscoveryDiscoverVersionFlags.String("session-token", "", "")
+		registryDiscoveryDiscoverVersionApikeyTokenFlag      = registryDiscoveryDiscoverVersionFlags.String("apikey-token", "", "")
+		registryDiscoveryDiscoverVersionProjectSlugInputFlag = registryDiscoveryDiscoverVersionFlags.String("project-slug-input", "", "")
 
 		mcpServersFlags = flag.NewFlagSet("mcp-servers", flag.ContinueOnError)
 
@@ -3523,6 +3555,12 @@ func ParseEndpoint(
 		telemetryGetObservabilityOverviewSessionTokenFlag     = telemetryGetObservabilityOverviewFlags.String("session-token", "", "")
 		telemetryGetObservabilityOverviewProjectSlugInputFlag = telemetryGetObservabilityOverviewFlags.String("project-slug-input", "", "")
 
+		telemetryGetMcpNetworkTrafficFlags                = flag.NewFlagSet("get-mcp-network-traffic", flag.ExitOnError)
+		telemetryGetMcpNetworkTrafficBodyFlag             = telemetryGetMcpNetworkTrafficFlags.String("body", "REQUIRED", "")
+		telemetryGetMcpNetworkTrafficApikeyTokenFlag      = telemetryGetMcpNetworkTrafficFlags.String("apikey-token", "", "")
+		telemetryGetMcpNetworkTrafficSessionTokenFlag     = telemetryGetMcpNetworkTrafficFlags.String("session-token", "", "")
+		telemetryGetMcpNetworkTrafficProjectSlugInputFlag = telemetryGetMcpNetworkTrafficFlags.String("project-slug-input", "", "")
+
 		telemetryGetMetaMcpServerUsageFlags                = flag.NewFlagSet("get-meta-mcp-server-usage", flag.ExitOnError)
 		telemetryGetMetaMcpServerUsageBodyFlag             = telemetryGetMetaMcpServerUsageFlags.String("body", "REQUIRED", "")
 		telemetryGetMetaMcpServerUsageApikeyTokenFlag      = telemetryGetMetaMcpServerUsageFlags.String("apikey-token", "", "")
@@ -4274,6 +4312,29 @@ func ParseEndpoint(
 		adminGetSupportCoverageWindowDaysFlag        = adminGetSupportCoverageFlags.String("window-days", "30", "")
 		adminGetSupportCoverageAdminSessionTokenFlag = adminGetSupportCoverageFlags.String("admin-session-token", "", "")
 
+		adminListRegistryEntriesFlags                 = flag.NewFlagSet("list-registry-entries", flag.ExitOnError)
+		adminListRegistryEntriesQueryFlag             = adminListRegistryEntriesFlags.String("query", "", "")
+		adminListRegistryEntriesPublishedFlag         = adminListRegistryEntriesFlags.String("published", "", "")
+		adminListRegistryEntriesCursorFlag            = adminListRegistryEntriesFlags.String("cursor", "", "")
+		adminListRegistryEntriesLimitFlag             = adminListRegistryEntriesFlags.String("limit", "", "")
+		adminListRegistryEntriesAdminSessionTokenFlag = adminListRegistryEntriesFlags.String("admin-session-token", "", "")
+
+		adminGetRegistryEntryFlags                 = flag.NewFlagSet("get-registry-entry", flag.ExitOnError)
+		adminGetRegistryEntryIDFlag                = adminGetRegistryEntryFlags.String("id", "REQUIRED", "")
+		adminGetRegistryEntryAdminSessionTokenFlag = adminGetRegistryEntryFlags.String("admin-session-token", "", "")
+
+		adminCreateRegistryEntryFlags                 = flag.NewFlagSet("create-registry-entry", flag.ExitOnError)
+		adminCreateRegistryEntryBodyFlag              = adminCreateRegistryEntryFlags.String("body", "REQUIRED", "")
+		adminCreateRegistryEntryAdminSessionTokenFlag = adminCreateRegistryEntryFlags.String("admin-session-token", "", "")
+
+		adminSaveRegistryEntryFlags                 = flag.NewFlagSet("save-registry-entry", flag.ExitOnError)
+		adminSaveRegistryEntryBodyFlag              = adminSaveRegistryEntryFlags.String("body", "REQUIRED", "")
+		adminSaveRegistryEntryAdminSessionTokenFlag = adminSaveRegistryEntryFlags.String("admin-session-token", "", "")
+
+		adminSetRegistryEntryPublishedFlags                 = flag.NewFlagSet("set-registry-entry-published", flag.ExitOnError)
+		adminSetRegistryEntryPublishedBodyFlag              = adminSetRegistryEntryPublishedFlags.String("body", "REQUIRED", "")
+		adminSetRegistryEntryPublishedAdminSessionTokenFlag = adminSetRegistryEntryPublishedFlags.String("admin-session-token", "", "")
+
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
 
 		userSessionClientsListUserSessionClientsFlags                   = flag.NewFlagSet("list-user-session-clients", flag.ExitOnError)
@@ -4905,6 +4966,11 @@ func ParseEndpoint(
 	mcpMetadataSetMcpMetadataFlags.Usage = mcpMetadataSetMcpMetadataUsage
 	mcpMetadataExportMcpMetadataFlags.Usage = mcpMetadataExportMcpMetadataUsage
 
+	registryDiscoveryFlags.Usage = registryDiscoveryUsage
+	registryDiscoveryDiscoverServersFlags.Usage = registryDiscoveryDiscoverServersUsage
+	registryDiscoveryDiscoverVersionsFlags.Usage = registryDiscoveryDiscoverVersionsUsage
+	registryDiscoveryDiscoverVersionFlags.Usage = registryDiscoveryDiscoverVersionUsage
+
 	mcpServersFlags.Usage = mcpServersUsage
 	mcpServersCreateMcpServerFlags.Usage = mcpServersCreateMcpServerUsage
 	mcpServersGetMcpServerFlags.Usage = mcpServersGetMcpServerUsage
@@ -5284,6 +5350,7 @@ func ParseEndpoint(
 	telemetryGetUserMetricsSummaryFlags.Usage = telemetryGetUserMetricsSummaryUsage
 	telemetryGetEmployeeDataFlowGraphFlags.Usage = telemetryGetEmployeeDataFlowGraphUsage
 	telemetryGetObservabilityOverviewFlags.Usage = telemetryGetObservabilityOverviewUsage
+	telemetryGetMcpNetworkTrafficFlags.Usage = telemetryGetMcpNetworkTrafficUsage
 	telemetryGetMetaMcpServerUsageFlags.Usage = telemetryGetMetaMcpServerUsageUsage
 	telemetryGetProjectOverviewFlags.Usage = telemetryGetProjectOverviewUsage
 	telemetryGetUnproxiedMcpServerUsageFlags.Usage = telemetryGetUnproxiedMcpServerUsageUsage
@@ -5449,6 +5516,11 @@ func ParseEndpoint(
 	adminGetSupportMatrixFlags.Usage = adminGetSupportMatrixUsage
 	adminUpdateSupportMatrixFlags.Usage = adminUpdateSupportMatrixUsage
 	adminGetSupportCoverageFlags.Usage = adminGetSupportCoverageUsage
+	adminListRegistryEntriesFlags.Usage = adminListRegistryEntriesUsage
+	adminGetRegistryEntryFlags.Usage = adminGetRegistryEntryUsage
+	adminCreateRegistryEntryFlags.Usage = adminCreateRegistryEntryUsage
+	adminSaveRegistryEntryFlags.Usage = adminSaveRegistryEntryUsage
+	adminSetRegistryEntryPublishedFlags.Usage = adminSetRegistryEntryPublishedUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
@@ -5607,6 +5679,8 @@ func ParseEndpoint(
 			svcf = mcpEndpointsFlags
 		case "mcp-metadata":
 			svcf = mcpMetadataFlags
+		case "registry-discovery":
+			svcf = registryDiscoveryFlags
 		case "mcp-servers":
 			svcf = mcpServersFlags
 		case "meta-mcp":
@@ -6730,6 +6804,19 @@ func ParseEndpoint(
 
 			}
 
+		case "registry-discovery":
+			switch epn {
+			case "discover-servers":
+				epf = registryDiscoveryDiscoverServersFlags
+
+			case "discover-versions":
+				epf = registryDiscoveryDiscoverVersionsFlags
+
+			case "discover-version":
+				epf = registryDiscoveryDiscoverVersionFlags
+
+			}
+
 		case "mcp-servers":
 			switch epn {
 			case "create-mcp-server":
@@ -7804,6 +7891,9 @@ func ParseEndpoint(
 			case "get-observability-overview":
 				epf = telemetryGetObservabilityOverviewFlags
 
+			case "get-mcp-network-traffic":
+				epf = telemetryGetMcpNetworkTrafficFlags
+
 			case "get-meta-mcp-server-usage":
 				epf = telemetryGetMetaMcpServerUsageFlags
 
@@ -8280,6 +8370,21 @@ func ParseEndpoint(
 
 			case "get-support-coverage":
 				epf = adminGetSupportCoverageFlags
+
+			case "list-registry-entries":
+				epf = adminListRegistryEntriesFlags
+
+			case "get-registry-entry":
+				epf = adminGetRegistryEntryFlags
+
+			case "create-registry-entry":
+				epf = adminCreateRegistryEntryFlags
+
+			case "save-registry-entry":
+				epf = adminSaveRegistryEntryFlags
+
+			case "set-registry-entry-published":
+				epf = adminSetRegistryEntryPublishedFlags
 
 			}
 
@@ -9494,6 +9599,19 @@ func ParseEndpoint(
 				endpoint = c.ExportMcpMetadata()
 				data, err = mcpmetadatac.BuildExportMcpMetadataPayload(*mcpMetadataExportMcpMetadataBodyFlag, *mcpMetadataExportMcpMetadataApikeyTokenFlag, *mcpMetadataExportMcpMetadataSessionTokenFlag, *mcpMetadataExportMcpMetadataProjectSlugInputFlag)
 			}
+		case "registry-discovery":
+			c := registrydiscoveryc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "discover-servers":
+				endpoint = c.DiscoverServers()
+				data, err = registrydiscoveryc.BuildDiscoverServersPayload(*registryDiscoveryDiscoverServersIncludeDeletedFlag, *registryDiscoveryDiscoverServersUpdatedSinceFlag, *registryDiscoveryDiscoverServersSearchFlag, *registryDiscoveryDiscoverServersVersionFlag, *registryDiscoveryDiscoverServersCursorFlag, *registryDiscoveryDiscoverServersLimitFlag, *registryDiscoveryDiscoverServersSessionTokenFlag, *registryDiscoveryDiscoverServersApikeyTokenFlag, *registryDiscoveryDiscoverServersProjectSlugInputFlag)
+			case "discover-versions":
+				endpoint = c.DiscoverVersions()
+				data, err = registrydiscoveryc.BuildDiscoverVersionsPayload(*registryDiscoveryDiscoverVersionsServerNameFlag, *registryDiscoveryDiscoverVersionsIncludeDeletedFlag, *registryDiscoveryDiscoverVersionsUpdatedSinceFlag, *registryDiscoveryDiscoverVersionsSessionTokenFlag, *registryDiscoveryDiscoverVersionsApikeyTokenFlag, *registryDiscoveryDiscoverVersionsProjectSlugInputFlag)
+			case "discover-version":
+				endpoint = c.DiscoverVersion()
+				data, err = registrydiscoveryc.BuildDiscoverVersionPayload(*registryDiscoveryDiscoverVersionServerNameFlag, *registryDiscoveryDiscoverVersionVersionFlag, *registryDiscoveryDiscoverVersionIncludeDeletedFlag, *registryDiscoveryDiscoverVersionUpdatedSinceFlag, *registryDiscoveryDiscoverVersionSessionTokenFlag, *registryDiscoveryDiscoverVersionApikeyTokenFlag, *registryDiscoveryDiscoverVersionProjectSlugInputFlag)
+			}
 		case "mcp-servers":
 			c := mcpserversc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -10581,6 +10699,9 @@ func ParseEndpoint(
 			case "get-observability-overview":
 				endpoint = c.GetObservabilityOverview()
 				data, err = telemetryc.BuildGetObservabilityOverviewPayload(*telemetryGetObservabilityOverviewBodyFlag, *telemetryGetObservabilityOverviewApikeyTokenFlag, *telemetryGetObservabilityOverviewSessionTokenFlag, *telemetryGetObservabilityOverviewProjectSlugInputFlag)
+			case "get-mcp-network-traffic":
+				endpoint = c.GetMcpNetworkTraffic()
+				data, err = telemetryc.BuildGetMcpNetworkTrafficPayload(*telemetryGetMcpNetworkTrafficBodyFlag, *telemetryGetMcpNetworkTrafficApikeyTokenFlag, *telemetryGetMcpNetworkTrafficSessionTokenFlag, *telemetryGetMcpNetworkTrafficProjectSlugInputFlag)
 			case "get-meta-mcp-server-usage":
 				endpoint = c.GetMetaMcpServerUsage()
 				data, err = telemetryc.BuildGetMetaMcpServerUsagePayload(*telemetryGetMetaMcpServerUsageBodyFlag, *telemetryGetMetaMcpServerUsageApikeyTokenFlag, *telemetryGetMetaMcpServerUsageSessionTokenFlag, *telemetryGetMetaMcpServerUsageProjectSlugInputFlag)
@@ -11060,6 +11181,21 @@ func ParseEndpoint(
 			case "get-support-coverage":
 				endpoint = c.GetSupportCoverage()
 				data, err = adminc.BuildGetSupportCoveragePayload(*adminGetSupportCoverageOrganizationIDFlag, *adminGetSupportCoverageWindowDaysFlag, *adminGetSupportCoverageAdminSessionTokenFlag)
+			case "list-registry-entries":
+				endpoint = c.ListRegistryEntries()
+				data, err = adminc.BuildListRegistryEntriesPayload(*adminListRegistryEntriesQueryFlag, *adminListRegistryEntriesPublishedFlag, *adminListRegistryEntriesCursorFlag, *adminListRegistryEntriesLimitFlag, *adminListRegistryEntriesAdminSessionTokenFlag)
+			case "get-registry-entry":
+				endpoint = c.GetRegistryEntry()
+				data, err = adminc.BuildGetRegistryEntryPayload(*adminGetRegistryEntryIDFlag, *adminGetRegistryEntryAdminSessionTokenFlag)
+			case "create-registry-entry":
+				endpoint = c.CreateRegistryEntry()
+				data, err = adminc.BuildCreateRegistryEntryPayload(*adminCreateRegistryEntryBodyFlag, *adminCreateRegistryEntryAdminSessionTokenFlag)
+			case "save-registry-entry":
+				endpoint = c.SaveRegistryEntry()
+				data, err = adminc.BuildSaveRegistryEntryPayload(*adminSaveRegistryEntryBodyFlag, *adminSaveRegistryEntryAdminSessionTokenFlag)
+			case "set-registry-entry-published":
+				endpoint = c.SetRegistryEntryPublished()
+				data, err = adminc.BuildSetRegistryEntryPublishedPayload(*adminSetRegistryEntryPublishedBodyFlag, *adminSetRegistryEntryPublishedAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -18162,6 +18298,111 @@ func mcpMetadataExportMcpMetadataUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// registryDiscoveryUsage displays the usage of the registry-discovery command
+// and its subcommands.
+func registryDiscoveryUsage() {
+	fmt.Fprintln(os.Stderr, `Authenticated discovery-only preview. Current records only: no version history, incremental synchronization or mirror guarantees. Uses Gram credentials, not generic-client OAuth. Discovery errors use the pinned standard error envelope; authorization uses Gram security.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] registry-discovery COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    discover-servers: DiscoverServers implements discoverServers.`)
+	fmt.Fprintln(os.Stderr, `    discover-versions: DiscoverVersions implements discoverVersions.`)
+	fmt.Fprintln(os.Stderr, `    discover-version: DiscoverVersion implements discoverVersion.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s registry-discovery COMMAND --help\n", os.Args[0])
+}
+func registryDiscoveryDiscoverServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] registry-discovery discover-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -include-deleted BOOL")
+	fmt.Fprint(os.Stderr, " -updated-since STRING")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -version STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT32")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `DiscoverServers implements discoverServers.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -include-deleted BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -updated-since STRING: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -version STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT32: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "registry-discovery discover-servers --include-deleted false --updated-since \"abc123\" --search \"abc123\" --version \"abc123\" --cursor \"aaa\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func registryDiscoveryDiscoverVersionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] registry-discovery discover-versions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -server-name STRING")
+	fmt.Fprint(os.Stderr, " -include-deleted BOOL")
+	fmt.Fprint(os.Stderr, " -updated-since STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `DiscoverVersions implements discoverVersions.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -server-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-deleted BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -updated-since STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "registry-discovery discover-versions --server-name \"abc123\" --include-deleted false --updated-since \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func registryDiscoveryDiscoverVersionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] registry-discovery discover-version", os.Args[0])
+	fmt.Fprint(os.Stderr, " -server-name STRING")
+	fmt.Fprint(os.Stderr, " -version STRING")
+	fmt.Fprint(os.Stderr, " -include-deleted BOOL")
+	fmt.Fprint(os.Stderr, " -updated-since STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `DiscoverVersion implements discoverVersion.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -server-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -version STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-deleted BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -updated-since STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "registry-discovery discover-version --server-name \"abc123\" --version \"abc123\" --include-deleted false --updated-since \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // mcpServersUsage displays the usage of the mcp-servers command and its
@@ -25832,6 +26073,7 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    get-user-metrics-summary: Get aggregated metrics summary grouped by user`)
 	fmt.Fprintln(os.Stderr, `    get-employee-data-flow-graph: Get an employee's MCP data flow graph across origins, clients, servers, and tools`)
 	fmt.Fprintln(os.Stderr, `    get-observability-overview: Get observability overview metrics including time series, tool breakdowns, and summary stats`)
+	fmt.Fprintln(os.Stderr, `    get-mcp-network-traffic: Observed inbound public and private MCP request counts for a server or gateway over a recent window`)
 	fmt.Fprintln(os.Stderr, `    get-meta-mcp-server-usage: Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.`)
 	fmt.Fprintln(os.Stderr, `    get-project-overview: Get project-level overview including total chats, tool calls, active servers/users, and top lists`)
 	fmt.Fprintln(os.Stderr, `    get-unproxied-mcp-server-usage: Best-effort tool-call activity for an unproxied MCP server, sourced from Shadow MCP's hook-reported traces matched by canonicalized URL. Coverage is opportunistic: only calls made from hook-instrumented sessions in this project are visible, so a freshly added or rarely used server may show no data.`)
@@ -26078,6 +26320,30 @@ func telemetryGetObservabilityOverviewUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-observability-overview --body '{\n      \"account_type\": \"abc123\",\n      \"api_key_id\": \"abc123\",\n      \"event_source\": \"abc123\",\n      \"external_org_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_source\": \"abc123\",\n      \"include_time_series\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetMcpNetworkTrafficUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-mcp-network-traffic", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Observed inbound public and private MCP request counts for a server or gateway over a recent window`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-mcp-network-traffic --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"window\": \"7d\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryGetMetaMcpServerUsageUsage() {
@@ -27065,7 +27331,7 @@ func toolsetsUpdateToolsetUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets update-toolset --body '{\n      \"custom_domain_id\": \"abc123\",\n      \"default_environment_slug\": \"aaa\",\n      \"description\": \"abc123\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"aaa\",\n      \"name\": \"abc123\",\n      \"prompt_template_names\": [\n         \"abc123\"\n      ],\n      \"resource_urns\": [\n         \"abc123\"\n      ],\n      \"tool_selection_mode\": \"abc123\",\n      \"tool_urns\": [\n         \"abc123\"\n      ]\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets update-toolset --body '{\n      \"custom_domain_id\": \"abc123\",\n      \"default_environment_slug\": \"aaa\",\n      \"description\": \"abc123\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"aaa\",\n      \"name\": \"abc123\",\n      \"network_access_mode\": \"dual\",\n      \"prompt_template_names\": [\n         \"abc123\"\n      ],\n      \"resource_urns\": [\n         \"abc123\"\n      ],\n      \"tool_selection_mode\": \"abc123\",\n      \"tool_urns\": [\n         \"abc123\"\n      ]\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func toolsetsDeleteToolsetUsage() {
@@ -28324,6 +28590,11 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-support-matrix: Read the shared support catalog and product coverage.`)
 	fmt.Fprintln(os.Stderr, `    update-support-matrix: Save coverage against the last read revision; rejects concurrent changes.`)
 	fmt.Fprintln(os.Stderr, `    get-support-coverage: Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.`)
+	fmt.Fprintln(os.Stderr, `    list-registry-entries: Staff-only registry administration.`)
+	fmt.Fprintln(os.Stderr, `    get-registry-entry: Staff-only registry administration.`)
+	fmt.Fprintln(os.Stderr, `    create-registry-entry: Staff-only registry administration.`)
+	fmt.Fprintln(os.Stderr, `    save-registry-entry: Staff-only registry administration.`)
+	fmt.Fprintln(os.Stderr, `    set-registry-entry-published: Staff-only registry administration.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -29522,6 +29793,112 @@ func adminGetSupportCoverageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-support-coverage --organization-id \"abc123\" --window-days 2 --admin-session-token \"abc123\"")
+}
+
+func adminListRegistryEntriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-registry-entries", os.Args[0])
+	fmt.Fprint(os.Stderr, " -query STRING")
+	fmt.Fprint(os.Stderr, " -published BOOL")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT32")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only registry administration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -query STRING: `)
+	fmt.Fprintln(os.Stderr, `    -published BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT32: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-registry-entries --query \"abc123\" --published false --cursor \"abc123\" --limit 1 --admin-session-token \"abc123\"")
+}
+
+func adminGetRegistryEntryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-registry-entry", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only registry administration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-registry-entry --id \"550e8400-e29b-41d4-a716-446655440000\" --admin-session-token \"abc123\"")
+}
+
+func adminCreateRegistryEntryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin create-registry-entry", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only registry administration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin create-registry-entry --body '{\n      \"data_json\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminSaveRegistryEntryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin save-registry-entry", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only registry administration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin save-registry-entry --body '{\n      \"data_json\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"updated_at\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminSetRegistryEntryPublishedUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-registry-entry-published", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only registry administration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-registry-entry-published --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"published\": false,\n      \"updated_at\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // userSessionClientsUsage displays the usage of the user-session-clients

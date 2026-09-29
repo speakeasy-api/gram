@@ -59,26 +59,10 @@ type DrilldownTelemetryReader interface {
 // authorization decision: the MCP must be one this principal can already see,
 // and the window must be one of the named ones.
 type drilldownTarget struct {
-	toolsetSlugs []string
-	urlSuffixes  []string
-	projectID    string
-	mcpServerID  string
-	window       ResolvedWindow
-	now          time.Time
-}
-
-// hostedToolsetSlug is the toolset a hosted MCP's traffic is recorded under, or
-// empty for a remote, tunneled, or unproxied server.
-//
-// Emptiness matters: the summary reads treat an empty slug as "no filter", so a
-// caller that passes it through unchecked gets the whole project's numbers back
-// under one MCP's name. Every use of this value must handle the empty case
-// rather than forwarding it.
-func (t drilldownTarget) hostedToolsetSlug() string {
-	if len(t.toolsetSlugs) == 0 {
-		return ""
-	}
-	return t.toolsetSlugs[0]
+	identity  serverIdentity
+	projectID string
+	window    ResolvedWindow
+	now       time.Time
 }
 
 func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Principal, projectID, mcpID, window string, budget OperationBudget, spec windowSpec) (drilldownTarget, error) {
@@ -102,45 +86,21 @@ func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Pri
 	if _, err := s.reader.GetMCP(ctx, principal, GetMCPInput{ProjectID: projectID, MCPID: mcpID}); err != nil {
 		return drilldownTarget{}, fmt.Errorf("resolve drilldown mcp: %w", err)
 	}
-	target, err := s.diagnosticsTarget(ctx, principal.OrganizationID, projectID, mcpID)
+	identity, err := s.serverIdentity(ctx, principal.OrganizationID, projectID, mcpID)
 	if err != nil {
 		return drilldownTarget{}, err
 	}
-	toolsetSlugs := nonEmpty(target.ToolsetSlug)
-	if target.ToolsetMcpCount > 1 {
-		// Direct telemetry identifies only the toolset. When several configured
-		// MCP wrappers share it, those rows cannot be attributed to one wrapper.
-		toolsetSlugs = nil
-	}
 	return drilldownTarget{
-		toolsetSlugs: toolsetSlugs,
-		urlSuffixes:  mcpURLSuffixes(target.McpSlug),
-		projectID:    projectID,
-		mcpServerID:  mcpID,
-		window:       resolved,
-		now:          now,
+		identity:  identity,
+		projectID: projectID,
+		window:    resolved,
+		now:       now,
 	}, nil
 }
 
+// outcomeParams narrows a call-level read to this target's server and window.
 func (t drilldownTarget) outcomeParams() telemetryrepo.GetMCPOutcomeBreakdownParams {
-	toolsetSlugs := t.toolsetSlugs
-	urlSuffixes := t.urlSuffixes
-	if len(toolsetSlugs) == 0 && len(urlSuffixes) == 0 {
-		// Both telemetry lanes interpret an empty selector as unfiltered. A
-		// configured MCP without either identity is unresolvable, not the whole
-		// project, so install impossible sentinels and return no attribution.
-		toolsetSlugs = []string{"__platform_mcp_unresolvable__"}
-		urlSuffixes = []string{"/__platform_mcp_unresolvable__"}
-	}
-	return telemetryrepo.GetMCPOutcomeBreakdownParams{
-		GramProjectIDs:       []string{t.projectID},
-		ToolsetSlugs:         toolsetSlugs,
-		MCPServerURLSuffixes: urlSuffixes,
-		CanonicalIdentityOrg: "",
-		TimeStart:            t.window.start.UnixNano(),
-		TimeEnd:              t.window.end.UnixNano(),
-		Limit:                0,
-	}
+	return t.identity.outcomeParams(t.projectID, t.window.start.UnixNano(), t.window.end.UnixNano())
 }
 
 func (s *DiagnosticsService) drilldownEnvelope(ctx context.Context, target drilldownTarget, observed bool) (DataEnvelope, error) {
@@ -455,13 +415,13 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 // traceCursorScope is the normalized query a trace cursor belongs to: the MCP,
 // the outcome class, and the window it was read over.
 func mcpUsageUserScope(target drilldownTarget) string {
-	return queryScope(target.projectID, target.mcpServerID, string(target.window.Window))
+	return queryScope(target.projectID, target.identity.mcpServerID, string(target.window.Window))
 }
 
 func traceCursorScope(target drilldownTarget, outcome string) string {
 	return queryScope(
 		target.projectID,
-		target.mcpServerID,
+		target.identity.mcpServerID,
 		outcome,
 		string(target.window.Window),
 	)
@@ -480,11 +440,11 @@ func summaryIdentityParams(target drilldownTarget, start, end int64) telemetryre
 		TimeStart:     start,
 		TimeEnd:       end,
 	}
-	if slug := target.hostedToolsetSlug(); slug != "" {
+	if slug := target.identity.toolsetSlug; slug != "" {
 		params.ToolsetSlug = slug
 		return params
 	}
-	params.MCPServerID = target.mcpServerID
+	params.MCPServerID = target.identity.mcpServerID
 	return params
 }
 
@@ -510,9 +470,9 @@ type QueryMCPMetricsOutput struct {
 	FailureRate  float64      `json:"failure_rate"`
 	AvgLatencyMs float64      `json:"avg_latency_ms"`
 	ActiveUsers  SubjectCount `json:"active_users"`
-	// ActiveUsersUnavailable reports that this MCP's model cannot be scoped by
-	// the active-count read, so ActiveUsers is not an answer about this server.
-	// Stated rather than left as a zero, which would read as "nobody".
+	// ActiveUsersUnavailable is retained for compatibility. The active-count
+	// read scopes a hosted server by its toolset slug and every other model by
+	// its configured id, so ActiveUsers is always an answer about this server.
 	ActiveUsersUnavailable bool `json:"active_users_unavailable"`
 }
 
@@ -526,13 +486,13 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 	if err := s.volume.AllowMetricQuery(ctx, principal); err != nil {
 		return QueryMCPMetricsOutput{}, err
 	}
-	toolsetSlug := target.hostedToolsetSlug()
 	start, end := target.window.start.UnixNano(), target.window.end.UnixNano()
 
-	// Call volume comes from the same correctly-scoped trace source the rest of
-	// the drill-down reads, which matches on both the toolset slug and the
-	// server URL. The summary read below can only narrow by toolset slug or
-	// mcp_server_id, so it is used for latency alone.
+	// Call volume comes from the same server-scoped trace source the rest of
+	// the drill-down reads, which classifies each call's outcome. The summary
+	// read narrows by the one identity the gateway stamps on every row and is
+	// what latency comes from; the two are reconciled so a window the gateway
+	// observed is never reported as zero calls beside a nonzero latency.
 	outcomeRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, target.outcomeParams())
 	if err != nil {
 		return QueryMCPMetricsOutput{}, fmt.Errorf("read mcp metrics outcomes: %w", err)
@@ -541,8 +501,8 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 	if err != nil {
 		return QueryMCPMetricsOutput{}, fmt.Errorf("read mcp metrics summary: %w", err)
 	}
-	totals := totalsFromRows(outcomeRows)
-	envelope, err := s.drilldownEnvelope(ctx, target, totals.Total > 0)
+	metrics := reconcileMetrics(totalsFromRows(outcomeRows), summary)
+	envelope, err := s.drilldownEnvelope(ctx, target, metrics.observed)
 	if err != nil {
 		return QueryMCPMetricsOutput{}, err
 	}
@@ -550,27 +510,15 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 		ProjectID:       input.ProjectID,
 		MCPID:           input.MCPID,
 		Envelope:        envelope,
-		ToolCalls:       totals.Total,
-		FailedToolCalls: totals.failures(),
-		FailureRate:     failureRate(totals.Total, totals.failures()),
+		ToolCalls:       metrics.toolCalls,
+		FailedToolCalls: metrics.failedToolCalls,
+		FailureRate:     failureRate(metrics.toolCalls, metrics.failedToolCalls),
+		AvgLatencyMs:    metrics.avgLatencyMs,
 	}
-	if summary != nil {
-		output.AvgLatencyMs = summary.AvgLatencyMs
-	}
-	// Active users are only answerable for a hosted server: the active-count
-	// read narrows by toolset slug and by nothing else, so for any other model
-	// the honest answer is that this metric is unavailable for this MCP — not
-	// the project's user count wearing its name.
-	if toolsetSlug == "" {
-		output.ActiveUsersUnavailable = true
-		return output, nil
-	}
-	counts, err := s.telemetry.GetActiveCounts(ctx, telemetryrepo.GetActiveCountsParams{
-		GramProjectID: target.projectID,
-		TimeStart:     start,
-		TimeEnd:       end,
-		ToolsetSlug:   toolsetSlug,
-	})
+	// The active-count read carries the same identities the outcome tally
+	// matched on, so a user whose calls the tally counted through a hook is
+	// counted here too rather than reported as zero beside them.
+	counts, err := s.telemetry.GetActiveCounts(ctx, target.identity.activeCountsParams(target.projectID, start, end))
 	if err != nil {
 		return QueryMCPMetricsOutput{}, fmt.Errorf("read mcp metrics active counts: %w", err)
 	}
@@ -623,8 +571,8 @@ type GetUserMCPStatusOutput struct {
 	Activity       string              `json:"activity"`
 	Tools          []SubjectToolStatus `json:"tools"`
 	ToolsTruncated bool                `json:"tools_truncated"`
-	// Unavailable is retained for compatibility. The call-level reader can scope
-	// every MCP model that carries a trustworthy server identity.
+	// Unavailable is retained for compatibility. The call-level reader scopes
+	// every MCP model by its configured id, so it is never set.
 	Unavailable bool `json:"unavailable"`
 }
 
@@ -669,15 +617,6 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	// read is audited separately from the aggregate ones.
 	if err := s.auditor.RecordUserMCPStatusRead(ctx, principal, input.ProjectID, input.MCPID, output.MaskedIdentity, string(target.window.Window)); err != nil {
 		return GetUserMCPStatusOutput{}, fmt.Errorf("record user mcp status read: %w", err)
-	}
-	if len(target.toolsetSlugs) == 0 && len(target.urlSuffixes) == 0 {
-		envelope, err := s.drilldownEnvelope(ctx, target, false)
-		if err != nil {
-			return GetUserMCPStatusOutput{}, err
-		}
-		output.Envelope = envelope
-		output.Unavailable = true
-		return output, nil
 	}
 	if err := s.volume.AllowRows(ctx, principal, maxDrilldownTools); err != nil {
 		return GetUserMCPStatusOutput{}, err

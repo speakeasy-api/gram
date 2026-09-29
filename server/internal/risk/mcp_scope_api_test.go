@@ -229,6 +229,51 @@ func sortedPolicyNames(policies []*types.RiskPolicy) []string {
 	return names
 }
 
+func TestRiskPolicyMCPScopeEmptyToolListMeansAllTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	projectID, organizationID := riskTestProject(t, ctx)
+	serverID, _, _ := seedRiskMCPServers(t, ctx, ti, projectID, organizationID)
+
+	_, err := mcpserversrepo.New(ti.conn).AddMCPServerToolMetadata(ctx, mcpserversrepo.AddMCPServerToolMetadataParams{
+		ProjectID:   projectID,
+		McpServerID: serverID,
+		Tools:       []byte(`[{"tool_name":"danger","destructive_hint":true}]`),
+	})
+	require.NoError(t, err)
+
+	policy := createMCPScopedPolicy(t, ctx, ti, "Empty tool list", true, &types.RiskMCPScope{
+		Servers: []*types.RiskMCPServerScope{{
+			McpServerID: serverID.String(),
+			Tools:       []string{},
+		}},
+	})
+	require.Equal(t, []string{"*"}, policy.McpScope.Servers[0].Tools,
+		"an empty tool list is stored as the all-tools wildcard, not dropped")
+
+	matches, err := ti.service.ListRiskPoliciesForMcpServer(ctx, &gen.ListRiskPoliciesForMcpServerPayload{
+		McpServerID: serverID.String(),
+		ToolName:    new("anything"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Empty tool list"}, sortedPolicyNames(matches.Policies),
+		"wildcard tools match any tool name on the server")
+
+	updated, err := ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:   policy.ID,
+		Name: policy.Name,
+		McpScope: &types.RiskMCPScope{
+			AllServers: true,
+			Servers: []*types.RiskMCPServerScope{{
+				McpServerID: serverID.String(),
+				Tools:       []string{},
+			}},
+		},
+	})
+	require.NoError(t, err, "an empty tool list also satisfies the all-servers custom-tools requirement")
+	require.Equal(t, []string{"*"}, updated.McpScope.Servers[0].Tools)
+}
+
 func TestRiskPolicyMCPScopeRejectsShadowMCP(t *testing.T) {
 	t.Parallel()
 

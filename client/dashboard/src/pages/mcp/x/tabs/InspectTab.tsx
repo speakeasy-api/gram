@@ -1,4 +1,7 @@
-import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import {
+  platformEndpointSlug,
+  useResolvedMcpServerUrl,
+} from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -41,6 +44,9 @@ export function InspectTab({
         remoteMcpServerId={mcpServer.remoteMcpServerId ?? undefined}
         isDisabled={mcpServer.visibility === "disabled"}
         authSettingsHref={authSettingsHref}
+        platformSlug={platformEndpointSlug(endpoints)}
+        tunneledMcpServerId={mcpServer.tunneledMcpServerId}
+        visibility={mcpServer.visibility}
       />
     </div>
   );

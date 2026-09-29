@@ -96,7 +96,12 @@ export function useProxiedMcpConnection(
     { headers, enabled: connectionReady, throwOnError: false },
   );
 
-  const authUrl = useMemo(() => firstPartyConnectUrl(mcpUrl), [mcpUrl]);
+  // mcpUrl is already the platform-namespace address. The connect route still
+  // 404s when the server has no issuer, so don't hand callers that URL.
+  const authUrl = useMemo(
+    () => (isIssuerGated ? firstPartyConnectUrl(mcpUrl) : undefined),
+    [isIssuerGated, mcpUrl],
+  );
 
   return {
     mcpUrl,

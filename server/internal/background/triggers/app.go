@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -150,6 +151,8 @@ type App struct {
 	dispatchers    map[string]Dispatcher
 	audit          *audit.Logger
 	slackClient    *slackclient.SlackClient
+
+	slackBotIdentities cache.TypedCacheObject[slackBotIdentity]
 }
 
 // InstanceDBHook runs inside the transaction that mutates a trigger instance,
@@ -198,6 +201,7 @@ func NewApp(
 	serverURL *url.URL,
 	siteURL *url.URL,
 	slackClient *slackclient.SlackClient,
+	cacheImpl cache.Cache,
 	dispatchers ...Dispatcher,
 ) *App {
 	logger = logger.With(attr.SlogComponent("background_triggers"))
@@ -219,6 +223,8 @@ func NewApp(
 		dispatchers:    dispatcherMap,
 		audit:          auditLogger,
 		slackClient:    slackClient,
+
+		slackBotIdentities: cache.NewTypedObjectCache[slackBotIdentity](logger.With(attr.SlogCacheNamespace("slack_bot_identity")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -744,6 +750,7 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 		return result, nil
 	}
 
+	result.Event.Event = a.withSlackBotIdentity(ctx, instance, envMap, result.Event.Event)
 	result.Event.TriggerInstanceID = instance.ID.String()
 	result.Event.DefinitionSlug = instance.DefinitionSlug
 
@@ -924,22 +931,40 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 		return nil, fmt.Errorf("validate trigger target kind: %w", err)
 	}
 
+	routed, skipReason, err := a.routeEvent(ctx, instance, config, envelope)
+	if err != nil {
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "route event", err)
+		return nil, fmt.Errorf("route event: %w", err)
+	}
+	if routed == nil {
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusSkipped, skipReason, nil)
+		return nil, nil
+	}
+
 	task := &Task{
 		TriggerInstanceID: instance.ID.String(),
 		DefinitionSlug:    instance.DefinitionSlug,
 		TargetKind:        instance.TargetKind,
 		TargetRef:         instance.TargetRef,
 		TargetDisplay:     instance.TargetDisplay,
-		EventID:           boundAssistantKey(envelope.EventID),
-		CorrelationID:     boundAssistantKey(envelope.CorrelationID),
+		EventID:           boundAssistantKey(routed.eventID),
+		CorrelationID:     boundAssistantKey(routed.correlationID),
 		EventJSON:         nil,
 		RawPayload:        envelope.RawPayload,
+		ThreadBackfill:    routed.backfill,
 	}
 	if envelope.Event != nil {
 		eventJSON, err := json.Marshal(envelope.Event)
 		if err != nil {
 			a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "marshal event payload", err)
 			return nil, fmt.Errorf("marshal event payload: %w", err)
+		}
+		if routed.addressed {
+			eventJSON, err = setEventJSONField(eventJSON, addressedEventKey, true)
+			if err != nil {
+				a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "mark event addressed", err)
+				return nil, fmt.Errorf("mark event addressed: %w", err)
+			}
 		}
 		task.EventJSON = eventJSON
 	}
@@ -1004,6 +1029,10 @@ func (a *App) Dispatch(ctx context.Context, input Task) error {
 	dispatcher, ok := a.dispatchers[input.TargetKind]
 	if !ok {
 		return fmt.Errorf("trigger dispatcher for target kind %q is not configured", input.TargetKind)
+	}
+	input, err := a.backfillSlackThread(ctx, input)
+	if err != nil {
+		return fmt.Errorf("backfill thread: %w", err)
 	}
 	if err := dispatcher.Dispatch(ctx, input); err != nil {
 		return fmt.Errorf("dispatch trigger target: %w", err)

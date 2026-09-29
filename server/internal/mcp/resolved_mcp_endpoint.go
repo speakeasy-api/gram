@@ -627,6 +627,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
+	// loadToolset has already checked the canonical hosted policy for this public fallback.
 	// Honour the surface the challenge was minted under so the resumed
 	// endpoint's URLs match the original mint. Empty ref.RouteBase falls
 	// back to "mcp" for states cached before EndpointRef.RouteBase existed.
@@ -662,6 +663,7 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
+	// loadToolset has already checked the canonical hosted policy for this public fallback.
 	endpoint := newResolvedMcpEndpointFromToolset(toolset, routeBase)
 	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 		return nil, err

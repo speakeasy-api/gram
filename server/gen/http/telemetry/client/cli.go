@@ -587,6 +587,59 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 	return v, nil
 }
 
+// BuildGetMcpNetworkTrafficPayload builds the payload for the telemetry
+// getMcpNetworkTraffic endpoint from CLI flags.
+func BuildGetMcpNetworkTrafficPayload(telemetryGetMcpNetworkTrafficBody string, telemetryGetMcpNetworkTrafficApikeyToken string, telemetryGetMcpNetworkTrafficSessionToken string, telemetryGetMcpNetworkTrafficProjectSlugInput string) (*telemetry.GetMcpNetworkTrafficPayload, error) {
+	var err error
+	var body GetMcpNetworkTrafficRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetMcpNetworkTrafficBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"window\": \"7d\"\n   }'")
+		}
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
+		if body.MetaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+		}
+		if !(body.Window == "24h" || body.Window == "7d") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.window", body.Window, []any{"24h", "7d"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetMcpNetworkTrafficApikeyToken != "" {
+			apikeyToken = &telemetryGetMcpNetworkTrafficApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetMcpNetworkTrafficSessionToken != "" {
+			sessionToken = &telemetryGetMcpNetworkTrafficSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetMcpNetworkTrafficProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetMcpNetworkTrafficProjectSlugInput
+		}
+	}
+	v := &telemetry.GetMcpNetworkTrafficPayload{
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		Window:          body.Window,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetMetaMcpServerUsagePayload builds the payload for the telemetry
 // getMetaMcpServerUsage endpoint from CLI flags.
 func BuildGetMetaMcpServerUsagePayload(telemetryGetMetaMcpServerUsageBody string, telemetryGetMetaMcpServerUsageApikeyToken string, telemetryGetMetaMcpServerUsageSessionToken string, telemetryGetMetaMcpServerUsageProjectSlugInput string) (*telemetry.GetMetaMcpServerUsagePayload, error) {

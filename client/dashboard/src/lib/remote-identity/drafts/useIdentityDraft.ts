@@ -1,4 +1,5 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import type { Gram } from "@gram/client";
 import { slugify } from "@/lib/constants";
 import {
   deriveRemoteSessionIssuerNameFromUrl,
@@ -7,10 +8,16 @@ import {
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
+import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import {
+  preferredScopes,
+  serverIdentityAuthMethod,
+} from "../model/clientConfiguration";
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
 import { useClientHasSessions } from "../queries/useClientSessions";
 import { useProtectedResourceMetadata } from "../queries/useProtectedResourceMetadata";
@@ -54,6 +61,33 @@ type UserIdentityStatus =
   | { kind: "done" }
   | { kind: "refused"; message: string | null }
   | { kind: "unreachable"; message: string | null };
+
+// A provider counts as this upstream's own only on a DNS-label boundary. A
+// bare suffix test would read notgithub.com as github.com and hand that
+// unrelated upstream the provider's tokens.
+function sameSite(issuerHost: string, upstreamHost: string): boolean {
+  if (issuerHost === "" || upstreamHost === "") return false;
+  return issuerHost === upstreamHost || upstreamHost.endsWith(`.${issuerHost}`);
+}
+
+// The probe only runs up front while a provider is being discovered. A server
+// that already matched one still needs the resource's scopes at save time, so
+// read them then. A failed probe is not fatal: the issuer's list is the
+// fallback preferredScopes already defines.
+async function protectedResourceScopes(
+  client: Gram,
+  remoteMcpServerId: string,
+): Promise<string[] | undefined> {
+  if (!remoteMcpServerId) return undefined;
+  try {
+    const result = await client.remoteMcp.discoverProtectedResourceMetadata({
+      discoverProtectedResourceMetadataRequestBody: { remoteMcpServerId },
+    });
+    return result.available ? result.metadata?.scopesSupported : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function hostOf(url: string | undefined | null): string {
   if (!url) return "";
@@ -117,7 +151,7 @@ export type UserIdentityDraft = {
   status: UserIdentityStatus;
   idleHint: string;
   canSave: boolean;
-  save: () => void;
+  save: () => Promise<void>;
   saving: boolean;
 };
 
@@ -148,7 +182,12 @@ export function useUserIdentityDraft({
   const queryClient = useQueryClient();
 
   const [providerPick, setProviderPick] = useState<string | null>(null);
-  const [clientPick, setClientPick] = useState<string | null>(null);
+  // undefined: untouched, so the linked client shows. null: the operator
+  // explicitly asked for a new one, which must beat the linked client or the
+  // row can never leave it for Auto-Configure or manual registration.
+  const [clientPick, setClientPick] = useState<string | null | undefined>(
+    undefined,
+  );
   const [forceManual, setForceManual] = useState(false);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
@@ -161,12 +200,7 @@ export function useUserIdentityDraft({
   const upstreamHost = hostOf(upstreamUrl);
   const matchedIssuer = useMemo(
     () =>
-      issuers.find((issuer) => {
-        const host = hostOf(issuer.issuer);
-        return (
-          host !== "" && (host === upstreamHost || upstreamHost.endsWith(host))
-        );
-      }),
+      issuers.find((issuer) => sameSite(hostOf(issuer.issuer), upstreamHost)),
     [issuers, upstreamHost],
   );
   const linkedIssuerId = linkedClients[0]?.remoteSessionIssuerId;
@@ -273,7 +307,8 @@ export function useUserIdentityDraft({
     linkedClients.find(
       (candidate) => candidate.remoteSessionIssuerId === selectedProviderId,
     )?.id ?? null;
-  const selectedClientId = clientPick ?? linkedClientId;
+  const selectedClientId =
+    clientPick === undefined ? linkedClientId : clientPick;
   const existingClient =
     clientOptions.find((candidate) => candidate.id === selectedClientId) ??
     null;
@@ -294,6 +329,7 @@ export function useUserIdentityDraft({
       });
     },
     enabled: enabled && !!selectedDiscovered && !!discoveredIssuerUrl,
+    throwOnError: false,
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
@@ -309,9 +345,22 @@ export function useUserIdentityDraft({
   const supportsAutomatic = (candidate: {
     clientIdMetadataDocumentSupported?: boolean;
     registrationEndpoint?: string | null;
-  }): boolean =>
-    !!candidate.clientIdMetadataDocumentSupported ||
-    !!candidate.registrationEndpoint?.trim();
+    authorizationEndpoint?: string | null;
+    tokenEndpoint?: string | null;
+  }): boolean => {
+    // Without both endpoints the registration would persist an identity
+    // nobody can complete a login through, so it is not on offer.
+    if (
+      !candidate.authorizationEndpoint?.trim() ||
+      !candidate.tokenEndpoint?.trim()
+    ) {
+      return false;
+    }
+    return (
+      !!candidate.clientIdMetadataDocumentSupported ||
+      !!candidate.registrationEndpoint?.trim()
+    );
+  };
 
   let automaticAvailable = false;
   if (selectedDiscovered) {
@@ -329,8 +378,12 @@ export function useUserIdentityDraft({
   // the client choice and any outcome from the previous one.
   const selectProvider = (id: string | null): void => {
     setProviderPick(id);
-    setClientPick(null);
+    setClientPick(undefined);
     setForceManual(false);
+    // Manual credentials are issued by one provider and meaningless to the
+    // next, so they leave with it rather than being saved under its successor.
+    setClientId("");
+    setClientSecret("");
     setLocalStatus({ kind: "idle" });
   };
 
@@ -347,8 +400,9 @@ export function useUserIdentityDraft({
       // read its metadata now and send the whole record with the commit.
       let createProvider = undefined;
       let providerId: string | undefined = selectedIssuer?.id;
+      let draft: RemoteSessionIssuerDraft | null = null;
       if (selectedDiscovered && discoveredIssuerUrl) {
-        const draft =
+        draft =
           discoveredMetadata ??
           (await client.remoteSessionIssuers.fetchMetadata({
             fetchIssuerMetadataRequestBody: { issuer: discoveredIssuerUrl },
@@ -372,6 +426,53 @@ export function useUserIdentityDraft({
             draft.codeChallengeMethodsSupported ?? undefined,
           clientIdMetadataDocumentSupported:
             draft.clientIdMetadataDocumentSupported,
+          // The rest of the document. Callback validation and enrichment read
+          // these later, and the create path in configureCreatedIdentity
+          // already forwards them — a provider should not come out different
+          // depending on which surface created it.
+          userinfoEndpoint: draft.userinfoEndpoint ?? undefined,
+          introspectionEndpoint: draft.introspectionEndpoint ?? undefined,
+          introspectionEndpointAuthMethodsSupported:
+            draft.introspectionEndpointAuthMethodsSupported ?? undefined,
+          idTokenSigningAlgValuesSupported:
+            draft.idTokenSigningAlgValuesSupported ?? undefined,
+          claimsSupported: draft.claimsSupported ?? undefined,
+          backchannelLogoutSupported: draft.backchannelLogoutSupported,
+          authorizationResponseIssParameterSupported:
+            draft.authorizationResponseIssParameterSupported,
+          oidc: draft.oidc,
+          passthrough: draft.passthrough,
+        };
+      }
+
+      let clientConfiguration: ServerIdentityClientConfiguration | undefined;
+      if (!existingClient) {
+        // A new client asks for what this server's protected resource
+        // advertises, exactly as the create flow does. Left empty, the server
+        // falls back to every scope the issuer advertises — the request that
+        // broke Salesforce logins.
+        const resourceScopes =
+          prm.metadata?.scopesSupported ??
+          (await protectedResourceScopes(client, remoteMcpServerId));
+        const scopes = preferredScopes(
+          resourceScopes,
+          selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
+        );
+        const secret = manualNeeded ? clientSecret.trim() : "";
+        clientConfiguration = {
+          clientId: manualNeeded ? clientId.trim() : undefined,
+          clientSecret: secret || undefined,
+          scope: scopes.length > 0 ? scopes : undefined,
+          // A manual client without a secret is a public client; naming a
+          // secret-based method for it is refused by the server.
+          tokenEndpointAuthMethod:
+            manualNeeded && !secret
+              ? "none"
+              : serverIdentityAuthMethod(
+                  selectedIssuer?.tokenEndpointAuthMethodsSupported ??
+                    draft?.tokenEndpointAuthMethodsSupported ??
+                    [],
+                ),
         };
       }
 
@@ -382,14 +483,7 @@ export function useUserIdentityDraft({
           createProvider,
           clientMode,
           existingClientId: existingClient?.id,
-          clientConfiguration: existingClient
-            ? undefined
-            : {
-                clientId: manualNeeded ? clientId.trim() : undefined,
-                clientSecret: manualNeeded
-                  ? clientSecret.trim() || undefined
-                  : undefined,
-              },
+          clientConfiguration,
         },
       });
     },
@@ -417,12 +511,19 @@ export function useUserIdentityDraft({
         invalidateAllRemoteSessionIssuers(queryClient),
       ]);
     },
-    onError: () => {
-      setLocalStatus({ kind: "idle" });
+    onError: (error: unknown) => {
+      // Dropping back to idle without a word makes Save look like it simply
+      // stopped. The reachable case is an operator with mcp:write but not
+      // project:write: the commit needs project:write to create or register a
+      // client, so the button is enabled and the request is refused.
+      setLocalStatus({
+        kind: "unreachable",
+        message: error instanceof Error ? error.message : null,
+      });
     },
   });
 
-  const { mutate: runCommit, isPending } = commit;
+  const { mutateAsync: runCommit, isPending } = commit;
 
   // Dirty means the selection differs from what the server holds — not that
   // the operator opened a menu. Asking whether they interacted meant
@@ -442,6 +543,9 @@ export function useUserIdentityDraft({
   const canSave =
     !!selected &&
     !capabilitiesLoading &&
+    // Saving before the client list lands would miss an existing client and
+    // register a duplicate in its place.
+    !clientsLoading &&
     !isPending &&
     status.kind !== "done" &&
     (!manualNeeded || clientId.trim() !== "");
@@ -519,7 +623,16 @@ export function useUserIdentityDraft({
     status,
     idleHint,
     canSave,
-    save: (): void => runCommit(),
+    save: async (): Promise<void> => {
+      // Awaitable so callers can sequence work after it. onError has already
+      // put the failure on screen, so the rejection is swallowed here rather
+      // than surfacing twice or escaping as an unhandled rejection.
+      try {
+        await runCommit();
+      } catch {
+        /* reported by onError */
+      }
+    },
     saving: isPending,
   };
 }

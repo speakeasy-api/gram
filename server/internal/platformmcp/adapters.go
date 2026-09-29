@@ -332,48 +332,56 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
-	logger              *slog.Logger
-	db                  *pgxpool.Pool
-	reader              *readmodel.Reader
-	inventory           *platformrepo.Queries
-	inventoryCursor     *inventoryCursorCodec
-	metadataVersionKey  []byte
-	riskReads           *RiskReadService
-	riskAnalysisStatus  *RiskAnalysisStatusService
-	riskFindings        riskFindingsLister
-	dataExports         *DataExportReadService
-	dataExportMutations *dataExportMutationService
-	recentToolCalls     *RecentToolCallReadService
-	eventFeed           *EventFeedReadService
-	authz               *authz.Engine
-	shadowInventory     *ShadowInventoryService
-	shadowDecisions     *ShadowDecisionService
-	shadowAI            *ShadowAIService
-	reviewRequests      MCPReviewRequestService
-	reviewRequestBudget OperationBudget
+	logger                    *slog.Logger
+	db                        *pgxpool.Pool
+	reader                    *readmodel.Reader
+	inventory                 *platformrepo.Queries
+	inventoryCursor           *inventoryCursorCodec
+	metadataVersionKey        []byte
+	riskReads                 *RiskReadService
+	riskAnalysisStatus        *RiskAnalysisStatusService
+	riskFindings              riskFindingsLister
+	riskFindingList           riskFindingListLister
+	dataExports               *DataExportReadService
+	dataExportMutations       *dataExportMutationService
+	recentToolCalls           *RecentToolCallReadService
+	networkTraffic            MCPNetworkTrafficReader
+	networkTrafficLogsEnabled FeatureChecker
+	eventFeed                 *EventFeedReadService
+	networkIngress            *NetworkIngressStatusService
+	authz                     *authz.Engine
+	shadowInventory           *ShadowInventoryService
+	shadowDecisions           *ShadowDecisionService
+	shadowAI                  *ShadowAIService
+	reviewRequests            MCPReviewRequestService
+	reviewRequestBudget       OperationBudget
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
-		logger:              logger.With(attr.SlogComponent("platformmcp")),
-		db:                  db,
-		reader:              readmodel.New(db),
-		inventory:           platformrepo.New(db),
-		inventoryCursor:     nil,
-		metadataVersionKey:  nil,
-		riskReads:           nil,
-		riskAnalysisStatus:  nil,
-		riskFindings:        nil,
-		dataExports:         nil,
-		dataExportMutations: nil,
-		recentToolCalls:     nil,
-		eventFeed:           nil,
-		authz:               nil,
-		shadowInventory:     nil,
-		shadowDecisions:     nil,
-		shadowAI:            nil,
-		reviewRequests:      nil,
-		reviewRequestBudget: OperationBudget{Connection: nil, Organization: nil},
+		logger:                    logger.With(attr.SlogComponent("platformmcp")),
+		db:                        db,
+		reader:                    readmodel.New(db),
+		inventory:                 platformrepo.New(db),
+		inventoryCursor:           nil,
+		metadataVersionKey:        nil,
+		riskReads:                 nil,
+		riskAnalysisStatus:        nil,
+		riskFindings:              nil,
+		riskFindingList:           nil,
+		dataExports:               nil,
+		dataExportMutations:       nil,
+		recentToolCalls:           nil,
+		networkTraffic:            nil,
+		networkTrafficLogsEnabled: nil,
+		eventFeed:                 nil,
+		networkIngress:            nil,
+		authz:                     nil,
+		shadowInventory:           nil,
+		shadowDecisions:           nil,
+		shadowAI:                  nil,
+		reviewRequests:            nil,
+		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 	}
 }
 
@@ -480,6 +488,16 @@ func (r *PostgresReader) WithRiskAnalysisStatus(service *RiskAnalysisStatusServi
 func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService, budget OperationBudget) *PostgresReader {
 	if r != nil && service.valid() {
 		r.riskFindings = &budgetedRiskFindings{service: service, budget: budget}
+	}
+	return r
+}
+
+// WithRiskFindingList attaches the per-finding reads behind the same required
+// row-level budget as the Watchdog alerts. A missing budget leaves the tools
+// served as stubs.
+func (r *PostgresReader) WithRiskFindingList(service *RiskFindingListService, budget OperationBudget) *PostgresReader {
+	if r != nil && service.valid() {
+		r.riskFindingList = &budgetedRiskFindingList{service: service, budget: budget}
 	}
 	return r
 }

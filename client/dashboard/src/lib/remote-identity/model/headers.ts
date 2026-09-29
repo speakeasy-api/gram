@@ -9,8 +9,8 @@ import type { IdentityMode } from "./identity";
 export const IdentityErrors = {
   /** No Identity is selected, so nothing may set a static Authorization. */
   NoAuthorization:
-    "Switch to Agent Identity to use a static Authorization credential.",
-  /** User or Agent Identity owns the row, so a hand-written one may not. */
+    "Switch to Service Account to use a static Authorization credential.",
+  /** User Identity or a Service Account owns the row, so a hand-written one may not. */
   ManagedAuthorization: "Authorization is managed in the Identity section.",
 } as const;
 
@@ -22,7 +22,7 @@ function isAuthorizationHeader(name: string): boolean {
   return name.trim().toLowerCase() === "authorization";
 }
 
-/** The Authorization header the Agent Identity credential writes. */
+/** The Authorization header the Service Account credential writes. */
 export function findStaticAuthorizationHeader(
   headers: readonly RemoteMcpServerHeader[],
 ): RemoteMcpServerHeader | undefined {

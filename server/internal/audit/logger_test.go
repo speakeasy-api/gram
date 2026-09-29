@@ -78,17 +78,35 @@ func TestLogger_OutboxActorIdentity(t *testing.T) {
 	tests := []struct {
 		name               string
 		actingSurface      string
+		wantWebhookActorID string
 		wantWebhookDisplay string
 		wantWebhookSlug    string
+		actingClientID     string
+		wantWebhookClient  string
 	}{
 		{
 			name:               "admin surface masks the actor identity",
+			actingClientID:     "staff-client-secret",
+			wantWebhookActorID: "",
+			wantWebhookClient:  "",
 			actingSurface:      string(audit.SurfaceAdmin),
 			wantWebhookDisplay: audit.SpeakeasyTeamActorLabel,
 			wantWebhookSlug:    "",
 		},
 		{
+			name:               "admin MCP surface masks the actor identity and client id",
+			actingSurface:      string(audit.SurfaceAdminMCP),
+			actingClientID:     "staff-client-secret",
+			wantWebhookActorID: "",
+			wantWebhookDisplay: audit.SpeakeasyTeamActorLabel,
+			wantWebhookSlug:    "",
+			wantWebhookClient:  "",
+		},
+		{
 			name:               "non-admin surface preserves the actor identity",
+			actingClientID:     "customer-client",
+			wantWebhookActorID: "user_test01",
+			wantWebhookClient:  "customer-client",
 			actingSurface:      string(audit.SurfaceDashboard),
 			wantWebhookDisplay: "Private Actor Name",
 			wantWebhookSlug:    "private-actor",
@@ -99,7 +117,7 @@ func TestLogger_OutboxActorIdentity(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := contextvalues.SetActingSurface(t.Context(), tt.actingSurface)
+			ctx := contextvalues.SetOAuthClientID(contextvalues.SetActingSurface(t.Context(), tt.actingSurface), tt.actingClientID)
 			conn, err := infra.CloneTestDatabase(t, "testdb")
 			require.NoError(t, err)
 
@@ -141,8 +159,10 @@ func TestLogger_OutboxActorIdentity(t *testing.T) {
 			require.NoError(t, proto.Unmarshal(envelope, &event))
 			var payload events.AuditLogCreatedPayloadV1
 			require.NoError(t, json.Unmarshal(event.GetPayload(), &payload))
+			require.Equal(t, tt.wantWebhookActorID, payload.ActorID)
 			require.Equal(t, tt.wantWebhookDisplay, payload.ActorDisplayName)
 			require.Equal(t, tt.wantWebhookSlug, payload.ActorSlug)
+			require.Equal(t, tt.wantWebhookClient, payload.ActingClientID)
 		})
 	}
 }

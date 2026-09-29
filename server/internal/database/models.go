@@ -82,6 +82,50 @@ type AdminMcpSession struct {
 	UpdatedAt            pgtype.Timestamptz
 }
 
+type AdminMcpWriteEvent struct {
+	ID            uuid.UUID
+	ProposalID    uuid.NullUUID
+	SubjectUrn    string
+	OauthClientID uuid.NullUUID
+	Event         string
+	ReasonCode    pgtype.Text
+	RequestID     pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type AdminMcpWriteProposal struct {
+	ID                     uuid.UUID
+	SubjectUrn             string
+	OauthClientID          uuid.UUID
+	ConnectionID           uuid.UUID
+	ConnectionGeneration   uuid.UUID
+	Operation              string
+	OperationSchemaVersion int32
+	PlatformGlobal         bool
+	OrganizationID         pgtype.Text
+	ProjectID              uuid.NullUUID
+	ResourceKind           pgtype.Text
+	ResourceID             pgtype.Text
+	IdempotencyKey         string
+	Arguments              []byte
+	ExpectedStateDigest    string
+	ProposalDigest         string
+	Preview                []byte
+	Status                 string
+	ExpiresAt              pgtype.Timestamptz
+	ApprovedBySubjectUrn   pgtype.Text
+	ApprovedAt             pgtype.Timestamptz
+	RejectedAt             pgtype.Timestamptz
+	InvalidatedAt          pgtype.Timestamptz
+	InvalidationReason     pgtype.Text
+	ExecutedAt             pgtype.Timestamptz
+	ResultCode             pgtype.Text
+	ResultPayload          []byte
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+}
+
 type Agent struct {
 	ID                          uuid.UUID
 	OrganizationID              string
@@ -2563,6 +2607,31 @@ type RemoteSessionEmaBinding struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
+type RemoteSessionEmaCredential struct {
+	ID                             uuid.UUID
+	OrganizationID                 pgtype.Text
+	ProjectID                      uuid.NullUUID
+	UserSessionIssuerID            uuid.NullUUID
+	RemoteSessionIssuerID          uuid.NullUUID
+	RemoteSessionClientID          uuid.NullUUID
+	Resource                       string
+	SubjectUrn                     string
+	ClientSelection                string
+	RemoteSessionEmaBindingID      uuid.NullUUID
+	EmaBindingGeneration           pgtype.Int8
+	TrustedIssuerSessionID         uuid.NullUUID
+	RequestedScopes                []string
+	GrantedScopes                  []string
+	AccessTokenEncrypted           pgtype.Text
+	AccessExpiresAt                pgtype.Timestamptz
+	DownstreamRefreshTokenObserved bool
+	LastUsedAt                     pgtype.Timestamptz
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+	DeletedAt                      pgtype.Timestamptz
+	Deleted                        bool
+}
+
 type RemoteSessionIssuer struct {
 	ID                                         uuid.UUID
 	ProjectID                                  uuid.NullUUID
@@ -3457,6 +3526,21 @@ type TriggerInstance struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type TriggerThreadRoute struct {
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	TargetKind           string
+	TargetRef            string
+	CorrelationID        string
+	RouteToCorrelationID pgtype.Text
+	State                string
+	LastSeenCursor       pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 type TrustedIssuerSession struct {

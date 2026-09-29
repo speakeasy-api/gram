@@ -85,11 +85,11 @@ func TestUsageAttributionReferenceScopesBindTargetAndWindow(t *testing.T) {
 	lastDay, err := resolveWindow("24h", now, drilldownWindowSpec)
 	require.NoError(t, err)
 
-	first := drilldownTarget{projectID: "project", mcpServerID: "mcp-a", window: oneHour}
-	second := drilldownTarget{projectID: "project", mcpServerID: "mcp-b", window: oneHour}
+	first := drilldownTarget{projectID: "project", identity: serverIdentity{mcpServerID: "mcp-a"}, window: oneHour}
+	second := drilldownTarget{projectID: "project", identity: serverIdentity{mcpServerID: "mcp-b"}, window: oneHour}
 	require.NotEqual(t, mcpUsageUserScope(first), mcpUsageUserScope(second))
 	first.window = lastDay
-	require.NotEqual(t, mcpUsageUserScope(first), mcpUsageUserScope(drilldownTarget{projectID: "project", mcpServerID: "mcp-a", window: oneHour}))
+	require.NotEqual(t, mcpUsageUserScope(first), mcpUsageUserScope(drilldownTarget{projectID: "project", identity: serverIdentity{mcpServerID: "mcp-a"}, window: oneHour}))
 	require.NotEqual(t, skillUsageUserScope("project", "skill-a", oneHour), skillUsageUserScope("project", "skill-b", oneHour))
 	require.NotEqual(t, skillUsageUserScope("project", "skill-a", oneHour), skillUsageUserScope("project", "skill-a", lastDay))
 }

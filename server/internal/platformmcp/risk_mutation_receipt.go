@@ -25,8 +25,8 @@ type RiskMutationReceiptRequest struct {
 	Input          any
 }
 
-// RiskMutationReceiptResult is implemented only by the four closed, redacted
-// result projections below. Callbacks cannot supply an open JSON object, so a
+// RiskMutationReceiptResult is implemented only by the closed, redacted result
+// projections below and the finding false-positive projections beside them. Callbacks cannot supply an open JSON object, so a
 // new user-authored field cannot silently enter operation receipts.
 type RiskMutationReceiptResult interface {
 	riskMutationReceiptOperation() string
@@ -77,6 +77,18 @@ type UpdateRiskPolicyReceiptResult struct {
 
 func (UpdateRiskPolicyReceiptResult) riskMutationReceiptOperation() string {
 	return operationUpdateRiskPolicy
+}
+
+type ChangeRiskPolicyAudienceReceiptResult struct{ UpdateRiskPolicyReceiptResult }
+
+func (ChangeRiskPolicyAudienceReceiptResult) riskMutationReceiptOperation() string {
+	return operationChangeRiskPolicyAudience
+}
+
+type RemoveSelfFromRiskPolicyReceiptResult struct{ UpdateRiskPolicyReceiptResult }
+
+func (RemoveSelfFromRiskPolicyReceiptResult) riskMutationReceiptOperation() string {
+	return operationRemoveSelfFromRiskPolicy
 }
 
 type CreateRiskExclusionReceiptResult struct {
@@ -169,7 +181,7 @@ func riskMutationInputHash(operation string, normalized any) (string, error) {
 
 func riskMutationOperation(operation string) bool {
 	switch operation {
-	case operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion:
+	case operationChangeRiskPolicyAudience, operationRemoveSelfFromRiskPolicy, operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion, operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive:
 		return true
 	default:
 		return false
@@ -193,8 +205,16 @@ func encodeRiskMutationResult(operation string, result RiskMutationReceiptResult
 
 func normalizedRiskMutationReceiptResult(result RiskMutationReceiptResult) (RiskMutationReceiptResult, bool) {
 	switch typed := result.(type) {
-	case CreateRiskPolicyReceiptResult, UpdateRiskPolicyReceiptResult, CreateRiskExclusionReceiptResult, UpdateRiskExclusionReceiptResult:
+	case ChangeRiskPolicyAudienceReceiptResult, RemoveSelfFromRiskPolicyReceiptResult, CreateRiskPolicyReceiptResult, UpdateRiskPolicyReceiptResult, CreateRiskExclusionReceiptResult, UpdateRiskExclusionReceiptResult, MarkRiskFindingsFalsePositiveReceiptResult, UnmarkRiskFindingsFalsePositiveReceiptResult:
 		return typed, true
+	case *ChangeRiskPolicyAudienceReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
+	case *RemoveSelfFromRiskPolicyReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
 	case *CreateRiskPolicyReceiptResult:
 		if typed != nil {
 			return *typed, true
@@ -211,12 +231,24 @@ func normalizedRiskMutationReceiptResult(result RiskMutationReceiptResult) (Risk
 		if typed != nil {
 			return *typed, true
 		}
+	case *MarkRiskFindingsFalsePositiveReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
+	case *UnmarkRiskFindingsFalsePositiveReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
 	}
 	return nil, false
 }
 
 func validRiskMutationReceiptResult(result RiskMutationReceiptResult) bool {
 	switch typed := result.(type) {
+	case ChangeRiskPolicyAudienceReceiptResult:
+		return validRiskMutationReceiptResult(typed.UpdateRiskPolicyReceiptResult)
+	case RemoveSelfFromRiskPolicyReceiptResult:
+		return validRiskMutationReceiptResult(typed.UpdateRiskPolicyReceiptResult)
 	case CreateRiskPolicyReceiptResult:
 		return validRiskReceiptProject(typed.Project) && validRiskPolicyReceiptSummary(typed.Policy) && validRiskReceiptVersion(typed.Version) && validRiskResultCategory(typed.ResultCategory, "created", "matched_existing")
 	case UpdateRiskPolicyReceiptResult:
@@ -225,6 +257,10 @@ func validRiskMutationReceiptResult(result RiskMutationReceiptResult) bool {
 		return validRiskReceiptProject(typed.Project) && validRiskExclusionReceiptSummary(typed.Exclusion) && validRiskReceiptVersion(typed.Version) && validRiskResultCategory(typed.ResultCategory, "created", "matched_existing") && typed.Reconciliation == "scheduled"
 	case UpdateRiskExclusionReceiptResult:
 		return validRiskReceiptProject(typed.Project) && validRiskExclusionReceiptSummary(typed.Exclusion) && validRiskReceiptVersion(typed.Version) && validRiskResultCategory(typed.ResultCategory, "updated") && typed.Reconciliation == "scheduled"
+	case MarkRiskFindingsFalsePositiveReceiptResult:
+		return validRiskFindingFalsePositiveReceipt(typed.RiskFindingFalsePositiveReceipt, riskFindingResultCategoryDismissed)
+	case UnmarkRiskFindingsFalsePositiveReceiptResult:
+		return validRiskFindingFalsePositiveReceipt(typed.RiskFindingFalsePositiveReceipt, riskFindingResultCategoryRestored)
 	default:
 		return false
 	}

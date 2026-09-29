@@ -101,6 +101,16 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
       // unresolved one does, and a snippet carrying "" or "/" is worse than no
       // snippet: it looks copyable and configures nothing.
       const code = step.code;
+      // Validate before inserting into a quoted shell assignment: a quote in a
+      // server value could bypass the generated command's runtime slug check.
+      if (
+        code.includes(CURSOR_PLUGIN_NAME_PLACEHOLDER) &&
+        !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(
+          publishStatus?.cursorObservabilityPlugin ?? "",
+        )
+      ) {
+        return undefined;
+      }
       if (
         substitutions.some(([marker, value]) => !value && code.includes(marker))
       ) {

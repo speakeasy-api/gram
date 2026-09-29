@@ -1197,6 +1197,14 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	if err != nil {
 		return nil, err
 	}
+	if server, serverErr := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID}); serverErr == nil {
+		mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
+		if modeErr != nil || !mode.Allows(networkaccess.SurfacePublic) {
+			return nil, fmt.Errorf("%w: endpoint is not available on this network surface", errToolsetNotFound)
+		}
+	} else if !errors.Is(serverErr, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("load canonical mcp server: %w", serverErr)
+	}
 	s.legacyFallback.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackInstallPage)
 	org, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
 	if err != nil {
@@ -1870,6 +1878,15 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 
 	if !toolset.McpEnabled {
 		return nil, fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
+	}
+	server, err := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
+	if err == nil {
+		mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
+		if modeErr != nil || !server.ToolsetID.Valid || server.ToolsetID.UUID != toolset.ID || server.Visibility == "disabled" || !mode.Allows(networkaccess.SurfacePublic) || server.UserSessionIssuerID != toolset.UserSessionIssuerID || (server.Visibility == "public") != toolset.McpIsPublic {
+			return nil, fmt.Errorf("%w: hosted MCP policy denies public access", errToolsetNotFound)
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("load hosted MCP network policy: %w", err)
 	}
 
 	return &toolset, nil
