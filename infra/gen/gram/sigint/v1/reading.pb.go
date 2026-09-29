@@ -78,6 +78,7 @@ type Reading struct {
 	xxx_hidden_MessageId           *string                `protobuf:"bytes,6,opt,name=message_id,json=messageId"`
 	xxx_hidden_MessageRole         Reading_MessageRole    `protobuf:"varint,7,opt,name=message_role,json=messageRole,enum=gram.sigint.v1.Reading_MessageRole"`
 	xxx_hidden_SensorId            *string                `protobuf:"bytes,8,opt,name=sensor_id,json=sensorId"`
+	xxx_hidden_SensorSlug          *string                `protobuf:"bytes,19,opt,name=sensor_slug,json=sensorSlug"`
 	xxx_hidden_MessageCreatedAt    *string                `protobuf:"bytes,9,opt,name=message_created_at,json=messageCreatedAt"`
 	xxx_hidden_EvaluatedAt         *string                `protobuf:"bytes,10,opt,name=evaluated_at,json=evaluatedAt"`
 	xxx_hidden_DefinitionHash      *string                `protobuf:"bytes,12,opt,name=definition_hash,json=definitionHash"`
@@ -195,6 +196,16 @@ func (x *Reading) GetSensorId() string {
 	return ""
 }
 
+func (x *Reading) GetSensorSlug() string {
+	if x != nil {
+		if x.xxx_hidden_SensorSlug != nil {
+			return *x.xxx_hidden_SensorSlug
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Reading) GetMessageCreatedAt() string {
 	if x != nil {
 		if x.xxx_hidden_MessageCreatedAt != nil {
@@ -281,62 +292,67 @@ func (x *Reading) GetScore() *Reading_Score {
 
 func (x *Reading) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 16)
 }
 
 func (x *Reading) SetEvaluationAttemptId(v string) {
 	x.xxx_hidden_EvaluationAttemptId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 16)
 }
 
 func (x *Reading) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 16)
 }
 
 func (x *Reading) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 16)
 }
 
 func (x *Reading) SetConversationId(v string) {
 	x.xxx_hidden_ConversationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 16)
 }
 
 func (x *Reading) SetMessageId(v string) {
 	x.xxx_hidden_MessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 16)
 }
 
 func (x *Reading) SetMessageRole(v Reading_MessageRole) {
 	x.xxx_hidden_MessageRole = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 16)
 }
 
 func (x *Reading) SetSensorId(v string) {
 	x.xxx_hidden_SensorId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 16)
+}
+
+func (x *Reading) SetSensorSlug(v string) {
+	x.xxx_hidden_SensorSlug = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 16)
 }
 
 func (x *Reading) SetMessageCreatedAt(v string) {
 	x.xxx_hidden_MessageCreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 16)
 }
 
 func (x *Reading) SetEvaluatedAt(v string) {
 	x.xxx_hidden_EvaluatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 16)
 }
 
 func (x *Reading) SetDefinitionHash(v string) {
 	x.xxx_hidden_DefinitionHash = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 16)
 }
 
 func (x *Reading) SetConfiguredModel(v string) {
 	x.xxx_hidden_ConfiguredModel = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 16)
 }
 
 func (x *Reading) SetModels(v []string) {
@@ -345,7 +361,7 @@ func (x *Reading) SetModels(v []string) {
 
 func (x *Reading) SetCompilerVersion(v string) {
 	x.xxx_hidden_CompilerVersion = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 15)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 16)
 }
 
 func (x *Reading) SetMultiLabel(v *Reading_MultiLabel) {
@@ -428,39 +444,46 @@ func (x *Reading) HasSensorId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
 }
 
-func (x *Reading) HasMessageCreatedAt() bool {
+func (x *Reading) HasSensorSlug() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
 }
 
-func (x *Reading) HasEvaluatedAt() bool {
+func (x *Reading) HasMessageCreatedAt() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
 }
 
-func (x *Reading) HasDefinitionHash() bool {
+func (x *Reading) HasEvaluatedAt() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 10)
 }
 
-func (x *Reading) HasConfiguredModel() bool {
+func (x *Reading) HasDefinitionHash() bool {
 	if x == nil {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
 }
 
+func (x *Reading) HasConfiguredModel() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 12)
+}
+
 func (x *Reading) HasCompilerVersion() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 13)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 14)
 }
 
 func (x *Reading) HasResult() bool {
@@ -534,28 +557,33 @@ func (x *Reading) ClearSensorId() {
 	x.xxx_hidden_SensorId = nil
 }
 
-func (x *Reading) ClearMessageCreatedAt() {
+func (x *Reading) ClearSensorSlug() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 8)
+	x.xxx_hidden_SensorSlug = nil
+}
+
+func (x *Reading) ClearMessageCreatedAt() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
 	x.xxx_hidden_MessageCreatedAt = nil
 }
 
 func (x *Reading) ClearEvaluatedAt() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 10)
 	x.xxx_hidden_EvaluatedAt = nil
 }
 
 func (x *Reading) ClearDefinitionHash() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 10)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
 	x.xxx_hidden_DefinitionHash = nil
 }
 
 func (x *Reading) ClearConfiguredModel() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 12)
 	x.xxx_hidden_ConfiguredModel = nil
 }
 
 func (x *Reading) ClearCompilerVersion() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 13)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 14)
 	x.xxx_hidden_CompilerVersion = nil
 }
 
@@ -615,8 +643,10 @@ type Reading_builder struct {
 	MessageId           *string
 	MessageRole         *Reading_MessageRole
 	SensorId            *string
-	MessageCreatedAt    *string
-	EvaluatedAt         *string
+	// Always populated with the sensor slug observed during evaluation.
+	SensorSlug       *string
+	MessageCreatedAt *string
+	EvaluatedAt      *string
 	// Effective configuration for traceability; not part of reading identity.
 	DefinitionHash  *string
 	ConfiguredModel *string
@@ -635,56 +665,60 @@ func (b0 Reading_builder) Build() *Reading {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 16)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.EvaluationAttemptId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 16)
 		x.xxx_hidden_EvaluationAttemptId = b.EvaluationAttemptId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 16)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 16)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.ConversationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 16)
 		x.xxx_hidden_ConversationId = b.ConversationId
 	}
 	if b.MessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 16)
 		x.xxx_hidden_MessageId = b.MessageId
 	}
 	if b.MessageRole != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 16)
 		x.xxx_hidden_MessageRole = *b.MessageRole
 	}
 	if b.SensorId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 16)
 		x.xxx_hidden_SensorId = b.SensorId
 	}
+	if b.SensorSlug != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 16)
+		x.xxx_hidden_SensorSlug = b.SensorSlug
+	}
 	if b.MessageCreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 16)
 		x.xxx_hidden_MessageCreatedAt = b.MessageCreatedAt
 	}
 	if b.EvaluatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 16)
 		x.xxx_hidden_EvaluatedAt = b.EvaluatedAt
 	}
 	if b.DefinitionHash != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 16)
 		x.xxx_hidden_DefinitionHash = b.DefinitionHash
 	}
 	if b.ConfiguredModel != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 16)
 		x.xxx_hidden_ConfiguredModel = b.ConfiguredModel
 	}
 	x.xxx_hidden_Models = b.Models
 	if b.CompilerVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 15)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 16)
 		x.xxx_hidden_CompilerVersion = b.CompilerVersion
 	}
 	if b.MultiLabel != nil {
@@ -735,6 +769,7 @@ type Reading_Probability struct {
 	state                  protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_SignalId    *string                `protobuf:"bytes,1,opt,name=signal_id,json=signalId"`
 	xxx_hidden_Probability float64                `protobuf:"fixed64,2,opt,name=probability"`
+	xxx_hidden_SignalSlug  *string                `protobuf:"bytes,3,opt,name=signal_slug,json=signalSlug"`
 	XXX_raceDetectHookData protoimpl.RaceDetectHookData
 	XXX_presence           [1]uint32
 	unknownFields          protoimpl.UnknownFields
@@ -783,14 +818,29 @@ func (x *Reading_Probability) GetProbability() float64 {
 	return 0
 }
 
+func (x *Reading_Probability) GetSignalSlug() string {
+	if x != nil {
+		if x.xxx_hidden_SignalSlug != nil {
+			return *x.xxx_hidden_SignalSlug
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Reading_Probability) SetSignalId(v string) {
 	x.xxx_hidden_SignalId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 2)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
 }
 
 func (x *Reading_Probability) SetProbability(v float64) {
 	x.xxx_hidden_Probability = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 2)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 3)
+}
+
+func (x *Reading_Probability) SetSignalSlug(v string) {
+	x.xxx_hidden_SignalSlug = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
 }
 
 func (x *Reading_Probability) HasSignalId() bool {
@@ -807,6 +857,13 @@ func (x *Reading_Probability) HasProbability() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
 }
 
+func (x *Reading_Probability) HasSignalSlug() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
 func (x *Reading_Probability) ClearSignalId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_SignalId = nil
@@ -817,11 +874,18 @@ func (x *Reading_Probability) ClearProbability() {
 	x.xxx_hidden_Probability = 0
 }
 
+func (x *Reading_Probability) ClearSignalSlug() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_SignalSlug = nil
+}
+
 type Reading_Probability_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
 	SignalId    *string
 	Probability *float64
+	// Always populated with the signal slug observed during evaluation.
+	SignalSlug *string
 }
 
 func (b0 Reading_Probability_builder) Build() *Reading_Probability {
@@ -829,12 +893,16 @@ func (b0 Reading_Probability_builder) Build() *Reading_Probability {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.SignalId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 2)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
 		x.xxx_hidden_SignalId = b.SignalId
 	}
 	if b.Probability != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 2)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 3)
 		x.xxx_hidden_Probability = *b.Probability
+	}
+	if b.SignalSlug != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 3)
+		x.xxx_hidden_SignalSlug = b.SignalSlug
 	}
 	return m0
 }
@@ -899,14 +967,15 @@ func (b0 Reading_MultiLabel_builder) Build() *Reading_MultiLabel {
 }
 
 type Reading_Choice struct {
-	state                       protoimpl.MessageState  `protogen:"opaque.v1"`
-	xxx_hidden_SelectedSignalId *string                 `protobuf:"bytes,1,opt,name=selected_signal_id,json=selectedSignalId"`
-	xxx_hidden_Distribution     *[]*Reading_Probability `protobuf:"bytes,2,rep,name=distribution"`
-	xxx_hidden_Confidence       float64                 `protobuf:"fixed64,3,opt,name=confidence"`
-	XXX_raceDetectHookData      protoimpl.RaceDetectHookData
-	XXX_presence                [1]uint32
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	state                         protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_SelectedSignalId   *string                 `protobuf:"bytes,1,opt,name=selected_signal_id,json=selectedSignalId"`
+	xxx_hidden_Distribution       *[]*Reading_Probability `protobuf:"bytes,2,rep,name=distribution"`
+	xxx_hidden_Confidence         float64                 `protobuf:"fixed64,3,opt,name=confidence"`
+	xxx_hidden_SelectedSignalSlug *string                 `protobuf:"bytes,4,opt,name=selected_signal_slug,json=selectedSignalSlug"`
+	XXX_raceDetectHookData        protoimpl.RaceDetectHookData
+	XXX_presence                  [1]uint32
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
 }
 
 func (x *Reading_Choice) Reset() {
@@ -960,9 +1029,19 @@ func (x *Reading_Choice) GetConfidence() float64 {
 	return 0
 }
 
+func (x *Reading_Choice) GetSelectedSignalSlug() string {
+	if x != nil {
+		if x.xxx_hidden_SelectedSignalSlug != nil {
+			return *x.xxx_hidden_SelectedSignalSlug
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Reading_Choice) SetSelectedSignalId(v string) {
 	x.xxx_hidden_SelectedSignalId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 4)
 }
 
 func (x *Reading_Choice) SetDistribution(v []*Reading_Probability) {
@@ -971,7 +1050,12 @@ func (x *Reading_Choice) SetDistribution(v []*Reading_Probability) {
 
 func (x *Reading_Choice) SetConfidence(v float64) {
 	x.xxx_hidden_Confidence = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 4)
+}
+
+func (x *Reading_Choice) SetSelectedSignalSlug(v string) {
+	x.xxx_hidden_SelectedSignalSlug = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 4)
 }
 
 func (x *Reading_Choice) HasSelectedSignalId() bool {
@@ -988,6 +1072,13 @@ func (x *Reading_Choice) HasConfidence() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
 }
 
+func (x *Reading_Choice) HasSelectedSignalSlug() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
 func (x *Reading_Choice) ClearSelectedSignalId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_SelectedSignalId = nil
@@ -998,12 +1089,19 @@ func (x *Reading_Choice) ClearConfidence() {
 	x.xxx_hidden_Confidence = 0
 }
 
+func (x *Reading_Choice) ClearSelectedSignalSlug() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_SelectedSignalSlug = nil
+}
+
 type Reading_Choice_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
 	SelectedSignalId *string
 	Distribution     []*Reading_Probability
 	Confidence       *float64
+	// Always populated, matching the selected signal's distribution entry.
+	SelectedSignalSlug *string
 }
 
 func (b0 Reading_Choice_builder) Build() *Reading_Choice {
@@ -1011,13 +1109,17 @@ func (b0 Reading_Choice_builder) Build() *Reading_Choice {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.SelectedSignalId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 4)
 		x.xxx_hidden_SelectedSignalId = b.SelectedSignalId
 	}
 	x.xxx_hidden_Distribution = &b.Distribution
 	if b.Confidence != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 4)
 		x.xxx_hidden_Confidence = *b.Confidence
+	}
+	if b.SelectedSignalSlug != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 4)
+		x.xxx_hidden_SelectedSignalSlug = b.SelectedSignalSlug
 	}
 	return m0
 }
@@ -1148,8 +1250,7 @@ var File_gram_sigint_v1_reading_proto protoreflect.FileDescriptor
 
 const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xc1\n" +
-	"\n" +
+	"\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xb5\v\n" +
 	"\aReading\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
 	"\x15evaluation_attempt_id\x18\x02 \x01(\tR\x13evaluationAttemptId\x12'\n" +
@@ -1160,7 +1261,9 @@ const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\n" +
 	"message_id\x18\x06 \x01(\tR\tmessageId\x12F\n" +
 	"\fmessage_role\x18\a \x01(\x0e2#.gram.sigint.v1.Reading.MessageRoleR\vmessageRole\x12\x1b\n" +
-	"\tsensor_id\x18\b \x01(\tR\bsensorId\x12,\n" +
+	"\tsensor_id\x18\b \x01(\tR\bsensorId\x12\x1f\n" +
+	"\vsensor_slug\x18\x13 \x01(\tR\n" +
+	"sensorSlug\x12,\n" +
 	"\x12message_created_at\x18\t \x01(\tR\x10messageCreatedAt\x12!\n" +
 	"\fevaluated_at\x18\n" +
 	" \x01(\tR\vevaluatedAt\x12'\n" +
@@ -1171,19 +1274,22 @@ const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\vmulti_label\x18\x10 \x01(\v2\".gram.sigint.v1.Reading.MultiLabelH\x00R\n" +
 	"multiLabel\x128\n" +
 	"\x06choice\x18\x11 \x01(\v2\x1e.gram.sigint.v1.Reading.ChoiceH\x00R\x06choice\x125\n" +
-	"\x05score\x18\x12 \x01(\v2\x1d.gram.sigint.v1.Reading.ScoreH\x00R\x05score\x1aL\n" +
+	"\x05score\x18\x12 \x01(\v2\x1d.gram.sigint.v1.Reading.ScoreH\x00R\x05score\x1am\n" +
 	"\vProbability\x12\x1b\n" +
 	"\tsignal_id\x18\x01 \x01(\tR\bsignalId\x12 \n" +
-	"\vprobability\x18\x02 \x01(\x01R\vprobability\x1aK\n" +
+	"\vprobability\x18\x02 \x01(\x01R\vprobability\x12\x1f\n" +
+	"\vsignal_slug\x18\x03 \x01(\tR\n" +
+	"signalSlug\x1aK\n" +
 	"\n" +
 	"MultiLabel\x12=\n" +
-	"\asignals\x18\x01 \x03(\v2#.gram.sigint.v1.Reading.ProbabilityR\asignals\x1a\x9f\x01\n" +
+	"\asignals\x18\x01 \x03(\v2#.gram.sigint.v1.Reading.ProbabilityR\asignals\x1a\xd1\x01\n" +
 	"\x06Choice\x12,\n" +
 	"\x12selected_signal_id\x18\x01 \x01(\tR\x10selectedSignalId\x12G\n" +
 	"\fdistribution\x18\x02 \x03(\v2#.gram.sigint.v1.Reading.ProbabilityR\fdistribution\x12\x1e\n" +
 	"\n" +
 	"confidence\x18\x03 \x01(\x01R\n" +
-	"confidence\x1a\x97\x01\n" +
+	"confidence\x120\n" +
+	"\x14selected_signal_slug\x18\x04 \x01(\tR\x12selectedSignalSlug\x1a\x97\x01\n" +
 	"\x05Score\x12%\n" +
 	"\x0eexpected_index\x18\x01 \x01(\x01R\rexpectedIndex\x12G\n" +
 	"\fdistribution\x18\x02 \x03(\v2#.gram.sigint.v1.Reading.ProbabilityR\fdistribution\x12\x1e\n" +

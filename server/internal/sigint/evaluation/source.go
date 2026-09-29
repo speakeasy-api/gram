@@ -17,6 +17,9 @@ type Sensor struct {
 	// ID is the project-scoped sensor identity.
 	ID string
 
+	// Slug is the sensor's human-readable external identifier.
+	Slug string
+
 	// Mode determines how signals are compiled and interpreted.
 	Mode string
 
@@ -25,6 +28,9 @@ type Sensor struct {
 
 	// Signals contains active signals in membership order.
 	Signals []classifier.Option
+
+	// SignalSlugs maps each signal identity to its external identifier.
+	SignalSlugs map[classifier.OptionKey]string
 }
 
 // Source loads tenant-scoped definitions in a consistent snapshot.
@@ -53,13 +59,14 @@ func (r *Repository) Load(ctx context.Context, org string, project uuid.UUID) ([
 			if row.Instructions.Valid {
 				instructions = &row.Instructions.String
 			}
-			sensors = append(sensors, Sensor{ID: id, Mode: row.Mode, Instructions: instructions, Signals: nil})
+			sensors = append(sensors, Sensor{ID: id, Slug: row.SensorSlug, Mode: row.Mode, Instructions: instructions, Signals: nil, SignalSlugs: make(map[classifier.OptionKey]string)})
 		}
 		var description classifier.Entry
 		if row.ClassifierCriteria.Valid {
 			description = classifier.Text(row.ClassifierCriteria.String)
 		}
 		sensors[len(sensors)-1].Signals = append(sensors[len(sensors)-1].Signals, classifier.NewOption(classifier.OptionKey(row.SignalID.String()), description))
+		sensors[len(sensors)-1].SignalSlugs[classifier.OptionKey(row.SignalID.String())] = row.SignalSlug
 	}
 	return sensors, nil
 }

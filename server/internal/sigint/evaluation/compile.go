@@ -15,17 +15,27 @@ import (
 var readingNamespace = uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:sigint:reading"))
 
 type compiledSensor struct {
-	id        string
-	mode      string
-	hash      string
-	questions []classifier.Question
+	id          string
+	slug        string
+	signalSlugs map[classifier.OptionKey]string
+	mode        string
+	hash        string
+	questions   []classifier.Question
 }
 
 func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	var compiled compiledSensor
-	if sensor.Instructions == nil || len(sensor.Signals) == 0 {
+	if sensor.Instructions == nil || len(sensor.Signals) == 0 || sensor.Slug == "" {
 		return compiled, false
 	}
+	compiled.signalSlugs = make(map[classifier.OptionKey]string, len(sensor.Signals))
+	for _, signal := range sensor.Signals {
+		if sensor.SignalSlugs[signal.Key] == "" {
+			return compiled, false
+		}
+		compiled.signalSlugs[signal.Key] = sensor.SignalSlugs[signal.Key]
+	}
+	compiled.slug = sensor.Slug
 	instructions := classifier.Text(*sensor.Instructions)
 	key := classifier.QuestionKey(sensor.ID)
 	compiled.id, compiled.mode = sensor.ID, sensor.Mode
@@ -65,6 +75,9 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 }
 
 func reading(m *conversationv1.Message, sensor compiledSensor, answers map[classifier.QuestionKey]classifier.QuestionOutcome, attempt, at string, result classifier.Result) (*sigintv1.Reading, error) {
+	if sensor.slug == "" {
+		return nil, fmt.Errorf("missing sensor slug")
+	}
 	for _, q := range sensor.questions {
 		outcome, ok := answers[q.Key]
 		if !ok || outcome.Answer == nil || outcome.Failure != nil {
@@ -84,6 +97,7 @@ func reading(m *conversationv1.Message, sensor compiledSensor, answers map[class
 		r.SetMessageRole(sigintv1.Reading_MESSAGE_ROLE_ASSISTANT)
 	}
 	r.SetSensorId(sensor.id)
+	r.SetSensorSlug(sensor.slug)
 	r.SetMessageCreatedAt(m.GetCreatedAt())
 	r.SetEvaluatedAt(at)
 	r.SetDefinitionHash(sensor.hash)
@@ -101,6 +115,11 @@ func reading(m *conversationv1.Message, sensor compiledSensor, answers map[class
 			}
 			p := &sigintv1.Reading_Probability{}
 			p.SetSignalId(string(q.Key)[len(sensor.id)+1:])
+			slug := sensor.signalSlugs[classifier.OptionKey(p.GetSignalId())]
+			if slug == "" {
+				return nil, fmt.Errorf("missing signal slug")
+			}
+			p.SetSignalSlug(slug)
 			p.SetProbability(answer.Probability)
 			signals = append(signals, p)
 		}
@@ -113,7 +132,16 @@ func reading(m *conversationv1.Message, sensor compiledSensor, answers map[class
 		}
 		value := &sigintv1.Reading_Choice{}
 		value.SetSelectedSignalId(string(answer.Selected))
-		value.SetDistribution(distribution(answer.Distribution))
+		selectedSlug := sensor.signalSlugs[answer.Selected]
+		if selectedSlug == "" {
+			return nil, fmt.Errorf("missing selected signal slug")
+		}
+		value.SetSelectedSignalSlug(selectedSlug)
+		probabilities, err := distribution(answer.Distribution, sensor.signalSlugs)
+		if err != nil {
+			return nil, err
+		}
+		value.SetDistribution(probabilities)
 		if answer.Confidence != nil {
 			value.SetConfidence(*answer.Confidence)
 		}
@@ -125,7 +153,11 @@ func reading(m *conversationv1.Message, sensor compiledSensor, answers map[class
 		}
 		value := &sigintv1.Reading_Score{}
 		value.SetExpectedIndex(answer.ExpectedIndex)
-		value.SetDistribution(distribution(answer.Distribution))
+		probabilities, err := distribution(answer.Distribution, sensor.signalSlugs)
+		if err != nil {
+			return nil, err
+		}
+		value.SetDistribution(probabilities)
 		if answer.Confidence != nil {
 			value.SetConfidence(*answer.Confidence)
 		}
@@ -134,13 +166,17 @@ func reading(m *conversationv1.Message, sensor compiledSensor, answers map[class
 	return r, nil
 }
 
-func distribution(values []classifier.Probability) []*sigintv1.Reading_Probability {
+func distribution(values []classifier.Probability, slugs map[classifier.OptionKey]string) ([]*sigintv1.Reading_Probability, error) {
 	result := make([]*sigintv1.Reading_Probability, 0, len(values))
 	for _, value := range values {
 		p := &sigintv1.Reading_Probability{}
 		p.SetSignalId(string(value.Option))
+		if slugs[value.Option] == "" {
+			return nil, fmt.Errorf("missing distribution signal slug")
+		}
+		p.SetSignalSlug(slugs[value.Option])
 		p.SetProbability(value.Value)
 		result = append(result, p)
 	}
-	return result
+	return result, nil
 }

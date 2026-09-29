@@ -1391,6 +1391,7 @@ pubsub:
           message Probability {
             string signal_id = 1;
             double probability = 2;
+            string signal_slug = 3;
           }
           message MultiLabel {
             repeated Probability signals = 1;
@@ -1399,6 +1400,7 @@ pubsub:
             string selected_signal_id = 1;
             repeated Probability distribution = 2;
             double confidence = 3;
+            string selected_signal_slug = 4;
           }
           message Score {
             double expected_index = 1;
@@ -1413,6 +1415,7 @@ pubsub:
           string message_id = 6;
           MessageRole message_role = 7;
           string sensor_id = 8;
+          string sensor_slug = 19;
           string message_created_at = 9;
           string evaluated_at = 10;
           reserved 11;
