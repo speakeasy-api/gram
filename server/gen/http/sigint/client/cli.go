@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	sigint "github.com/speakeasy-api/gram/server/gen/sigint"
 	types "github.com/speakeasy-api/gram/server/gen/types"
@@ -25,7 +26,18 @@ func BuildCreateSignalPayload(sigintCreateSignalBody string, sigintCreateSignalS
 	{
 		err = json.Unmarshal([]byte(sigintCreateSignalBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"classifier_criteria\": \"abc123\",\n      \"description\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"classifier_criteria\": \"abc123\",\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"aaa\"\n   }'")
+		}
+		if body.Slug != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+		}
+		if body.Slug != nil {
+			if utf8.RuneCountInString(*body.Slug) > 40 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -50,6 +62,10 @@ func BuildCreateSignalPayload(sigintCreateSignalBody string, sigintCreateSignalS
 		Name:               body.Name,
 		Description:        body.Description,
 		ClassifierCriteria: body.ClassifierCriteria,
+	}
+	if body.Slug != nil {
+		slug := types.Slug(*body.Slug)
+		v.Slug = &slug
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -167,7 +183,15 @@ func BuildUpdateSignalPayload(sigintUpdateSignalBody string, sigintUpdateSignalS
 	{
 		err = json.Unmarshal([]byte(sigintUpdateSignalBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"classifier_criteria\": \"abc123\",\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"classifier_criteria\": \"abc123\",\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"aaa\"\n   }'")
+		}
+		if body.Slug != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+		}
+		if body.Slug != nil {
+			if utf8.RuneCountInString(*body.Slug) > 40 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+			}
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -197,6 +221,10 @@ func BuildUpdateSignalPayload(sigintUpdateSignalBody string, sigintUpdateSignalS
 		Name:               body.Name,
 		Description:        body.Description,
 		ClassifierCriteria: body.ClassifierCriteria,
+	}
+	if body.Slug != nil {
+		slug := types.Slug(*body.Slug)
+		v.Slug = &slug
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -252,7 +280,15 @@ func BuildCreateSensorPayload(sigintCreateSensorBody string, sigintCreateSensorS
 	{
 		err = json.Unmarshal([]byte(sigintCreateSensorBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }'")
+		}
+		if body.Slug != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+		}
+		if body.Slug != nil {
+			if utf8.RuneCountInString(*body.Slug) > 40 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+			}
 		}
 		if !(body.Mode == "multi_label" || body.Mode == "exclusive" || body.Mode == "ordered_score") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", body.Mode, []any{"multi_label", "exclusive", "ordered_score"}))
@@ -287,6 +323,10 @@ func BuildCreateSensorPayload(sigintCreateSensorBody string, sigintCreateSensorS
 		Description:  body.Description,
 		Instructions: body.Instructions,
 		Mode:         types.SigintSensorMode(body.Mode),
+	}
+	if body.Slug != nil {
+		slug := types.Slug(*body.Slug)
+		v.Slug = &slug
 	}
 	if body.SignalIds != nil {
 		v.SignalIds = make([]string, len(body.SignalIds))
@@ -410,7 +450,15 @@ func BuildUpdateSensorPayload(sigintUpdateSensorBody string, sigintUpdateSensorS
 	{
 		err = json.Unmarshal([]byte(sigintUpdateSensorBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }'")
+		}
+		if body.Slug != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+		}
+		if body.Slug != nil {
+			if utf8.RuneCountInString(*body.Slug) > 40 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+			}
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.Mode != nil {
@@ -448,6 +496,10 @@ func BuildUpdateSensorPayload(sigintUpdateSensorBody string, sigintUpdateSensorS
 		Name:         body.Name,
 		Description:  body.Description,
 		Instructions: body.Instructions,
+	}
+	if body.Slug != nil {
+		slug := types.Slug(*body.Slug)
+		v.Slug = &slug
 	}
 	if body.Mode != nil {
 		mode := types.SigintSensorMode(*body.Mode)

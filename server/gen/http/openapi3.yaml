@@ -86078,6 +86078,11 @@ components:
                         type: string
                         format: uuid
                     description: Initial ordered signal IDs. Omitted and [] both create an empty sensor.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
             required:
                 - name
                 - mode
@@ -86093,6 +86098,11 @@ components:
                 name:
                     type: string
                     description: Display name; trimmed before enforcing the 1 to 200 character limit
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
             required:
                 - name
         CreateSignedChatAttachmentURLForm:
@@ -104382,6 +104392,11 @@ components:
                         type: string
                         format: uuid
                     description: Ordered signal IDs. In ordered_score mode the zero-based array index is the score level.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
                 updated_at:
                     type: string
                     description: Last update time
@@ -104391,6 +104406,7 @@ components:
                 - id
                 - project_id
                 - name
+                - slug
                 - mode
                 - signal_ids
                 - created_at
@@ -104419,6 +104435,11 @@ components:
                     type: string
                     description: Owning project ID
                     format: uuid
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
                 updated_at:
                     type: string
                     description: Last update time
@@ -104428,6 +104449,7 @@ components:
                 - id
                 - project_id
                 - name
+                - slug
                 - created_at
                 - updated_at
         Skill:
@@ -110803,6 +110825,11 @@ components:
                         type: string
                         format: uuid
                     description: Authoritative ordered signal IDs. Omit or send null to preserve; send [] to clear.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
             required:
                 - id
         UpdateSigintSignalForm:
@@ -110821,6 +110848,11 @@ components:
                 name:
                     type: string
                     description: Replacement display name; trimmed before enforcing the 1 to 200 character limit
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
             required:
                 - id
         UpdateSkillRequestBody:

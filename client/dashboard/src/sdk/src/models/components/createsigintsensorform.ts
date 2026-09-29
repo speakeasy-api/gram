@@ -40,6 +40,10 @@ export type CreateSigintSensorForm = {
    * Initial ordered signal IDs. Omitted and [] both create an empty sensor.
    */
   signalIds?: Array<string> | undefined;
+  /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  slug?: string | undefined;
 };
 
 /** @internal */
@@ -52,6 +56,7 @@ export type CreateSigintSensorForm$Outbound = {
   mode: string;
   name: string;
   signal_ids?: Array<string> | undefined;
+  slug?: string | undefined;
 };
 
 /** @internal */
@@ -65,6 +70,7 @@ export const CreateSigintSensorForm$outboundSchema: z.ZodMiniType<
     mode: Mode$outboundSchema,
     name: z.string(),
     signalIds: z.optional(z.array(z.string())),
+    slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {

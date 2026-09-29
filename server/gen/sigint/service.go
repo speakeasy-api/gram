@@ -90,6 +90,9 @@ type CreateSensorPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Optional project-scoped slug; defaults to a slugified display name. Must be
+	// unique including deleted sensors.
+	Slug *types.Slug
 	// Display name; trimmed before enforcing the 1 to 200 character limit
 	Name string
 	// Optional description; empty stores no value
@@ -107,6 +110,9 @@ type CreateSignalPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Optional project-scoped slug; defaults to a slugified display name. Must be
+	// unique including deleted signals.
+	Slug *types.Slug
 	// Display name; trimmed before enforcing the 1 to 200 character limit
 	Name string
 	// Optional description; empty stores no value
@@ -201,6 +207,9 @@ type UpdateSensorPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Replacement slug; omission preserves it. Changing it changes the identifier
+	// used by future exports.
+	Slug *types.Slug
 	// Sensor ID
 	ID string
 	// Replacement display name; trimmed before enforcing the 1 to 200 character
@@ -222,6 +231,9 @@ type UpdateSignalPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Replacement slug; omission preserves it. Changing it changes the identifier
+	// used by future exports.
+	Slug *types.Slug
 	// Signal ID
 	ID string
 	// Replacement display name; trimmed before enforcing the 1 to 200 character
