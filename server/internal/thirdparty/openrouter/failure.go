@@ -101,8 +101,7 @@ func Classify(err error) FailureReason {
 	case IsUpstreamUnavailable(err):
 		return ReasonUpstreamUnavailable
 	}
-	var httpErr *HTTPError
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[*HTTPError](err); ok {
 		switch httpErr.StatusCode {
 		case http.StatusUnauthorized, http.StatusForbidden:
 			return ReasonUnauthorized

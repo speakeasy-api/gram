@@ -33,12 +33,12 @@ There are three distinct questions, and a ratio alone answers none of them:
 written against these exact names and values, and
 `server/internal/riskhealth/riskhealth_test.go` pins them.
 
-| Tag                            | Meaning                                                |
-| ------------------------------ | ------------------------------------------------------ |
-| `gram.org.id`                  | Organization whose traffic was being analyzed.          |
-| `gram.risk.component`          | Which part of risk analysis ran.                        |
-| `gram.outcome`                 | What the evaluation produced.                           |
-| `gram.risk.degradation_reason` | Why it produced nothing. `none` unless `degraded`.      |
+| Tag                            | Meaning                                            |
+| ------------------------------ | -------------------------------------------------- |
+| `gram.org.id`                  | Organization whose traffic was being analyzed.     |
+| `gram.risk.component`          | Which part of risk analysis ran.                   |
+| `gram.outcome`                 | What the evaluation produced.                      |
+| `gram.risk.degradation_reason` | Why it produced nothing. `none` unless `degraded`. |
 
 `gram.risk.component`:
 
@@ -62,21 +62,21 @@ written against these exact names and values, and
 
 `gram.risk.degradation_reason`:
 
-| Reason                  | Self-heals? | What it means                                                     |
-| ----------------------- | ----------- | ----------------------------------------------------------------- |
-| `insufficient_credits`  | No          | The model provider balance is drained (OpenRouter 402).            |
-| `unauthorized`          | No          | Missing, revoked or unentitled provider key.                       |
-| `key_disabled`          | No          | Gram locked down its own provisioned provider key.                 |
-| `not_configured`        | No          | The engine is not wired up in this deployment at all.              |
-| `rate_limited`          | Maybe       | The model provider throttled Gram.                                 |
-| `throttled`             | Maybe       | Gram's own per-organization judge limiter refused the call.        |
-| `upstream_unavailable`  | Usually     | Provider 5xx, edge timeout or overload.                            |
-| `timeout`               | Usually     | The evaluation ran out of time.                                    |
-| `malformed_response`    | Usually     | The model answered with something that is not a verdict.           |
-| `dependency_unavailable`| Usually     | A policy reached no verdict because an engine it needs was down.   |
-| `policy_error`          | No          | A customer policy errored during its own evaluation.               |
-| `bad_request`           | No          | The provider rejected what Gram sent. An engineering signal.       |
-| `error`                 | Unknown     | Unclassified.                                                      |
+| Reason                   | Self-heals? | What it means                                                    |
+| ------------------------ | ----------- | ---------------------------------------------------------------- |
+| `insufficient_credits`   | No          | The model provider balance is drained (OpenRouter 402).          |
+| `unauthorized`           | No          | Missing, revoked or unentitled provider key.                     |
+| `key_disabled`           | No          | Gram locked down its own provisioned provider key.               |
+| `not_configured`         | No          | The engine is not wired up in this deployment at all.            |
+| `rate_limited`           | Maybe       | The model provider throttled Gram.                               |
+| `throttled`              | Maybe       | Gram's own per-organization judge limiter refused the call.      |
+| `upstream_unavailable`   | Usually     | Provider 5xx, edge timeout or overload.                          |
+| `timeout`                | Usually     | The evaluation ran out of time.                                  |
+| `malformed_response`     | Usually     | The model answered with something that is not a verdict.         |
+| `dependency_unavailable` | Usually     | A policy reached no verdict because an engine it needs was down. |
+| `policy_error`           | No          | A customer policy errored during its own evaluation.             |
+| `bad_request`            | No          | The provider rejected what Gram sent. An engineering signal.     |
+| `error`                  | Unknown     | Unclassified.                                                    |
 
 A provider content-policy refusal is **not** degraded: the provider looked at
 the payload and declined it, which is a verdict about the content rather than
@@ -224,16 +224,16 @@ Alert: > 0
 
 ## Response
 
-| Reason                                      | First action                                                                                 |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `insufficient_credits`                      | Top up the OpenRouter balance. Cross-check `gram.openrouter.credits_remaining` for the trend.  |
-| `unauthorized`, `key_disabled`              | Check the provider key: revoked upstream, or disabled by Gram (see `disable_causes.go`).       |
-| `not_configured`                            | Check the deployment's model configuration (`GRAM_RISK_LLM_URL`, the OpenRouter client wiring). |
-| `rate_limited`                              | Check the provider quota; consider raising the per-org judge limit.                            |
-| `throttled`                                 | Gram's own limiter. Raise the judge rate limit or shed load.                                   |
-| `upstream_unavailable`, `timeout`           | Check the provider status page and the per-engine latency histograms.                          |
-| `malformed_response`                        | A model or prompt regression. Check for a recent model or schema change.                       |
-| `policy_error`, `dependency_unavailable`    | Identify the organization, then read the warn logs carrying `gram.risk.policy_id`.             |
+| Reason                                   | First action                                                                                    |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `insufficient_credits`                   | Top up the OpenRouter balance. Cross-check `gram.openrouter.credits_remaining` for the trend.   |
+| `unauthorized`, `key_disabled`           | Check the provider key: revoked upstream, or disabled by Gram (see `disable_causes.go`).        |
+| `not_configured`                         | Check the deployment's model configuration (`GRAM_RISK_LLM_URL`, the OpenRouter client wiring). |
+| `rate_limited`                           | Check the provider quota; consider raising the per-org judge limit.                             |
+| `throttled`                              | Gram's own limiter. Raise the judge rate limit or shed load.                                    |
+| `upstream_unavailable`, `timeout`        | Check the provider status page and the per-engine latency histograms.                           |
+| `malformed_response`                     | A model or prompt regression. Check for a recent model or schema change.                        |
+| `policy_error`, `dependency_unavailable` | Identify the organization, then read the warn logs carrying `gram.risk.policy_id`.              |
 
 While any of these is firing, assume content is passing through **unanalyzed**
 for the affected component. The one exception is the LLM analyzer in the `llm`
