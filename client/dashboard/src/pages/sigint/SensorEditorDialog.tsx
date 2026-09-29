@@ -1,4 +1,5 @@
 import { duplicateNameCounts } from "./signal-names";
+import { slugError } from "./slug";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Alert } from "@/components/ui/Alert";
@@ -21,6 +22,7 @@ import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
 export interface SensorDraft {
+  slug?: string;
   name: string;
   description: string;
   instructions: string;
@@ -108,6 +110,7 @@ export function SensorEditorDialog({
   onSave,
 }: SensorEditorDialogProps): JSX.Element {
   const [name, setName] = useState(sensor?.name ?? "");
+  const [slug, setSlug] = useState(sensor?.slug ?? "");
   const [description, setDescription] = useState(sensor?.description ?? "");
   const [instructions, setInstructions] = useState(sensor?.instructions ?? "");
   const [mode, setMode] = useState<SigintSensorMode>(
@@ -132,6 +135,7 @@ export function SensorEditorDialog({
         signal.id.toLocaleLowerCase().includes(needle)),
   );
   const nameValidation = validateName(name);
+  const slugValidation = slugError(slug, sensor !== null);
   const tooManySignals = signalIds.length > signalLimit(mode);
   const selectedMode = MODE_OPTIONS.find((option) => option.value === mode)!;
 
@@ -148,9 +152,17 @@ export function SensorEditorDialog({
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     setSubmitted(true);
-    if (!canWrite || pending || nameValidation || tooManySignals) return;
+    if (
+      !canWrite ||
+      pending ||
+      nameValidation ||
+      slugValidation ||
+      tooManySignals
+    )
+      return;
     onSave({
       name: name.trim(),
+      slug: slug.trim() || undefined,
       description,
       instructions,
       mode,
@@ -186,6 +198,14 @@ export function SensorEditorDialog({
               autoFocus
               error={submitted ? nameValidation : null}
               hint="A trimmed name between 1 and 200 Unicode characters."
+            />
+            <InputField
+              label="Slug"
+              value={slug}
+              onChange={(event) => setSlug(event.target.value)}
+              maxLength={40}
+              error={submitted ? slugValidation : null}
+              hint="Unique identifier for analytics and integrations. Leave blank on creation to generate from the name."
             />
             <AnyField
               label="Mode"
