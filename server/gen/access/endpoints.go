@@ -16,6 +16,8 @@ import (
 
 // Endpoints wraps the "access" service endpoints.
 type Endpoints struct {
+	GetRoleProvisioning                  goa.Endpoint
+	ConfigureRoleProvisioning            goa.Endpoint
 	ListRoles                            goa.Endpoint
 	GetRole                              goa.Endpoint
 	CreateRole                           goa.Endpoint
@@ -54,6 +56,8 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		GetRoleProvisioning:                  NewGetRoleProvisioningEndpoint(s, a.APIKeyAuth),
+		ConfigureRoleProvisioning:            NewConfigureRoleProvisioningEndpoint(s, a.APIKeyAuth),
 		ListRoles:                            NewListRolesEndpoint(s, a.APIKeyAuth),
 		GetRole:                              NewGetRoleEndpoint(s, a.APIKeyAuth),
 		CreateRole:                           NewCreateRoleEndpoint(s, a.APIKeyAuth),
@@ -90,6 +94,8 @@ func NewEndpoints(s Service) *Endpoints {
 
 // Use applies the given middleware to all the "access" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.GetRoleProvisioning = m(e.GetRoleProvisioning)
+	e.ConfigureRoleProvisioning = m(e.ConfigureRoleProvisioning)
 	e.ListRoles = m(e.ListRoles)
 	e.GetRole = m(e.GetRole)
 	e.CreateRole = m(e.CreateRole)
@@ -121,6 +127,52 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListChallengeBuckets = m(e.ListChallengeBuckets)
 	e.ResolveChallenge = m(e.ResolveChallenge)
 	e.ListIdentityAccess = m(e.ListIdentityAccess)
+}
+
+// NewGetRoleProvisioningEndpoint returns an endpoint function that calls the
+// method "getRoleProvisioning" of service "access".
+func NewGetRoleProvisioningEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRoleProvisioningPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRoleProvisioning(ctx, p)
+	}
+}
+
+// NewConfigureRoleProvisioningEndpoint returns an endpoint function that calls
+// the method "configureRoleProvisioning" of service "access".
+func NewConfigureRoleProvisioningEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ConfigureRoleProvisioningPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ConfigureRoleProvisioning(ctx, p)
+	}
 }
 
 // NewListRolesEndpoint returns an endpoint function that calls the method

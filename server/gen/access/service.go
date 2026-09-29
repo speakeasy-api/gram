@@ -16,6 +16,13 @@ import (
 
 // Manage roles, team member access control, and authorization challenge events.
 type Service interface {
+	// Read organization-admin role plugin provisioning settings and observed
+	// outcomes. Does not provision or publish.
+	GetRoleProvisioning(context.Context, *GetRoleProvisioningPayload) (res *RoleProvisioningStatus, err error)
+	// Save organization-admin role plugin provisioning intent with optimistic
+	// versioning. Shared by IdP onboarding and settings. Disabling preserves
+	// plugins and audiences. Reconciliation is asynchronous.
+	ConfigureRoleProvisioning(context.Context, *ConfigureRoleProvisioningPayload) (res *RoleProvisioningStatus, err error)
 	// List all roles for the current organization.
 	ListRoles(context.Context, *ListRolesPayload) (res *ListRolesResult, err error)
 	// Get a role by ID.
@@ -150,7 +157,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [31]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [33]string{"getRoleProvisioning", "configureRoleProvisioning", "listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -413,6 +420,21 @@ type ChallengeResolution struct {
 	CreatedAt  string
 }
 
+// ConfigureRoleProvisioningPayload is the payload type of the access service
+// configureRoleProvisioning method.
+type ConfigureRoleProvisioningPayload struct {
+	SessionToken    *string
+	ExpectedVersion int64
+	Enabled         bool
+	// Omit to preserve the destination, or choose the best project on first save.
+	// Onboarding supplies its preferred project. Zero UUID explicitly leaves
+	// pending.
+	ProjectID *string
+	// Omitted roles preserve saved exclusions; first save selects all live IdP
+	// roles.
+	Roles []*RoleProvisioningSelection
+}
+
 // CreateRolePayload is the payload type of the access service createRole
 // method.
 type CreateRolePayload struct {
@@ -493,6 +515,12 @@ type GetRolePayload struct {
 	// The ID of the role.
 	ID           string
 	ApikeyToken  *string
+	SessionToken *string
+}
+
+// GetRoleProvisioningPayload is the payload type of the access service
+// getRoleProvisioning method.
+type GetRoleProvisioningPayload struct {
 	SessionToken *string
 }
 
@@ -928,6 +956,49 @@ type RoleGrant struct {
 	Scope string
 	// Selector constraints. Null means unrestricted.
 	Selectors []*Selector
+}
+
+type RoleProvisioningProject struct {
+	ID   string
+	Name string
+}
+
+type RoleProvisioningRoleStatus struct {
+	RoleUrn string
+	Name    string
+	// Whether this role has saved intent, rather than an initial default selection.
+	Configured bool
+	Enabled    bool
+	// Desired destination.
+	ProjectID *string
+	// Current live associated plugin project.
+	AppliedProjectID *string
+	PluginID         *string
+	OriginAudience   string
+	// Existing publication evidence, independent of provisioning. published_before
+	// does not assert freshness.
+	PublicationStatus string
+	// Pending reconciliation or admission reason. audience_approval_required
+	// requires the existing plugin audience approval workflow.
+	PendingReason *string
+}
+
+type RoleProvisioningSelection struct {
+	RoleUrn string
+	Enabled bool
+	// Destination override; zero UUID explicitly leaves pending.
+	ProjectID *string
+}
+
+// RoleProvisioningStatus is the result type of the access service
+// getRoleProvisioning method.
+type RoleProvisioningStatus struct {
+	Enabled   bool
+	Version   int64
+	ProjectID *string
+	Roles     []*RoleProvisioningRoleStatus
+	// Eligible destinations, ordered by live plugin count then oldest project.
+	Projects []*RoleProvisioningProject
 }
 
 type ScopeDefinition struct {

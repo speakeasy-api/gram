@@ -5534,6 +5534,93 @@ paths:
             x-speakeasy-name-override: uploadTraces
             x-speakeasy-react-hook:
                 name: UploadOpenTelemetryTraces
+    /rpc/access.configureRoleProvisioning:
+        post:
+            description: Save organization-admin role plugin provisioning intent with optimistic versioning. Shared by IdP onboarding and settings. Disabling preserves plugins and audiences. Reconciliation is asynchronous.
+            operationId: configureRoleProvisioning
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ConfigureRoleProvisioningRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RoleProvisioningStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: configureRoleProvisioning access
+            tags:
+                - access
+            x-speakeasy-name-override: configureRoleProvisioning
+            x-speakeasy-react-hook:
+                name: ConfigureRoleProvisioning
     /rpc/access.createRole:
         post:
             description: Create a new custom role.
@@ -5914,6 +6001,87 @@ paths:
             x-speakeasy-name-override: getRole
             x-speakeasy-react-hook:
                 name: Role
+    /rpc/access.getRoleProvisioning:
+        get:
+            description: Read organization-admin role plugin provisioning settings and observed outcomes. Does not provision or publish.
+            operationId: getRoleProvisioning
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RoleProvisioningStatus'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getRoleProvisioning access
+            tags:
+                - access
+            x-speakeasy-name-override: getRoleProvisioning
+            x-speakeasy-react-hook:
+                name: RoleProvisioning
     /rpc/access.getShadowMCPInventoryServer:
         get:
             description: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.
@@ -83122,6 +83290,27 @@ components:
             description: The outcome of committing a Remote MCP server user-identity plan. registered and linked are successful local commits. A registration failure is returned in failure. manual_setup_required is a preparation signal, not a registration outcome, and means auto mode found neither usable CIMD nor DCR support; no local state changed.
             required:
                 - manual_setup_required
+        ConfigureRoleProvisioningRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                expected_version:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                project_id:
+                    type: string
+                    description: Omit to preserve the destination, or choose the best project on first save. Onboarding supplies its preferred project. Zero UUID explicitly leaves pending.
+                    format: uuid
+                roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleProvisioningSelection'
+                    description: Omitted roles preserve saved exclusions; first save selects all live IdP roles.
+            required:
+                - expected_version
+                - enabled
         ConfirmOktaResourceConnectionsRequestBody:
             type: object
             properties:
@@ -100754,6 +100943,103 @@ components:
                     description: Selector constraints. Null means unrestricted.
             required:
                 - scope
+        RoleProvisioningProject:
+            type: object
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+            required:
+                - id
+                - name
+        RoleProvisioningRoleStatus:
+            type: object
+            properties:
+                applied_project_id:
+                    type: string
+                    description: Current live associated plugin project.
+                    format: uuid
+                configured:
+                    type: boolean
+                    description: Whether this role has saved intent, rather than an initial default selection.
+                enabled:
+                    type: boolean
+                name:
+                    type: string
+                origin_audience:
+                    type: string
+                    enum:
+                        - assigned
+                        - not_assigned
+                        - not_provisioned
+                pending_reason:
+                    type: string
+                    description: Pending reconciliation or admission reason. audience_approval_required requires the existing plugin audience approval workflow.
+                plugin_id:
+                    type: string
+                    format: uuid
+                project_id:
+                    type: string
+                    description: Desired destination.
+                    format: uuid
+                publication_status:
+                    type: string
+                    description: Existing publication evidence, independent of provisioning. published_before does not assert freshness.
+                    enum:
+                        - not_provisioned
+                        - not_connected
+                        - not_published
+                        - published_before
+                role_urn:
+                    type: string
+            required:
+                - role_urn
+                - name
+                - configured
+                - enabled
+                - origin_audience
+                - publication_status
+        RoleProvisioningSelection:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                project_id:
+                    type: string
+                    description: Destination override; zero UUID explicitly leaves pending.
+                    format: uuid
+                role_urn:
+                    type: string
+            required:
+                - role_urn
+                - enabled
+        RoleProvisioningStatus:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                project_id:
+                    type: string
+                    format: uuid
+                projects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleProvisioningProject'
+                    description: Eligible destinations, ordered by live plugin count then oldest project.
+                roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RoleProvisioningRoleStatus'
+                version:
+                    type: integer
+                    format: int64
+            required:
+                - enabled
+                - version
+                - roles
+                - projects
         RoleSummary:
             type: object
             properties:

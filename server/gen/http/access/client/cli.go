@@ -17,6 +17,74 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildGetRoleProvisioningPayload builds the payload for the access
+// getRoleProvisioning endpoint from CLI flags.
+func BuildGetRoleProvisioningPayload(accessGetRoleProvisioningSessionToken string) (*access.GetRoleProvisioningPayload, error) {
+	var sessionToken *string
+	{
+		if accessGetRoleProvisioningSessionToken != "" {
+			sessionToken = &accessGetRoleProvisioningSessionToken
+		}
+	}
+	v := &access.GetRoleProvisioningPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildConfigureRoleProvisioningPayload builds the payload for the access
+// configureRoleProvisioning endpoint from CLI flags.
+func BuildConfigureRoleProvisioningPayload(accessConfigureRoleProvisioningBody string, accessConfigureRoleProvisioningSessionToken string) (*access.ConfigureRoleProvisioningPayload, error) {
+	var err error
+	var body ConfigureRoleProvisioningRequestBody
+	{
+		err = json.Unmarshal([]byte(accessConfigureRoleProvisioningBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"expected_version\": 1,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"roles\": [\n         {\n            \"enabled\": false,\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"role_urn\": \"abc123\"\n         }\n      ]\n   }'")
+		}
+		if body.ExpectedVersion < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_version", body.ExpectedVersion, 0, true))
+		}
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		for _, e := range body.Roles {
+			if e != nil {
+				if err2 := ValidateRoleProvisioningSelectionRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessConfigureRoleProvisioningSessionToken != "" {
+			sessionToken = &accessConfigureRoleProvisioningSessionToken
+		}
+	}
+	v := &access.ConfigureRoleProvisioningPayload{
+		ExpectedVersion: body.ExpectedVersion,
+		Enabled:         body.Enabled,
+		ProjectID:       body.ProjectID,
+	}
+	if body.Roles != nil {
+		v.Roles = make([]*access.RoleProvisioningSelection, len(body.Roles))
+		for i, val := range body.Roles {
+			if val == nil {
+				v.Roles[i] = nil
+				continue
+			}
+			v.Roles[i] = marshalRoleProvisioningSelectionRequestBodyToAccessRoleProvisioningSelection(val)
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListRolesPayload builds the payload for the access listRoles endpoint
 // from CLI flags.
 func BuildListRolesPayload(accessListRolesApikeyToken string, accessListRolesSessionToken string) (*access.ListRolesPayload, error) {

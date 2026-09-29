@@ -19,6 +19,8 @@ import (
 // Server lists the access service endpoint HTTP handlers.
 type Server struct {
 	Mounts                               []*MountPoint
+	GetRoleProvisioning                  http.Handler
+	ConfigureRoleProvisioning            http.Handler
 	ListRoles                            http.Handler
 	GetRole                              http.Handler
 	CreateRole                           http.Handler
@@ -79,6 +81,8 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"GetRoleProvisioning", "GET", "/rpc/access.getRoleProvisioning"},
+			{"ConfigureRoleProvisioning", "POST", "/rpc/access.configureRoleProvisioning"},
 			{"ListRoles", "GET", "/rpc/access.listRoles"},
 			{"GetRole", "GET", "/rpc/access.getRole"},
 			{"CreateRole", "POST", "/rpc/access.createRole"},
@@ -111,6 +115,8 @@ func New(
 			{"ResolveChallenge", "POST", "/rpc/access.resolveChallenge"},
 			{"ListIdentityAccess", "GET", "/rpc/access.listIdentityAccess"},
 		},
+		GetRoleProvisioning:                  NewGetRoleProvisioningHandler(e.GetRoleProvisioning, mux, decoder, encoder, errhandler, formatter),
+		ConfigureRoleProvisioning:            NewConfigureRoleProvisioningHandler(e.ConfigureRoleProvisioning, mux, decoder, encoder, errhandler, formatter),
 		ListRoles:                            NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
 		GetRole:                              NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
 		CreateRole:                           NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
@@ -150,6 +156,8 @@ func (s *Server) Service() string { return "access" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.GetRoleProvisioning = m(s.GetRoleProvisioning)
+	s.ConfigureRoleProvisioning = m(s.ConfigureRoleProvisioning)
 	s.ListRoles = m(s.ListRoles)
 	s.GetRole = m(s.GetRole)
 	s.CreateRole = m(s.CreateRole)
@@ -188,6 +196,8 @@ func (s *Server) MethodNames() []string { return access.MethodNames[:] }
 
 // Mount configures the mux to serve the access endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountGetRoleProvisioningHandler(mux, h.GetRoleProvisioning)
+	MountConfigureRoleProvisioningHandler(mux, h.ConfigureRoleProvisioning)
 	MountListRolesHandler(mux, h.ListRoles)
 	MountGetRoleHandler(mux, h.GetRole)
 	MountCreateRoleHandler(mux, h.CreateRole)
@@ -224,6 +234,113 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the access endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountGetRoleProvisioningHandler configures the mux to serve the "access"
+// service "getRoleProvisioning" endpoint.
+func MountGetRoleProvisioningHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.getRoleProvisioning", f)
+}
+
+// NewGetRoleProvisioningHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "getRoleProvisioning" endpoint.
+func NewGetRoleProvisioningHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRoleProvisioningRequest(mux, decoder)
+		encodeResponse = EncodeGetRoleProvisioningResponse(encoder)
+		encodeError    = EncodeGetRoleProvisioningError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRoleProvisioning")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountConfigureRoleProvisioningHandler configures the mux to serve the
+// "access" service "configureRoleProvisioning" endpoint.
+func MountConfigureRoleProvisioningHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.configureRoleProvisioning", f)
+}
+
+// NewConfigureRoleProvisioningHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "configureRoleProvisioning"
+// endpoint.
+func NewConfigureRoleProvisioningHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeConfigureRoleProvisioningRequest(mux, decoder)
+		encodeResponse = EncodeConfigureRoleProvisioningResponse(encoder)
+		encodeError    = EncodeConfigureRoleProvisioningError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "configureRoleProvisioning")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountListRolesHandler configures the mux to serve the "access" service

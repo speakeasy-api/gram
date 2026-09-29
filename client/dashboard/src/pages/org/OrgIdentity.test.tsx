@@ -34,6 +34,9 @@ vi.mock("nuqs", async (importOriginal) => ({
   useQueryState: (await import("./identity-provider/nuqsRouterMock"))
     .useRouterQueryState,
 }));
+vi.mock("./identity-provider/RolePluginSettingsPanel", () => ({
+  RolePluginSettingsPanel: () => <div>Shared role plugin settings</div>,
+}));
 vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
   DirectoryRoleMappings: ({ footerAction }: { footerAction?: ReactNode }) => (
     <div>
@@ -338,6 +341,7 @@ describe("directory sync domain gate", () => {
       }).disabled,
     ).toBe(false);
     expect(dsync.getByText("Role mappings panel")).toBeTruthy();
+    expect(screen.getByText("Shared role plugin settings")).toBeTruthy();
   });
 
   it("keeps role mappings from non-admins and shows them the SCIM card", () => {
@@ -347,6 +351,7 @@ describe("directory sync domain gate", () => {
     show();
     const dsync = directorySyncSection();
     expect(dsync.queryByText("Role mappings panel")).toBeNull();
+    expect(screen.queryByText("Shared role plugin settings")).toBeNull();
     expect(
       dsync.queryByRole("button", { name: "Manage connection" }),
     ).toBeNull();

@@ -14,6 +14,20 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// ConfigureRoleProvisioningRequestBody is the type of the "access" service
+// "configureRoleProvisioning" endpoint HTTP request body.
+type ConfigureRoleProvisioningRequestBody struct {
+	ExpectedVersion *int64 `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
+	Enabled         *bool  `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Omit to preserve the destination, or choose the best project on first save.
+	// Onboarding supplies its preferred project. Zero UUID explicitly leaves
+	// pending.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Omitted roles preserve saved exclusions; first save selects all live IdP
+	// roles.
+	Roles []*RoleProvisioningSelectionRequestBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
+}
+
 // CreateRoleRequestBody is the type of the "access" service "createRole"
 // endpoint HTTP request body.
 type CreateRoleRequestBody struct {
@@ -154,6 +168,28 @@ type ResolveChallengeRequestBody struct {
 	// Confirms the administrator reviewed and accepts every permission granted by
 	// the complete role. Must be true when resolution_type=role_assigned.
 	RoleAssignmentConfirmed *bool `form:"role_assignment_confirmed,omitempty" json:"role_assignment_confirmed,omitempty" xml:"role_assignment_confirmed,omitempty"`
+}
+
+// GetRoleProvisioningResponseBody is the type of the "access" service
+// "getRoleProvisioning" endpoint HTTP response body.
+type GetRoleProvisioningResponseBody struct {
+	Enabled   bool                                      `form:"enabled" json:"enabled" xml:"enabled"`
+	Version   int64                                     `form:"version" json:"version" xml:"version"`
+	ProjectID *string                                   `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Roles     []*RoleProvisioningRoleStatusResponseBody `form:"roles" json:"roles" xml:"roles"`
+	// Eligible destinations, ordered by live plugin count then oldest project.
+	Projects []*RoleProvisioningProjectResponseBody `form:"projects" json:"projects" xml:"projects"`
+}
+
+// ConfigureRoleProvisioningResponseBody is the type of the "access" service
+// "configureRoleProvisioning" endpoint HTTP response body.
+type ConfigureRoleProvisioningResponseBody struct {
+	Enabled   bool                                      `form:"enabled" json:"enabled" xml:"enabled"`
+	Version   int64                                     `form:"version" json:"version" xml:"version"`
+	ProjectID *string                                   `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Roles     []*RoleProvisioningRoleStatusResponseBody `form:"roles" json:"roles" xml:"roles"`
+	// Eligible destinations, ordered by live plugin count then oldest project.
+	Projects []*RoleProvisioningProjectResponseBody `form:"projects" json:"projects" xml:"projects"`
 }
 
 // ListRolesResponseBody is the type of the "access" service "listRoles"
@@ -504,6 +540,382 @@ type ListIdentityAccessResponseBody struct {
 	Servers []*AccessibleMCPServerResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// Skills accessible to this identity.
 	Skills []*AccessibleSkillResponseBody `form:"skills" json:"skills" xml:"skills"`
+}
+
+// GetRoleProvisioningUnauthorizedResponseBody is the type of the "access"
+// service "getRoleProvisioning" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetRoleProvisioningUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRoleProvisioningForbiddenResponseBody is the type of the "access" service
+// "getRoleProvisioning" endpoint HTTP response body for the "forbidden" error.
+type GetRoleProvisioningForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRoleProvisioningBadRequestResponseBody is the type of the "access"
+// service "getRoleProvisioning" endpoint HTTP response body for the
+// "bad_request" error.
+type GetRoleProvisioningBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRoleProvisioningNotFoundResponseBody is the type of the "access" service
+// "getRoleProvisioning" endpoint HTTP response body for the "not_found" error.
+type GetRoleProvisioningNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRoleProvisioningConflictResponseBody is the type of the "access" service
+// "getRoleProvisioning" endpoint HTTP response body for the "conflict" error.
+type GetRoleProvisioningConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRoleProvisioningUnsupportedMediaResponseBody is the type of the "access"
+// service "getRoleProvisioning" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetRoleProvisioningUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRoleProvisioningInvalidResponseBody is the type of the "access" service
+// "getRoleProvisioning" endpoint HTTP response body for the "invalid" error.
+type GetRoleProvisioningInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRoleProvisioningInvariantViolationResponseBody is the type of the
+// "access" service "getRoleProvisioning" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetRoleProvisioningInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRoleProvisioningUnexpectedResponseBody is the type of the "access"
+// service "getRoleProvisioning" endpoint HTTP response body for the
+// "unexpected" error.
+type GetRoleProvisioningUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRoleProvisioningGatewayErrorResponseBody is the type of the "access"
+// service "getRoleProvisioning" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetRoleProvisioningGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureRoleProvisioningUnauthorizedResponseBody is the type of the
+// "access" service "configureRoleProvisioning" endpoint HTTP response body for
+// the "unauthorized" error.
+type ConfigureRoleProvisioningUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureRoleProvisioningForbiddenResponseBody is the type of the "access"
+// service "configureRoleProvisioning" endpoint HTTP response body for the
+// "forbidden" error.
+type ConfigureRoleProvisioningForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureRoleProvisioningBadRequestResponseBody is the type of the "access"
+// service "configureRoleProvisioning" endpoint HTTP response body for the
+// "bad_request" error.
+type ConfigureRoleProvisioningBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureRoleProvisioningNotFoundResponseBody is the type of the "access"
+// service "configureRoleProvisioning" endpoint HTTP response body for the
+// "not_found" error.
+type ConfigureRoleProvisioningNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureRoleProvisioningConflictResponseBody is the type of the "access"
+// service "configureRoleProvisioning" endpoint HTTP response body for the
+// "conflict" error.
+type ConfigureRoleProvisioningConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureRoleProvisioningUnsupportedMediaResponseBody is the type of the
+// "access" service "configureRoleProvisioning" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ConfigureRoleProvisioningUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureRoleProvisioningInvalidResponseBody is the type of the "access"
+// service "configureRoleProvisioning" endpoint HTTP response body for the
+// "invalid" error.
+type ConfigureRoleProvisioningInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureRoleProvisioningInvariantViolationResponseBody is the type of the
+// "access" service "configureRoleProvisioning" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ConfigureRoleProvisioningInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureRoleProvisioningUnexpectedResponseBody is the type of the "access"
+// service "configureRoleProvisioning" endpoint HTTP response body for the
+// "unexpected" error.
+type ConfigureRoleProvisioningUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConfigureRoleProvisioningGatewayErrorResponseBody is the type of the
+// "access" service "configureRoleProvisioning" endpoint HTTP response body for
+// the "gateway_error" error.
+type ConfigureRoleProvisioningGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // ListRolesUnauthorizedResponseBody is the type of the "access" service
@@ -6246,6 +6658,35 @@ type ListIdentityAccessGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RoleProvisioningRoleStatusResponseBody is used to define fields on response
+// body types.
+type RoleProvisioningRoleStatusResponseBody struct {
+	RoleUrn string `form:"role_urn" json:"role_urn" xml:"role_urn"`
+	Name    string `form:"name" json:"name" xml:"name"`
+	// Whether this role has saved intent, rather than an initial default selection.
+	Configured bool `form:"configured" json:"configured" xml:"configured"`
+	Enabled    bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Desired destination.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Current live associated plugin project.
+	AppliedProjectID *string `form:"applied_project_id,omitempty" json:"applied_project_id,omitempty" xml:"applied_project_id,omitempty"`
+	PluginID         *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
+	OriginAudience   string  `form:"origin_audience" json:"origin_audience" xml:"origin_audience"`
+	// Existing publication evidence, independent of provisioning. published_before
+	// does not assert freshness.
+	PublicationStatus string `form:"publication_status" json:"publication_status" xml:"publication_status"`
+	// Pending reconciliation or admission reason. audience_approval_required
+	// requires the existing plugin audience approval workflow.
+	PendingReason *string `form:"pending_reason,omitempty" json:"pending_reason,omitempty" xml:"pending_reason,omitempty"`
+}
+
+// RoleProvisioningProjectResponseBody is used to define fields on response
+// body types.
+type RoleProvisioningProjectResponseBody struct {
+	ID   string `form:"id" json:"id" xml:"id"`
+	Name string `form:"name" json:"name" xml:"name"`
+}
+
 // RoleResponseBody is used to define fields on response body types.
 type RoleResponseBody struct {
 	// Unique role identifier.
@@ -6776,6 +7217,15 @@ type AccessibleSkillResponseBody struct {
 	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
 }
 
+// RoleProvisioningSelectionRequestBody is used to define fields on request
+// body types.
+type RoleProvisioningSelectionRequestBody struct {
+	RoleUrn *string `form:"role_urn,omitempty" json:"role_urn,omitempty" xml:"role_urn,omitempty"`
+	Enabled *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Destination override; zero UUID explicitly leaves pending.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+}
+
 // RoleGrantRequestBody is used to define fields on request body types.
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
@@ -6817,6 +7267,77 @@ type SetResourceAudienceEntryRequestBody struct {
 	// Narrow the access to tools carrying these annotations. Omit for the whole
 	// resource.
 	Dispositions []string `form:"dispositions,omitempty" json:"dispositions,omitempty" xml:"dispositions,omitempty"`
+}
+
+// NewGetRoleProvisioningResponseBody builds the HTTP response body from the
+// result of the "getRoleProvisioning" endpoint of the "access" service.
+func NewGetRoleProvisioningResponseBody(res *access.RoleProvisioningStatus) *GetRoleProvisioningResponseBody {
+	body := &GetRoleProvisioningResponseBody{
+		Enabled:   res.Enabled,
+		Version:   res.Version,
+		ProjectID: res.ProjectID,
+	}
+	if res.Roles != nil {
+		body.Roles = make([]*RoleProvisioningRoleStatusResponseBody, len(res.Roles))
+		for i, val := range res.Roles {
+			if val == nil {
+				body.Roles[i] = nil
+				continue
+			}
+			body.Roles[i] = marshalAccessRoleProvisioningRoleStatusToRoleProvisioningRoleStatusResponseBody(val)
+		}
+	} else {
+		body.Roles = []*RoleProvisioningRoleStatusResponseBody{}
+	}
+	if res.Projects != nil {
+		body.Projects = make([]*RoleProvisioningProjectResponseBody, len(res.Projects))
+		for i, val := range res.Projects {
+			if val == nil {
+				body.Projects[i] = nil
+				continue
+			}
+			body.Projects[i] = marshalAccessRoleProvisioningProjectToRoleProvisioningProjectResponseBody(val)
+		}
+	} else {
+		body.Projects = []*RoleProvisioningProjectResponseBody{}
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningResponseBody builds the HTTP response body from
+// the result of the "configureRoleProvisioning" endpoint of the "access"
+// service.
+func NewConfigureRoleProvisioningResponseBody(res *access.RoleProvisioningStatus) *ConfigureRoleProvisioningResponseBody {
+	body := &ConfigureRoleProvisioningResponseBody{
+		Enabled:   res.Enabled,
+		Version:   res.Version,
+		ProjectID: res.ProjectID,
+	}
+	if res.Roles != nil {
+		body.Roles = make([]*RoleProvisioningRoleStatusResponseBody, len(res.Roles))
+		for i, val := range res.Roles {
+			if val == nil {
+				body.Roles[i] = nil
+				continue
+			}
+			body.Roles[i] = marshalAccessRoleProvisioningRoleStatusToRoleProvisioningRoleStatusResponseBody(val)
+		}
+	} else {
+		body.Roles = []*RoleProvisioningRoleStatusResponseBody{}
+	}
+	if res.Projects != nil {
+		body.Projects = make([]*RoleProvisioningProjectResponseBody, len(res.Projects))
+		for i, val := range res.Projects {
+			if val == nil {
+				body.Projects[i] = nil
+				continue
+			}
+			body.Projects[i] = marshalAccessRoleProvisioningProjectToRoleProvisioningProjectResponseBody(val)
+		}
+	} else {
+		body.Projects = []*RoleProvisioningProjectResponseBody{}
+	}
+	return body
 }
 
 // NewListRolesResponseBody builds the HTTP response body from the result of
@@ -7485,6 +8006,305 @@ func NewListIdentityAccessResponseBody(res *access.ListIdentityAccessResult) *Li
 		}
 	} else {
 		body.Skills = []*AccessibleSkillResponseBody{}
+	}
+	return body
+}
+
+// NewGetRoleProvisioningUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getRoleProvisioning" endpoint of the "access"
+// service.
+func NewGetRoleProvisioningUnauthorizedResponseBody(res *goa.ServiceError) *GetRoleProvisioningUnauthorizedResponseBody {
+	body := &GetRoleProvisioningUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRoleProvisioningForbiddenResponseBody builds the HTTP response body
+// from the result of the "getRoleProvisioning" endpoint of the "access"
+// service.
+func NewGetRoleProvisioningForbiddenResponseBody(res *goa.ServiceError) *GetRoleProvisioningForbiddenResponseBody {
+	body := &GetRoleProvisioningForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRoleProvisioningBadRequestResponseBody builds the HTTP response body
+// from the result of the "getRoleProvisioning" endpoint of the "access"
+// service.
+func NewGetRoleProvisioningBadRequestResponseBody(res *goa.ServiceError) *GetRoleProvisioningBadRequestResponseBody {
+	body := &GetRoleProvisioningBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRoleProvisioningNotFoundResponseBody builds the HTTP response body
+// from the result of the "getRoleProvisioning" endpoint of the "access"
+// service.
+func NewGetRoleProvisioningNotFoundResponseBody(res *goa.ServiceError) *GetRoleProvisioningNotFoundResponseBody {
+	body := &GetRoleProvisioningNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRoleProvisioningConflictResponseBody builds the HTTP response body
+// from the result of the "getRoleProvisioning" endpoint of the "access"
+// service.
+func NewGetRoleProvisioningConflictResponseBody(res *goa.ServiceError) *GetRoleProvisioningConflictResponseBody {
+	body := &GetRoleProvisioningConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRoleProvisioningUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getRoleProvisioning" endpoint of the "access"
+// service.
+func NewGetRoleProvisioningUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRoleProvisioningUnsupportedMediaResponseBody {
+	body := &GetRoleProvisioningUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRoleProvisioningInvalidResponseBody builds the HTTP response body from
+// the result of the "getRoleProvisioning" endpoint of the "access" service.
+func NewGetRoleProvisioningInvalidResponseBody(res *goa.ServiceError) *GetRoleProvisioningInvalidResponseBody {
+	body := &GetRoleProvisioningInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRoleProvisioningInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getRoleProvisioning" endpoint of the
+// "access" service.
+func NewGetRoleProvisioningInvariantViolationResponseBody(res *goa.ServiceError) *GetRoleProvisioningInvariantViolationResponseBody {
+	body := &GetRoleProvisioningInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRoleProvisioningUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getRoleProvisioning" endpoint of the "access"
+// service.
+func NewGetRoleProvisioningUnexpectedResponseBody(res *goa.ServiceError) *GetRoleProvisioningUnexpectedResponseBody {
+	body := &GetRoleProvisioningUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRoleProvisioningGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getRoleProvisioning" endpoint of the "access"
+// service.
+func NewGetRoleProvisioningGatewayErrorResponseBody(res *goa.ServiceError) *GetRoleProvisioningGatewayErrorResponseBody {
+	body := &GetRoleProvisioningGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "configureRoleProvisioning" endpoint of
+// the "access" service.
+func NewConfigureRoleProvisioningUnauthorizedResponseBody(res *goa.ServiceError) *ConfigureRoleProvisioningUnauthorizedResponseBody {
+	body := &ConfigureRoleProvisioningUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningForbiddenResponseBody builds the HTTP response
+// body from the result of the "configureRoleProvisioning" endpoint of the
+// "access" service.
+func NewConfigureRoleProvisioningForbiddenResponseBody(res *goa.ServiceError) *ConfigureRoleProvisioningForbiddenResponseBody {
+	body := &ConfigureRoleProvisioningForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningBadRequestResponseBody builds the HTTP response
+// body from the result of the "configureRoleProvisioning" endpoint of the
+// "access" service.
+func NewConfigureRoleProvisioningBadRequestResponseBody(res *goa.ServiceError) *ConfigureRoleProvisioningBadRequestResponseBody {
+	body := &ConfigureRoleProvisioningBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningNotFoundResponseBody builds the HTTP response
+// body from the result of the "configureRoleProvisioning" endpoint of the
+// "access" service.
+func NewConfigureRoleProvisioningNotFoundResponseBody(res *goa.ServiceError) *ConfigureRoleProvisioningNotFoundResponseBody {
+	body := &ConfigureRoleProvisioningNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningConflictResponseBody builds the HTTP response
+// body from the result of the "configureRoleProvisioning" endpoint of the
+// "access" service.
+func NewConfigureRoleProvisioningConflictResponseBody(res *goa.ServiceError) *ConfigureRoleProvisioningConflictResponseBody {
+	body := &ConfigureRoleProvisioningConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "configureRoleProvisioning" endpoint of
+// the "access" service.
+func NewConfigureRoleProvisioningUnsupportedMediaResponseBody(res *goa.ServiceError) *ConfigureRoleProvisioningUnsupportedMediaResponseBody {
+	body := &ConfigureRoleProvisioningUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningInvalidResponseBody builds the HTTP response
+// body from the result of the "configureRoleProvisioning" endpoint of the
+// "access" service.
+func NewConfigureRoleProvisioningInvalidResponseBody(res *goa.ServiceError) *ConfigureRoleProvisioningInvalidResponseBody {
+	body := &ConfigureRoleProvisioningInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "configureRoleProvisioning" endpoint of
+// the "access" service.
+func NewConfigureRoleProvisioningInvariantViolationResponseBody(res *goa.ServiceError) *ConfigureRoleProvisioningInvariantViolationResponseBody {
+	body := &ConfigureRoleProvisioningInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningUnexpectedResponseBody builds the HTTP response
+// body from the result of the "configureRoleProvisioning" endpoint of the
+// "access" service.
+func NewConfigureRoleProvisioningUnexpectedResponseBody(res *goa.ServiceError) *ConfigureRoleProvisioningUnexpectedResponseBody {
+	body := &ConfigureRoleProvisioningUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConfigureRoleProvisioningGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "configureRoleProvisioning" endpoint of
+// the "access" service.
+func NewConfigureRoleProvisioningGatewayErrorResponseBody(res *goa.ServiceError) *ConfigureRoleProvisioningGatewayErrorResponseBody {
+	body := &ConfigureRoleProvisioningGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -11997,6 +12817,38 @@ func NewListIdentityAccessGatewayErrorResponseBody(res *goa.ServiceError) *ListI
 	return body
 }
 
+// NewGetRoleProvisioningPayload builds a access service getRoleProvisioning
+// endpoint payload.
+func NewGetRoleProvisioningPayload(sessionToken *string) *access.GetRoleProvisioningPayload {
+	v := &access.GetRoleProvisioningPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewConfigureRoleProvisioningPayload builds a access service
+// configureRoleProvisioning endpoint payload.
+func NewConfigureRoleProvisioningPayload(body *ConfigureRoleProvisioningRequestBody, sessionToken *string) *access.ConfigureRoleProvisioningPayload {
+	v := &access.ConfigureRoleProvisioningPayload{
+		ExpectedVersion: *body.ExpectedVersion,
+		Enabled:         *body.Enabled,
+		ProjectID:       body.ProjectID,
+	}
+	if body.Roles != nil {
+		v.Roles = make([]*access.RoleProvisioningSelection, len(body.Roles))
+		for i, val := range body.Roles {
+			if val == nil {
+				v.Roles[i] = nil
+				continue
+			}
+			v.Roles[i] = unmarshalRoleProvisioningSelectionRequestBodyToAccessRoleProvisioningSelection(val)
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListRolesPayload builds a access service listRoles endpoint payload.
 func NewListRolesPayload(apikeyToken *string, sessionToken *string) *access.ListRolesPayload {
 	v := &access.ListRolesPayload{}
@@ -12448,6 +13300,33 @@ func NewListIdentityAccessPayload(userID string, sessionToken *string) *access.L
 	return v
 }
 
+// ValidateConfigureRoleProvisioningRequestBody runs the validations defined on
+// ConfigureRoleProvisioningRequestBody
+func ValidateConfigureRoleProvisioningRequestBody(body *ConfigureRoleProvisioningRequestBody) (err error) {
+	if body.ExpectedVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expected_version", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.ExpectedVersion != nil {
+		if *body.ExpectedVersion < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_version", *body.ExpectedVersion, 0, true))
+		}
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	for _, e := range body.Roles {
+		if e != nil {
+			if err2 := ValidateRoleProvisioningSelectionRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateCreateRoleRequestBody runs the validations defined on
 // CreateRoleRequestBody
 func ValidateCreateRoleRequestBody(body *CreateRoleRequestBody) (err error) {
@@ -12689,6 +13568,21 @@ func ValidateResolveChallengeRequestBody(body *ResolveChallengeRequestBody) (err
 		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
 		}
+	}
+	return
+}
+
+// ValidateRoleProvisioningSelectionRequestBody runs the validations defined on
+// RoleProvisioningSelectionRequestBody
+func ValidateRoleProvisioningSelectionRequestBody(body *RoleProvisioningSelectionRequestBody) (err error) {
+	if body.RoleUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_urn", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	return
 }

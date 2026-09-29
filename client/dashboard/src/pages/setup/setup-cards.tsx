@@ -58,7 +58,9 @@ export const SETUP_CARDS: Record<string, SetupCard> = {
   },
   "identity-provider": {
     slug: "idp",
-    Step: ({ onComplete }) => <IdentityProviderStep onComplete={onComplete} />,
+    Step: ({ onComplete, projectSlug }) => (
+      <IdentityProviderStep onComplete={onComplete} projectSlug={projectSlug} />
+    ),
   },
   "anthropic-observability": {
     projectScopes: ["project:read"],

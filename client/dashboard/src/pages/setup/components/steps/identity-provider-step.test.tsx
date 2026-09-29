@@ -14,6 +14,14 @@ import { IdentityProviderStep } from "./identity-provider-step";
 import { toast } from "sonner";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 
+vi.mock("@/pages/org/identity-provider/RolePluginSettingsPanel", () => ({
+  RolePluginSettingsPanel: ({
+    preferredProjectSlug,
+  }: {
+    preferredProjectSlug?: string;
+  }) => <div>Shared role plugin settings {preferredProjectSlug}</div>,
+}));
+
 const onboardingStatus = vi.hoisted(() => ({
   current: {
     data: {
@@ -80,6 +88,17 @@ beforeEach(() => {
 });
 
 describe("IdentityProviderStep", () => {
+  it("passes the onboarding project to the shared confirmation", () => {
+    render(
+      <IdentityProviderStep
+        onComplete={vi.fn<() => void>()}
+        projectSlug="preferred"
+      />,
+    );
+    expect(
+      screen.getByText("Shared role plugin settings preferred"),
+    ).toBeTruthy();
+  });
   it("keeps domain, SSO, and directory sync as nested wizard steps", () => {
     onboardingStatus.current.data.domainVerified = false;
     function Rail() {
@@ -107,7 +126,12 @@ describe("IdentityProviderStep", () => {
       within(rail)
         .getAllByRole("button")
         .map((b) => b.textContent),
-    ).toEqual(["Verify domain", "Single sign-on", "Directory sync"]);
+    ).toEqual([
+      "Verify domain",
+      "Single sign-on",
+      "Directory sync",
+      "Automatic role plugins",
+    ]);
     expect(screen.getByRole("heading", { name: "Verify domain" })).toBeTruthy();
     expect(
       screen.queryByRole("heading", { name: "Single sign-on" }),
@@ -309,6 +333,7 @@ describe("IdentityProviderStep domain verification", () => {
       expect.stringMatching(/^1?Verify domain/),
       expect.stringMatching(/^2?Single sign-on/),
       expect.stringMatching(/^3?Directory sync/),
+      expect.stringMatching(/^4?Automatic role plugins/),
     ]);
   });
 

@@ -465,6 +465,28 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Switching Match to _Wildcard_ clears it. Selecting `Acme CI` instead
     disables the Wildcard option and says why.
 
+## Automatic role plugins (local organization only)
+
+1. After seeding, use an organization-admin session and open Organization Identity
+   → Directory Sync. Automatic role plugins starts off. Initial checked roles
+   and proposed project mappings must not claim that plugins are provisioned or
+   published. Gateway/Both choices must not appear.
+2. Review the same configuration in the IdP onboarding step. Its project is the
+   preferred initial destination; saved destinations and exclusions take
+   precedence on later visits. Directory sync remains independent of automation.
+3. In the local organization only, exclude one role, choose destinations, and
+   confirm enablement. Reload both surfaces: the organization flag, exclusion,
+   and destinations agree. A missing destination asks for a project rather than
+   creating one. Saved intent and actual association/audience/publication status
+   remain separate; pending approval includes an approval next action.
+4. Open two sessions. Save in one, then save the stale version in the other. The
+   second session must ask for reload/review rather than overwrite the first.
+5. Disable automation and reload: selections and destinations remain saved.
+   Existing plugins, contents, and audiences are retained. Reseeding restores
+   default-off state; run the demo safety suite to verify other tenants survive.
+
+Do not run enablement against the shared Explore Demo organization.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns

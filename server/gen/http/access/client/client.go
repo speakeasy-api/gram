@@ -17,6 +17,14 @@ import (
 
 // Client lists the access service endpoint HTTP clients.
 type Client struct {
+	// GetRoleProvisioning Doer is the HTTP client used to make requests to the
+	// getRoleProvisioning endpoint.
+	GetRoleProvisioningDoer goahttp.Doer
+
+	// ConfigureRoleProvisioning Doer is the HTTP client used to make requests to
+	// the configureRoleProvisioning endpoint.
+	ConfigureRoleProvisioningDoer goahttp.Doer
+
 	// ListRoles Doer is the HTTP client used to make requests to the listRoles
 	// endpoint.
 	ListRolesDoer goahttp.Doer
@@ -161,6 +169,8 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		GetRoleProvisioningDoer:                  doer,
+		ConfigureRoleProvisioningDoer:            doer,
 		ListRolesDoer:                            doer,
 		GetRoleDoer:                              doer,
 		CreateRoleDoer:                           doer,
@@ -197,6 +207,54 @@ func NewClient(
 		host:                                     host,
 		decoder:                                  dec,
 		encoder:                                  enc,
+	}
+}
+
+// GetRoleProvisioning returns an endpoint that makes HTTP requests to the
+// access service getRoleProvisioning server.
+func (c *Client) GetRoleProvisioning() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRoleProvisioningRequest(c.encoder)
+		decodeResponse = DecodeGetRoleProvisioningResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRoleProvisioningRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRoleProvisioningDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "getRoleProvisioning", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ConfigureRoleProvisioning returns an endpoint that makes HTTP requests to
+// the access service configureRoleProvisioning server.
+func (c *Client) ConfigureRoleProvisioning() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeConfigureRoleProvisioningRequest(c.encoder)
+		decodeResponse = DecodeConfigureRoleProvisioningResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildConfigureRoleProvisioningRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ConfigureRoleProvisioningDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "configureRoleProvisioning", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

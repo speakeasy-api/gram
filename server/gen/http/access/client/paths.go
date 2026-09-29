@@ -7,6 +7,16 @@
 
 package client
 
+// GetRoleProvisioningAccessPath returns the URL path to the access service getRoleProvisioning HTTP endpoint.
+func GetRoleProvisioningAccessPath() string {
+	return "/rpc/access.getRoleProvisioning"
+}
+
+// ConfigureRoleProvisioningAccessPath returns the URL path to the access service configureRoleProvisioning HTTP endpoint.
+func ConfigureRoleProvisioningAccessPath() string {
+	return "/rpc/access.configureRoleProvisioning"
+}
+
 // ListRolesAccessPath returns the URL path to the access service listRoles HTTP endpoint.
 func ListRolesAccessPath() string {
 	return "/rpc/access.listRoles"

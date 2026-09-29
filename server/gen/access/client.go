@@ -15,6 +15,8 @@ import (
 
 // Client is the "access" service client.
 type Client struct {
+	GetRoleProvisioningEndpoint                  goa.Endpoint
+	ConfigureRoleProvisioningEndpoint            goa.Endpoint
 	ListRolesEndpoint                            goa.Endpoint
 	GetRoleEndpoint                              goa.Endpoint
 	CreateRoleEndpoint                           goa.Endpoint
@@ -49,8 +51,10 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, syncDirectoryGroups, setDirectoryRoleMapping, deleteDirectoryRoleMapping, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
+func NewClient(getRoleProvisioning, configureRoleProvisioning, listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, syncDirectoryGroups, setDirectoryRoleMapping, deleteDirectoryRoleMapping, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
 	return &Client{
+		GetRoleProvisioningEndpoint:                  getRoleProvisioning,
+		ConfigureRoleProvisioningEndpoint:            configureRoleProvisioning,
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
 		CreateRoleEndpoint:                           createRole,
@@ -83,6 +87,52 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirec
 		ResolveChallengeEndpoint:                     resolveChallenge,
 		ListIdentityAccessEndpoint:                   listIdentityAccess,
 	}
+}
+
+// GetRoleProvisioning calls the "getRoleProvisioning" endpoint of the "access"
+// service.
+// GetRoleProvisioning may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRoleProvisioning(ctx context.Context, p *GetRoleProvisioningPayload) (res *RoleProvisioningStatus, err error) {
+	var ires any
+	ires, err = c.GetRoleProvisioningEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RoleProvisioningStatus), nil
+}
+
+// ConfigureRoleProvisioning calls the "configureRoleProvisioning" endpoint of
+// the "access" service.
+// ConfigureRoleProvisioning may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ConfigureRoleProvisioning(ctx context.Context, p *ConfigureRoleProvisioningPayload) (res *RoleProvisioningStatus, err error) {
+	var ires any
+	ires, err = c.ConfigureRoleProvisioningEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RoleProvisioningStatus), nil
 }
 
 // ListRoles calls the "listRoles" endpoint of the "access" service.

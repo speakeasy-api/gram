@@ -19,6 +19,472 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildGetRoleProvisioningRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "getRoleProvisioning"
+// endpoint
+func (c *Client) BuildGetRoleProvisioningRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRoleProvisioningAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "getRoleProvisioning", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRoleProvisioningRequest returns an encoder for requests sent to the
+// access getRoleProvisioning server.
+func EncodeGetRoleProvisioningRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.GetRoleProvisioningPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "getRoleProvisioning", "*access.GetRoleProvisioningPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetRoleProvisioningResponse returns a decoder for responses returned
+// by the access getRoleProvisioning endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetRoleProvisioningResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRoleProvisioningResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRoleProvisioningResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+			}
+			err = ValidateGetRoleProvisioningResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+			}
+			res := NewGetRoleProvisioningRoleProvisioningStatusOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRoleProvisioningUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+			}
+			err = ValidateGetRoleProvisioningUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+			}
+			return nil, NewGetRoleProvisioningUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRoleProvisioningForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+			}
+			err = ValidateGetRoleProvisioningForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+			}
+			return nil, NewGetRoleProvisioningForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRoleProvisioningBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+			}
+			err = ValidateGetRoleProvisioningBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+			}
+			return nil, NewGetRoleProvisioningBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRoleProvisioningNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+			}
+			err = ValidateGetRoleProvisioningNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+			}
+			return nil, NewGetRoleProvisioningNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRoleProvisioningConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+			}
+			err = ValidateGetRoleProvisioningConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+			}
+			return nil, NewGetRoleProvisioningConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRoleProvisioningUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+			}
+			err = ValidateGetRoleProvisioningUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+			}
+			return nil, NewGetRoleProvisioningUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRoleProvisioningInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+			}
+			err = ValidateGetRoleProvisioningInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+			}
+			return nil, NewGetRoleProvisioningInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRoleProvisioningInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+				}
+				err = ValidateGetRoleProvisioningInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+				}
+				return nil, NewGetRoleProvisioningInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRoleProvisioningUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+				}
+				err = ValidateGetRoleProvisioningUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+				}
+				return nil, NewGetRoleProvisioningUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "getRoleProvisioning", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRoleProvisioningGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "getRoleProvisioning", err)
+			}
+			err = ValidateGetRoleProvisioningGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "getRoleProvisioning", err)
+			}
+			return nil, NewGetRoleProvisioningGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "getRoleProvisioning", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildConfigureRoleProvisioningRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "configureRoleProvisioning" endpoint
+func (c *Client) BuildConfigureRoleProvisioningRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ConfigureRoleProvisioningAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "configureRoleProvisioning", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeConfigureRoleProvisioningRequest returns an encoder for requests sent
+// to the access configureRoleProvisioning server.
+func EncodeConfigureRoleProvisioningRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ConfigureRoleProvisioningPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "configureRoleProvisioning", "*access.ConfigureRoleProvisioningPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewConfigureRoleProvisioningRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "configureRoleProvisioning", err)
+		}
+		return nil
+	}
+}
+
+// DecodeConfigureRoleProvisioningResponse returns a decoder for responses
+// returned by the access configureRoleProvisioning endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeConfigureRoleProvisioningResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeConfigureRoleProvisioningResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ConfigureRoleProvisioningResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+			}
+			err = ValidateConfigureRoleProvisioningResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+			}
+			res := NewConfigureRoleProvisioningRoleProvisioningStatusOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ConfigureRoleProvisioningUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+			}
+			err = ValidateConfigureRoleProvisioningUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+			}
+			return nil, NewConfigureRoleProvisioningUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ConfigureRoleProvisioningForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+			}
+			err = ValidateConfigureRoleProvisioningForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+			}
+			return nil, NewConfigureRoleProvisioningForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ConfigureRoleProvisioningBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+			}
+			err = ValidateConfigureRoleProvisioningBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+			}
+			return nil, NewConfigureRoleProvisioningBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ConfigureRoleProvisioningNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+			}
+			err = ValidateConfigureRoleProvisioningNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+			}
+			return nil, NewConfigureRoleProvisioningNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ConfigureRoleProvisioningConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+			}
+			err = ValidateConfigureRoleProvisioningConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+			}
+			return nil, NewConfigureRoleProvisioningConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ConfigureRoleProvisioningUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+			}
+			err = ValidateConfigureRoleProvisioningUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+			}
+			return nil, NewConfigureRoleProvisioningUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ConfigureRoleProvisioningInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+			}
+			err = ValidateConfigureRoleProvisioningInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+			}
+			return nil, NewConfigureRoleProvisioningInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ConfigureRoleProvisioningInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+				}
+				err = ValidateConfigureRoleProvisioningInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+				}
+				return nil, NewConfigureRoleProvisioningInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ConfigureRoleProvisioningUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+				}
+				err = ValidateConfigureRoleProvisioningUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+				}
+				return nil, NewConfigureRoleProvisioningUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "configureRoleProvisioning", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ConfigureRoleProvisioningGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "configureRoleProvisioning", err)
+			}
+			err = ValidateConfigureRoleProvisioningGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "configureRoleProvisioning", err)
+			}
+			return nil, NewConfigureRoleProvisioningGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "configureRoleProvisioning", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRolesRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "listRoles" endpoint
 func (c *Client) BuildListRolesRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -7364,6 +7830,70 @@ func DecodeListIdentityAccessResponse(decoder func(*http.Response) goahttp.Decod
 			return nil, goahttp.ErrInvalidResponse("access", "listIdentityAccess", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalRoleProvisioningRoleStatusResponseBodyToAccessRoleProvisioningRoleStatus
+// builds a value of type *access.RoleProvisioningRoleStatus from a value of
+// type *RoleProvisioningRoleStatusResponseBody.
+func unmarshalRoleProvisioningRoleStatusResponseBodyToAccessRoleProvisioningRoleStatus(v *RoleProvisioningRoleStatusResponseBody) *access.RoleProvisioningRoleStatus {
+	res := &access.RoleProvisioningRoleStatus{
+		RoleUrn:           *v.RoleUrn,
+		Name:              *v.Name,
+		Configured:        *v.Configured,
+		Enabled:           *v.Enabled,
+		ProjectID:         v.ProjectID,
+		AppliedProjectID:  v.AppliedProjectID,
+		PluginID:          v.PluginID,
+		OriginAudience:    *v.OriginAudience,
+		PublicationStatus: *v.PublicationStatus,
+		PendingReason:     v.PendingReason,
+	}
+
+	return res
+}
+
+// unmarshalRoleProvisioningProjectResponseBodyToAccessRoleProvisioningProject
+// builds a value of type *access.RoleProvisioningProject from a value of type
+// *RoleProvisioningProjectResponseBody.
+func unmarshalRoleProvisioningProjectResponseBodyToAccessRoleProvisioningProject(v *RoleProvisioningProjectResponseBody) *access.RoleProvisioningProject {
+	res := &access.RoleProvisioningProject{
+		ID:   *v.ID,
+		Name: *v.Name,
+	}
+
+	return res
+}
+
+// marshalAccessRoleProvisioningSelectionToRoleProvisioningSelectionRequestBody
+// builds a value of type *RoleProvisioningSelectionRequestBody from a value of
+// type *access.RoleProvisioningSelection.
+func marshalAccessRoleProvisioningSelectionToRoleProvisioningSelectionRequestBody(v *access.RoleProvisioningSelection) *RoleProvisioningSelectionRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &RoleProvisioningSelectionRequestBody{
+		RoleUrn:   v.RoleUrn,
+		Enabled:   v.Enabled,
+		ProjectID: v.ProjectID,
+	}
+
+	return res
+}
+
+// marshalRoleProvisioningSelectionRequestBodyToAccessRoleProvisioningSelection
+// builds a value of type *access.RoleProvisioningSelection from a value of
+// type *RoleProvisioningSelectionRequestBody.
+func marshalRoleProvisioningSelectionRequestBodyToAccessRoleProvisioningSelection(v *RoleProvisioningSelectionRequestBody) *access.RoleProvisioningSelection {
+	if v == nil {
+		return nil
+	}
+	res := &access.RoleProvisioningSelection{
+		RoleUrn:   v.RoleUrn,
+		Enabled:   v.Enabled,
+		ProjectID: v.ProjectID,
+	}
+
+	return res
 }
 
 // unmarshalRoleResponseBodyToAccessRole builds a value of type *access.Role

@@ -17,10 +17,8 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
 	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/repo"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -36,15 +34,15 @@ type Actor struct {
 	PublicationUserID string
 }
 
-type Service struct {
-	db          *pgxpool.Pool
-	audit       *audit.Logger
-	guard       *admission.Guard
-	publication plugins.PublicationRequests
+// SettingsService reads provisioning status and saves intent without performing
+// reconciliation. It has no admission or publication dependencies.
+type SettingsService struct {
+	db    *pgxpool.Pool
+	audit *audit.Logger
 }
 
-func New(db *pgxpool.Pool, logger *audit.Logger, guard *admission.Guard, publication plugins.PublicationRequests) *Service {
-	return &Service{db: db, audit: logger, guard: guard, publication: publication}
+func NewSettings(db *pgxpool.Pool, logger *audit.Logger) *SettingsService {
+	return &SettingsService{db: db, audit: logger}
 }
 
 type Selection struct {
@@ -81,7 +79,7 @@ type Settings struct {
 	Version   int64
 }
 
-func (s *Service) Settings(ctx context.Context, organizationID string) (Settings, error) {
+func (s *SettingsService) Settings(ctx context.Context, organizationID string) (Settings, error) {
 	// The version and role selections are one logical configuration snapshot.
 	// Repeatable read prevents a concurrent Configure commit between these reads
 	// from pairing an old conflict token with new selections.
@@ -122,7 +120,7 @@ func configurationSnapshot(enabled bool, projectID uuid.NullUUID, version int64,
 
 // Configure commits audited intent and its durable hint, never downstream provisioning.
 // The expected version covers every explicit organization and per-role change.
-func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, error) {
+func (s *SettingsService) Configure(ctx context.Context, in ConfigureInput) (int64, error) {
 	if in.OrganizationID == "" || in.ExpectedVersion < 0 || in.Actor.Principal.IsZero() || s.audit == nil {
 		return 0, ErrInvalid
 	}

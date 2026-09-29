@@ -34,10 +34,12 @@ trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
+  src/funcs/accessConfigureRoleProvisioning.ts: {}
   src/funcs/accessCreateRole.ts: {}
   src/funcs/accessDeleteDirectoryRoleMapping.ts: {}
   src/funcs/accessDeleteRole.ts: {}
   src/funcs/accessGetRole.ts: {}
+  src/funcs/accessGetRoleProvisioning.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListAIDetectionUsers.ts: {}
   src/funcs/accessListAIDetections.ts: {}
@@ -901,6 +903,7 @@ trackedFiles:
   src/models/components/codexhookresult.ts: {}
   src/models/components/commitserveridentityconfigurationform.ts: {}
   src/models/components/commitserveridentityconfigurationresult.ts: {}
+  src/models/components/configureroleprovisioningrequestbody.ts: {}
   src/models/components/confirmoktaresourceconnectionsrequestbody.ts: {}
   src/models/components/confirmoktaresourceconnectionsresult.ts: {}
   src/models/components/createagentform.ts: {}
@@ -1564,6 +1567,10 @@ trackedFiles:
   src/models/components/riskuserbreakdownresult.ts: {}
   src/models/components/role.ts: {}
   src/models/components/rolegrant.ts: {}
+  src/models/components/roleprovisioningproject.ts: {}
+  src/models/components/roleprovisioningrolestatus.ts: {}
+  src/models/components/roleprovisioningselection.ts: {}
+  src/models/components/roleprovisioningstatus.ts: {}
   src/models/components/rolesummary.ts: {}
   src/models/components/rootmcpserveroption.ts: {}
   src/models/components/rotatecredentialsrequestbody.ts: {}
@@ -1929,6 +1936,7 @@ trackedFiles:
   src/models/operations/clonetoolset.ts: {}
   src/models/operations/commitserveridentityconfiguration.ts: {}
   src/models/operations/compileexpr.ts: {}
+  src/models/operations/configureroleprovisioning.ts: {}
   src/models/operations/confirmoktaresourceconnections.ts: {}
   src/models/operations/createagent.ts: {}
   src/models/operations/createagentpolicygrant.ts: {}
@@ -2176,6 +2184,7 @@ trackedFiles:
   src/models/operations/getrisksignals.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
   src/models/operations/getrole.ts: {}
+  src/models/operations/getroleprovisioning.ts: {}
   src/models/operations/getshadowmcpinventoryserver.ts: {}
   src/models/operations/getsharedskill.ts: {}
   src/models/operations/getskill.ts: {}
@@ -2732,6 +2741,7 @@ trackedFiles:
   src/react-query/cloneEnvironment.ts: {}
   src/react-query/cloneToolset.ts: {}
   src/react-query/commitServerIdentityConfiguration.ts: {}
+  src/react-query/configureRoleProvisioning.ts: {}
   src/react-query/confirmOktaResourceConnections.ts: {}
   src/react-query/createAPIKey.ts: {}
   src/react-query/createAgent.ts: {}
@@ -3434,6 +3444,8 @@ trackedFiles:
   src/react-query/riskUserBreakdown.ts: {}
   src/react-query/role.core.ts: {}
   src/react-query/role.ts: {}
+  src/react-query/roleProvisioning.core.ts: {}
+  src/react-query/roleProvisioning.ts: {}
   src/react-query/roles.core.ts: {}
   src/react-query/roles.ts: {}
   src/react-query/rootMcpServers.core.ts: {}
@@ -4286,6 +4298,17 @@ examples:
       responses:
         "200":
           application/json: {"error": "<value>", "ok": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  configureRoleProvisioning:
+    speakeasy-default-configure-role-provisioning:
+      requestBody:
+        application/json: {"enabled": true, "expected_version": 351291}
+      responses:
+        "200":
+          application/json: {"enabled": false, "projects": [], "roles": [], "version": 901456}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7287,6 +7310,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getRoleProvisioning:
+    speakeasy-default-get-role-provisioning:
+      responses:
+        "200":
+          application/json: {"enabled": false, "projects": [{"id": "f40437ed-5b38-4fe9-b6b9-5a09219751ab", "name": "<value>"}], "roles": [], "version": 104155}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getShadowMCPInventoryServer:
     speakeasy-default-get-shadow-MCP-inventory-server:
       parameters:

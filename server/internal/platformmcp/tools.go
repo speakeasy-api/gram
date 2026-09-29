@@ -43,9 +43,11 @@ type Reader interface {
 }
 
 type PlatformContext struct {
-	OrganizationID string `json:"organization_id"`
-	ConnectionID   string `json:"connection_id"`
-	ReadOnly       bool   `json:"read_only"`
+	RoleProvisioning            *RoleProvisioningContext `json:"role_provisioning,omitempty"`
+	RoleProvisioningUnavailable string                   `json:"role_provisioning_unavailable,omitempty"`
+	OrganizationID              string                   `json:"organization_id"`
+	ConnectionID                string                   `json:"connection_id"`
+	ReadOnly                    bool                     `json:"read_only"`
 	// Overview orients a caller that has only ever seen this server's tool
 	// names. The manifest can say what one tool does; only something read at
 	// the start of a conversation can say how the pieces relate, which is what
@@ -212,6 +214,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
 			"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
 			"To change an existing MCP server or gateway address or network access, first read its exact connection settings in the selected project. Show the current and proposed address or mode, and wait for explicit confirmation before changing it. Re-read that same target afterwards. A publication request means the plugin update was requested, not that its packages or downstream users have converged; verify the publication evidence before reporting completion.",
+			"Role-plugin provisioning is an organization-admin workflow on the external endpoint only. Read get_platform_context for live settings and status, confirm the exact organization and destinations before configure_role_provisioning, and never equate a successful settings save with audience assignment or publication. Expected versions are single-use: on an uncertain response re-read context rather than replaying with a new version.",
 			"Before moving any MCP server or gateway to dual or private_only, call get_network_ingress. If ready_for_private_access is false, report its next_action and present its exact setup_url instead of attempting the change; Tailscale credentials are entered only in the dashboard, never in chat. Private access restricts who can reach the AI Control Plane endpoint over the organization's tailnet; it does not change where the upstream MCP server is hosted.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
 			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
@@ -415,7 +418,9 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 }
 
 func registerReadTools(reg *Registrar, reader Reader, cursorKeyMaterial string) {
-	registerGetPlatformContextTool(reg)
+	backend := provisioningBackend(reader)
+	registerGetPlatformContextTool(reg, backend)
+	registerRoleProvisioningTool(reg, backend)
 	registerListProjectsTool(reg, reader)
 	registerFindMCPTool(reg, reader, cursorKeyMaterial)
 	registerGetMCPTool(reg, reader)

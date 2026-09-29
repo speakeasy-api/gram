@@ -1,3 +1,4 @@
+import { RolePluginSettingsPanel } from "@/pages/org/identity-provider/RolePluginSettingsPanel";
 import { useMemo, useState } from "react";
 import { Check, ChevronDown, ExternalLink, Loader2 } from "lucide-react";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
@@ -19,6 +20,7 @@ const INITIAL_VISIBLE = 6;
 
 interface IdentityProviderStepProps {
   onComplete: () => void;
+  projectSlug?: string;
 }
 
 // One card for the whole identity outcome: domain verification, single
@@ -29,6 +31,7 @@ interface IdentityProviderStepProps {
 // is always available.
 export function IdentityProviderStep({
   onComplete,
+  projectSlug,
 }: IdentityProviderStepProps): JSX.Element {
   const { data: onboardingStatus, isLoading } = useOnboardingStatus(
     undefined,
@@ -67,6 +70,14 @@ export function IdentityProviderStep({
           configured={!!onboardingStatus?.dsyncConfigured}
           isLoading={isLoading}
         />
+        <StepSection
+          index={4}
+          slug="role-plugins"
+          title="Automatic role plugins"
+          badge="Optional"
+        >
+          <RolePluginSettingsPanel preferredProjectSlug={projectSlug} />
+        </StepSection>
       </div>
     </StepContainer>
   );

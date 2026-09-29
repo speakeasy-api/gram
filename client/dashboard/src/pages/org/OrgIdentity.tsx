@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { ExternalLink, FolderSync, Globe, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
+import { RolePluginSettingsPanel } from "./identity-provider/RolePluginSettingsPanel";
 import { DirectoryRoleMappings } from "./identity-provider/DirectoryRoleMappings";
 import { EnterpriseManagedAuth } from "./identity-provider/EnterpriseManagedAuth";
 import {
@@ -512,6 +513,9 @@ function SingleSignOnTab(): JSX.Element {
           )
         }
       />
+      <RequireScope scope="org:admin" level="section">
+        <RolePluginSettingsPanel />
+      </RequireScope>
     </div>
   );
 }

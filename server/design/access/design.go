@@ -11,6 +11,7 @@ var _ = Service("access", func() {
 	Description("Manage roles, team member access control, and authorization challenge events.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
+	roleProvisioningMethods()
 
 	Method("listRoles", func() {
 		Description("List all roles for the current organization.")

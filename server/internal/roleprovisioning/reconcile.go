@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -20,6 +21,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
+
+// Service adds reconciliation to the shared settings implementation.
+type Service struct {
+	*SettingsService
+	guard       *admission.Guard
+	publication plugins.PublicationRequests
+}
+
+func New(db *pgxpool.Pool, logger *audit.Logger, guard *admission.Guard, publication plugins.PublicationRequests) *Service {
+	return &Service{SettingsService: NewSettings(db, logger), guard: guard, publication: publication}
+}
 
 // Result distinguishes committed database state from pending intent and a
 // publication request. Enqueued publication is never evidence of delivery.

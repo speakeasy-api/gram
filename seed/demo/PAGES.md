@@ -228,6 +228,17 @@ dashboard, provider acceptance, or usable human access is demonstrated.
 
 [Browser evidence and supplementary checks](https://github.com/speakeasy-api/gram/pull/6438#issuecomment-5798502630).
 
+### [~] Organization Identity: Automatic role plugins
+
+The shared demo and retargeted local fixtures retain an explicit default-off
+organization provisioning setting (version 0, no destination or per-role intent).
+An organization admin can inspect Automatic role plugins under Directory Sync;
+initial checked roles and suggested destinations are proposals, not provisioned
+plugins. The same settings appear during IdP onboarding. Existing provisioning
+fixture tests cover reseeding and tenant isolation. See `verify.md` for the
+local-only enable/exclude/disable flow; never enable automation in the shared demo
+as part of verification.
+
 ### [~] Organization Identity: Slack workspaces
 
 With `org:admin`, the Slack workspaces tab shows Acme Engineering and Acme Operations as requiring authorization. These are synthetic history rows with no credentials. Each workspace links to a filtered member table; clearing the workspace filter shows both. Ten synthetic historical profiles cover active, invited, deactivated, guest, bot, missing-email, and absent-from-snapshot states; deactivated members, guests and bots appear only with their toggles on. Engineering shows five members observed in its last full snapshot and Operations shows four; one retained member is unknown. Both snapshots are marked stale and sync is disabled until real authorization. Six synthetic mapping records associate existing demo personnel, including one person in both workspaces. Four need review (including a recovered active member with a sticky finding); one unmapped email suggests an existing person. Personnel is an inline picker that saves mapping, reassignment and removal as soon as a person is picked; it is read-only in the shared demo. These fixtures illustrate admin decisions, not a live Slack authorization, sync or invocation protection.

@@ -108,3 +108,27 @@ WHERE o.id = @organization_id;
 -- name: ListRoleSettings :many
 SELECT role_urn, enabled, project_id FROM role_provisioning_settings
 WHERE organization_id = @organization_id ORDER BY role_urn;
+
+-- name: ListStatusProjects :many
+SELECT p.id, p.name FROM projects p
+LEFT JOIN plugins pl ON pl.project_id = p.id AND pl.organization_id = p.organization_id AND pl.deleted IS FALSE
+WHERE p.organization_id = @organization_id AND p.deleted IS FALSE
+GROUP BY p.id ORDER BY count(pl.id) DESC, p.created_at ASC, p.id ASC;
+
+-- name: ListRoleStatus :many
+SELECT s.role_urn, s.enabled, s.project_id,
+ CASE WHEN s.last_attempt_at >= cfg.updated_at THEN COALESCE(s.last_error_code, '') ELSE '' END::text AS last_error_code,
+ p.project_id AS applied_project_id, p.id AS plugin_id,
+ EXISTS (SELECT 1 FROM plugin_assignments pa WHERE pa.organization_id = s.organization_id
+   AND pa.plugin_id = p.id AND pa.principal_urn = s.role_urn)::boolean AS origin_assigned,
+ CASE WHEN p.id IS NULL THEN 'not_provisioned'
+      WHEN c.id IS NULL THEN 'not_connected'
+      WHEN c.published_mcp_fingerprints ? p.slug THEN 'published_before'
+      ELSE 'not_published' END::text AS publication_status
+FROM role_provisioning_settings s
+LEFT JOIN organization_role_provisioning_settings cfg ON cfg.organization_id = s.organization_id
+LEFT JOIN role_plugin_associations a ON a.role_provisioning_setting_id = s.id AND a.is_current AND a.retired_at IS NULL
+LEFT JOIN projects pr ON pr.id = a.project_id AND pr.organization_id = s.organization_id AND pr.deleted IS FALSE
+LEFT JOIN plugins p ON p.id = a.plugin_id AND p.project_id = pr.id AND p.organization_id = s.organization_id AND p.deleted IS FALSE
+LEFT JOIN plugin_github_connections c ON c.project_id = p.project_id
+WHERE s.organization_id = @organization_id;

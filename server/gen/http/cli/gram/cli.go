@@ -116,7 +116,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|delete-directory-role-mapping|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
+		"access (get-role-provisioning|configure-role-provisioning|list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|delete-directory-role-mapping|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -212,7 +212,7 @@ func UsageExamples() string {
 	return os.Args[0] + " " + "external receive-work-os-webhook --workos-signature \"abc123\" --stream \"goa.png\"" + "\n" +
 		os.Args[0] + " " + "killswitches list-capabilities --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "about openapi" + "\n" +
-		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "access get-role-provisioning --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\"" + "\n" +
 		""
 }
@@ -278,6 +278,13 @@ func ParseEndpoint(
 		aboutOpenapiFlags = flag.NewFlagSet("openapi", flag.ExitOnError)
 
 		accessFlags = flag.NewFlagSet("access", flag.ContinueOnError)
+
+		accessGetRoleProvisioningFlags            = flag.NewFlagSet("get-role-provisioning", flag.ExitOnError)
+		accessGetRoleProvisioningSessionTokenFlag = accessGetRoleProvisioningFlags.String("session-token", "", "")
+
+		accessConfigureRoleProvisioningFlags            = flag.NewFlagSet("configure-role-provisioning", flag.ExitOnError)
+		accessConfigureRoleProvisioningBodyFlag         = accessConfigureRoleProvisioningFlags.String("body", "REQUIRED", "")
+		accessConfigureRoleProvisioningSessionTokenFlag = accessConfigureRoleProvisioningFlags.String("session-token", "", "")
 
 		accessListRolesFlags            = flag.NewFlagSet("list-roles", flag.ExitOnError)
 		accessListRolesApikeyTokenFlag  = accessListRolesFlags.String("apikey-token", "", "")
@@ -4620,6 +4627,8 @@ func ParseEndpoint(
 	aboutOpenapiFlags.Usage = aboutOpenapiUsage
 
 	accessFlags.Usage = accessUsage
+	accessGetRoleProvisioningFlags.Usage = accessGetRoleProvisioningUsage
+	accessConfigureRoleProvisioningFlags.Usage = accessConfigureRoleProvisioningUsage
 	accessListRolesFlags.Usage = accessListRolesUsage
 	accessGetRoleFlags.Usage = accessGetRoleUsage
 	accessCreateRoleFlags.Usage = accessCreateRoleUsage
@@ -5841,6 +5850,12 @@ func ParseEndpoint(
 
 		case "access":
 			switch epn {
+			case "get-role-provisioning":
+				epf = accessGetRoleProvisioningFlags
+
+			case "configure-role-provisioning":
+				epf = accessConfigureRoleProvisioningFlags
+
 			case "list-roles":
 				epf = accessListRolesFlags
 
@@ -8622,6 +8637,12 @@ func ParseEndpoint(
 		case "access":
 			c := accessc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "get-role-provisioning":
+				endpoint = c.GetRoleProvisioning()
+				data, err = accessc.BuildGetRoleProvisioningPayload(*accessGetRoleProvisioningSessionTokenFlag)
+			case "configure-role-provisioning":
+				endpoint = c.ConfigureRoleProvisioning()
+				data, err = accessc.BuildConfigureRoleProvisioningPayload(*accessConfigureRoleProvisioningBodyFlag, *accessConfigureRoleProvisioningSessionTokenFlag)
 			case "list-roles":
 				endpoint = c.ListRoles()
 				data, err = accessc.BuildListRolesPayload(*accessListRolesApikeyTokenFlag, *accessListRolesSessionTokenFlag)
@@ -11634,6 +11655,8 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `Manage roles, team member access control, and authorization challenge events.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] access COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-role-provisioning: Read organization-admin role plugin provisioning settings and observed outcomes. Does not provision or publish.`)
+	fmt.Fprintln(os.Stderr, `    configure-role-provisioning: Save organization-admin role plugin provisioning intent with optimistic versioning. Shared by IdP onboarding and settings. Disabling preserves plugins and audiences. Reconciliation is asynchronous.`)
 	fmt.Fprintln(os.Stderr, `    list-roles: List all roles for the current organization.`)
 	fmt.Fprintln(os.Stderr, `    get-role: Get a role by ID.`)
 	fmt.Fprintln(os.Stderr, `    create-role: Create a new custom role.`)
@@ -11669,6 +11692,44 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
 }
+func accessGetRoleProvisioningUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access get-role-provisioning", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read organization-admin role plugin provisioning settings and observed outcomes. Does not provision or publish.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-role-provisioning --session-token \"abc123\"")
+}
+
+func accessConfigureRoleProvisioningUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access configure-role-provisioning", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Save organization-admin role plugin provisioning intent with optimistic versioning. Shared by IdP onboarding and settings. Disabling preserves plugins and audiences. Reconciliation is asynchronous.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access configure-role-provisioning --body '{\n      \"enabled\": false,\n      \"expected_version\": 1,\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"roles\": [\n         {\n            \"enabled\": false,\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"role_urn\": \"abc123\"\n         }\n      ]\n   }' --session-token \"abc123\"")
+}
+
 func accessListRolesUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access list-roles", os.Args[0])
