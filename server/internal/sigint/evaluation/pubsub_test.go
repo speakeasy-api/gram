@@ -2,15 +2,18 @@ package evaluation
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"cloud.google.com/go/pubsub/v2"
 	"cloud.google.com/go/pubsub/v2/apiv1/pubsubpb"
+	"cloud.google.com/go/pubsub/v2/pstest"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/api/option"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/infra/gen"
@@ -23,11 +26,19 @@ import (
 
 func TestPubSubEvaluationPublishesCompleteSuccess(t *testing.T) {
 	t.Parallel()
-	require.NotEmpty(t, os.Getenv("PUBSUB_EMULATOR_HOST"), "requires Pub/Sub emulator")
+	// Own the transport so the test works without a separately running emulator
+	// and cannot accidentally use the developer's or CI's Pub/Sub endpoint.
+	server := pstest.NewServer()
+	t.Cleanup(func() { require.NoError(t, server.Close()) })
+	conn, err := grpc.NewClient(server.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	project := "sigint-test-" + uuid.NewString()
-	client, err := pubsub.NewClient(ctx, project)
+	client, err := pubsub.NewClient(ctx, project, option.WithGRPCConn(conn))
+	if err != nil {
+		require.NoError(t, conn.Close())
+	}
 	require.NoError(t, err)
 	defer func() { require.NoError(t, client.Close()) }()
 	broker := gcp.NewEmulatedPubSub(testenv.NewLogger(t), project, client, gen.Descriptors)
