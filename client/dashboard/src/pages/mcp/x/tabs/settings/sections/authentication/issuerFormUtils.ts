@@ -1,9 +1,5 @@
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 
-// The preference rule lives with the remote identity model, which registers
-// clients too; the issuer form consumes it from there.
-export { pickPreferredAuthMethod } from "@/lib/remote-identity/model/clientConfiguration";
-
 // Snapshot of the issuer + RFC 8414 metadata for a given Issuer URL. Created
 // fresh on every successful discovery and seeded from saved records in the
 // Modify sheet. Drives the Discover/Reset slot and the URL-change reset.

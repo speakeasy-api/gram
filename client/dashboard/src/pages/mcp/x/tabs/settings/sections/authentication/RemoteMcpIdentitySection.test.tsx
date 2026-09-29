@@ -1012,7 +1012,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog.textContent).toContain("unlinks the identity provider");
     expect(dialog.textContent).toContain(
-      "removes the leftover static Authorization credential",
+      "removes the static Authorization credential",
     );
   });
 

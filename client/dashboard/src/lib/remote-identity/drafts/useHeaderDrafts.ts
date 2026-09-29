@@ -8,6 +8,7 @@ import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { toError } from "@/lib/errors";
 import type { IdentityMode } from "../model/identity";
 import {
   findPassThroughAuthorizationHeader,
@@ -217,9 +218,7 @@ export function useHeaderDrafts({
         });
       }
     } catch (error) {
-      setWriteError(
-        error instanceof Error ? error : new Error("Failed to save headers"),
-      );
+      setWriteError(toError(error));
       throw error;
     } finally {
       // react-query keeps a settled mutation's request variables, and for

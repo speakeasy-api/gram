@@ -76,13 +76,6 @@ function isUntouchedSecret(draft: HeaderDraft): boolean {
   return draft.hadSecret && draft.staticValue === REDACTED_SECRET;
 }
 
-// The server keeps a stored value only for a row that stays secret, and it
-// never reveals one as plain text. So an untouched secret can be kept only
-// while Secret is still ticked; un-ticking it needs a freshly typed value.
-function isKeptSecret(draft: HeaderDraft): boolean {
-  return isUntouchedSecret(draft) && draft.isSecret;
-}
-
 export function draftsEqual(a: HeaderDraft[], b: HeaderDraft[]): boolean {
   if (a.length !== b.length) return false;
   for (let index = 0; index < a.length; index += 1) {
@@ -272,15 +265,15 @@ export function headerDraftToWriteFields(
     };
   }
 
-  if (isKeptSecret(draft)) {
-    // Omitting `value` is what tells the server to keep the stored secret.
-    return { ...base, isSecret: true };
-  }
-
   if (isUntouchedSecret(draft)) {
-    // headerDraftErrors holds Save closed on this row; refuse here too so the
-    // redaction placeholder can never become the stored credential.
-    throw new Error(`Header "${base.name}" needs a new value.`);
+    // The server keeps a stored value only for a row that stays secret, and
+    // never reveals one as plain text. Omitting `value` keeps it; un-ticking
+    // Secret needs a fresh value, which headerDraftErrors already demands —
+    // refuse here too so the placeholder can never become the credential.
+    if (!draft.isSecret) {
+      throw new Error(`Header "${base.name}" needs a new value.`);
+    }
+    return { ...base, isSecret: true };
   }
 
   return {

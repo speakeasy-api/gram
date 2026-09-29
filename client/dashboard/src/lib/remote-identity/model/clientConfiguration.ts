@@ -33,7 +33,7 @@ const PREFERRED_AUTH_METHODS = [
   "none",
 ] as const;
 
-export type PreferredAuthMethod = (typeof PREFERRED_AUTH_METHODS)[number];
+type PreferredAuthMethod = (typeof PREFERRED_AUTH_METHODS)[number];
 
 /** The most preferred method the issuer advertises, or undefined for none. */
 function firstPreferredAuthMethod(

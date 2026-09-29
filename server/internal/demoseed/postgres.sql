@@ -3233,22 +3233,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- The stamp has to be what ResyncMCPServerRemoteSessionIssuers would derive:
   -- every live client bound to Linear's user session issuer names one remote
   -- issuer, and it is the stamped one.
-  SELECT count(DISTINCT c.remote_session_issuer_id) INTO stray
+  SELECT count(*) INTO stray
   FROM remote_session_client_user_session_issuers link
   JOIN remote_session_clients c ON c.id = link.remote_session_client_id
   WHERE link.user_session_issuer_id = demo.det_uuid('gram-demo-issuer-linear')
     AND c.deleted IS FALSE
-    AND c.remote_session_issuer_id
-        = demo.det_uuid('gram-demo-remote-identity-provider-linear');
-  IF stray <> 1 OR EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers link
-    JOIN remote_session_clients c ON c.id = link.remote_session_client_id
-    WHERE link.user_session_issuer_id = demo.det_uuid('gram-demo-issuer-linear')
-      AND c.deleted IS FALSE
-      AND c.remote_session_issuer_id
-          <> demo.det_uuid('gram-demo-remote-identity-provider-linear')
-  ) THEN
+  HAVING bool_and(c.remote_session_issuer_id
+                  = demo.det_uuid('gram-demo-remote-identity-provider-linear'));
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'demo seed postflight: Linear user session issuer must bind clients of exactly one remote issuer, its stamped provider';
   END IF;
 

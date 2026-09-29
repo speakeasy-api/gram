@@ -618,7 +618,7 @@ function removalConsequences(
   leavingAgent: boolean,
 ): string {
   if (leavingUser && leavingAgent) {
-    return `${UNLINK_PROVIDER_CONSEQUENCE} It also removes the leftover static Authorization credential from the Remote MCP source.`;
+    return `${UNLINK_PROVIDER_CONSEQUENCE} ${REMOVE_CREDENTIAL_CONSEQUENCE}`;
   }
   if (leavingUser) return UNLINK_PROVIDER_CONSEQUENCE;
   return REMOVE_CREDENTIAL_CONSEQUENCE;
