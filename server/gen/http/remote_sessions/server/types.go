@@ -47,6 +47,10 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	ExistingClientID *string `form:"existing_client_id,omitempty" json:"existing_client_id,omitempty" xml:"existing_client_id,omitempty"`
 	// Client settings for auto or manual mode. Forbidden for existing mode.
 	ClientConfiguration *ServerIdentityClientConfigurationRequestBody `form:"client_configuration,omitempty" json:"client_configuration,omitempty" xml:"client_configuration,omitempty"`
+	// Auto mode only. cimd (the default) prefers a Client ID Metadata Document
+	// when the provider supports one and falls back to dynamic client
+	// registration; dcr always uses dynamic client registration.
+	RegistrationMethod *string `form:"registration_method,omitempty" json:"registration_method,omitempty" xml:"registration_method,omitempty"`
 }
 
 // ListBindingsResponseBody is the type of the "remoteSessions" service
@@ -2931,10 +2935,11 @@ func NewDetachBindingPayload(body *DetachBindingRequestBody, sessionToken *strin
 // commitServerIdentityConfiguration endpoint payload.
 func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfigurationRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.CommitServerIdentityConfigurationPayload {
 	v := &remotesessions.CommitServerIdentityConfigurationPayload{
-		McpServerID:      *body.McpServerID,
-		ProviderID:       body.ProviderID,
-		ClientMode:       *body.ClientMode,
-		ExistingClientID: body.ExistingClientID,
+		McpServerID:        *body.McpServerID,
+		ProviderID:         body.ProviderID,
+		ClientMode:         *body.ClientMode,
+		ExistingClientID:   body.ExistingClientID,
+		RegistrationMethod: body.RegistrationMethod,
 	}
 	if body.CreateProvider != nil {
 		v.CreateProvider = unmarshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm(body.CreateProvider)
@@ -3069,6 +3074,11 @@ func ValidateCommitServerIdentityConfigurationRequestBody(body *CommitServerIden
 	if body.ClientConfiguration != nil {
 		if err2 := ValidateServerIdentityClientConfigurationRequestBody(body.ClientConfiguration); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.RegistrationMethod != nil {
+		if !(*body.RegistrationMethod == "cimd" || *body.RegistrationMethod == "dcr") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registration_method", *body.RegistrationMethod, []any{"cimd", "dcr"}))
 		}
 	}
 	return

@@ -48,6 +48,10 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	ExistingClientID *string `form:"existing_client_id,omitempty" json:"existing_client_id,omitempty" xml:"existing_client_id,omitempty"`
 	// Client settings for auto or manual mode. Forbidden for existing mode.
 	ClientConfiguration *ServerIdentityClientConfigurationRequestBody `form:"client_configuration,omitempty" json:"client_configuration,omitempty" xml:"client_configuration,omitempty"`
+	// Auto mode only. cimd (the default) prefers a Client ID Metadata Document
+	// when the provider supports one and falls back to dynamic client
+	// registration; dcr always uses dynamic client registration.
+	RegistrationMethod *string `form:"registration_method,omitempty" json:"registration_method,omitempty" xml:"registration_method,omitempty"`
 }
 
 // ListBindingsResponseBody is the type of the "remoteSessions" service
@@ -1799,10 +1803,11 @@ func NewDetachBindingRequestBody(p *remotesessions.DetachBindingPayload) *Detach
 // "remoteSessions" service.
 func NewCommitServerIdentityConfigurationRequestBody(p *remotesessions.CommitServerIdentityConfigurationPayload) *CommitServerIdentityConfigurationRequestBody {
 	body := &CommitServerIdentityConfigurationRequestBody{
-		McpServerID:      p.McpServerID,
-		ProviderID:       p.ProviderID,
-		ClientMode:       p.ClientMode,
-		ExistingClientID: p.ExistingClientID,
+		McpServerID:        p.McpServerID,
+		ProviderID:         p.ProviderID,
+		ClientMode:         p.ClientMode,
+		ExistingClientID:   p.ExistingClientID,
+		RegistrationMethod: p.RegistrationMethod,
 	}
 	if p.CreateProvider != nil {
 		body.CreateProvider = marshalRemotesessionsCreateRemoteSessionIssuerFormToCreateRemoteSessionIssuerFormRequestBody(p.CreateProvider)

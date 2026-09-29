@@ -111,6 +111,10 @@ type CommitServerIdentityConfigurationPayload struct {
 	ExistingClientID *string
 	// Client settings for auto or manual mode. Forbidden for existing mode.
 	ClientConfiguration *ServerIdentityClientConfiguration
+	// Auto mode only. cimd (the default) prefers a Client ID Metadata Document
+	// when the provider supports one and falls back to dynamic client
+	// registration; dcr always uses dynamic client registration.
+	RegistrationMethod *string
 }
 
 // CommitServerIdentityConfigurationResult is the result type of the

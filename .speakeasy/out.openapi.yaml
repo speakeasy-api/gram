@@ -77665,6 +77665,12 @@ components:
           type: string
           description: An existing Remote Identity Provider visible to the target project.
           format: uuid
+        registration_method:
+          type: string
+          description: Auto mode only. cimd (the default) prefers a Client ID Metadata Document when the provider supports one and falls back to dynamic client registration; dcr always uses dynamic client registration.
+          enum:
+            - cimd
+            - dcr
       description: 'A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
       required:
         - mcp_server_id
