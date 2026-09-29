@@ -117,6 +117,20 @@ export function isUnnarrowed(entry: {
   );
 }
 
+/** Whether a rule names this tool, by name or by annotation. */
+export function coversTool(
+  entry: { tools?: string[]; dispositions?: string[] },
+  tool: ToolSelectionTool,
+): boolean {
+  if (isUnnarrowed(entry)) return true;
+  const tools = new Set(entry.tools ?? []);
+  const dispositions = new Set<string>(entry.dispositions ?? []);
+  return (
+    tools.has(tool.name) ||
+    tool.annotations.some((annotation) => dispositions.has(annotation))
+  );
+}
+
 function isNarrowedRule(entry: {
   tools?: string[];
   dispositions?: string[];
@@ -138,8 +152,16 @@ function isNarrowedRule(entry: {
  */
 export function blockingRules(
   reaching: ResourceAudienceEntry[],
+  /** The person these rules reach, so their own rules here take precedence. */
+  principalUrn?: string,
 ): ResourceAudienceEntry[] {
-  if (reaching.length === 0 || effectiveReach(reaching) !== null) return [];
+  if (
+    reaching.length === 0 ||
+    effectiveReach(reaching, [], principalUrn) !== null
+  ) {
+    return [];
+  }
+  reaching = withoutOutrankedBlocks(reaching, principalUrn);
   const granted = new Set(
     reaching
       .filter((entry) => !isBlock(entry))
@@ -153,11 +175,75 @@ export function blockingRules(
   );
 }
 
-export function effectiveReach(
+/**
+ * The rules with every block this person's own rules outrank set aside. A
+ * rule naming this server that is made to the person directly outranks a
+ * block reaching them through a role or everyone, for the capabilities it
+ * grants. View and manage are about the server itself, so a narrowed rule
+ * restores them whole; connect reaches tools, so only an unnarrowed rule sets
+ * a connect block aside here. Mirrors server/internal/authz/precedence.go.
+ */
+function withoutOutrankedBlocks(
   reaching: ResourceAudienceEntry[],
+  principalUrn: string | undefined,
+): ResourceAudienceEntry[] {
+  if (!principalUrn) return reaching;
+  const direct = reaching.filter(
+    (entry) =>
+      entry.principalUrn === principalUrn &&
+      entry.appliesTo === "resource" &&
+      !isBlock(entry),
+  );
+  if (direct.length === 0) return reaching;
+  const outranked = new Set(
+    direct.flatMap((entry) =>
+      capabilitiesOf(entry.level).filter(
+        (capability) => capability !== "use" || !isNarrowedRule(entry),
+      ),
+    ),
+  );
+  return reaching.filter(
+    (entry) =>
+      !isBlock(entry) ||
+      entry.principalUrn === principalUrn ||
+      !outranked.has(BLOCKED_CAPABILITY[entry.level]!),
+  );
+}
+
+/**
+ * This person's own narrowed connect rules naming this server, when a block
+ * from a role or everyone would otherwise close connect. They still reach
+ * their tools past that block.
+ */
+function directConnectPastBlock(
+  reaching: ResourceAudienceEntry[],
+  principalUrn: string | undefined,
+): ResourceAudienceEntry[] {
+  if (!principalUrn) return [];
+  const ownConnectBlock = reaching.some(
+    (entry) =>
+      entry.principalUrn === principalUrn &&
+      BLOCKED_CAPABILITY[entry.level] === "use" &&
+      !isNarrowedRule(entry),
+  );
+  if (ownConnectBlock) return [];
+  return reaching.filter(
+    (entry) =>
+      entry.principalUrn === principalUrn &&
+      entry.appliesTo === "resource" &&
+      !isBlock(entry) &&
+      capabilitiesOf(entry.level).includes("use"),
+  );
+}
+
+export function effectiveReach(
+  allReaching: ResourceAudienceEntry[],
   /** The server's tools, when it publishes a catalogue. */
   catalog: ToolSelectionTool[] = [],
+  /** The person these rules reach, so their own rules here take precedence. */
+  principalUrn?: string,
 ): EffectiveReach | null {
+  const reaching = withoutOutrankedBlocks(allReaching, principalUrn);
   const granting = reaching.filter((entry) => !isBlock(entry));
   if (granting.length === 0) return null;
 
@@ -171,68 +257,40 @@ export function effectiveReach(
       .filter((entry) => isBlock(entry) && !isNarrowed(entry))
       .map((entry) => BLOCKED_CAPABILITY[entry.level]!),
   );
+  // A block from a role or everyone closing connect still leaves the tools
+  // this person's own narrowed rule here names.
+  const pastBlock = blocked.has("use")
+    ? directConnectPastBlock(reaching, principalUrn)
+    : [];
+  if (pastBlock.length > 0) blocked.delete("use");
 
   const unnarrowed = granting.find((entry) => !isNarrowed(entry));
-  // Tools taken away by a narrowed block on connect. This page narrows a
-  // rule it does not own by subtracting from it, so the reachable set is the
-  // catalogue minus these — and that is what a reader wants named, not the
-  // subtraction itself.
-  const trimmed = [
-    ...new Set(
-      reaching
-        .filter(
-          (entry) =>
-            BLOCKED_CAPABILITY[entry.level] === "use" && isNarrowed(entry),
-        )
-        .flatMap((entry) => entry.tools ?? []),
-    ),
-  ];
-  // Annotations narrow a rule as much as names do, so a block naming
-  // "destructive" has to be resolved against the catalogue, not ignored.
-  const trimmedDispositions = new Set<string>(
-    reaching
-      .filter(
-        (entry) =>
-          BLOCKED_CAPABILITY[entry.level] === "use" && isNarrowed(entry),
-      )
-      .flatMap((entry) => entry.dispositions ?? []),
+  const connectBlocks = reaching.filter(
+    (entry) => BLOCKED_CAPABILITY[entry.level] === "use",
   );
-  const removed = new Set(trimmed);
+  const directConnect = directConnectPastBlock(reaching, principalUrn);
   const reachable = catalog
+    .filter((tool) => granting.some((grant) => coversTool(grant, tool)))
     .filter(
       (tool) =>
-        !removed.has(tool.name) &&
-        !tool.annotations.some((annotation) =>
-          trimmedDispositions.has(annotation),
+        !connectBlocks.some(
+          (block) =>
+            coversTool(block, tool) &&
+            (block.principalUrn === principalUrn ||
+              !directConnect.some((grant) => coversTool(grant, tool))),
         ),
     )
     .map((tool) => tool.name);
-  const countable =
-    Boolean(unnarrowed) &&
-    catalog.length > 0 &&
-    (trimmed.length > 0 || trimmedDispositions.size > 0);
+  const countable = catalog.length > 0 && connectBlocks.length > 0;
   const remaining = reachable.length;
 
-  const toolsLabel = blocked.has("use")
-    ? // Tool access is about connecting; without it there are no tools to
-      // reach, whatever view and manage still allow.
-      "None"
-    : countable
-      ? remaining <= 0
-        ? "None"
-        : remaining === 1
-          ? "1 tool"
-          : `${remaining} tools`
-      : unnarrowed
-        ? "All tools"
-        : capitalize(
-            narrowingLabel({
-              tools: granting.flatMap((entry) => entry.tools ?? []),
-              dispositions: granting.flatMap(
-                (entry) => entry.dispositions ?? [],
-              ),
-            }),
-          );
+  const toolsLabel = reachLabel({
+    connectBlocked: blocked.has("use"),
+    remaining: countable ? remaining : null,
+    // Past a block, only this person's own narrowed rules reach any tools.
+    labelRules: pastBlock.length > 0 ? pastBlock : granting,
+    wholeServer: Boolean(unnarrowed) && pastBlock.length === 0,
+  });
 
   // A capability held over every tool, versus one held over a few: the second
   // is worth naming separately rather than implying it everywhere.
@@ -291,6 +349,38 @@ export function effectiveReach(
       ).values(),
     ],
   };
+}
+
+/** How much of the server a person can call, said for the reach row. */
+function reachLabel({
+  connectBlocked,
+  remaining,
+  labelRules,
+  wholeServer,
+}: {
+  /** Connect is taken away whole. */
+  connectBlocked: boolean;
+  /** Tools left once blocks are resolved against the catalogue, if counted. */
+  remaining: number | null;
+  /** The rules whose narrowing names what is reachable. */
+  labelRules: ResourceAudienceEntry[];
+  /** An unnarrowed rule opens every tool. */
+  wholeServer: boolean;
+}): string {
+  // Tool access is about connecting; without it there are no tools to reach,
+  // whatever view and manage still allow.
+  if (connectBlocked) return "None";
+  if (remaining !== null) {
+    if (remaining <= 0) return "None";
+    return remaining === 1 ? "1 tool" : `${remaining} tools`;
+  }
+  if (wholeServer) return "All tools";
+  return capitalize(
+    narrowingLabel({
+      tools: labelRules.flatMap((entry) => entry.tools ?? []),
+      dispositions: labelRules.flatMap((entry) => entry.dispositions ?? []),
+    }),
+  );
 }
 
 /** Weakest first, so a row reads "connect, view" rather than "view, connect". */

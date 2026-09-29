@@ -1023,7 +1023,10 @@ func (q *Queries) ListAccessNotificationUsers(ctx context.Context, organizationI
 
 const listAccessibleMCPServersForUser = `-- name: ListAccessibleMCPServersForUser :many
 WITH user_grants AS (
-  SELECT pg.scope, pg.selectors
+  SELECT
+    pg.scope,
+    pg.selectors,
+    (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = $1
     AND COALESCE(pg.effect, 'allow') = 'allow'
@@ -1051,6 +1054,8 @@ WITH user_grants AS (
   SELECT
     s.id AS server_id,
     ug.scope,
+    ug.direct,
+    COALESCE(ug.selectors->>'resource_id', '*') <> '*' AS concrete,
     -- Whether this grant would also satisfy StrictMatches, which exclusions
     -- use: every dimension it names must be one the check constrains. A
     -- tool- or disposition-scoped block narrows something inside the server,
@@ -1084,6 +1089,7 @@ WHERE NOT EXISTS (
   WHERE blocked.server_id = s.id
     AND blocked.strict
     AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY s.name
 `
@@ -1112,7 +1118,9 @@ type ListAccessibleMCPServersForUserRow struct {
 // The shape mirrors the authorization engine's own: a permission is an allow
 // grant for a scope minus a blocked_ grant for THAT SAME scope proving the same
 // server (see authz/expressions.go). mcp:blocked_connect withdraws
-// mcp:connect; it does not withdraw mcp:read.
+// mcp:connect; it does not withdraw mcp:read. A grant made directly to the
+// user that names this server outranks a block inherited from a role or
+// user:all, while the user's own blocks always apply (authz/precedence.go).
 func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListAccessibleMCPServersForUserParams) ([]ListAccessibleMCPServersForUserRow, error) {
 	rows, err := q.db.Query(ctx, listAccessibleMCPServersForUser, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -1141,7 +1149,10 @@ func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListA
 
 const listAccessibleSkillsForUser = `-- name: ListAccessibleSkillsForUser :many
 WITH user_grants AS (
-  SELECT pg.scope, pg.selectors
+  SELECT
+    pg.scope,
+    pg.selectors,
+    (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = $1
     AND COALESCE(pg.effect, 'allow') = 'allow'
@@ -1161,7 +1172,11 @@ WITH user_grants AS (
   -- authz.allowedSelectorKeys), so there is no project_id to honour here and
   -- no narrower block that could fail StrictMatches — the wildcard and the
   -- per-skill grant are the only shapes a skill grant can take.
-  SELECT cs.id AS skill_id, ug.scope
+  SELECT
+    cs.id AS skill_id,
+    ug.scope,
+    ug.direct,
+    COALESCE(ug.selectors->>'resource_id', '*') <> '*' AS concrete
   FROM candidate_skills cs
   JOIN user_grants ug ON (
     ug.selectors->>'resource_kind' IN ('*', 'skill')
@@ -1182,6 +1197,7 @@ WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.skill_id = cs.id
     AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY cs.display_name, cs.name
 `
@@ -1204,7 +1220,8 @@ type ListAccessibleSkillsForUserRow struct {
 //
 // Authorization only, on the same terms as the MCP query above: a skill
 // distributed to a plugin the user holds is still unreachable if RBAC does not
-// allow it, so distribution is not consulted.
+// allow it, so distribution is not consulted. Principal precedence also
+// matches: a direct grant naming the skill outranks an inherited block.
 // SELECT DISTINCT only permits ORDER BY over selected columns, and
 // skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAccessibleSkillsForUserParams) ([]ListAccessibleSkillsForUserRow, error) {
