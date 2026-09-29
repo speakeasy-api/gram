@@ -684,16 +684,16 @@ SELECT sensor.id AS sensor_id, sensor.slug AS sensor_slug, sensor.mode, sensor.i
        signal.id AS signal_id, signal.slug AS signal_slug, signal.classifier_criteria
 FROM sigint_sensors AS sensor
 JOIN projects AS project ON project.id = sensor.project_id
-JOIN sigint_sensor_signals AS member
+LEFT JOIN sigint_sensor_signals AS member
   ON member.project_id = sensor.project_id AND member.sensor_id = sensor.id
-JOIN sigint_custom_signals AS signal
+  AND member.deleted IS FALSE
+LEFT JOIN sigint_custom_signals AS signal
   ON signal.project_id = member.project_id AND signal.id = member.signal_id
+  AND signal.deleted IS FALSE
 WHERE sensor.project_id = $1
   AND project.organization_id = $2
   AND project.deleted IS FALSE
   AND sensor.deleted IS FALSE
-  AND member.deleted IS FALSE
-  AND signal.deleted IS FALSE
 ORDER BY sensor.id, member.sort_order, member.id
 `
 
@@ -707,8 +707,8 @@ type LoadEvaluationSensorsRow struct {
 	SensorSlug         string
 	Mode               string
 	Instructions       pgtype.Text
-	SignalID           uuid.UUID
-	SignalSlug         string
+	SignalID           uuid.NullUUID
+	SignalSlug         pgtype.Text
 	ClassifierCriteria pgtype.Text
 }
 

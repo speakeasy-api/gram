@@ -39,9 +39,10 @@ message Reading {
     // Absence means no classification was supplied.
     string account_type = 2;
     // How the external AI account is billed: "metered" for usage-based billing,
-    // "flat_rate" for subscription/seat billing, "unknown" when undetermined.
-    // Resolved from source-account/provider-organization configuration; absence
-    // means undeclared. Does not determine Gram pricing or select a billing user.
+    // "flat_rate" for subscription/seat billing; "unknown" may be supplied when
+    // undetermined. Resolved from account/provider-organization configuration;
+    // absence means no mode was resolved or supplied. Does not determine Gram
+    // pricing or select a billing user.
     string billing_mode = 3;
   }
   // Role of the evaluated message, independent of its human attribution.

@@ -84,14 +84,13 @@ func reading(m *conversationv1.Message, sensor compiledSensor, answers map[class
 			return nil, fmt.Errorf("incomplete sensor evaluation")
 		}
 	}
-	r := &sigintv1.Reading{}
+	r := sigintv1.Reading_builder{MessageId: new(m.GetId())}.Build()
 	identity, _ := json.Marshal([]string{"sigint-reading-v1", m.GetOrganizationId(), m.GetProjectId(), m.GetId(), sensor.id})
 	r.SetId(uuid.NewSHA1(readingNamespace, identity).String())
 	r.SetEvaluationAttemptId(attempt)
 	r.SetOrganizationId(m.GetOrganizationId())
 	r.SetProjectId(m.GetProjectId())
 	r.SetConversationId(m.GetConversationId())
-	r.SetMessageId(m.GetId())
 	r.SetMessageRole(sigintv1.Reading_MESSAGE_ROLE_USER)
 	if m.GetRole() == conversationv1.Message_ROLE_ASSISTANT {
 		r.SetMessageRole(sigintv1.Reading_MESSAGE_ROLE_ASSISTANT)

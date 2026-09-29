@@ -263,6 +263,58 @@ func TestHandlerPermanentFailureAcksAndEmitsMetric(t *testing.T) {
 	require.True(t, found)
 }
 
+func TestHandlerOperationFailureSemantics(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		err   error
+		retry bool
+	}{
+		{"disabled", classifier.ErrDisabled, false},
+		{"invalid", classifier.ErrInvalidRequest, false},
+		{"unavailable", errors.New("unavailable"), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			reader := sdkmetric.NewManualReader()
+			meters := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			t.Cleanup(func() { require.NoError(t, meters.Shutdown(context.Background())) })
+			m := message()
+			c := classifiertest.NewMock(t)
+			partial := partialResult(false)
+			// Retain the successful sensor; the other sensor has no outcomes.
+			result := classifier.NewResult(partial.Outcomes[len(partial.Outcomes)-1:], fmt.Errorf("wrapped: %w", tc.err))
+			c.On("Classify", mock.Anything, mock.Anything).Return(result).Once()
+			h, pub := handler(t, m, partialSensors(), c, meters)
+			err := h.Handle(t.Context(), m, gcp.MessageMetadata{})
+			if tc.retry {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Len(t, pub.readings, 1)
+			require.Equal(t, "other", pub.readings[0].GetSensorId())
+			var data metricdata.ResourceMetrics
+			require.NoError(t, reader.Collect(t.Context(), &data))
+			var failures int64
+			for _, scope := range data.ScopeMetrics {
+				for _, metric := range scope.Metrics {
+					if metric.Name == "gram.sigint.evaluation.failures" {
+						for _, point := range metric.Data.(metricdata.Sum[int64]).DataPoints {
+							failures += point.Value
+						}
+					}
+				}
+			}
+			if tc.retry {
+				require.Zero(t, failures)
+			} else {
+				require.Equal(t, int64(1), failures)
+			}
+		})
+	}
+}
+
 func TestHandlerOversizedReadingIsPermanentAndPreservesOtherReadings(t *testing.T) {
 	t.Parallel()
 	reader := sdkmetric.NewManualReader()
