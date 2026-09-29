@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -60,6 +61,7 @@ import (
 )
 
 type Service struct {
+	registry             *mcpregistry.Service
 	remoteSessions       *remotesessions.Service
 	assets               *assets.Service
 	tracer               trace.Tracer
@@ -199,6 +201,7 @@ func NewService(
 	billing BillingOperations,
 	supportCoverage SupportCoverageReader,
 	dashboardURL *url.URL,
+	registry *mcpregistry.Service,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -216,7 +219,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil,
+	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil, registry: registry,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:         logger,
 		db:             db,
@@ -419,6 +422,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetGlobalIssuerMigratePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerMigratePreflight)
 	server.MigrateToGlobalIssuer = service.strictAdminJSON(server.MigrateToGlobalIssuer, func() any { return new(adminserver.MigrateToGlobalIssuerRequestBody) })
 	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
+	server.ListRegistryEntries = service.preauthorizeAdmin(server.ListRegistryEntries)
+	server.GetRegistryEntry = service.preauthorizeAdmin(server.GetRegistryEntry)
+	server.CreateRegistryEntry = service.strictAdminJSONLimit(server.CreateRegistryEntry, func() any { return new(adminserver.CreateRegistryEntryRequestBody) }, 16<<20)
+	server.SaveRegistryEntry = service.strictAdminJSONLimit(server.SaveRegistryEntry, func() any { return new(adminserver.SaveRegistryEntryRequestBody) }, 16<<20)
+	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
 	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
 	adminserver.Mount(mux, server)
@@ -495,12 +503,16 @@ func (s *Service) preauthorizeAdmin(next http.Handler) http.Handler {
 const maxAdminJSONBodyBytes = 1 << 20
 
 func (s *Service) strictAdminJSON(next http.Handler, body func() any) http.Handler {
+	return s.strictAdminJSONLimit(next, body, maxAdminJSONBodyBytes)
+}
+
+func (s *Service) strictAdminJSONLimit(next http.Handler, body func() any, maxBytes int64) http.Handler {
 	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
 		ctx, err := s.authorizeAdminRequest(r)
 		if err != nil {
 			return err
 		}
-		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAdminJSONBodyBytes))
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBytes))
 		if err != nil {
 			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 				return oops.E(oops.CodeRequestTooLarge, err, "read admin request body")

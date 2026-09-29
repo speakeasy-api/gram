@@ -215,6 +215,16 @@ type Service interface {
 	// session activity, policy enforcement, identity attribution, token usage and
 	// shadow MCP exposure.
 	GetSupportCoverage(context.Context, *GetSupportCoveragePayload) (res *SupportCoverageResult, err error)
+	// Staff-only registry administration.
+	ListRegistryEntries(context.Context, *ListRegistryEntriesPayload) (res *AdminRegistryPage, err error)
+	// Staff-only registry administration.
+	GetRegistryEntry(context.Context, *GetRegistryEntryPayload) (res *AdminRegistryEntry, err error)
+	// Staff-only registry administration.
+	CreateRegistryEntry(context.Context, *CreateRegistryEntryPayload) (res *AdminRegistryEntry, err error)
+	// Staff-only registry administration.
+	SaveRegistryEntry(context.Context, *SaveRegistryEntryPayload) (res *AdminRegistryEntry, err error)
+	// Staff-only registry administration.
+	SetRegistryEntryPublished(context.Context, *SetRegistryEntryPublishedPayload) (res *AdminRegistryEntry, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -237,7 +247,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [57]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage"}
+var MethodNames = [62]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -546,6 +556,39 @@ type AdminProjectDetail struct {
 	UpdatedAt      string
 }
 
+// AdminRegistryEntry is the result type of the admin service getRegistryEntry
+// method.
+type AdminRegistryEntry struct {
+	ID string
+	// Complete lossless registry record JSON
+	DataJSON  string
+	Published bool
+	CreatedAt string
+	// Opaque write precondition; echo unchanged
+	UpdatedAt string
+	Issues    []*AdminRegistryIssue
+}
+
+type AdminRegistryIssue struct {
+	Path    string
+	Message string
+}
+
+// AdminRegistryPage is the result type of the admin service
+// listRegistryEntries method.
+type AdminRegistryPage struct {
+	Entries    []*AdminRegistrySummary
+	NextCursor *string
+}
+
+type AdminRegistrySummary struct {
+	ID        string
+	Name      string
+	Published bool
+	UpdatedAt string
+	Issues    []*AdminRegistryIssue
+}
+
 // AdminSession is the result type of the admin service getSession method.
 type AdminSession struct {
 	Email string
@@ -797,6 +840,15 @@ type CreateOrganizationPayload struct {
 	OwnershipConfirmed bool
 }
 
+// CreateRegistryEntryPayload is the payload type of the admin service
+// createRegistryEntry method.
+type CreateRegistryEntryPayload struct {
+	AdminSessionToken *string
+	// Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced
+	// by the server on incoming writes. Stored records remain readable for repair.
+	DataJSON string
+}
+
 // DeleteGlobalIssuerPayload is the payload type of the admin service
 // deleteGlobalIssuer method.
 type DeleteGlobalIssuerPayload struct {
@@ -946,6 +998,13 @@ type GetProjectPayload struct {
 	// is reported as not found. Optional, because the global project lookup has no
 	// organization to scope by.
 	OrganizationIDOrSlug *string
+}
+
+// GetRegistryEntryPayload is the payload type of the admin service
+// getRegistryEntry method.
+type GetRegistryEntryPayload struct {
+	AdminSessionToken *string
+	ID                string
 }
 
 // GetSessionPayload is the payload type of the admin service getSession method.
@@ -1220,6 +1279,20 @@ type ListProjectMcpServersPayload struct {
 	ProjectID string
 }
 
+// ListRegistryEntriesPayload is the payload type of the admin service
+// listRegistryEntries method.
+type ListRegistryEntriesPayload struct {
+	AdminSessionToken *string
+	// Search query; at most 1024 UTF-8 bytes (enforced by the server).
+	Query     *string
+	Published *bool
+	// Opaque continuation cursor from next_cursor; at most 8192 UTF-8 bytes
+	// (enforced by the server).
+	Cursor *string
+	// Page size; zero uses the server default of 25.
+	Limit *int32
+}
+
 // LoginPayload is the payload type of the admin service login method.
 type LoginPayload struct {
 	// Optional URL to return the user to after login. Relative paths and absolute
@@ -1383,6 +1456,17 @@ type ResumeStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// SaveRegistryEntryPayload is the payload type of the admin service
+// saveRegistryEntry method.
+type SaveRegistryEntryPayload struct {
+	AdminSessionToken *string
+	ID                string
+	UpdatedAt         string
+	// Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced
+	// by the server on incoming writes. Stored records remain readable for repair.
+	DataJSON string
+}
+
 // ServeImageForm is the payload type of the admin service serveImage method.
 type ServeImageForm struct {
 	// The ID of the asset to serve
@@ -1436,6 +1520,15 @@ type SetOrganizationOnboardingPayload struct {
 	// A key from presets. Omit to preserve the saved preset. Null/reset is not
 	// supported.
 	Preset *string
+}
+
+// SetRegistryEntryPublishedPayload is the payload type of the admin service
+// setRegistryEntryPublished method.
+type SetRegistryEntryPublishedPayload struct {
+	AdminSessionToken *string
+	ID                string
+	UpdatedAt         string
+	Published         bool
 }
 
 // SetStripeCustomerPayload is the payload type of the admin service
