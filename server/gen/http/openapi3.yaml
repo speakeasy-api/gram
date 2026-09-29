@@ -109371,6 +109371,9 @@ components:
                     type: string
                     description: The remote_session_client id.
                     format: uuid
+                legacy_callback_url:
+                    type: boolean
+                    description: Platform admins only. Set true to run the client in compatibility mode with the legacy callback URL, or false to migrate it to the current callback URL once that URL is registered with the identity provider. Omit to leave unchanged.
                 scope:
                     type: array
                     items:

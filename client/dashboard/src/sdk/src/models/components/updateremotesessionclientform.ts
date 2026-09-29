@@ -54,6 +54,10 @@ export type UpdateRemoteSessionClientForm = {
    */
   id: string;
   /**
+   * Platform admins only. Set true to run the client in compatibility mode with the legacy callback URL, or false to migrate it to the current callback URL once that URL is registered with the identity provider. Omit to leave unchanged.
+   */
+  legacyCallbackUrl?: boolean | undefined;
+  /**
    * Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
    */
   scope?: Array<string> | undefined;
@@ -87,6 +91,7 @@ export type UpdateRemoteSessionClientForm$Outbound = {
   audience?: string | undefined;
   client_secret?: string | undefined;
   id: string;
+  legacy_callback_url?: boolean | undefined;
   scope?: Array<string> | undefined;
   token_endpoint_auth_audience_format?: string | undefined;
   token_endpoint_auth_method?: string | undefined;
@@ -101,6 +106,7 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     audience: z.optional(z.string()),
     clientSecret: z.optional(z.string()),
     id: z.string(),
+    legacyCallbackUrl: z.optional(z.boolean()),
     scope: z.optional(z.array(z.string())),
     tokenEndpointAuthAudienceFormat: z.optional(
       UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema,
@@ -112,6 +118,7 @@ export const UpdateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       clientSecret: "client_secret",
+      legacyCallbackUrl: "legacy_callback_url",
       tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
     });
