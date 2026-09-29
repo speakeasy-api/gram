@@ -152,6 +152,6 @@ message Message {
   ConversationContext conversation_context = 14;
 
   option (gcp.pubsub.v1.topic) = {
-    retention_hint: { seconds: 604800 /* 7 days */ }
+    retention_hint: { seconds: 345600 /* 4 days */ }
   };
 }

@@ -2015,7 +2015,7 @@ pubsub:
       proto_message: gram-conversation-v1-message
     name: gram-conversation-v1-message
     spec:
-      messageRetentionDuration: 604800s
+      messageRetentionDuration: 345600s
       schemaSettings:
         encoding: BINARY
         schemaRef:
