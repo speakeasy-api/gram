@@ -9,7 +9,6 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
-import { getServerURL } from "@/lib/utils";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import {
   UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
@@ -22,19 +21,10 @@ import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
   isPrivateKeyJwtAuthMethod,
+  remoteLoginCallbackURL,
   type ClientType,
 } from "./issuerFormUtils";
 import type { ReactNode } from "react";
-
-// remoteLoginCallbackURL is the single stable redirect_uri Gram uses for
-// every upstream OAuth provider, regardless of MCP server or slug (see
-// canonicalCallbackRouteBase in server/internal/remotesessions/challenge.go).
-// Manual clients need it registered on the upstream's app out-of-band; DCR
-// and CIMD clients send/publish it automatically, so this only surfaces
-// where the operator has to do that registration by hand.
-export function remoteLoginCallbackURL(): string {
-  return `${getServerURL()}/mcp/remote_login_callback`;
-}
 
 // RedirectURICallout shows the redirect_uri operators must register on the
 // upstream provider's OAuth app before typed-in client credentials will

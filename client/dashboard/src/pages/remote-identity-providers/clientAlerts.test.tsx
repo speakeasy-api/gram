@@ -34,7 +34,7 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
   getServerURL: () => "https://app.example.com",
 }));
 vi.mock(
-  "../mcp/x/tabs/settings/sections/authentication/IssuerFormFields",
+  "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils",
   () => ({
     remoteLoginCallbackURL: () =>
       "https://app.example.com/mcp/remote_login_callback",
@@ -120,17 +120,22 @@ describe("IssuerScopeOverrideAlert", () => {
 describe("LegacyCallbackAlert", () => {
   it("renders nothing for a current client or a non-admin", () => {
     const { rerender, container } = render(
-      <LegacyCallbackAlert legacyCallbackUrl={false} onMigrate={vi.fn()} />,
+      <LegacyCallbackAlert
+        legacyCallbackUrl={false}
+        onMigrate={vi.fn<() => void>()}
+      />,
     );
     expect(container.textContent).toBe("");
 
     rbac.isPlatformAdmin = false;
-    rerender(<LegacyCallbackAlert legacyCallbackUrl onMigrate={vi.fn()} />);
+    rerender(
+      <LegacyCallbackAlert legacyCallbackUrl onMigrate={vi.fn<() => void>()} />,
+    );
     expect(container.textContent).toBe("");
   });
 
   it("names both callback URLs and migrates only after confirmation", () => {
-    const onMigrate = vi.fn();
+    const onMigrate = vi.fn<() => void>();
     render(<LegacyCallbackAlert legacyCallbackUrl onMigrate={onMigrate} />);
 
     expect(

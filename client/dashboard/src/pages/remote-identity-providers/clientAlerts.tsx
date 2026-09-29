@@ -7,7 +7,7 @@ import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useState } from "react";
 import { Link } from "react-router";
-import { remoteLoginCallbackURL } from "../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
+import { remoteLoginCallbackURL } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 // IssuerScopeOverrideAlert warns beside a client's scope field that the parent
