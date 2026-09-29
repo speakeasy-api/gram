@@ -33,14 +33,8 @@ import {
  *
  * A card carries what an operator needs to recognise a platform and to judge its
  * reach: the identifier an assertion's `iss` must carry, where its keys are
- * published, and which tier it was trusted at. The machines actually allowed
- * under it live on that platform's own page, because those are per-machine
- * rather than per-platform.
- *
- * Platform presets will land in this same grid — see the administrator UI
- * milestone. A preset carries the values an operator cannot be expected to know
- * for a platform: its issuer identifier, its JWKS URL, and whether its subject
- * shape makes wildcard admission sound.
+ * published, and its tags. The machines allowed under it live on that
+ * platform's own page, because those are per-machine rather than per-platform.
  */
 export function WorkloadIssuersRoot(): JSX.Element {
   return <Outlet />;
@@ -59,8 +53,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
   const [registerOpen, setRegisterOpen] = useState(false);
   // Catalog leads: the question an operator arrives with is which platform they
   // are connecting, and the answer is a preset where one exists. Custom is the
-  // fallback for a platform the catalogue does not carry yet — which today is
-  // all of them.
+  // fallback for a platform the catalogue does not carry.
   const [view, setView] = useState<IssuerView>("catalog");
   const [search, setSearch] = useState("");
   const { data, isPending } = useWorkloadIdentities({});
@@ -177,10 +170,9 @@ function WorkloadIssuersCatalogue(): JSX.Element {
             </>
           )
         ) : (
-          // Empty on purpose. A preset carries what an operator cannot be
-          // expected to know for a platform: its issuer identifier, its JWKS URL,
-          // and whether its subject shape makes wildcard admission sound — the
-          // judgement that otherwise falls to whoever is onboarding, every time.
+          // A preset carries what an operator cannot be expected to know for a
+          // platform: its issuer identifier, its JWKS URL, and whether its
+          // subject shape makes wildcard admission sound.
           <Cards noGrid>
             <InlineEmptyState
               icon="layout-grid"

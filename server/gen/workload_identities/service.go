@@ -117,9 +117,7 @@ type RegisterIssuerPayload struct {
 	JwksURI string
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Re-checked on every lookup rather than at write time, so
-	// clearing it makes wildcard rules already written inert immediately — an
-	// incident control rather than a setup step, which is why the dashboard does
-	// not ask for it at registration.
+	// clearing it makes wildcard rules already written inert immediately.
 	AllowWildcardAdmission bool
 	// What the platform is and what runs on it, shown in place of the issuer URL
 	// wherever the issuer is listed. Trimmed on write; blank is stored as none. At

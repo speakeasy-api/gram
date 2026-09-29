@@ -94,33 +94,22 @@ export function AdmitSubjectSheet({
     onOpenChange(next);
   };
 
-  // The wildcard option is offered only where the issuer permits it, rather than
-  // offered everywhere and refused on submit.
   const wildcardAvailable = issuer.allowWildcardAdmission;
 
-  // The terminator belongs to the match kind, not to the text: the field holds
-  // the stem and the "*" is rendered after it, so selecting Wildcard is the only
-  // place breadth is stated. Validate and submit the composed value, which is
-  // what the row will actually hold.
-  // Read off the value rather than selected: the terminator is how a rule states
-  // its own breadth, so a separate control would only be a second way to say the
-  // same thing — and a way for the two to disagree.
+  // The terminator is how a rule states its own breadth, so the kind is read off
+  // the value and a separate control could only disagree with it.
   const matchKind = inferMatchKind(values.subject);
   const storedSubject = values.subject.trim();
-  // The issuer's permission is a state the operator can reach — an older row, or
-  // one cleared during an incident — and with the match control gone the field is
-  // the only place left to say so. Without this the submit would sit disabled
-  // with no reason, which is the failure the caution below exists to avoid.
+  // An issuer can forbid wildcards (an older row, or one cleared during an
+  // incident). Say so under the field rather than leave the submit disabled
+  // with no reason.
   const warning =
     subjectRuleWarning(matchKind, storedSubject) ??
     (matchKind === "wildcard" && !wildcardAvailable
       ? "This issuer does not permit wildcard matching, so a rule ending in \u201c*\u201d cannot be admitted under it. Give the subject in full, or turn wildcard admission back on for the issuer."
       : null);
 
-  // Stated where the rule is written rather than asked when the issuer is
-  // registered. An operator registering an issuer has no rule in mind yet, and
-  // whether a wildcard is sound is a judgement about their own platform. Naming
-  // the stem and the agent makes the reach of the rule concrete.
+  // Naming the stem and the agent makes the reach of a wildcard rule concrete.
   const wildcardStem =
     matchKind === "wildcard" && storedSubject.endsWith("*")
       ? storedSubject.slice(0, -1)
