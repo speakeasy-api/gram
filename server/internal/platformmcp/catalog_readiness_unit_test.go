@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -143,4 +144,61 @@ func TestRedactProbeErrorRemovesCredentialsAndBoundsLength(t *testing.T) {
 	require.NotContains(t, detail, "query-sentinel")
 	require.Contains(t, detail, "https://mcp.example.test/mcp?[REDACTED]")
 	require.LessOrEqual(t, len(detail), catalogProbeMaxLoggedError+len("…"))
+}
+
+// TestRemoteMCPReadinessProbeIgnoresInboundProtocolVersion runs the probe from
+// inside an MCP tool call, as get_mcp_readiness does in production. The inbound
+// request negotiates 2026-07-28; the upstream only speaks legacy revisions and
+// rejects a 2026-07-28 header after initialize, as the reported provider did.
+func TestRemoteMCPReadinessProbeIgnoresInboundProtocolVersion(t *testing.T) {
+	t.Parallel()
+
+	legacyServer := mcp.NewServer(&mcp.Implementation{Name: "legacy-upstream", Version: "1.0.0"}, nil)
+	mcp.AddTool(legacyServer, &mcp.Tool{Name: "noop"}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, struct{}, error) {
+		return &mcp.CallToolResult{}, struct{}{}, nil
+	})
+	legacyHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return legacyServer }, nil)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "read request body", http.StatusInternalServerError)
+			return
+		}
+		initialize := bytes.Contains(body, []byte(`"method":"initialize"`))
+		if !initialize && r.Header.Get("Mcp-Protocol-Version") == "2026-07-28" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32000,"message":"Bad Request: Unsupported protocol version: 2026-07-28"},"id":null}`))
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		legacyHandler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(upstream.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	prober := &RemoteMCPReadinessProber{logger: testenv.NewLogger(t), policy: policy}
+
+	platformServer := mcp.NewServer(&mcp.Implementation{Name: "platform", Version: "1.0.0"}, nil)
+	mcp.AddTool(platformServer, &mcp.Tool{Name: "probe"}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct{}, error) {
+		state, evidence := prober.probe(ctx, upstream.URL, nil, "")
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(state) + " " + evidence}}}, struct{}{}, nil
+	})
+	// The Platform MCP runs stateless, which dispatches tool handlers on the
+	// inbound HTTP request context.
+	platform := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return platformServer }, &mcp.StreamableHTTPOptions{Stateless: true}))
+	t.Cleanup(platform.Close)
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "caller", Version: "1.0.0"}, nil)
+	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: platform.URL, MaxRetries: -1, DisableStandaloneSSE: true}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "probe"})
+	require.NoError(t, err)
+	require.Len(t, result.Content, 1)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Equal(t, "ready tools_list_ok", text.Text)
 }
