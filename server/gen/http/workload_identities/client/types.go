@@ -25,8 +25,9 @@ type RegisterIssuerRequestBody struct {
 	// an https URL on a fully qualified domain name.
 	JwksURI string `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
-	// Defaults to true. Re-checked on every lookup rather than at write time, so
-	// clearing it makes wildcard rules already written inert immediately.
+	// Defaults to true. Checked when a wildcard rule is admitted and again on
+	// every lookup, so clearing it makes wildcard rules already written inert
+	// immediately.
 	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
 	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
 	// not key/value pairs. Trimmed and de-duplicated on write, then limited to 40

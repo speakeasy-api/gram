@@ -113,8 +113,9 @@ type RegisterIssuerPayload struct {
 	// an https URL on a fully qualified domain name.
 	JwksURI string
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
-	// Defaults to true. Re-checked on every lookup rather than at write time, so
-	// clearing it makes wildcard rules already written inert immediately.
+	// Defaults to true. Checked when a wildcard rule is admitted and again on
+	// every lookup, so clearing it makes wildcard rules already written inert
+	// immediately.
 	AllowWildcardAdmission *bool
 	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
 	// not key/value pairs. Trimmed and de-duplicated on write, then limited to 40
