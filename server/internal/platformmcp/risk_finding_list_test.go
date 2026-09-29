@@ -79,7 +79,31 @@ func newFindingListFixture(t *testing.T) *findingListFixture {
 		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Enabled: true, Deleted: true, Score: 10},
 	}
 	clickhouse := &findingListClickHouse{rows: []chrepo.RiskFindingListRow{
-		{ID: uuid.New(), MessageCreatedAt: riskAnalysisTestNow.Add(-time.Hour), ChatMessageID: uuid.NewString(), ChatID: uuid.NewString(), ExternalUserID: findingListEmail, RiskPolicyID: policies[0].ID.String(), RiskPolicyVersion: 2, RuleID: "secret.stripe", Source: "gitleaks", Confidence: 0.9, Tags: []string{"secrets"}, MatchRedacted: "sk-l*********************************89"},
+		{
+			ID:                 uuid.New(),
+			MessageCreatedAt:   riskAnalysisTestNow.Add(-time.Hour),
+			ChatMessageID:      uuid.NewString(),
+			ChatID:             uuid.NewString(),
+			UserID:             "user-internal",
+			ExternalUserID:     findingListEmail,
+			RiskPolicyID:       policies[0].ID.String(),
+			RiskPolicyVersion:  2,
+			RuleID:             "secret.stripe",
+			Source:             "gitleaks",
+			Confidence:         0.9,
+			Tags:               []string{"secrets"},
+			MatchRedacted:      "sk-l*********************************89",
+			ExecutionID:        uuid.NewString(),
+			MCPServerID:        uuid.NewString(),
+			ToolsetID:          uuid.NewString(),
+			ToolName:           "create_issue",
+			Phase:              "request",
+			MediationSurface:   "hosted_mcp",
+			MCPMethod:          "tools/call",
+			PrincipalKind:      "user_session",
+			IdentityStamped:    true,
+			EnforcementOutcome: "denied",
+		},
 		{ID: uuid.New(), MessageCreatedAt: riskAnalysisTestNow.Add(-2 * time.Hour), ChatID: uuid.NewString(), RiskPolicyID: policies[1].ID.String(), RuleID: "pii.email_address", Source: "presidio", Confidence: 0.6, Tags: nil, MatchRedacted: "<redacted len=24 sha=0123abcd>"},
 	}}
 	policyReader := &findingPolicies{rows: policies}
@@ -96,6 +120,7 @@ func TestRiskFindingListValidation(t *testing.T) {
 		{To: "later"},
 		{From: riskAnalysisTestNow.Format(time.RFC3339), To: riskAnalysisTestNow.Add(-time.Hour).Format(time.RFC3339)},
 		{PolicyID: "not-a-uuid"},
+		{MCPServerID: "not-a-uuid"},
 		{ChatID: "not-a-uuid"},
 		{AssistantID: "not-a-uuid"},
 		{MCPServerID: "not-a-uuid"},
@@ -160,6 +185,9 @@ func TestRiskFindingListDefaultIncludesDisabledExcludesDeleted(t *testing.T) {
 	require.Len(t, out.Findings, 2)
 	require.Equal(t, f.policies[1].ID.String(), out.Findings[1].PolicyID)
 	require.Equal(t, "high", out.Findings[1].Severity, "a disabled policy's finding scores from that policy")
+	require.Equal(t, f.clickhouse.rows[0].MCPServerID, out.Findings[0].MCPServerID)
+	require.Equal(t, "create_issue", out.Findings[0].ToolName)
+	require.Equal(t, "denied", out.Findings[0].EnforcementOutcome)
 
 	// An explicit filter on a deleted policy short-circuits without a read.
 	empty, err := f.service.List(t.Context(), principal, ListRiskFindingPageInput{PolicyID: f.policies[3].ID.String()})
@@ -173,13 +201,15 @@ func TestRiskFindingListFiltersAndCursorBinding(t *testing.T) {
 
 	f := newFindingListFixture(t)
 	principal := testRiskPrincipal("user")
-	input := ListRiskFindingPageInput{Limit: 1, Category: "secrets", RuleID: "secret", UserID: "reporter", UniqueMatch: true, NonAssistant: true}
+	mcpServerID := uuid.New()
+	input := ListRiskFindingPageInput{Limit: 1, MCPServerID: strings.ToUpper(mcpServerID.String()), Category: "secrets", RuleID: "secret", UserID: "reporter", UniqueMatch: true, NonAssistant: true}
 	out, err := f.service.List(t.Context(), principal, input)
 	require.NoError(t, err)
 	require.Len(t, out.Findings, 1)
 	require.NotEmpty(t, out.NextCursor)
 	require.Equal(t, riskFindingListLimitations, out.Limitations)
 	params := f.clickhouse.list[0]
+	require.Equal(t, mcpServerID.String(), params.MCPServerID)
 	require.Equal(t, "secrets", params.Category)
 	require.Equal(t, "secret", params.RuleIDSubstr)
 	require.Equal(t, "reporter", params.UserIDSubstr)
@@ -442,7 +472,10 @@ func TestRiskFindingListToolsMCPInProcess(t *testing.T) {
 		require.NotContains(t, descriptor.Description, "unavailable in this deployment")
 		require.Contains(t, string(descriptor.InputSchema), `"project_slug"`)
 	}
-	require.Contains(t, string(descriptorByName(t, reg, riskFindingListToolName).InputSchema), `"secrets"`, "categories are enumerated so the model picks a real key")
+	findingDescriptor := descriptorByName(t, reg, riskFindingListToolName)
+	require.Contains(t, string(findingDescriptor.InputSchema), `"secrets"`, "categories are enumerated so the model picks a real key")
+	require.Contains(t, string(findingDescriptor.InputSchema), `"mcp_server_id"`)
+	require.Contains(t, findingDescriptor.Description, "mediation_surface")
 	require.Contains(t, string(descriptorByName(t, reg, riskRuleBreakdownToolName).InputSchema), `"required":["category"]`)
 
 	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {

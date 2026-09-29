@@ -176,16 +176,17 @@ func (q *Queries) ListRiskSignalAggregates(ctx context.Context, p RiskSignalWind
 	return out, nil
 }
 
-// RiskSignalUserCount is one (rule, user) group's finding count in the current
-// window. Team and Email are any non-empty values stamped on the user's
-// findings at ingest, empty when unattributed — no Postgres resolution
-// happens on this read path.
+// RiskSignalUserCount is one (rule, user, attribution-kind) group's finding
+// count in the current window. Team and Email are any non-empty values stamped
+// on the user's findings at ingest. MCPFinding separates MCP rows so read-time
+// account email resolution cannot change existing chat identity display.
 type RiskSignalUserCount struct {
 	RuleID         string
 	UserID         string
 	ExternalUserID string
 	Team           string
 	Email          string
+	MCPFinding     bool
 	Findings       uint64
 }
 
@@ -200,10 +201,11 @@ func (q *Queries) ListRiskSignalTopUsers(ctx context.Context, p RiskOverviewWind
 		"external_user_id",
 		"anyIf(team, team != '') AS g_team",
 		"anyIf(user_email, user_email != '') AS g_email",
+		"(mcp_server_id IS NOT NULL OR meta_mcp_server_id IS NOT NULL OR mediation_surface != '') AS is_mcp_finding",
 		"uniqExact(id) AS findings",
 	).
-		GroupBy("rule_id", "user_id", "external_user_id").
-		OrderBy("rule_id ASC", "findings DESC", "user_id ASC", "external_user_id ASC").
+		GroupBy("rule_id", "user_id", "external_user_id", "is_mcp_finding").
+		OrderBy("rule_id ASC", "findings DESC", "user_id ASC", "external_user_id ASC", "is_mcp_finding DESC").
 		Suffix(fmt.Sprintf("LIMIT %d BY rule_id LIMIT %d", perRule, totalLimit)).
 		ToSql()
 	if err != nil {
@@ -219,7 +221,7 @@ func (q *Queries) ListRiskSignalTopUsers(ctx context.Context, p RiskOverviewWind
 	var out []RiskSignalUserCount
 	for rows.Next() {
 		var row RiskSignalUserCount
-		if err := rows.Scan(&row.RuleID, &row.UserID, &row.ExternalUserID, &row.Team, &row.Email, &row.Findings); err != nil {
+		if err := rows.Scan(&row.RuleID, &row.UserID, &row.ExternalUserID, &row.Team, &row.Email, &row.MCPFinding, &row.Findings); err != nil {
 			return nil, fmt.Errorf("scan risk signal top users row: %w", err)
 		}
 		out = append(out, row)

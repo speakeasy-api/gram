@@ -93,12 +93,12 @@ func (s *Service) listResultsByProjectFromClickHouse(
 		totalCount = safeCount(count)
 	}
 
-	titles, blocks := s.listDisplayEnrichment(ctx, projectID, rows)
+	titles, blocks, userEmails := s.listDisplayEnrichment(ctx, authCtx.ActiveOrganizationID, projectID, rows)
 
 	results := make([]*types.RiskResult, 0, len(rows))
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
-		results = append(results, chListRowToResult(row, titles, blocks))
+		results = append(results, chListRowToResult(row, titles, blocks, userEmails))
 		if i == pageSize {
 			// Cursor from the LAST RETURNED row (not this extra row): the
 			// next-page predicate is a strict (message_created_at, id) <, so a
@@ -138,15 +138,17 @@ func (s *Service) visiblePolicyIDs(ctx context.Context, projectID uuid.UUID, pol
 	return ids, nil
 }
 
-// listDisplayEnrichment batch-fetches the page's chat titles (by chat id) and
-// latest tool-call block ids (by chat message id) from Postgres. Best-effort:
-// a failed lookup logs and leaves the affected display fields empty rather
-// than failing the page.
-func (s *Service) listDisplayEnrichment(ctx context.Context, projectID uuid.UUID, rows []chrepo.RiskFindingListRow) (map[uuid.UUID]string, map[uuid.UUID]uuid.UUID) {
+// listDisplayEnrichment batch-fetches the page's chat titles (by chat id),
+// latest tool-call block ids (by chat message id), and MCP users' current
+// emails from Postgres. Best-effort: a failed lookup logs and leaves the
+// affected display fields on their existing fallbacks rather than failing the
+// page.
+func (s *Service) listDisplayEnrichment(ctx context.Context, organizationID string, projectID uuid.UUID, rows []chrepo.RiskFindingListRow) (map[uuid.UUID]string, map[uuid.UUID]uuid.UUID, map[string]string) {
 	chatIDs := make([]uuid.UUID, 0, len(rows))
 	messageIDs := make([]uuid.UUID, 0, len(rows))
 	seenChats := make(map[uuid.UUID]struct{}, len(rows))
 	seenMessages := make(map[uuid.UUID]struct{}, len(rows))
+	userIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
 		if id, err := uuid.Parse(row.ChatID); err == nil {
 			if _, ok := seenChats[id]; !ok {
@@ -159,6 +161,9 @@ func (s *Service) listDisplayEnrichment(ctx context.Context, projectID uuid.UUID
 				seenMessages[id] = struct{}{}
 				messageIDs = append(messageIDs, id)
 			}
+		}
+		if isMCPFindingRow(row) && row.UserID != "" {
+			userIDs = append(userIDs, row.UserID)
 		}
 	}
 
@@ -188,14 +193,28 @@ func (s *Service) listDisplayEnrichment(ctx context.Context, projectID uuid.UUID
 		}
 	}
 
-	return titles, blocks
+	userEmails, err := s.riskUserEmailsByID(ctx, organizationID, userIDs)
+	if err != nil {
+		s.logger.WarnContext(ctx, "enrich risk listing user emails", attr.SlogError(err))
+		userEmails = map[string]string{}
+	}
+
+	return titles, blocks, userEmails
+}
+
+func isMCPFindingRow(row chrepo.RiskFindingListRow) bool {
+	return row.MCPServerID != "" ||
+		row.MetaMCPServerID != "" ||
+		row.ToolsetID != "" ||
+		row.MediationSurface != "" ||
+		row.MCPMethod != ""
 }
 
 // chListRowToResult maps one ClickHouse listing row to the API type. The
 // store-side redaction is authoritative: Match and Spans stay nil and
 // MatchRedacted carries the ingest-time display string, so the public
 // ListRiskResults redaction pass recognizes the row as already redacted.
-func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]string, blocks map[uuid.UUID]uuid.UUID) *types.RiskResult {
+func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]string, blocks map[uuid.UUID]uuid.UUID, userEmails map[string]string) *types.RiskResult {
 	var chatID *string
 	var chatTitle *string
 	if id, err := uuid.Parse(row.ChatID); err == nil {
@@ -219,6 +238,17 @@ func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]strin
 		tags = []string{}
 	}
 
+	displayUserID := row.ExternalUserID
+	if isMCPFindingRow(row) {
+		displayUserID = userEmails[row.UserID]
+		if displayUserID == "" {
+			displayUserID = row.ExternalUserID
+		}
+		if displayUserID == "" {
+			displayUserID = row.UserID
+		}
+	}
+
 	return &types.RiskResult{
 		ID:                 row.ID.String(),
 		PolicyID:           row.RiskPolicyID,
@@ -239,7 +269,7 @@ func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]strin
 		ChatContentPartID:  conv.PtrEmpty(row.ContentPartID),
 		ChatID:             chatID,
 		ChatTitle:          chatTitle,
-		UserID:             conv.PtrEmpty(row.ExternalUserID),
+		UserID:             conv.PtrEmpty(displayUserID),
 		Source:             row.Source,
 		RuleID:             conv.PtrEmpty(row.RuleID),
 		Description:        conv.PtrEmpty(row.Description),
