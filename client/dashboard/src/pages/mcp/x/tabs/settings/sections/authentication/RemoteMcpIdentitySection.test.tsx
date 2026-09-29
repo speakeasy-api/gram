@@ -61,6 +61,10 @@ vi.mock("@/routes", () => ({
       clientDetail: {
         href: (issuerId: string, clientId: string) =>
           `/providers/${issuerId}/clients/${clientId}`,
+        mcpServers: {
+          href: (issuerId: string, clientId: string) =>
+            `/providers/${issuerId}/clients/${clientId}/mcp-servers`,
+        },
       },
     },
   }),
@@ -1100,14 +1104,35 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe(true);
   });
 
-  it("locks identity when the session issuer is organization-wide", () => {
+  it("locks identity only when an organization-wide issuer holds an organization client", () => {
     mocks.userSessionIssuer.mockReturnValue({
       data: { id: "user-session-issuer-1", projectId: "" },
+    });
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "org-client",
+          projectId: "",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
     });
 
     renderIdentity();
 
-    expect(screen.getByText(/organization-wide session issuer/i)).toBeDefined();
+    // The server refuses to change a binding every project shares, so the
+    // panel says who can and links to where they would do it.
+    expect(screen.getByText(/shared by every project/i)).toBeDefined();
+    expect(
+      screen
+        .getByRole("link", { name: /client's MCP servers/ })
+        .getAttribute("href"),
+    ).toBe("/providers/provider-1/clients/client-1/mcp-servers");
     expect(
       (
         screen.getByRole("radio", {
@@ -1115,6 +1140,32 @@ describe("RemoteMcpIdentitySectionBody", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
+    cleanup();
+
+    // A project-owned client on the same issuer is this project's to change.
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-2",
+          clientId: "project-client",
+          projectId: "project-1",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    renderIdentity();
+    expect(screen.queryByText(/shared by every project/i)).toBeNull();
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /Service Account/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
   });
 
   it("renders query failures as indeterminate instead of No Identity", () => {

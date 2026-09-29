@@ -90,11 +90,14 @@ export function RemoteMcpIdentitySectionBody({
     undefined,
     { enabled: !!target.userSessionIssuerId, throwOnError: false },
   );
-  // An organization-owned issuer governs servers across projects, so its
-  // bindings are managed at the organization, not from one server. The server
-  // refuses the change anyway (ErrIdentityOrgWideBinding); locking here says
-  // so before Save instead of after.
+  // On an organization-level issuer, a binding to an organization-owned
+  // client is shared by every project's servers on that issuer, so the server
+  // refuses to replace it from one project (ErrIdentityOrgWideBinding).
+  // Project-owned clients stay editable, so only that case locks the panel.
   const organizationIssuer = userSessionIssuer?.projectId === "";
+  const orgSharedClient = organizationIssuer
+    ? clients.find((linked) => linked.projectId === "")
+    : undefined;
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -121,7 +124,7 @@ export function RemoteMcpIdentitySectionBody({
     siblingsQuery.isLoading || siblingsQuery.isError || !canWrite;
   const identityReadOnly =
     sharedSource ||
-    organizationIssuer ||
+    !!orgSharedClient ||
     siblingsQuery.isLoading ||
     siblingsQuery.isError ||
     !canWrite;
@@ -358,18 +361,23 @@ export function RemoteMcpIdentitySectionBody({
               </Alert>
             ) : null}
 
-            {organizationIssuer && !sharedSource ? (
+            {orgSharedClient && !sharedSource ? (
               <Alert variant="warning" dismissible={false}>
-                This server uses an organization-wide session issuer, so its
-                identity is managed for the whole organization rather than from
-                here. Manage it in{" "}
+                This server uses a client shared by every project on the
+                organization&apos;s session issuer, so it can&apos;t be changed
+                here. An organization admin can remove it from this server on
+                the{" "}
                 <Link
                   className="font-medium underline underline-offset-2"
-                  to={routes.remoteIdentityProviders.href()}
+                  to={routes.remoteIdentityProviders.clientDetail.mcpServers.href(
+                    orgSharedClient.remoteSessionIssuerId,
+                    orgSharedClient.id,
+                  )}
                 >
-                  Remote Identity Providers
+                  client&apos;s MCP servers
                 </Link>
-                .
+                , or you can move this server to a project session issuer under
+                Sessions below.
               </Alert>
             ) : null}
 
