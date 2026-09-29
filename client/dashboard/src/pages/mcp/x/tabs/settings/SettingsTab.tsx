@@ -131,10 +131,14 @@ export function SettingsTab({
   if (remoteMcpServerId) {
     return (
       <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
-        <GeneralSection
-          mcpServer={mcpServer}
-          remoteMcpServer={remoteMcpServer}
-        />
+        {/* Held until the source settles: arriving later would remount the
+            form around its Remote URL and drop anything already typed. */}
+        {remoteMcpServer || remoteQuery.isError ? (
+          <GeneralSection
+            mcpServer={mcpServer}
+            remoteMcpServer={remoteMcpServer}
+          />
+        ) : null}
         {/* Identity sits directly under General: it is the first decision a
             remote server needs. Upstream headers live inside its Custom
             Headers disclosure; they are governed by the identity choice, not

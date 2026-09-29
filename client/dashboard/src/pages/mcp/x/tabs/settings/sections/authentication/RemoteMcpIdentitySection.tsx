@@ -85,7 +85,11 @@ export function RemoteMcpIdentitySectionBody({
     { enabled: !!target.userSessionIssuerId },
   );
   const { data: issuersResult } = useRemoteSessionIssuers();
-  const { data: userSessionIssuer } = useUserSessionIssuer(
+  const {
+    data: userSessionIssuer,
+    isLoading: issuerLoading,
+    isError: issuerError,
+  } = useUserSessionIssuer(
     { id: target.userSessionIssuerId ?? undefined },
     undefined,
     { enabled: !!target.userSessionIssuerId, throwOnError: false },
@@ -122,9 +126,14 @@ export function RemoteMcpIdentitySectionBody({
   // binding for its siblings — but headers do not inherit that lock.
   const headersReadOnly =
     siblingsQuery.isLoading || siblingsQuery.isError || !canWrite;
+  // Held until the issuer is classified: an organization-wide one could make
+  // Save fail with ErrIdentityOrgWideBinding, so neither a pending nor a
+  // failed lookup may leave the controls open.
   const identityReadOnly =
     sharedSource ||
     !!orgSharedClient ||
+    issuerLoading ||
+    issuerError ||
     siblingsQuery.isLoading ||
     siblingsQuery.isError ||
     !canWrite;

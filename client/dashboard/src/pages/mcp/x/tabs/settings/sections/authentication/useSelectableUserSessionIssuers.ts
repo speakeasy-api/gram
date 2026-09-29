@@ -17,11 +17,15 @@ export function useSelectableUserSessionIssuers(target: AuthTarget): {
   const effectiveIssuersQuery = useEffectiveUserSessionIssuers({
     mcpResourceId: target.permissionResourceId,
   });
-  const { data: userSessionIssuer } = useUserSessionIssuer(
+  // The current issuer may be missing from the effective list, so it is read
+  // on its own; until it lands the picker could show no current issuer and
+  // offer a reassignment it cannot judge, so its state counts too.
+  const currentIssuerQuery = useUserSessionIssuer(
     { id: userSessionIssuerId },
     undefined,
-    { enabled: !!userSessionIssuerId },
+    { enabled: !!userSessionIssuerId, throwOnError: false },
   );
+  const userSessionIssuer = currentIssuerQuery.data;
   const issuers = useMemo(() => {
     const supportedIssuers = target.supportsOrganizationIssuers
       ? effectiveIssuersQuery.issuers
@@ -45,7 +49,7 @@ export function useSelectableUserSessionIssuers(target: AuthTarget): {
 
   return {
     issuers,
-    isLoading: effectiveIssuersQuery.isLoading,
-    isError: effectiveIssuersQuery.isError,
+    isLoading: effectiveIssuersQuery.isLoading || currentIssuerQuery.isLoading,
+    isError: effectiveIssuersQuery.isError || currentIssuerQuery.isError,
   };
 }
