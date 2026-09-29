@@ -37,7 +37,7 @@ Derive the PR description from the diff, commits, and user intent. Do not merely
 
 ### Gutternote review steps
 
-CI adds the `preview` label and launches a preview app when a PR changes `.tsx` or `.css` files under `client/dashboard/` or `client/admin/` (see `preview-ui` in `.github/filters.yaml`). Reviewers open that preview and need to find the new UI without reading the diff. Write this section for any PR that matches those paths or already has the label. Skip it only when no change is visible, such as a type-only refactor, and say so in one line.
+Adding the `preview` label to a PR launches a preview app; CI does not add it for you. Reviewers open that preview and need to find the new UI without reading the diff. Write this section for any PR that changes UI or has the label. Skip it only when no change is visible, such as a type-only refactor, and say so in one line.
 
 Write it as numbered steps a reviewer can follow in the preview app, from the first page after login:
 
