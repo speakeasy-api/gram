@@ -244,8 +244,12 @@ type AccessMember struct {
 	Email string
 	// Avatar URL.
 	PhotoURL *string
-	// All role IDs assigned to this member.
+	// Role IDs assigned directly to this member.
 	RoleIds []string
+	// Role IDs this member holds through directory role mappings. They follow the
+	// member's directory groups and attributes, so updating the member's roles
+	// does not change them.
+	DirectoryRoleIds []string
 	// When the member joined the organization.
 	JoinedAt string
 	// Department name as reported by the identity provider.

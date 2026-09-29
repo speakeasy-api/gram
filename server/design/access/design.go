@@ -1168,14 +1168,15 @@ var ListAudienceOptionsResult = Type("ListAudienceOptionsResult", func() {
 })
 
 var MemberModel = Type("AccessMember", func() {
-	Required("id", "principal_urn", "name", "email", "role_ids", "joined_at")
+	Required("id", "principal_urn", "name", "email", "role_ids", "directory_role_ids", "joined_at")
 
 	Attribute("id", String, "User ID.")
 	Attribute("principal_urn", String, "Canonical principal URN for this member.")
 	Attribute("name", String, "Display name.")
 	Attribute("email", String, "Email address.")
 	Attribute("photo_url", String, "Avatar URL.")
-	Attribute("role_ids", ArrayOf(String), "All role IDs assigned to this member.")
+	Attribute("role_ids", ArrayOf(String), "Role IDs assigned directly to this member.")
+	Attribute("directory_role_ids", ArrayOf(String), "Role IDs this member holds through directory role mappings. They follow the member's directory groups and attributes, so updating the member's roles does not change them.")
 	Attribute("joined_at", String, func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)

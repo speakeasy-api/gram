@@ -528,7 +528,28 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 		attr.UserID(ac.UserID),
 	)
 
-	return memberUpdate.After, nil
+	// The update's After is also the audit snapshot, which leaves out
+	// directory-owned data, so the response gets the member's mapped roles on a
+	// copy. The roles are already committed, so a failed read only leaves the
+	// mapped roles out of the response.
+	result := *memberUpdate.After
+	principals, err := repo.New(s.db).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		UserID:         result.ID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "load directory mapped roles for member role update response", attr.SlogError(err))
+		return &result, nil
+	}
+	for _, principal := range principals {
+		if !principal.FromDirectoryMapping {
+			continue
+		}
+		// A role principal URN ends in the role ID: role:<kind>:<id>.
+		roleID := principal.PrincipalUrn[strings.LastIndex(principal.PrincipalUrn, ":")+1:]
+		result.DirectoryRoleIds = append(result.DirectoryRoleIds, roleID)
+	}
+	return &result, nil
 }
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {

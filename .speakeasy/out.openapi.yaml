@@ -74379,6 +74379,11 @@ components:
         department:
           type: string
           description: Department name as reported by the identity provider.
+        directory_role_ids:
+          type: array
+          items:
+            type: string
+          description: Role IDs this member holds through directory role mappings. They follow the member's directory groups and attributes, so updating the member's roles does not change them.
         email:
           type: string
           description: Email address.
@@ -74407,13 +74412,14 @@ components:
           type: array
           items:
             type: string
-          description: All role IDs assigned to this member.
+          description: Role IDs assigned directly to this member.
       required:
         - id
         - principal_urn
         - name
         - email
         - role_ids
+        - directory_role_ids
         - joined_at
     AccessibleMCPServer:
       type: object

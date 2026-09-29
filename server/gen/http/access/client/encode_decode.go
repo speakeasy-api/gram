@@ -7589,6 +7589,10 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 	for i, val := range v.RoleIds {
 		res.RoleIds[i] = val
 	}
+	res.DirectoryRoleIds = make([]string, len(v.DirectoryRoleIds))
+	for i, val := range v.DirectoryRoleIds {
+		res.DirectoryRoleIds[i] = val
+	}
 	if v.Groups != nil {
 		res.Groups = make([]string, len(v.Groups))
 		for i, val := range v.Groups {

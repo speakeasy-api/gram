@@ -311,8 +311,12 @@ type UpdateMemberRolesResponseBody struct {
 	Email string `form:"email" json:"email" xml:"email"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// All role IDs assigned to this member.
+	// Role IDs assigned directly to this member.
 	RoleIds []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
+	// Role IDs this member holds through directory role mappings. They follow the
+	// member's directory groups and attributes, so updating the member's roles
+	// does not change them.
+	DirectoryRoleIds []string `form:"directory_role_ids" json:"directory_role_ids" xml:"directory_role_ids"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
 	// Department name as reported by the identity provider.
@@ -6370,8 +6374,12 @@ type AccessMemberResponseBody struct {
 	Email string `form:"email" json:"email" xml:"email"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// All role IDs assigned to this member.
+	// Role IDs assigned directly to this member.
 	RoleIds []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
+	// Role IDs this member holds through directory role mappings. They follow the
+	// member's directory groups and attributes, so updating the member's roles
+	// does not change them.
+	DirectoryRoleIds []string `form:"directory_role_ids" json:"directory_role_ids" xml:"directory_role_ids"`
 	// When the member joined the organization.
 	JoinedAt string `form:"joined_at" json:"joined_at" xml:"joined_at"`
 	// Department name as reported by the identity provider.
@@ -7089,6 +7097,14 @@ func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRol
 		}
 	} else {
 		body.RoleIds = []string{}
+	}
+	if res.DirectoryRoleIds != nil {
+		body.DirectoryRoleIds = make([]string, len(res.DirectoryRoleIds))
+		for i, val := range res.DirectoryRoleIds {
+			body.DirectoryRoleIds[i] = val
+		}
+	} else {
+		body.DirectoryRoleIds = []string{}
 	}
 	if res.Groups != nil {
 		body.Groups = make([]string, len(res.Groups))
