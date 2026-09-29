@@ -56,9 +56,6 @@ func observedRow(t *testing.T, ctx context.Context, si *instance, serverID uuid.
 
 func TestObserveAttempt_Mapping(t *testing.T) {
 	t.Parallel()
-	ctx, si := newTestService(t)
-	recordAgent(t, ctx, si, "wlp1")
-	observer := newObserver(t, si)
 
 	tests := []struct {
 		name      string
@@ -83,14 +80,21 @@ func TestObserveAttempt_Mapping(t *testing.T) {
 		{"persistence after success", failure(identitychaining.StagePersistence, identitychaining.ReasonStaleConfiguration, true), true, "", "connected"},
 	}
 	for _, tt := range tests {
-		f, obs := confirmedUpstream(t, ctx, si, "Map"+uuid.NewString()[:6])
-		obs.Outcome = tt.outcome
-		obs.GrantValidated = tt.validated
-		require.NoError(t, observer.ObserveAttempt(ctx, obs), tt.name)
-		row := observedRow(t, ctx, si, f.serverID)
-		require.Equal(t, tt.want, conv.PtrValOr(row.ObservedResult, ""), tt.name)
-		require.Equal(t, tt.state, row.State, tt.name)
-		require.Equal(t, tt.want != "", row.ObservedAt != nil, tt.name)
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, si := newTestService(t)
+			recordAgent(t, ctx, si, "wlp1")
+			observer := newObserver(t, si)
+
+			f, obs := confirmedUpstream(t, ctx, si, "Map"+uuid.NewString()[:6])
+			obs.Outcome = tt.outcome
+			obs.GrantValidated = tt.validated
+			require.NoError(t, observer.ObserveAttempt(ctx, obs), tt.name)
+			row := observedRow(t, ctx, si, f.serverID)
+			require.Equal(t, tt.want, conv.PtrValOr(row.ObservedResult, ""), tt.name)
+			require.Equal(t, tt.state, row.State, tt.name)
+			require.Equal(t, tt.want != "", row.ObservedAt != nil, tt.name)
+		})
 	}
 }
 
@@ -192,7 +196,7 @@ func TestObserveAttempt_AuditsTransitionsAsTheSystem(t *testing.T) {
 	require.Nil(t, row.ObservedAt)
 }
 
-func TestReadiness_AudienceMismatchOutranksObservedMissingConnection(t *testing.T) {
+func TestObserveAttempt_MismatchedAudienceDoesNotRecordMissingConnection(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 	recordAgent(t, ctx, si, "wlp1")
@@ -213,31 +217,73 @@ func TestReadiness_AudienceMismatchOutranksObservedMissingConnection(t *testing.
 	row := observedRow(t, ctx, si, f.serverID)
 	require.Equal(t, "broken", row.State)
 	require.Equal(t, "audience_mismatch", conv.PtrValOr(row.BrokenReason, ""))
-	require.Equal(t, "connection_missing", conv.PtrValOr(row.ObservedResult, ""))
+	require.Nil(t, row.ObservedResult)
+	require.Nil(t, row.ObservedAt)
 }
 
-func TestObserveAttempt_OneUsersFailureDoesNotFlipVerified(t *testing.T) {
+func TestObserveAttempt_DefinitiveFailureReplacesVerified(t *testing.T) {
 	t.Parallel()
-	ctx, si := newTestService(t)
-	recordAgent(t, ctx, si, "wlp1")
-	observer := newObserver(t, si)
-	f, obs := confirmedUpstream(t, ctx, si, "Flap")
-	require.NoError(t, observer.ObserveAttempt(ctx, obs))
+	for _, tt := range []struct {
+		name    string
+		outcome identitychaining.Outcome
+		want    string
+	}{
+		{"downstream rejection", failure(identitychaining.StageRedemption, identitychaining.ReasonInvalidGrant, false), "downstream_rejected"},
+		{"scope denied", failure(identitychaining.StageExchange, identitychaining.ReasonScopePolicyDenied, false), "scope_not_allowed"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, si := newTestService(t)
+			recordAgent(t, ctx, si, "wlp1")
+			observer := newObserver(t, si)
+			f, obs := confirmedUpstream(t, ctx, si, "Failure")
+			require.NoError(t, observer.ObserveAttempt(ctx, obs))
 
-	rejected := obs
-	rejected.StartedAt = obs.StartedAt.Add(time.Minute)
-	rejected.Outcome = failure(identitychaining.StageRedemption, identitychaining.ReasonInvalidGrant, false)
-	require.NoError(t, observer.ObserveAttempt(ctx, rejected))
-	require.Equal(t, "verified", observedRow(t, ctx, si, f.serverID).State)
+			rejected := obs
+			rejected.StartedAt = obs.StartedAt.Add(time.Second)
+			rejected.Outcome = tt.outcome
+			require.NoError(t, observer.ObserveAttempt(ctx, rejected))
+			row := observedRow(t, ctx, si, f.serverID)
+			require.Equal(t, "broken", row.State)
+			require.Equal(t, tt.want, conv.PtrValOr(row.BrokenReason, ""))
+			count, err := audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionObserve)
+			require.NoError(t, err)
+			require.EqualValues(t, 2, count)
+		})
+	}
+}
 
-	rejected.StartedAt = obs.StartedAt.Add(25 * time.Hour)
-	require.NoError(t, observer.ObserveAttempt(ctx, rejected))
-	row := observedRow(t, ctx, si, f.serverID)
-	require.Equal(t, "broken", row.State)
-	require.Equal(t, "downstream_rejected", conv.PtrValOr(row.BrokenReason, ""))
-	count, err := audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionObserve)
-	require.NoError(t, err)
-	require.EqualValues(t, 2, count)
+func TestObserveAttempt_IgnoredFailurePreservesVerified(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name    string
+		outcome identitychaining.Outcome
+	}{
+		{"ambiguous grant", failure(identitychaining.StageExchange, identitychaining.ReasonInvalidGrant, false)},
+		{"per-user denial", failure(identitychaining.StageExchange, identitychaining.ReasonAccessDenied, false)},
+		{"transient redemption", failure(identitychaining.StageRedemption, identitychaining.ReasonTransientFailure, true)},
+		{"malformed redemption", failure(identitychaining.StageRedemption, identitychaining.ReasonMalformedResponse, false)},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, si := newTestService(t)
+			recordAgent(t, ctx, si, "wlp1")
+			observer := newObserver(t, si)
+			f, obs := confirmedUpstream(t, ctx, si, "Ignored")
+			require.NoError(t, observer.ObserveAttempt(ctx, obs))
+			before := observedRow(t, ctx, si, f.serverID)
+			obs.StartedAt = obs.StartedAt.Add(time.Second)
+			obs.Outcome = tt.outcome
+			require.NoError(t, observer.ObserveAttempt(ctx, obs))
+			row := observedRow(t, ctx, si, f.serverID)
+			require.Equal(t, "verified", row.State)
+			require.Equal(t, before.ObservedResult, row.ObservedResult)
+			require.Equal(t, before.ObservedAt, row.ObservedAt)
+			count, err := audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionObserve)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, count)
+		})
+	}
 }
 
 func TestObserveAttempt_RefreshesAnUnchangedResultWithoutAuditing(t *testing.T) {

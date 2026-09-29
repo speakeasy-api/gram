@@ -247,7 +247,8 @@ WHERE organization_id = @organization_id
   AND resource = @resource
 FOR UPDATE;
 
--- The observer's unlocked first read rejects stale or held results without a lock.
+-- The observer's unlocked first read rejects stale attempts without taking a lock.
+-- Concurrently locked rows are skipped by GetResourceConnectionForObservation.
 -- name: GetResourceConnection :one
 SELECT *
 FROM okta_resource_connections
@@ -333,7 +334,9 @@ WHERE id = @id;
 -- name: SetIssuerURLFixture :execrows
 UPDATE remote_session_issuers
 SET issuer = @issuer
-WHERE id = @id;
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id;
 
 -- Test fixture: a snapshot row for an identity provider app instance.
 -- name: CreateOktaApplicationFixture :one

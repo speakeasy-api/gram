@@ -404,6 +404,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// connection-scoped org administration.
 	for _, name := range []string{
 		"get_network_ingress",
+		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
 		operationSetPluginAssignments,

@@ -69,12 +69,11 @@ func Derive(in Inputs) State {
 	switch {
 	case !in.Confirmed:
 		return StateNeedsConnection
-	// A working exchange outranks any static check.
-	case in.Observed == ResultVerified:
-		return StateVerified
 	// A wrong audience also surfaces as a missing connection; name the cause.
 	case BrokenReason(in) == ReasonAudienceMismatch:
 		return StateBroken
+	case in.Observed == ResultVerified:
+		return StateVerified
 	case in.Observed == ResultConnectionMissing:
 		return StateNeedsConnection
 	case BrokenReason(in) != "":
@@ -94,7 +93,7 @@ func NotApplicableReason(in Inputs) string {
 
 // BrokenReason is empty unless a confirmed connection is known not to work.
 func BrokenReason(in Inputs) string {
-	if !in.Confirmed || in.Observed == ResultVerified {
+	if !in.Confirmed {
 		return ""
 	}
 	if in.AudienceMismatch {

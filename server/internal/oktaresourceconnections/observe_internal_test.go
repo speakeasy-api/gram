@@ -71,9 +71,8 @@ func TestSupersedes(t *testing.T) {
 	require.True(t, supersedes(row(ResultVerified, observed), ResultVerified, observed.Add(time.Hour)), "unchanged refresh")
 	require.True(t, supersedes(row(ResultVerified, observed), ResultConnectionMissing, observed.Add(time.Second)), "org-level failure replaces verified")
 	require.True(t, supersedes(row(ResultVerified, observed), ResultClientAuthFailed, observed.Add(time.Second)))
-	require.False(t, supersedes(row(ResultVerified, observed), ResultDownstreamRejected, observed.Add(23*time.Hour)), "possibly one user's failure")
-	require.False(t, supersedes(row(ResultVerified, observed), ResultScopeNotAllowed, observed.Add(23*time.Hour)))
-	require.True(t, supersedes(row(ResultVerified, observed), ResultDownstreamRejected, observed.Add(24*time.Hour)), "no success for a day")
+	require.True(t, supersedes(row(ResultVerified, observed), ResultDownstreamRejected, observed.Add(time.Second)), "newer definitive failure replaces verified immediately")
+	require.True(t, supersedes(row(ResultVerified, observed), ResultScopeNotAllowed, observed.Add(time.Second)))
 	require.True(t, supersedes(row(ResultDownstreamRejected, observed), ResultVerified, observed.Add(time.Second)), "success always replaces a failure")
 
 	for _, previous := range []Result{ResultVerified, ResultConnectionMissing} {

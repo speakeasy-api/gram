@@ -30,14 +30,8 @@ const (
 	ObserverActorDisplayName = "Cross App Access exchange"
 )
 
-const (
-	// verifiedHold keeps a failure that may be one user's from replacing a
-	// verified result until no exchange has succeeded for this long.
-	verifiedHold = 24 * time.Hour
-
-	// rollbackTimeout bounds a rollback after the observation's deadline.
-	rollbackTimeout = time.Second
-)
+// rollbackTimeout bounds a rollback after the observation's deadline.
+const rollbackTimeout = time.Second
 
 // Observer records identity chaining exchange results on the organization's
 // confirmed Okta resource connections.
@@ -99,23 +93,14 @@ func providerRejection(r identitychaining.Reason) bool {
 // supersedes reports whether result, from an attempt that started at
 // startedAt, replaces what rc records. Newer unchanged results also advance
 // observed_at so older contradictory attempts cannot replace them.
-func supersedes(rc repo.OktaResourceConnection, result Result, startedAt time.Time) bool {
+func supersedes(rc repo.OktaResourceConnection, _ Result, startedAt time.Time) bool {
 	if !startedAt.After(rc.UpdatedAt.Time) {
 		return false
 	}
 	if !rc.ObservedAt.Valid {
 		return true
 	}
-	age := startedAt.Sub(rc.ObservedAt.Time)
-	previous := Result(rc.ObservedResult.String)
-	switch {
-	case age <= 0:
-		return false
-	case previous == ResultVerified && (result == ResultScopeNotAllowed || result == ResultDownstreamRejected):
-		return age >= verifiedHold
-	default:
-		return true
-	}
+	return startedAt.After(rc.ObservedAt.Time)
 }
 
 // ObserveAttempt records the attempt's result on the confirmed resource
@@ -162,6 +147,11 @@ func (o *Observer) ObserveAttempt(ctx context.Context, obs identitychaining.Obse
 	if err != nil {
 		return fmt.Errorf("read resource connection: %w", err)
 	}
+	// invalid_target for another audience does not establish that the
+	// confirmed connection is missing; static readiness explains the mismatch.
+	if result == ResultConnectionMissing && !remotesessions.IssuerURLsEqual(rc.Audience, obs.RemoteIssuer) {
+		return nil
+	}
 	if !supersedes(rc, result, obs.StartedAt) {
 		return nil
 	}
@@ -183,6 +173,11 @@ func (o *Observer) ObserveAttempt(ctx context.Context, obs identitychaining.Obse
 	}
 	if err != nil {
 		return fmt.Errorf("lock resource connection: %w", err)
+	}
+	// invalid_target for another audience does not establish that the
+	// confirmed connection is missing; static readiness explains the mismatch.
+	if result == ResultConnectionMissing && !remotesessions.IssuerURLsEqual(locked.Audience, obs.RemoteIssuer) {
+		return nil
 	}
 	if !supersedes(locked, result, obs.StartedAt) {
 		return nil

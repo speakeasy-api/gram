@@ -475,7 +475,8 @@ type GetResourceConnectionParams struct {
 	Resource                     string
 }
 
-// The observer's unlocked first read rejects stale or held results without a lock.
+// The observer's unlocked first read rejects stale attempts without taking a lock.
+// Concurrently locked rows are skipped by GetResourceConnectionForObservation.
 func (q *Queries) GetResourceConnection(ctx context.Context, arg GetResourceConnectionParams) (OktaResourceConnection, error) {
 	row := q.db.QueryRow(ctx, getResourceConnection,
 		arg.OrganizationID,
@@ -1008,16 +1009,25 @@ const setIssuerURLFixture = `-- name: SetIssuerURLFixture :execrows
 UPDATE remote_session_issuers
 SET issuer = $1
 WHERE id = $2
+  AND organization_id = $3
+  AND project_id = $4
 `
 
 type SetIssuerURLFixtureParams struct {
-	Issuer string
-	ID     uuid.UUID
+	Issuer         string
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
 }
 
 // Test fixture: an issuer identifier, e.g. to match a confirmed audience.
 func (q *Queries) SetIssuerURLFixture(ctx context.Context, arg SetIssuerURLFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setIssuerURLFixture, arg.Issuer, arg.ID)
+	result, err := q.db.Exec(ctx, setIssuerURLFixture,
+		arg.Issuer,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
 	if err != nil {
 		return 0, err
 	}

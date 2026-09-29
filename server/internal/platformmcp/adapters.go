@@ -332,6 +332,7 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
+	xaaReadiness              *xaaReadinessService
 	logger                    *slog.Logger
 	db                        *pgxpool.Pool
 	reader                    *readmodel.Reader
@@ -376,6 +377,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		networkTrafficLogsEnabled: nil,
 		eventFeed:                 nil,
 		networkIngress:            nil,
+		xaaReadiness:              nil,
 		authz:                     nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,

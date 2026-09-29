@@ -36,7 +36,7 @@ func TestDerive(t *testing.T) {
 		{"downstream rejection is broken", with(func(i *Inputs) { i.Observed = ResultDownstreamRejected }), StateBroken},
 		{"audience mismatch is broken", with(func(i *Inputs) { i.AudienceMismatch = true }), StateBroken},
 		{"audience mismatch explains a missing connection", with(func(i *Inputs) { i.AudienceMismatch = true; i.Observed = ResultConnectionMissing }), StateBroken},
-		{"verified outranks an audience mismatch", with(func(i *Inputs) { i.AudienceMismatch = true; i.Observed = ResultVerified }), StateVerified},
+		{"audience mismatch outranks verified", with(func(i *Inputs) { i.AudienceMismatch = true; i.Observed = ResultVerified }), StateBroken},
 		{"agent still first", with(func(i *Inputs) { i.AgentRecorded = false; i.Observed = ResultVerified }), StateNeedsAgent},
 	}
 	for _, tt := range tests {
@@ -50,7 +50,7 @@ func TestDerive(t *testing.T) {
 	require.Equal(t, ReasonAudienceMismatch, BrokenReason(with(func(i *Inputs) { i.AudienceMismatch = true; i.Observed = ResultScopeNotAllowed })))
 	require.Equal(t, string(ResultScopeNotAllowed), BrokenReason(with(func(i *Inputs) { i.Observed = ResultScopeNotAllowed })))
 	require.Empty(t, BrokenReason(with(func(i *Inputs) { i.Observed = ResultVerified })))
-	require.Empty(t, BrokenReason(with(func(i *Inputs) { i.AudienceMismatch = true; i.Observed = ResultVerified })))
+	require.Equal(t, ReasonAudienceMismatch, BrokenReason(with(func(i *Inputs) { i.AudienceMismatch = true; i.Observed = ResultVerified })))
 	require.Empty(t, BrokenReason(with(func(i *Inputs) { i.Confirmed = false; i.AudienceMismatch = true })))
 }
 

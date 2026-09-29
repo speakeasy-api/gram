@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -85,6 +86,7 @@ type Chainer struct {
 	delegation *remotesessions.DelegationService
 	keys       *jwks.KeyResolver
 	locks      cache.Cache
+	observerMu sync.RWMutex
 	observer   Observer
 	now        func() time.Time
 }

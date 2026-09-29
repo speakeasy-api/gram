@@ -186,7 +186,7 @@ func createResourceIssuer(t *testing.T, ctx context.Context, si *instance, orgID
 	require.EqualValues(t, 1, n)
 	if capable {
 		// Confirming with the shared audience then reads as connected, not a mismatch.
-		n, err = si.q.SetIssuerURLFixture(ctx, repo.SetIssuerURLFixtureParams{Issuer: audience, ID: issuerID})
+		n, err = si.q.SetIssuerURLFixture(ctx, repo.SetIssuerURLFixtureParams{Issuer: audience, ID: issuerID, OrganizationID: conv.ToPGText(orgID), ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}})
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
 	}

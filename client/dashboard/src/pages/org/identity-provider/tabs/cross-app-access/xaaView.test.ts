@@ -50,7 +50,7 @@ describe("exchange observations", () => {
     expect(brokenReasonSummary(undefined)).toBe("");
   });
 
-  it("treats every row with a recorded confirmation as confirmed", () => {
+  it("recognizes recorded confirmations only for applicable rows past agent setup", () => {
     expect(hasConfirmation({ state: "broken", confirmedAt: new Date() })).toBe(
       true,
     );

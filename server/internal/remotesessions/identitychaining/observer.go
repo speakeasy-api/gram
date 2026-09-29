@@ -47,18 +47,24 @@ type Observer interface {
 	ObserveAttempt(ctx context.Context, o Observation) error
 }
 
-// SetObserver registers an observer for fresh attempts.
+// SetObserver registers an observer for fresh attempts, or clears it with nil.
+// It is safe to call concurrently with acquisition and observer callbacks.
 func (c *Chainer) SetObserver(o Observer) {
+	c.observerMu.Lock()
 	c.observer = o
+	c.observerMu.Unlock()
 }
 
 func (c *Chainer) observe(ctx context.Context, logger *slog.Logger, o Observation) {
-	if c.observer == nil {
+	c.observerMu.RLock()
+	observer := c.observer
+	c.observerMu.RUnlock()
+	if observer == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), observeTimeout)
 	defer cancel()
-	if err := c.observer.ObserveAttempt(ctx, o); err != nil {
+	if err := observer.ObserveAttempt(ctx, o); err != nil {
 		logger.WarnContext(ctx, "observe identity chaining attempt", attr.SlogError(err))
 	}
 }
