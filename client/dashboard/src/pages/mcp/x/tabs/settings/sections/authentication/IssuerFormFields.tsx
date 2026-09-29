@@ -449,8 +449,8 @@ export function ClientCredentialsFields({
 // OverridesFields renders the per-client OAuth dance overrides. Both fields
 // are optional and apply in both DCR and manual modes — they control what
 // Gram sends at authorize/token time, independent of how the client was
-// registered. scopeWarning renders under the scope input, for callers whose
-// issuer pins the requested scopes and so makes this field inert.
+// registered. scopeWarning renders under the scope input once it has text, for
+// callers whose issuer pins the requested scopes and so makes this field inert.
 export function OverridesFields({
   scopeOverride,
   audienceOverride,
@@ -480,7 +480,8 @@ export function OverridesFields({
           during the OAuth dance; otherwise it falls back to the issuer's
           scopes_supported.
         </Text>
-        {scopeWarning}
+        {/* Only warn once there are client scopes to be overridden. */}
+        {scopeOverride.trim() && scopeWarning}
       </Stack>
 
       <Stack gap={2}>

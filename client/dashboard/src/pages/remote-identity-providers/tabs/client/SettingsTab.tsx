@@ -173,7 +173,8 @@ export function SettingsTab({
         <div className="flex flex-col gap-1.5">
           <Label>Scopes (comma-separated)</Label>
           <Input value={scope} onChange={setScope} />
-          <IssuerScopeOverrideAlert issuer={issuer} />
+          {/* Only warn once there are client scopes to be overridden. */}
+          {scope.trim() && <IssuerScopeOverrideAlert issuer={issuer} />}
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Audience</Label>
