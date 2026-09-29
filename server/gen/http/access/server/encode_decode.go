@@ -7062,6 +7062,14 @@ func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember)
 	} else {
 		res.RoleIds = []string{}
 	}
+	if v.DirectoryRoleIds != nil {
+		res.DirectoryRoleIds = make([]string, len(v.DirectoryRoleIds))
+		for i, val := range v.DirectoryRoleIds {
+			res.DirectoryRoleIds[i] = val
+		}
+	} else {
+		res.DirectoryRoleIds = []string{}
+	}
 	if v.Groups != nil {
 		res.Groups = make([]string, len(v.Groups))
 		for i, val := range v.Groups {
@@ -7092,6 +7100,16 @@ func marshalAccessListRoleGrantToListRoleGrantResponseBody(v *access.ListRoleGra
 				continue
 			}
 			res.Selectors[i] = marshalAccessSelectorToSelectorResponseBody(val)
+		}
+	}
+	if v.DirectSelectors != nil {
+		res.DirectSelectors = make([]*SelectorResponseBody, len(v.DirectSelectors))
+		for i, val := range v.DirectSelectors {
+			if val == nil {
+				res.DirectSelectors[i] = nil
+				continue
+			}
+			res.DirectSelectors[i] = marshalAccessSelectorToSelectorResponseBody(val)
 		}
 	}
 

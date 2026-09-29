@@ -33,6 +33,29 @@ func TestSeedOrganizationDefaultsTx_EnablesLoggingBundle(t *testing.T) {
 	}
 }
 
+func TestOrganizationDefaultFailOpenCanBeDisabled(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+	q := featurerepo.New(ti.conn)
+	params := featurerepo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)}
+	enabled, err := q.IsFeatureEnabled(ctx, params)
+	require.NoError(t, err)
+	require.True(t, enabled)
+	_, err = q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)})
+	require.NoError(t, err)
+	tx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+	enabled, err = q.IsFeatureEnabled(ctx, params)
+	require.NoError(t, err)
+	require.False(t, enabled, "trial provisioning must preserve an explicit fail-closed choice")
+}
+
 func TestSeedEnterpriseTrialBundleTx_Idempotent(t *testing.T) {
 	t.Parallel()
 

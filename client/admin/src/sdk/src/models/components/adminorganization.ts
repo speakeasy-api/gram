@@ -98,6 +98,10 @@ export type AdminOrganization = {
    */
   whitelisted: boolean;
   /**
+   * Link to the organization in the WorkOS dashboard. Absent when the organization is not linked to WorkOS or the deployment has no WorkOS environment configured.
+   */
+  workosDashboardUrl?: string | undefined;
+  /**
    * WorkOS organization ID, if linked.
    */
   workosId?: string | undefined;
@@ -144,6 +148,7 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     whitelisted: z.boolean(),
+    workos_dashboard_url: z.optional(z.string()),
     workos_id: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -161,6 +166,7 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       "trial_state": "trialState",
       "trial_tier": "trialTier",
       "updated_at": "updatedAt",
+      "workos_dashboard_url": "workosDashboardUrl",
       "workos_id": "workosId",
     });
   }),

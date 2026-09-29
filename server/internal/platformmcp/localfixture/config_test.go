@@ -55,3 +55,14 @@ func TestNewConfigRejectsNonOriginURLs(t *testing.T) {
 		})
 	}
 }
+
+func TestRegistryDetailsPathWithDiscoveryPrefix(t *testing.T) {
+	t.Parallel()
+
+	origin, err := url.Parse("https://localhost:8080")
+	require.NoError(t, err)
+	config, err := NewConfig(origin)
+	require.NoError(t, err)
+	config.SetRegistryPrefix("/platform-mcp/local-fixture/registry")
+	require.Equal(t, "/platform-mcp/local-fixture/registry/v0.1/servers/local-fixture%2Freviewed-mcp/versions/latest", config.RegistryDetailsPath())
+}

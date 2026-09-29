@@ -11,6 +11,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -75,10 +76,10 @@ func NewKMSClientAssertionSigner(logger *slog.Logger, db *pgxpool.Pool, gcpIdent
 func (s *KMSClientAssertionSigner) SignClientAssertion(ctx context.Context, request ClientAssertionRequest) (string, error) {
 	logger := s.logger.With(attr.SlogRemoteSessionClientID(request.RemoteSessionClientID.String()))
 	if request.OrganizationID == "" || request.JSONWebKeySetID == uuid.Nil {
-		return "", fmt.Errorf("private_key_jwt requires an organization-owned JSON Web Key Set")
+		return "", fmt.Errorf("private_key_jwt requires an organization-owned JSON Web Key Set: %w", errClientAssertionKeyUnconfigured)
 	}
 	if request.ClientID == "" || request.Audience == "" {
-		return "", fmt.Errorf("private_key_jwt requires non-empty client and audience identifiers")
+		return "", fmt.Errorf("private_key_jwt requires non-empty client and audience identifiers: %w", errClientAssertionKeyUnconfigured)
 	}
 
 	q := jsonwebkeysets_repo.New(s.db)
@@ -98,11 +99,11 @@ func (s *KMSClientAssertionSigner) SignClientAssertion(ctx context.Context, requ
 		return "", fmt.Errorf("load client assertion backing key: %w", err)
 	}
 	if !backing.ResourceName.Valid || backing.ResourceName.String == "" {
-		return "", fmt.Errorf("active client assertion key is not backed by GCP KMS")
+		return "", fmt.Errorf("active client assertion key is not backed by GCP KMS: %w", errClientAssertionKeyUnconfigured)
 	}
 	if s.managedSigner != "" && backing.ExternalKey.IdentityProviderConnectionID.Valid {
 		if got := strings.TrimSpace(backing.ImpersonateServiceAccount.String); got != "" && !strings.EqualFold(got, s.managedSigner) {
-			return "", fmt.Errorf("client assertion credential impersonates %s, configured signer is %s", got, s.managedSigner)
+			return "", fmt.Errorf("client assertion credential impersonates %s, configured signer is %s: %w", got, s.managedSigner, errClientAssertionKeyUnconfigured)
 		}
 	}
 
@@ -116,7 +117,7 @@ func (s *KMSClientAssertionSigner) SignClientAssertion(ctx context.Context, requ
 		return "", fmt.Errorf("screen client assertion credential: %w", err)
 	}
 	if problem != "" {
-		return "", fmt.Errorf("client assertion credential is unusable: %s", detail)
+		return "", fmt.Errorf("client assertion credential is unusable: %s: %w", detail, errClientAssertionKeyUnconfigured)
 	}
 	tokenSource, err := s.gcpIdentity.TokenSource(ctx, credential)
 	if err != nil {
@@ -134,25 +135,25 @@ func (s *KMSClientAssertionSigner) SignClientAssertion(ctx context.Context, requ
 func serializeClientAssertion(ctx context.Context, kmsClient gcpkms.SigningClient, resourceName, kid string, publicJWKDocument []byte, clientID, audience string, now time.Time) (string, error) {
 	var publicJWK jose.JSONWebKey
 	if err := publicJWK.UnmarshalJSON(publicJWKDocument); err != nil {
-		return "", fmt.Errorf("decode active client assertion public JWK: %w", err)
+		return "", fmt.Errorf("decode active client assertion public JWK: %w: %w", err, errClientAssertionKeyUnconfigured)
 	}
 	alg, err := gcpkms.ParseSignatureAlgorithm(publicJWK.Algorithm)
 	if err != nil {
-		return "", fmt.Errorf("resolve active client assertion algorithm: %w", err)
+		return "", fmt.Errorf("resolve active client assertion algorithm: %w: %w", err, errClientAssertionKeyUnconfigured)
 	}
 	opaque, err := gcpkms.NewSigner(ctx, kmsClient, resourceName, kid, gcpkms.PublicKey{
 		Algorithm: alg,
 		Key:       publicJWK.Key,
 	})
 	if err != nil {
-		return "", fmt.Errorf("build client assertion signer: %w", err)
+		return "", fmt.Errorf("build client assertion signer: %w: %w", err, errClientAssertionKeyUnconfigured)
 	}
 	joseSigner, err := jose.NewSigner(
 		jose.SigningKey{Algorithm: alg, Key: opaque},
 		new(jose.SignerOptions).WithType("client-authentication+jwt"),
 	)
 	if err != nil {
-		return "", fmt.Errorf("configure client assertion signer: %w", err)
+		return "", fmt.Errorf("configure client assertion signer: %w: %w", err, errClientAssertionKeyUnconfigured)
 	}
 
 	assertion, err := jwt.Signed(joseSigner).Claims(jwt.Claims{
@@ -171,6 +172,25 @@ func serializeClientAssertion(ctx context.Context, kmsClient gcpkms.SigningClien
 }
 
 var errTokenEndpointSigningUnavailable = errors.New("private_key_jwt signing is unavailable")
+
+// errClientAssertionKeyUnconfigured marks a signing failure caused by the
+// client's key configuration rather than by KMS or the database answering:
+// the key set, key, or credential it names is missing or cannot be used.
+// Retrying reproduces it until an administrator repairs the configuration.
+var errClientAssertionKeyUnconfigured = errors.New("client assertion key is not configured")
+
+// clientAssertionUnconfigured reports whether a token endpoint request failed
+// on client assertion configuration that only an administrator repairs: the
+// deployment has no signer, the client's key configuration is incomplete, or
+// the key set or key it names no longer exists.
+func clientAssertionUnconfigured(err error) bool {
+	if _, ok := errors.AsType[*tokenEndpointSigningError](err); !ok {
+		return false
+	}
+	return errors.Is(err, errTokenEndpointSigningUnavailable) ||
+		errors.Is(err, errClientAssertionKeyUnconfigured) ||
+		errors.Is(err, pgx.ErrNoRows)
+}
 
 // tokenEndpointSigningError preserves shared error text and causes while giving
 // federation a safe classification boundary.

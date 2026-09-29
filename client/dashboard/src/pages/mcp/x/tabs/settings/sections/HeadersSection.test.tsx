@@ -173,6 +173,32 @@ describe("HeadersSection", () => {
     expect(box(values[1]!)).toContain("border-warning-default");
   });
 
+  it("refuses to forward the session cookie upstream", () => {
+    // The proxy is the control that holds; this marks the row while editing
+    // so the refusal is not a failed request much later.
+    const rows = [
+      draft({
+        key: "row-cookie",
+        name: "X-Session",
+        source: "request",
+        staticValue: "",
+        valueFromRequestHeader: "Cookie",
+      }),
+    ];
+    renderSection(
+      headerState({
+        drafts: rows,
+        fieldErrors: headerDraftErrors(rows),
+        reportErrors: true,
+      }),
+    );
+
+    const value = screen.getByLabelText("Inbound request header");
+    expect(value.parentElement?.className ?? "").toContain(
+      "border-warning-default",
+    );
+  });
+
   it("stays quiet about problems nobody has been told about yet", () => {
     const rows = [draft({ key: "row-nameless", name: "" })];
     renderSection(

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Setup Gram Functions to use Fly.io during development. Assistant runtimes run locally and need no Fly.io setup."
 //MISE dir="{{ config_root }}"

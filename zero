@@ -146,6 +146,7 @@ interactive_only mise run zero:idp
 interactive_only mise run zero:melange
 interactive_only mise run zero:fly
 mise run zero:encryption
+mise run zero:tunnel-identity
 mise run zero:tls
 # Env only here: the image build needs Docker, which infra:start confirms.
 mise run zero:assistants --skip-image

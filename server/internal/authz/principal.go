@@ -94,7 +94,7 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 
 	// Direct role assignments come first, then roles granted through
 	// directory role mappings.
-	roleURNs, err := repo.New(db).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{
+	roleRows, err := repo.New(db).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{
 		OrganizationID: organizationID,
 		UserID:         userID,
 	})
@@ -102,8 +102,8 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		return nil, fmt.Errorf("resolve role principals: %w", err)
 	}
 
-	for _, raw := range roleURNs {
-		principal, err := parseRolePrincipalURN(raw)
+	for _, row := range roleRows {
+		principal, err := parseRolePrincipalURN(row.PrincipalUrn)
 		if err != nil {
 			return nil, err
 		}

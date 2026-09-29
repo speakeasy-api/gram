@@ -34,6 +34,10 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	Attribute("slug", String, "The slug of the organization")
 	Attribute("account_type", String, "Gram account type (e.g. free, pro, payg, enterprise).")
 	Attribute("workos_id", String, "WorkOS organization ID, if linked.")
+	Attribute("workos_dashboard_url", String, func() {
+		Description("Link to the organization in the WorkOS dashboard. Absent when the organization is not linked to WorkOS or the deployment has no WorkOS environment configured.")
+		Format(FormatURI)
+	})
 	Attribute("stripe_customer_id", String, "Stripe customer ID, if billing metadata has a customer.")
 	Attribute("stripe_subscription_id", String, "Current Stripe subscription ID, if subscribed.")
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
@@ -1232,5 +1236,6 @@ var _ = Service("admin", func() {
 
 	supportMatrixMethods()
 	supportCoverageMethods()
+	registryDesign()
 
 })

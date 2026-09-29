@@ -25,6 +25,7 @@ const state = vi.hoisted(() => ({
   createServer: vi.fn(),
   listServers: vi.fn(),
   navigate: vi.fn(),
+  verifyResult: vi.fn(),
   // Route helper `goTo` and the router's own navigate are separate calls; the
   // setup-required path uses the latter to land on Settings > Identity.
   routerNavigate: vi.fn(),
@@ -83,7 +84,7 @@ vi.mock("@/pages/sources/tunneled-mcp/hooks", () => ({
 }));
 vi.mock("@/pages/sources/remote-mcp/useVerifyRemoteMcpUrl", () => ({
   useVerifyRemoteMcpUrl: () => ({
-    result: { verified: true },
+    result: state.verifyResult(),
     trigger: vi.fn(),
   }),
 }));
@@ -137,6 +138,7 @@ vi.mock("react-router", () => ({
 }));
 beforeEach(() => {
   vi.clearAllMocks();
+  state.verifyResult.mockReturnValue({ verified: true });
   Object.assign(state.flow, {
     gatewayId: "gateway",
     createdServerId: null,
@@ -300,6 +302,36 @@ it("disables direct connections only in gateway context", () => {
       .getByRole("radio", { name: /Clients connect directly/ })
       .hasAttribute("disabled"),
   ).toBe(false);
+});
+
+it("preselects User Identity only when the challenge advertised OAuth", () => {
+  // A bare 401 from a Basic or API-key upstream reports the same outcome as an
+  // OAuth challenge. Only the advertised metadata URL tells them apart, and
+  // defaulting the wrong one to User walks the operator into a setup that
+  // cannot complete.
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    outcome: "authentication_required",
+  });
+  const view = render(<CreateRemoteMcp />);
+  expect(
+    screen
+      .getByRole("radio", { name: /No Identity/ })
+      .getAttribute("data-state"),
+  ).toBe("checked");
+
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    outcome: "authentication_required",
+    protectedResourceMetadataUrl:
+      "https://example.com/.well-known/oauth-protected-resource",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    screen
+      .getByRole("radio", { name: /User Identity/ })
+      .getAttribute("data-state"),
+  ).toBe("checked");
 });
 
 it("can cancel from the tunnel key screen without attaching", async () => {

@@ -508,6 +508,15 @@ BEGIN
   FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac']) AS f
   ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
+  -- Unlike demo entitlements, preserve an explicit fail-closed choice on reseed.
+  INSERT INTO organization_features (organization_id, feature_name)
+  SELECT demo_org, 'hooks_fail_open'
+  WHERE NOT EXISTS (
+    SELECT 1 FROM organization_features
+    WHERE organization_id = demo_org AND feature_name = 'hooks_fail_open'
+  )
+  ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+
   FOR i IN 1 .. array_length(demo_user_ids, 1) LOOP
     INSERT INTO users (id, email, display_name, workos_id)
     VALUES (demo_user_ids[i], demo_user_emails[i], demo_user_names[i],
@@ -1363,7 +1372,7 @@ BEGIN
   -- Leave instructions NULL so Settings starts with the editable built-in
   -- instructions, matching the gateway's initialize and server/discover text.
   -- Remote MCP identity modes: Linear uses per-user OAuth through a
-  -- project-scoped CIMD client, Slack carries one inert shared Agent Identity
+  -- project-scoped CIMD client, Slack carries one inert shared Service Account
   -- credential, and GitHub intentionally has no upstream identity. The demo
   -- values are display fixtures only and cannot authenticate to any service.
   INSERT INTO remote_session_issuers
@@ -1399,12 +1408,25 @@ BEGIN
     (demo.det_uuid('gram-demo-remote-identity-client-linear'),
      demo.det_uuid('gram-demo-issuer-linear'));
 
+  -- mcp_servers.remote_session_issuer_id is denormalized from the live client
+  -- bindings, and the app recomputes it after the commit that writes them
+  -- (ResyncMCPServerRemoteSessionIssuers). Seeding the binding in SQL never
+  -- goes through that path, so stamp what the resync would derive: exactly one
+  -- remote issuer is bound to this server's user session issuer (the
+  -- attachment fixture's client below sits under the same one). Left NULL,
+  -- upstream token routing fails closed and Linear reads as having no identity.
+  UPDATE mcp_servers
+  SET remote_session_issuer_id =
+        demo.det_uuid('gram-demo-remote-identity-provider-linear')
+  WHERE id = demo.det_uuid('gram-demo-mcpserver-linear')
+    AND project_id = proj_a;
+
   INSERT INTO remote_mcp_server_headers
     (id, remote_mcp_server_id, name, description, is_required, is_secret, value)
   VALUES
     (demo.det_uuid('gram-demo-agent-identity-header-slack'),
      demo.det_uuid('gram-demo-remotemcp-slack'), 'Authorization',
-     'Inert demo Agent Identity credential', TRUE, FALSE,
+     'Inert demo Service Account credential', TRUE, FALSE,
      'Bearer DEMO-NONFUNCTIONAL-TOKEN');
 
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
@@ -1517,20 +1539,16 @@ BEGIN
   -- Inert upstream account, owned by the human on Linear session 6. Both
   -- active release agents share that human owner. The explicit client link
   -- makes this exact session reachable from the requesting session's issuer.
-  -- Reserved .invalid endpoints, an invalid ciphertext and no refresh token
+  -- The client sits under Linear's own remote identity provider: every client
+  -- bound to one user session issuer must share a remote issuer, or the
+  -- mcp_servers.remote_session_issuer_id derivation above would come out NULL.
+  -- Reserved example endpoints, an invalid ciphertext and no refresh token
   -- prevent this display fixture from becoming a usable upstream credential.
-  INSERT INTO remote_session_issuers
-    (id, project_id, organization_id, slug, issuer, name, authorization_grant_profiles_supported)
-  VALUES (demo.det_uuid('gram-demo-attachment-issuer'), proj_a, demo_org,
-          'fictional-release-account', 'https://release.example.invalid',
-          -- Administrator-declared capability only: not a discovery visit or client grant.
-          'Fictional release account', ARRAY['urn:ietf:params:oauth:grant-profile:id-jag']);
-
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,
      token_endpoint_auth_method)
   VALUES (demo.det_uuid('gram-demo-attachment-client'), proj_a, demo_org,
-          demo.det_uuid('gram-demo-attachment-issuer'),
+          demo.det_uuid('gram-demo-remote-identity-provider-linear'),
           demo.det_uuid('gram-demo-attachment-client')::text, 'none');
 
   INSERT INTO remote_session_client_user_session_issuers
@@ -3210,10 +3228,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: expected 8 registered agents, found %', stray;
   END IF;
 
+  -- Linear's remote identity provider and the identity chaining example.
   SELECT count(*) INTO stray FROM remote_session_issuers
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 project remote session issuers, found %', stray;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 project remote session issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM remote_session_clients
@@ -3231,13 +3250,35 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: expected 2 Remote MCP User Identity bindings, found %', stray;
   END IF;
 
+  -- The stamp has to be what ResyncMCPServerRemoteSessionIssuers would derive:
+  -- every live client bound to Linear's user session issuer names one remote
+  -- issuer, and it is the stamped one.
+  SELECT count(*) INTO stray
+  FROM remote_session_client_user_session_issuers link
+  JOIN remote_session_clients c ON c.id = link.remote_session_client_id
+  WHERE link.user_session_issuer_id = demo.det_uuid('gram-demo-issuer-linear')
+    AND c.deleted IS FALSE
+  HAVING bool_and(c.remote_session_issuer_id
+                  = demo.det_uuid('gram-demo-remote-identity-provider-linear'));
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'demo seed postflight: Linear user session issuer must bind clients of exactly one remote issuer, its stamped provider';
+  END IF;
+
+  SELECT count(*) INTO stray FROM mcp_servers
+  WHERE project_id = proj_a
+    AND remote_session_issuer_id
+        = demo.det_uuid('gram-demo-remote-identity-provider-linear');
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %', stray;
+  END IF;
+
   SELECT count(*) INTO stray
   FROM remote_mcp_server_headers header
   JOIN remote_mcp_servers remote ON remote.id = header.remote_mcp_server_id
   WHERE remote.project_id = proj_a AND header.deleted IS FALSE
     AND lower(header.name) = 'authorization' AND header.value IS NOT NULL;
   IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP Agent Identity header, found %', stray;
+    RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP Service Account header, found %', stray;
   END IF;
 
   -- Managed-agent credentials are a separate surface from ordinary MCP

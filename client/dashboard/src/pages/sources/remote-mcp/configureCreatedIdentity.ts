@@ -1,11 +1,13 @@
 import { isNotFoundError } from "@/lib/errors";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
-import { pickPreferredAuthMethod } from "@/pages/mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import {
+  preferredScopes,
+  serverIdentityAuthMethod,
+} from "@/lib/remote-identity/model/clientConfiguration";
 import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { CommitServerIdentityConfigurationResult } from "@gram/client/models/components/commitserveridentityconfigurationresult.js";
-import type { ServerIdentityClientConfigurationTokenEndpointAuthMethod } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import type {
   McpServer,
   McpServerVisibility,
@@ -42,27 +44,6 @@ export type ConfigureCreatedIdentityResult =
       userIdentity?: CommitServerIdentityConfigurationResult;
     };
 
-// The issuer form's method list is wider than what this RPC accepts: it also
-// carries private_key_jwt, which the composite cannot express. In practice
-// pickPreferredAuthMethod never returns it — it falls back to
-// client_secret_basic when nothing recognized is advertised — so this narrows
-// the type at the boundary rather than changing which method is sent.
-function rpcAuthMethod(
-  supported: string[],
-): ServerIdentityClientConfigurationTokenEndpointAuthMethod {
-  switch (pickPreferredAuthMethod(supported)) {
-    case "client_secret_post":
-      return "client_secret_post";
-    case "none":
-      return "none";
-    case "client_secret_basic":
-    // The composite has no private_key_jwt; pickPreferredAuthMethod cannot
-    // return it either, so this only satisfies exhaustiveness.
-    case "private_key_jwt":
-      return "client_secret_basic";
-  }
-}
-
 export async function configureCreatedRemoteMcpIdentity({
   client,
   remoteMcpServer,
@@ -93,7 +74,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Add an Agent Identity credential in Settings > Identity.",
+        "Add a Service Account credential in Settings > Identity.",
       );
     }
     try {
@@ -114,7 +95,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Agent Identity could not be configured. Add the credential in Settings > Identity.",
+        "Service Account could not be configured. Add the credential in Settings > Identity.",
       );
     }
 
@@ -127,7 +108,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Agent Identity was configured, but the server could not be enabled. Enable it from Settings.",
+        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
       );
     }
   }
@@ -216,6 +197,19 @@ export async function configureCreatedRemoteMcpIdentity({
         "The authorization server metadata could not be discovered. Configure User Identity in Settings > Identity.",
       );
     }
+    // RFC 8414 requires the document to name the issuer it was fetched for.
+    // A mismatch means the resource pointed at one authorization server and
+    // got another's metadata, and the provider is created from `draft.issuer`
+    // — so accepting it would bind this server to whichever issuer the
+    // document claimed. Exact equality, deliberately: no trailing-slash
+    // normalization, which belongs to readers and not to a write like this.
+    if (draft.issuer !== authorizationServer) {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "The authorization server metadata identified a different issuer. Configure User Identity in Settings > Identity.",
+      );
+    }
     if (!draft.authorizationEndpoint || !draft.tokenEndpoint) {
       return setupRequired(
         mcpServer,
@@ -248,7 +242,8 @@ export async function configureCreatedRemoteMcpIdentity({
           clientMode: "auto",
           clientConfiguration: {
             scope: scopes.length > 0 ? scopes : undefined,
-            tokenEndpointAuthMethod: rpcAuthMethod(issuerAuthMethods),
+            tokenEndpointAuthMethod:
+              serverIdentityAuthMethod(issuerAuthMethods),
           },
         },
       },
@@ -384,22 +379,6 @@ async function setMcpServerVisibility(
     undefined,
     options,
   );
-}
-
-function preferredScopes(
-  protectedResourceScopes: string[] | undefined,
-  authorizationServerScopes: string[] | undefined,
-): string[] {
-  const resourceScopes = nonEmptyStrings(protectedResourceScopes);
-  return resourceScopes.length > 0
-    ? resourceScopes
-    : nonEmptyStrings(authorizationServerScopes);
-}
-
-function nonEmptyStrings(values: string[] | undefined): string[] {
-  return (values ?? [])
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
 }
 
 function configured(

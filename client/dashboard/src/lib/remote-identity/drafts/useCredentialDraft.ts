@@ -4,34 +4,12 @@ import type { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-
 import { useForm, useStore } from "@tanstack/react-form";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-const REDACTED_SECRET = "***";
-
-type AgentCredentialFormat =
-  | "bearer"
-  | "basic"
-  | "manual"
-  | "client-credentials";
-
-function formatFromHeader(
-  header: RemoteMcpServerHeader | undefined,
-): AgentCredentialFormat {
-  // Nothing configured yet starts on Bearer — the format almost every upstream
-  // wants — rather than on Manual, which asks the operator to hand-assemble a
-  // header before they have seen the simpler options.
-  if (!header) return "bearer";
-  const value = header.value ?? "";
-  if (value.startsWith("Basic ")) return "basic";
-  if (value.startsWith("Bearer ") || value === REDACTED_SECRET) return "bearer";
-  return "manual";
-}
-
-function encodeBasicCredential(username: string, password: string): string {
-  const bytes = new TextEncoder().encode(`${username}:${password}`);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
+import {
+  credentialFromHeader,
+  encodeBasicCredential,
+  type AgentCredentialFormat,
+} from "../model/credential";
+import { REDACTED_SECRET, secretToWireValue } from "../model/secret";
 
 /** Bullets rather than the literal secret, capped so a long token can't wrap
  * the preview into a paragraph. */
@@ -56,17 +34,17 @@ type AgentCredentialValues = {
 function valuesFromHeader(
   header: RemoteMcpServerHeader | undefined,
 ): AgentCredentialValues {
-  const format = formatFromHeader(header);
-  const value = header?.value ?? "";
+  // The model owns reading a saved header back into parts, readable Basic
+  // included. A redacted secret seeds nothing; the operator is replacing it or
+  // leaving it alone.
+  const credential = credentialFromHeader(header);
   return {
-    format,
-    prefix: "Bearer",
-    // A redacted secret cannot be read back, so it seeds nothing; the operator
-    // is replacing it or leaving it alone.
-    token: value.startsWith("Bearer ") ? value.slice(7) : "",
-    username: "",
-    password: "",
-    manualValue: format === "manual" && value !== REDACTED_SECRET ? value : "",
+    format: credential.format,
+    prefix: credential.prefix,
+    token: secretToWireValue(credential.token) ?? "",
+    username: credential.username,
+    password: secretToWireValue(credential.password) ?? "",
+    manualValue: secretToWireValue(credential.raw) ?? "",
   };
 }
 
@@ -124,9 +102,11 @@ export function useAgentCredentialFields(
   const { format, prefix, token, username, password, manualValue } = values;
 
   let authorizationValue = "";
-  if (format === "bearer" && token) {
+  // Blank out on a whitespace-only secret: the scheme prefix alone would make
+  // authorizationValue.trim() non-empty and pass an unusable header as valid.
+  if (format === "bearer" && token.trim()) {
     authorizationValue = prefix.trim() ? `${prefix.trim()} ${token}` : token;
-  } else if (format === "basic" && username && password) {
+  } else if (format === "basic" && username.trim() && password.trim()) {
     authorizationValue = `Basic ${encodeBasicCredential(username, password)}`;
   } else if (format === "manual") {
     authorizationValue = manualValue;
@@ -242,13 +222,13 @@ export function useAgentCredentialDraft({
         return true;
       }
       clear();
-      toast.success("Agent Identity updated");
+      toast.success("Service Account updated");
       return true;
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to update Agent Identity",
+          : "Failed to update Service Account",
       );
       return false;
     }

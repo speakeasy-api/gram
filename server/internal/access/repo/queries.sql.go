@@ -848,22 +848,25 @@ SELECT
   -- A member with no directory row, or one whose provider does not report the
   -- attribute, comes back as an empty string.
   COALESCE(du.attributes ->> 'department_name', '')::text AS department,
-  COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names
+  COALESCE(dg_names.group_names, '{}'::text[])::text[] AS group_names,
+  COALESCE(mapped_roles.role_ids, '{}'::text[])::text[] AS directory_role_ids
 FROM organization_user_relationships AS our
 JOIN users
   ON users.id = our.user_id
 LEFT JOIN LATERAL (
-  -- The member's directory profile, preferring an explicit user link over an
-  -- email match so a stale email row cannot shadow the linked profile. An
-  -- email-matched row has a NULL user_id, and NULLs sort first under DESC, so
-  -- the link test needs NULLS LAST to actually win; among equals the profile
-  -- the directory updated most recently is the current one.
+  -- The member's directory profile, chosen the same way as in
+  -- ListUserRolePrincipals: the directory user linked to the member, falling
+  -- back to an unlinked directory user with the same email. A profile linked
+  -- to another user never matches. An email-matched row has a NULL user_id,
+  -- and NULLs sort first under DESC, so the link test needs NULLS LAST to
+  -- actually win; among equals the profile the directory updated most
+  -- recently is the current one.
   SELECT d.id, d.attributes
   FROM directory_users d
   WHERE d.organization_id = our.organization_id
     AND d.deleted IS FALSE
     AND d.workos_deleted IS FALSE
-    AND (d.user_id = users.id OR LOWER(d.email) = LOWER(users.email))
+    AND (d.user_id = users.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(users.email)))
   ORDER BY (d.user_id = users.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
   LIMIT 1
 ) du ON TRUE
@@ -878,6 +881,46 @@ LEFT JOIN LATERAL (
   WHERE m.directory_user_id = du.id
     AND m.deleted IS FALSE
 ) dg_names ON TRUE
+LEFT JOIN LATERAL (
+  -- Roles granted to the member's directory profile through directory role
+  -- mappings, matched the same way as in ListUserRolePrincipals. Mappings that
+  -- point at a deleted role are skipped.
+  SELECT ARRAY_AGG(DISTINCT COALESCE(mapped_org_role.id::text, mapped_global_role.id::text)) AS role_ids
+  FROM directory_role_mappings AS drm
+  LEFT JOIN organization_roles AS mapped_org_role
+    ON drm.role_urn = 'role:organization:' || mapped_org_role.id::text
+    AND mapped_org_role.organization_id = drm.organization_id
+    AND mapped_org_role.deleted IS FALSE
+    AND mapped_org_role.workos_deleted IS FALSE
+  LEFT JOIN global_roles AS mapped_global_role
+    ON drm.role_urn = 'role:global:' || mapped_global_role.id::text
+    AND mapped_global_role.deleted IS FALSE
+    AND mapped_global_role.workos_deleted IS FALSE
+  WHERE drm.organization_id = our.organization_id
+    AND drm.deleted IS FALSE
+    AND COALESCE(mapped_org_role.id, mapped_global_role.id) IS NOT NULL
+    AND (
+      (
+        drm.source_kind = 'group'
+        AND EXISTS (
+          SELECT 1
+          FROM directory_user_group_memberships AS m
+          JOIN directory_groups AS dg
+            ON dg.id = m.directory_group_id
+            AND dg.organization_id = drm.organization_id
+            AND dg.deleted IS FALSE
+            AND dg.workos_deleted IS FALSE
+          WHERE m.directory_user_id = du.id
+            AND m.directory_group_id = drm.directory_group_id
+            AND m.deleted IS FALSE
+        )
+      )
+      OR (
+        drm.source_kind = 'attribute'
+        AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    )
+) mapped_roles ON TRUE
 LEFT JOIN organization_role_assignments AS ora
   ON ora.organization_id = our.organization_id
   AND ora.workos_user_id = users.workos_id
@@ -898,14 +941,15 @@ ORDER BY users.email, users.id
 `
 
 type ListAccessMembersRow struct {
-	ID          string
-	DisplayName string
-	Email       string
-	PhotoUrl    pgtype.Text
-	RoleID      string
-	JoinedAt    pgtype.Timestamptz
-	Department  string
-	GroupNames  []string
+	ID               string
+	DisplayName      string
+	Email            string
+	PhotoUrl         pgtype.Text
+	RoleID           string
+	JoinedAt         pgtype.Timestamptz
+	Department       string
+	GroupNames       []string
+	DirectoryRoleIds []string
 }
 
 func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) ([]ListAccessMembersRow, error) {
@@ -926,6 +970,7 @@ func (q *Queries) ListAccessMembers(ctx context.Context, organizationID string) 
 			&i.JoinedAt,
 			&i.Department,
 			&i.GroupNames,
+			&i.DirectoryRoleIds,
 		); err != nil {
 			return nil, err
 		}
@@ -978,7 +1023,10 @@ func (q *Queries) ListAccessNotificationUsers(ctx context.Context, organizationI
 
 const listAccessibleMCPServersForUser = `-- name: ListAccessibleMCPServersForUser :many
 WITH user_grants AS (
-  SELECT pg.scope, pg.selectors
+  SELECT
+    pg.scope,
+    pg.selectors,
+    (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = $1
     AND COALESCE(pg.effect, 'allow') = 'allow'
@@ -1006,6 +1054,8 @@ WITH user_grants AS (
   SELECT
     s.id AS server_id,
     ug.scope,
+    ug.direct,
+    COALESCE(ug.selectors->>'resource_id', '*') <> '*' AS concrete,
     -- Whether this grant would also satisfy StrictMatches, which exclusions
     -- use: every dimension it names must be one the check constrains. A
     -- tool- or disposition-scoped block narrows something inside the server,
@@ -1039,6 +1089,7 @@ WHERE NOT EXISTS (
   WHERE blocked.server_id = s.id
     AND blocked.strict
     AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY s.name
 `
@@ -1067,7 +1118,9 @@ type ListAccessibleMCPServersForUserRow struct {
 // The shape mirrors the authorization engine's own: a permission is an allow
 // grant for a scope minus a blocked_ grant for THAT SAME scope proving the same
 // server (see authz/expressions.go). mcp:blocked_connect withdraws
-// mcp:connect; it does not withdraw mcp:read.
+// mcp:connect; it does not withdraw mcp:read. A grant made directly to the
+// user that names this server outranks a block inherited from a role or
+// user:all, while the user's own blocks always apply (authz/precedence.go).
 func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListAccessibleMCPServersForUserParams) ([]ListAccessibleMCPServersForUserRow, error) {
 	rows, err := q.db.Query(ctx, listAccessibleMCPServersForUser, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -1096,7 +1149,10 @@ func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListA
 
 const listAccessibleSkillsForUser = `-- name: ListAccessibleSkillsForUser :many
 WITH user_grants AS (
-  SELECT pg.scope, pg.selectors
+  SELECT
+    pg.scope,
+    pg.selectors,
+    (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = $1
     AND COALESCE(pg.effect, 'allow') = 'allow'
@@ -1116,7 +1172,11 @@ WITH user_grants AS (
   -- authz.allowedSelectorKeys), so there is no project_id to honour here and
   -- no narrower block that could fail StrictMatches — the wildcard and the
   -- per-skill grant are the only shapes a skill grant can take.
-  SELECT cs.id AS skill_id, ug.scope
+  SELECT
+    cs.id AS skill_id,
+    ug.scope,
+    ug.direct,
+    COALESCE(ug.selectors->>'resource_id', '*') <> '*' AS concrete
   FROM candidate_skills cs
   JOIN user_grants ug ON (
     ug.selectors->>'resource_kind' IN ('*', 'skill')
@@ -1137,6 +1197,7 @@ WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.skill_id = cs.id
     AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY cs.display_name, cs.name
 `
@@ -1159,7 +1220,8 @@ type ListAccessibleSkillsForUserRow struct {
 //
 // Authorization only, on the same terms as the MCP query above: a skill
 // distributed to a plugin the user holds is still unreachable if RBAC does not
-// allow it, so distribution is not consulted.
+// allow it, so distribution is not consulted. Principal precedence also
+// matches: a direct grant naming the skill outranks an inherited block.
 // SELECT DISTINCT only permits ORDER BY over selected columns, and
 // skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAccessibleSkillsForUserParams) ([]ListAccessibleSkillsForUserRow, error) {
@@ -2466,7 +2528,9 @@ mapped AS (
       )
     )
 )
-SELECT principal_urn::text AS principal_urn
+SELECT
+  principal_urn::text AS principal_urn,
+  (source_rank = 1)::boolean AS from_directory_mapping
 FROM (
   SELECT 0 AS source_rank, role_slug AS sort_key, principal_urn FROM direct
   UNION ALL
@@ -2480,6 +2544,11 @@ type ListUserRolePrincipalsParams struct {
 	UserID         string
 }
 
+type ListUserRolePrincipalsRow struct {
+	PrincipalUrn         string
+	FromDirectoryMapping bool
+}
+
 // Every role principal a member holds, in one read: direct role assignments
 // first (the same rows as ListMemberRolePrincipalsByUser), then roles granted
 // through directory role mappings. A mapping applies when its group contains
@@ -2487,20 +2556,21 @@ type ListUserRolePrincipalsParams struct {
 // profile is the directory user linked to the member, falling back to an
 // unlinked directory user with the same email. A profile linked to another
 // user never matches. Mappings that point at a deleted role are skipped. Callers
-// dedupe roles that come from both sources.
-func (q *Queries) ListUserRolePrincipals(ctx context.Context, arg ListUserRolePrincipalsParams) ([]string, error) {
+// dedupe roles that come from both sources; from_directory_mapping tells the
+// two apart.
+func (q *Queries) ListUserRolePrincipals(ctx context.Context, arg ListUserRolePrincipalsParams) ([]ListUserRolePrincipalsRow, error) {
 	rows, err := q.db.Query(ctx, listUserRolePrincipals, arg.OrganizationID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListUserRolePrincipalsRow
 	for rows.Next() {
-		var principal_urn string
-		if err := rows.Scan(&principal_urn); err != nil {
+		var i ListUserRolePrincipalsRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.FromDirectoryMapping); err != nil {
 			return nil, err
 		}
-		items = append(items, principal_urn)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

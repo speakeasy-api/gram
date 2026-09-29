@@ -214,7 +214,7 @@ func TestUpsertWithTxRequiresCodexOrganizationID(t *testing.T) {
 
 	workspaceID := "75179082-77da-4127-8031-fce17dddb623"
 	require.Error(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &workspaceID, nil, nil)
+		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &workspaceID, nil, nil, nil)
 		return err
 	}))
 }
@@ -226,7 +226,7 @@ func TestUpsertWithTxRejectsCodexPathLikeOrganizationID(t *testing.T) {
 
 	externalOrgID := "org-openai/../other"
 	require.Error(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, nil, nil)
+		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, nil, nil, nil)
 		return err
 	}))
 }
@@ -513,7 +513,7 @@ func upsertConfigWithTx(
 	var result UpsertResult
 	require.NoError(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 		var err error
-		result, err = store.upsertWithTx(ctx, tx, orgID, provider, apiKey, apiKeySupplied, enabled, externalOrganizationID, nil, resetPollWatermarkAt)
+		result, err = store.upsertWithTx(ctx, tx, orgID, provider, apiKey, apiKeySupplied, enabled, externalOrganizationID, nil, resetPollWatermarkAt, nil)
 		return err
 	}))
 	return result
@@ -602,7 +602,7 @@ func TestUpsertRejectsNonUUIDWorkspaceIDForChatGPTCompliance(t *testing.T) {
 	// upsert rather than failing every background poll later.
 	orgStyleID := "org-123abc"
 	err := pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &orgStyleID, nil, nil)
+		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderChatGPTCompliance, "chatgpt-key", true, true, &orgStyleID, nil, nil, nil)
 		return err
 	})
 	require.Error(t, err)
@@ -690,4 +690,18 @@ func TestUpsertResetsAllProviderScheduleWatermarks(t *testing.T) {
 			require.Equal(t, time.Unix(0, 0).UTC(), row.NextPollAfter.Time.UTC(), "never-synced sibling stays due-immediately at epoch")
 		}
 	}
+}
+
+// A failure that lands on no schedule row must error, or the poll activity
+// counts it as recorded and swallows it.
+func TestRecordSchedulePollFailureRejectsAMissingSchedule(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	result := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
+
+	err := store.RecordSchedulePollFailure(ctx, result.Row.ID, ScheduleCodexCloudSessions, time.Now().UTC(), errors.New("boom"), 1)
+	require.ErrorContains(t, err, "no "+ScheduleCodexCloudSessions+" schedule")
+
+	require.NoError(t, store.RecordSchedulePollFailure(ctx, result.Row.ID, ScheduleCursor, time.Now().UTC(), errors.New("boom"), 1))
 }

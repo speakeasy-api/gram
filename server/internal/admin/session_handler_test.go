@@ -205,6 +205,7 @@ func TestAdminSessionCookieWorksForDashboardAndMCP(t *testing.T) {
 	}{
 		{name: "dashboard login", location: "/admin/organizations", sessionID: "test-session"},
 		{name: "MCP consent login", location: "/admin-mcp/connect?state=opaque", sessionID: "test-session", mcp: true},
+		{name: "MCP proposal login", location: "/admin-mcp/proposals/00000000-0000-0000-0000-000000000001", sessionID: "test-session", mcp: true},
 		{name: "MCP login fallback", location: "/admin-mcp/connect?state=opaque"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

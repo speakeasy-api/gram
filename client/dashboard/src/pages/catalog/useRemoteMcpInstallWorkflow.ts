@@ -81,6 +81,12 @@ export interface ServerInstallStatus {
   /** Public URL of the pre-staged default MCP endpoint, when one was created. */
   mcpEndpointUrl?: string;
   error?: string;
+  /**
+   * Set when the server was created but kept disabled because its identity
+   * still needs a step in Settings. The install counts as failed for callers
+   * that tally results, but the dialog shows it as a next step, not an error.
+   */
+  setupRequired?: string;
 }
 
 interface WorkflowBase {
@@ -824,6 +830,10 @@ export function useRemoteMcpInstallWorkflow({
           error:
             result.identityConfiguration?.status === "setup-required"
               ? `Server retained disabled. ${result.identityConfiguration.message}`
+              : undefined,
+          setupRequired:
+            result.identityConfiguration?.status === "setup-required"
+              ? result.identityConfiguration.message
               : undefined,
         });
       } catch (err) {

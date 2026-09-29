@@ -4,12 +4,14 @@
 
 import { remoteSessionsAttachBinding } from "../funcs/remoteSessionsAttachBinding.js";
 import { remoteSessionsCommitServerIdentityConfiguration } from "../funcs/remoteSessionsCommitServerIdentityConfiguration.js";
+import { remoteSessionsCount } from "../funcs/remoteSessionsCount.js";
 import { remoteSessionsDetachBinding } from "../funcs/remoteSessionsDetachBinding.js";
 import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { remoteSessionsListBindings } from "../funcs/remoteSessionsListBindings.js";
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CommitServerIdentityConfigurationResult } from "../models/components/commitserveridentityconfigurationresult.js";
+import { CountRemoteSessionsResult } from "../models/components/countremotesessionsresult.js";
 import { ListBindingsResponseBody } from "../models/components/listbindingsresponsebody.js";
 import { PrincipalRemoteSessionBinding } from "../models/components/principalremotesessionbinding.js";
 import {
@@ -20,6 +22,10 @@ import {
   CommitServerIdentityConfigurationRequest,
   CommitServerIdentityConfigurationSecurity,
 } from "../models/operations/commitserveridentityconfiguration.js";
+import {
+  CountRemoteSessionsRequest,
+  CountRemoteSessionsSecurity,
+} from "../models/operations/countremotesessions.js";
 import {
   DetachBindingRequest,
   DetachBindingSecurity,
@@ -72,6 +78,25 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CommitServerIdentityConfigurationResult> {
     return unwrapAsync(remoteSessionsCommitServerIdentityConfiguration(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * countRemoteSessions remoteSessions
+   *
+   * @remarks
+   * Count the distinct people (user subjects) holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer, client and remote issuer are reachable from the caller's project count; API-key and anonymous subjects do not. A client shared by several MCP servers counts people across all of them.
+   */
+  async count(
+    request: CountRemoteSessionsRequest,
+    security?: CountRemoteSessionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<CountRemoteSessionsResult> {
+    return unwrapAsync(remoteSessionsCount(
       this,
       request,
       security,
