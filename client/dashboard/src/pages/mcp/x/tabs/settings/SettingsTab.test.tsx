@@ -5,9 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsTab } from "./SettingsTab";
 
 vi.mock("./sections/BrandingSection", () => ({
-  BrandingSection: ({ title = "Branding" }: { title?: string }) => (
-    <h2>{title}</h2>
-  ),
+  BrandingSection: () => <h2>Display</h2>,
 }));
 vi.mock("./sections/authentication/AuthenticationSection", () => ({
   MCP_AUTHENTICATION_SECTION_ID: "authentication",
@@ -144,7 +142,7 @@ describe("SettingsTab", () => {
     expect(
       renderSettings(server({ tunneledMcpServerId: "tunneled-source-1" })),
     ).toEqual([
-      "Branding",
+      "Display",
       "Source Name",
       "Server URL",
       "Network Access",
@@ -162,6 +160,6 @@ describe("SettingsTab", () => {
   it("preserves unproxied MCP settings structure", () => {
     expect(
       renderSettings(server({ unproxiedMcpServerId: "unproxied-source-1" })),
-    ).toEqual(["Branding", "Authentication", "Danger Zone"]);
+    ).toEqual(["Display", "Authentication", "Danger Zone"]);
   });
 });

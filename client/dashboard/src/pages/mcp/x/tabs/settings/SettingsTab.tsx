@@ -142,11 +142,7 @@ export function SettingsTab({
   if (remoteMcpServerId) {
     return (
       <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
-        <BrandingSection
-          mcpServer={mcpServer}
-          title="Display"
-          description="Customize how this Remote MCP server appears in the dashboard and on its installation page."
-        />
+        <BrandingSection mcpServer={mcpServer} />
         {/* Identity sits directly under Display: it is the first decision a
             remote server needs. Upstream headers live inside its Custom
             Headers disclosure; they are governed by the identity choice, not

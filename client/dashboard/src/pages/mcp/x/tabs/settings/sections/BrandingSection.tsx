@@ -1,6 +1,5 @@
 import { useMcpMetadataMetadataForm } from "@/components/mcp_install_page/useMcpMetadataForm";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/Button";
 import {
   Field,
   FieldDescription,
@@ -8,7 +7,6 @@ import {
   FieldLabel,
 } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
-import { Stack } from "@/components/ui/Stack";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -18,6 +16,7 @@ import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { Network, Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -32,12 +31,8 @@ const NAME_MAX_LENGTH = 40;
 
 export function BrandingSection({
   mcpServer,
-  title = "Branding",
-  description = "Used to identify your MCP server within the dashboard and on its installation page.",
 }: {
   mcpServer: McpServer;
-  title?: string;
-  description?: string;
 }): JSX.Element {
   const [nameDraft, setNameDraft] = useState(mcpServer.name ?? "");
 
@@ -143,78 +138,86 @@ export function BrandingSection({
   return (
     <SettingsSection>
       <SettingsSection.Header>
-        <SettingsSection.Title>{title}</SettingsSection.Title>
-        <SettingsSection.Description>{description}</SettingsSection.Description>
+        <SettingsSection.Title>Display</SettingsSection.Title>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          <Field className="max-w-md">
-            <FieldLabel>Icon</FieldLabel>
-            <Stack direction="horizontal" gap={3} align="center">
-              {metadataForm.logoUploadHandlers.renderFilePreview() ?? (
-                <div className="bg-muted text-muted-foreground flex h-16 w-16 shrink-0 items-center justify-center text-xs">
-                  No icon
-                </div>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/gif,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (file) {
-                    metadataForm.logoUploadHandlers
-                      .onUpload(file)
-                      .catch((error: unknown) => {
-                        toast.error(
-                          error instanceof Error
-                            ? error.message
-                            : "Failed to upload icon",
-                        );
-                      });
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={metadataUnresolved}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Button.Text>Upload icon</Button.Text>
-              </Button>
-            </Stack>
-            {metadataUnresolved && !metadataResult.isLoading && (
-              <FieldDescription className="text-destructive pl-1 text-xs">
-                Couldn't load current branding settings. Refresh the page before
-                making changes.
-              </FieldDescription>
-            )}
-          </Field>
-          <Field
-            data-invalid={update.isError ? true : undefined}
-            className="max-w-md"
-          >
-            <FieldLabel htmlFor="mcp-server-display-name">
-              Display Name
-            </FieldLabel>
-            <Input
-              id="mcp-server-display-name"
-              value={nameDraft}
-              onChange={(value) => setNameDraft(value)}
-              placeholder="My MCP server"
-              maxLength={NAME_MAX_LENGTH}
-              aria-invalid={update.isError}
+          <div className="flex items-center gap-5">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) {
+                  metadataForm.logoUploadHandlers
+                    .onUpload(file)
+                    .catch((error: unknown) => {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Failed to upload icon",
+                      );
+                    });
+                }
+              }}
             />
-            {nameDirty && (
-              <FieldDescription className="pl-1 text-xs">
-                {characterCount}
-              </FieldDescription>
-            )}
-            {update.isError && <FieldError>{update.error.message}</FieldError>}
-          </Field>
+            {/* The icon is its own control: the pencil badge marks it as
+                editable without spending a row on an "Upload icon" button. */}
+            <button
+              type="button"
+              aria-label="Change icon"
+              disabled={metadataUnresolved}
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-muted text-foreground relative flex size-16 shrink-0 items-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {metadataForm.logoUploadHandlers.renderFilePreview() ?? (
+                <Network aria-hidden="true" className="size-7" />
+              )}
+              <span className="border-input bg-background text-foreground absolute -right-1.5 -bottom-1.5 flex size-[22px] items-center justify-center border">
+                <Pencil aria-hidden="true" className="size-3" />
+              </span>
+            </button>
+            <Field
+              data-invalid={update.isError ? true : undefined}
+              className="max-w-md flex-1"
+            >
+              <FieldLabel htmlFor="mcp-server-display-name">
+                Display Name
+              </FieldLabel>
+              <div className="relative">
+                <Input
+                  id="mcp-server-display-name"
+                  value={nameDraft}
+                  onChange={(value) => setNameDraft(value)}
+                  placeholder="My MCP server"
+                  maxLength={NAME_MAX_LENGTH}
+                  aria-invalid={update.isError}
+                  className="pr-10"
+                />
+                <Pencil
+                  aria-hidden="true"
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2"
+                />
+              </div>
+              {nameDirty && (
+                <FieldDescription className="pl-1 text-xs">
+                  {characterCount}
+                </FieldDescription>
+              )}
+              {update.isError && (
+                <FieldError>{update.error.message}</FieldError>
+              )}
+            </Field>
+          </div>
+          {metadataUnresolved && !metadataResult.isLoading && (
+            <FieldDescription className="text-destructive text-xs">
+              Couldn't load current branding settings. Refresh the page before
+              making changes.
+            </FieldDescription>
+          )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
