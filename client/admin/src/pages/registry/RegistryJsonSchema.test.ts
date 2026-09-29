@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import canonical from "../../../../../server/internal/mcpregistry/contract/record.schema.json";
+import speakeasyRegistry from "../../../../../server/internal/mcpregistry/contract/speakeasy-registry.schema.json";
 import { registryJsonDiagnostics } from "./RegistryJsonSchema";
 // @ts-expect-error Monaco ships no declarations for its worker implementation.
 import { JSONWorker } from "monaco-editor/languages/features/json/jsonWorker.js";
@@ -27,7 +28,10 @@ function worker(text: string, modelUri = uri) {
 }
 
 it("registers the exact canonical offline schema only for registry models", () => {
-  expect(registryJsonDiagnostics.schemas?.[0]?.schema).toMatchObject(canonical);
+  expect(registryJsonDiagnostics.schemas?.[0]?.schema).toEqual({
+    ...canonical,
+    allOf: [speakeasyRegistry],
+  });
   expect(canonical.$schema).toBe(
     "https://json-schema.org/draft/2020-12/schema",
   );
@@ -105,6 +109,9 @@ it("validates Speakeasy registry documentation URLs alongside the unchanged upst
     "https://:80/docs",
     "https://example.test /x",
     "https://user:pass@example.test/docs",
+    "HtTpS://user:pass@example.test/docs",
+    "HTTP://example.test /docs",
+    "hTtPs:///missing-host",
     "https://user@example.test/docs",
     "https://user%40mail:p%40ss@example.test/docs",
   ]) {
@@ -118,6 +125,10 @@ it("validates Speakeasy registry documentation URLs alongside the unchanged upst
   for (const url of [
     "https://example.test/docs",
     "http://example.test/docs",
+    "HTTP://example.test/docs",
+    "HTTPS://EXAMPLE.TEST/DOCS",
+    "hTtP://example.test/@guide?q=a@example.test",
+    "hTtPs://[::1]:8443/docs",
     "https://example.test/docs?q=v#section",
     "https://example.test/@guide",
     "http://example.test:8080/docs?email=a@example.test",

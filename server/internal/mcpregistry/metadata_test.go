@@ -105,6 +105,10 @@ func TestCatalogDocumentationMetadata(t *testing.T) {
 	}{
 		{"https://example.test/docs", true},
 		{"http://example.test/docs", true},
+		{"HTTP://example.test/docs", true},
+		{"HTTPS://EXAMPLE.TEST/DOCS", true},
+		{"hTtP://example.test/@guide?q=a@example.test", true},
+		{"hTtPs://[::1]:8443/docs", true},
 		{"https://example.test/docs?q=v#section", true},
 		{"https://example.test/@guide", true},
 		{"http://example.test:8080/docs?email=a@example.test", true},
@@ -120,6 +124,9 @@ func TestCatalogDocumentationMetadata(t *testing.T) {
 		{"https://@/docs", false},
 		{"https://:80/docs", false},
 		{"https://user:pass@example.test/docs", false},
+		{"HtTpS://user:pass@example.test/docs", false},
+		{"HTTP://example.test /docs", false},
+		{"hTtPs:///missing-host", false},
 		{"https://user@example.test/docs", false},
 		{"https://user%40mail:p%40ss@example.test/docs", false},
 	} {
