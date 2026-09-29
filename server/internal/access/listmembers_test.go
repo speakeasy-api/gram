@@ -188,3 +188,51 @@ func TestService_ListMembers_EmailFallbackIgnoresProfileLinkedToAnotherUser(t *t
 	require.Equal(t, new("Sales"), byID["local_user_a"].Department)
 	require.Nil(t, byID["local_user_b"].Department, "a profile linked to another user must not match by email")
 }
+
+func TestService_ListMembers_ReportsDirectoryMappedRolesSeparately(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	builderID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	viewerID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_viewer", "Viewer", "viewer", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	viewer := seededRolePrincipal(t, ctx, ti.conn, orgID, "viewer").String()
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", "Sales User", "user_sales", "membership_sales")
+	seedRoleAssignment(t, ctx, ti.conn, orgID, "local_sales_user", mockMember("", "membership_sales", "user_sales", "builder"))
+	directoryUserID, workosDirectoryUserID := seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", `{"department_name":"Sales"}`)
+	groupID, workosGroupID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+	addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosDirectoryUserID, groupID, workosGroupID)
+
+	key := "department_name"
+	value := "Sales"
+	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+		SourceKind:     directoryRoleMappingSourceAttribute,
+		AttributeKey:   &key,
+		AttributeValue: &value,
+		RoleUrn:        builder,
+	})
+	require.NoError(t, err)
+	groupIDString := groupID.String()
+	_, err = ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+		SourceKind:       directoryRoleMappingSourceGroup,
+		DirectoryGroupID: &groupIDString,
+		RoleUrn:          viewer,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	require.NoError(t, err)
+
+	byID := map[string]*gen.AccessMember{}
+	for _, member := range result.Members {
+		byID[member.ID] = member
+	}
+	// Builder is held both ways and reported in both lists; only the direct
+	// assignment can be removed through the member's roles.
+	require.Equal(t, []string{builderID}, byID["local_sales_user"].RoleIds)
+	require.ElementsMatch(t, []string{builderID, viewerID}, byID["local_sales_user"].DirectoryRoleIds)
+	require.Empty(t, byID[authCtx.UserID].DirectoryRoleIds)
+}

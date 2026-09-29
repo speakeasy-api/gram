@@ -309,8 +309,12 @@ type UpdateMemberRolesResponseBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// All role IDs assigned to this member.
+	// Role IDs assigned directly to this member.
 	RoleIds []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
+	// Role IDs this member holds through directory role mappings. They follow the
+	// member's directory groups and attributes, so updating the member's roles
+	// does not change them.
+	DirectoryRoleIds []string `form:"directory_role_ids,omitempty" json:"directory_role_ids,omitempty" xml:"directory_role_ids,omitempty"`
 	// When the member joined the organization.
 	JoinedAt *string `form:"joined_at,omitempty" json:"joined_at,omitempty" xml:"joined_at,omitempty"`
 	// Department name as reported by the identity provider.
@@ -6394,8 +6398,12 @@ type AccessMemberResponseBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Avatar URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-	// All role IDs assigned to this member.
+	// Role IDs assigned directly to this member.
 	RoleIds []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
+	// Role IDs this member holds through directory role mappings. They follow the
+	// member's directory groups and attributes, so updating the member's roles
+	// does not change them.
+	DirectoryRoleIds []string `form:"directory_role_ids,omitempty" json:"directory_role_ids,omitempty" xml:"directory_role_ids,omitempty"`
 	// When the member joined the organization.
 	JoinedAt *string `form:"joined_at,omitempty" json:"joined_at,omitempty" xml:"joined_at,omitempty"`
 	// Department name as reported by the identity provider.
@@ -9053,6 +9061,10 @@ func NewUpdateMemberRolesAccessMemberOK(body *UpdateMemberRolesResponseBody) *ac
 	v.RoleIds = make([]string, len(body.RoleIds))
 	for i, val := range body.RoleIds {
 		v.RoleIds[i] = val
+	}
+	v.DirectoryRoleIds = make([]string, len(body.DirectoryRoleIds))
+	for i, val := range body.DirectoryRoleIds {
+		v.DirectoryRoleIds[i] = val
 	}
 	if body.Groups != nil {
 		v.Groups = make([]string, len(body.Groups))
@@ -12553,6 +12565,9 @@ func ValidateUpdateMemberRolesResponseBody(body *UpdateMemberRolesResponseBody) 
 	}
 	if body.RoleIds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
+	}
+	if body.DirectoryRoleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("directory_role_ids", "body"))
 	}
 	if body.JoinedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("joined_at", "body"))
@@ -20681,6 +20696,9 @@ func ValidateAccessMemberResponseBody(body *AccessMemberResponseBody) (err error
 	}
 	if body.RoleIds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
+	}
+	if body.DirectoryRoleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("directory_role_ids", "body"))
 	}
 	if body.JoinedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("joined_at", "body"))
