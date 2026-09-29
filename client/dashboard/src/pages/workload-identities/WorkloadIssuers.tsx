@@ -55,7 +55,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
   // fallback for a platform the catalogue does not carry.
   const [view, setView] = useState<IssuerView>("catalog");
   const [search, setSearch] = useState("");
-  const { data, isPending } = useWorkloadIdentities({});
+  const { data, isPending, isError, refetch } = useWorkloadIdentities({});
   const issuers = useMemo(() => data?.issuers ?? [], [data]);
 
   const visibleIssuers = useMemo(
@@ -69,11 +69,13 @@ function WorkloadIssuersCatalogue(): JSX.Element {
         refetchType: "all",
       });
       setRegisterOpen(false);
-      toast.success("Issuer trusted");
+      toast.success("Platform registered");
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : "Failed to trust the issuer",
+        error instanceof Error
+          ? error.message
+          : "Failed to register the platform",
       );
     },
   });
@@ -132,7 +134,24 @@ function WorkloadIssuersCatalogue(): JSX.Element {
         </Stack>
 
         {view === "custom" ? (
-          issuers.length === 0 && !isPending ? (
+          isError ? (
+            <Cards noGrid>
+              <InlineEmptyState
+                icon="triangle-alert"
+                heading="Couldn’t load trusted platforms"
+                description="The trust policy failed to load, so what is registered here is unknown."
+                action={
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => refetch()}
+                  >
+                    <Button.Text>Try again</Button.Text>
+                  </Button>
+                }
+              />
+            </Cards>
+          ) : issuers.length === 0 && !isPending ? (
             <Cards noGrid>
               <InlineEmptyState
                 icon="cpu"

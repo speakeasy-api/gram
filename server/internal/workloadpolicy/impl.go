@@ -247,6 +247,10 @@ func normalizeIssuerTags(tags []string) ([]string, error) {
 		if tag == "" {
 			return nil, oops.E(oops.CodeInvalid, nil, "tags must not be blank")
 		}
+		// Postgres text cannot hold a NUL byte, so the insert would fail.
+		if strings.ContainsRune(tag, 0) {
+			return nil, oops.E(oops.CodeInvalid, nil, "tags must not contain a NUL character")
+		}
 		if utf8.RuneCountInString(tag) > maxIssuerTagRunes {
 			return nil, oops.E(oops.CodeInvalid, nil, "tags must be at most %d characters", maxIssuerTagRunes)
 		}
