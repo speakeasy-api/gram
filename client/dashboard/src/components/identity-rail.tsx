@@ -7,9 +7,26 @@ export type IdentityRailItem = {
   title: string;
   href: string;
   active: boolean;
-  /** A sub-page of the item above it, drawn indented beneath it. */
+  /**
+   * A sub-page of the item above it, drawn indented beneath it with a dash in
+   * place of the left rule that marks the top-level sections.
+   */
   nested?: boolean;
 };
+
+// The left edge on the rail layout. The rule belongs to the top-level
+// sections; a nested item keeps the edge's width, so its box matches theirs,
+// but only draws it as the light edge of the card when it is open.
+function leftEdgeClassName(item: IdentityRailItem): string {
+  if (item.nested) {
+    return item.active
+      ? "lg:border-l-border"
+      : "lg:border-l-transparent lg:hover:border-l-transparent";
+  }
+  return item.active
+    ? "lg:border-l-foreground"
+    : "lg:border-l-border lg:hover:border-l-foreground/40";
+}
 
 /**
  * The identity page's own navigation, in the page rather than in the app
@@ -40,7 +57,7 @@ export function IdentityRail({
             // only grows them when selected moves the whole rail by a pixel
             // each time you change section.
             "shrink-0 border-b-2 px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
-            item.nested && "lg:pl-6",
+            item.nested && "lg:pl-5",
             "lg:border-t lg:border-r lg:border-b lg:border-l-2",
             item.active
               ? // The open section lifts off the recessed ground as a card:
@@ -50,7 +67,7 @@ export function IdentityRail({
                 // row hover.
                 cn(
                   "bg-card dark:bg-accent/70 text-foreground",
-                  "border-b-foreground lg:border-l-foreground",
+                  "border-b-foreground",
                   "lg:border-t-border lg:border-r-border lg:border-b-border",
                 )
               : cn(
@@ -60,12 +77,17 @@ export function IdentityRail({
                   // and right rules of the rail layout too, which read as half
                   // a box appearing around the row.
                   "border-b-border hover:border-b-foreground/40",
-                  "lg:border-l-border lg:hover:border-l-foreground/40",
                   "lg:border-t-transparent lg:border-r-transparent lg:border-b-transparent",
                   "lg:hover:border-t-transparent lg:hover:border-r-transparent lg:hover:border-b-transparent",
                 ),
+            leftEdgeClassName(item),
           )}
         >
+          {item.nested && (
+            <span aria-hidden className="mr-1.5 hidden lg:inline">
+              -
+            </span>
+          )}
           {item.title}
         </Link>
       ))}
