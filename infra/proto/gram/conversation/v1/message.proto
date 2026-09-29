@@ -22,13 +22,23 @@ message Message {
     ROLE_TOOL = 5;
   }
 
-  // Only values observed by ingestion are populated; absence means unknown.
+  // Attribution captured when ingestion produces this snapshot. Message user,
+  // billing user and provider account are independent facts; consumers must not
+  // substitute one for another. Missing fields mean unknown or unassigned.
   message Provenance {
     // Canonical normalized ingestion source.
     string source = 1;
     string external_message_id = 2;
+    // Gram user ID attached to the persisted message. Identifies the person the
+    // message is attributed to, not necessarily its author: assistant responses
+    // can carry the requesting user's ID. Does not allocate billing usage.
     string user_id = 3;
+    // Opaque user ID reported by the source system, not a Gram user/account ID.
+    // Interpret within organization_id and source. Can exist without user_id
+    // when ingestion has not resolved the external identity to a Gram user.
     string external_user_id = 4;
+    // Gram assistant UUID associated with the workload, supplied by the producer.
+    // Identifies an assistant resource, not a human user or provider account.
     string assistant_id = 5;
     string provider = 6;
     string model = 7;
@@ -43,21 +53,36 @@ message Message {
     // Device hostname and client user agent observed by ingestion.
     string hostname = 11;
     string user_agent = 12;
-    // Observed actor email; not inferred from the provider account.
+    // Message actor email explicitly observed by ingestion. Not a current Gram
+    // directory lookup, a billing-user email, or an inferred provider-account email.
     string user_email = 13;
     Account account = 14;
-    // Gram user explicitly allocated usage by the ingestion producer.
-    // Independent of user_id; absence means no billing user was assigned.
+    // Gram user ID to which the ingestion producer explicitly allocates usage,
+    // using the same attribution as agent-session storage metering. May differ
+    // from user_id or exist without it (e.g. an assistant's generated compaction
+    // message allocated to the chat owner). Interpret with organization_id.
+    // This is usage attribution, not proof that a charge occurred. Absence means
+    // unassigned; consumers must not fall back to user_id or an account owner.
     string billing_user_id = 15;
   }
 
-  // Observed provider-account attribution. Classification may be known even
-  // when ingestion could not resolve a persisted account identity.
+  // The external AI account/credentials used for the source session, as resolved
+  // by ingestion. Not the Gram user allocated usage or the organization's Gram
+  // billing plan. Classification may be known without a persisted account ID.
   message Account {
-    // Gram user_accounts UUID, not a provider-issued account identifier.
+    // UUID of Gram's user_accounts record representing the external AI account.
+    // Not a Gram user ID, provider-issued account ID, or billing-user selection.
     string user_account_id = 1;
+    // Gram's ingestion-time classification: "team" for company-associated
+    // accounts/credentials, "personal" for personal accounts. May be inferred
+    // from provider organization and identity evidence or assigned by an import
+    // adapter; not necessarily a provider-reported plan or verified ownership.
+    // Absence means no classification was supplied.
     string account_type = 2;
-    // Billing mode resolved at ingestion, not a downstream billing decision.
+    // How the external AI account is billed: "metered" for usage-based billing,
+    // "flat_rate" for subscription/seat billing, "unknown" when undetermined.
+    // Resolved from source-account/provider-organization configuration; absence
+    // means undeclared. Does not determine Gram pricing or select a billing user.
     string billing_mode = 3;
   }
 
