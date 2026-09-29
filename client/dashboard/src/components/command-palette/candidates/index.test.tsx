@@ -963,7 +963,13 @@ describe("usePersonCandidates", () => {
   it("yields person candidates for org readers", () => {
     mocks.scopes = ["org:read"];
     mocks.members = [
-      { id: "m1", name: "Ada", email: "ada@example.test", roleIds: ["admin"] },
+      {
+        id: "m1",
+        name: "Ada",
+        email: "ada@example.test",
+        roleIds: ["admin"],
+        directoryRoleIds: [],
+      },
     ];
     const { result } = renderCandidates();
     const [ada] = byKind(result.current, "person");
@@ -977,7 +983,13 @@ describe("usePersonCandidates", () => {
 
   it("yields no person candidates without an org scope", () => {
     mocks.members = [
-      { id: "m1", name: "Ada", email: "ada@example.test", roleIds: [] },
+      {
+        id: "m1",
+        name: "Ada",
+        email: "ada@example.test",
+        roleIds: [],
+        directoryRoleIds: [],
+      },
     ];
     const { result } = renderCandidates();
     expect(byKind(result.current, "person")).toHaveLength(0);
@@ -1397,7 +1409,15 @@ describe("useLauncherCandidates", () => {
     mocks.publishStatus = { configured: true, connected: true, upToDate: true };
     mocks.mcpServers = [mcpServer("Slack", "slack-a1", "private")];
     mocks.catalogServers = [catalogServer("Datadog", "com.datadoghq/datadog")];
-    mocks.members = [{ id: "m1", name: "Ada", email: "a@x", roleIds: [] }];
+    mocks.members = [
+      {
+        id: "m1",
+        name: "Ada",
+        email: "a@x",
+        roleIds: [],
+        directoryRoleIds: [],
+      },
+    ];
     mocks.organizations = [acme([project("Widgets", "widgets")])];
     const { result } = renderCandidates();
 

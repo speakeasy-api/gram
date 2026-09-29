@@ -76,12 +76,42 @@ import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
 import { killswitchCreateHref } from "@/components/killswitch/killswitch-routing";
 import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
+import { allMemberRoleIds } from "@/lib/member-roles";
 
 /**
  * Everything from TeamInner's scope that the member actions menu needs,
  * so the dropdown render fn and MemberRowContextMenu can build the same
  * menu model for a member.
  */
+/**
+ * A role chip on a member's row. A role granted through a directory role
+ * mapping says so, because it cannot be removed from the member here.
+ */
+function MemberRoleLink({
+  href,
+  name,
+  fromDirectory,
+}: {
+  href: string;
+  name: string;
+  fromDirectory: boolean;
+}): JSX.Element {
+  const link = (
+    <Link
+      to={href}
+      className="text-foreground hover:text-primary border px-1.5 py-0.5 text-xs no-underline transition-colors"
+    >
+      {name}
+    </Link>
+  );
+  if (!fromDirectory) return link;
+  return (
+    <SimpleTooltip tooltip="Granted by a directory role mapping. It follows the member's directory groups and attributes.">
+      {link}
+    </SimpleTooltip>
+  );
+}
+
 type MemberMenuDeps = {
   accessMemberByUserId: Map<string, AccessMember>;
   adminCount: number;
@@ -138,6 +168,7 @@ function getMemberMenuModel(
           email: member.email,
           photoUrl: member.photoUrl,
           roleIds: memberRoleIds,
+          directoryRoleIds: [],
           joinedAt: member.createdAt,
         }
       : undefined);
@@ -617,8 +648,11 @@ function TeamInner() {
       header: "Roles",
       width: "200px",
       render: (member) => {
-        const memberRoleIds = roleIdsByUserId.get(member.userId);
-        if (!memberRoleIds || memberRoleIds.length === 0)
+        const accessMember = accessMemberByUserId.get(member.userId);
+        const memberRoleIds = accessMember
+          ? allMemberRoleIds(accessMember)
+          : [];
+        if (memberRoleIds.length === 0)
           return <span className="text-muted-foreground">—</span>;
         const MAX_VISIBLE = 1;
         const visible = memberRoleIds.slice(0, MAX_VISIBLE);
@@ -626,13 +660,12 @@ function TeamInner() {
         return (
           <Stack direction="horizontal" gap={1} className="flex-wrap">
             {visible.map((roleId) => (
-              <Link
+              <MemberRoleLink
                 key={roleId}
-                to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
-                className="text-foreground hover:text-primary border px-1.5 py-0.5 text-xs no-underline transition-colors"
-              >
-                {getRoleName(roleId)}
-              </Link>
+                href={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
+                name={getRoleName(roleId)}
+                fromDirectory={!accessMember?.roleIds.includes(roleId)}
+              />
             ))}
             {overflow.length > 0 && (
               <SimpleTooltip
