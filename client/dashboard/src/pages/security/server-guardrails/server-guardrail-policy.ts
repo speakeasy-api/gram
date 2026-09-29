@@ -78,6 +78,22 @@ export function catalogPresetState(tools: ServerTool[]): ServerGuardrailState {
   };
 }
 
+/** Whether a tool's MCP annotations mark it destructive. The destructive hint
+ *  only means something on a tool that is not read-only, the same rule the
+ *  catalog's tool badges use. */
+export function isDestructiveTool(
+  annotations:
+    | {
+        destructiveHint?: boolean | undefined;
+        readOnlyHint?: boolean | undefined;
+      }
+    | undefined,
+): boolean {
+  return (
+    annotations?.destructiveHint === true && annotations.readOnlyHint !== true
+  );
+}
+
 export function destructiveToolNames(tools: ServerTool[]): string[] {
   return tools.filter((tool) => tool.destructive).map((tool) => tool.name);
 }

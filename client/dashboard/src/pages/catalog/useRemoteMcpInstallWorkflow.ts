@@ -46,6 +46,7 @@ import { useDetectorMode } from "@/pages/security/use-detector-mode";
 import {
   buildServerGuardrailRequest,
   catalogPresetState,
+  isDestructiveTool,
   type ServerGuardrailState,
   type ServerTool,
 } from "@/pages/security/server-guardrails/server-guardrail-policy";
@@ -992,9 +993,6 @@ export function useRemoteMcpInstallWorkflow({
               undefined,
               reqOpts,
             );
-            await invalidateAllRiskListPolicies(queryClient, {
-              refetchType: "all",
-            });
             setGuardrailOutcome({ status: "created", name });
           } catch (err) {
             setGuardrailOutcome({
@@ -1003,6 +1001,11 @@ export function useRemoteMcpInstallWorkflow({
               error: err instanceof Error ? err.message : String(err),
             });
           }
+          // Outside the create's error path: a failed refetch must not report
+          // a policy that exists as not created.
+          void invalidateAllRiskListPolicies(queryClient, {
+            refetchType: "all",
+          }).catch(() => undefined);
         }
       }
 
@@ -1146,9 +1149,11 @@ function serverToolsForPreset(server: PulseMCPServer): ServerTool[] {
       ? [
           {
             name: tool.name,
-            destructive:
-              (tool.annotations as { destructiveHint?: boolean } | undefined)
-                ?.destructiveHint === true,
+            destructive: isDestructiveTool(
+              tool.annotations as
+                | { destructiveHint?: boolean; readOnlyHint?: boolean }
+                | undefined,
+            ),
           },
         ]
       : [],

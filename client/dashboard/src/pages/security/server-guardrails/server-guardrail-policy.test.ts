@@ -5,6 +5,7 @@ import {
   defaultServerGuardrailState,
   destructiveToolNames,
   effectiveAction,
+  isDestructiveTool,
   serverGuardrailScope,
   validateServerGuardrail,
 } from "./server-guardrail-policy";
@@ -34,6 +35,17 @@ describe("catalogPresetState", () => {
     const state = catalogPresetState([{ name: "read", destructive: false }]);
     expect(state.categories.has("destructive_tool")).toBe(false);
     expect(effectiveAction(state)).toBe("warn");
+  });
+});
+
+describe("isDestructiveTool", () => {
+  it("ignores the destructive hint on read-only tools", () => {
+    expect(isDestructiveTool({ destructiveHint: true })).toBe(true);
+    expect(
+      isDestructiveTool({ destructiveHint: true, readOnlyHint: true }),
+    ).toBe(false);
+    expect(isDestructiveTool({ readOnlyHint: false })).toBe(false);
+    expect(isDestructiveTool(undefined)).toBe(false);
   });
 });
 

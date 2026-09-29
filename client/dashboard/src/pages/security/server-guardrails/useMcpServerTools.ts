@@ -3,7 +3,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useListMcpServerToolMetadata } from "@gram/client/react-query/listMcpServerToolMetadata.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMemo } from "react";
-import type { ServerTool } from "./server-guardrail-policy";
+import { isDestructiveTool, type ServerTool } from "./server-guardrail-policy";
 
 interface McpServerTools {
   tools: ServerTool[];
@@ -35,11 +35,11 @@ export function useMcpServerTools(
           .find((toolset) => toolset.id === toolsetId)
           ?.tools.map((tool) => ({
             name: tool.name,
-            destructive: tool.annotations?.destructiveHint === true,
+            destructive: isDestructiveTool(tool.annotations),
           })) ?? [])
       : (metadataQuery.data?.tools.map((tool) => ({
           name: tool.toolName,
-          destructive: tool.destructiveHint === true,
+          destructive: isDestructiveTool(tool),
         })) ?? []);
     return list.sort((left, right) => left.name.localeCompare(right.name));
   }, [server, toolsetId, toolsetsQuery.data, metadataQuery.data]);
