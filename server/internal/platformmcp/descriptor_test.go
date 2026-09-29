@@ -396,18 +396,16 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		admitted[descriptor.Name] = true
 	}
 
-	// Named-plugin distribution is intentionally unavailable until
-	// compatibility deployment. Session recall stays external-only because it
-	// contains user-personal cross-project transcripts. Data exports stay
-	// external-only because creation can send future project data off-platform.
-	// Network ingress status stays with connection-scoped org administration.
+	// Named-plugin distribution and assignment changes are intentionally
+	// unavailable until compatibility deployment. Session recall stays
+	// external-only because it contains user-personal cross-project
+	// transcripts. Data exports stay external-only because creation can send
+	// future project data off-platform. Network ingress status stays with
+	// connection-scoped org administration.
 	for _, name := range []string{
 		"get_network_ingress",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
-		"list_plugin_assignments",
-		"list_plugins",
-		"get_plugin",
 		operationSetPluginAssignments,
 		"list_my_sessions",
 		"continue_session",
@@ -420,12 +418,16 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// The reads, registration paths, and persisted readiness projections are
 	// connection-less end to end. get_setup_handoff is admitted because the
 	// handoff only carries the caller to the dashboard, which completes setup
-	// under its own session.
+	// under its own session. Plugin reads are admitted so the assistant can
+	// resolve a plugin by name before distributing a skill to it.
 	for _, name := range []string{
 		"get_platform_context",
 		"list_projects",
 		"find_mcp",
 		"get_mcp",
+		"list_plugins",
+		"get_plugin",
+		"list_plugin_assignments",
 		"list_recent_tool_calls",
 		"get_tool_usage_summary",
 		"list_organization_events",
