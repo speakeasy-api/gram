@@ -54,7 +54,16 @@ func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, erro
 	if err != nil {
 		return Entry{}, err
 	}
-	row, err := repo.New(s.db).CreateEntry(ctx, repo.CreateEntryParams{Data: data, PublishedAt: pgtype.Timestamptz{Time: publishedAt, InfinityModifier: pgtype.Finite, Valid: true}, StoredRecordLimit: StoredRecordByteLimit})
+	params := repo.CreateEntryParams{
+		Data: data,
+		PublishedAt: pgtype.Timestamptz{
+			Time:             publishedAt,
+			InfinityModifier: pgtype.Finite,
+			Valid:            true,
+		},
+		StoredRecordLimit: StoredRecordByteLimit,
+	}
+	row, err := repo.New(s.db).CreateEntry(ctx, params)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Entry{}, storedSizeError()
 	}
@@ -138,7 +147,18 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 		}
 		result, err = entry(row, updateErr)
 	} else {
-		row, updateErr := q.SetEntryPublished(ctx, repo.SetEntryPublishedParams{ID: id, Published: *published, Data: data, PublishedAt: pgtype.Timestamptz{Time: publishedAt, InfinityModifier: pgtype.Finite, Valid: !publishedAt.IsZero()}, StoredRecordLimit: StoredRecordByteLimit})
+		params := repo.SetEntryPublishedParams{
+			ID:        id,
+			Published: *published,
+			Data:      data,
+			PublishedAt: pgtype.Timestamptz{
+				Time:             publishedAt,
+				InfinityModifier: pgtype.Finite,
+				Valid:            !publishedAt.IsZero(),
+			},
+			StoredRecordLimit: StoredRecordByteLimit,
+		}
+		row, updateErr := q.SetEntryPublished(ctx, params)
 		if errors.Is(updateErr, pgx.ErrNoRows) {
 			return Entry{}, storedSizeError()
 		}
