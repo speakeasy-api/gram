@@ -83,23 +83,25 @@ describe("shared role provisioning API panel", () => {
     const { client } = setup();
     await screen.findByRole("checkbox", { name: "Engineering" });
     fireEvent.click(
-      screen.getByRole("checkbox", { name: "Enable automatic role plugins" }),
+      screen.getByRole("switch", { name: "Enable automatic role plugins" }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     const result = { ...status(1), enabled: true };
     mocks.callbacks.onSuccess?.(result);
-    await waitFor(() => expect(screen.getByText("Enabled")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("switch", { name: "Enable automatic role plugins" })
+          .getAttribute("aria-checked"),
+      ).toBe("true"),
+    );
     expect(
-      screen.getByText("Associated plugin").nextElementSibling?.textContent,
-    ).toBe("Not provisioned");
+      screen.queryByRole("button", { name: "Reload saved settings" }),
+    ).toBeNull();
     expect(
       client.getQueryData(["role-provisioning", { organizationId: "org-one" }]),
     ).toEqual(result);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(
       mocks.mutate.mock.lastCall?.[0].request
         .configureRoleProvisioningRequestBody.expectedVersion,
@@ -107,18 +109,16 @@ describe("shared role provisioning API panel", () => {
   });
   it("loads ranked choices, prefers the onboarding project, and sends expected version", async () => {
     setup();
-    await screen.findByRole("button", { name: "Save role plugin settings" });
+    await screen.findByRole("button", { name: "Save changes" });
     expect(
       screen.getByRole<HTMLButtonElement>("combobox", {
         name: "Destination for Engineering",
       }).textContent,
     ).toBe("Beta");
     fireEvent.click(
-      screen.getByRole("checkbox", { name: "Enable automatic role plugins" }),
+      screen.getByRole("switch", { name: "Enable automatic role plugins" }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(mocks.mutate).toHaveBeenCalledWith({
       request: {
         configureRoleProvisioningRequestBody: {
@@ -141,9 +141,7 @@ describe("shared role provisioning API panel", () => {
     setup();
     await screen.findByRole("checkbox", { name: "Engineering" });
     fireEvent.click(screen.getByRole("checkbox", { name: "Engineering" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     mocks.callbacks.onError?.(
       Object.assign(new Error("Conflict"), { statusCode: 409 }),
     );
@@ -160,12 +158,10 @@ describe("shared role provisioning API panel", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(
       screen
-        .getByRole("checkbox", { name: "Enable automatic role plugins" })
+        .getByRole("switch", { name: "Enable automatic role plugins" })
         .getAttribute("aria-checked"),
     ).toBe("true");
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(
       mocks.mutate.mock.lastCall?.[0].request
         .configureRoleProvisioningRequestBody.expectedVersion,
@@ -182,7 +178,7 @@ describe("shared role provisioning API panel", () => {
       await screen.findByRole("checkbox", { name: "Engineering" }),
     );
     fireEvent.click(
-      screen.getByRole("checkbox", { name: "Enable automatic role plugins" }),
+      screen.getByRole("switch", { name: "Enable automatic role plugins" }),
     );
     mocks.organizationId = "org-two";
     mocks.read.mockResolvedValue({ ...status(), roles: [] });
@@ -192,10 +188,10 @@ describe("shared role provisioning API panel", () => {
       </QueryClientProvider>,
     );
     expect(screen.queryByRole("checkbox", { name: "Engineering" })).toBeNull();
-    await screen.findByText(/No IdP roles yet/);
+    await screen.findByText(/No IdP roles synced yet/);
     expect(
       screen
-        .getByRole("checkbox", { name: "Enable automatic role plugins" })
+        .getByRole("switch", { name: "Enable automatic role plugins" })
         .getAttribute("aria-checked"),
     ).toBe("false");
     mocks.organizationId = "org-one";
@@ -212,7 +208,7 @@ describe("shared role provisioning API panel", () => {
     ).toBe("false");
     expect(
       screen
-        .getByRole("checkbox", { name: "Enable automatic role plugins" })
+        .getByRole("switch", { name: "Enable automatic role plugins" })
         .getAttribute("aria-checked"),
     ).toBe("false");
   });

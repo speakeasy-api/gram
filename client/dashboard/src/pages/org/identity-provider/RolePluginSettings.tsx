@@ -1,6 +1,13 @@
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
+import { Info } from "lucide-react";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/Popover";
+import { Switch } from "@/components/ui/Switch";
 import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Select,
@@ -15,7 +22,6 @@ import type { ConfigureRoleProvisioningRequestBody } from "@gram/client/models/c
 export type RolePluginStatus = RoleProvisioningStatus;
 export type RolePluginConfiguration = ConfigureRoleProvisioningRequestBody;
 const NO_PROJECT = "00000000-0000-0000-0000-000000000000";
-const label = (value: string) => value.replaceAll("_", " ");
 
 /** Shared confirmation editor: status is authoritative; edits never claim provisioning. */
 export function RolePluginSettings({
@@ -53,8 +59,6 @@ export function RolePluginSettings({
         (initial && !role.configured ? proposed : role.projectId) || "",
     })),
   );
-  const projectName = (id: string | null | undefined) =>
-    status.projects.find((p) => p.id === id)?.name ?? id ?? "None";
   function projectPicker(
     value: string,
     name: string,
@@ -66,7 +70,7 @@ export function RolePluginSettings({
         onValueChange={(id) => change(id === NO_PROJECT ? "" : id)}
         disabled={saving}
       >
-        <SelectTrigger aria-label={name}>
+        <SelectTrigger aria-label={name} className="w-full min-w-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -89,30 +93,36 @@ export function RolePluginSettings({
         Automatic role plugins
       </h3>
       <p className="text-muted-foreground text-sm">
-        Create empty plugins for selected IdP roles. Add servers in plugin
-        management; existing server permissions never populate plugin contents.
-        Publication is separate.
-      </p>
-      <p className="text-sm">
-        Saved organization setting:{" "}
-        <strong>{status.enabled ? "Enabled" : "Off"}</strong>
+        Create an empty plugin for each selected IdP role.
       </p>
       <fieldset disabled={saving} className="space-y-4">
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox
-            disabled={saving}
-            checked={enabled}
-            onCheckedChange={(checked) => setEnabled(checked === true)}
-          />
-          Enable automatic role plugins
-        </label>
-        <p className="text-muted-foreground text-sm">
-          Turning this off stops automation and preserves plugins, contents,
-          audiences, grants, exclusions, and destinations. Directory sync
-          continues independently.
-        </p>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-3 text-sm font-medium">
+            <Switch
+              disabled={saving}
+              checked={enabled}
+              onCheckedChange={setEnabled}
+            />
+            Enable automatic role plugins
+          </label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="About automatic role plugins"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-6 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2"
+              >
+                <Info className="size-4" aria-hidden="true" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="text-sm">
+              Creates an empty plugin for each selected IdP role in its chosen
+              project. You add tools and publish the plugins separately.
+            </PopoverContent>
+          </Popover>
+        </div>
         <label className="flex flex-col gap-2 text-sm">
-          Default destination for new roles
+          Default project
           {projectPicker(projectId, "Default destination project", (id) => {
             setProjectId(id);
             setRoles((previous) =>
@@ -124,99 +134,71 @@ export function RolePluginSettings({
         </label>
         {status.projects.length === 0 && (
           <p role="status" className="text-sm">
-            Choose a project when one is available. No project will be created;
-            directory sync is unaffected.
+            No projects available. Create a project to choose a destination.
           </p>
         )}
-        <p className="text-muted-foreground text-sm">
-          Review each role before saving. Unchecked roles remain excluded.
-          Existing destinations stay unchanged when the default changes.
-        </p>
         {status.roles.length === 0 && (
-          <p className="text-sm">
-            No IdP roles yet. Future roles follow the saved organization
-            setting.
+          <p className="text-muted-foreground text-sm">
+            No IdP roles synced yet.
           </p>
         )}
-        {status.roles.map((role, index) => {
-          const draft = roles[index]!;
-          return (
-            <article
-              key={role.roleUrn}
-              className="space-y-2 rounded-md border p-3"
-            >
-              <label className="flex items-center gap-2 font-medium">
-                <Checkbox
-                  disabled={saving}
-                  checked={draft.enabled}
-                  onCheckedChange={(checked) =>
+        <div className="divide-y">
+          {status.roles.map((role, index) => {
+            const draft = roles[index]!;
+            return (
+              <div
+                key={role.roleUrn}
+                className="grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1fr)] sm:items-center"
+              >
+                <label className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                  <Checkbox
+                    disabled={saving}
+                    checked={draft.enabled}
+                    onCheckedChange={(checked) =>
+                      setRoles((previous) =>
+                        previous.map((item) =>
+                          item.roleUrn === role.roleUrn
+                            ? { ...item, enabled: checked === true }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                  <span className="break-words">{role.name}</span>
+                </label>
+                {projectPicker(
+                  draft.projectId,
+                  `Destination for ${role.name}`,
+                  (id) =>
                     setRoles((previous) =>
                       previous.map((item) =>
                         item.roleUrn === role.roleUrn
-                          ? { ...item, enabled: checked === true }
+                          ? { ...item, projectId: id }
                           : item,
                       ),
-                    )
-                  }
-                />
-                {role.name}
-              </label>
-              <p className="text-muted-foreground text-sm">
-                Saved role setting:{" "}
-                {role.configured === false || (initial && !role.configured)
-                  ? "Not configured"
-                  : role.enabled
-                    ? "Enabled"
-                    : "Excluded"}
-              </p>
-              {projectPicker(
-                draft.projectId,
-                `Destination for ${role.name}`,
-                (id) =>
-                  setRoles((previous) =>
-                    previous.map((item) =>
-                      item.roleUrn === role.roleUrn
-                        ? { ...item, projectId: id }
-                        : item,
                     ),
-                  ),
-              )}
-              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                <dt>Saved desired destination</dt>
-                <dd>{projectName(role.projectId)}</dd>
-                <dt>Applied destination</dt>
-                <dd>{projectName(role.appliedProjectId)}</dd>
-                <dt>Associated plugin</dt>
-                <dd className="break-all">
-                  {role.pluginId ?? "Not provisioned"}
-                </dd>
-                <dt>Origin audience</dt>
-                <dd>{label(role.originAudience)}</dd>
-                <dt>Publication</dt>
-                <dd>{label(role.publicationStatus)}</dd>
-              </dl>
-              {role.pendingReason && (
-                <p role="status" className="text-sm">
-                  Pending: {label(role.pendingReason)}.
-                  {role.pendingReason === "audience_approval_required" &&
-                    " Review the existing audience approval request before restoration can proceed."}
-                </p>
-              )}
-            </article>
-          );
-        })}
-        <p className="text-muted-foreground text-sm">
-          Saving records intent only. Enabled does not mean queued, provisioned,
-          or published.
-        </p>
+                )}
+                {role.pendingReason === "audience_approval_required" && (
+                  <p
+                    role="status"
+                    className="text-muted-foreground text-sm sm:col-span-2"
+                  >
+                    Review the pending audience approval request to restore
+                    access.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
         {error && (
-          <div role="alert" className="space-y-2 text-sm">
-            <p>{error}</p>
+          <div className="space-y-2 text-sm">
+            <p role="alert">{error}</p>
+            <Button variant="secondary" onClick={onReload}>
+              Reload saved settings
+            </Button>
           </div>
         )}
-        <Button variant="secondary" onClick={onReload}>
-          Reload saved settings
-        </Button>
         <Button
           onClick={() =>
             onSave(
@@ -234,7 +216,7 @@ export function RolePluginSettings({
             )
           }
         >
-          {saving ? "Saving…" : "Save role plugin settings"}
+          {saving ? "Saving…" : "Save changes"}
         </Button>
       </fieldset>
     </section>

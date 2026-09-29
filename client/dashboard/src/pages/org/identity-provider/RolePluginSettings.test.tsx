@@ -44,6 +44,79 @@ function setup(data = status(), preferredProjectId?: string) {
   return { save, reload };
 }
 describe("role plugin confirmation", () => {
+  it("shows help on demand without changing the enable setting", async () => {
+    setup(status({ enabled: true }));
+    expect(
+      screen.getByRole("heading", { name: "Automatic role plugins" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Create an empty plugin for each selected IdP role."),
+    ).toBeTruthy();
+    expect(screen.getByText("Default project")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Reload saved settings" }),
+    ).toBeNull();
+    expect(screen.queryByText(/You add tools and publish/)).toBeNull();
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "About automatic role plugins" }),
+    );
+    expect(screen.getByText(/You add tools and publish/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("switch", { name: "Enable automatic role plugins" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByText(/You add tools and publish/)).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "About automatic role plugins" }),
+    );
+  });
+  it("offers reload only when an error needs recovery", () => {
+    const reload = vi.fn<() => void>();
+    render(
+      <RolePluginSettings
+        status={status()}
+        saving={false}
+        error="Could not save settings."
+        onSave={vi.fn<(configuration: RolePluginConfiguration) => void>()}
+        onReload={reload}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Could not save settings.",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reload saved settings" }),
+    );
+    expect(reload).toHaveBeenCalledOnce();
+  });
+  it("saves a per-role project override independently of the default", () => {
+    const { save } = setup(status({ enabled: true }));
+    fireEvent.keyDown(
+      screen.getByRole("combobox", { name: "Destination for Engineering" }),
+      { key: "ArrowDown" },
+    );
+    fireEvent.click(screen.getByRole("option", { name: "Beta" }));
+    expect(
+      screen.getByRole("combobox", { name: "Default destination project" })
+        .textContent,
+    ).toBe("Alpha");
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(save).toHaveBeenCalledWith({
+      expectedVersion: 0,
+      enabled: true,
+      projectId: "project-a",
+      roles: [
+        {
+          roleUrn: "urn:role:engineering",
+          enabled: true,
+          projectId: "project-b",
+        },
+      ],
+    });
+  });
   it("keeps the original conflict token when a background read changes", () => {
     const save = vi.fn<(configuration: RolePluginConfiguration) => void>();
     const view = render(
@@ -62,9 +135,7 @@ describe("role plugin confirmation", () => {
         onReload={vi.fn<() => void>()}
       />,
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(save.mock.calls[0]?.[0].expectedVersion).toBe(2);
   });
   it("uses the backend-ranked fallback and blocks saves while pending", async () => {
@@ -82,6 +153,20 @@ describe("role plugin confirmation", () => {
         name: "Destination for Engineering",
       }).textContent,
     ).toBe("Alpha");
+    expect(
+      screen.getByRole<HTMLButtonElement>("switch", {
+        name: "Enable automatic role plugins",
+      }).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>("checkbox", { name: "Engineering" })
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>("combobox", {
+        name: "Destination for Engineering",
+      }).disabled,
+    ).toBe(true);
     const button = screen.getByRole("button", { name: "Saving…" });
     await userEvent.setup().click(button);
     expect(save).not.toHaveBeenCalled();
@@ -115,10 +200,7 @@ describe("role plugin confirmation", () => {
         name: "Destination for Engineering",
       }).textContent,
     ).toBe("Alpha");
-    expect(screen.getByText(/Saved role setting: Excluded/)).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(save.mock.calls[0]?.[0]).toMatchObject({
       expectedVersion: 0,
       roles: [{ enabled: false, projectId: "project-a" }],
@@ -128,7 +210,7 @@ describe("role plugin confirmation", () => {
     const { save } = setup(status(), "project-b");
     expect(
       screen
-        .getByRole<HTMLButtonElement>("checkbox", {
+        .getByRole<HTMLButtonElement>("switch", {
           name: "Enable automatic role plugins",
         })
         .getAttribute("aria-checked"),
@@ -144,13 +226,11 @@ describe("role plugin confirmation", () => {
       }).textContent,
     ).toBe("Beta");
     fireEvent.click(
-      screen.getByRole<HTMLButtonElement>("checkbox", {
+      screen.getByRole<HTMLButtonElement>("switch", {
         name: "Enable automatic role plugins",
       }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(save).toHaveBeenCalledWith({
       expectedVersion: 0,
       enabled: true,
@@ -194,13 +274,11 @@ describe("role plugin confirmation", () => {
       }).textContent,
     ).toBe("Alpha");
     fireEvent.click(
-      screen.getByRole<HTMLButtonElement>("checkbox", {
+      screen.getByRole<HTMLButtonElement>("switch", {
         name: "Enable automatic role plugins",
       }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(save.mock.calls[0]?.[0]).toMatchObject({
       expectedVersion: 5,
       roles: [{ enabled: false, projectId: "project-a" }],
@@ -209,29 +287,25 @@ describe("role plugin confirmation", () => {
   it("sends only organization disable, preserving all role and project configuration", () => {
     const { save } = setup(status({ enabled: true, version: 9 }));
     fireEvent.click(
-      screen.getByRole<HTMLButtonElement>("checkbox", {
+      screen.getByRole<HTMLButtonElement>("switch", {
         name: "Enable automatic role plugins",
       }),
     );
     fireEvent.click(
       screen.getByRole<HTMLButtonElement>("checkbox", { name: "Engineering" }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(save).toHaveBeenCalledWith({ expectedVersion: 9, enabled: false });
   });
   it("keeps no-project intent pending without creating a project", () => {
     const { save } = setup(status({ projectId: undefined, projects: [] }));
-    expect(screen.getByText(/No project will be created/)).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Save role plugin settings" }),
-    );
+    expect(screen.getByText(/No projects available/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(save.mock.calls[0]?.[0]).toMatchObject({
       projectId: "00000000-0000-0000-0000-000000000000",
     });
   });
-  it("separates desired, applied, audience and publication, including pending approval", () => {
+  it("shows actionable audience approval without provisioning details", () => {
     setup(
       status({
         version: 3,
@@ -253,20 +327,13 @@ describe("role plugin confirmation", () => {
       }),
     );
     expect(
-      screen.getByText("Saved desired destination").nextElementSibling
-        ?.textContent,
-    ).toContain("Beta");
-    expect(
-      screen.getByText("Applied destination").nextElementSibling?.textContent,
-    ).toContain("Alpha");
-    expect(
-      screen.getByText("Publication").nextElementSibling?.textContent,
-    ).toContain("not published");
-    expect(screen.getByRole("status")?.textContent).toContain(
-      "Pending: audience approval required",
+      screen.getByRole("combobox", { name: "Destination for Engineering" })
+        .textContent,
+    ).toBe("Beta");
+    expect(screen.getByRole("status").textContent).toContain(
+      "Review the pending audience approval request",
     );
-    expect(screen.getByRole("status")?.textContent).toContain(
-      "Review the existing audience approval request",
-    );
+    expect(screen.queryByText("plugin-one")).toBeNull();
+    expect(screen.queryByText("not_published")).toBeNull();
   });
 });
