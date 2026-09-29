@@ -18,6 +18,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Stack } from "@/components/ui/Stack";
+import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { useEffect, useState } from "react";
@@ -27,12 +28,14 @@ import {
   type MatchKind,
   subjectRuleWarning,
 } from "./subjectRule";
+import { tagsProblem } from "./tagLimits";
 
 export interface AdmitSubjectValues {
   issuer: string;
   subject: string;
   matchKind: MatchKind;
   name: string;
+  tags: string[];
   agentId: string;
 }
 
@@ -43,6 +46,7 @@ export interface AdmitSubjectValues {
 interface AdmitSubjectForm {
   subject: string;
   name: string;
+  tags: string[];
   agentId: string;
 }
 
@@ -59,6 +63,7 @@ interface AdmitSubjectSheetProps {
 const EMPTY: AdmitSubjectForm = {
   subject: "",
   name: "",
+  tags: [],
   agentId: "",
 };
 
@@ -113,12 +118,16 @@ export function AdmitSubjectSheet({
     agents.find((agent) => agent.id === values.agentId)?.name ?? "";
   const showCaution = wildcardStem.length > 0 && warning === null;
 
-  const canSubmit = canAdmit({
-    subject: storedSubject,
-    agentId: values.agentId,
-    warning,
-    matchKindPermitted: matchKind !== "wildcard" || wildcardAvailable,
-  });
+  const tagProblem = tagsProblem(values.tags);
+
+  const canSubmit =
+    tagProblem === null &&
+    canAdmit({
+      subject: storedSubject,
+      agentId: values.agentId,
+      warning,
+      matchKindPermitted: matchKind !== "wildcard" || wildcardAvailable,
+    });
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
@@ -235,6 +244,30 @@ export function AdmitSubjectSheet({
                 Useful where a subject is opaque, such as a numeric service
                 account id.
               </Text>
+            </Stack>
+
+            <Stack gap={2}>
+              <Label htmlFor="admit-tags">Tags</Label>
+              <TagInput
+                id="admit-tags"
+                value={values.tags}
+                placeholder="support, production"
+                error={tagProblem !== null}
+                ariaDescribedBy={
+                  tagProblem !== null ? "admit-tags-error" : undefined
+                }
+                onChange={(tags) => setValues({ ...values, tags })}
+              />
+              {tagProblem !== null ? (
+                <Text id="admit-tags-error" role="alert" small destructive>
+                  {tagProblem}
+                </Text>
+              ) : (
+                <Text muted small>
+                  Optional labels for finding this machine later. Not used for
+                  matching.
+                </Text>
+              )}
             </Stack>
           </div>
 

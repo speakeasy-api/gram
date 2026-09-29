@@ -36,7 +36,7 @@ vi.mock("@/routes", () => ({
   }),
 }));
 
-function issuer(name: string, tags: string[]) {
+function issuer(name: string, tags: string[], description = "") {
   return {
     id: `issuer-${name}`,
     organizationId: "example-org",
@@ -44,6 +44,7 @@ function issuer(name: string, tags: string[]) {
     name,
     issuer: `https://${name}.example.com`,
     jwksUri: `https://${name}.example.com/jwks`,
+    description,
     allowWildcardAdmission: true,
     tags,
     createdAt: new Date("2026-09-25T00:00:00Z"),
@@ -56,7 +57,7 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
     data: {
       issuers: [
         issuer("build", ["production", "ci"]),
-        issuer("staging", ["ci"]),
+        issuer("staging", ["ci"], "Preview deploys for every pull request"),
         issuer("legacy", []),
       ],
       admissions: [],
@@ -101,13 +102,14 @@ function visiblePlatforms(): string[] {
 // The toolbar search reports its value on a timer, even undebounced, so each
 // query is awaited until the list reflects it.
 async function search(query: string, expected: string[]) {
-  fireEvent.change(screen.getByPlaceholderText("Search name, URL or tag…"), {
-    target: { value: query },
-  });
+  fireEvent.change(
+    screen.getByPlaceholderText("Search name, description, URL or tag…"),
+    { target: { value: query } },
+  );
   await waitFor(() => expect(visiblePlatforms()).toEqual(expected));
 }
 
-it("finds platforms by free-text search, with no per-tag buttons", () => {
+it("replaces the tag chips with a free-text search", () => {
   renderPage();
 
   // No per-tag buttons: a tag is found by typing it.
@@ -121,10 +123,11 @@ it("narrows the platforms to the ones matching a tag", async () => {
   await search("production", ["build"]);
 });
 
-it("matches the name and issuer URL, ignoring case", async () => {
+it("matches the name, description and issuer URL, ignoring case", async () => {
   renderPage();
 
   await search("LEG", ["legacy"]);
+  await search("pull request", ["staging"]);
   await search("build.example.com", ["build"]);
 });
 
@@ -138,10 +141,28 @@ it("restores every platform when the search is cleared", async () => {
 it("says so when nothing matches", async () => {
   renderPage();
 
-  fireEvent.change(screen.getByPlaceholderText("Search name, URL or tag…"), {
-    target: { value: "no-such-platform" },
-  });
+  fireEvent.change(
+    screen.getByPlaceholderText("Search name, description, URL or tag…"),
+    { target: { value: "no-such-platform" } },
+  );
 
   expect(await screen.findByText("No platforms match")).toBeTruthy();
   expect(screen.queryAllByRole("link")).toHaveLength(0);
+});
+
+it("shows a platform's description in place of its issuer URL", () => {
+  renderPage();
+
+  const staging = screen.getByRole("link", { name: /^staging/ });
+  expect(staging.textContent).toContain(
+    "Preview deploys for every pull request",
+  );
+  // With a description, the URL sits on a labeled line beside the keys.
+  expect(staging.textContent).toContain("Issuer: https://staging.example.com");
+
+  // Without a description the issuer URL stays where the description would be,
+  // so it is not repeated on a labeled line.
+  const build = screen.getByRole("link", { name: /^build/ });
+  expect(build.textContent).not.toContain("Issuer:");
+  expect(build.textContent).toContain("https://build.example.com");
 });

@@ -14,6 +14,10 @@ export type RegisterWorkloadIssuerForm = {
    */
   allowWildcardAdmission?: boolean | undefined;
   /**
+   * What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.
+   */
+  description?: string | undefined;
+  /**
    * The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
    */
   issuer: string;
@@ -38,6 +42,7 @@ export type RegisterWorkloadIssuerForm = {
 /** @internal */
 export type RegisterWorkloadIssuerForm$Outbound = {
   allow_wildcard_admission?: boolean | undefined;
+  description?: string | undefined;
   issuer: string;
   jwks_uri: string;
   name: string;
@@ -52,6 +57,7 @@ export const RegisterWorkloadIssuerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     allowWildcardAdmission: z.optional(z.boolean()),
+    description: z.optional(z.string()),
     issuer: z.string(),
     jwksUri: z.string(),
     name: z.string(),

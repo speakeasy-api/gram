@@ -47,8 +47,8 @@ func (q *Queries) CountLiveAdmissionsForSubject(ctx context.Context, arg CountLi
 }
 
 const createWorkloadAdmission = `-- name: CreateWorkloadAdmission :one
-INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, created_at, updated_at, deleted_at, deleted
 `
 
@@ -59,6 +59,7 @@ type CreateWorkloadAdmissionParams struct {
 	Subject          string
 	MatchKind        string
 	Name             pgtype.Text
+	Tags             []string
 }
 
 func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloadAdmissionParams) (WorkloadIdentityAdmission, error) {
@@ -69,6 +70,7 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 		arg.Subject,
 		arg.MatchKind,
 		arg.Name,
+		arg.Tags,
 	)
 	var i WorkloadIdentityAdmission
 	err := row.Scan(
@@ -89,8 +91,8 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 }
 
 const createWorkloadIssuer = `-- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 `
 
@@ -98,6 +100,7 @@ type CreateWorkloadIssuerParams struct {
 	OrganizationID         string
 	ProjectID              uuid.NullUUID
 	Name                   string
+	Description            pgtype.Text
 	Tags                   []string
 	Issuer                 string
 	JwksUri                string
@@ -109,6 +112,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.Name,
+		arg.Description,
 		arg.Tags,
 		arg.Issuer,
 		arg.JwksUri,

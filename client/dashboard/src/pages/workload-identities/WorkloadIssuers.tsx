@@ -1,5 +1,6 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
+import { cn } from "@/lib/utils";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -85,6 +86,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
       request: {
         registerWorkloadIssuerForm: {
           name: values.name.trim(),
+          description: values.description.trim() || undefined,
           issuer: values.issuer.trim(),
           jwksUri: values.jwksUri.trim(),
           tags: values.tags,
@@ -166,7 +168,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
                   className="w-full"
                   value={search}
                   onChange={setSearch}
-                  placeholder="Search name, URL or tag…"
+                  placeholder="Search name, description, URL or tag…"
                 />
               </Page.Toolbar>
               {visibleIssuers.length === 0 && !isPending ? (
@@ -174,7 +176,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
                   <InlineEmptyState
                     icon="search"
                     heading="No platforms match"
-                    description="Nothing registered here matches that search. Try part of a name, an issuer URL or a tag."
+                    description="Nothing registered here matches that search. Try part of a name, description, issuer URL or tag."
                   />
                 </Cards>
               ) : (
@@ -214,6 +216,9 @@ type IssuerView = "catalog" | "custom";
 
 function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
   const routes = useRoutes();
+  // A description identifies the platform better than its URL, so it takes the
+  // URL's place and the URL sits on a labeled line beside the keys.
+  const hasDescription = issuer.description !== "";
 
   return (
     // A link rather than an onClick, so the card keeps what a link gives for
@@ -225,8 +230,12 @@ function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
       <Card className="hover:border-foreground/30 h-full transition-colors">
         <Card.Header>
           <Card.Title>{issuer.name}</Card.Title>
-          <Card.Description className="break-all">
-            {issuer.issuer}
+          <Card.Description
+            className={
+              hasDescription ? "line-clamp-2 !whitespace-normal" : "break-all"
+            }
+          >
+            {hasDescription ? issuer.description : issuer.issuer}
           </Card.Description>
         </Card.Header>
         <Card.Content>
@@ -239,7 +248,16 @@ function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
               ))}
             </div>
           )}
-          <Text muted small className="mt-3 block break-all">
+          {hasDescription && (
+            <Text muted small className="mt-3 block break-all">
+              Issuer: {issuer.issuer}
+            </Text>
+          )}
+          <Text
+            muted
+            small
+            className={cn("block break-all", hasDescription ? "mt-1" : "mt-3")}
+          >
             Keys: {issuer.jwksUri}
           </Text>
         </Card.Content>

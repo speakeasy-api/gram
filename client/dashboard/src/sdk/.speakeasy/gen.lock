@@ -3928,7 +3928,7 @@ examples:
         application/json: {"agent_id": "2aa24d85-0c2a-4342-a8ed-4db1a21ba276", "issuer": "mastercard", "match_kind": "exact", "project_scoped": false, "subject": "<value>"}
       responses:
         "200":
-          application/json: {"admissions": [{"agent_id": "699d2770-2c50-4076-b7ec-41ff4e2c2e85", "agent_name": "<value>", "created_at": "2025-07-09T02:12:37.415Z", "id": "55001c0c-1e9a-4559-95c4-5bffb2aa31f3", "issuer": "diners_club", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "updated_at": "2025-05-31T20:36:13.884Z", "wildcard_active": true, "workload_issuer_id": "bb712eab-4d75-409f-a571-6d332e042074"}], "issuers": []}
+          application/json: {"admissions": [{"agent_id": "699d2770-2c50-4076-b7ec-41ff4e2c2e85", "agent_name": "<value>", "created_at": "2025-07-09T02:12:37.415Z", "id": "55001c0c-1e9a-4559-95c4-5bffb2aa31f3", "issuer": "diners_club", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "tags": [], "updated_at": "2025-05-31T20:36:13.884Z", "wildcard_active": true, "workload_issuer_id": "bb712eab-4d75-409f-a571-6d332e042074"}], "issuers": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -9792,7 +9792,7 @@ examples:
     speakeasy-default-list-workload-identities:
       responses:
         "200":
-          application/json: {"admissions": [], "issuers": [{"allow_wildcard_admission": false, "created_at": "2026-04-05T08:16:34.528Z", "id": "7f2a8883-57ab-4de9-846b-7a2c31e8601f", "issuer": "visa", "jwks_uri": "https://rewarding-developing.net", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "tags": ["<value 1>"], "updated_at": "2025-04-11T13:58:43.672Z"}]}
+          application/json: {"admissions": [], "issuers": [{"allow_wildcard_admission": false, "created_at": "2026-04-05T08:16:34.528Z", "description": "preclude pocket-watch shakily usually warmly great", "id": "7f2a8883-57ab-4de9-846b-7a2c31e8601f", "issuer": "visa", "jwks_uri": "https://rewarding-developing.net", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "tags": ["<value 1>"], "updated_at": "2025-04-11T13:58:43.672Z"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -10361,7 +10361,7 @@ examples:
         application/json: {"issuer": "visa", "jwks_uri": "https://beneficial-outlaw.name", "name": "<value>", "project_scoped": false}
       responses:
         "200":
-          application/json: {"admissions": [{"agent_id": "d71bc33d-0ac0-482b-a72c-2f9f2ee4fd35", "agent_name": "<value>", "created_at": "2026-11-27T16:58:02.027Z", "id": "e341442f-6e78-4f2b-a588-9369a859d62b", "issuer": "diners_club", "issuer_name": "<value>", "match_kind": "exact", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "updated_at": "2026-08-31T08:44:17.617Z", "wildcard_active": false, "workload_issuer_id": "8ff4d533-47f7-43b5-91b7-7b4059134b79"}], "issuers": []}
+          application/json: {"admissions": [{"agent_id": "d71bc33d-0ac0-482b-a72c-2f9f2ee4fd35", "agent_name": "<value>", "created_at": "2026-11-27T16:58:02.027Z", "id": "e341442f-6e78-4f2b-a588-9369a859d62b", "issuer": "diners_club", "issuer_name": "<value>", "match_kind": "exact", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "tags": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2026-08-31T08:44:17.617Z", "wildcard_active": false, "workload_issuer_id": "8ff4d533-47f7-43b5-91b7-7b4059134b79"}], "issuers": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -12653,7 +12653,7 @@ examples:
           id: "bca55d4a-5ccb-44af-8ea2-f7c1e52c2772"
       responses:
         "200":
-          application/json: {"admissions": [{"agent_id": "7307caf8-59ec-45fa-989b-cdfbf0f2b40a", "agent_name": "<value>", "created_at": "2026-11-30T22:02:46.314Z", "id": "f041a24d-46b3-410e-b84c-250693d21ace", "issuer": "american_express", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "updated_at": "2024-06-12T05:33:26.915Z", "wildcard_active": false, "workload_issuer_id": "5d157ed0-a29a-4ddc-9e8d-6666043fdd45"}], "issuers": []}
+          application/json: {"admissions": [{"agent_id": "7307caf8-59ec-45fa-989b-cdfbf0f2b40a", "agent_name": "<value>", "created_at": "2026-11-30T22:02:46.314Z", "id": "f041a24d-46b3-410e-b84c-250693d21ace", "issuer": "american_express", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "tags": ["<value 1>", "<value 2>"], "updated_at": "2024-06-12T05:33:26.915Z", "wildcard_active": false, "workload_issuer_id": "5d157ed0-a29a-4ddc-9e8d-6666043fdd45"}], "issuers": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -12665,7 +12665,7 @@ examples:
           id: "f1fdb5e8-d552-40e5-82cd-2856641d1250"
       responses:
         "200":
-          application/json: {"admissions": [{"agent_id": "1b7cd57f-5526-4b15-914c-f0abefbae7c5", "agent_name": "<value>", "created_at": "2024-10-08T12:41:59.151Z", "id": "68d3e580-f5be-4d0f-823a-3f4bb1a537fb", "issuer": "american_express", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "updated_at": "2026-01-19T16:13:07.192Z", "wildcard_active": false, "workload_issuer_id": "bc1cd297-a931-4711-a6f1-5c5fcd473345"}], "issuers": []}
+          application/json: {"admissions": [{"agent_id": "1b7cd57f-5526-4b15-914c-f0abefbae7c5", "agent_name": "<value>", "created_at": "2024-10-08T12:41:59.151Z", "id": "68d3e580-f5be-4d0f-823a-3f4bb1a537fb", "issuer": "american_express", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "tags": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2026-01-19T16:13:07.192Z", "wildcard_active": false, "workload_issuer_id": "bc1cd297-a931-4711-a6f1-5c5fcd473345"}], "issuers": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

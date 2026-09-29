@@ -2,6 +2,7 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
@@ -38,9 +39,18 @@ import { toast } from "sonner";
  * what makes "this issuer's workloads" a well-defined set even where two issuers
  * share a URL across tiers.
  */
-// The identifiers an administrator copies into the platform's console.
+// The operator's description leads when there is one; the identifiers follow
+// because they are what an administrator copies into the platform's console.
 function issuerSummary(issuer: WorkloadIssuer): string {
-  return `Issuer ${issuer.issuer}, keys at ${issuer.jwksUri}.`;
+  const identifiers = `Issuer ${issuer.issuer}, keys at ${issuer.jwksUri}.`;
+  const description = issuer.description.trim();
+  if (description === "") {
+    return identifiers;
+  }
+  // An operator's description need not end in punctuation, and without it the
+  // identifiers would read as part of the same sentence.
+  const separator = /[.!?]$/.test(description) ? " " : ". ";
+  return `${description}${separator}${identifiers}`;
 }
 
 export function WorkloadIssuerDetailPage(): JSX.Element {
@@ -182,6 +192,15 @@ function IssuerDetail(): JSX.Element {
               rule matches nothing.
             </Text>
           )}
+          {admission.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {admission.tags.map((tag) => (
+                <Badge key={tag} variant="information">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
         </Stack>
       ),
     },
@@ -252,6 +271,7 @@ function IssuerDetail(): JSX.Element {
           subject: values.subject.trim(),
           matchKind: values.matchKind,
           name: label.length > 0 ? label : undefined,
+          tags: values.tags,
           agentId: values.agentId,
         },
       },
@@ -287,7 +307,7 @@ function IssuerDetail(): JSX.Element {
               className="w-full"
               value={search}
               onChange={setSearch}
-              placeholder="Search subject, label or agent…"
+              placeholder="Search subject, label, tag or agent…"
             />
           </Page.Toolbar>
           <Table

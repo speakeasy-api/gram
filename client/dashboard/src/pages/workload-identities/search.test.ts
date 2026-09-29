@@ -15,6 +15,7 @@ function admission(
     subject: "repo:acme/payments-api:ref:refs/heads/main",
     matchKind: "exact",
     name: "Payments deploy",
+    tags: ["payments", "canary"],
     agentId: "22222222-2222-2222-2222-222222222222",
     agentName: "Release assistant",
     wildcardActive: false,
@@ -24,13 +25,15 @@ function admission(
   };
 }
 
-it("matches a machine by subject, label or agent, ignoring case", () => {
+it("matches a machine by subject, label, tag or agent, ignoring case", () => {
   const machine = admission();
 
   expect(admissionMatches(machine, "payments-api")).toBe(true);
   expect(admissionMatches(machine, "PAYMENTS DEPLOY")).toBe(true);
   expect(admissionMatches(machine, "deploy")).toBe(true);
   expect(admissionMatches(machine, "release")).toBe(true);
+  // Only the tag carries "canary", so this match proves tags are searched.
+  expect(admissionMatches(machine, "CANARY")).toBe(true);
 });
 
 it("matches everything on an empty query and nothing on an unrelated one", () => {

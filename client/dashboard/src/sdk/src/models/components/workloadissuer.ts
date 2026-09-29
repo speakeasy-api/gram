@@ -18,6 +18,10 @@ export type WorkloadIssuer = {
   allowWildcardAdmission: boolean;
   createdAt: Date;
   /**
+   * What the platform is and what runs on it. Empty rather than absent where none is set.
+   */
+  description: string;
+  /**
    * The workload issuer id.
    */
   id: string;
@@ -59,6 +63,7 @@ export const WorkloadIssuer$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    description: z.string(),
     id: z.string(),
     issuer: z.string(),
     jwks_uri: z.string(),

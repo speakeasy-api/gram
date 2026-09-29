@@ -30,6 +30,9 @@ type RegisterIssuerRequestBody struct {
 	// every lookup, so clearing it makes wildcard rules already written inert
 	// immediately.
 	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
+	// What the platform is and what runs on it, in the operator's words. Trimmed
+	// on write; blank is stored as none. At most 500 characters after trimming.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
 	// not key/value pairs. Trimmed and de-duplicated on write, then limited to 40
 	// tags of at most 64 characters each.
@@ -56,6 +59,10 @@ type AdmitSubjectRequestBody struct {
 	MatchKind *string `form:"match_kind,omitempty" json:"match_kind,omitempty" xml:"match_kind,omitempty"`
 	// Optional label, for platforms whose subjects are not self-describing.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Free-form labels for finding the admitted workload in a long list. Flat
+	// strings, not key/value pairs. Trimmed and de-duplicated on write, then
+	// limited to 40 tags of at most 64 characters each.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The agent whose policy the admitted workload inherits.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// Admit the subject for the selected project alone rather than the whole
@@ -1057,6 +1064,9 @@ type WorkloadIssuerResponseBody struct {
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
 	// Where the issuer publishes its signing keys.
 	JwksURI string `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
+	// What the platform is and what runs on it. Empty rather than absent where
+	// none is set.
+	Description string `form:"description" json:"description" xml:"description"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
 	// Free-form labels for grouping and filtering trusted platforms. Empty rather
@@ -1087,6 +1097,9 @@ type WorkloadAdmissionResponseBody struct {
 	MatchKind string `form:"match_kind" json:"match_kind" xml:"match_kind"`
 	// Optional label; empty when none was supplied.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Free-form labels for finding the admitted workload. Empty rather than absent
+	// where none are set.
+	Tags []string `form:"tags" json:"tags" xml:"tags"`
 	// The agent whose policy this workload inherits. Empty when the assignment is
 	// missing, which the token endpoint refuses.
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
@@ -2000,6 +2013,7 @@ func NewRegisterIssuerPayload(body *RegisterIssuerRequestBody, sessionToken *str
 		Issuer:                 *body.Issuer,
 		JwksURI:                *body.JwksURI,
 		AllowWildcardAdmission: body.AllowWildcardAdmission,
+		Description:            body.Description,
 	}
 	if body.ProjectScoped != nil {
 		v.ProjectScoped = *body.ProjectScoped
@@ -2049,6 +2063,12 @@ func NewAdmitSubjectPayload(body *AdmitSubjectRequestBody, sessionToken *string,
 	}
 	if body.MatchKind == nil {
 		v.MatchKind = "exact"
+	}
+	if body.Tags != nil {
+		v.Tags = make([]string, len(body.Tags))
+		for i, val := range body.Tags {
+			v.Tags[i] = val
+		}
 	}
 	if body.ProjectScoped == nil {
 		v.ProjectScoped = false

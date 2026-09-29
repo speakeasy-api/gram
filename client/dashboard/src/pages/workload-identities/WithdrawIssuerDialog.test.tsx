@@ -10,6 +10,7 @@ const platform: WorkloadIssuer = {
   organizationId: "org",
   projectId: "",
   name: "Example CI",
+  description: "",
   issuer: "https://ci-identity.example.com",
   jwksUri: "https://ci-identity.example.com/jwks",
   allowWildcardAdmission: false,

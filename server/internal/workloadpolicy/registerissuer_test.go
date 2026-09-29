@@ -25,6 +25,7 @@ func registerAnthropic(t *testing.T, ctx context.Context, ti *testInstance, allo
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
+		Description:            nil,
 		AllowWildcardAdmission: new(allowWildcard),
 		Tags:                   nil,
 		ProjectScoped:          false,
@@ -73,6 +74,7 @@ func TestRegisterIssuer_DefaultsToAllowingWildcards(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
+		Description:            nil,
 		AllowWildcardAdmission: nil,
 		Tags:                   nil,
 		ProjectScoped:          false,
@@ -125,6 +127,7 @@ func TestRegisterIssuer_RefusesUnsafeURLs(t *testing.T) {
 				Name:                   "Claude Tag " + tc.name,
 				Issuer:                 tc.issuer,
 				JwksURI:                tc.jwksURI,
+				Description:            nil,
 				AllowWildcardAdmission: new(false),
 				ProjectScoped:          false,
 			})
@@ -146,6 +149,7 @@ func TestRegisterIssuer_RefusesADuplicateNameAtTheSameTier(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 "https://identity.example.com",
 		JwksURI:                "https://identity.example.com/jwks",
+		Description:            nil,
 		AllowWildcardAdmission: new(false),
 		Tags:                   nil,
 		ProjectScoped:          false,
@@ -168,6 +172,7 @@ func TestRegisterIssuer_RequiresWorkloadWrite(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
+		Description:            nil,
 		AllowWildcardAdmission: new(false),
 		Tags:                   nil,
 		ProjectScoped:          false,
@@ -189,6 +194,7 @@ func TestRegisterIssuer_RefusesABlankName(t *testing.T) {
 		Name:                   strings.Repeat(" ", 4),
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
+		Description:            nil,
 		AllowWildcardAdmission: new(false),
 		Tags:                   nil,
 		ProjectScoped:          false,
@@ -207,6 +213,7 @@ func TestRegisterIssuer_StoresTagsTrimmedAndDeduplicated(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
+		Description:            nil,
 		AllowWildcardAdmission: new(true),
 		Tags:                   []string{"  production  ", "ci", "production"},
 		ProjectScoped:          false,
@@ -241,6 +248,7 @@ func TestRegisterIssuer_RefusesABlankTag(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
+		Description:            nil,
 		AllowWildcardAdmission: new(true),
 		Tags:                   []string{"production", "   "},
 		ProjectScoped:          false,
@@ -259,11 +267,56 @@ func TestRegisterIssuer_RefusesAnOverlongTag(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
+		Description:            nil,
 		AllowWildcardAdmission: new(true),
 		Tags:                   []string{strings.Repeat("a", 65)},
 		ProjectScoped:          false,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestRegisterIssuer_StoresTheDescriptionTrimmed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "Claude Tag",
+		Issuer:                 anthropicIssuer,
+		JwksURI:                anthropicJWKS,
+		Description:            new("  Claude agents in our Slack workspace  "),
+		AllowWildcardAdmission: new(true),
+		Tags:                   nil,
+		ProjectScoped:          false,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, "Claude agents in our Slack workspace", policy.Issuers[0].Description)
+}
+
+func TestRegisterIssuer_RendersNoDescriptionAsEmpty(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "Claude Tag",
+		Issuer:                 anthropicIssuer,
+		JwksURI:                anthropicJWKS,
+		Description:            new("   "),
+		AllowWildcardAdmission: new(true),
+		Tags:                   nil,
+		ProjectScoped:          false,
+	})
+	require.NoError(t, err)
+
+	// A whitespace-only description is stored as none, so a card never renders
+	// a blank line where the issuer URL would otherwise have been.
+	require.Empty(t, policy.Issuers[0].Description)
 }
 
 func registerWithTags(ctx context.Context, ti *testInstance, tags []string) (*gen.WorkloadIdentityPolicy, error) {
@@ -274,6 +327,7 @@ func registerWithTags(ctx context.Context, ti *testInstance, tags []string) (*ge
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
+		Description:            nil,
 		AllowWildcardAdmission: new(true),
 		Tags:                   tags,
 		ProjectScoped:          false,
@@ -330,5 +384,43 @@ func TestRegisterIssuer_RefusesATagWithANulCharacter(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	_, err := registerWithTags(ctx, ti, []string{"prod\x00uction"})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func registerWithDescription(ctx context.Context, ti *testInstance, description string) (*gen.WorkloadIdentityPolicy, error) {
+	policy, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "Claude Tag",
+		Issuer:                 anthropicIssuer,
+		JwksURI:                anthropicJWKS,
+		Description:            &description,
+		AllowWildcardAdmission: new(true),
+		Tags:                   nil,
+		ProjectScoped:          false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("register issuer: %w", err)
+	}
+	return policy, nil
+}
+
+func TestRegisterIssuer_LimitsTheDescriptionAfterTrimming(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	// 500 multi-byte characters, padded: within the limit once trimmed.
+	description := strings.Repeat("é", 500)
+	policy, err := registerWithDescription(ctx, ti, "  "+description+"  ")
+	require.NoError(t, err)
+	require.Equal(t, description, policy.Issuers[0].Description)
+}
+
+func TestRegisterIssuer_RefusesAnOverlongDescription(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	_, err := registerWithDescription(ctx, ti, strings.Repeat("a", 501))
 	requireOopsCode(t, err, oops.CodeInvalid)
 }

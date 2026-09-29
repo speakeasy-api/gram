@@ -1,6 +1,6 @@
-// The column caps a platform's tags at 40 and each entry at 64 characters, and
-// the server refuses anything past that. Checked here so the reason lands
-// beside the field.
+// Issuer and admission tags share one set of limits: each column caps the list
+// at 40 and each entry at 64 characters, and the server refuses anything past
+// that. Checked here so the reason lands beside the field.
 const MAX_TAGS = 40;
 const MAX_TAG_LENGTH = 64;
 

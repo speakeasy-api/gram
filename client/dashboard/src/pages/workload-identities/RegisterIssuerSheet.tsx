@@ -12,11 +12,13 @@ import {
 import { Stack } from "@/components/ui/Stack";
 import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
+import { TextArea } from "@/components/ui/Textarea";
 import { useEffect, useState } from "react";
 import { tagsProblem } from "./tagLimits";
 
 export interface RegisterIssuerValues {
   name: string;
+  description: string;
   issuer: string;
   jwksUri: string;
   tags: string[];
@@ -31,10 +33,22 @@ interface RegisterIssuerSheetProps {
 
 const EMPTY: RegisterIssuerValues = {
   name: "",
+  description: "",
   issuer: "",
   jwksUri: "",
   tags: [],
 };
+
+// The column caps a description at 500 characters, as the server does.
+const MAX_DESCRIPTION_LENGTH = 500;
+
+function descriptionProblem(description: string): string | null {
+  // Code points, as the server counts them, not UTF-16 units.
+  if (Array.from(description.trim()).length > MAX_DESCRIPTION_LENGTH) {
+    return `At most ${MAX_DESCRIPTION_LENGTH} characters.`;
+  }
+  return null;
+}
 
 // Mirrors what the server refuses on the write path, so the reason appears next
 // to the field instead of arriving as a toast after submit. Deliberately not a
@@ -94,6 +108,7 @@ export function RegisterIssuerSheet({
   const issuerProblem = httpsUrlProblem(values.issuer, true);
   const jwksProblem = httpsUrlProblem(values.jwksUri, false);
   const tagProblem = tagsProblem(values.tags);
+  const descProblem = descriptionProblem(values.description);
 
   const canSubmit =
     values.name.trim().length > 0 &&
@@ -101,6 +116,7 @@ export function RegisterIssuerSheet({
     values.jwksUri.trim().length > 0 &&
     issuerProblem === null &&
     jwksProblem === null &&
+    descProblem === null &&
     tagProblem === null;
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
@@ -139,6 +155,40 @@ export function RegisterIssuerSheet({
               <Text muted small>
                 How this issuer is labeled here. Not used for matching.
               </Text>
+            </Stack>
+
+            <Stack gap={2}>
+              <Label htmlFor="workload-issuer-description">Description</Label>
+              <TextArea
+                id="workload-issuer-description"
+                value={values.description}
+                placeholder="Claude agents in our Slack workspace"
+                rows={2}
+                aria-invalid={descProblem !== null || undefined}
+                aria-describedby={
+                  descProblem !== null
+                    ? "workload-issuer-description-error"
+                    : undefined
+                }
+                onChange={(value) =>
+                  setValues({ ...values, description: value })
+                }
+              />
+              {descProblem !== null ? (
+                <Text
+                  id="workload-issuer-description-error"
+                  role="alert"
+                  small
+                  destructive
+                >
+                  {descProblem}
+                </Text>
+              ) : (
+                <Text muted small>
+                  Optional. What this platform is and what runs on it, shown in
+                  place of the issuer URL in the Access Hub.
+                </Text>
+              )}
             </Stack>
 
             <Stack gap={2}>
