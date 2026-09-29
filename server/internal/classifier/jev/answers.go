@@ -34,7 +34,7 @@ func decodeAnswer(q plannedQuestion, wire wireAnswer) *classifier.Answer {
 		answer.Noul = &classifier.NoulAnswer{Probability: *wire.Noul}
 		return &answer
 	}
-	if !probability(wire.Confidence) {
+	if wire.Confidence != nil && !probability(wire.Confidence) {
 		return nil
 	}
 	var options []classifier.Option
