@@ -5211,7 +5211,7 @@ examples:
         application/json: {"mode": "ordered_score", "name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2026-11-17T07:55:55.903Z", "id": "9b0aba32-79a3-453e-aa22-a34624b4f576", "mode": "ordered_score", "name": "<value>", "project_id": "abe56e10-dc34-4d84-b95b-2f35529523a0", "signal_ids": ["c027a78e-b0d9-499a-8bd4-0e3c18fec4fe", "776f5e85-92f4-4089-aaf2-04bc346fead1"], "updated_at": "2026-04-20T06:53:45.466Z"}
+          application/json: {"created_at": "2026-11-17T07:55:55.903Z", "id": "9b0aba32-79a3-453e-aa22-a34624b4f576", "mode": "ordered_score", "name": "<value>", "project_id": "abe56e10-dc34-4d84-b95b-2f35529523a0", "signal_ids": ["c027a78e-b0d9-499a-8bd4-0e3c18fec4fe", "776f5e85-92f4-4089-aaf2-04bc346fead1"], "slug": "<value>", "updated_at": "2026-04-20T06:53:45.466Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5222,7 +5222,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2026-09-24T09:38:32.011Z", "id": "56436b43-1895-44e3-8ba3-edfaed1ca636", "name": "<value>", "project_id": "36ef8828-3e66-4deb-a6e7-71a4182f574f", "updated_at": "2025-02-07T22:50:51.208Z"}
+          application/json: {"created_at": "2026-09-24T09:38:32.011Z", "id": "56436b43-1895-44e3-8ba3-edfaed1ca636", "name": "<value>", "project_id": "36ef8828-3e66-4deb-a6e7-71a4182f574f", "slug": "<value>", "updated_at": "2025-02-07T22:50:51.208Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5958,7 +5958,7 @@ examples:
           id: "cb4b46d2-b9eb-402c-9cf5-431c3d7285c2"
       responses:
         "200":
-          application/json: {"created_at": "2025-12-08T14:54:57.251Z", "id": "1fa69653-45a6-4186-8298-368c3f2315ec", "mode": "exclusive", "name": "<value>", "project_id": "50d06624-0605-4472-b70b-8da8d4e7e67d", "signal_ids": ["e4a11fad-f856-4d36-9db0-bfae59f61c0f", "ed9e31be-6e3e-4b67-a2b5-7d0f6249f4ed", "d2d4a503-5247-454b-9d06-0de1f5b8863d"], "updated_at": "2024-12-20T06:52:43.938Z"}
+          application/json: {"created_at": "2025-12-08T14:54:57.251Z", "id": "1fa69653-45a6-4186-8298-368c3f2315ec", "mode": "exclusive", "name": "<value>", "project_id": "50d06624-0605-4472-b70b-8da8d4e7e67d", "signal_ids": ["e4a11fad-f856-4d36-9db0-bfae59f61c0f", "ed9e31be-6e3e-4b67-a2b5-7d0f6249f4ed", "d2d4a503-5247-454b-9d06-0de1f5b8863d"], "slug": "<value>", "updated_at": "2024-12-20T06:52:43.938Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5970,7 +5970,7 @@ examples:
           id: "69317ec4-635d-4703-bc59-4d9809a875fb"
       responses:
         "200":
-          application/json: {"created_at": "2026-01-06T04:04:37.331Z", "id": "23dfbb0f-1bcb-4201-9b11-05f897f499ca", "name": "<value>", "project_id": "1e6423dd-52af-407e-bcc2-b8dac79e9262", "updated_at": "2025-10-11T11:03:52.371Z"}
+          application/json: {"created_at": "2026-01-06T04:04:37.331Z", "id": "23dfbb0f-1bcb-4201-9b11-05f897f499ca", "name": "<value>", "project_id": "1e6423dd-52af-407e-bcc2-b8dac79e9262", "slug": "<value>", "updated_at": "2025-10-11T11:03:52.371Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7788,7 +7788,7 @@ examples:
           id: "72bcb542-d65c-43d0-a556-7a422d22a30d"
       responses:
         "200":
-          application/json: {"created_at": "2026-03-07T13:20:55.414Z", "id": "de30666c-efc0-4fc7-9b2a-493954432815", "mode": "ordered_score", "name": "<value>", "project_id": "3d75568e-fff7-4958-b752-e58ae713ec4e", "signal_ids": ["3945f1d3-5702-4fcc-9e6b-e6ab6ba24520"], "updated_at": "2024-05-05T15:10:41.876Z"}
+          application/json: {"created_at": "2026-03-07T13:20:55.414Z", "id": "de30666c-efc0-4fc7-9b2a-493954432815", "mode": "ordered_score", "name": "<value>", "project_id": "3d75568e-fff7-4958-b752-e58ae713ec4e", "signal_ids": ["3945f1d3-5702-4fcc-9e6b-e6ab6ba24520"], "slug": "<value>", "updated_at": "2024-05-05T15:10:41.876Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7800,7 +7800,7 @@ examples:
           id: "cc72d5d3-3eae-4c25-9367-36ffaa941aa4"
       responses:
         "200":
-          application/json: {"created_at": "2025-02-10T08:57:00.085Z", "id": "505a4c1d-b915-462a-bfdb-d1670110fcc3", "name": "<value>", "project_id": "d6f69d21-ed45-4555-a8bb-0e2447fe28e8", "updated_at": "2025-02-21T02:41:45.229Z"}
+          application/json: {"created_at": "2025-02-10T08:57:00.085Z", "id": "505a4c1d-b915-462a-bfdb-d1670110fcc3", "name": "<value>", "project_id": "d6f69d21-ed45-4555-a8bb-0e2447fe28e8", "slug": "<value>", "updated_at": "2025-02-21T02:41:45.229Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -12900,7 +12900,7 @@ examples:
         application/json: {"id": "5a4fb2a1-5c08-4df6-bf7b-f9312a0e46e8"}
       responses:
         "200":
-          application/json: {"created_at": "2024-05-03T21:42:07.872Z", "id": "6e82e2bb-bede-4d68-ab5d-5a7a4665874a", "mode": "exclusive", "name": "<value>", "project_id": "31ec639d-3570-4f32-9a44-7df13dc3fab2", "signal_ids": ["e7ba4ee5-80e7-46ce-9189-e3215f144598"], "updated_at": "2025-05-25T21:10:51.226Z"}
+          application/json: {"created_at": "2024-05-03T21:42:07.872Z", "id": "6e82e2bb-bede-4d68-ab5d-5a7a4665874a", "mode": "exclusive", "name": "<value>", "project_id": "31ec639d-3570-4f32-9a44-7df13dc3fab2", "signal_ids": ["e7ba4ee5-80e7-46ce-9189-e3215f144598"], "slug": "<value>", "updated_at": "2025-05-25T21:10:51.226Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -12911,7 +12911,7 @@ examples:
         application/json: {"id": "b90b0716-db3d-4c25-a05b-7468d9e95ed4"}
       responses:
         "200":
-          application/json: {"created_at": "2026-11-13T21:12:02.126Z", "id": "21489b79-8472-4bb2-88aa-34ec457bcd8b", "name": "<value>", "project_id": "8a39245d-673a-4e6f-af27-807770c595ac", "updated_at": "2026-03-02T14:21:21.536Z"}
+          application/json: {"created_at": "2026-11-13T21:12:02.126Z", "id": "21489b79-8472-4bb2-88aa-34ec457bcd8b", "name": "<value>", "project_id": "8a39245d-673a-4e6f-af27-807770c595ac", "slug": "<value>", "updated_at": "2026-03-02T14:21:21.536Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

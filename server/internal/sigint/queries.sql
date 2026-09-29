@@ -8,6 +8,7 @@ INSERT INTO sigint_custom_signals (
     id,
     project_id,
     name,
+    slug,
     description,
     classifier_criteria
 )
@@ -15,6 +16,7 @@ VALUES (
     @id,
     @project_id,
     @name,
+    @slug,
     sqlc.narg('description'),
     sqlc.narg('classifier_criteria')
 )
@@ -39,6 +41,7 @@ LIMIT @limit_value;
 -- name: UpdateSignal :one
 UPDATE sigint_custom_signals
 SET name = @name,
+    slug = @slug,
     description = sqlc.narg('description'),
     classifier_criteria = sqlc.narg('classifier_criteria'),
     updated_at = clock_timestamp()
@@ -61,6 +64,7 @@ INSERT INTO sigint_sensors (
     id,
     project_id,
     name,
+    slug,
     description,
     instructions,
     mode
@@ -69,6 +73,7 @@ VALUES (
     @id,
     @project_id,
     @name,
+    @slug,
     sqlc.narg('description'),
     sqlc.narg('instructions'),
     @mode
@@ -80,6 +85,7 @@ SELECT
     sensor.id,
     sensor.project_id,
     sensor.name,
+    sensor.slug,
     sensor.description,
     sensor.instructions,
     sensor.mode,
@@ -103,6 +109,7 @@ SELECT
     sensor.id,
     sensor.project_id,
     sensor.name,
+    sensor.slug,
     sensor.description,
     sensor.instructions,
     sensor.mode,
@@ -126,6 +133,7 @@ LIMIT @limit_value;
 -- name: UpdateSensor :one
 UPDATE sigint_sensors
 SET name = @name,
+    slug = @slug,
     description = sqlc.narg('description'),
     instructions = sqlc.narg('instructions'),
     mode = @mode,
@@ -215,6 +223,7 @@ SELECT
     sensor.id,
     sensor.project_id,
     sensor.name,
+    sensor.slug,
     sensor.description,
     sensor.instructions,
     sensor.mode,
@@ -277,6 +286,7 @@ SELECT
     sensor.id,
     sensor.project_id,
     sensor.name,
+    sensor.slug,
     sensor.description,
     sensor.instructions,
     sensor.mode,

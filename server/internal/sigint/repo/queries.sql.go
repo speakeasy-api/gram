@@ -46,6 +46,7 @@ INSERT INTO sigint_sensors (
     id,
     project_id,
     name,
+    slug,
     description,
     instructions,
     mode
@@ -56,15 +57,17 @@ VALUES (
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7
 )
-RETURNING id, project_id, name, description, instructions, mode, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateSensorParams struct {
 	ID           uuid.UUID
 	ProjectID    uuid.UUID
 	Name         string
+	Slug         string
 	Description  pgtype.Text
 	Instructions pgtype.Text
 	Mode         string
@@ -75,6 +78,7 @@ func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (Sig
 		arg.ID,
 		arg.ProjectID,
 		arg.Name,
+		arg.Slug,
 		arg.Description,
 		arg.Instructions,
 		arg.Mode,
@@ -84,6 +88,7 @@ func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (Sig
 		&i.ID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.Instructions,
 		&i.Mode,
@@ -100,6 +105,7 @@ INSERT INTO sigint_custom_signals (
     id,
     project_id,
     name,
+    slug,
     description,
     classifier_criteria
 )
@@ -108,15 +114,17 @@ VALUES (
     $2,
     $3,
     $4,
-    $5
+    $5,
+    $6
 )
-RETURNING id, project_id, name, description, classifier_criteria, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, classifier_criteria, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateSignalParams struct {
 	ID                 uuid.UUID
 	ProjectID          uuid.UUID
 	Name               string
+	Slug               string
 	Description        pgtype.Text
 	ClassifierCriteria pgtype.Text
 }
@@ -126,6 +134,7 @@ func (q *Queries) CreateSignal(ctx context.Context, arg CreateSignalParams) (Sig
 		arg.ID,
 		arg.ProjectID,
 		arg.Name,
+		arg.Slug,
 		arg.Description,
 		arg.ClassifierCriteria,
 	)
@@ -134,6 +143,7 @@ func (q *Queries) CreateSignal(ctx context.Context, arg CreateSignalParams) (Sig
 		&i.ID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.ClassifierCriteria,
 		&i.CreatedAt,
@@ -151,7 +161,7 @@ SET deleted_at = clock_timestamp(),
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, name, description, instructions, mode, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteSensorParams struct {
@@ -166,6 +176,7 @@ func (q *Queries) DeleteSensor(ctx context.Context, arg DeleteSensorParams) (Sig
 		&i.ID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.Instructions,
 		&i.Mode,
@@ -203,7 +214,7 @@ SET deleted_at = clock_timestamp(),
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, name, description, classifier_criteria, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, classifier_criteria, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteSignalParams struct {
@@ -218,6 +229,7 @@ func (q *Queries) DeleteSignal(ctx context.Context, arg DeleteSignalParams) (Sig
 		&i.ID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.ClassifierCriteria,
 		&i.CreatedAt,
@@ -268,6 +280,7 @@ SELECT
     sensor.id,
     sensor.project_id,
     sensor.name,
+    sensor.slug,
     sensor.description,
     sensor.instructions,
     sensor.mode,
@@ -296,6 +309,7 @@ type GetSensorRow struct {
 	ID           uuid.UUID
 	ProjectID    uuid.UUID
 	Name         string
+	Slug         string
 	Description  pgtype.Text
 	Instructions pgtype.Text
 	Mode         string
@@ -311,6 +325,7 @@ func (q *Queries) GetSensor(ctx context.Context, arg GetSensorParams) (GetSensor
 		&i.ID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.Instructions,
 		&i.Mode,
@@ -326,6 +341,7 @@ SELECT
     sensor.id,
     sensor.project_id,
     sensor.name,
+    sensor.slug,
     sensor.description,
     sensor.instructions,
     sensor.mode,
@@ -355,6 +371,7 @@ type GetSensorsByIDsRow struct {
 	ID           uuid.UUID
 	ProjectID    uuid.UUID
 	Name         string
+	Slug         string
 	Description  pgtype.Text
 	Instructions pgtype.Text
 	Mode         string
@@ -376,6 +393,7 @@ func (q *Queries) GetSensorsByIDs(ctx context.Context, arg GetSensorsByIDsParams
 			&i.ID,
 			&i.ProjectID,
 			&i.Name,
+			&i.Slug,
 			&i.Description,
 			&i.Instructions,
 			&i.Mode,
@@ -394,7 +412,7 @@ func (q *Queries) GetSensorsByIDs(ctx context.Context, arg GetSensorsByIDsParams
 }
 
 const getSignal = `-- name: GetSignal :one
-SELECT id, project_id, name, description, classifier_criteria, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, description, classifier_criteria, created_at, updated_at, deleted_at, deleted
 FROM sigint_custom_signals
 WHERE id = $1
   AND project_id = $2
@@ -413,6 +431,7 @@ func (q *Queries) GetSignal(ctx context.Context, arg GetSignalParams) (SigintCus
 		&i.ID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.ClassifierCriteria,
 		&i.CreatedAt,
@@ -462,6 +481,7 @@ SELECT
     sensor.id,
     sensor.project_id,
     sensor.name,
+    sensor.slug,
     sensor.description,
     sensor.instructions,
     sensor.mode,
@@ -493,6 +513,7 @@ type ListSensorsRow struct {
 	ID           uuid.UUID
 	ProjectID    uuid.UUID
 	Name         string
+	Slug         string
 	Description  pgtype.Text
 	Instructions pgtype.Text
 	Mode         string
@@ -514,6 +535,7 @@ func (q *Queries) ListSensors(ctx context.Context, arg ListSensorsParams) ([]Lis
 			&i.ID,
 			&i.ProjectID,
 			&i.Name,
+			&i.Slug,
 			&i.Description,
 			&i.Instructions,
 			&i.Mode,
@@ -536,6 +558,7 @@ SELECT
     sensor.id,
     sensor.project_id,
     sensor.name,
+    sensor.slug,
     sensor.description,
     sensor.instructions,
     sensor.mode,
@@ -569,6 +592,7 @@ type ListSensorsForSignalRow struct {
 	ID           uuid.UUID
 	ProjectID    uuid.UUID
 	Name         string
+	Slug         string
 	Description  pgtype.Text
 	Instructions pgtype.Text
 	Mode         string
@@ -590,6 +614,7 @@ func (q *Queries) ListSensorsForSignal(ctx context.Context, arg ListSensorsForSi
 			&i.ID,
 			&i.ProjectID,
 			&i.Name,
+			&i.Slug,
 			&i.Description,
 			&i.Instructions,
 			&i.Mode,
@@ -608,7 +633,7 @@ func (q *Queries) ListSensorsForSignal(ctx context.Context, arg ListSensorsForSi
 }
 
 const listSignals = `-- name: ListSignals :many
-SELECT id, project_id, name, description, classifier_criteria, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, description, classifier_criteria, created_at, updated_at, deleted_at, deleted
 FROM sigint_custom_signals
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -636,6 +661,7 @@ func (q *Queries) ListSignals(ctx context.Context, arg ListSignalsParams) ([]Sig
 			&i.ID,
 			&i.ProjectID,
 			&i.Name,
+			&i.Slug,
 			&i.Description,
 			&i.ClassifierCriteria,
 			&i.CreatedAt,
@@ -747,18 +773,20 @@ func (q *Queries) TouchSensors(ctx context.Context, arg TouchSensorsParams) erro
 const updateSensor = `-- name: UpdateSensor :one
 UPDATE sigint_sensors
 SET name = $1,
-    description = $2,
-    instructions = $3,
-    mode = $4,
+    slug = $2,
+    description = $3,
+    instructions = $4,
+    mode = $5,
     updated_at = clock_timestamp()
-WHERE id = $5
-  AND project_id = $6
+WHERE id = $6
+  AND project_id = $7
   AND deleted IS FALSE
-RETURNING id, project_id, name, description, instructions, mode, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateSensorParams struct {
 	Name         string
+	Slug         string
 	Description  pgtype.Text
 	Instructions pgtype.Text
 	Mode         string
@@ -769,6 +797,7 @@ type UpdateSensorParams struct {
 func (q *Queries) UpdateSensor(ctx context.Context, arg UpdateSensorParams) (SigintSensor, error) {
 	row := q.db.QueryRow(ctx, updateSensor,
 		arg.Name,
+		arg.Slug,
 		arg.Description,
 		arg.Instructions,
 		arg.Mode,
@@ -780,6 +809,7 @@ func (q *Queries) UpdateSensor(ctx context.Context, arg UpdateSensorParams) (Sig
 		&i.ID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.Instructions,
 		&i.Mode,
@@ -794,17 +824,19 @@ func (q *Queries) UpdateSensor(ctx context.Context, arg UpdateSensorParams) (Sig
 const updateSignal = `-- name: UpdateSignal :one
 UPDATE sigint_custom_signals
 SET name = $1,
-    description = $2,
-    classifier_criteria = $3,
+    slug = $2,
+    description = $3,
+    classifier_criteria = $4,
     updated_at = clock_timestamp()
-WHERE id = $4
-  AND project_id = $5
+WHERE id = $5
+  AND project_id = $6
   AND deleted IS FALSE
-RETURNING id, project_id, name, description, classifier_criteria, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, classifier_criteria, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateSignalParams struct {
 	Name               string
+	Slug               string
 	Description        pgtype.Text
 	ClassifierCriteria pgtype.Text
 	ID                 uuid.UUID
@@ -814,6 +846,7 @@ type UpdateSignalParams struct {
 func (q *Queries) UpdateSignal(ctx context.Context, arg UpdateSignalParams) (SigintCustomSignal, error) {
 	row := q.db.QueryRow(ctx, updateSignal,
 		arg.Name,
+		arg.Slug,
 		arg.Description,
 		arg.ClassifierCriteria,
 		arg.ID,
@@ -824,6 +857,7 @@ func (q *Queries) UpdateSignal(ctx context.Context, arg UpdateSignalParams) (Sig
 		&i.ID,
 		&i.ProjectID,
 		&i.Name,
+		&i.Slug,
 		&i.Description,
 		&i.ClassifierCriteria,
 		&i.CreatedAt,

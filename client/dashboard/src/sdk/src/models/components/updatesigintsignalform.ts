@@ -22,6 +22,10 @@ export type UpdateSigintSignalForm = {
    * Replacement display name; trimmed before enforcing the 1 to 200 character limit
    */
   name?: string | undefined;
+  /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  slug?: string | undefined;
 };
 
 /** @internal */
@@ -30,6 +34,7 @@ export type UpdateSigintSignalForm$Outbound = {
   description?: string | undefined;
   id: string;
   name?: string | undefined;
+  slug?: string | undefined;
 };
 
 /** @internal */
@@ -42,6 +47,7 @@ export const UpdateSigintSignalForm$outboundSchema: z.ZodMiniType<
     description: z.optional(z.string()),
     id: z.string(),
     name: z.optional(z.string()),
+    slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
