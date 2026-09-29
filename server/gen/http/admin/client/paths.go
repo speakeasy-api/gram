@@ -107,6 +107,16 @@ func ListOrganizationActivityAdminPath() string {
 	return "/admin/organization.activity"
 }
 
+// ListUsersAdminPath returns the URL path to the admin service listUsers HTTP endpoint.
+func ListUsersAdminPath() string {
+	return "/admin/users.list"
+}
+
+// ListUserOrganizationsAdminPath returns the URL path to the admin service listUserOrganizations HTTP endpoint.
+func ListUserOrganizationsAdminPath() string {
+	return "/admin/users.organizations.list"
+}
+
 // ListOrganizationsAdminPath returns the URL path to the admin service listOrganizations HTTP endpoint.
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"

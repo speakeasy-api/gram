@@ -671,3 +671,64 @@ SELECT m.id, c.id, sqlc.arg(status)::text, sqlc.arg(notes)::text, sqlc.arg(needs
 FROM support_matrix_integration_methods m, support_matrix_capabilities c
 WHERE m.slug = sqlc.arg(method_slug)::text AND c.slug = sqlc.arg(capability_slug)::text AND m.deleted_at IS NULL AND c.deleted_at IS NULL
 ON CONFLICT (integration_method_id, capability_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes, needs_verification = EXCLUDED.needs_verification, verified_at = NULL, updated_at = clock_timestamp(), deleted_at = NULL;
+
+-- name: AdminListUsers :many
+SELECT u.id, u.email, u.display_name, u.last_login
+FROM users u
+WHERE u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM unnest(@name_patterns::text[]) p(pattern) WHERE NOT (u.display_name ILIKE p.pattern))
+AND NOT EXISTS (SELECT 1 FROM unnest(@email_patterns::text[]) p(pattern) WHERE NOT (u.email ILIKE p.pattern))
+AND (cardinality(@org_patterns::text[]) = 0 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM unnest(@org_patterns::text[]) p(pattern) WHERE NOT (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern))
+))
+AND NOT EXISTS (
+    SELECT 1 FROM unnest(@any_patterns::text[]) p(pattern)
+    WHERE NOT (u.display_name ILIKE p.pattern OR u.email ILIKE p.pattern OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE AND (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern)
+ ))
+)
+ORDER BY lower(u.email), u.id LIMIT @page_limit::int OFFSET @page_offset::int;
+
+-- name: AdminCountUsers :one
+-- Keep eligibility and search predicates identical to AdminListUsers.
+SELECT count(*)
+FROM users u
+WHERE u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM unnest(@name_patterns::text[]) p(pattern) WHERE NOT (u.display_name ILIKE p.pattern))
+AND NOT EXISTS (SELECT 1 FROM unnest(@email_patterns::text[]) p(pattern) WHERE NOT (u.email ILIKE p.pattern))
+AND (cardinality(@org_patterns::text[]) = 0 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM unnest(@org_patterns::text[]) p(pattern) WHERE NOT (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern))
+))
+AND NOT EXISTS (
+    SELECT 1 FROM unnest(@any_patterns::text[]) p(pattern)
+    WHERE NOT (u.display_name ILIKE p.pattern OR u.email ILIKE p.pattern OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE AND (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern)
+ ))
+);
+
+-- name: AdminListUsersOrganizationPreviews :many
+WITH ranked AS (
+    SELECT m.user_id, o.id, o.name, o.slug, o.disabled_at,
+    count(*) OVER (PARTITION BY m.user_id) AS organization_count,
+    row_number() OVER (PARTITION BY m.user_id ORDER BY lower(o.name), o.slug, o.id) AS position
+    FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = ANY(@user_ids::text[]) AND m.deleted IS FALSE
+)
+SELECT user_id, id, name, slug, disabled_at, organization_count FROM ranked WHERE position <= 3
+ORDER BY user_id, position;
+
+-- name: AdminListUserOrganizations :many
+SELECT o.id, o.name, o.slug, o.disabled_at
+FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+WHERE m.user_id = @user_id::text AND m.deleted IS FALSE
+ORDER BY lower(o.name), o.slug, o.id LIMIT @page_limit::int OFFSET @page_offset::int;
+
+-- name: AdminCountUserOrganizations :one
+SELECT (SELECT count(*) FROM organization_user_relationships m WHERE m.user_id = u.id AND m.deleted IS FALSE) AS total
+FROM users u WHERE u.id = @user_id::text AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL;

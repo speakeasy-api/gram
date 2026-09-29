@@ -195,7 +195,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4148,6 +4148,18 @@ func ParseEndpoint(
 		adminListOrganizationActivityCursorFlag            = adminListOrganizationActivityFlags.String("cursor", "", "")
 		adminListOrganizationActivityAdminSessionTokenFlag = adminListOrganizationActivityFlags.String("admin-session-token", "", "")
 
+		adminListUsersFlags                 = flag.NewFlagSet("list-users", flag.ExitOnError)
+		adminListUsersQFlag                 = adminListUsersFlags.String("q", "", "")
+		adminListUsersPageFlag              = adminListUsersFlags.String("page", "", "")
+		adminListUsersLimitFlag             = adminListUsersFlags.String("limit", "", "")
+		adminListUsersAdminSessionTokenFlag = adminListUsersFlags.String("admin-session-token", "", "")
+
+		adminListUserOrganizationsFlags                 = flag.NewFlagSet("list-user-organizations", flag.ExitOnError)
+		adminListUserOrganizationsUserIDFlag            = adminListUserOrganizationsFlags.String("user-id", "REQUIRED", "")
+		adminListUserOrganizationsPageFlag              = adminListUserOrganizationsFlags.String("page", "", "")
+		adminListUserOrganizationsLimitFlag             = adminListUserOrganizationsFlags.String("limit", "", "")
+		adminListUserOrganizationsAdminSessionTokenFlag = adminListUserOrganizationsFlags.String("admin-session-token", "", "")
+
 		adminListOrganizationsFlags                 = flag.NewFlagSet("list-organizations", flag.ExitOnError)
 		adminListOrganizationsQFlag                 = adminListOrganizationsFlags.String("q", "", "")
 		adminListOrganizationsAccountTypeFlag       = adminListOrganizationsFlags.String("account-type", "", "")
@@ -5486,6 +5498,8 @@ func ParseEndpoint(
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
 	adminListProjectMcpServersFlags.Usage = adminListProjectMcpServersUsage
 	adminListOrganizationActivityFlags.Usage = adminListOrganizationActivityUsage
+	adminListUsersFlags.Usage = adminListUsersUsage
+	adminListUserOrganizationsFlags.Usage = adminListUserOrganizationsUsage
 	adminListOrganizationsFlags.Usage = adminListOrganizationsUsage
 	adminExtendTrialFlags.Usage = adminExtendTrialUsage
 	adminCreateOrganizationFlags.Usage = adminCreateOrganizationUsage
@@ -8269,6 +8283,12 @@ func ParseEndpoint(
 
 			case "list-organization-activity":
 				epf = adminListOrganizationActivityFlags
+
+			case "list-users":
+				epf = adminListUsersFlags
+
+			case "list-user-organizations":
+				epf = adminListUserOrganizationsFlags
 
 			case "list-organizations":
 				epf = adminListOrganizationsFlags
@@ -11080,6 +11100,12 @@ func ParseEndpoint(
 			case "list-organization-activity":
 				endpoint = c.ListOrganizationActivity()
 				data, err = adminc.BuildListOrganizationActivityPayload(*adminListOrganizationActivityOrganizationIDFlag, *adminListOrganizationActivityCursorFlag, *adminListOrganizationActivityAdminSessionTokenFlag)
+			case "list-users":
+				endpoint = c.ListUsers()
+				data, err = adminc.BuildListUsersPayload(*adminListUsersQFlag, *adminListUsersPageFlag, *adminListUsersLimitFlag, *adminListUsersAdminSessionTokenFlag)
+			case "list-user-organizations":
+				endpoint = c.ListUserOrganizations()
+				data, err = adminc.BuildListUserOrganizationsPayload(*adminListUserOrganizationsUserIDFlag, *adminListUserOrganizationsPageFlag, *adminListUserOrganizationsLimitFlag, *adminListUserOrganizationsAdminSessionTokenFlag)
 			case "list-organizations":
 				endpoint = c.ListOrganizations()
 				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsAccountTypesFlag, *adminListOrganizationsTrialStatesFlag, *adminListOrganizationsDisabledStatusFlag, *adminListOrganizationsMinMembersFlag, *adminListOrganizationsMaxMembersFlag, *adminListOrganizationsCreatedFromFlag, *adminListOrganizationsCreatedToFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsSortFlag, *adminListOrganizationsDirectionFlag, *adminListOrganizationsPageFlag, *adminListOrganizationsAdminSessionTokenFlag)
@@ -28587,6 +28613,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-project-mcp-servers: Lists the MCP servers in a project (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organization-activity: Lists activity belonging to an organization for admin operators.`)
+	fmt.Fprintln(os.Stderr, `    list-users: Staff-only active user discovery.`)
+	fmt.Fprintln(os.Stderr, `    list-user-organizations: Staff-only active user discovery.`)
 	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.`)
 	fmt.Fprintln(os.Stderr, `    extend-trial: Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.`)
 	fmt.Fprintln(os.Stderr, `    create-organization: Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
@@ -29043,6 +29071,54 @@ func adminListOrganizationActivityUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organization-activity --organization-id \"abc123\" --cursor \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminListUsersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-users", os.Args[0])
+	fmt.Fprint(os.Stderr, " -q STRING")
+	fmt.Fprint(os.Stderr, " -page INT")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only active user discovery.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -q STRING: `)
+	fmt.Fprintln(os.Stderr, `    -page INT: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-users --q \"abc123\" --page 2 --limit 2 --admin-session-token \"abc123\"")
+}
+
+func adminListUserOrganizationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-user-organizations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -page INT")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only active user discovery.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -page INT: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-user-organizations --user-id \"abc123\" --page 2 --limit 2 --admin-session-token \"abc123\"")
 }
 
 func adminListOrganizationsUsage() {

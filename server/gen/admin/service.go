@@ -69,6 +69,10 @@ type Service interface {
 	ListProjectMcpServers(context.Context, *ListProjectMcpServersPayload) (res *AdminListProjectMcpServersResult, err error)
 	// Lists activity belonging to an organization for admin operators.
 	ListOrganizationActivity(context.Context, *ListOrganizationActivityPayload) (res *AdminListOrganizationActivityResult, err error)
+	// Staff-only active user discovery.
+	ListUsers(context.Context, *ListUsersPayload) (res *AdminListUsersResult, err error)
+	// Staff-only active user discovery.
+	ListUserOrganizations(context.Context, *ListUserOrganizationsPayload) (res *AdminListUserOrganizationsResult, err error)
 	// Lists organizations for platform admin operations with optional search and
 	// filters. Defaults to created_at descending, with id ascending to break ties.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
@@ -247,7 +251,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [62]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished"}
+var MethodNames = [64]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -352,6 +356,24 @@ type AdminListOrganizationsResult struct {
 type AdminListProjectMcpServersResult struct {
 	// The project's MCP servers, oldest first.
 	McpServers []*AdminMcpServer
+}
+
+// AdminListUserOrganizationsResult is the result type of the admin service
+// listUserOrganizations method.
+type AdminListUserOrganizationsResult struct {
+	Organizations []*AdminUserOrganization
+	Total         int64
+	Page          int
+	Limit         int
+}
+
+// AdminListUsersResult is the result type of the admin service listUsers
+// method.
+type AdminListUsersResult struct {
+	Users []*AdminUser
+	Total int64
+	Page  int
+	Limit int
 }
 
 // MCP server surfaced to admin operators. Covers both server models:
@@ -637,6 +659,22 @@ type AdminStripeSubscription struct {
 	CancelAt           *string
 	CanceledAt         *string
 	PaymentFailed      bool
+}
+
+type AdminUser struct {
+	ID                string
+	DisplayName       string
+	Email             string
+	LastLogin         *string
+	Organizations     []*AdminUserOrganization
+	OrganizationCount int64
+}
+
+type AdminUserOrganization struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt *string
 }
 
 type Asset struct {
@@ -1295,6 +1333,23 @@ type ListRegistryEntriesPayload struct {
 	Cursor *string
 	// Page size; zero uses the server default of 25.
 	Limit *int32
+}
+
+// ListUserOrganizationsPayload is the payload type of the admin service
+// listUserOrganizations method.
+type ListUserOrganizationsPayload struct {
+	AdminSessionToken *string
+	UserID            string
+	Page              *int
+	Limit             *int
+}
+
+// ListUsersPayload is the payload type of the admin service listUsers method.
+type ListUsersPayload struct {
+	AdminSessionToken *string
+	Q                 *string
+	Page              *int
+	Limit             *int
 }
 
 // LoginPayload is the payload type of the admin service login method.

@@ -37,6 +37,8 @@ type Endpoints struct {
 	ListOrganizationProjects              goa.Endpoint
 	ListProjectMcpServers                 goa.Endpoint
 	ListOrganizationActivity              goa.Endpoint
+	ListUsers                             goa.Endpoint
+	ListUserOrganizations                 goa.Endpoint
 	ListOrganizations                     goa.Endpoint
 	ExtendTrial                           goa.Endpoint
 	CreateOrganization                    goa.Endpoint
@@ -124,6 +126,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListOrganizationProjects:              NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
 		ListProjectMcpServers:                 NewListProjectMcpServersEndpoint(s, a.APIKeyAuth),
 		ListOrganizationActivity:              NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
+		ListUsers:                             NewListUsersEndpoint(s, a.APIKeyAuth),
+		ListUserOrganizations:                 NewListUserOrganizationsEndpoint(s, a.APIKeyAuth),
 		ListOrganizations:                     NewListOrganizationsEndpoint(s, a.APIKeyAuth),
 		ExtendTrial:                           NewExtendTrialEndpoint(s, a.APIKeyAuth),
 		CreateOrganization:                    NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
@@ -191,6 +195,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
 	e.ListProjectMcpServers = m(e.ListProjectMcpServers)
 	e.ListOrganizationActivity = m(e.ListOrganizationActivity)
+	e.ListUsers = m(e.ListUsers)
+	e.ListUserOrganizations = m(e.ListUserOrganizations)
 	e.ListOrganizations = m(e.ListOrganizations)
 	e.ExtendTrial = m(e.ExtendTrial)
 	e.CreateOrganization = m(e.CreateOrganization)
@@ -662,6 +668,52 @@ func NewListOrganizationActivityEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.ListOrganizationActivity(ctx, p)
+	}
+}
+
+// NewListUsersEndpoint returns an endpoint function that calls the method
+// "listUsers" of service "admin".
+func NewListUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListUsersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListUsers(ctx, p)
+	}
+}
+
+// NewListUserOrganizationsEndpoint returns an endpoint function that calls the
+// method "listUserOrganizations" of service "admin".
+func NewListUserOrganizationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListUserOrganizationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListUserOrganizations(ctx, p)
 	}
 }
 
