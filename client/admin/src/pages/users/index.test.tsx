@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import type { AdminListUsersResult } from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { renderRouteTree } from "@/test/harness";
 const mocks = vi.hoisted(() => ({ listUsers: vi.fn(), getSession: vi.fn() }));
@@ -258,4 +259,96 @@ it("shows refresh errors, exact timestamps, empty success and bounds validation"
   });
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(await screen.findByText("No users found")).toBeTruthy();
+});
+
+it("labels committed-query placeholders and traverses first/final page boundaries", async () => {
+  const result = (
+    name: string,
+    page: number,
+    total: number,
+  ): AdminListUsersResult => ({
+    users: [
+      {
+        id: name,
+        display_name: name,
+        email: `${name}@example.test`,
+        organizations: [],
+        organization_count: 0,
+      },
+    ],
+    total,
+    page,
+    limit: 50,
+  });
+  const first = result("New first", 1, 51);
+  const final = result("New final", 2, 51);
+  let resolveNew: (value: AdminListUsersResult) => void = () => {};
+  const deferred = new Promise<AdminListUsersResult>((resolve) => {
+    resolveNew = resolve;
+  });
+  mocks.listUsers.mockImplementation(({ q, page }) => {
+    if (q === "old") return Promise.resolve(result("Old result", 2, 101));
+    return page === 2 ? Promise.resolve(final) : deferred;
+  });
+  const { router } = await renderRouteTree(routeTree, {
+    initialPath: "/users?q=old&page=2",
+  });
+  await screen.findByText("Old result");
+  const previous = (): HTMLButtonElement =>
+    screen.getByRole("button", { name: "Previous" });
+  const next = (): HTMLButtonElement =>
+    screen.getByRole("button", { name: "Next" });
+  expect(previous().disabled).toBe(false);
+  expect(next().disabled).toBe(false);
+
+  vi.useFakeTimers();
+  fireEvent.change(screen.getByRole("textbox", { name: "Search users" }), {
+    target: { value: "new" },
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(300);
+  });
+  // The debounce has committed; these are placeholders for an in-flight new
+  // query, not merely rows retained while the draft waits to reach the URL.
+  expect(router.state.location.search).toEqual({ q: "new", page: 1 });
+  expect(mocks.listUsers).toHaveBeenLastCalledWith(
+    { q: "new", page: 1, limit: 50 },
+    expect.any(AbortSignal),
+  );
+  expect(
+    screen.getByText("Showing last valid results for old (page 2)."),
+  ).toBeTruthy();
+  expect(screen.getByText("Old result")).toBeTruthy();
+  expect(screen.queryByText("New first")).toBeNull();
+  expect(previous().disabled).toBe(true);
+  expect(next().disabled).toBe(true);
+
+  await act(async () => {
+    resolveNew(first);
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  vi.useRealTimers();
+  await screen.findByText("New first");
+  expect(screen.queryByText("Old result")).toBeNull();
+  expect(screen.queryByText(/Showing last valid results/)).toBeNull();
+  expect(previous().disabled).toBe(true);
+  expect(next().disabled).toBe(false);
+
+  fireEvent.click(next());
+  await screen.findByText("New final");
+  expect(router.state.location.search).toEqual({ q: "new", page: 2 });
+  expect(mocks.listUsers).toHaveBeenLastCalledWith(
+    { q: "new", page: 2, limit: 50 },
+    expect.any(AbortSignal),
+  );
+  expect(screen.queryByText("New first")).toBeNull();
+  expect(previous().disabled).toBe(false);
+  expect(next().disabled).toBe(true);
+
+  fireEvent.click(previous());
+  await screen.findByText("New first");
+  await waitFor(() => expect(next().disabled).toBe(false));
+  expect(router.state.location.search).toEqual({ q: "new", page: 1 });
+  expect(screen.queryByText("New final")).toBeNull();
+  expect(previous().disabled).toBe(true);
 });
