@@ -527,6 +527,11 @@ function ExistingClientField({
           {draft.existingOptions.map((option: ClientOption) => (
             <SelectItem key={option.id} value={option.id}>
               {option.name}
+              {option.hint ? (
+                <span className="text-muted-foreground ml-2 font-mono text-xs">
+                  {option.hint}
+                </span>
+              ) : null}
             </SelectItem>
           ))}
         </SelectContent>

@@ -5,7 +5,6 @@ import {
   deriveRemoteSessionIssuerNameFromUrl,
   remoteSessionScopeTier,
 } from "@/lib/sources";
-import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
@@ -56,6 +55,8 @@ type ProviderGroup = {
 export type ClientOption = {
   id: string;
   name: string;
+  /** A short tail of the provider-issued client_id, to tell clients apart. */
+  hint: string | null;
   /** Scopes the client was registered with. Empty: it takes what the provider grants. */
   scopes: string[];
 };
@@ -92,6 +93,29 @@ function automaticSupport(candidate: {
     cimd: !!candidate.clientIdMetadataDocumentSupported,
     dcr: !!candidate.registrationEndpoint?.trim(),
   };
+}
+
+const CLIENT_DATE = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+// A client_id is whatever the provider issued — a metadata URL for CIMD, an
+// opaque string otherwise — and means nothing to an operator picking between
+// clients. Name a client by how it came to exist and when; a short tail of a
+// non-CIMD client_id is kept only to tell two clients apart.
+function clientOptionName(candidate: RemoteSessionClient): string {
+  const created = CLIENT_DATE.format(candidate.createdAt);
+  return candidate.clientIdMetadataUri
+    ? `Automatic client · created ${created}`
+    : `Client created ${created}`;
+}
+
+function clientOptionHint(candidate: RemoteSessionClient): string | null {
+  if (candidate.clientIdMetadataUri) return null;
+  const id = candidate.clientId;
+  return id.length > 8 ? `…${id.slice(-6)}` : id;
 }
 
 function scopesFromText(text: string): string[] {
@@ -356,7 +380,8 @@ export function useUserIdentityDraft({
     () =>
       providerClients.map((candidate) => ({
         id: candidate.id,
-        name: remoteSessionClientDisplayName(candidate),
+        name: clientOptionName(candidate),
+        hint: clientOptionHint(candidate),
         scopes: candidate.scope ?? [],
       })),
     [providerClients],
