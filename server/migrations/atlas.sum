@@ -1,4 +1,4 @@
-h1:Vge9xwOca8gDtEQ1bywqEXQy5Nv/FsdTlqCfEgBnpB0=
+h1:JxM2dJi0A2BvsFFatzxjEssz8B7iJFJLLIuqbJPwaNA=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -439,4 +439,4 @@ h1:Vge9xwOca8gDtEQ1bywqEXQy5Nv/FsdTlqCfEgBnpB0=
 20260927185929_trigger-thread-routes.sql h1:jyVG+nXirOsIje+xGPZtmlRYpVzhKH5Ul3SuK0pkSXw=
 20260928165815_remote-session-ema-credentials.sql h1:+zSRmu+9zmYfpbz7Bm5oX0Qr3a5m2W/Y/ywwTkBX8Xg=
 20260928221953_admin-mcp-write-proposals.sql h1:JgECOO/C2KFXYJJSmaWBw49LGu4GwIBWP+zYW0Y1REQ=
-20260929170207_index-plugin-servers-mcp-server-id.sql h1:AKUkF3UoR1LT54WoP4VJZdRNFhJ/pn/oyJqVpJcGk7g=
+20260929174020_index-plugin-servers-mcp-server-id.sql h1:ztMaTdzPI4y+15PQPQ62A2toGfOl5Jc1Cs3v59YtCO8=
