@@ -55,6 +55,16 @@ Other storage errors retry.
 
 ## Delivery and observability
 
+Readings preserve ingestion identity separately from billing attribution:
+`actor` contains the message's Gram user ID, external user ID and observed email;
+`billing_user_id` is the producer's explicit usage allocation, including for
+assistant-generated messages with no actor. Neither identity is inferred from the
+other. `source` namespaces external identities within the organization. Account
+ID/type/billing mode, assistant ID and the historical `replayed` marker are copied
+from the consumed message snapshot. Absent provenance remains absent. Directory
+enrichment belongs downstream, as it does for agent-session storage metering.
+These fields do not participate in reading identity or the definition hash.
+
 Successful readings are published and their publication results awaited before
 acknowledgment.
 Readings exceeding 9 MiB of serialized protobuf are rejected before publication,

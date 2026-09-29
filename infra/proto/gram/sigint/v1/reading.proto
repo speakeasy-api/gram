@@ -10,6 +10,23 @@ option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigi
 // Delivery and evaluation are at-least-once: the same id can carry different
 // answers from different attempts. Storage consumers choose the winning attempt.
 message Reading {
+  // Identity attached to the source message, not necessarily its author
+  // (assistant messages can be attributed to a user). Missing fields are unknown.
+  message Actor {
+    string user_id = 1;
+    // Interpret in the namespace of organization_id and source.
+    string external_user_id = 2;
+    // Email observed by ingestion, not a current directory lookup.
+    string user_email = 3;
+  }
+  // Source account attribution observed during ingestion.
+  message Account {
+    // Gram user_accounts UUID, not a provider-issued identifier.
+    string user_account_id = 1;
+    string account_type = 2;
+    // Source account billing arrangement, not the user allocated usage.
+    string billing_mode = 3;
+  }
   enum MessageRole {
     MESSAGE_ROLE_UNSPECIFIED = 0;
     MESSAGE_ROLE_USER = 1;
@@ -60,6 +77,15 @@ message Reading {
   // A logical evaluation may span multiple provider requests/model versions.
   repeated string models = 14;
   string compiler_version = 15;
+  Actor actor = 20;
+  // Gram user explicitly allocated usage by ingestion. Never inferred from actor.
+  string billing_user_id = 21;
+  // Canonical ingestion source; namespaces the external actor identity.
+  string source = 22;
+  Account account = 23;
+  string assistant_id = 24;
+  // Historical ingestion marker, not Pub/Sub redelivery.
+  bool replayed = 25;
   oneof result {
     MultiLabel multi_label = 16;
     Choice choice = 17;

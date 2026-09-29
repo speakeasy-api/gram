@@ -104,6 +104,46 @@ func reading(m *conversationv1.Message, sensor compiledSensor, answers map[class
 	r.SetConfiguredModel(result.Metadata.Model)
 	r.SetModels(result.Models)
 	r.SetCompilerVersion("sigint-v1/" + result.Metadata.CompilerVersion)
+	if provenance := m.GetProvenance(); provenance != nil {
+		actor := &sigintv1.Reading_Actor{}
+		if provenance.HasUserId() {
+			actor.SetUserId(provenance.GetUserId())
+		}
+		if provenance.HasExternalUserId() {
+			actor.SetExternalUserId(provenance.GetExternalUserId())
+		}
+		if provenance.HasUserEmail() {
+			actor.SetUserEmail(provenance.GetUserEmail())
+		}
+		if actor.HasUserId() || actor.HasExternalUserId() || actor.HasUserEmail() {
+			r.SetActor(actor)
+		}
+		if provenance.HasBillingUserId() {
+			r.SetBillingUserId(provenance.GetBillingUserId())
+		}
+		if provenance.HasSource() {
+			r.SetSource(provenance.GetSource())
+		}
+		if provenance.HasAssistantId() {
+			r.SetAssistantId(provenance.GetAssistantId())
+		}
+		if provenance.HasReplayed() {
+			r.SetReplayed(provenance.GetReplayed())
+		}
+		if source := provenance.GetAccount(); source != nil {
+			account := &sigintv1.Reading_Account{}
+			if source.HasUserAccountId() {
+				account.SetUserAccountId(source.GetUserAccountId())
+			}
+			if source.HasAccountType() {
+				account.SetAccountType(source.GetAccountType())
+			}
+			if source.HasBillingMode() {
+				account.SetBillingMode(source.GetBillingMode())
+			}
+			r.SetAccount(account)
+		}
+	}
 	switch sensor.mode {
 	case "multi_label":
 		value := &sigintv1.Reading_MultiLabel{}
