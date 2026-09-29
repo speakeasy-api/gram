@@ -31,14 +31,14 @@ func Emit(ctx context.Context, tx pgx.Tx, hint Hint) error {
 	if hint.OrganizationID == "" {
 		return fmt.Errorf("role provisioning hint requires an organization")
 	}
-	event := pluginsv1.RoleProvisioningRequested_builder{OrgId: new(hint.OrganizationID)}.Build()
+	event := pluginsv1.RoleProvisioningRequested_builder{OrganizationId: new(hint.OrganizationID)}.Build()
 	if hint.RoleURN != "" {
 		event.SetRoleUrn(hint.RoleURN)
 	}
 	if hint.PluginID != uuid.Nil {
 		event.SetPluginId(hint.PluginID.String())
 	}
-	if _, err := outbox.Publish(ctx, tx, hint.OrganizationID, outbox.Message{Proto: event}); err != nil {
+	if _, err := outbox.Publish(ctx, tx, hint.OrganizationID, outbox.Message{PublicID: uuid.Nil, Attributes: nil, Proto: event}); err != nil {
 		return fmt.Errorf("enqueue role provisioning hint: %w", err)
 	}
 	return nil

@@ -3,6 +3,7 @@ package assignments
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -35,7 +36,11 @@ func (r *originRows) Next() bool { return r.index < len(r.principals) }
 func (r *originRows) Close()     {}
 func (r *originRows) Err() error { return nil }
 func (r *originRows) Scan(dest ...any) error {
-	*dest[3].(*string) = r.principals[r.index]
+	principal, ok := dest[3].(*string)
+	if !ok {
+		return fmt.Errorf("unexpected principal destination: %T", dest[3])
+	}
+	*principal = r.principals[r.index]
 	r.index++
 	return nil
 }

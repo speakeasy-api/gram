@@ -1,7 +1,9 @@
 package roleprovisioning_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -21,6 +23,116 @@ func (f *fixture) attachDirectRemote(pluginID, projectID uuid.UUID) {
 	f.exec(`INSERT INTO mcp_servers (id,project_id,remote_mcp_server_id,visibility) VALUES ($1,$2,$3,'public')`, server, projectID, remote)
 	f.exec(`INSERT INTO platform_mcp_catalog_registrations (organization_id,project_id,source_kind,catalog_provider,catalog_reference,mcp_server_id) VALUES ($1,$2,'remote','direct-remote-url-v1','https://mcp.example.test/api',$3)`, f.org, projectID, server)
 	f.exec(`INSERT INTO plugin_servers (plugin_id,mcp_server_id,display_name) VALUES ($1,$2,'Admin content')`, pluginID, server)
+}
+
+func TestMissingGuardFailsClosedOnAudienceRepair(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.configure(0, true)
+	pluginID := f.reconcile(f.role).PluginID
+	f.exec(`DELETE FROM plugin_assignments WHERE plugin_id=$1`, pluginID)
+	f.exec(`INSERT INTO plugin_assignments (plugin_id,organization_id,principal_urn) VALUES ($1,$2,$3)`, pluginID, f.org, urn.PrincipalWildcard)
+	f.service = roleprovisioning.New(f.db, audit.NewLogger(), nil, plugins.PublicationRequests{})
+	result := f.reconcile(f.role)
+	require.Equal(t, "admission_unavailable", result.Pending)
+	require.Equal(t, []string{urn.PrincipalWildcard}, f.audiences(pluginID))
+	require.Equal(t, 1, f.count(`SELECT count(*) FROM role_plugin_associations WHERE plugin_id=$1 AND is_current`, pluginID))
+}
+
+func TestAdmissionReadsPolicyAfterProjectLock(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.configure(0, true)
+	pluginID := f.reconcile(f.role).PluginID
+	f.attachDirectRemote(pluginID, f.project)
+	f.exec(`DELETE FROM plugin_assignments WHERE plugin_id=$1`, pluginID)
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, f.org, true)
+	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, f.org, false)
+	flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, f.org, []byte(`{"mode":"enforce"}`))
+	f.service = roleprovisioning.New(f.db, audit.NewLogger(), admission.NewGuard(flags, nil), plugins.PublicationRequests{})
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	blocker, pid := f.beginBlocker(ctx)
+	require.NoError(t, admission.LockProject(ctx, blocker, f.project))
+	type response struct {
+		result roleprovisioning.Result
+		err    error
+	}
+	done := make(chan response, 1)
+	go func() {
+		result, err := f.service.Reconcile(ctx, f.org, f.role, f.actor)
+		done <- response{result, err}
+	}()
+	f.waitForBlocked(ctx, pid)
+	// Database policy stays fresh after the project lock, unlike the rollout
+	// feature snapshot retained for this attempt. Publish a policy while it waits.
+	_, err := blocker.Exec(ctx, `INSERT INTO risk_policies (organization_id,project_id,name,sources,action,version) VALUES ($1,$2,'Approval required',ARRAY['shadow_mcp'],'block',1)`, f.org, f.project) //nolint:glint // notestingrawsql: commit policy under the admission lock before repair resumes
+	require.NoError(t, err)
+	require.NoError(t, blocker.Commit(ctx))
+	result := <-done
+	require.NoError(t, result.err)
+	require.Equal(t, "audience_approval_required", result.result.Pending)
+	require.Empty(t, f.audiences(pluginID))
+	require.Equal(t, 1, f.count(`SELECT count(*) FROM plugin_servers WHERE plugin_id=$1 AND NOT deleted`, pluginID))
+}
+
+func TestAdmissionRetainsFeatureSnapshotWhileWaitingForProjectLock(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		flag    feature.Flag
+		pending string
+	}{
+		{name: "enforcement", flag: feature.FlagPlatformMCPShadowAudienceEnforcement, pending: "audience_approval_required"},
+		{name: "kill switch", flag: feature.FlagPlatformMCPDirectRemoteDistributionDisabled, pending: "admission_unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			f.configure(0, true)
+			pluginID := f.reconcile(f.role).PluginID
+			f.attachDirectRemote(pluginID, f.project)
+			f.exec(`DELETE FROM plugin_assignments WHERE plugin_id=$1`, pluginID)
+			f.exec(`INSERT INTO risk_policies (organization_id,project_id,name,sources,action,version) VALUES ($1,$2,'Approval required',ARRAY['shadow_mcp'],'block',1)`, f.org, f.project)
+			flags := new(feature.InMemory)
+			flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, f.org, false)
+			flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, f.org, false)
+			flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, f.org, []byte(`{"mode":"enforce"}`))
+			f.service = roleprovisioning.New(f.db, audit.NewLogger(), admission.NewGuard(flags, nil), plugins.PublicationRequests{})
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			blocker, pid := f.beginBlocker(ctx)
+			require.NoError(t, admission.LockProject(ctx, blocker, f.project))
+			type response struct {
+				result roleprovisioning.Result
+				err    error
+			}
+			done := make(chan response, 1)
+			go func() {
+				result, err := f.service.Reconcile(ctx, f.org, f.role, f.actor)
+				done <- response{result, err}
+			}()
+			// The database wait proves rollout resolution completed before the update.
+			f.waitForBlocked(ctx, pid)
+			flags.SetFlag(tc.flag, f.org, true)
+			require.NoError(t, blocker.Commit(ctx))
+			inFlight := <-done
+			require.NoError(t, inFlight.err)
+			require.Empty(t, inFlight.result.Pending)
+			require.Equal(t, pluginID, inFlight.result.PluginID)
+			require.Equal(t, []string{f.role}, f.audiences(pluginID))
+
+			// Recreate the same repair: a new attempt must resolve the updated flag,
+			// rather than retaining the preceding attempt's permissive snapshot.
+			f.exec(`DELETE FROM plugin_assignments WHERE plugin_id=$1`, pluginID)
+			next := f.reconcile(f.role)
+			require.Equal(t, tc.pending, next.Pending)
+			require.Empty(t, f.audiences(pluginID))
+			require.Equal(t, 1, f.count(`SELECT count(*) FROM plugin_servers WHERE plugin_id=$1 AND NOT deleted`, pluginID))
+			require.Equal(t, 1, f.count(`SELECT count(*) FROM role_plugin_associations WHERE plugin_id=$1 AND is_current`, pluginID))
+		})
+	}
 }
 
 func TestEveryoneRemoteOriginAdditionStillRequiresApproval(t *testing.T) {

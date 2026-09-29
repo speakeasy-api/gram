@@ -878,7 +878,7 @@ pubsub:
       definition: |
         edition = "2024";
         message RoleProvisioningRequested {
-          string org_id = 1;
+          string organization_id = 1;
           string role_urn = 2;
           string plugin_id = 3;
         }

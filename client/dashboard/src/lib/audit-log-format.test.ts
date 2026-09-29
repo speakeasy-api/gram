@@ -19,6 +19,12 @@ function log(partial: Partial<AuditLog> & { action: string }): AuditLog {
 }
 
 describe("renderVerb", () => {
+  it("humanizes role provisioning configuration in feeds and filters", () => {
+    const action = "organization:role_provisioning_configured";
+    expect(renderVerb(log({ action }))).toBe("configured role provisioning");
+    expect(formatAuditActionLabel(action)).toBe("Configured role provisioning");
+  });
+
   it("humanizes known actions in past tense", () => {
     expect(renderVerb(log({ action: "risk_policy:delete" }))).toBe(
       "deleted risk policy",

@@ -228,16 +228,16 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 	}
 	// A human replacement may intentionally omit the originating role. Persist
 	// the hint with that edit; a later reconciler merges only the missing origin.
-	managed, err := queries.HasCurrentRolePluginAssociation(ctx, pluginsrepo.HasCurrentRolePluginAssociationParams{PluginID: plugin.ID, ProjectID: plugin.ProjectID, OrganizationID: plugin.OrganizationID})
+	missingOrigin, err := queries.HasMissingRolePluginOrigin(ctx, pluginsrepo.HasMissingRolePluginOriginParams{PluginID: plugin.ID, ProjectID: plugin.ProjectID, OrganizationID: plugin.OrganizationID, DesiredPrincipals: desired})
 	if err != nil {
 		return Result{}, fmt.Errorf("check role plugin association: %w", err)
 	}
-	if managed {
-		if err := hints.Emit(ctx, tx, hints.Hint{OrganizationID: plugin.OrganizationID, PluginID: plugin.ID}); err != nil {
-			return Result{}, err
+	if missingOrigin {
+		if err := hints.Emit(ctx, tx, hints.Hint{OrganizationID: plugin.OrganizationID, RoleURN: "", PluginID: plugin.ID}); err != nil {
+			return Result{}, fmt.Errorf("emit assignment maintenance hint: %w", err)
 		}
 	}
-	return Result{Plugin: plugin, Assignments: created, PrincipalURNs: desired, PreviousPrincipals: current}, nil
+	return Result{Changed: true, Plugin: plugin, Assignments: created, PrincipalURNs: desired, PreviousPrincipals: current}, nil
 }
 
 // AddOrigin adds exactly one role principal without replacing other assignments.
@@ -297,7 +297,7 @@ func mutateOrigin(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin p
 	if err := guard(ctx, tx, plugin, current, desired); err != nil {
 		return Result{}, err
 	}
-	result := Result{Plugin: plugin, Assignments: existing, PrincipalURNs: desired, PreviousPrincipals: current}
+	result := Result{Changed: false, Plugin: plugin, Assignments: existing, PrincipalURNs: desired, PreviousPrincipals: current}
 	if add == found {
 		return result, nil
 	}

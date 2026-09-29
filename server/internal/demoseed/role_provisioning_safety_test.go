@@ -31,15 +31,18 @@ func TestRoleProvisioningReseed(t *testing.T) {
 			for range 2 {
 				seedLocalPostgres(ctx, t, db, spec)
 				var count int
+				//nolint:glint // notestingrawsql: independently plant or verify adversarial persisted seed state
 				err = db.QueryRow(ctx, `SELECT count(*) FROM organization_role_provisioning_settings
      WHERE organization_id = $1 AND enabled IS FALSE AND project_id IS NULL AND version = 0`, spec.OrgID).Scan(&count)
 				require.NoError(t, err)
 				require.Equal(t, 1, count, "reseed must restore default-off organization settings")
+				//nolint:glint // notestingrawsql: independently plant or verify adversarial persisted seed state
 				err = db.QueryRow(ctx, `SELECT count(*) FROM role_provisioning_settings WHERE organization_id = $1`, spec.OrgID).Scan(&count)
 				require.NoError(t, err)
 				require.Zero(t, count, "reseed must remove sticky per-role intent")
 				// Check IDs directly: deleting settings first would orphan these
 				// rows and make an ownership JOIN incorrectly report no leftovers.
+				//nolint:glint // notestingrawsql: independently plant or verify adversarial persisted seed state
 				err = db.QueryRow(ctx, `SELECT count(*) FROM role_plugin_associations WHERE id = ANY($1::uuid[])`, associationIDs).Scan(&count)
 				require.NoError(t, err)
 				require.Zero(t, count, "reseed must remove all association history")
@@ -55,23 +58,35 @@ func plantRoleProvisioningHistory(t *testing.T, db *pgxpool.Pool, spec Spec) []u
 	t.Helper()
 	ctx := t.Context()
 	projectID := spec.UUIDPrefix + "-0000-4000-a000-000000000001"
-	_, err := db.Exec(ctx, `UPDATE organization_role_provisioning_settings
+	//nolint:glint // notestingrawsql: independently plant or verify adversarial persisted seed state
+	tag, err := db.Exec(ctx, `UPDATE organization_role_provisioning_settings
   SET enabled = true, project_id = $2, version = 7 WHERE organization_id = $1`, spec.OrgID, projectID)
 	require.NoError(t, err)
+	require.EqualValues(t, 1, tag.RowsAffected(), "fixture must enable exactly one organization")
+	var enabledCount int
+	//nolint:glint // notestingrawsql: independently plant or verify adversarial persisted seed state
+	err = db.QueryRow(ctx, `SELECT count(*) FROM organization_role_provisioning_settings
+  WHERE organization_id = $1 AND enabled IS TRUE AND project_id = $2 AND version = 7`, spec.OrgID, projectID).Scan(&enabledCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, enabledCount, "fixture must establish enabled organization intent before reseeding")
 	var pluginID uuid.UUID
+	//nolint:glint // notestingrawsql: independently plant or verify adversarial persisted seed state
 	err = db.QueryRow(ctx, `INSERT INTO plugins (organization_id, project_id, name, slug)
   VALUES ($1, $2, 'Provisioning safety fixture', 'provisioning-safety-fixture') RETURNING id`, spec.OrgID, projectID).Scan(&pluginID)
 	require.NoError(t, err)
 	var settingID, pendingID uuid.UUID
+	//nolint:glint // notestingrawsql: independently plant or verify adversarial persisted seed state
 	err = db.QueryRow(ctx, `INSERT INTO role_provisioning_settings
   (organization_id, role_urn, project_id, last_attempt_at, last_error_code)
   VALUES ($1, 'role:global:00000000-0000-4000-a000-000000000001', $2, now(), 'fixture_error') RETURNING id`, spec.OrgID, projectID).Scan(&settingID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: independently plant or verify adversarial persisted seed state
 	err = db.QueryRow(ctx, `INSERT INTO role_provisioning_settings
   (organization_id, role_urn, enabled, project_id)
   VALUES ($1, 'role:global:00000000-0000-4000-a000-000000000002', false, NULL) RETURNING id`, spec.OrgID).Scan(&pendingID)
 	require.NoError(t, err)
 	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	//nolint:glint // notestingrawsql: independently plant or verify adversarial persisted seed state
 	_, err = db.Exec(ctx, `INSERT INTO role_plugin_associations
   (id, role_provisioning_setting_id, project_id, plugin_id, is_current, retired_at, last_automatic_name)
   VALUES
@@ -81,5 +96,10 @@ func plantRoleProvisioningHistory(t *testing.T, db *pgxpool.Pool, spec Spec) []u
   ($4, $6, NULL, NULL, false, NULL, NULL)`,
 		ids[0], ids[1], ids[2], ids[3], settingID, pendingID, projectID, pluginID)
 	require.NoError(t, err)
+	var associationCount int
+	//nolint:glint // notestingrawsql: independently plant or verify adversarial persisted seed state
+	err = db.QueryRow(ctx, `SELECT count(*) FROM role_plugin_associations WHERE id = ANY($1::uuid[])`, ids).Scan(&associationCount)
+	require.NoError(t, err)
+	require.Equal(t, len(ids), associationCount, "fixture must establish all four association histories before reseeding")
 	return ids
 }

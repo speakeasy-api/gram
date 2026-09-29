@@ -41,6 +41,12 @@ function goAuditActions(): string[] {
 }
 
 describe("AUDIT_ACTIONS", () => {
+  it("describes role provisioning configuration", () => {
+    expect(
+      staticActionPhrase("organization:role_provisioning_configured"),
+    ).toBe("configured role provisioning");
+  });
+
   it("describes changed trial end dates", () => {
     expect(
       staticActionPhrase("organization:enterprise_trial_end_changed"),

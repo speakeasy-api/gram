@@ -46,7 +46,7 @@ func TestEmit(t *testing.T) {
 		require.True(t, ok)
 		event := new(pluginsv1.RoleProvisioningRequested)
 		require.NoError(t, proto.Unmarshal(body, event))
-		require.Equal(t, hint.OrganizationID, event.GetOrgId())
+		require.Equal(t, hint.OrganizationID, event.GetOrganizationId())
 		require.Equal(t, hint.RoleURN, event.GetRoleUrn())
 		require.Equal(t, hint.RoleURN != "", event.HasRoleUrn())
 		require.Equal(t, hint.PluginID != uuid.Nil, event.HasPluginId())

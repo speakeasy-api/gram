@@ -6,11 +6,11 @@ from typing import ClassVar as _ClassVar, Optional as _Optional
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class RoleProvisioningRequested(_message.Message):
-    __slots__ = ("org_id", "role_urn", "plugin_id")
-    ORG_ID_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("organization_id", "role_urn", "plugin_id")
+    ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     ROLE_URN_FIELD_NUMBER: _ClassVar[int]
     PLUGIN_ID_FIELD_NUMBER: _ClassVar[int]
-    org_id: str
+    organization_id: str
     role_urn: str
     plugin_id: str
-    def __init__(self, org_id: _Optional[str] = ..., role_urn: _Optional[str] = ..., plugin_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, organization_id: _Optional[str] = ..., role_urn: _Optional[str] = ..., plugin_id: _Optional[str] = ...) -> None: ...

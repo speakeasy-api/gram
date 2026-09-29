@@ -66,6 +66,7 @@ func TestConfigureAuditsSavedIntent(t *testing.T) {
 }
 
 func TestConfigureRequiresAuditAndValidActor(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"missing-logger", "zero-principal", "invalid-principal"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
@@ -92,6 +93,7 @@ func TestConfigureRequiresAuditAndValidActor(t *testing.T) {
 }
 
 func TestConfigureAuditAndHintFailuresRollBackTogether(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"audit", "hint"} {
 		for _, existing := range []bool{false, true} {
 			name := target + map[bool]string{false: "/initial", true: "/update"}[existing]

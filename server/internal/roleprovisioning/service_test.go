@@ -54,6 +54,44 @@ func TestConfigureSelectionsExclusionsAndStaleVersion(t *testing.T) {
 	require.Equal(t, 1, f.count(`SELECT count(*) FROM role_provisioning_settings WHERE role_urn=$1 AND NOT enabled`, excluded))
 }
 
+func TestConfigureUnseenRolesUsePreviousOrganizationState(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		previous bool
+		next     bool
+	}{
+		{name: "disabled to enabled", previous: false, next: true},
+		{name: "enabled to disabled", previous: true, next: false},
+		{name: "enabled remains enabled", previous: true, next: true},
+		{name: "disabled remains disabled", previous: false, next: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			excluded := f.addRole(f.org, "Excluded")
+			v := f.configure(0, tc.previous, roleprovisioning.Selection{RoleURN: excluded, Enabled: false})
+			unseen := f.addRole(f.org, "Unseen")
+			explicit := f.addRole(f.org, "Explicit")
+			v = f.configure(v, tc.next, roleprovisioning.Selection{RoleURN: explicit, Enabled: !tc.previous})
+			saved, err := f.service.Settings(t.Context(), f.org)
+			require.NoError(t, err)
+			require.Equal(t, tc.next, saved.Enabled)
+			require.Equal(t, v, saved.Version)
+			selections := make(map[string]bool, len(saved.Roles))
+			for _, role := range saved.Roles {
+				selections[role.RoleURN] = role.Enabled
+			}
+			require.Equal(t, map[string]bool{
+				f.role:   true,
+				excluded: false,
+				unseen:   tc.previous,
+				explicit: !tc.previous,
+			}, selections)
+		})
+	}
+}
+
 func TestInitialOrganizationAndGlobalRolesAreEmptyOriginOnly(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -137,6 +175,7 @@ func TestRemapABAReusesPluginAndPreservesContentsAndOtherAudiences(t *testing.T)
 }
 
 func TestDisabledDoesNotRepairOrRename(t *testing.T) {
+	t.Parallel()
 	for _, orgDisabled := range []bool{true, false} {
 		t.Run(map[bool]string{true: "organization", false: "role"}[orgDisabled], func(t *testing.T) {
 			t.Parallel()
@@ -160,6 +199,7 @@ func TestDisabledDoesNotRepairOrRename(t *testing.T) {
 }
 
 func TestMissingDestinationStaysPending(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"no-project", "explicit-null", "deleted-project"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
@@ -186,6 +226,7 @@ func TestMissingDestinationStaysPending(t *testing.T) {
 }
 
 func TestAutomaticNamesRespectMismatchAndManualMarker(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"automatic", "mismatch", "manual-marker"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()

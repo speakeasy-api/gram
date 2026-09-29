@@ -9,6 +9,7 @@ import (
 )
 
 func TestConfigureExplicitDestinationResolvesPendingRoles(t *testing.T) {
+	t.Parallel()
 	for _, initial := range []string{"no-projects", "explicit-pending"} {
 		t.Run(initial, func(t *testing.T) {
 			t.Parallel()

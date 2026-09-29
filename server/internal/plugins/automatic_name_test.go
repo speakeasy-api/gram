@@ -81,7 +81,7 @@ func TestUpdatePluginAutomaticNameLockedBeforeImage(t *testing.T) {
 	require.NoError(t, err)
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary for lock and rollback assertions
 	require.NoError(t, err)
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var blocker int
 	require.NoError(t, tx.QueryRow(ctx, `SELECT pg_backend_pid() FROM plugins WHERE id=$1 FOR UPDATE`, uuid.MustParse(plugin.ID)).Scan(&blocker)) //nolint:glint // notestingrawsql: observe database lock ordering in the isolated fixture
 	done := make(chan error, 1)
@@ -89,11 +89,22 @@ func TestUpdatePluginAutomaticNameLockedBeforeImage(t *testing.T) {
 		_, err := ti.service.UpdatePlugin(ctx, &gen.UpdatePluginPayload{ID: plugin.ID, Name: "Renamed", Slug: plugin.Slug})
 		done <- err
 	}()
+	var updateErr error
+	var finishedEarly bool
 	require.Eventually(t, func() bool {
+		select {
+		case updateErr = <-done:
+			finishedEarly = true
+			return true
+		default:
+		}
 		var waiting bool
 		err := ti.conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)))`, blocker).Scan(&waiting) //nolint:glint // notestingrawsql: observe database lock ordering in the isolated fixture
-		return err == nil && waiting
+		require.NoError(t, err)
+		return waiting
 	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, updateErr)
+	require.False(t, finishedEarly, "name update finished before waiting for the plugin lock")
 	_, err = tx.Exec(ctx, `UPDATE plugins SET name='Renamed' WHERE id=$1`, uuid.MustParse(plugin.ID)) //nolint:glint // notestingrawsql: isolated retention, manual-edit, and failure-injection fixtures
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `UPDATE role_plugin_associations SET last_automatic_name='Renamed' WHERE id=$1`, associationID) //nolint:glint // notestingrawsql: isolated retention, manual-edit, and failure-injection fixtures

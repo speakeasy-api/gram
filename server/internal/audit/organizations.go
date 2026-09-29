@@ -1000,10 +1000,21 @@ func (l *Logger) LogOrganizationRoleProvisioningConfigured(ctx context.Context, 
 		return fmt.Errorf("marshal role-provisioning after snapshot: %w", err)
 	}
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
-		ActorID:        event.Actor.ID, ActorType: string(event.Actor.Type),
-		Action:    string(ActionOrganizationRoleProvisioningConfigured),
-		SubjectID: event.OrganizationID, SubjectType: "organization",
-		BeforeSnapshot: before, AfterSnapshot: after,
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.ToPGTextEmpty(""),
+		ActorSlug:          conv.ToPGTextEmpty(""),
+		Action:             string(ActionOrganizationRoleProvisioningConfigured),
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(""),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+		BeforeSnapshot:     before,
+		AfterSnapshot:      after,
+		Metadata:           nil,
+		ActingSurface:      conv.ToPGTextEmpty(""),
+		ActingClientID:     conv.ToPGTextEmpty(""),
 	}, OutboxEvent: events.OrganizationRoleProvisioningV1})
 }

@@ -85,7 +85,7 @@ func (s *Service) Settings(ctx context.Context, organizationID string) (Settings
 	// The version and role selections are one logical configuration snapshot.
 	// Repeatable read prevents a concurrent Configure commit between these reads
 	// from pairing an old conflict token with new selections.
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{DeferrableMode: "", BeginQuery: "", CommitQuery: "", IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return Settings{}, fmt.Errorf("begin role-provisioning settings snapshot: %w", err)
 	}
@@ -93,7 +93,7 @@ func (s *Service) Settings(ctx context.Context, organizationID string) (Settings
 	q := repo.New(tx)
 	row, err := q.GetSettings(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Settings{}, nil
+		return Settings{Roles: nil, Enabled: false, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Version: 0}, nil
 	}
 	if err != nil {
 		return Settings{}, fmt.Errorf("read role-provisioning settings: %w", err)
@@ -131,7 +131,7 @@ func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, erro
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("begin provisioning configuration: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	q := repo.New(tx)
@@ -141,19 +141,19 @@ func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, erro
 	saved, err := q.GetSettings(ctx, in.OrganizationID)
 	initial := errors.Is(err, pgx.ErrNoRows)
 	if err != nil && !initial {
-		return 0, err
+		return 0, fmt.Errorf("get settings: %w", err)
 	}
 	if saved.Version != in.ExpectedVersion {
 		return 0, ErrConflict
 	}
 	beforeRoles, err := q.ListRoleSettings(ctx, text(in.OrganizationID))
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("list role settings: %w", err)
 	}
 	before := configurationSnapshot(saved.Enabled, saved.ProjectID, saved.Version, beforeRoles)
 	projects, err := q.ListProjects(ctx, in.OrganizationID)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("list projects: %w", err)
 	}
 	// Seeded and legacy inert rows are still untouched configuration. Every
 	// explicit save increments version, including a deliberately pending NULL
@@ -171,7 +171,7 @@ func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, erro
 	}
 	roles, err := accessrepo.New(tx).ListActiveOrganizationRoles(ctx, in.OrganizationID)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("list active organization roles: %w", err)
 	}
 	selected := make(map[string]Selection, len(in.Roles))
 	for _, selection := range in.Roles {
@@ -190,10 +190,11 @@ func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, erro
 		if _, err = lockRole(ctx, q, in.OrganizationID, role.RoleUrn); err != nil {
 			return 0, err
 		}
-		// First confirmation starts all roles selected; later calls preserve saved
-		// exclusions. New roles inherit the sticky organization default.
-		if err = q.EnsureRoleSetting(ctx, repo.EnsureRoleSettingParams{OrganizationID: text(in.OrganizationID), RoleUrn: role.RoleUrn, Enabled: true, ProjectID: destination}); err != nil {
-			return 0, err
+		// Untouched configuration starts all roles selected. Later calls default
+		// unseen roles to the previous organization state, not the requested state.
+		// Conflict-do-nothing preserves existing selections.
+		if err = q.EnsureRoleSetting(ctx, repo.EnsureRoleSettingParams{OrganizationID: text(in.OrganizationID), RoleUrn: role.RoleUrn, Enabled: untouched || saved.Enabled, ProjectID: destination}); err != nil {
+			return 0, fmt.Errorf("ensure role setting: %w", err)
 		}
 		selection, ok := selected[role.RoleUrn]
 		fillPending := in.ProjectID != nil && destination.Valid
@@ -202,7 +203,7 @@ func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, erro
 		}
 		setting, err := q.GetRoleSetting(ctx, repo.GetRoleSettingParams{OrganizationID: text(in.OrganizationID), RoleUrn: role.RoleUrn})
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("get role setting: %w", err)
 		}
 		target := setting.ProjectID
 		// An explicit organization destination resolves pending roles, but never
@@ -218,29 +219,29 @@ func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, erro
 			}
 		}
 		if err = q.SaveRoleSetting(ctx, repo.SaveRoleSettingParams{OrganizationID: text(in.OrganizationID), RoleUrn: role.RoleUrn, Enabled: enabled, ProjectID: target}); err != nil {
-			return 0, err
+			return 0, fmt.Errorf("save role setting: %w", err)
 		}
 	}
 	version, err := q.SaveSettings(ctx, repo.SaveSettingsParams{OrganizationID: in.OrganizationID, Enabled: pgtype.Bool{Bool: in.Enabled, Valid: true}, ProjectID: destination, Version: pgtype.Int8{Int64: saved.Version + 1, Valid: true}})
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("save settings: %w", err)
 	}
 	afterRoles, err := q.ListRoleSettings(ctx, text(in.OrganizationID))
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("list role settings: %w", err)
 	}
 	if err = s.audit.LogOrganizationRoleProvisioningConfigured(ctx, tx, audit.LogOrganizationRoleProvisioningConfiguredEvent{
 		OrganizationID: in.OrganizationID, Actor: in.Actor.Principal,
 		RoleProvisioningSnapshotBefore: before,
 		RoleProvisioningSnapshotAfter:  configurationSnapshot(in.Enabled, destination, version, afterRoles),
 	}); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("audit provisioning configuration: %w", err)
 	}
-	if err = hints.Emit(ctx, tx, hints.Hint{OrganizationID: in.OrganizationID}); err != nil {
-		return 0, err
+	if err = hints.Emit(ctx, tx, hints.Hint{RoleURN: "", PluginID: uuid.Nil, OrganizationID: in.OrganizationID}); err != nil {
+		return 0, fmt.Errorf("emit maintenance hint: %w", err)
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("commit: %w", err)
 	}
 	return version, nil
 }
@@ -259,9 +260,17 @@ func lockRole(ctx context.Context, q *repo.Queries, org, role string) (string, e
 	}
 	switch parts[1] {
 	case "organization":
-		return q.LockOrganizationRole(ctx, repo.LockOrganizationRoleParams{ID: id, OrganizationID: org})
+		name, err := q.LockOrganizationRole(ctx, repo.LockOrganizationRoleParams{ID: id, OrganizationID: org})
+		if err != nil {
+			return "", fmt.Errorf("lock organization role: %w", err)
+		}
+		return name, nil
 	case "global":
-		return q.LockGlobalRole(ctx, id)
+		name, err := q.LockGlobalRole(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("lock global role: %w", err)
+		}
+		return name, nil
 	default:
 		return "", ErrInvalid
 	}

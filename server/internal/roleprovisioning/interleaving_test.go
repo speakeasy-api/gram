@@ -16,13 +16,14 @@ import (
 
 func TestFirstEnableUntouchedSettingsSelectsProject(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"seeded", "nullable legacy"} {
+	for _, kind := range []string{"missing", "seeded", "nullable legacy"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			f := newFixture(t)
-			if kind == "seeded" {
+			switch kind {
+			case "seeded":
 				f.exec(`INSERT INTO organization_role_provisioning_settings (organization_id,enabled,project_id,version) VALUES ($1,false,NULL,0)`, f.org)
-			} else {
+			case "nullable legacy":
 				f.exec(`INSERT INTO organization_role_provisioning_settings (organization_id,enabled,project_id,version) VALUES ($1,NULL,NULL,NULL)`, f.org)
 			}
 			f.configure(0, true)
@@ -31,6 +32,7 @@ func TestFirstEnableUntouchedSettingsSelectsProject(t *testing.T) {
 			require.Equal(t, int64(1), saved.Version)
 			require.Equal(t, f.project, saved.ProjectID.UUID)
 			require.Len(t, saved.Roles, 1)
+			require.True(t, saved.Roles[0].Enabled)
 			require.Equal(t, f.project, saved.Roles[0].ProjectID.UUID)
 			created := f.reconcile(f.role)
 			require.Empty(t, created.Pending)

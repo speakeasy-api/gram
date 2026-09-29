@@ -10,7 +10,7 @@ option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;plu
 // organization settings and role/plugin state; identifiers may already be gone.
 // Emission is independent of marketplace publication and GitHub connectivity.
 message RoleProvisioningRequested {
-  string org_id = 1;
+  string organization_id = 1;
   // Optional narrowing hints. Absent identifiers request organization-wide work.
   string role_urn = 2;
   string plugin_id = 3;

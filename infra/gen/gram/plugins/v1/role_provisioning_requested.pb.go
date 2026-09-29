@@ -25,14 +25,14 @@ const (
 // organization settings and role/plugin state; identifiers may already be gone.
 // Emission is independent of marketplace publication and GitHub connectivity.
 type RoleProvisioningRequested struct {
-	state                  protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_OrgId       *string                `protobuf:"bytes,1,opt,name=org_id,json=orgId"`
-	xxx_hidden_RoleUrn     *string                `protobuf:"bytes,2,opt,name=role_urn,json=roleUrn"`
-	xxx_hidden_PluginId    *string                `protobuf:"bytes,3,opt,name=plugin_id,json=pluginId"`
-	XXX_raceDetectHookData protoimpl.RaceDetectHookData
-	XXX_presence           [1]uint32
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                     protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_OrganizationId *string                `protobuf:"bytes,1,opt,name=organization_id,json=organizationId"`
+	xxx_hidden_RoleUrn        *string                `protobuf:"bytes,2,opt,name=role_urn,json=roleUrn"`
+	xxx_hidden_PluginId       *string                `protobuf:"bytes,3,opt,name=plugin_id,json=pluginId"`
+	XXX_raceDetectHookData    protoimpl.RaceDetectHookData
+	XXX_presence              [1]uint32
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *RoleProvisioningRequested) Reset() {
@@ -60,10 +60,10 @@ func (x *RoleProvisioningRequested) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-func (x *RoleProvisioningRequested) GetOrgId() string {
+func (x *RoleProvisioningRequested) GetOrganizationId() string {
 	if x != nil {
-		if x.xxx_hidden_OrgId != nil {
-			return *x.xxx_hidden_OrgId
+		if x.xxx_hidden_OrganizationId != nil {
+			return *x.xxx_hidden_OrganizationId
 		}
 		return ""
 	}
@@ -90,8 +90,8 @@ func (x *RoleProvisioningRequested) GetPluginId() string {
 	return ""
 }
 
-func (x *RoleProvisioningRequested) SetOrgId(v string) {
-	x.xxx_hidden_OrgId = &v
+func (x *RoleProvisioningRequested) SetOrganizationId(v string) {
+	x.xxx_hidden_OrganizationId = &v
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
 }
 
@@ -105,7 +105,7 @@ func (x *RoleProvisioningRequested) SetPluginId(v string) {
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
 }
 
-func (x *RoleProvisioningRequested) HasOrgId() bool {
+func (x *RoleProvisioningRequested) HasOrganizationId() bool {
 	if x == nil {
 		return false
 	}
@@ -126,9 +126,9 @@ func (x *RoleProvisioningRequested) HasPluginId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
 }
 
-func (x *RoleProvisioningRequested) ClearOrgId() {
+func (x *RoleProvisioningRequested) ClearOrganizationId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
-	x.xxx_hidden_OrgId = nil
+	x.xxx_hidden_OrganizationId = nil
 }
 
 func (x *RoleProvisioningRequested) ClearRoleUrn() {
@@ -144,7 +144,7 @@ func (x *RoleProvisioningRequested) ClearPluginId() {
 type RoleProvisioningRequested_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	OrgId *string
+	OrganizationId *string
 	// Optional narrowing hints. Absent identifiers request organization-wide work.
 	RoleUrn  *string
 	PluginId *string
@@ -154,9 +154,9 @@ func (b0 RoleProvisioningRequested_builder) Build() *RoleProvisioningRequested {
 	m0 := &RoleProvisioningRequested{}
 	b, x := &b0, m0
 	_, _ = b, x
-	if b.OrgId != nil {
+	if b.OrganizationId != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
-		x.xxx_hidden_OrgId = b.OrgId
+		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RoleUrn != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 3)
@@ -173,9 +173,9 @@ var File_gram_plugins_v1_role_provisioning_requested_proto protoreflect.FileDesc
 
 const file_gram_plugins_v1_role_provisioning_requested_proto_rawDesc = "" +
 	"\n" +
-	"1gram/plugins/v1/role_provisioning_requested.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"v\n" +
-	"\x19RoleProvisioningRequested\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x19\n" +
+	"1gram/plugins/v1/role_provisioning_requested.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x88\x01\n" +
+	"\x19RoleProvisioningRequested\x12'\n" +
+	"\x0forganization_id\x18\x01 \x01(\tR\x0eorganizationId\x12\x19\n" +
 	"\brole_urn\x18\x02 \x01(\tR\aroleUrn\x12\x1b\n" +
 	"\tplugin_id\x18\x03 \x01(\tR\bpluginId:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$BCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\beditionsp\xe9\a"

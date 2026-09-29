@@ -62,7 +62,7 @@ func TestAudienceReplacementDurablyHintsOriginRepair(t *testing.T) {
 	before := f.count(`SELECT count(*) FROM publish_outbox WHERE topic LIKE '%RoleProvisioningRequested%'`)
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary for lock and rollback assertions
 	require.NoError(t, err)
-	defer tx.Rollback(t.Context())
+	defer func() { _ = tx.Rollback(t.Context()) }()
 	require.NoError(t, admission.LockProject(t.Context(), tx, f.project))
 	locked, err := assignments.Lock(t.Context(), tx, f.org, f.project, pluginID)
 	require.NoError(t, err)
