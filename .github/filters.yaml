@@ -13,6 +13,9 @@ server:
 client:
   - ".github/**"
   - "client/**"
+  - "e2e/package.json"
+  - "e2e/registry-editor.config.ts"
+  - "e2e/tests/registry-editor.spec.ts"
   - "package.json"
   - "pnpm-lock.yaml"
   - "pnpm-workspace.yaml"
@@ -137,10 +140,7 @@ webhooks-catalog:
 otel-collector:
   - "otel-collector/**"
 
-# PRs that change rendered dashboard UI. Gates the automatic `preview` label
-# in .github/workflows/pr.yaml. Deliberately narrower than the `client`
-# filter, which also matches ".github/**" and the root lockfiles and so would
-# put a preview environment on every CI or dependency PR.
+# Gates the automatic `preview` label in .github/workflows/pr.yaml.
 preview-ui:
   - "client/admin/**/*.tsx"
   - "client/dashboard/**/*.tsx"

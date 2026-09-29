@@ -5,6 +5,8 @@ import (
 	. "goa.design/goa/v3/dsl"
 	"goa.design/goa/v3/expr"
 
+	_ "github.com/speakeasy-api/gram/server/design/registryclient"
+
 	_ "github.com/speakeasy-api/gram/server/design/about"
 	_ "github.com/speakeasy-api/gram/server/design/access"
 	_ "github.com/speakeasy-api/gram/server/design/admin"
@@ -45,6 +47,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/mcpapproval"
 	_ "github.com/speakeasy-api/gram/server/design/mcpendpoints"
 	_ "github.com/speakeasy-api/gram/server/design/mcpmetadata"
+	_ "github.com/speakeasy-api/gram/server/design/mcpregistry"
 	_ "github.com/speakeasy-api/gram/server/design/mcpservers"
 	_ "github.com/speakeasy-api/gram/server/design/metamcp"
 	_ "github.com/speakeasy-api/gram/server/design/modelkeys"

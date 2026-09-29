@@ -23,10 +23,14 @@ const (
 // Principal is the identity returned by the staff MCP authenticator.
 // It must not be populated from MCP arguments or browser cookies.
 type Principal struct {
-	Subject      string
-	Email        string
-	ClientID     string
+	Subject  string
+	Email    string
+	ClientID string
+	// ClientRowID and Generation bind write proposals to the exact stored
+	// client and connection generation; they are never taken from tool input.
+	ClientRowID  string
 	ConnectionID string
+	Generation   string
 	Scopes       []string
 	staff        *contextvalues.AdminAuthContext
 }

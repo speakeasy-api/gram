@@ -174,5 +174,5 @@ func (s *Service) authenticateAgentGatewayKey(
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
-	return keyCtx, authCtx, nil
+	return s.identityValidator.StampAgent(keyCtx, agentID), authCtx, nil
 }

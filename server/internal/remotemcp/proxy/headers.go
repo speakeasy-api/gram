@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -38,6 +39,9 @@ const (
 // Authorization is end-to-end and is handled separately by
 // [Proxy.applyRequestHeaders] based on [Proxy.AuthorizationOverride].
 func isSkippedRequestHeader(name string) bool {
+	if mcpauthz.ReservedHeader(name) {
+		return true
+	}
 	switch strings.ToLower(name) {
 	case
 		"accept-encoding",
@@ -75,6 +79,9 @@ func isSkippedRequestHeader(name string) bool {
 // hop-by-hop handling itself, but Content-Length is recomputed by the
 // ResponseWriter, and Transfer-Encoding would double-encode.
 func isSkippedResponseHeader(name string) bool {
+	if mcpauthz.ReservedHeader(name) {
+		return true
+	}
 	switch strings.ToLower(name) {
 	case
 		"connection",
@@ -147,6 +154,7 @@ func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response, wwwA
 func (p *Proxy) stripConfiguredCredentials(header http.Header) {
 	header.Del("Authorization")
 	header.Del("Cookie")
+	mcpauthz.Strip(header)
 
 	for _, h := range p.Headers {
 		if h.Name != "" {
@@ -181,6 +189,9 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 	}
 
 	for _, h := range p.Headers {
+		if mcpauthz.ReservedHeader(h.Name) || mcpauthz.ReservedHeader(h.ValueFromRequestHeader) {
+			continue
+		}
 		value, err := h.Resolve(userReq)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "missing required header for remote mcp server").LogError(ctx, p.Logger)
@@ -201,6 +212,16 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 	// negotiation, otherwise a gzipped upstream body reaches readJSONRPCBody
 	// undecoded and bypasses response interception.
 	remoteReq.Header.Del("Accept-Encoding")
+	mcpauthz.Strip(remoteReq.Header)
+	if p.CallerAssertion != nil {
+		assertion, err := p.CallerAssertion(ctx)
+		if err != nil {
+			return oops.E(oops.CodeUnauthorized, err, "could not establish tunnel caller identity").LogWarn(ctx, p.Logger)
+		}
+		if assertion != "" {
+			remoteReq.Header.Set(mcpauthz.Header, assertion)
+		}
+	}
 
 	return nil
 }

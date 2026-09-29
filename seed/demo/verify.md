@@ -321,11 +321,16 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 19. **Remote MCP identity settings** — open the settings page for each seeded
     Remote MCP server. Linear shows the **User** identity pill, the Example
     Workspace Identity provider, and the Session length / Client access controls
-    in Sessions. Slack shows **Agent** with the inert demo Authorization
-    credential managed under Identity. GitHub shows **None** with no provider or
-    static Authorization header. All three use the Display, Identity, Server URL,
-    Sessions, Tool Filtering, Danger Zone order, with Advanced Headers directly
-    after the Identity controls.
+    in Sessions. Slack shows **Service Account** with the inert demo
+    Authorization credential managed under Identity. GitHub shows **None** with
+    no provider or static Authorization header. All three use the Display,
+    Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
+    Custom Headers directly after the Identity controls. In Postgres, only the
+    Linear row in `mcp_servers` has `remote_session_issuer_id` set, to the
+    Example Workspace Identity provider, and every client bound to Linear's
+    user session issuer (the identity client and the attachment fixture's
+    client) sits under that same provider, so the stamp matches what
+    `ResyncMCPServerRemoteSessionIssuers` would derive.
 
 20. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,

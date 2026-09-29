@@ -29,6 +29,24 @@ vi.mock("@gram/client/react-query/members.js", () => ({
   }),
 }));
 
+vi.mock("@gram/client/react-query/audienceOptions.js", () => ({
+  useAudienceOptions: () => ({
+    data: {
+      options: [
+        {
+          principalUrn: "agent:agent-1",
+          kind: "agent",
+          displayName: "Release Bot",
+          description: "Ships releases",
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({}),
 }));
@@ -228,10 +246,10 @@ describe("the access list", () => {
     expect(screen.getAllByText("No access")).toHaveLength(2);
   });
 
-  it("says a personal grant a role's block cancels is not in force", () => {
-    // Blocks reach people, not principals: the block on Engineering takes
-    // connect from everyone in it, including Hana's own rule. Showing
-    // "Search" here would promise access the server refuses.
+  it("lets a personal grant outrank a role's block", () => {
+    // Hana's own rule names this server, so it outranks the block reaching
+    // her through Engineering: the line shows what her rule opens, and no
+    // note sends an administrator to the role.
     renderList([
       entry({
         principalUrn: "role:global:1",
@@ -246,19 +264,46 @@ describe("the access list", () => {
 
     fireEvent.click(screen.getAllByRole("button", { expanded: false })[1]!);
 
-    // Two lines say it, and both are right: the person's connect line, and
-    // the role's own connect line, since this block covers every server and
-    // so is not the role row's to lift either. A collapsed row keeps its
-    // panel in the DOM — inert, so the disclosure can animate — so the
-    // role's line is rendered without being expanded. The person's note is
-    // split around a link to the role, hence matching on whole text; the
-    // role's own line just reads "No access", since naming itself says
-    // nothing.
+    // The expanded Connect line itself, not the row summary above it.
+    const connectLines = screen
+      .getAllByText("Call this server's tools")
+      .map((hint) => hint.parentElement!.parentElement!);
+    expect(
+      connectLines.some((line) => line.textContent?.includes("Search")),
+    ).toBe(true);
     const notes = screen
-      .getAllByText(/blocked by/)
+      .queryAllByText(/blocked by/)
       .filter((el) => el.textContent === "blocked by Engineering");
-    expect(notes).toHaveLength(1);
-    expect(screen.queryByText("Search")).toBeNull();
+    expect(notes).toHaveLength(0);
+  });
+
+  it("withholds agents a role's block reaches from the agent picker", () => {
+    renderList([
+      entry({
+        principalUrn: "role:global:1",
+        kind: "role",
+        displayName: "Engineering",
+        appliesTo: "all_resources",
+        level: "blocked",
+        agentIds: ["agent-1"],
+      }),
+    ]);
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: /Grant access/ }),
+      {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      },
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Agent" }));
+
+    fireEvent.click(screen.getByRole("combobox"));
+
+    expect(
+      screen.getByText("Blocked by Engineering on this server"),
+    ).toBeTruthy();
   });
 
   it("says when nobody reaches the server", () => {

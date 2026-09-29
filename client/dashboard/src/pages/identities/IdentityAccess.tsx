@@ -22,6 +22,7 @@ import {
   useIdentityPrincipalUrn,
   useIdentityWindow,
 } from "./useIdentityQueries";
+import { allMemberRoleIds } from "@/lib/member-roles";
 
 const RECENT_CHALLENGES = 5;
 
@@ -104,7 +105,7 @@ export default function IdentityAccess(): JSX.Element {
   const rolesById = new Map(
     (rolesQuery.data?.roles ?? []).map((role) => [role.id, role]),
   );
-  const roles = (member?.roleIds ?? []).map(
+  const roles = (member ? allMemberRoleIds(member) : []).map(
     (id) => rolesById.get(id) ?? { id, name: id, slug: id, description: "" },
   );
   // A scope slug is "<family>:<action>" (org:read, chat:read). Grouping by

@@ -50,6 +50,12 @@ type Service interface {
 	// and refresh_token_encrypted are never returned — only metadata
 	// (access_expires_at, refresh_expires_at, scopes).
 	ListRemoteSessions(context.Context, *ListRemoteSessionsPayload) (res *ListRemoteSessionsResult, err error)
+	// Count the distinct people (user subjects) holding a live remote_session
+	// minted through one remote_session_client. Scoped like listRemoteSessions:
+	// only sessions whose issuer, client and remote issuer are reachable from the
+	// caller's project count; API-key and anonymous subjects do not. A client
+	// shared by several MCP servers counts people across all of them.
+	CountRemoteSessions(context.Context, *CountRemoteSessionsPayload) (res *CountRemoteSessionsResult, err error)
 	// Drop a remote_session row. The next /mcp call by that principal triggers a
 	// fresh authn challenge.
 	RevokeRemoteSession(context.Context, *RevokeRemoteSessionPayload) (err error)
@@ -75,7 +81,7 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "listRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [7]string{"listBindings", "attachBinding", "detachBinding", "commitServerIdentityConfiguration", "listRemoteSessions", "countRemoteSessions", "revokeRemoteSession"}
 
 // AttachBindingPayload is the payload type of the remoteSessions service
 // attachBinding method.
@@ -106,6 +112,10 @@ type CommitServerIdentityConfigurationPayload struct {
 	ExistingClientID *string
 	// Client settings for auto or manual mode. Forbidden for existing mode.
 	ClientConfiguration *ServerIdentityClientConfiguration
+	// Auto mode only. cimd (the default) prefers a Client ID Metadata Document
+	// when the provider supports one and falls back to dynamic client
+	// registration; dcr always uses dynamic client registration.
+	RegistrationMethod *string
 }
 
 // CommitServerIdentityConfigurationResult is the result type of the
@@ -135,6 +145,23 @@ type CommitServerIdentityConfigurationResult struct {
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
 	Failure *ServerIdentityRegistrationFailure
+}
+
+// CountRemoteSessionsPayload is the payload type of the remoteSessions service
+// countRemoteSessions method.
+type CountRemoteSessionsPayload struct {
+	// The remote_session_client whose sessions to count.
+	RemoteSessionClientID string
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+}
+
+// CountRemoteSessionsResult is the result type of the remoteSessions service
+// countRemoteSessions method.
+type CountRemoteSessionsResult struct {
+	// Distinct user subjects with a live remote_session through the client.
+	Subjects int64
 }
 
 // Form for creating a remote_session_issuer.

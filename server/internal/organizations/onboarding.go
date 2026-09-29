@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -92,22 +93,45 @@ func LoadOnboardingConfiguration(ctx context.Context, db repo.DBTX, organization
 // SaveOnboardingConfiguration changes selection only. Its caller authenticates
 // staff; it never invokes the session-bound assignment or email path.
 func SaveOnboardingConfiguration(ctx context.Context, db *pgxpool.Pool, logger *audit.Logger, organizationID string, visibleTaskKeys []string, preset *string, actor urn.Principal, displayName *string) (*gen.AdminOnboardingConfiguration, error) {
-	if visibleTaskKeys == nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "visible_task_keys must be an explicit array")
-	}
-	if preset != nil && !IsOnboardingPreset(*preset) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid onboarding preset")
-	}
-	for _, key := range visibleTaskKeys {
-		if setupTaskDefinitionForKey(key) == nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "unknown setup task")
-		}
+	if err := validateOnboardingSelection(visibleTaskKeys, preset); err != nil {
+		return nil, err
 	}
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin onboarding configuration: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	after, err := SaveOnboardingConfigurationTx(ctx, tx, logger, organizationID, visibleTaskKeys, preset, actor, displayName)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit onboarding configuration: %w", err)
+	}
+	return after, nil
+}
+
+func validateOnboardingSelection(visibleTaskKeys []string, preset *string) error {
+	if visibleTaskKeys == nil {
+		return oops.E(oops.CodeBadRequest, nil, "visible_task_keys must be an explicit array")
+	}
+	if preset != nil && !IsOnboardingPreset(*preset) {
+		return oops.E(oops.CodeBadRequest, nil, "invalid onboarding preset")
+	}
+	for _, key := range visibleTaskKeys {
+		if setupTaskDefinitionForKey(key) == nil {
+			return oops.E(oops.CodeBadRequest, nil, "unknown setup task")
+		}
+	}
+	return nil
+}
+
+// SaveOnboardingConfigurationTx makes the selection change and its audit
+// records inside the caller's transaction. The caller owns commit.
+func SaveOnboardingConfigurationTx(ctx context.Context, tx pgx.Tx, logger *audit.Logger, organizationID string, visibleTaskKeys []string, preset *string, actor urn.Principal, displayName *string) (*gen.AdminOnboardingConfiguration, error) {
+	if err := validateOnboardingSelection(visibleTaskKeys, preset); err != nil {
+		return nil, err
+	}
 	queries := repo.New(tx)
 	org, err := queries.LockOrganizationForSetupTaskUpdate(ctx, organizationID)
 	if err != nil {
@@ -159,9 +183,6 @@ func SaveOnboardingConfiguration(ctx context.Context, db *pgxpool.Pool, logger *
 		OnboardingSnapshotBefore: onboardingSnapshot(before), OnboardingSnapshotAfter: onboardingSnapshot(after),
 	}); err != nil {
 		return nil, fmt.Errorf("audit onboarding configuration: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit onboarding configuration: %w", err)
 	}
 	return after, nil
 }

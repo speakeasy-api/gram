@@ -22,7 +22,6 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // seedTunneledMetaMember creates a tunneled mcp_server (with its own issuer,
@@ -112,7 +111,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesOwnToken(t *te
 	// resync derives the mcp_servers.remote_session_issuer_id routing key).
 	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-a", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
-	subject := urn.NewUserSubject("meta-tunnel-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "meta-tunnel-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, client, subject, "token-tunnel", "")
 
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
@@ -168,7 +167,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesIdentifierQual
 
 	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-rid", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
-	subject := urn.NewUserSubject("meta-tunnel-rid-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "meta-tunnel-rid-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, client, subject, "token-qualified", identifier)
 
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
@@ -217,7 +216,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledIdentifierNeverHarvestsSib
 	// against the vendor's authorization server and correctly audienced to
 	// it — so a resource scan would match the tunnel's claimed identifier.
 	vendorClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-vendor", "", []uuid.UUID{sharedIssuerID})
-	subject := urn.NewUserSubject("meta-tunnel-harvest-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "meta-tunnel-harvest-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, vendorClient, subject, "victim-vendor-token", vendorResource)
 
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
@@ -264,7 +263,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberNeverBorrowsSiblingT
 	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-leak-a", "", []uuid.UUID{sharedIssuerID, memberAIssuerID})
 	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-leak-b", "", []uuid.UUID{sharedIssuerID, memberBIssuerID})
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberAIssuerID, memberBIssuerID}))
-	subject := urn.NewUserSubject("meta-tunnel-leak-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "meta-tunnel-leak-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-member-a", "")
 
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)

@@ -46,6 +46,8 @@ const (
 	SurfaceProjectAssistant Surface = "project_assistant"
 	// SurfaceAdmin is the isolated Google-authenticated admin app.
 	SurfaceAdmin Surface = "admin"
+	// SurfaceAdminMCP is the staff-only Admin MCP endpoint.
+	SurfaceAdminMCP Surface = "admin_mcp"
 	// SurfacePlatformBreakGlass is the main-server platform-administrator
 	// killswitch recovery path. It remains distinct from customer management.
 	SurfacePlatformBreakGlass Surface = "platform_break_glass"
@@ -55,6 +57,12 @@ const (
 // against. A package marking a surface passes a plain string so it need not
 // depend on this one; anything not named here records an unknown surface
 // rather than widening what the column can hold.
+// IsStaffAdminSurface reports whether an audit surface represents staff acting
+// through a staff-only administrative interface.
+func IsStaffAdminSurface(surface Surface) bool {
+	return surface == SurfaceAdmin || surface == SurfaceAdminMCP
+}
+
 var knownSurfaces = map[Surface]struct{}{
 	SurfaceUnknown:            {},
 	SurfaceSystem:             {},
@@ -63,6 +71,7 @@ var knownSurfaces = map[Surface]struct{}{
 	SurfacePlatformMCP:        {},
 	SurfaceProjectAssistant:   {},
 	SurfaceAdmin:              {},
+	SurfaceAdminMCP:           {},
 	SurfacePlatformBreakGlass: {},
 }
 

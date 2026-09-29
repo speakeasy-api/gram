@@ -811,6 +811,9 @@ WITH categorized AS (
       ELSE 'custom'
     END AS category
   FROM risk_results rr
+  -- Soft-deleted policies keep their findings until the cleanup catches up;
+  -- the breakdown must not count them, matching the listing's visibility.
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.skill_version_id IS NULL
@@ -821,7 +824,10 @@ SELECT rule_id, source, COUNT(*)::BIGINT AS findings
 FROM categorized
 WHERE category = @category::text
 GROUP BY rule_id, source
-ORDER BY findings DESC, rule_id ASC;
+ORDER BY findings DESC, rule_id ASC
+-- A NULL page_limit is LIMIT ALL: the dashboard reads every rule, while
+-- bounded callers pass one extra row to detect truncation.
+LIMIT sqlc.narg(page_limit)::int;
 
 -- name: ListRiskOverviewTopUsers :many
 WITH user_findings AS (
@@ -1316,7 +1322,11 @@ FROM (
       rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
       COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
       COALESCE(cm.created_at, ccp.created_at) AS message_created_at,
-      c.title AS chat_title, c.external_user_id AS chat_user_id,
+      c.title AS chat_title,
+      -- The message's own external identity first, then the chat's, matching
+      -- the ClickHouse listing's ingest-time attribution. @user_id below
+      -- filters on the same expression.
+      COALESCE(NULLIF(cm.external_user_id, ''), c.external_user_id) AS chat_user_id,
       COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id,
       CASE
         WHEN @unique_match::boolean THEN ROW_NUMBER() OVER (
@@ -1347,7 +1357,7 @@ FROM (
     AND (sqlc.narg(from_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) >= sqlc.narg(from_time)::timestamptz)
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
-    AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
+    AND (@user_id::text = '' OR COALESCE(NULLIF(cm.external_user_id, ''), c.external_user_id) ILIKE '%' || @user_id::text || '%')
     -- Whole-id matching, unlike @user_id above: one subject's findings, not
     -- everyone whose id happens to contain theirs as a substring.
     AND (
@@ -1455,7 +1465,10 @@ ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsByChatFound :many
-SELECT rr.*, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+-- chat_user_id resolves the message's own external identity first and falls
+-- back to the chat's, matching the ClickHouse listing's ingest-time
+-- attribution so a pager sees the same identity on either store.
+SELECT rr.*, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, COALESCE(NULLIF(cm.external_user_id, ''), c.external_user_id) AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
@@ -1479,21 +1492,26 @@ ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsGroupedByChat :many
+-- A finding is anchored to either a chat message or a chat content part
+-- (attachment), so both anchors resolve the chat; skill-anchored findings
+-- have neither and are excluded by the non-null chat check.
 SELECT
-    cm.chat_id
+    COALESCE(cm.chat_id, ccp.chat_id)::uuid AS chat_id
   , c.title AS chat_title
   , c.external_user_id AS chat_user_id
   , COUNT(*)::BIGINT AS findings_count
   , MAX(rr.created_at)::TIMESTAMPTZ AS latest_detected
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND (sqlc.narg(cursor)::uuid IS NULL OR cm.chat_id <= sqlc.narg(cursor)::uuid)
-GROUP BY cm.chat_id, c.title, c.external_user_id
-ORDER BY cm.chat_id DESC
+  AND COALESCE(cm.chat_id, ccp.chat_id) IS NOT NULL
+  AND (sqlc.narg(cursor)::uuid IS NULL OR COALESCE(cm.chat_id, ccp.chat_id) <= sqlc.narg(cursor)::uuid)
+GROUP BY COALESCE(cm.chat_id, ccp.chat_id), c.title, c.external_user_id
+ORDER BY COALESCE(cm.chat_id, ccp.chat_id) DESC
 LIMIT @page_limit;
 
 -- name: ListEnabledEnforcingPoliciesByProject :many
@@ -2297,6 +2315,12 @@ WHERE id = @chat_id;
 INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url, parent_chat_message_id)
 VALUES (@chat_id, @project_id, @kind, @content_asset_url, @parent_chat_message_id)
 RETURNING id;
+
+-- name: SetChatMessageExternalUserIDForTest :exec
+UPDATE chat_messages
+SET external_user_id = @external_user_id
+WHERE id = @id
+  AND project_id = @project_id;
 
 -- name: SetRiskResultExcludedForTest :exec
 UPDATE risk_results
