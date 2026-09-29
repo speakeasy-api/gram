@@ -45,6 +45,7 @@ jobs:
       webhooks-catalog: ${{ steps.gates.outputs.webhooks-catalog }}
       otel-collector: ${{ steps.gates.outputs.otel-collector }}
       tunnel: ${{ steps.gates.outputs.tunnel }}
+      preview-ui: ${{ steps.filter.outputs.preview-ui }}
       preview-retag-components: ${{ steps.preview-retag.outputs.components }}
       preview-tag: ${{ steps.preview-retag.outputs.tag }}
     steps:
@@ -2481,6 +2482,65 @@ jobs:
           openapi-file: ${{ env.SVIX_OPENAPI_FILE }}
           svix-api-key: ${{ secrets.SVIX_SYNC_KEY_US_PROD }}
           replace-all: true
+
+  preview-label:
+    name: Add the preview label
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs:
+      [
+        changes,
+        docker-build-server,
+        docker-build-client,
+        docker-build-pystreams,
+        preview-image-tags,
+        upload-dashboard-assets,
+      ]
+    permissions:
+      pull-requests: write
+    # Labels UI PRs with `preview` once, when they are opened (or leave
+    # draft), so reviewers get a preview app without asking for one. Later
+    # commits never touch the label: removing it by hand sticks, which lets
+    # the preview sweeper drop the database.
+    #
+    # The `preview` label triggers gram-infra's gram-app-previews
+    # ApplicationSet, whose wait-for-images PreSync hook polls GCR for the
+    # pr-<number>-<sha8> tags of every component. Labelling before those tags
+    # exist leaves the hook polling for images that never arrive (this is
+    # what #2749 cleaned up), so the label is only added once this run has
+    # produced a complete tag set.
+    #
+    # A component's tag comes either from its docker build job or, when that
+    # job is skipped, from preview-image-tags aliasing main's image. Those two
+    # sources are keyed off the same `changes` gates, so readiness is checked
+    # as "gate closed, or the build succeeded" rather than as "not failed".
+    # `skipped` on its own is not enough: docker-build-server also needs
+    # server-build-lint, so a lint failure skips it under the default
+    # success() condition while its gate is open — leaving no server tag for
+    # preview-retag to have aliased either.
+    if: >-
+      !cancelled() &&
+      github.event_name == 'pull_request' &&
+      (github.event.action == 'opened' || github.event.action == 'ready_for_review') &&
+      !github.event.pull_request.draft &&
+      !github.event.pull_request.head.repo.fork &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      needs.changes.outputs.preview-ui == 'true' &&
+      (needs.changes.outputs.server != 'true' ||
+       needs.docker-build-server.result == 'success') &&
+      ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+       needs.docker-build-client.result == 'success') &&
+      (needs.changes.outputs.pystreams != 'true' ||
+       needs.docker-build-pystreams.result == 'success') &&
+      ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+       needs.upload-dashboard-assets.result == 'success') &&
+      contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result)
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Add the preview label
+        run: gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label preview
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
