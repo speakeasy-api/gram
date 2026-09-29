@@ -208,14 +208,14 @@ func (c *Classifier) execute(ctx context.Context, state classifier.Entry, questi
 
 func (c *Classifier) send(ctx context.Context, state classifier.Entry, questions []plannedQuestion) (wireResponse, *classifier.QuestionFailure, bool, bool) {
 	var response wireResponse
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 	select {
 	case c.slots <- struct{}{}:
 		defer func() { <-c.slots }()
 	case <-ctx.Done():
-		return response, nil, false, false
+		return response, failure(classifier.FailureProviderUnavailable, "Provider admission wait interrupted", true), false, false
 	}
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
 	request := wireRequest{Model: model, State: state, Questions: make(map[string]wireQuestion, len(questions))}
 	for _, q := range questions {
 		request.Questions[strconv.Itoa(q.index)] = q.wire
@@ -233,6 +233,13 @@ func (c *Classifier) send(ctx context.Context, state classifier.Entry, questions
 	httpReq.Header.Set("Accept", "application/json")
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
+		if denial, ok := errors.AsType[*guardian.ResilienceError](err); ok && errors.Is(err, guardian.ErrRateLimited) {
+			failed := failure(classifier.FailureRateLimited, "Provider admission rate limited", true)
+			if denial.RetryAfter > 0 {
+				failed.RetryAfter = new(denial.RetryAfter)
+			}
+			return response, failed, false, false
+		}
 		return response, failure(classifier.FailureProviderUnavailable, "Provider request failed", true), false, true
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })

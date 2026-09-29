@@ -28,7 +28,7 @@ func Text(value string) Entry {
 // strings, objects, arrays, and null are accepted at the top level. Invalid input
 // returns a zero-valued entry and an error.
 func ParseEntry(data []byte) (Entry, error) {
-	data = bytes.TrimSpace(data)
+	data = bytes.Trim(data, " \t\r\n")
 	if !json.Valid(data) {
 		return Entry{raw: nil}, fmt.Errorf("parse classifier entry: invalid JSON")
 	}
