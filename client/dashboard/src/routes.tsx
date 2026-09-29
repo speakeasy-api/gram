@@ -82,6 +82,7 @@ import PluginDetail from "./pages/plugins/PluginDetail";
 import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
+import { OrgHomeRedirect } from "./pages/org/OrgHomeRedirect";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
@@ -1275,6 +1276,14 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Home",
     url: "",
     icon: "house",
+    component: OrgHomeRedirect,
+  },
+  // The former org home: the project list, plus the org-wide setup cards and
+  // recent activity that sat beside it.
+  projects: {
+    title: "Projects",
+    url: "projects",
+    icon: "folder",
     component: OrgHome,
   },
   billing: {

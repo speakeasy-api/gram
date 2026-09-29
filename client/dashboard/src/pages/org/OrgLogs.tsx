@@ -144,145 +144,165 @@ function OrgLogsInner({
       title="Logs"
       description={ENABLE_LOGS_PAGE_DESCRIPTION}
     >
-      <LogDataRetentionBanner />
-      <div className="border-border bg-card border p-4">
-        <Stack gap={4}>
-          <EnableLogsSetting
-            onEnabledChange={(enabled) => {
-              setLogsEnabled(enabled);
-              if (!enabled) setToolIoLogsEnabled(null);
-            }}
-            onPendingChange={setLogsSettingPending}
-          />
+      {/* One block, so the notice sits with the settings it qualifies
+          rather than a full section gap away from them. */}
+      <div className="flex flex-col gap-3">
+        <LogDataRetentionBanner className="mb-0" />
+        <div className="border-border bg-card border p-4">
+          <Stack gap={4}>
+            <EnableLogsSetting
+              onEnabledChange={(enabled) => {
+                setLogsEnabled(enabled);
+                if (!enabled) setToolIoLogsEnabled(null);
+              }}
+              onPendingChange={setLogsSettingPending}
+            />
 
-          <div className="border-border border-t" />
+            <div className="border-border border-t" />
 
-          <SkillContentUploadSetting />
-          {featuresData && <div className="border-border border-t" />}
+            <SkillContentUploadSetting />
+            {featuresData && <div className="border-border border-t" />}
 
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <Eye className="text-muted-foreground h-4 w-4" />
-                <Text variant="body" className="font-medium">
-                  Record Tool I/O
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+            >
+              <Stack gap={1}>
+                <Stack direction="horizontal" align="center" gap={2}>
+                  <Eye className="text-muted-foreground h-4 w-4" />
+                  <Text variant="body" className="font-medium">
+                    Record Tool I/O
+                  </Text>
+                </Stack>
+                <Text
+                  variant="body"
+                  className="text-muted-foreground ml-6 text-sm"
+                >
+                  Store tool inputs and outputs. May expose sensitive data in
+                  logs.
                 </Text>
               </Stack>
-              <Text
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Store tool inputs and outputs. May expose sensitive data in
-                logs.
-              </Text>
+              {featuresData && (
+                <RequireScope scope="org:admin" level="component">
+                  <Switch
+                    checked={effectiveToolIoLogsEnabled}
+                    onCheckedChange={handleSetToolIoLogs}
+                    disabled={isMutatingLogs || !effectiveLogsEnabled}
+                    aria-label="Record tool inputs and outputs"
+                  />
+                </RequireScope>
+              )}
             </Stack>
-            {featuresData && (
-              <RequireScope scope="org:admin" level="component">
-                <Switch
-                  checked={effectiveToolIoLogsEnabled}
-                  onCheckedChange={handleSetToolIoLogs}
-                  disabled={isMutatingLogs || !effectiveLogsEnabled}
-                  aria-label="Record tool inputs and outputs"
-                />
-              </RequireScope>
-            )}
-          </Stack>
 
-          <div className="border-border border-t" />
+            <div className="border-border border-t" />
 
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <Monitor className="text-muted-foreground h-4 w-4" />
-                <Text variant="body" className="font-medium">
-                  Agent Session Capture
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+            >
+              <Stack gap={1}>
+                <Stack direction="horizontal" align="center" gap={2}>
+                  <Monitor className="text-muted-foreground h-4 w-4" />
+                  <Text variant="body" className="font-medium">
+                    Agent Session Capture
+                  </Text>
+                </Stack>
+                <Text
+                  variant="body"
+                  className="text-muted-foreground ml-6 text-sm"
+                >
+                  Capture user prompts and assistant responses from supported
+                  coding agents. Sessions appear in the Agent Sessions tab.
                 </Text>
               </Stack>
-              <Text
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Capture user prompts and assistant responses from supported
-                coding agents. Sessions appear in the Agent Sessions tab.
-              </Text>
+              {featuresData && (
+                <RequireScope scope="org:admin" level="component">
+                  <Switch
+                    checked={effectiveSessionCaptureEnabled}
+                    onCheckedChange={handleSetSessionCapture}
+                    disabled={isMutatingLogs || !effectiveLogsEnabled}
+                    aria-label="Enable Claude Code session capture"
+                  />
+                </RequireScope>
+              )}
             </Stack>
-            {featuresData && (
-              <RequireScope scope="org:admin" level="component">
-                <Switch
-                  checked={effectiveSessionCaptureEnabled}
-                  onCheckedChange={handleSetSessionCapture}
-                  disabled={isMutatingLogs || !effectiveLogsEnabled}
-                  aria-label="Enable Claude Code session capture"
-                />
-              </RequireScope>
-            )}
-          </Stack>
 
-          <div className="border-border border-t" />
+            <div className="border-border border-t" />
 
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <Unplug className="text-muted-foreground h-4 w-4" />
-                <Text variant="body" className="font-medium">
-                  Fail Open During Outages
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+            >
+              <Stack gap={1}>
+                <Stack direction="horizontal" align="center" gap={2}>
+                  <Unplug className="text-muted-foreground h-4 w-4" />
+                  <Text variant="body" className="font-medium">
+                    Fail Open During Outages
+                  </Text>
+                </Stack>
+                <Text
+                  variant="body"
+                  className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
+                >
+                  Let tool calls proceed while Speakeasy is unreachable, instead
+                  of blocking them (the default). Tool calls then only ever
+                  block when a blocking policy fires — with no blocking
+                  policies, nothing blocks (formerly Observability Mode). Events
+                  are still recorded and scanned after recovery. Invalid
+                  credentials always block.
                 </Text>
               </Stack>
-              <Text
-                variant="body"
-                className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
-              >
-                Let tool calls proceed while Speakeasy is unreachable, instead
-                of blocking them (the default). Tool calls then only ever block
-                when a blocking policy fires — with no blocking policies,
-                nothing blocks (formerly Observability Mode). Events are still
-                recorded and scanned after recovery. Invalid credentials always
-                block.
-              </Text>
+              {featuresData && (
+                <RequireScope scope="org:admin" level="component">
+                  <Switch
+                    checked={effectiveHooksFailOpenEnabled}
+                    onCheckedChange={handleSetHooksFailOpen}
+                    disabled={isMutatingLogs}
+                    aria-label="Fail open during outages"
+                  />
+                </RequireScope>
+              )}
             </Stack>
-            {featuresData && (
-              <RequireScope scope="org:admin" level="component">
-                <Switch
-                  checked={effectiveHooksFailOpenEnabled}
-                  onCheckedChange={handleSetHooksFailOpen}
-                  disabled={isMutatingLogs}
-                  aria-label="Fail open during outages"
-                />
-              </RequireScope>
-            )}
-          </Stack>
 
-          <div className="border-border border-t" />
+            <div className="border-border border-t" />
 
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <LogIn className="text-muted-foreground h-4 w-4" />
-                <Text variant="body" className="font-medium">
-                  Hook Browser Sign-In
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+            >
+              <Stack gap={1}>
+                <Stack direction="horizontal" align="center" gap={2}>
+                  <LogIn className="text-muted-foreground h-4 w-4" />
+                  <Text variant="body" className="font-medium">
+                    Hook Browser Sign-In
+                  </Text>
+                </Stack>
+                <Text
+                  variant="body"
+                  className="text-muted-foreground ml-6 text-sm"
+                >
+                  Let hook plugins sign users in through the browser to record
+                  events under their own identity. When off, plugins use the
+                  organization key or explicitly configured credentials.
                 </Text>
               </Stack>
-              <Text
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Let hook plugins sign users in through the browser to record
-                events under their own identity. When off, plugins use the
-                organization key or explicitly configured credentials.
-              </Text>
+              {featuresData && (
+                <RequireScope scope="org:admin" level="component">
+                  <Switch
+                    checked={effectiveHooksBrowserLoginEnabled}
+                    onCheckedChange={handleSetHooksBrowserLogin}
+                    disabled={isMutatingLogs}
+                    aria-label="Enable hook browser sign-in"
+                  />
+                </RequireScope>
+              )}
             </Stack>
-            {featuresData && (
-              <RequireScope scope="org:admin" level="component">
-                <Switch
-                  checked={effectiveHooksBrowserLoginEnabled}
-                  onCheckedChange={handleSetHooksBrowserLogin}
-                  disabled={isMutatingLogs}
-                  aria-label="Enable hook browser sign-in"
-                />
-              </RequireScope>
-            )}
           </Stack>
-        </Stack>
+        </div>
       </div>
     </SettingsPage>
   );

@@ -14,6 +14,7 @@ import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "@/components/ui/Heading";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/Breadcrumb";
 import { WorkspaceSwitcher } from "./workspace-switcher.tsx";
+import { useInSettingsOverlay } from "./settings-overlay-context";
 import { SidebarTrigger } from "@/components/ui/Sidebar";
 
 // Publishes where the sticky header ends as --page-sticky-top on <html>, so
@@ -56,8 +57,14 @@ function PageHeaderComponent({
   // banner there would hide a paused organization from the page it was working
   // on.
   const onBillingPage = useMatch("/:orgSlug/billing") !== null;
+  const inSettingsOverlay = useInSettingsOverlay();
   const showBreadcrumbs = useShowBreadcrumbs();
   const stickyRef = useStickyTopVar();
+
+  // The global settings overlay draws its own chrome.
+  if (inSettingsOverlay) {
+    return <>{!onBillingPage && <PaygCapReachedBanners />}</>;
+  }
 
   return (
     <>

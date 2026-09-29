@@ -18,3 +18,17 @@ export function getPreferredProject<T extends { slug: string }>(
   if (!preferredSlug) return undefined;
   return projects.find((p) => p.slug === preferredSlug);
 }
+
+/**
+ * The project to open when a URL names only the organization: the last-visited
+ * one, else "default", else the first.
+ */
+export function resolveLandingProject<T extends { slug: string }>(
+  projects: readonly T[],
+): T | undefined {
+  return (
+    getPreferredProject(projects) ??
+    projects.find((p) => p.slug === "default") ??
+    projects[0]
+  );
+}

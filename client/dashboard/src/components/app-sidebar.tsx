@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { ArrowLeft, MinusIcon, TestTube2Icon } from "lucide-react";
+import { ArrowLeft, MinusIcon, Settings, TestTube2Icon } from "lucide-react";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import {
   Sidebar,
@@ -15,6 +15,8 @@ import { useMemo, useState } from "react";
 import { Button } from "./ui/Button";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { SidebarBrandHeader } from "./sidebar-brand-header";
+import { SidebarFooterAction } from "./sidebar-footer-action";
+import { useOrganization } from "@/contexts/Auth";
 import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
@@ -46,10 +48,13 @@ import { useSlugs } from "@/contexts/Sdk";
 /** A top-level navigation item gated by its required scopes. */
 function ScopeGatedTopLevelItem({
   item,
+  label,
   scope = ["project:read"],
   resourceId,
 }: {
   item: AppRoute;
+  /** Display label; the route title stays the id for the active highlight. */
+  label?: string;
   scope?: Scope | Scope[];
   resourceId?: string;
 }) {
@@ -57,7 +62,8 @@ function ScopeGatedTopLevelItem({
     <RequireScope scope={scope} resourceId={resourceId} level="section">
       <SidebarMenuItem>
         <NavButton
-          title={item.title}
+          id={item.title}
+          title={label ?? item.title}
           href={item.href()}
           active={item.active}
           Icon={item.Icon}
@@ -72,7 +78,11 @@ export function AppSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const { orgSlug } = useSlugs();
+  // With one project there is nothing to tell apart, so "Project" drops out of
+  // the labels.
+  const isSingleProject = useOrganization().projects.length <= 1;
   const { state } = useSidebar();
   // While grants reload (e.g. right after switching projects, when the query
   // cache is cleared), show a skeleton so the scope-gated nav doesn't flash empty.
@@ -121,13 +131,13 @@ export function AppSidebar({
 
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
-    // Shaped like the real list below — 3 top-level items, the divider, the
+    // Shaped like the real list below — 2 top-level items, the divider, the
     // 4 collapsed groups, then Settings — at the same spacing, so resolving
     // the grants swaps the rows out without shifting the nav.
     sidebarContent = (
       <SidebarNavSkeleton
-        rows={8}
-        divideAfter={3}
+        rows={7}
+        divideAfter={2}
         className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
       />
     );
@@ -171,26 +181,10 @@ export function AppSidebar({
     sidebarContent = (
       <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
         <SidebarMenu className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0">
-          {/* Home — the org-scoped app (was the "Organization settings"
-              footer action); the project's own landing page sits below it as
-              "Project Overview". Scoped to match OrgSidebar's own Home item,
-              so it only shows to users who can open the page it links to. */}
-          <RequireScope
-            scope={["org:read", "project:read", "org:admin"]}
-            level="section"
-          >
-            <SidebarMenuItem>
-              <NavButton
-                title="Home"
-                href={`/${orgSlug}`}
-                Icon={(p) => <Icon {...p} name="building" />}
-              />
-            </SidebarMenuItem>
-          </RequireScope>
-
           {/* Project overview — top-level, no group */}
           <ScopeGatedTopLevelItem
             item={routes.home}
+            label={isSingleProject ? "Overview" : undefined}
             {...accessFor(routes.home)}
           />
 
@@ -198,10 +192,11 @@ export function AppSidebar({
                   Project Assistant alongside the docked composer */}
           <ScopeGatedTopLevelItem
             item={routes.chat}
+            label={isSingleProject ? "Assistant" : undefined}
             {...accessFor(routes.chat)}
           />
 
-          {/* Divider: sets Home + Chat apart from the grouped nav below */}
+          {/* Divider: sets Overview + Chat apart from the grouped nav below */}
           <li aria-hidden="true" className="my-2 px-1">
             <div className="border-border border-t" />
           </li>
@@ -316,6 +311,19 @@ export function AppSidebar({
           <ProjectGuideSidebarCta />
           <InsightsDockResumeButton />
         </div>
+        {/* Organization-wide settings are a separate mode with its own
+            sidebar, entered from here, rather than a second app beside this
+            one. Project settings stay in the nav above. */}
+        <RequireScope
+          scope={["org:read", "project:read", "org:admin"]}
+          level="section"
+        >
+          <SidebarFooterAction
+            to={orgRoutes.projects.href()}
+            icon={Settings}
+            label="Global settings"
+          />
+        </RequireScope>
         {DevSidebarSlot && <DevSidebarSlot />}
         <SidebarUserMenu />
       </SidebarFooter>

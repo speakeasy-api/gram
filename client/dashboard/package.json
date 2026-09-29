@@ -72,6 +72,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
     "fflate": "^0.8.3",
+    "fuse.js": "^7.5.0",
     "lucide-react": "catalog:",
     "monaco-editor": "^0.56.0",
     "motion": "^13.2.0",

@@ -1,9 +1,3 @@
-import {
-  auditActorPrincipal,
-  auditSubjectPrincipal,
-  useAuditPrincipals,
-} from "@/components/auditlogs/audit-principals";
-import { AuditPrincipalLink } from "@/components/auditlogs/principals";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { MemberFacepile } from "@/components/member-facepile";
@@ -13,9 +7,7 @@ import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQ
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import type { Action } from "@/components/ui/MoreActions";
 import { SearchBar } from "@/components/ui/SearchBar";
 import {
@@ -32,19 +24,10 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters } from "@/lib/dates";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
-import {
-  getInitials,
-  isDisplayableBucket,
-} from "@/pages/access/challengeHelpers";
-import { OrgWelcomeBanner } from "@/pages/org/OrgWelcomeBanner";
-import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
-import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
-import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
-import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -57,35 +40,23 @@ import {
 import { type IconName } from "@/components/ui/Icon/names";
 import {
   ChevronDown,
-  ChevronRight,
   ChevronUp,
   Copy,
   History,
-  KeyRound,
   LayoutGrid,
   List,
   MoreHorizontal,
   Plus,
   Settings,
-  ShieldCheck,
   Star,
-  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import {
-  formatSubjectLabel,
-  getActorLabel,
-  renderVerb,
-} from "@/lib/audit-log-format";
-
-import { ActionIconTile } from "@/components/auditlogs/feed";
+import { getActorLabel, renderVerb } from "@/lib/audit-log-format";
 
 const PROJECT_LIMIT = 6;
-const AUDIT_PREVIEW_LIMIT = 8;
-const CHALLENGE_PREVIEW_LIMIT = 3;
 const FACEPILE_LIMIT = 10;
 
 type OrgProject = ReturnType<typeof useOrganization>["projects"][number];
@@ -96,9 +67,7 @@ export default function OrgHome(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      {/* fullWidth + noPadding so the welcome banner can run edge to edge;
-          everything else re-applies the page column below. */}
-      <Page.Body fullWidth noPadding className="gap-0">
+      <Page.Body>
         <RequireScope
           scope={["org:read", "project:read", "org:admin"]}
           level="page"
@@ -117,7 +86,6 @@ function OrgHomeInner() {
   const navigate = useNavigate();
   const { hasScope } = useRBAC();
   const canAdmin = hasScope("org:admin");
-  const orgRoutes = useOrgRoutes();
 
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -291,14 +259,15 @@ function OrgHomeInner() {
 
   return (
     <>
-      <OrgWelcomeBanner />
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-8 pb-24">
-        {/* `items-start` so each column is only as tall as its content — the
-            default stretch left the Projects card padded with dead space
-            whenever the rail was taller, which is the common case for orgs
-            with one or two projects. */}
-        <div className="grid grid-cols-1 items-start gap-8 xl:grid-cols-[1fr_420px] 2xl:grid-cols-[1fr_500px]">
-          <main className="flex min-w-0 flex-col gap-6">
+      <Page.Section>
+        <Page.Section.Title>Projects</Page.Section.Title>
+        <Page.Section.Description>
+          Create a project for each team or environment that needs its own MCP
+          servers, skills, plugins and access, such as separate staging and
+          production, or a team whose tools others should not see.
+        </Page.Section.Description>
+        <Page.Section.Body>
+          <div className="flex min-w-0 flex-col gap-6">
             <div className="flex items-center gap-2">
               <SearchBar
                 value={search}
@@ -308,25 +277,20 @@ function OrgHomeInner() {
               />
               <ViewModeToggle value={viewMode} onChange={setViewMode} />
               {canAdmin && (
-                <AddNewMenu
-                  onCreateProject={() => setCreateDialogOpen(true)}
-                  onInviteMember={() => orgRoutes.team.goTo()}
-                  onManageRoles={() => orgRoutes.access.roles.goTo()}
-                />
+                <Button onClick={() => setCreateDialogOpen(true)}>
+                  <Plus className="size-4" />
+                  New project
+                </Button>
               )}
             </div>
 
-            {/* List rows run edge to edge; grid cards need the card's own
-                padding so they do not collide with its border. */}
-            <Card.Dashboard
-              title="Projects"
-              // Not h-full: a single project row would otherwise stretch to
-              // whatever height the activity rail sets.
-              className="h-auto"
-              // Grid keeps the card's side padding but drops the top, so the
-              // first divider sits the same distance below the header as it
-              // does in list mode, where the body is flush.
-              bodyClassName={viewMode === "grid" ? "px-6 pt-0 pb-5" : "p-0"}
+            {/* The page title already says Projects, so no titled card:
+                list rows sit in one bordered panel, grid cards stand alone
+                rather than as boxes inside a box. */}
+            <div
+              className={cn(
+                viewMode === "list" && "border-border bg-card border",
+              )}
             >
               {filteredProjects.length === 0 && isSearching ? (
                 <div className="border-border bg-card flex flex-col items-center gap-3 border border-dashed py-12 text-center">
@@ -409,15 +373,10 @@ function OrgHomeInner() {
                     )}
                 </>
               )}
-            </Card.Dashboard>
-          </main>
-
-          <aside className="flex flex-col gap-8 xl:sticky xl:top-[calc(var(--page-sticky-top,0px)+1rem)] xl:self-start">
-            <RecentChallengesCompact />
-            <RecentActivityCompact logs={auditLogs} />
-          </aside>
-        </div>
-      </div>
+            </div>
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
 
       {createDialogOpen && (
         <InputDialog
@@ -441,49 +400,8 @@ function OrgHomeInner() {
   );
 }
 
-function AddNewMenu({
-  onCreateProject,
-  onInviteMember,
-  onManageRoles,
-}: {
-  onCreateProject: () => void;
-  onInviteMember: () => void;
-  onManageRoles: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const handle = (cb: () => void) => () => {
-    setOpen(false);
-    cb();
-  };
-  return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button className="h-[42px] shrink-0 px-4">
-          <Plus className="size-4" />
-          Add New
-          <ChevronDown className="size-3.5 opacity-70" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={handle(onCreateProject)}>
-          <Plus className="size-4" />
-          Project
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handle(onInviteMember)}>
-          <UserPlus className="size-4" />
-          Team member
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handle(onManageRoles)}>
-          <ShieldCheck className="size-4" />
-          Role
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 function ProjectList({ children }: { children: React.ReactNode }) {
-  // No border of its own — the Projects card already draws one, and nesting
+  // No border of its own — the list panel around it draws one, and nesting
   // two reads as a box in a box.
   return (
     <div className="border-border divide-border divide-y overflow-hidden">
@@ -519,9 +437,9 @@ function SectionDivider({ label, inset }: { label: string; inset: boolean }) {
 
 function ProjectGrid({ children }: { children: React.ReactNode }) {
   return (
-    // Two across at most: the main column gives up width to the activity rail
-    // from xl, and a third card there truncates every name and slug.
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">{children}</div>
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+      {children}
+    </div>
   );
 }
 
@@ -957,197 +875,5 @@ function TimestampDetail({ date }: { date: Date }) {
         <span>{local}</span>
       </div>
     </div>
-  );
-}
-
-function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
-  const orgRoutes = useOrgRoutes();
-  const preview = useMemo(() => logs.slice(0, AUDIT_PREVIEW_LIMIT), [logs]);
-  const identities = useAuditPrincipals(preview);
-
-  return (
-    <Card.Dashboard
-      bodyClassName={preview.length === 0 ? undefined : "p-0"}
-      title="Recent activity"
-      tooltip="Recent administrative activity across this organization — project, MCP server, access and key changes. Most recent first."
-      action={
-        <orgRoutes.auditLogs.Link className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline">
-          View all
-          <ChevronRight className="size-3" />
-        </orgRoutes.auditLogs.Link>
-      }
-    >
-      {preview.length === 0 ? (
-        <Text muted small>
-          Activity will appear here as your team makes changes.
-        </Text>
-      ) : (
-        <ol className="divide-border max-h-72 divide-y overflow-y-auto">
-          {preview.map((log) => {
-            const subjectPrincipal = auditSubjectPrincipal(log);
-            return (
-              <li
-                key={log.id}
-                className="flex items-start gap-3 px-6 py-3 text-xs"
-              >
-                <ActionIconTile action={log.action} />
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <Text small className="truncate leading-snug">
-                    <AuditPrincipalLink
-                      principal={auditActorPrincipal(log)}
-                      identities={identities}
-                      fallback={getActorLabel(log)}
-                      className="text-foreground font-medium"
-                    />{" "}
-                    <span className="text-muted-foreground">
-                      {renderVerb(log)}
-                    </span>
-                    {(log.subjectDisplayName || subjectPrincipal) && (
-                      <>
-                        {" "}
-                        <span
-                          className="text-foreground font-medium"
-                          title={
-                            subjectPrincipal?.urn ?? log.subjectDisplayName
-                          }
-                        >
-                          {subjectPrincipal ? (
-                            <AuditPrincipalLink
-                              principal={subjectPrincipal}
-                              identities={identities}
-                              fallback={
-                                log.subjectDisplayName || subjectPrincipal.urn
-                              }
-                            />
-                          ) : (
-                            formatSubjectLabel(
-                              log.subjectDisplayName ?? "",
-                              log.subjectType,
-                            )
-                          )}
-                        </span>
-                      </>
-                    )}
-                  </Text>
-                  <Text
-                    muted
-                    small
-                    className="text-muted-foreground/80 text-[11px]"
-                  >
-                    {log.projectSlug ? `${log.projectSlug} · ` : ""}
-                    {dateTimeFormatters.humanize(log.createdAt, {
-                      includeTime: false,
-                    })}
-                  </Text>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      )}
-    </Card.Dashboard>
-  );
-}
-
-function RecentChallengesCompact() {
-  const orgRoutes = useOrgRoutes();
-  const { data, isLoading } = useChallengeBuckets({
-    outcome: Outcome.Deny,
-    resolved: false,
-    limit: CHALLENGE_PREVIEW_LIMIT,
-  });
-
-  const buckets = useMemo(
-    () =>
-      (data?.buckets ?? [])
-        .filter(isDisplayableBucket)
-        .slice(0, CHALLENGE_PREVIEW_LIMIT),
-    [data?.buckets],
-  );
-
-  if (isLoading) return null;
-
-  return (
-    <Card.Dashboard
-      bodyClassName={buckets.length === 0 ? undefined : "p-0"}
-      title="Recent challenges"
-      tooltip="Authorization checks your team was denied recently, grouped by principal and scope."
-      action={
-        <orgRoutes.access.challenges.Link className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline">
-          View all
-          <ChevronRight className="size-3" />
-        </orgRoutes.access.challenges.Link>
-      }
-    >
-      {buckets.length === 0 ? (
-        // Compact copy rather than the full-page ChallengesEmptyState — inside
-        // a rail card its illustration and framing box read as a second card.
-        <Text muted small>
-          No denied access attempts. Authorization checks are all passing.
-        </Text>
-      ) : (
-        <ol className="divide-border max-h-72 divide-y overflow-y-auto">
-          {buckets.map((bucket) => (
-            <li key={bucket.id}>
-              <CompactChallengeRow bucket={bucket} />
-            </li>
-          ))}
-        </ol>
-      )}
-    </Card.Dashboard>
-  );
-}
-
-function shortenPrincipal(bucket: ChallengeBucket): string {
-  if (bucket.userEmail) return bucket.userEmail;
-  if (bucket.principalType === "api_key") {
-    // "api_key:akey_6a0dcca03eb1abcd" → "akey_6a0d…"
-    const id = bucket.principalUrn.replace(/^api_key:/, "");
-    return id.length > 14 ? `${id.slice(0, 10)}…` : id;
-  }
-  return bucket.principalUrn;
-}
-
-function CompactChallengeRow({ bucket }: { bucket: ChallengeBucket }) {
-  const orgRoutes = useOrgRoutes();
-  const label = shortenPrincipal(bucket);
-  const isApiKey = bucket.principalType === "api_key";
-  const lastSeen = new Date(bucket.lastSeen);
-  const count = Number(bucket.challengeCount);
-
-  return (
-    <orgRoutes.access.challenges.Link className="hover:bg-muted/40 flex items-start gap-3 px-6 py-3 text-xs no-underline transition-colors hover:no-underline">
-      {/* Sized to match the ActionIconTile in Recent activity below, so the two
-          rail cards line up row for row. */}
-      <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full">
-        {isApiKey || !bucket.userEmail ? (
-          <KeyRound className="size-4" />
-        ) : (
-          <Avatar className="size-8">
-            {bucket.photoUrl ? (
-              <AvatarImage src={bucket.photoUrl} alt={label} />
-            ) : null}
-            <AvatarFallback className="bg-muted text-muted-foreground text-[11px] font-medium">
-              {getInitials(bucket.userEmail)}
-            </AvatarFallback>
-          </Avatar>
-        )}
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <Text small className="truncate leading-snug">
-          <span className="text-destructive mr-1.5 font-mono text-[10px] font-medium uppercase">
-            deny
-          </span>
-          <span className="text-foreground font-medium">{label}</span>
-        </Text>
-        <Text muted small className="truncate text-[11px]">
-          <span className="font-mono">{bucket.scope}</span>
-          <span className="mx-1 opacity-60">·</span>
-          {count} attempt{count === 1 ? "" : "s"}
-          <span className="mx-1 opacity-60">·</span>
-          {dateTimeFormatters.humanize(lastSeen, { includeTime: false })}
-        </Text>
-      </div>
-    </orgRoutes.access.challenges.Link>
   );
 }

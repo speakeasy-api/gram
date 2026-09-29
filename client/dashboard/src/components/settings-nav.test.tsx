@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { OrgSidebar } from "./org-sidebar";
+import { SettingsNav } from "./settings-nav";
 import type { ReactNode } from "react";
 import type { ProductTier } from "@/hooks/useProductTier";
 
@@ -19,6 +19,8 @@ vi.mock("@/routes", () => ({
       {
         get: (_, key: string) => ({
           title: key === "identity" ? "IDP and SSO" : key,
+          url: key,
+          Icon: () => null,
           active: key === mocks.active,
           href: () =>
             key === "identity" || key === "setup"
@@ -29,36 +31,41 @@ vi.mock("@/routes", () => ({
     ),
 }));
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: "org_example" }),
+  useOrganization: () => ({
+    id: "org_example",
+    name: "Example",
+    slug: "example",
+  }),
   useIsPlatformAdmin: () => mocks.isPlatformAdmin,
 }));
 vi.mock("@/hooks/useRBAC", async (importOriginal) => {
   const { hasScopeInGrants } =
     await importOriginal<typeof import("@/hooks/useRBAC")>();
+  type Scope = Parameters<typeof hasScopeInGrants>[1];
+  const hasScope = (scope: Scope, resourceId?: string) =>
+    hasScopeInGrants(
+      mocks.adminOrganizationId
+        ? [
+            {
+              scope: "org:admin",
+              selectors: [
+                {
+                  resourceKind: "org",
+                  resourceId: mocks.adminOrganizationId,
+                },
+              ],
+            },
+          ]
+        : [],
+      scope,
+      resourceId,
+    );
   return {
     useRBAC: () => ({
       isLoading: false,
-      hasScope: (
-        scope: Parameters<typeof hasScopeInGrants>[1],
-        resourceId?: string,
-      ) =>
-        hasScopeInGrants(
-          mocks.adminOrganizationId
-            ? [
-                {
-                  scope: "org:admin",
-                  selectors: [
-                    {
-                      resourceKind: "org",
-                      resourceId: mocks.adminOrganizationId,
-                    },
-                  ],
-                },
-              ]
-            : [],
-          scope,
-          resourceId,
-        ),
+      hasScope,
+      // Nav visibility is a UI filter; the pages enforce access themselves.
+      hasAnyScope: () => true,
     }),
   };
 });
@@ -73,66 +80,21 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: mocks.features,
 }));
 vi.mock("react-router", () => ({
-  Link: ({ children, to }: { children: ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
-  ),
-}));
-vi.mock("@/components/nav-menu", () => ({
-  NavButton: () => null,
-  NavGroupProvider: ({
-    activeGroup,
-    activeItem,
+  useNavigate: () => vi.fn(),
+  Link: ({
     children,
+    to,
+    ...rest
   }: {
-    activeGroup: string;
-    activeItem: string;
     children: ReactNode;
+    to: string;
+    "aria-current"?: "page";
   }) => (
-    <div
-      data-testid="selection"
-      data-group={activeGroup}
-      data-item={activeItem}
-    >
+    <a href={to} aria-current={rest["aria-current"]}>
       {children}
-    </div>
+    </a>
   ),
 }));
-vi.mock("@/components/ui/Sidebar", () => {
-  const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
-  return {
-    Sidebar: Part,
-    SidebarContent: Part,
-    SidebarFooter: Part,
-    SidebarHeader: Part,
-    SidebarMenu: Part,
-    SidebarMenuItem: Part,
-    SidebarTrigger: () => null,
-  };
-});
-vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
-vi.mock("@/components/scope-gated-nav-group", () => ({
-  ScopeGatedNavGroup: ({
-    items,
-  }: {
-    items: {
-      item: { title: string; href: () => string };
-      label?: string;
-    }[];
-  }) => (
-    <>
-      {items.map(({ item, label }) => (
-        <a key={item.title} href={item.href()} aria-label={item.title}>
-          {label ?? item.title}
-        </a>
-      ))}
-    </>
-  ),
-}));
-vi.mock("./sidebar-user-menu", () => ({ SidebarUserMenu: () => null }));
-vi.mock("./trial-status-card", () => ({ TrialStatusCard: () => null }));
-
 afterEach(() => {
   cleanup();
   mocks.active = "agents";
@@ -141,35 +103,34 @@ afterEach(() => {
   mocks.adminOrganizationId = null;
 });
 
-it("lists one IDP and SSO entry under Team and no vendor entry", () => {
-  render(<OrgSidebar />);
+it("lists one SSO entry under People and no vendor entry", () => {
+  render(<SettingsNav />);
   expect(screen.queryByRole("link", { name: "okta" })).toBeNull();
   expect(
     screen.queryByRole("link", { name: "Enterprise Managed Auth" }),
   ).toBeNull();
-  const identity = screen.getByRole("link", { name: "IDP and SSO" });
+  const identity = screen.getByRole("link", { name: "SSO & Directory" });
   expect(identity.getAttribute("href")).toBe("/example/identity");
 });
 
 it("keeps Network Access visible without a staff entitlement", () => {
-  render(<OrgSidebar />);
+  render(<SettingsNav />);
   expect(screen.getByText("Network Access")).toBeTruthy();
 });
 
 it.each([
-  ["team", "Team"],
-  ["access", "Team"],
-  ["identity", "Team"],
-  ["auditLogs", "Secure"],
-])("selects the correct group for %s", (active, group) => {
+  ["team", "Members"],
+  ["access", "access"],
+  ["createRole", "access"],
+  ["identity", "SSO & Directory"],
+  ["auditLogs", "auditLogs"],
+])("marks the current page for %s", (active, label) => {
   mocks.active = active;
-  render(<OrgSidebar />);
-  expect(screen.getByTestId("selection").getAttribute("data-group")).toBe(
-    group,
-  );
-  expect(screen.getByTestId("selection").getAttribute("data-item")).toBe(
-    active === "identity" ? "IDP and SSO" : active,
-  );
+  render(<SettingsNav />);
+  const current = screen
+    .getAllByRole("link")
+    .filter((link) => link.getAttribute("aria-current") === "page");
+  expect(current.map((link) => link.textContent)).toEqual([label]);
 });
 
 it.each([false, true])(
@@ -177,7 +138,7 @@ it.each([false, true])(
   (isPlatformAdmin) => {
     mocks.isPlatformAdmin = isPlatformAdmin;
     mocks.active = "remoteIdentityProviders";
-    render(<OrgSidebar />);
+    render(<SettingsNav />);
     expect(
       screen.queryByRole("link", { name: "platformRemoteIdentityProviders" }),
     ).toBeNull();
@@ -187,13 +148,13 @@ it.each([false, true])(
     expect(screen.queryByRole("link", { name: "agents" })).toBeNull();
     if (isPlatformAdmin)
       expect(
-        screen.getByRole("link", { name: "platformAdminOpenRouterKeys" }),
+        screen.getByRole("link", { name: "OpenRouter Keys" }),
       ).toBeTruthy();
   },
 );
 
 it("does not request organization features for baseline project users", () => {
-  render(<OrgSidebar />);
+  render(<SettingsNav />);
   expect(mocks.features).toHaveBeenLastCalledWith(
     expect.anything(),
     undefined,
@@ -216,7 +177,7 @@ it.each([
   (tier, adminOrganizationId, visible) => {
     mocks.productTier = tier;
     mocks.adminOrganizationId = adminOrganizationId;
-    render(<OrgSidebar />);
+    render(<SettingsNav />);
     const link = screen.queryByRole("link", {
       name: "Finish organization setup",
     });
@@ -227,3 +188,21 @@ it.each([
     }
   },
 );
+
+it("finds the page that holds a setting from its search terms", () => {
+  render(<SettingsNav />);
+  fireEvent.change(screen.getByPlaceholderText("Search"), {
+    target: { value: "saml" },
+  });
+  const [first] = screen.getAllByRole("option");
+  expect(first?.textContent).toContain("SSO & Directory");
+  expect(first?.textContent).toContain("SAML");
+});
+
+it("says so when nothing matches", () => {
+  render(<SettingsNav />);
+  fireEvent.change(screen.getByPlaceholderText("Search"), {
+    target: { value: "zzzzqqq" },
+  });
+  expect(screen.getByText(/No settings match/)).toBeTruthy();
+});

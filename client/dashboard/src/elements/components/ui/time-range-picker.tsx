@@ -682,17 +682,9 @@ function TimeRangePicker({
             "relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all outline-none",
             "border-border hover:border-border/80",
             disabled && "cursor-not-allowed opacity-50",
-            timezone && "py-1.5",
             className,
           )}
         >
-          {/* Floating timezone legend */}
-          {timezone && (
-            <span className="absolute -top-2 left-3 bg-background px-1 text-xs text-muted-foreground">
-              {timezone}
-            </span>
-          )}
-
           {/* Short badge */}
           <span
             className={cn(
@@ -731,6 +723,13 @@ function TimeRangePicker({
               disabled && "cursor-not-allowed",
             )}
           />
+
+          {/* Timezone hint, inline so it never floats on the border */}
+          {timezone && (
+            <span className="shrink-0 font-mono text-xs text-muted-foreground">
+              {timezone}
+            </span>
+          )}
 
           {/* Dropdown chevron */}
           <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
