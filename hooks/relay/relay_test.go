@@ -1507,6 +1507,45 @@ func TestSplitInlineFlagsRecordsConfigError(t *testing.T) {
 	require.Equal(t, []string{"run"}, rest)
 }
 
+// TestLoadConfigReadsDebugLogFromEnv pins the support path for providers that
+// pass the hook environment through: diagnostics turn on without hand-editing
+// the generated hook command.
+func TestLoadConfigReadsDebugLogFromEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hooks-debug.log")
+	t.Setenv("GRAM_HOOKS_DEBUG_LOG", "  "+path+"  ")
+
+	cfg := LoadConfig(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
+	require.Equal(t, path, cfg.DebugLog)
+}
+
+// TestDebugLogFlagBeatsEnv pins the precedence: the flag is the only channel
+// that survives providers which scrub the hook environment, so a support
+// session that sets it must not be redirected by a stale env var.
+func TestDebugLogFlagBeatsEnv(t *testing.T) {
+	flagPath := filepath.Join(t.TempDir(), "flag.log")
+	t.Setenv("GRAM_HOOKS_DEBUG_LOG", filepath.Join(t.TempDir(), "env.log"))
+
+	flagCfg, rest := SplitInlineFlags(Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, []string{"--debug-log=" + flagPath, "run"})
+	require.Equal(t, []string{"run"}, rest)
+	require.Equal(t, flagPath, LoadConfig(flagCfg).DebugLog)
+}
+
+// TestDebugLogEnvRecordsEvent runs one hook event through the env-resolved
+// config a provider spawn would produce, and pins that the diagnostic line
+// actually lands on disk.
+func TestDebugLogEnvRecordsEvent(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	path := filepath.Join(t.TempDir(), "hooks-debug.log")
+	t.Setenv("GRAM_HOOKS_DEBUG_LOG", path)
+	cfg := LoadConfig(authedConfig(t, fs.URL))
+
+	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "event=PreToolUse")
+}
+
 // TestBrokenConfigFailsClosedWhenEstablished: with the plugin config
 // unreadable the deployment identity is unknown, so an established machine
 // must block without sending anything — a cached key for the fallback server

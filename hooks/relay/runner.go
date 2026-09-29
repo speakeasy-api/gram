@@ -493,10 +493,17 @@ func sanitizeMarker(s string) string {
 // debugf appends a diagnostic line to the configured debug log, if any. It is a
 // best-effort aid for local troubleshooting and never affects hook behavior.
 func (r *Relay) debugf(format string, args ...any) {
-	if r.cfg.DebugLog == "" {
+	debugLogf(r.cfg.DebugLog, format, args...)
+}
+
+// debugLogf appends one line to the debug log at path, doing nothing when no
+// path is configured. Every failure is swallowed — an unwritable log must not
+// change what the hook does.
+func debugLogf(path string, format string, args ...any) {
+	if path == "" {
 		return
 	}
-	f, err := os.OpenFile(r.cfg.DebugLog, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return
 	}

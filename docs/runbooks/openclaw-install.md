@@ -153,6 +153,10 @@ Per-user attribution on shared gateways is tracked separately in DNO-971.
    - `openclaw plugins list` shows `speakeasy-observability` enabled?
    - Is the model on the Claude CLI harness? (see the coverage table above)
    - Gateway logs for `speakeasy-observability` errors.
+   - Still nothing? Export `GRAM_HOOKS_DEBUG_LOG=<path>` in the gateway's
+     environment, restart it, and reproduce: the relay appends one line per
+     event with the server it posted to and the status it got back. See
+     [Hooks environment overrides](./hooks-environment-overrides.md).
 
 ## Enforcement
 

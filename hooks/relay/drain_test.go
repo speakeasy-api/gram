@@ -90,6 +90,24 @@ func TestDrainReplaysOldestFirstWithStoredKeys(t *testing.T) {
 	}
 }
 
+// TestDrainWritesDebugLogFromEnv pins that the drain reports itself: it runs
+// as its own process, so the hook command's --debug-log never reaches it and
+// GRAM_HOOKS_DEBUG_LOG is the only channel a support session can use.
+func TestDrainWritesDebugLogFromEnv(t *testing.T) {
+	drainEnv(t)
+	path := filepath.Join(t.TempDir(), "hooks-debug.log")
+	t.Setenv("GRAM_HOOKS_DEBUG_LOG", path)
+	fs := newFakeServer(t, nil)
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-debug")
+
+	s := Drain(t.Context())
+	require.Equal(t, DrainSummary{Replayed: 1, Dropped: 0, Expired: 0, Skipped: 0, Remaining: 0, Aborted: false}, s)
+
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "drain: replayed=1 dropped=0 expired=0 skipped=0 remaining=0 aborted=false")
+}
+
 func TestDrainReplaysSkillContent(t *testing.T) {
 	drainEnv(t)
 	content := []byte("# Offline skill\n")
