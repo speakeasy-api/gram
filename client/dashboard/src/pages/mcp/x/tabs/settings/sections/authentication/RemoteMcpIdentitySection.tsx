@@ -474,7 +474,7 @@ export function RemoteMcpIdentitySectionBody({
             >
               <UserIdentityRow
                 draft={userDraft}
-                disabled={identityReadOnly}
+                disabled={identityReadOnly || userDraft.saving}
                 manageHref={routes.remoteIdentityProviders.href()}
                 createHref={routes.remoteIdentityProviders.href()}
                 inspectHref={mcpServerTabHref(routes, target.slug, "inspect")}
