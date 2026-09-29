@@ -57,6 +57,39 @@ func UpsertSettings(
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	if _, err := UpsertSettingsTx(ctx, tx, auditLogger, organizationID, judge, enabled, dailyCap, actor, actorDisplayName); err != nil {
+		return Settings{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Settings{}, fmt.Errorf("commit chat analysis settings upsert: %w", err)
+	}
+
+	settings, err := LoadSettings(ctx, db, organizationID)
+	if err != nil {
+		return Settings{}, fmt.Errorf("reload chat analysis settings: %w", err)
+	}
+	return settings, nil
+}
+
+// UpsertSettingsTx makes the settings change, budget lock and audit/outbox
+// record inside the caller's transaction and returns the in-transaction view.
+// The caller owns commit.
+func UpsertSettingsTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	auditLogger *audit.Logger,
+	organizationID string,
+	judge string,
+	enabled bool,
+	dailyCap int,
+	actor urn.Principal,
+	actorDisplayName *string,
+) (Settings, error) {
+	if dailyCap < 0 || dailyCap > MaxDailyCap {
+		return Settings{}, fmt.Errorf("daily cap must be between 0 and %d", MaxDailyCap)
+	}
+
 	queries := repo.New(tx)
 	if err := queries.LockOrganizationChatAnalysisBudget(ctx, organizationID); err != nil {
 		return Settings{}, fmt.Errorf("lock chat analysis settings: %w", err)
@@ -90,11 +123,7 @@ func UpsertSettings(
 		return Settings{}, fmt.Errorf("log chat analysis settings upsert: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return Settings{}, fmt.Errorf("commit chat analysis settings upsert: %w", err)
-	}
-
-	settings, err := LoadSettings(ctx, db, organizationID)
+	settings, err := loadSettings(ctx, queries, organizationID)
 	if err != nil {
 		return Settings{}, fmt.Errorf("reload chat analysis settings: %w", err)
 	}

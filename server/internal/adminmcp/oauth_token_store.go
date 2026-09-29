@@ -12,6 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 var errStaffGrant = errors.New("staff OAuth grant is invalid")
@@ -49,39 +52,32 @@ func (s postgresStaffGrantStore) ValidateGrant(ctx context.Context, codeHash, cl
 	if s.db == nil {
 		return staffTokenConnection{}, errors.New("staff OAuth state unavailable")
 	}
-	var connection staffTokenConnection
-	var challenge, storedRedirect string
-	err := s.db.QueryRow(ctx, staffGrantQuery+`
- AND auth_grant.authorization_code_hash = $1 AND client.client_id = $2
-`, codeHash, clientID).Scan(&connection.ID, &connection.ClientRowID, &connection.Subject, &connection.SessionEnc, &connection.ResourceURI, &connection.Scopes, &connection.Generation, &connection.AuthorizedTil, &challenge, &storedRedirect)
+	row, err := repo.New(s.db).GetAuthorizationGrant(ctx, repo.GetAuthorizationGrantParams{AuthorizationCodeHash: codeHash, ClientID: clientID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return staffTokenConnection{}, errStaffGrant
 	}
 	if err != nil {
 		return staffTokenConnection{}, fmt.Errorf("lookup staff authorization grant: %w", err)
 	}
-	if !validStaffVerifier(verifier) || !matchesStaffChallenge(verifier, challenge) || !now.Before(connection.AuthorizedTil) || storedRedirect != redirectURI {
+	connection := tokenConnectionFromRow(row.AdminMcpConnection)
+	if !validStaffVerifier(verifier) || !matchesStaffChallenge(verifier, row.CodeChallenge) || !now.Before(connection.AuthorizedTil) || row.RedirectUri != redirectURI {
 		return staffTokenConnection{}, errStaffGrant
 	}
 	return connection, nil
 }
 
-const staffGrantQuery = `
-SELECT connection.id, connection.oauth_client_id, connection.subject_urn,
- connection.admin_session_id_enc, connection.resource_uri, connection.scopes,
- connection.active_generation, connection.authorization_expires_at, auth_grant.code_challenge, auth_grant.redirect_uri
-FROM admin_mcp_authorization_grants AS auth_grant
-JOIN admin_mcp_connections AS connection
- ON connection.id = auth_grant.connection_id AND connection.oauth_client_id = auth_grant.oauth_client_id
-JOIN admin_mcp_oauth_clients AS client ON client.id = auth_grant.oauth_client_id
- AND client.revoked_at IS NULL AND (client.client_secret_expires_at IS NULL OR client.client_secret_expires_at > clock_timestamp())
-WHERE auth_grant.consumed_at IS NULL AND auth_grant.revoked_at IS NULL
- AND auth_grant.expires_at > clock_timestamp() AND connection.revoked_at IS NULL
- AND connection.reauthorization_required_at IS NULL
- AND connection.active_generation = auth_grant.connection_generation
- AND connection.authorization_expires_at > clock_timestamp()
- AND connection.scopes = auth_grant.scopes AND connection.resource_uri = auth_grant.resource_uri
-`
+func tokenConnectionFromRow(row repo.AdminMcpConnection) staffTokenConnection {
+	return staffTokenConnection{
+		ID:            row.ID,
+		ClientRowID:   row.OauthClientID,
+		Subject:       row.SubjectUrn,
+		SessionEnc:    row.AdminSessionIDEnc,
+		ResourceURI:   row.ResourceUri,
+		Scopes:        row.Scopes,
+		Generation:    row.ActiveGeneration,
+		AuthorizedTil: row.AuthorizationExpiresAt.Time,
+	}
+}
 
 func (s postgresStaffGrantStore) ExchangeGrant(ctx context.Context, codeHash, clientID, redirectURI, verifier string, session staffIssuedSession, now time.Time) error {
 	if s.db == nil {
@@ -92,42 +88,23 @@ func (s postgresStaffGrantStore) ExchangeGrant(ctx context.Context, codeHash, cl
 		return fmt.Errorf("begin staff code exchange: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var connection staffTokenConnection
-	var challenge, storedRedirect string
-	err = tx.QueryRow(ctx, `
-SELECT connection.id, connection.oauth_client_id, connection.subject_urn,
- connection.admin_session_id_enc, connection.resource_uri, connection.scopes,
- connection.active_generation, connection.authorization_expires_at,
- auth_grant.code_challenge, auth_grant.redirect_uri
-FROM admin_mcp_authorization_grants AS auth_grant
-JOIN admin_mcp_connections AS connection
- ON connection.id = auth_grant.connection_id AND connection.oauth_client_id = auth_grant.oauth_client_id
-JOIN admin_mcp_oauth_clients AS client ON client.id = auth_grant.oauth_client_id
-WHERE auth_grant.authorization_code_hash = $1 AND client.client_id = $2
- AND auth_grant.consumed_at IS NULL AND auth_grant.revoked_at IS NULL
- AND auth_grant.expires_at > clock_timestamp() AND connection.revoked_at IS NULL
- AND connection.reauthorization_required_at IS NULL
- AND connection.active_generation = auth_grant.connection_generation
- AND connection.authorization_expires_at > clock_timestamp()
- AND connection.scopes = auth_grant.scopes AND connection.resource_uri = auth_grant.resource_uri
- AND client.revoked_at IS NULL
- AND (client.client_secret_expires_at IS NULL OR client.client_secret_expires_at > clock_timestamp())
-FOR UPDATE OF auth_grant, connection
-`, codeHash, clientID).Scan(&connection.ID, &connection.ClientRowID, &connection.Subject, &connection.SessionEnc, &connection.ResourceURI, &connection.Scopes, &connection.Generation, &connection.AuthorizedTil, &challenge, &storedRedirect)
+	q := repo.New(tx)
+	row, err := q.LockAuthorizationGrant(ctx, repo.LockAuthorizationGrantParams{AuthorizationCodeHash: codeHash, ClientID: clientID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errStaffGrant
 	}
 	if err != nil {
 		return fmt.Errorf("lock staff authorization grant: %w", err)
 	}
-	if storedRedirect != redirectURI || !validStaffVerifier(verifier) || !matchesStaffChallenge(verifier, challenge) || !validStaffIssuedSession(session, connection, now) {
+	connection := tokenConnectionFromRow(row.AdminMcpConnection)
+	if row.RedirectUri != redirectURI || !validStaffVerifier(verifier) || !matchesStaffChallenge(verifier, row.CodeChallenge) || !validStaffIssuedSession(session, connection, now) {
 		return errStaffGrant
 	}
-	_, err = tx.Exec(ctx, `UPDATE admin_mcp_authorization_grants SET consumed_at = $2, updated_at = $2 WHERE authorization_code_hash = $1`, codeHash, now)
+	err = q.ConsumeAuthorizationGrant(ctx, repo.ConsumeAuthorizationGrantParams{Now: conv.ToPGTimestamptz(now), AuthorizationCodeHash: codeHash})
 	if err != nil {
 		return fmt.Errorf("consume staff authorization grant: %w", err)
 	}
-	if err := insertStaffSession(ctx, tx, connection, session); err != nil {
+	if err := insertStaffSession(ctx, q, connection, session); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -142,12 +119,17 @@ func validStaffIssuedSession(session staffIssuedSession, connection staffTokenCo
 		session.RefreshTil.After(now) && !session.RefreshTil.After(connection.AuthorizedTil)
 }
 
-func insertStaffSession(ctx context.Context, tx pgx.Tx, connection staffTokenConnection, session staffIssuedSession) error {
-	_, err := tx.Exec(ctx, `
-INSERT INTO admin_mcp_sessions
- (id, connection_id, oauth_client_id, connection_generation, jti, refresh_token_hash, expires_at, refresh_expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-`, session.ID, connection.ID, connection.ClientRowID, connection.Generation, session.JTI, session.RefreshHash, session.ExpiresAt, session.RefreshTil)
+func insertStaffSession(ctx context.Context, q *repo.Queries, connection staffTokenConnection, session staffIssuedSession) error {
+	err := q.InsertStaffSession(ctx, repo.InsertStaffSessionParams{
+		ID:                   session.ID,
+		ConnectionID:         connection.ID,
+		OauthClientID:        connection.ClientRowID,
+		ConnectionGeneration: connection.Generation,
+		Jti:                  session.JTI,
+		RefreshTokenHash:     session.RefreshHash,
+		ExpiresAt:            conv.ToPGTimestamptz(session.ExpiresAt),
+		RefreshExpiresAt:     conv.ToPGTimestamptz(session.RefreshTil),
+	})
 	if err != nil {
 		return fmt.Errorf("persist staff MCP session: %w", err)
 	}
@@ -158,34 +140,18 @@ func (s postgresStaffGrantStore) PrepareRefresh(ctx context.Context, refreshHash
 	if s.db == nil {
 		return staffTokenConnection{}, errors.New("staff OAuth state unavailable")
 	}
-	var connection staffTokenConnection
-	var rotatedAt, revokedAt, reauthorizationRequiredAt *time.Time
-	var refreshTil time.Time
-	err := s.db.QueryRow(ctx, `
-SELECT connection.id, connection.oauth_client_id, connection.subject_urn,
- connection.admin_session_id_enc, connection.resource_uri, connection.scopes,
- connection.active_generation, connection.authorization_expires_at,
- session.rotated_at, session.revoked_at, session.refresh_expires_at,
- connection.reauthorization_required_at
-FROM admin_mcp_sessions AS session
-JOIN admin_mcp_connections AS connection
- ON connection.id = session.connection_id AND connection.oauth_client_id = session.oauth_client_id
-JOIN admin_mcp_oauth_clients AS client ON client.id = session.oauth_client_id
-WHERE session.refresh_token_hash = $1 AND client.client_id = $2
- AND client.revoked_at IS NULL AND (client.client_secret_expires_at IS NULL OR client.client_secret_expires_at > clock_timestamp())
- AND connection.revoked_at IS NULL
- AND connection.active_generation = session.connection_generation
-`, refreshHash, clientID).Scan(&connection.ID, &connection.ClientRowID, &connection.Subject, &connection.SessionEnc, &connection.ResourceURI, &connection.Scopes, &connection.Generation, &connection.AuthorizedTil, &rotatedAt, &revokedAt, &refreshTil, &reauthorizationRequiredAt)
+	row, err := repo.New(s.db).GetRefreshSession(ctx, repo.GetRefreshSessionParams{RefreshTokenHash: refreshHash, ClientID: clientID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return staffTokenConnection{}, errStaffGrant
 	}
 	if err != nil {
 		return staffTokenConnection{}, fmt.Errorf("lookup staff refresh session: %w", err)
 	}
-	if rotatedAt != nil {
+	if row.RotatedAt.Valid {
 		return staffTokenConnection{}, s.terminalizeRefreshReuse(ctx, refreshHash, clientID, now)
 	}
-	if revokedAt != nil || reauthorizationRequiredAt != nil || !now.Before(refreshTil) || !now.Before(connection.AuthorizedTil) {
+	connection := tokenConnectionFromRow(row.AdminMcpConnection)
+	if row.RevokedAt.Valid || row.AdminMcpConnection.ReauthorizationRequiredAt.Valid || !now.Before(row.RefreshExpiresAt.Time) || !now.Before(connection.AuthorizedTil) {
 		return staffTokenConnection{}, errStaffGrant
 	}
 	return connection, nil
@@ -197,30 +163,18 @@ func (s postgresStaffGrantStore) terminalizeRefreshReuse(ctx context.Context, re
 		return fmt.Errorf("begin staff refresh reuse check: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var connectionID, sessionGeneration, activeGeneration uuid.UUID
-	var rotatedAt *time.Time
-	err = tx.QueryRow(ctx, `
-SELECT connection.id, session.connection_generation, connection.active_generation, session.rotated_at
-FROM admin_mcp_sessions AS session
-JOIN admin_mcp_connections AS connection ON connection.id = session.connection_id
-JOIN admin_mcp_oauth_clients AS client ON client.id = session.oauth_client_id
-WHERE session.refresh_token_hash = $1 AND client.client_id = $2
-FOR UPDATE OF connection, session
-`, refreshHash, clientID).Scan(&connectionID, &sessionGeneration, &activeGeneration, &rotatedAt)
+	q := repo.New(tx)
+	row, err := q.LockReusedRefreshSession(ctx, repo.LockReusedRefreshSessionParams{RefreshTokenHash: refreshHash, ClientID: clientID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errStaffGrant
 	}
 	if err != nil {
 		return fmt.Errorf("lock staff refresh reuse: %w", err)
 	}
-	if rotatedAt == nil || activeGeneration != sessionGeneration {
+	if !row.RotatedAt.Valid || row.ActiveGeneration != row.ConnectionGeneration {
 		return errStaffGrant
 	}
-	_, err = tx.Exec(ctx, `
-UPDATE admin_mcp_connections SET reauthorization_required_at = $3,
- reauthorization_reason = 'refresh_reuse', updated_at = $3
-WHERE id = $1 AND active_generation = $2 AND revoked_at IS NULL
-`, connectionID, sessionGeneration, now)
+	err = q.RequireReauthorizationForRefreshReuse(ctx, repo.RequireReauthorizationForRefreshReuseParams{Now: conv.ToPGTimestamptz(now), ID: row.ConnectionID, Generation: row.ConnectionGeneration})
 	if err != nil {
 		return fmt.Errorf("terminalize reused staff refresh token: %w", err)
 	}
@@ -239,38 +193,17 @@ func (s postgresStaffGrantStore) RotateRefresh(ctx context.Context, refreshHash,
 		return fmt.Errorf("begin staff refresh rotation: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var sessionID, sessionGeneration uuid.UUID
-	var connection staffTokenConnection
-	var clientRevokedAt, clientSecretExpiresAt, connectionRevokedAt, reauthorizationRequiredAt *time.Time
-	var rotatedAt, revokedAt *time.Time
-	var refreshTil time.Time
-	err = tx.QueryRow(ctx, `
-SELECT session.id, connection.id, connection.oauth_client_id,
- connection.subject_urn, connection.admin_session_id_enc, connection.resource_uri,
- connection.scopes, connection.active_generation, connection.authorization_expires_at,
- session.connection_generation, session.rotated_at, session.revoked_at, session.refresh_expires_at,
- client.revoked_at, client.client_secret_expires_at, connection.revoked_at, connection.reauthorization_required_at
-FROM admin_mcp_sessions AS session
-JOIN admin_mcp_connections AS connection
- ON connection.id = session.connection_id AND connection.oauth_client_id = session.oauth_client_id
-JOIN admin_mcp_oauth_clients AS client ON client.id = session.oauth_client_id
-WHERE session.refresh_token_hash = $1 AND client.client_id = $2
-FOR UPDATE OF session, connection
-`, refreshHash, clientID).Scan(&sessionID, &connection.ID, &connection.ClientRowID, &connection.Subject, &connection.SessionEnc, &connection.ResourceURI, &connection.Scopes, &connection.Generation, &connection.AuthorizedTil, &sessionGeneration, &rotatedAt, &revokedAt, &refreshTil, &clientRevokedAt, &clientSecretExpiresAt, &connectionRevokedAt, &reauthorizationRequiredAt)
+	q := repo.New(tx)
+	row, err := q.LockRefreshSession(ctx, repo.LockRefreshSessionParams{RefreshTokenHash: refreshHash, ClientID: clientID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errStaffGrant
 	}
 	if err != nil {
 		return fmt.Errorf("lock staff refresh session: %w", err)
 	}
-	if rotatedAt != nil {
-		// Only terminalize the generation that issued the reused token, not a
-		// later staff reauthorization that happened while this request waited.
-		_, err = tx.Exec(ctx, `
-UPDATE admin_mcp_connections SET reauthorization_required_at = $3,
- reauthorization_reason = 'refresh_reuse', updated_at = $3
-WHERE id = $1 AND active_generation = $2 AND revoked_at IS NULL
-`, connection.ID, sessionGeneration, now)
+	connection := tokenConnectionFromRow(row.AdminMcpConnection)
+	if row.RotatedAt.Valid {
+		err = q.RequireReauthorizationForRefreshReuse(ctx, repo.RequireReauthorizationForRefreshReuseParams{Now: conv.ToPGTimestamptz(now), ID: connection.ID, Generation: row.SessionGeneration})
 		if err != nil {
 			return fmt.Errorf("terminalize reused staff refresh token: %w", err)
 		}
@@ -279,13 +212,13 @@ WHERE id = $1 AND active_generation = $2 AND revoked_at IS NULL
 		}
 		return errStaffRefreshReuse
 	}
-	if clientRevokedAt != nil || (clientSecretExpiresAt != nil && !now.Before(*clientSecretExpiresAt)) || connectionRevokedAt != nil || reauthorizationRequiredAt != nil || revokedAt != nil || !now.Before(refreshTil) || !now.Before(connection.AuthorizedTil) || connection.ID != expected.ID || connection.Generation != expected.Generation || connection.Generation != sessionGeneration || connection.Subject != expected.Subject || connection.ResourceURI != expected.ResourceURI || connection.SessionEnc != expected.SessionEnc || !validStaffIssuedSession(replacement, connection, now) {
+	if row.ClientRevokedAt.Valid || (row.ClientSecretExpiresAt.Valid && !now.Before(row.ClientSecretExpiresAt.Time)) || row.AdminMcpConnection.RevokedAt.Valid || row.AdminMcpConnection.ReauthorizationRequiredAt.Valid || row.SessionRevokedAt.Valid || !now.Before(row.RefreshExpiresAt.Time) || !now.Before(connection.AuthorizedTil) || connection.ID != expected.ID || connection.Generation != expected.Generation || connection.Generation != row.SessionGeneration || connection.Subject != expected.Subject || connection.ResourceURI != expected.ResourceURI || connection.SessionEnc != expected.SessionEnc || !validStaffIssuedSession(replacement, connection, now) {
 		return errStaffGrant
 	}
-	if err := insertStaffSession(ctx, tx, connection, replacement); err != nil {
+	if err := insertStaffSession(ctx, q, connection, replacement); err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `UPDATE admin_mcp_sessions SET rotated_at = $2, revoked_at = $2, replaced_by_session_id = $3, updated_at = $2 WHERE id = $1`, sessionID, now, replacement.ID)
+	err = q.RotateStaffSession(ctx, repo.RotateStaffSessionParams{Now: conv.ToPGTimestamptz(now), ReplacedBySessionID: uuid.NullUUID{UUID: replacement.ID, Valid: true}, ID: row.SessionID})
 	if err != nil {
 		return fmt.Errorf("rotate staff refresh session: %w", err)
 	}

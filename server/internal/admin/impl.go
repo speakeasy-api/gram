@@ -460,7 +460,8 @@ func (w *adminCallbackWriter) WriteHeader(status int) {
 				HttpOnly: true,
 				SameSite: http.SameSiteLaxMode,
 			}
-			if strings.HasPrefix(w.Header().Get("Location"), "/admin-mcp/connect?state=") {
+			location := w.Header().Get("Location")
+			if strings.HasPrefix(location, "/admin-mcp/connect?state=") || strings.HasPrefix(location, "/admin-mcp/proposals/") {
 				mcpCookie.Value = cookie.Value
 			} else {
 				mcpCookie.MaxAge = -1
@@ -1211,6 +1212,60 @@ func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrg
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
 }
 
+// TrialExtension is the trial end-date transition an extension wrote.
+type TrialExtension struct {
+	PreviousEndsAt time.Time
+	EndsAt         time.Time
+}
+
+// ErrTrialNotRunning reports that an organization has no running enterprise
+// trial to extend.
+var ErrTrialNotRunning = errors.New("organization has no running enterprise trial to extend")
+
+func (s *Service) extendTrialTx(ctx context.Context, tx pgx.Tx, logger *slog.Logger, organizationID string, days int) (TrialExtension, error) {
+	// Checked on the wide value before narrowing; see ExtendTrial.
+	if days < constants.MinTrialExtensionDays || days > constants.MaxTrialExtensionDays {
+		return TrialExtension{}, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialExtensionDays, constants.MaxTrialExtensionDays)
+	}
+
+	extended, err := trialsRepo.New(tx).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
+		OrganizationID: organizationID,
+		ExtendByDays:   int32(days),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return TrialExtension{}, ErrTrialNotRunning
+	case err != nil:
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
+	}
+
+	// The customer's feed names the organization, not only its id, and extend
+	// writes nothing on organization_metadata to get those columns back from.
+	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organizationID,
+		AllowSlug: false,
+	})
+	if err != nil {
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
+	}
+
+	actor, actorDisplayName, _ := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
+		OrganizationID:      organizationID,
+		Actor:               actor,
+		ActorDisplayName:    actorDisplayName,
+		ActorSlug:           nil,
+		OrganizationName:    organization.Name,
+		OrganizationSlug:    organization.Slug,
+		ExtendedByDays:      days,
+		PreviousTrialEndsAt: extended.PreviousEndsAt.Time,
+		TrialEndsAt:         extended.EndsAt.Time,
+	}); err != nil {
+		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "log trial extension").LogError(ctx, logger)
+	}
+	return TrialExtension{PreviousEndsAt: extended.PreviousEndsAt.Time, EndsAt: extended.EndsAt.Time}, nil
+}
+
 func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPayload) (*gen.AdminOrganization, error) {
 	// The design bounds this too, but that validation is generated into the
 	// request decoder and only runs at the HTTP boundary. Repeating it here is
@@ -1234,12 +1289,9 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	extended, err := trialsRepo.New(tx).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{
-		OrganizationID: payload.ID,
-		ExtendByDays:   int32(payload.Days),
-	})
+	_, err = s.extendTrialTx(ctx, tx, logger, payload.ID, payload.Days)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, ErrTrialNotRunning):
 		// rejectTrialChange reads on the pool, so this connection goes back
 		// before it asks for a second one. The deferred rollback is idempotent.
 		_ = tx.Rollback(ctx)
@@ -1247,34 +1299,10 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 			"look up organization after unextended trial",
 			"organization has no running enterprise trial to extend")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "extend trial").LogError(ctx, logger)
+		return nil, err
 	}
 
-	// The customer's feed names the organization, not only its id, and extend
-	// writes nothing on organization_metadata to get those columns back from.
-	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
-		ID:        payload.ID,
-		AllowSlug: false,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
-	}
-
-	actor, actorDisplayName, operatorEmail := adminActor(ctx)
-	if err := s.audit.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
-		OrganizationID:      payload.ID,
-		Actor:               actor,
-		ActorDisplayName:    actorDisplayName,
-		ActorSlug:           nil,
-		OrganizationName:    organization.Name,
-		OrganizationSlug:    organization.Slug,
-		ExtendedByDays:      payload.Days,
-		PreviousTrialEndsAt: extended.PreviousEndsAt.Time,
-		TrialEndsAt:         extended.EndsAt.Time,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log trial extension").LogError(ctx, logger)
-	}
-
+	_, _, operatorEmail := adminActor(ctx)
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit trial extension").LogError(ctx, logger)
 	}
