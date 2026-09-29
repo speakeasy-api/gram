@@ -5541,6 +5541,7 @@ CREATE TABLE IF NOT EXISTS mcp_registry_entries (
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   data jsonb NOT NULL,
   published boolean NOT NULL DEFAULT true,
+  published_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
