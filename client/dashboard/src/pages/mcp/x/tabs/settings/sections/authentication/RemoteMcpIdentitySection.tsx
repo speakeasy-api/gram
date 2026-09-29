@@ -26,12 +26,7 @@ import {
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowUpRight,
-  ChevronDown,
-  Loader2,
-  TriangleAlert,
-} from "lucide-react";
+import { ChevronDown, Loader2, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -487,18 +482,13 @@ export function RemoteMcpIdentitySectionBody({
           {identityResolved && selectedMode === "user" ? (
             <AuthRow
               label="Identity provider"
+              // Custom providers are created from the provider menu's own
+              // link, so the hint carries no separate way there.
               hint={
-                <>
+                <span className="text-muted-foreground/70">
                   Where users sign in. Speakeasy registers this server with it
                   for you.
-                  <Link
-                    to={routes.remoteIdentityProviders.href()}
-                    className="text-muted-foreground hover:text-foreground mt-2 flex w-fit items-center gap-1 underline underline-offset-2"
-                  >
-                    Manage identity providers
-                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                  </Link>
-                </>
+                </span>
               }
             >
               <UserIdentityRow
