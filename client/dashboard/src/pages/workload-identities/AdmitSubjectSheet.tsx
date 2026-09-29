@@ -120,8 +120,15 @@ export function AdmitSubjectSheet({
 
   const tagProblem = tagsProblem(values.tags);
 
+  // The agent list refetches while the sheet is open, and the server accepts a
+  // suspended or revoked agent — leaving a machine that authenticates and can
+  // reach nothing — so a choice that has dropped out of the active list is
+  // refused here.
+  const agentStillActive = agents.some((agent) => agent.id === values.agentId);
+
   const canSubmit =
     tagProblem === null &&
+    agentStillActive &&
     canAdmit({
       subject: storedSubject,
       agentId: values.agentId,
