@@ -10,10 +10,6 @@ export type MatchKind = "exact" | "wildcard";
 /**
  * The match kind a subject states, read off the value itself.
  *
- * There is no separate control for this. An operator writes the rule they mean
- * and the terminator says how broad it is — which is what the stored value has
- * always meant, so nothing is inferred that was not already there.
- *
  * Lossless, because an exact subject may never contain a `*`: ValidateSubjectRule
  * refuses one outright, so there is no legitimate exact value this could
  * misread. A `*` anywhere therefore means a wildcard was intended, and a
@@ -78,9 +74,8 @@ export function canAdmit(input: {
   warning: string | null;
   /**
    * Whether the kind this subject states is permitted by the issuer.
-   * An issuer that forbids wildcards is a state the operator can reach — an
-   * older row, or one cleared during an incident — so a rule stating one has to
-   * be refused here rather than only by the server.
+   * An issuer can forbid wildcards (an older row, or one cleared during an
+   * incident), so a rule stating one is refused here as well as by the server.
    */
   matchKindPermitted: boolean;
 }): boolean {
