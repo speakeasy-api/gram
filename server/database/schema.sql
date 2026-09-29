@@ -9683,6 +9683,10 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
   resource TEXT NOT NULL,
   audience TEXT NOT NULL,
   okta_application_id TEXT,
+  -- What the latest identity chaining exchange for this upstream showed, and
+  -- when; set together, NULL until an exchange ran after confirmation.
+  observed_result TEXT,
+  observed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT okta_resource_connections_pkey PRIMARY KEY (id),

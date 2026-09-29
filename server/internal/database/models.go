@@ -1778,6 +1778,8 @@ type OktaResourceConnection struct {
 	Resource                     string
 	Audience                     string
 	OktaApplicationID            pgtype.Text
+	ObservedResult               pgtype.Text
+	ObservedAt                   pgtype.Timestamptz
 	CreatedAt                    pgtype.Timestamptz
 	UpdatedAt                    pgtype.Timestamptz
 }
