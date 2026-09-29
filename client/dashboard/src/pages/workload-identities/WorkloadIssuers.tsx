@@ -144,7 +144,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => refetch()}
+                    onClick={() => void refetch()}
                   >
                     <Button.Text>Try again</Button.Text>
                   </Button>
