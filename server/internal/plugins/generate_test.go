@@ -3148,6 +3148,30 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 }
 
+func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-mcp-from-remote-url/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	// Attachment registers a client dynamically, so an upstream that answers
+	// with a challenge but advertises no dynamic registration (an API key or
+	// Basic upstream, or OAuth without DCR) must not be offered it.
+	for _, required := range []string{
+		"`authentication: authentication_required` and `oauth_discovery: available_dcr`",
+		"`oauth_discovery: available`",
+		"incomplete or absent OAuth discovery",
+		"Service Account credential through the dashboard setup URL",
+		"do not attempt attachment",
+	} {
+		require.Contains(t, workflow, required)
+	}
+	require.NotContains(t, workflow, "when inspection reported `authentication_required`, ask for explicit confirmation")
+}
+
 func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
