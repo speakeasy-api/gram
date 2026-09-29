@@ -48,7 +48,7 @@ var _ = Service("risk", func() {
 				Default("everyone")
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.")
-			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server. When set, the action must be flag or block.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server. When a non-empty scope is set, the action must be flag or block.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})
@@ -253,7 +253,7 @@ var _ = Service("risk", func() {
 				shared.RiskPolicyAudienceTypeEnum()
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. Omit to preserve the current target principals.")
-			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server. When set, the action must be flag or block.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server. When the resulting policy keeps an MCP scope, the action must be flag or block.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})

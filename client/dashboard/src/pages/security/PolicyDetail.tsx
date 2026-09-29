@@ -772,7 +772,16 @@ function PromptPolicyEditor({
   const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(() =>
     policyMCPScopeValue(policy?.mcpScope),
   );
-  const [action, setAction] = useState<PolicyAction>(policy?.action ?? "flag");
+  const [action, setAction] = useState<PolicyAction>(() => {
+    const initial = policy?.action ?? "flag";
+    return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
+  });
+  const updateMCPScope = (next: PolicyMCPScopeValue) => {
+    setMcpScope(next);
+    if (next.mode === "mcp") {
+      setAction((current) => mcpCompatibleAction(current));
+    }
+  };
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
   );
@@ -990,7 +999,7 @@ function PromptPolicyEditor({
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
           mcpScope={mcpScope}
-          setMcpScope={setMcpScope}
+          setMcpScope={updateMCPScope}
           action={action}
           hasStoredMcpScope={!!policy?.mcpScope}
         />
@@ -1019,6 +1028,7 @@ function PromptPolicyEditor({
           setUserMessage={setUserMessage}
           score={score}
           setScore={setScore}
+          mcpScoped={mcpScope.mode === "mcp"}
         />
       )}
 
