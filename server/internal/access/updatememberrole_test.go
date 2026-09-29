@@ -360,3 +360,45 @@ func TestService_UpdateMemberRoles_EmptyRoleIds(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "at least one role is required")
 }
+
+func TestService_UpdateMemberRoles_ReturnsDirectoryMappedRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	seedRole(t, ctx, ti.conn, orgID, mockSystemRole("role_admin", "Admin", "admin"))
+	builderID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "custom-builder", ""))
+	viewerID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_viewer", "Viewer", "viewer", ""))
+	viewer := seededRolePrincipal(t, ctx, ti.conn, orgID, "viewer").String()
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
+	seedRoleAssignment(t, ctx, ti.conn, orgID, "local_user_1", mockMember("", "membership_1", "user_1", "admin"))
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_user_2", "other@example.com", "Other Admin", "user_2", "membership_2")
+	seedRoleAssignment(t, ctx, ti.conn, orgID, "local_user_2", mockMember("", "membership_2", "user_2", "admin"))
+	seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_user_1", "ada@example.com", `{"department_name":"Research"}`)
+
+	key := "department_name"
+	value := "Research"
+	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+		SourceKind:     directoryRoleMappingSourceAttribute,
+		AttributeKey:   &key,
+		AttributeValue: &value,
+		RoleUrn:        viewer,
+	})
+	require.NoError(t, err)
+
+	ti.roles.On("UpdateMemberRoles", mock.Anything, "membership_1", []string{"custom-builder"}).Return(&thirdpartyworkos.Member{
+		ID:             "membership_1",
+		UserID:         "user_1",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlugs:      []string{"custom-builder"},
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Once()
+
+	member, err := ti.service.UpdateMemberRoles(ctx, &gen.UpdateMemberRolesPayload{UserID: "local_user_1", RoleIds: []string{builderID}})
+	require.NoError(t, err)
+	require.Equal(t, []string{builderID}, member.RoleIds)
+	require.Equal(t, []string{viewerID}, member.DirectoryRoleIds)
+}
