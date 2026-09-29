@@ -1,4 +1,5 @@
 import { AnyField } from "@/components/moon/any-field";
+import { slugError } from "./slug";
 import { InputField } from "@/components/moon/input-field";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -8,6 +9,7 @@ import type { SigintSignal } from "@gram/client/models/components/sigintsignal.j
 import { useState, type FormEvent } from "react";
 
 export interface SignalDraft {
+  slug?: string;
   name: string;
   description: string;
   classifierCriteria: string;
@@ -40,19 +42,22 @@ export function SignalEditorDialog({
   onSave,
 }: SignalEditorDialogProps): JSX.Element {
   const [name, setName] = useState(signal?.name ?? "");
+  const [slug, setSlug] = useState(signal?.slug ?? "");
   const [description, setDescription] = useState(signal?.description ?? "");
   const [classifierCriteria, setClassifierCriteria] = useState(
     signal?.classifierCriteria ?? "",
   );
   const [submitted, setSubmitted] = useState(false);
   const validationError = nameError(name);
+  const slugValidation = slugError(slug, signal !== null);
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     setSubmitted(true);
-    if (!canWrite || pending || validationError) return;
+    if (!canWrite || pending || validationError || slugValidation) return;
     onSave({
       name: name.trim(),
+      slug: slug.trim() || undefined,
       description,
       classifierCriteria,
     });
@@ -84,6 +89,14 @@ export function SignalEditorDialog({
             autoFocus
             error={submitted ? validationError : null}
             hint="A trimmed name between 1 and 200 Unicode characters."
+          />
+          <InputField
+            label="Slug"
+            value={slug}
+            onChange={(event) => setSlug(event.target.value)}
+            maxLength={40}
+            error={submitted ? slugValidation : null}
+            hint="Unique identifier for analytics and integrations. Leave blank on creation to generate from the name."
           />
           <AnyField
             label="Description"
@@ -122,7 +135,9 @@ export function SignalEditorDialog({
             <Button
               type="submit"
               disabled={
-                !canWrite || pending || (submitted && !!validationError)
+                !canWrite ||
+                pending ||
+                (submitted && !!(validationError || slugValidation))
               }
             >
               {pending ? "Saving…" : "Save signal"}
