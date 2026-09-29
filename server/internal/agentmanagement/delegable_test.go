@@ -447,11 +447,56 @@ func TestListDelegableGrantsBatchedToolsets(t *testing.T) {
 	for _, grant := range grants {
 		require.NotEqual(t, blocked.ID.String(), grant.Selector.ResourceID)
 	}
+}
 
-	_, err = f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
-		AgentID: f.agentID.String(), ToolsetIds: []string{first.ID.String(), uuid.NewString()},
+func TestListDelegableGrantsBatchOmitsUnavailableResources(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	live := f.toolset(t, "org-delegable", "live")
+	deleted := f.toolset(t, "org-delegable", "deleted")
+	// A live inventory wrapper can still refer to a deleted toolset.
+	f.modernServer(t, deleted.ProjectID, uuid.NullUUID{UUID: deleted.ID, Valid: true})
+	_, err := f.db.Exec(t.Context(), "UPDATE toolsets SET deleted_at = clock_timestamp() WHERE id = $1", deleted.ID)
+	require.NoError(t, err)
+	seedOrganization(t, f.db, "org-other-delegable")
+	foreign := f.toolset(t, "org-other-delegable", "foreign")
+	for _, principal := range []string{"agent", "owner", "caller"} {
+		f.grant(t, principal, authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "*"))
+	}
+	ctx := validatedHumanContext(t, "org-delegable", "caller")
+	want, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+		AgentID: f.agentID.String(), ToolsetID: new(live.ID.String()),
 	})
-	requireOopsCode(t, err, oops.CodeNotFound)
+	require.NoError(t, err)
+	require.NotEmpty(t, want)
+	for _, tc := range []struct{ name, id string }{
+		{name: "deleted backing toolset", id: deleted.ID.String()},
+		{name: "foreign organization", id: foreign.ID.String()},
+		{name: "missing resource", id: uuid.NewString()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			unavailable := tc.id
+			grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetIds: []string{unavailable, live.ID.String()},
+			})
+			require.NoError(t, err)
+			require.ElementsMatch(t, want, grants)
+			grants, err = f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetIds: []string{unavailable},
+			})
+			require.NoError(t, err)
+			require.Empty(t, grants, "an empty resolved batch must never become unscoped discovery")
+			_, err = f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetID: &unavailable, ToolsetIds: []string{live.ID.String()},
+			})
+			requireOopsCode(t, err, oops.CodeNotFound)
+		})
+	}
+	grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+		AgentID: f.agentID.String(), ToolsetIds: []string{live.ID.String(), "invalid"},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Nil(t, grants)
 }
 
 func TestListDelegableGrantsScopedToolsetRejectsInvalidResources(t *testing.T) {

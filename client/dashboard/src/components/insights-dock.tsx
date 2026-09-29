@@ -1142,6 +1142,13 @@ export function InsightsProvider({
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
       ...mcpConfig,
+      // The server-side Project Assistant discovers and executes its own
+      // tools. Passing the project inventory to Elements also initializes
+      // every MCP in the browser, even with the dock closed, and retries the
+      // whole inventory when those unnecessary connections fail. Keep this
+      // runtime mounted for composer/history state without client discovery.
+      mcp: undefined,
+      mcps: [],
       variant: "standalone",
       // Route the conversation through the persistent server-side Project
       // Assistant. Its model and system prompt are owned server-side, so we
@@ -1603,12 +1610,10 @@ export function InsightsProvider({
     <InsightsContext.Provider value={contextValue}>
       <InsightsRainbowStyles />
       {/* The dock and the full-page chat share ONE runtime so an in-flight
-          conversation survives moving between them. The assistant id resolves
-          eagerly (for the "Continue chat" lookup), but the runtime only mounts
-          where chat is actually shown — the open dock or a chat route — to
-          avoid running MCP discovery on every page. It remounts (via
-          runtimeKey) only when a new conversation is started; PendingPromptBridge
-          appends any queued prompt to the fresh thread. */}
+          conversation survives moving between them. It mounts eagerly for
+          composer/history state, but does not run client-side MCP discovery.
+          It remounts (via runtimeKey) only when a new conversation is started;
+          PendingPromptBridge appends any queued prompt to the fresh thread. */}
       {runtimeMounted ? (
         <GramElementsProvider
           key={`${mcpConfig.projectSlug}:${runtimeKey}`}
