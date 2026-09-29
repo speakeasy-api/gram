@@ -72,8 +72,8 @@ func (v *Validator) validate(raw json.RawMessage, byteLimit int) []Issue {
 	catalog, _ := meta["com.speakeasy.ai/catalog"].(map[string]any)
 	if documentationURL, ok := catalog["documentationUrl"].(string); ok {
 		parsed, err := url.Parse(documentationURL)
-		if err != nil || parsed.Hostname() == "" {
-			return []Issue{{Path: "/_meta/com.speakeasy.ai~1catalog/documentationUrl", Message: "absolute HTTP(S) URL with a host required"}}
+		if err != nil || parsed.Hostname() == "" || parsed.User != nil {
+			return []Issue{{Path: "/_meta/com.speakeasy.ai~1catalog/documentationUrl", Message: "absolute HTTP(S) URL with a host and without userinfo required"}}
 		}
 	}
 	server, _ := object["server"].(map[string]any)

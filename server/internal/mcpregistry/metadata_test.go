@@ -76,9 +76,14 @@ func TestReservedPublicationMetadataAndPrecision(t *testing.T) {
 	raw := strings.TrimSuffix(basicRecord, "}") + `,"_meta":{"com.speakeasy.ai/registry":{"publishedAt":"2000-01-01T00:00:00Z"}}}`
 	_, err := s.Create(ctx, json.RawMessage(raw))
 	require.Error(t, err)
-	raw = strings.TrimSuffix(basicRecord, "}") + `,"_meta":{"com.speakeasy.ai/catalog":{"documentationUrl":"https://example.test/docs"},"example.test/raw":{"n":9007199254740993,"d":1.234567890123456789}}}`
+	raw = strings.TrimSuffix(basicRecord, "}") + `,"_meta":{"com.speakeasy.ai/catalog":{"documentationUrl":"https://example.test/docs","futureCuratedInfo":{"label":"Public guide"}},"example.test/raw":{"n":9007199254740993,"d":1.234567890123456789}}}`
 	e, err := s.Create(ctx, json.RawMessage(raw))
 	require.NoError(t, err)
+	var record map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(e.Data, &record))
+	var meta map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(record["_meta"], &meta))
+	require.JSONEq(t, `{"documentationUrl":"https://example.test/docs","futureCuratedInfo":{"label":"Public guide"}}`, string(meta["com.speakeasy.ai/catalog"]))
 	require.Contains(t, string(e.Data), "9007199254740993")
 	require.Contains(t, string(e.Data), "1.234567890123456789")
 	forged := strings.ReplaceAll(string(e.Data), publicationDate(t, e.Data), "2000-01-01T00:00:00Z")
@@ -94,13 +99,32 @@ func TestCatalogDocumentationMetadata(t *testing.T) {
 	t.Parallel()
 	v, err := LoadValidator()
 	require.NoError(t, err)
-	for _, url := range []string{"https://example.test/docs", "http://example.test/docs", "ftp://example.test/docs", "not a url", "https:///missing-host", "https://example.test /x", "https:/foo", "http:///", "https://?query", "https://@/docs", "https://:80/docs", "https://example.test/docs?q=v#section"} {
-		raw := strings.TrimSuffix(basicRecord, "}") + `,"_meta":{"com.speakeasy.ai/catalog":{"documentationUrl":` + strconv.Quote(url) + `}}}`
-		if url == "https://example.test/docs" || url == "http://example.test/docs" || url == "https://example.test/docs?q=v#section" {
-			require.Empty(t, v.Validate([]byte(raw)))
-		} else {
-			require.NotEmpty(t, v.Validate([]byte(raw)))
-		}
+	for _, tc := range []struct {
+		url   string
+		valid bool
+	}{
+		{"https://example.test/docs", true},
+		{"http://example.test/docs", true},
+		{"https://example.test/docs?q=v#section", true},
+		{"https://example.test/@guide", true},
+		{"http://example.test:8080/docs?email=a@example.test", true},
+		{"https://[::1]:8443/docs", true},
+		{"http://localhost:8080/docs", true},
+		{"ftp://example.test/docs", false},
+		{"not a url", false},
+		{"https:///missing-host", false},
+		{"https://example.test /x", false},
+		{"https:/foo", false},
+		{"http:///", false},
+		{"https://?query", false},
+		{"https://@/docs", false},
+		{"https://:80/docs", false},
+		{"https://user:pass@example.test/docs", false},
+		{"https://user@example.test/docs", false},
+		{"https://user%40mail:p%40ss@example.test/docs", false},
+	} {
+		raw := strings.TrimSuffix(basicRecord, "}") + `,"_meta":{"com.speakeasy.ai/catalog":{"documentationUrl":` + strconv.Quote(tc.url) + `}}}`
+		require.Equal(t, tc.valid, len(v.Validate([]byte(raw))) == 0, tc.url)
 	}
 }
 

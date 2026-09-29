@@ -104,6 +104,9 @@ it("validates Speakeasy registry documentation URLs alongside the unchanged upst
     "https://@/docs",
     "https://:80/docs",
     "https://example.test /x",
+    "https://user:pass@example.test/docs",
+    "https://user@example.test/docs",
+    "https://user%40mail:p%40ss@example.test/docs",
   ]) {
     expect(
       await worker(raw.replace("ftp://example.test/docs", url)).doValidation(
@@ -116,6 +119,10 @@ it("validates Speakeasy registry documentation URLs alongside the unchanged upst
     "https://example.test/docs",
     "http://example.test/docs",
     "https://example.test/docs?q=v#section",
+    "https://example.test/@guide",
+    "http://example.test:8080/docs?email=a@example.test",
+    "https://[::1]:8443/docs",
+    "http://localhost:8080/docs",
   ]) {
     expect(
       await worker(raw.replace("ftp://example.test/docs", url)).doValidation(
