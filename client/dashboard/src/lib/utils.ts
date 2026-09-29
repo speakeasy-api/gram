@@ -58,15 +58,21 @@ export function isProdHost(serverURL: string): boolean {
   return PROD_HOSTS.has(new URL(serverURL).hostname);
 }
 
-// tunnel.speakeasy.com on every prod host, tunnel-pr-N.<env> in previews
-// (single label keeps the wildcard cert valid), tunnel.<host> otherwise.
+// Hosts serving the dev dashboard, compared exactly like PROD_HOSTS.
+const DEV_HOSTS = new Set(["dev.getgram.ai", "dev.ai.speakeasy.com"]);
+
+// tunnel.speakeasy.com on every prod host, tunnel.dev.getgram.ai on every dev
+// host, tunnel-pr-N.<env> in previews (single label keeps the wildcard cert
+// valid), tunnel.<host> otherwise.
 export function tunnelGatewayURL(serverURL = getServerURL()): string {
   const server = new URL(serverURL);
   const host = PROD_HOSTS.has(server.hostname)
     ? "tunnel.speakeasy.com"
-    : /^pr-\d+\./.test(server.host)
-      ? `tunnel-${server.host}`
-      : `tunnel.${server.host}`;
+    : DEV_HOSTS.has(server.hostname)
+      ? "tunnel.dev.getgram.ai"
+      : /^pr-\d+\./.test(server.host)
+        ? `tunnel-${server.host}`
+        : `tunnel.${server.host}`;
   return `${server.protocol === "http:" ? "ws" : "wss"}://${host}/connect`;
 }
 
@@ -262,6 +268,7 @@ export function getCustomDomainCNAME(serverURL = getServerURL()): string {
   try {
     if (isProdHost(serverURL)) return "cname.getgram.ai.";
     const url = new URL(serverURL);
+    if (DEV_HOSTS.has(url.hostname)) return "cname.dev.getgram.ai.";
     const parts = url.hostname.split(".");
     if (parts.length > 2) {
       parts[0] = parts[0] === "app" ? "cname" : `cname.${parts[0]}`;

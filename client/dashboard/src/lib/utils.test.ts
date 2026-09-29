@@ -74,10 +74,7 @@ describe("tunnelGatewayURL", () => {
     ["https://app.getgram.ai", "wss://tunnel.speakeasy.com/connect"],
     ["https://ai.speakeasy.com", "wss://tunnel.speakeasy.com/connect"],
     ["https://dev.getgram.ai", "wss://tunnel.dev.getgram.ai/connect"],
-    [
-      "https://dev.ai.speakeasy.com",
-      "wss://tunnel.dev.ai.speakeasy.com/connect",
-    ],
+    ["https://dev.ai.speakeasy.com", "wss://tunnel.dev.getgram.ai/connect"],
     [
       "https://pr-6012.dev.getgram.ai",
       "wss://tunnel-pr-6012.dev.getgram.ai/connect",
@@ -93,6 +90,7 @@ describe("getCustomDomainCNAME", () => {
     ["https://app.getgram.ai", "cname.getgram.ai."],
     ["https://ai.speakeasy.com", "cname.getgram.ai."],
     ["https://dev.getgram.ai", "cname.dev.getgram.ai."],
+    ["https://dev.ai.speakeasy.com", "cname.dev.getgram.ai."],
     ["https://app.dev.getgram.ai", "cname.dev.getgram.ai."],
     ["not a url", "cname.getgram.ai."],
   ])("maps %s to %s", (serverURL, expected) => {
