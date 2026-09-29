@@ -156,7 +156,7 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 	account := &conversationv1.Message_Account{}
 	account.SetUserAccountId(uuid.NewString())
 	account.SetAccountType("team")
-	account.SetBillingMode("subscription")
+	account.SetBillingMode("flat_rate")
 	provenance.SetAccount(account)
 	m.SetProvenance(provenance)
 	h, pub := handler(t, m, sensors(), c, testenv.NewMeterProvider(t))
@@ -184,7 +184,7 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 		require.Equal(t, provenance.GetAssistantId(), a.GetAssistantId())
 		require.Equal(t, account.GetUserAccountId(), a.GetAccount().GetUserAccountId())
 		require.Equal(t, "team", a.GetAccount().GetAccountType())
-		require.Equal(t, "subscription", a.GetAccount().GetBillingMode())
+		require.Equal(t, "flat_rate", a.GetAccount().GetBillingMode())
 		require.True(t, a.GetReplayed())
 		require.Equal(t, a.GetDefinitionHash(), b.GetDefinitionHash())
 	}
