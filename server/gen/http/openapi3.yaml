@@ -85274,7 +85274,7 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).'
+                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
                     default: flag
                     enum:
                         - flag
@@ -100481,7 +100481,7 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).'
+                    description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
                     default: flag
                     enum:
                         - flag
@@ -109974,7 +109974,7 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).'
+                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
                     enum:
                         - flag
                         - warn

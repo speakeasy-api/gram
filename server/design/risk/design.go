@@ -39,7 +39,7 @@ var _ = Service("risk", func() {
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
@@ -48,7 +48,7 @@ var _ = Service("risk", func() {
 				Default("everyone")
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.")
-			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server. When set, the action must be flag or block.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})
@@ -246,14 +246,14 @@ var _ = Service("risk", func() {
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
 				shared.RiskPolicyAudienceTypeEnum()
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. Omit to preserve the current target principals.")
-			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server. When set, the action must be flag or block.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})

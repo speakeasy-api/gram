@@ -177,7 +177,7 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 	createExclusion := unavailableRiskMutationTool[CreateRiskExclusionToolOutput]()
 	updateExclusion := unavailableRiskMutationTool[UpdateRiskExclusionToolOutput]()
 	createPolicyDescription := "Create a risk policy in an explicit project. Risk policy mutations are not enabled in this rollout."
-	updatePolicyDescription := "Patch a risk policy in an explicit project. Risk policy mutations are not enabled in this rollout."
+	updatePolicyDescription := "Patch a risk policy in an explicit project. MCP-scoped policies support flag and block actions only. Risk policy mutations are not enabled in this rollout."
 	createExclusionDescription := "Create a non-regex risk exclusion in an explicit project. Exclusion mutations are not enabled in this rollout."
 	updateExclusionDescription := "Enable or disable one risk exclusion without changing its definition. Exclusion mutations are not enabled in this rollout."
 	markFindings := unavailableRiskMutationTool[MarkRiskFindingsFalsePositiveToolOutput]()
@@ -201,7 +201,7 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 		}
 		if handlers.UpdatePolicy != nil {
 			updatePolicy = handlers.UpdatePolicy
-			updatePolicyDescription = "Patch allowlisted fields on a risk policy in an explicit project using an opaque expected version; omitted fields are preserved. The audience patch is available only to external OAuth administrators and replaces positive user/role grants, requires confirm=true, and never creates exclusions. Inspect get_risk_policy first. Targeted audiences must remain nonempty; everyone requires an empty principal_urns array. Removing a direct user grant does not remove role-derived access. Never represent everyone-except-one or role exclusions as supported."
+			updatePolicyDescription = "Patch allowlisted fields on a risk policy in an explicit project using an opaque expected version; omitted fields are preserved. MCP-scoped policies support flag and block actions only. The audience patch is available only to external OAuth administrators and replaces positive user/role grants, requires confirm=true, and never creates exclusions. Inspect get_risk_policy first. Targeted audiences must remain nonempty; everyone requires an empty principal_urns array. Removing a direct user grant does not remove role-derived access. Never represent everyone-except-one or role exclusions as supported."
 		}
 		if handlers.CreateExclusion != nil {
 			createExclusion = handlers.CreateExclusion
@@ -429,7 +429,7 @@ func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 		"audience":                 riskPolicyAudienceReplacementSchema(),
 		"name":                     stringSchema("Policy name.", 1, 100),
 		"enabled":                  {Type: "boolean"},
-		"action":                   catalogEnumSchema(catalog, catalog.Actions),
+		"action":                   riskPolicyActionSchema(catalog),
 		"score":                    {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
 		"prompt":                   stringSchema("Replacement prompt-policy instruction.", 1, 4000),
 		"sources":                  arraySchema(catalogEnumSchema(catalog, catalog.Sources), 0, true),
@@ -488,11 +488,16 @@ func riskPolicyCreateCommonProperties(catalog policycatalog.Catalog) map[string]
 		"project_slug":    stringSchema("Exact project slug; writes never default a project.", 1, 0),
 		"name":            stringSchema("Policy name.", 1, 100),
 		"enabled":         {Type: "boolean"},
-		"action":          catalogEnumSchema(catalog, catalog.Actions),
+		"action":          riskPolicyActionSchema(catalog),
 		"score":           {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
 		"user_message":    stringSchema("Optional user-facing enforcement message.", 0, 500),
 		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
 	}
+}
+func riskPolicyActionSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
+	schema := catalogEnumSchema(catalog, catalog.Actions)
+	schema.Description = "Policy action. MCP-scoped policies support flag and block only."
+	return schema
 }
 
 func fallbackCreateRiskPolicySchema() *jsonschema.Schema {

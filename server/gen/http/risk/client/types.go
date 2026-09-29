@@ -47,7 +47,7 @@ type CreateRiskPolicyRequestBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session).
+	// the hook session). MCP-scoped policies support flag and block only.
 	Action string `form:"action" json:"action" xml:"action"`
 	// Policy audience type: everyone or targeted.
 	AudienceType string `form:"audience_type" json:"audience_type" xml:"audience_type"`
@@ -55,7 +55,8 @@ type CreateRiskPolicyRequestBody struct {
 	// server stores user:all.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Omit or send an empty server list
-	// to apply the policy to every MCP server.
+	// to apply the policy to every MCP server. When set, the action must be flag
+	// or block.
 	McpScope *RiskMCPScopeRequestBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
@@ -117,7 +118,7 @@ type UpdateRiskPolicyRequestBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session).
+	// the hook session). MCP-scoped policies support flag and block only.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -126,7 +127,8 @@ type UpdateRiskPolicyRequestBody struct {
 	// principals.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Omit to preserve; send an empty
-	// server list to clear and apply the policy to every MCP server.
+	// server list to clear and apply the policy to every MCP server. When set, the
+	// action must be flag or block.
 	McpScope *RiskMCPScopeRequestBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
@@ -464,7 +466,8 @@ type CreateRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
 	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session).
+	// and freeze the hook session). MCP-scoped policies support flag and block
+	// only.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -472,7 +475,7 @@ type CreateRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server.
+	// MCP server. When set, the action must be flag or block.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Gram-hosted server unless allowed, allow_all permits every server unless
@@ -583,7 +586,8 @@ type GetRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
 	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session).
+	// and freeze the hook session). MCP-scoped policies support flag and block
+	// only.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -591,7 +595,7 @@ type GetRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server.
+	// MCP server. When set, the action must be flag or block.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Gram-hosted server unless allowed, allow_all permits every server unless
@@ -672,7 +676,8 @@ type UpdateRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
 	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session).
+	// and freeze the hook session). MCP-scoped policies support flag and block
+	// only.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -680,7 +685,7 @@ type UpdateRiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server.
+	// MCP server. When set, the action must be flag or block.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Gram-hosted server unless allowed, allow_all permits every server unless
@@ -11440,7 +11445,8 @@ type RiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
 	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session).
+	// and freeze the hook session). MCP-scoped policies support flag and block
+	// only.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -11448,7 +11454,7 @@ type RiskPolicyResponseBody struct {
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server.
+	// MCP server. When set, the action must be flag or block.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Gram-hosted server unless allowed, allow_all permits every server unless

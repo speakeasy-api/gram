@@ -502,7 +502,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err != nil {
 		return nil, err
 	}
-	if err := policycore.ValidateMCPScopeSources(mcpScope, sources); err != nil {
+	if err := policycore.ValidateMCPScope(mcpScope, sources, action); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 
@@ -936,9 +936,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		}
 		customRuleIds = payload.CustomRuleIds
 	}
-	if err := policycore.ValidateMCPScopeSources(mcpScope, sources); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
-	}
 
 	enabled := current.Enabled
 	if payload.Enabled != nil {
@@ -951,6 +948,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			return nil, err
 		}
 		action = *payload.Action
+	}
+	if err := policycore.ValidateMCPScope(mcpScope, sources, action); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	if err := validateSourceAction(sources, action); err != nil {
 		return nil, err
