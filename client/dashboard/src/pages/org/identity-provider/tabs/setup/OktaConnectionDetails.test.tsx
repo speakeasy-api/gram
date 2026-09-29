@@ -84,3 +84,27 @@ describe("ConnectionFacts token protection", () => {
     expect(screen.queryByText("Protected")).toBeNull();
   });
 });
+
+describe("ConnectionFacts key material", () => {
+  it("shows the key URL and signing key for key-based connections", () => {
+    render(
+      facts({
+        ...connection,
+        activeKey: {
+          id: "key-1",
+          kid: "kid-1",
+          activatedAt: new Date("2026-09-01T00:00:00Z"),
+        },
+      }),
+    );
+    expect(screen.getByText("Public key URL (JWKS)")).toBeTruthy();
+    expect(screen.getByText("Active signing key ID")).toBeTruthy();
+    expect(screen.getByText("kid-1")).toBeTruthy();
+  });
+
+  it("hides key facts for connections that use a client secret", () => {
+    render(facts({ ...connection, listingMode: "oin", jwksUrl: undefined }));
+    expect(screen.queryByText("Public key URL (JWKS)")).toBeNull();
+    expect(screen.queryByText("Active signing key ID")).toBeNull();
+  });
+});
