@@ -90,8 +90,7 @@ func testRiskReadService(t *testing.T, projects riskProjectResolver, policies *s
 	require.NoError(t, err)
 	fingerprint, err := policycatalog.Fingerprint(catalog)
 	require.NoError(t, err)
-	cursor, err := newRiskCursorCodec("test-key")
-	require.NoError(t, err)
+	cursor := newRiskCursorCodec("test-key")
 	versions, err := newRiskVersionCodec("test-key")
 	require.NoError(t, err)
 	return &RiskReadService{

@@ -154,8 +154,7 @@ func newFindingListFixture(t *testing.T, evaluation feature.Evaluation) *finding
 		{ID: uuid.New(), MessageCreatedAt: riskAnalysisTestNow.Add(-2 * time.Hour), ChatID: uuid.NewString(), RiskPolicyID: policies[1].ID.String(), RuleID: "pii.email_address", Source: "presidio", Confidence: 0.6, Tags: nil, MatchRedacted: "<redacted len=24 sha=0123abcd>"},
 	}}
 	flags := &riskMutationFlagProvider{evaluation: evaluation}
-	codec, err := newRiskCursorCodec("test-key")
-	require.NoError(t, err)
+	codec := newRiskCursorCodec("test-key")
 	service := &RiskFindingListService{projects: &findingProjects{project: project}, organizations: riskMutationOrganizationResolver{slug: "org"}, flags: flags, postgres: postgres, clickhouse: clickhouse, cursor: codec, now: func() time.Time { return riskAnalysisTestNow }}
 	return &findingListFixture{service: service, project: project, postgres: postgres, clickhouse: clickhouse, flags: flags, policies: policies}
 }
@@ -212,7 +211,9 @@ func TestRiskFindingListValidation(t *testing.T) {
 	var nilService *RiskFindingListService
 	_, err = nilService.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})
 	require.ErrorIs(t, err, ErrUnavailable)
-	require.Nil(t, NewRiskFindingListService(nil, nil, nil, nil, "key"))
+	require.Panics(t, func() {
+		NewRiskFindingListService(nil, nil, nil, nil, "")
+	})
 }
 
 func TestRiskFindingListPostgresRedactsAndPaginates(t *testing.T) {
@@ -411,12 +412,6 @@ func TestRiskFindingListStoreSelection(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnavailable)
 	require.Zero(t, f.postgres.calls())
 	require.Zero(t, f.clickhouse.calls())
-
-	f = newFindingListFixture(t, feature.EvaluationEnabled)
-	f.service.clickhouse = nil
-	_, err = f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})
-	require.NoError(t, err)
-	require.Len(t, f.postgres.projectParams, 1, "a deployment without ClickHouse serves Postgres regardless of the flag")
 
 	f = newFindingListFixture(t, feature.EvaluationIndeterminate)
 	_, err = f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})

@@ -89,10 +89,7 @@ func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService,
 	if db == nil {
 		return nil, ErrUnavailable
 	}
-	cursor, err := newRiskCursorCodec(keyMaterial)
-	if err != nil {
-		return nil, err
-	}
+	cursor := newRiskCursorCodec(keyMaterial)
 	catalog, err := policycatalog.Build()
 	if err != nil {
 		return nil, fmt.Errorf("build risk policy catalog: %w", err)

@@ -1776,15 +1776,7 @@ func newStartCommand() *cli.Command {
 			if temporalEnv != nil {
 				riskAnalysisDescriber = riskSignaler
 			}
-			var riskFindings platformmcp.RiskFindingsReader
-			var toolUsage platformmcp.ToolUsageBreakdownReader
-			var riskFindingList platformmcp.RiskFindingListReader
-			if chDB != nil {
-				riskQueries := riskchrepo.New(chDB)
-				riskFindings = riskQueries
-				riskFindingList = riskQueries
-				toolUsage = telemetryrepo.New(chDB)
-			}
+			riskFindings := riskchrepo.New(chDB)
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				Logger:                   logger,
 				MeterProvider:            meterProvider,
@@ -1822,9 +1814,9 @@ func newStartCommand() *cli.Command {
 				RiskExclusionReconciler:  &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger},
 				RiskAnalysisDescriber:    riskAnalysisDescriber,
 				RiskFindings:             riskFindings,
-				RiskFindingList:          riskFindingList,
+				RiskFindingList:          riskFindings,
 				Telemetry:                telemetryrepo.New(chDB),
-				ToolUsage:                toolUsage,
+				ToolUsage:                telemetryrepo.New(chDB),
 				TelemetryDrilldown:       telemetryrepo.New(chDB),
 				WorkflowRun:              posthogClient,
 				CanonicalIdentity:        telemSvc,

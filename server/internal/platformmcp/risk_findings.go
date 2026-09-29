@@ -47,15 +47,12 @@ type RiskFindingsService struct {
 }
 
 func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) *RiskFindingsService {
-	codec, err := newRiskCursorCodec(key)
-	if db == nil || findings == nil || organizations == nil || err != nil {
-		return nil
-	}
+	codec := newRiskCursorCodec(key)
 	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}
 }
 
 func (s *RiskFindingsService) valid() bool {
-	return s != nil && s.projects != nil && s.organizations != nil && s.policies != nil && s.findings != nil && s.cursor != nil && s.now != nil
+	return s != nil
 }
 
 type ListRiskFindingsInput struct {
