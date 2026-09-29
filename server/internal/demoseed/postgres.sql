@@ -1392,7 +1392,8 @@ BEGIN
   -- bindings, and the app recomputes it after the commit that writes them
   -- (ResyncMCPServerRemoteSessionIssuers). Seeding the binding in SQL never
   -- goes through that path, so stamp what the resync would derive: exactly one
-  -- remote issuer is bound to this server's user session issuer. Left NULL,
+  -- remote issuer is bound to this server's user session issuer (the
+  -- attachment fixture's client below sits under the same one). Left NULL,
   -- upstream token routing fails closed and Linear reads as having no identity.
   UPDATE mcp_servers
   SET remote_session_issuer_id =
@@ -1518,20 +1519,16 @@ BEGIN
   -- Inert upstream account, owned by the human on Linear session 6. Both
   -- active release agents share that human owner. The explicit client link
   -- makes this exact session reachable from the requesting session's issuer.
-  -- Reserved .invalid endpoints, an invalid ciphertext and no refresh token
+  -- The client sits under Linear's own remote identity provider: every client
+  -- bound to one user session issuer must share a remote issuer, or the
+  -- mcp_servers.remote_session_issuer_id derivation above would come out NULL.
+  -- Reserved example endpoints, an invalid ciphertext and no refresh token
   -- prevent this display fixture from becoming a usable upstream credential.
-  INSERT INTO remote_session_issuers
-    (id, project_id, organization_id, slug, issuer, name, authorization_grant_profiles_supported)
-  VALUES (demo.det_uuid('gram-demo-attachment-issuer'), proj_a, demo_org,
-          'fictional-release-account', 'https://release.example.invalid',
-          -- Administrator-declared capability only: not a discovery visit or client grant.
-          'Fictional release account', ARRAY['urn:ietf:params:oauth:grant-profile:id-jag']);
-
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,
      token_endpoint_auth_method)
   VALUES (demo.det_uuid('gram-demo-attachment-client'), proj_a, demo_org,
-          demo.det_uuid('gram-demo-attachment-issuer'),
+          demo.det_uuid('gram-demo-remote-identity-provider-linear'),
           demo.det_uuid('gram-demo-attachment-client')::text, 'none');
 
   INSERT INTO remote_session_client_user_session_issuers
@@ -3211,10 +3208,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: expected 8 registered agents, found %', stray;
   END IF;
 
+  -- Linear's remote identity provider and the identity chaining example.
   SELECT count(*) INTO stray FROM remote_session_issuers
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 project remote session issuers, found %', stray;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 project remote session issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM remote_session_clients
@@ -3230,6 +3228,28 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE usi.project_id = proj_a;
   IF stray <> 2 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 2 Remote MCP User Identity bindings, found %', stray;
+  END IF;
+
+  -- The stamp has to be what ResyncMCPServerRemoteSessionIssuers would derive:
+  -- every live client bound to Linear's user session issuer names one remote
+  -- issuer, and it is the stamped one.
+  SELECT count(DISTINCT c.remote_session_issuer_id) INTO stray
+  FROM remote_session_client_user_session_issuers link
+  JOIN remote_session_clients c ON c.id = link.remote_session_client_id
+  WHERE link.user_session_issuer_id = demo.det_uuid('gram-demo-issuer-linear')
+    AND c.deleted IS FALSE
+    AND c.remote_session_issuer_id
+        = demo.det_uuid('gram-demo-remote-identity-provider-linear');
+  IF stray <> 1 OR EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers link
+    JOIN remote_session_clients c ON c.id = link.remote_session_client_id
+    WHERE link.user_session_issuer_id = demo.det_uuid('gram-demo-issuer-linear')
+      AND c.deleted IS FALSE
+      AND c.remote_session_issuer_id
+          <> demo.det_uuid('gram-demo-remote-identity-provider-linear')
+  ) THEN
+    RAISE EXCEPTION 'demo seed postflight: Linear user session issuer must bind clients of exactly one remote issuer, its stamped provider';
   END IF;
 
   SELECT count(*) INTO stray FROM mcp_servers
