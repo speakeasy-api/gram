@@ -143,8 +143,8 @@ export function AdmitSubjectSheet({
           </SheetTitle>
           <SheetDescription>
             Allowing a machine is the grant of access. The agent you choose
-            supplies the whole policy that machine acts under, so it is chosen
-            at the same time.
+            supplies the whole policy that the machine acts under, so it is
+            chosen at the same time.
           </SheetDescription>
         </SheetHeader>
 
@@ -166,9 +166,9 @@ export function AdmitSubjectSheet({
                 </Text>
               ) : (
                 <Text muted small>
-                  Stored and compared exactly as entered, and not normalized.
-                  End it with <code>*</code> to admit every subject beginning
-                  with the part before the <code>*</code>.
+                  Surrounding spaces are trimmed; otherwise stored and compared
+                  exactly as entered. End it with <code>*</code> to admit every
+                  subject beginning with the part before the <code>*</code>.
                 </Text>
               )}
             </Stack>
@@ -198,11 +198,13 @@ export function AdmitSubjectSheet({
                 // alignTop because this body runs to several lines: a centred icon
                 // drifts into the middle of the text and stops reading as a marker.
                 <Alert variant="warning" alignTop>
-                  <div role="status" className="break-words">
-                    <Text small className="font-medium">
+                  {/* Plain elements so the copy takes the Alert's warning
+                      color, which Text's own color class would override. */}
+                  <div className="text-sm break-words">
+                    <p className="font-medium">
                       This rule admits more than one identity
-                    </Text>
-                    <Text small>
+                    </p>
+                    <p>
                       Any subject beginning{" "}
                       {/* A subject is one unbroken token, so it has to be told it
                         may wrap: <code> will not on its own, and the sheet
@@ -215,7 +217,7 @@ export function AdmitSubjectSheet({
                       Check that the varying part is assigned by the issuer
                       rather than chosen by the caller — where a caller can
                       influence it, this admits anyone who can.
-                    </Text>
+                    </p>
                   </div>
                 </Alert>
               )}

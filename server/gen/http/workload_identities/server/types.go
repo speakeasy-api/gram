@@ -30,7 +30,8 @@ type RegisterIssuerRequestBody struct {
 	// clearing it makes wildcard rules already written inert immediately.
 	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
 	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
-	// not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+	// not key/value pairs. Trimmed and de-duplicated on write, then limited to 40
+	// tags of at most 64 characters each.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
@@ -1994,18 +1995,13 @@ func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput 
 // endpoint payload.
 func NewRegisterIssuerPayload(body *RegisterIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.RegisterIssuerPayload {
 	v := &workloadidentities.RegisterIssuerPayload{
-		Name:    *body.Name,
-		Issuer:  *body.Issuer,
-		JwksURI: *body.JwksURI,
-	}
-	if body.AllowWildcardAdmission != nil {
-		v.AllowWildcardAdmission = *body.AllowWildcardAdmission
+		Name:                   *body.Name,
+		Issuer:                 *body.Issuer,
+		JwksURI:                *body.JwksURI,
+		AllowWildcardAdmission: body.AllowWildcardAdmission,
 	}
 	if body.ProjectScoped != nil {
 		v.ProjectScoped = *body.ProjectScoped
-	}
-	if body.AllowWildcardAdmission == nil {
-		v.AllowWildcardAdmission = true
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))
@@ -2102,14 +2098,6 @@ func ValidateRegisterIssuerRequestBody(body *RegisterIssuerRequestBody) (err err
 	}
 	if body.JwksURI != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_uri", *body.JwksURI, goa.FormatURI))
-	}
-	if len(body.Tags) > 40 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 40, false))
-	}
-	for _, e := range body.Tags {
-		if utf8.RuneCountInString(e) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags[*]", e, utf8.RuneCountInString(e), 64, false))
-		}
 	}
 	return
 }

@@ -115,9 +115,10 @@ type RegisterIssuerPayload struct {
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Re-checked on every lookup rather than at write time, so
 	// clearing it makes wildcard rules already written inert immediately.
-	AllowWildcardAdmission bool
+	AllowWildcardAdmission *bool
 	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
-	// not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+	// not key/value pairs. Trimmed and de-duplicated on write, then limited to 40
+	// tags of at most 64 characters each.
 	Tags []string
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.

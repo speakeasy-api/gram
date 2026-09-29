@@ -174,12 +174,8 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.", func() {
 		Format(FormatURI)
 	})
-	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Re-checked on every lookup rather than at write time, so clearing it makes wildcard rules already written inert immediately.", func() {
-		Default(true)
-	})
-	Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.", func() {
-		MaxLength(40)
-	})
+	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Re-checked on every lookup rather than at write time, so clearing it makes wildcard rules already written inert immediately.")
+	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
 	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Defaults to false.", func() {
 		Default(false)
 	})

@@ -2,6 +2,7 @@ package workloadpolicy_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -24,7 +25,7 @@ func registerAnthropic(t *testing.T, ctx context.Context, ti *testInstance, allo
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: allowWildcard,
+		AllowWildcardAdmission: new(allowWildcard),
 		Tags:                   nil,
 		ProjectScoped:          false,
 	})
@@ -61,7 +62,7 @@ func TestRegisterIssuer_Success(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-func TestRegisterIssuer_DefaultsToRefusingWildcards(t *testing.T) {
+func TestRegisterIssuer_DefaultsToAllowingWildcards(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
@@ -72,14 +73,21 @@ func TestRegisterIssuer_DefaultsToRefusingWildcards(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: false,
+		AllowWildcardAdmission: nil,
 		Tags:                   nil,
 		ProjectScoped:          false,
 	})
 	require.NoError(t, err)
 
-	// Default-off, and off is the resting state: a wildcard rule is a real
-	// widening, so it has to be asked for at the issuer as well as per rule.
+	require.True(t, policy.Issuers[0].AllowWildcardAdmission)
+}
+
+func TestRegisterIssuer_KeepsAnExplicitWildcardOptOut(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy := registerAnthropic(t, ctx, ti, false)
+
 	require.False(t, policy.Issuers[0].AllowWildcardAdmission)
 }
 
@@ -117,7 +125,7 @@ func TestRegisterIssuer_RefusesUnsafeURLs(t *testing.T) {
 				Name:                   "Claude Tag " + tc.name,
 				Issuer:                 tc.issuer,
 				JwksURI:                tc.jwksURI,
-				AllowWildcardAdmission: false,
+				AllowWildcardAdmission: new(false),
 				ProjectScoped:          false,
 			})
 			requireOopsCode(t, err, oops.CodeInvalid)
@@ -138,7 +146,7 @@ func TestRegisterIssuer_RefusesADuplicateNameAtTheSameTier(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 "https://identity.example.com",
 		JwksURI:                "https://identity.example.com/jwks",
-		AllowWildcardAdmission: false,
+		AllowWildcardAdmission: new(false),
 		Tags:                   nil,
 		ProjectScoped:          false,
 	})
@@ -160,7 +168,7 @@ func TestRegisterIssuer_RequiresWorkloadWrite(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: false,
+		AllowWildcardAdmission: new(false),
 		Tags:                   nil,
 		ProjectScoped:          false,
 	})
@@ -181,7 +189,7 @@ func TestRegisterIssuer_RefusesABlankName(t *testing.T) {
 		Name:                   strings.Repeat(" ", 4),
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: false,
+		AllowWildcardAdmission: new(false),
 		Tags:                   nil,
 		ProjectScoped:          false,
 	})
@@ -199,7 +207,7 @@ func TestRegisterIssuer_StoresTagsTrimmedAndDeduplicated(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: true,
+		AllowWildcardAdmission: new(true),
 		Tags:                   []string{"  production  ", "ci", "production"},
 		ProjectScoped:          false,
 	})
@@ -233,7 +241,7 @@ func TestRegisterIssuer_RefusesABlankTag(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: true,
+		AllowWildcardAdmission: new(true),
 		Tags:                   []string{"production", "   "},
 		ProjectScoped:          false,
 	})
@@ -251,9 +259,72 @@ func TestRegisterIssuer_RefusesAnOverlongTag(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: true,
+		AllowWildcardAdmission: new(true),
 		Tags:                   []string{strings.Repeat("a", 65)},
 		ProjectScoped:          false,
 	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func registerWithTags(ctx context.Context, ti *testInstance, tags []string) (*gen.WorkloadIdentityPolicy, error) {
+	return ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "Claude Tag",
+		Issuer:                 anthropicIssuer,
+		JwksURI:                anthropicJWKS,
+		AllowWildcardAdmission: new(true),
+		Tags:                   tags,
+		ProjectScoped:          false,
+	})
+}
+
+func TestRegisterIssuer_AcceptsATagAtTheLengthLimit(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	// Runes, not bytes: 64 multi-byte characters are within the limit.
+	tag := strings.Repeat("é", 64)
+	policy, err := registerWithTags(ctx, ti, []string{tag})
+	require.NoError(t, err)
+	require.Equal(t, []string{tag}, policy.Issuers[0].Tags)
+}
+
+func TestRegisterIssuer_RefusesMoreThanFortyTags(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	tags := make([]string, 41)
+	for i := range tags {
+		tags[i] = fmt.Sprintf("tag-%d", i)
+	}
+	_, err := registerWithTags(ctx, ti, tags)
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestRegisterIssuer_LimitsTagsAfterNormalizing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	// 41 entries that de-duplicate to 40, one of them padded past 64
+	// characters before trimming.
+	tags := make([]string, 0, 41)
+	for i := range 40 {
+		tags = append(tags, fmt.Sprintf("tag-%d", i))
+	}
+	tags = append(tags, "tag-0")
+	tags[1] = "  " + strings.Repeat("a", 64) + "  "
+
+	policy, err := registerWithTags(ctx, ti, tags)
+	require.NoError(t, err)
+	require.Len(t, policy.Issuers[0].Tags, 40)
+}
+
+func TestRegisterIssuer_RefusesATagWithANulCharacter(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	_, err := registerWithTags(ctx, ti, []string{"prod\x00uction"})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
