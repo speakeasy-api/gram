@@ -5665,6 +5665,7 @@ WHERE c.id = $1::uuid
   AND c.project_id IS NULL
   AND c.organization_id = $3::text
   AND c.deleted IS FALSE
+  AND c.identity_provider_connection_id IS NULL
   AND i.id = $2::uuid
   AND i.project_id IS NULL
   AND (i.organization_id = $3::text OR i.organization_id IS NULL)
@@ -5683,9 +5684,10 @@ type GetTrustedRemoteSessionClientForOrganizationRow struct {
 }
 
 // The exact live issuer/client pair eligible for organization identity-provider
-// login. Clients must be organization-owned by the caller; project and global
-// clients are deliberately excluded. The issuer may be organization-owned or
-// global, but the client must belong to that exact issuer.
+// login. Clients must be organization-owned by the caller; project, global,
+// and identity-provider-connection managed clients are deliberately excluded.
+// The issuer may be organization-owned or global, but the client must belong
+// to that exact issuer.
 func (q *Queries) GetTrustedRemoteSessionClientForOrganization(ctx context.Context, arg GetTrustedRemoteSessionClientForOrganizationParams) (GetTrustedRemoteSessionClientForOrganizationRow, error) {
 	row := q.db.QueryRow(ctx, getTrustedRemoteSessionClientForOrganization, arg.ClientID, arg.IssuerID, arg.OrganizationID)
 	var i GetTrustedRemoteSessionClientForOrganizationRow
@@ -9482,6 +9484,7 @@ WHERE c.id = $1::uuid
   AND c.project_id IS NULL
   AND c.organization_id = $3::text
   AND c.deleted IS FALSE
+  AND c.identity_provider_connection_id IS NULL
   AND i.id = $2::uuid
   AND i.project_id IS NULL
   AND (i.organization_id = $3::text OR i.organization_id IS NULL)

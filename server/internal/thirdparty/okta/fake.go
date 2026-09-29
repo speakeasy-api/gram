@@ -9,6 +9,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // Fixtures seeds a Fake with in-memory Okta data.
@@ -33,7 +36,8 @@ type Fixtures struct {
 }
 
 // Fake is an in-memory Client for tests and local development. It matches
-// on Query, Status, and Search only.
+// on Query, Status, and Search only. A Fake handed out by FakeFactory
+// authenticates with the Config it was last requested with.
 type Fake struct {
 	mu         sync.Mutex
 	fixtures   Fixtures
@@ -41,6 +45,12 @@ type Fake struct {
 	err        error
 	methodErrs map[string]error
 	appErrs    map[string]map[string]error
+
+	cfg            *Config
+	requiredSecret string
+	decrypter      SecretDecrypter
+	bearerOnly     bool
+	lastAuthMethod remotesessions.TokenEndpointAuthMethod
 }
 
 var _ Client = (*Fake)(nil)
@@ -52,7 +62,80 @@ func NewFake(fixtures Fixtures) *Fake {
 	if fixtures.AppGroups == nil {
 		fixtures.AppGroups = map[string][]AppGroup{}
 	}
-	return &Fake{mu: sync.Mutex{}, fixtures: fixtures, calls: nil, err: nil, methodErrs: map[string]error{}, appErrs: map[string]map[string]error{}}
+	return &Fake{
+		mu:             sync.Mutex{},
+		fixtures:       fixtures,
+		calls:          nil,
+		err:            nil,
+		methodErrs:     map[string]error{},
+		appErrs:        map[string]map[string]error{},
+		cfg:            nil,
+		requiredSecret: "",
+		decrypter:      nil,
+		bearerOnly:     false,
+		lastAuthMethod: "",
+	}
+}
+
+// RequireClientSecret makes every call under a client_secret_basic Config
+// fail with invalid_client, as Okta's token endpoint does, unless decrypter
+// turns the Config's ClientSecretEncrypted into secret. An empty secret clears
+// the requirement.
+func (f *Fake) RequireClientSecret(secret string, decrypter SecretDecrypter) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.requiredSecret = secret
+	f.decrypter = decrypter
+}
+
+// SetBearerOnly makes VerifyScopes report a Bearer token (DPoPBound false),
+// as an Okta app without DPoP enabled issues.
+func (f *Fake) SetBearerOnly(bearerOnly bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bearerOnly = bearerOnly
+}
+
+// LastAuthMethod returns the auth method of the last call's Config; empty
+// when no call ran under a Config.
+func (f *Fake) LastAuthMethod() remotesessions.TokenEndpointAuthMethod {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lastAuthMethod
+}
+
+func (f *Fake) useConfig(cfg Config) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cfg = &cfg
+}
+
+// credentialError mirrors the token endpoint's refusal of a bad client
+// secret. Callers must hold f.mu.
+func (f *Fake) credentialError() error {
+	if f.cfg == nil {
+		return nil
+	}
+	method := f.cfg.AuthMethod
+	if method == "" {
+		method = remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
+	}
+	f.lastAuthMethod = method
+	if method != remotesessions.TokenEndpointAuthMethodBasic || f.requiredSecret == "" {
+		return nil
+	}
+	rejected := &APIError{Method: http.MethodPost, Path: tokenEndpointPath, StatusCode: http.StatusUnauthorized, ErrorCode: oautherr.CodeInvalidClient, Summary: "Client authentication failed."}
+	if f.decrypter == nil || f.cfg.ClientSecretEncrypted == "" {
+		return rejected
+	}
+	secret, err := f.decrypter.Decrypt(f.cfg.ClientSecretEncrypted)
+	if err != nil {
+		return fmt.Errorf("decrypt okta client secret: %w: %w", ErrClientSecretUndecryptable, err)
+	}
+	if secret != f.requiredSecret {
+		return rejected
+	}
+	return nil
 }
 
 // SetFixtures replaces the in-memory data for subsequent calls.
@@ -127,6 +210,9 @@ func (f *Fake) record(name string) error {
 	f.calls = append(f.calls, name)
 	if f.err != nil {
 		return f.err
+	}
+	if err := f.credentialError(); err != nil {
+		return err
 	}
 	return f.methodErrs[name]
 }
@@ -244,7 +330,7 @@ func (f *Fake) VerifyScopes(_ context.Context, required []string) (*ScopeVerific
 	if len(granted) == 0 {
 		return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: false, ExpiresAt: time.Time{}}, nil
 	}
-	return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: true, ExpiresAt: time.Now().Add(time.Hour)}, nil
+	return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: !f.bearerOnly, ExpiresAt: time.Now().Add(time.Hour)}, nil
 }
 
 func (f *Fake) ListUsers(_ context.Context, req ListUsersRequest) ([]User, error) {

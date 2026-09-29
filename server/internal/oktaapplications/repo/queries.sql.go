@@ -431,9 +431,12 @@ SELECT
   , c.organization_id
   , c.status
   , o.org_url
+  , o.dpop_required
   , rc.id AS remote_session_client_id
   , rc.client_id
   , rc.json_web_key_set_id
+  , rc.token_endpoint_auth_method
+  , rc.client_secret_encrypted
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -450,13 +453,16 @@ WHERE c.id = $1
 `
 
 type GetSyncTargetRow struct {
-	ConnectionID          uuid.UUID
-	OrganizationID        string
-	Status                string
-	OrgUrl                string
-	RemoteSessionClientID uuid.UUID
-	ClientID              string
-	JsonWebKeySetID       uuid.NullUUID
+	ConnectionID            uuid.UUID
+	OrganizationID          string
+	Status                  string
+	OrgUrl                  string
+	DpopRequired            bool
+	RemoteSessionClientID   uuid.UUID
+	ClientID                string
+	JsonWebKeySetID         uuid.NullUUID
+	TokenEndpointAuthMethod pgtype.Text
+	ClientSecretEncrypted   pgtype.Text
 }
 
 // The credential configuration a run needs; the managed client is the
@@ -469,9 +475,12 @@ func (q *Queries) GetSyncTarget(ctx context.Context, connectionID uuid.UUID) (Ge
 		&i.OrganizationID,
 		&i.Status,
 		&i.OrgUrl,
+		&i.DpopRequired,
 		&i.RemoteSessionClientID,
 		&i.ClientID,
 		&i.JsonWebKeySetID,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientSecretEncrypted,
 	)
 	return i, err
 }

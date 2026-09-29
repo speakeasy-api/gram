@@ -34,9 +34,12 @@ SELECT
   , c.organization_id
   , c.status
   , o.org_url
+  , o.dpop_required
   , rc.id AS remote_session_client_id
   , rc.client_id
   , rc.json_web_key_set_id
+  , rc.token_endpoint_auth_method
+  , rc.client_secret_encrypted
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id

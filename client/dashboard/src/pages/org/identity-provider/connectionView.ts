@@ -137,6 +137,8 @@ export const VERIFICATION_REASON_LABELS: Record<VerificationReasons, string> = {
     "Okta did not apply the required token protection (DPoP). Check the app’s DPoP setting in Okta.",
   key_not_fetched:
     "Okta has not retrieved the public signing key. Check that the app uses the public key URL (JWKS) on the Okta Setup tab.",
+  secret_rejected:
+    "Okta rejected the client ID or client secret. Check both values against the Speakeasy app in Okta.",
   "read_failed:okta.apps.read":
     "Speakeasy could not read applications from Okta.",
   "read_failed:okta.users.read": "Speakeasy could not read users from Okta.",

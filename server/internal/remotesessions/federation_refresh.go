@@ -75,7 +75,7 @@ func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *Fede
 		return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
 	}
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}}
-	req, err := newTokenEndpointRequest(ctx, p.metadata.TokenEndpoint, form, auth)
+	req, err := NewTokenEndpointRequest(ctx, p.metadata.TokenEndpoint, form, auth)
 	if err != nil {
 		return nil, federatedRefreshSetupError(classifyFederatedExchangeError(err))
 	}

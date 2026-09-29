@@ -30,6 +30,21 @@ type SubmitClientIDRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Okta application client ID (0oa...).
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// Client secret from the Speakeasy integration installed from the Okta
+	// Integration Network. Required for connections created with listing_mode oin;
+	// rejected otherwise. Encrypted before persisting and never returned.
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+}
+
+// ReplaceClientSecretRequestBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// request body.
+type ReplaceClientSecretRequestBody struct {
+	// Connection ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// New client secret from the Speakeasy integration in Okta. Encrypted before
+	// persisting and never returned.
+	ClientSecret string `form:"client_secret" json:"client_secret" xml:"client_secret"`
 }
 
 // VerifyRequestBody is the type of the "identityProviderConnections" service
@@ -87,6 +102,8 @@ type CreateResponseBody struct {
 	// catalog.
 	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
 	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	// Omitted for connections installed from the Okta Integration Network, which
+	// authenticate with a client secret.
 	JwksURL *string `form:"jwks_url,omitempty" json:"jwks_url,omitempty" xml:"jwks_url,omitempty"`
 	// Okta application client ID. Omitted until submitted.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -144,6 +161,68 @@ type SubmitClientIDResponseBody struct {
 	// catalog.
 	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
 	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	// Omitted for connections installed from the Okta Integration Network, which
+	// authenticate with a client secret.
+	JwksURL *string `form:"jwks_url,omitempty" json:"jwks_url,omitempty" xml:"jwks_url,omitempty"`
+	// Okta application client ID. Omitted until submitted.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Whether the real Okta client ID has replaced the provisioning placeholder.
+	ClientIDSubmitted *bool `form:"client_id_submitted,omitempty" json:"client_id_submitted,omitempty" xml:"client_id_submitted,omitempty"`
+	// Whether Okta issued a DPoP-bound token at the last verification.
+	DpopRequired *bool `form:"dpop_required,omitempty" json:"dpop_required,omitempty" xml:"dpop_required,omitempty"`
+	// Okta API scopes the integration needs.
+	RequiredScopes []string `form:"required_scopes,omitempty" json:"required_scopes,omitempty" xml:"required_scopes,omitempty"`
+	// Scopes Okta granted at the last verification.
+	GrantedScopes []string `form:"granted_scopes,omitempty" json:"granted_scopes,omitempty" xml:"granted_scopes,omitempty"`
+	// Required scopes Okta did not grant at the last verification.
+	MissingScopes []string `form:"missing_scopes,omitempty" json:"missing_scopes,omitempty" xml:"missing_scopes,omitempty"`
+	// Typed reasons recorded by the last verification; empty when verified or not
+	// yet verified. missing_role is reserved for a later release.
+	VerificationReasons []string `form:"verification_reasons,omitempty" json:"verification_reasons,omitempty" xml:"verification_reasons,omitempty"`
+	// ISO 8601 timestamp of the last verification that found every required scope
+	// granted. Omitted until then.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// Why the last verification did not complete: Okta rejected the credential, or
+	// could not be reached. Omitted when it completed.
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// Admin-entered Okta AI agent ID. Display only.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Admin-entered Okta application ID the AI agent is bound to. Display only.
+	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
+	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
+	// Console steps for the connection's listing mode, in order.
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync,omitempty" json:"applications_sync,omitempty" xml:"applications_sync,omitempty"`
+	CreatedAt        *string                                                 `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt        *string                                                 `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ReplaceClientSecretResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body.
+type ReplaceClientSecretResponseBody struct {
+	// Connection ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Organization the connection belongs to.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Identity provider; always okta.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// Connection state. pending until the client ID is submitted and verified;
+	// verified when every required scope is granted over DPoP; degraded when
+	// verification found gaps (see verification_reasons); revoked once the
+	// credential was withdrawn.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Okta org URL, for example https://example.okta.com.
+	OrgURL *string `form:"org_url,omitempty" json:"org_url,omitempty" xml:"org_url,omitempty"`
+	// Discovered authorization server issuer. Equal to org_url by construction.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// Which checklist template applies: custom_app when the admin creates the API
+	// Services app by hand, oin when the Speakeasy OIN listing is added from the
+	// catalog.
+	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
+	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	// Omitted for connections installed from the Okta Integration Network, which
+	// authenticate with a client secret.
 	JwksURL *string `form:"jwks_url,omitempty" json:"jwks_url,omitempty" xml:"jwks_url,omitempty"`
 	// Okta application client ID. Omitted until submitted.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -201,6 +280,8 @@ type VerifyResponseBody struct {
 	// catalog.
 	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
 	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	// Omitted for connections installed from the Okta Integration Network, which
+	// authenticate with a client secret.
 	JwksURL *string `form:"jwks_url,omitempty" json:"jwks_url,omitempty" xml:"jwks_url,omitempty"`
 	// Okta application client ID. Omitted until submitted.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -265,6 +346,8 @@ type RecordAgentResponseBody struct {
 	// catalog.
 	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
 	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	// Omitted for connections installed from the Okta Integration Network, which
+	// authenticate with a client secret.
 	JwksURL *string `form:"jwks_url,omitempty" json:"jwks_url,omitempty" xml:"jwks_url,omitempty"`
 	// Okta application client ID. Omitted until submitted.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -322,6 +405,8 @@ type RevokeResponseBody struct {
 	// catalog.
 	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
 	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	// Omitted for connections installed from the Okta Integration Network, which
+	// authenticate with a client secret.
 	JwksURL *string `form:"jwks_url,omitempty" json:"jwks_url,omitempty" xml:"jwks_url,omitempty"`
 	// Okta application client ID. Omitted until submitted.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -380,6 +465,8 @@ type SyncApplicationsResponseBody struct {
 	// catalog.
 	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
 	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	// Omitted for connections installed from the Okta Integration Network, which
+	// authenticate with a client secret.
 	JwksURL *string `form:"jwks_url,omitempty" json:"jwks_url,omitempty" xml:"jwks_url,omitempty"`
 	// Okta application client ID. Omitted until submitted.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -901,6 +988,253 @@ type SubmitClientIDGatewayErrorResponseBody struct {
 // "identityProviderConnections" service "submitClientId" endpoint HTTP
 // response body for the "unavailable" error.
 type SubmitClientIDUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretFailedPreconditionResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "failed_precondition" error.
+type ReplaceClientSecretFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretRateLimitExceededResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "rate_limit_exceeded" error.
+type ReplaceClientSecretRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretUnauthorizedResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "unauthorized" error.
+type ReplaceClientSecretUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretForbiddenResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "forbidden" error.
+type ReplaceClientSecretForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretBadRequestResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "bad_request" error.
+type ReplaceClientSecretBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretNotFoundResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "not_found" error.
+type ReplaceClientSecretNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretConflictResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "conflict" error.
+type ReplaceClientSecretConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretUnsupportedMediaResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ReplaceClientSecretUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretInvalidResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "invalid" error.
+type ReplaceClientSecretInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretInvariantViolationResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ReplaceClientSecretInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretUnexpectedResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "unexpected" error.
+type ReplaceClientSecretUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretGatewayErrorResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "gateway_error" error.
+type ReplaceClientSecretGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReplaceClientSecretUnavailableResponseBody is the type of the
+// "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
+// response body for the "unavailable" error.
+type ReplaceClientSecretUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2314,6 +2648,8 @@ type OktaIdentityProviderConnectionResponseBody struct {
 	// catalog.
 	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
 	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	// Omitted for connections installed from the Okta Integration Network, which
+	// authenticate with a client secret.
 	JwksURL *string `form:"jwks_url,omitempty" json:"jwks_url,omitempty" xml:"jwks_url,omitempty"`
 	// Okta application client ID. Omitted until submitted.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
@@ -2415,8 +2751,20 @@ func NewCreateRequestBody(p *identityproviderconnections.CreatePayload) *CreateR
 // service.
 func NewSubmitClientIDRequestBody(p *identityproviderconnections.SubmitClientIDPayload) *SubmitClientIDRequestBody {
 	body := &SubmitClientIDRequestBody{
-		ID:       p.ID,
-		ClientID: p.ClientID,
+		ID:           p.ID,
+		ClientID:     p.ClientID,
+		ClientSecret: p.ClientSecret,
+	}
+	return body
+}
+
+// NewReplaceClientSecretRequestBody builds the HTTP request body from the
+// payload of the "replaceClientSecret" endpoint of the
+// "identityProviderConnections" service.
+func NewReplaceClientSecretRequestBody(p *identityproviderconnections.ReplaceClientSecretPayload) *ReplaceClientSecretRequestBody {
+	body := &ReplaceClientSecretRequestBody{
+		ID:           p.ID,
+		ClientSecret: p.ClientSecret,
 	}
 	return body
 }
@@ -2472,7 +2820,7 @@ func NewCreateOktaIdentityProviderConnectionOK(body *CreateResponseBody) *identi
 		OrgURL:            *body.OrgURL,
 		IssuerURL:         *body.IssuerURL,
 		ListingMode:       *body.ListingMode,
-		JwksURL:           *body.JwksURL,
+		JwksURL:           body.JwksURL,
 		ClientID:          body.ClientID,
 		ClientIDSubmitted: *body.ClientIDSubmitted,
 		DpopRequired:      *body.DpopRequired,
@@ -2722,7 +3070,7 @@ func NewSubmitClientIDOktaIdentityProviderConnectionOK(body *SubmitClientIDRespo
 		OrgURL:            *body.OrgURL,
 		IssuerURL:         *body.IssuerURL,
 		ListingMode:       *body.ListingMode,
-		JwksURL:           *body.JwksURL,
+		JwksURL:           body.JwksURL,
 		ClientID:          body.ClientID,
 		ClientIDSubmitted: *body.ClientIDSubmitted,
 		DpopRequired:      *body.DpopRequired,
@@ -2960,6 +3308,258 @@ func NewSubmitClientIDUnavailable(body *SubmitClientIDUnavailableResponseBody) *
 	return v
 }
 
+// NewReplaceClientSecretOktaIdentityProviderConnectionOK builds a
+// "identityProviderConnections" service "replaceClientSecret" endpoint result
+// from a HTTP "OK" response.
+func NewReplaceClientSecretOktaIdentityProviderConnectionOK(body *ReplaceClientSecretResponseBody) *identityproviderconnections.OktaIdentityProviderConnection {
+	v := &identityproviderconnections.OktaIdentityProviderConnection{
+		ID:                *body.ID,
+		OrganizationID:    *body.OrganizationID,
+		Provider:          *body.Provider,
+		Status:            *body.Status,
+		OrgURL:            *body.OrgURL,
+		IssuerURL:         *body.IssuerURL,
+		ListingMode:       *body.ListingMode,
+		JwksURL:           body.JwksURL,
+		ClientID:          body.ClientID,
+		ClientIDSubmitted: *body.ClientIDSubmitted,
+		DpopRequired:      *body.DpopRequired,
+		LastVerifiedAt:    body.LastVerifiedAt,
+		LastError:         body.LastError,
+		AgentID:           body.AgentID,
+		AgentAppID:        body.AgentAppID,
+		CreatedAt:         *body.CreatedAt,
+		UpdatedAt:         *body.UpdatedAt,
+	}
+	v.RequiredScopes = make([]string, len(body.RequiredScopes))
+	for i, val := range body.RequiredScopes {
+		v.RequiredScopes[i] = val
+	}
+	v.GrantedScopes = make([]string, len(body.GrantedScopes))
+	for i, val := range body.GrantedScopes {
+		v.GrantedScopes[i] = val
+	}
+	v.MissingScopes = make([]string, len(body.MissingScopes))
+	for i, val := range body.MissingScopes {
+		v.MissingScopes[i] = val
+	}
+	v.VerificationReasons = make([]string, len(body.VerificationReasons))
+	for i, val := range body.VerificationReasons {
+		v.VerificationReasons[i] = val
+	}
+	if body.ActiveKey != nil {
+		v.ActiveKey = unmarshalIdentityProviderConnectionActiveKeyResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionActiveKey(body.ActiveKey)
+	}
+	v.Checklist = make([]*identityproviderconnections.IdentityProviderConnectionChecklistItem, len(body.Checklist))
+	for i, val := range body.Checklist {
+		if val == nil {
+			v.Checklist[i] = nil
+			continue
+		}
+		v.Checklist[i] = unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionChecklistItem(val)
+	}
+	v.ApplicationsSync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(body.ApplicationsSync)
+
+	return v
+}
+
+// NewReplaceClientSecretFailedPrecondition builds a
+// identityProviderConnections service replaceClientSecret endpoint
+// failed_precondition error.
+func NewReplaceClientSecretFailedPrecondition(body *ReplaceClientSecretFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretRateLimitExceeded builds a identityProviderConnections
+// service replaceClientSecret endpoint rate_limit_exceeded error.
+func NewReplaceClientSecretRateLimitExceeded(body *ReplaceClientSecretRateLimitExceededResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretUnauthorized builds a identityProviderConnections
+// service replaceClientSecret endpoint unauthorized error.
+func NewReplaceClientSecretUnauthorized(body *ReplaceClientSecretUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretForbidden builds a identityProviderConnections service
+// replaceClientSecret endpoint forbidden error.
+func NewReplaceClientSecretForbidden(body *ReplaceClientSecretForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretBadRequest builds a identityProviderConnections
+// service replaceClientSecret endpoint bad_request error.
+func NewReplaceClientSecretBadRequest(body *ReplaceClientSecretBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretNotFound builds a identityProviderConnections service
+// replaceClientSecret endpoint not_found error.
+func NewReplaceClientSecretNotFound(body *ReplaceClientSecretNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretConflict builds a identityProviderConnections service
+// replaceClientSecret endpoint conflict error.
+func NewReplaceClientSecretConflict(body *ReplaceClientSecretConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretUnsupportedMedia builds a identityProviderConnections
+// service replaceClientSecret endpoint unsupported_media error.
+func NewReplaceClientSecretUnsupportedMedia(body *ReplaceClientSecretUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretInvalid builds a identityProviderConnections service
+// replaceClientSecret endpoint invalid error.
+func NewReplaceClientSecretInvalid(body *ReplaceClientSecretInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretInvariantViolation builds a
+// identityProviderConnections service replaceClientSecret endpoint
+// invariant_violation error.
+func NewReplaceClientSecretInvariantViolation(body *ReplaceClientSecretInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretUnexpected builds a identityProviderConnections
+// service replaceClientSecret endpoint unexpected error.
+func NewReplaceClientSecretUnexpected(body *ReplaceClientSecretUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretGatewayError builds a identityProviderConnections
+// service replaceClientSecret endpoint gateway_error error.
+func NewReplaceClientSecretGatewayError(body *ReplaceClientSecretGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReplaceClientSecretUnavailable builds a identityProviderConnections
+// service replaceClientSecret endpoint unavailable error.
+func NewReplaceClientSecretUnavailable(body *ReplaceClientSecretUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewVerifyOktaIdentityProviderConnectionOK builds a
 // "identityProviderConnections" service "verify" endpoint result from a HTTP
 // "OK" response.
@@ -2972,7 +3572,7 @@ func NewVerifyOktaIdentityProviderConnectionOK(body *VerifyResponseBody) *identi
 		OrgURL:            *body.OrgURL,
 		IssuerURL:         *body.IssuerURL,
 		ListingMode:       *body.ListingMode,
-		JwksURL:           *body.JwksURL,
+		JwksURL:           body.JwksURL,
 		ClientID:          body.ClientID,
 		ClientIDSubmitted: *body.ClientIDSubmitted,
 		DpopRequired:      *body.DpopRequired,
@@ -3399,7 +3999,7 @@ func NewRecordAgentOktaIdentityProviderConnectionOK(body *RecordAgentResponseBod
 		OrgURL:            *body.OrgURL,
 		IssuerURL:         *body.IssuerURL,
 		ListingMode:       *body.ListingMode,
-		JwksURL:           *body.JwksURL,
+		JwksURL:           body.JwksURL,
 		ClientID:          body.ClientID,
 		ClientIDSubmitted: *body.ClientIDSubmitted,
 		DpopRequired:      *body.DpopRequired,
@@ -3619,7 +4219,7 @@ func NewRevokeOktaIdentityProviderConnectionOK(body *RevokeResponseBody) *identi
 		OrgURL:            *body.OrgURL,
 		IssuerURL:         *body.IssuerURL,
 		ListingMode:       *body.ListingMode,
-		JwksURL:           *body.JwksURL,
+		JwksURL:           body.JwksURL,
 		ClientID:          body.ClientID,
 		ClientIDSubmitted: *body.ClientIDSubmitted,
 		DpopRequired:      *body.DpopRequired,
@@ -3839,7 +4439,7 @@ func NewSyncApplicationsOktaIdentityProviderConnectionOK(body *SyncApplicationsR
 		OrgURL:            *body.OrgURL,
 		IssuerURL:         *body.IssuerURL,
 		ListingMode:       *body.ListingMode,
-		JwksURL:           *body.JwksURL,
+		JwksURL:           body.JwksURL,
 		ClientID:          body.ClientID,
 		ClientIDSubmitted: *body.ClientIDSubmitted,
 		DpopRequired:      *body.DpopRequired,
@@ -4301,9 +4901,6 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 	if body.ListingMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("listing_mode", "body"))
 	}
-	if body.JwksURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_url", "body"))
-	}
 	if body.ClientIDSubmitted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_submitted", "body"))
 	}
@@ -4353,8 +4950,8 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "secret_rejected" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "secret_rejected", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -4415,8 +5012,116 @@ func ValidateSubmitClientIDResponseBody(body *SubmitClientIDResponseBody) (err e
 	if body.ListingMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("listing_mode", "body"))
 	}
-	if body.JwksURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_url", "body"))
+	if body.ClientIDSubmitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_submitted", "body"))
+	}
+	if body.DpopRequired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dpop_required", "body"))
+	}
+	if body.RequiredScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_scopes", "body"))
+	}
+	if body.GrantedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("granted_scopes", "body"))
+	}
+	if body.MissingScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_scopes", "body"))
+	}
+	if body.VerificationReasons == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verification_reasons", "body"))
+	}
+	if body.Checklist == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("checklist", "body"))
+	}
+	if body.ApplicationsSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_sync", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Provider != nil {
+		if !(*body.Provider == "okta") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"okta"}))
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "verified" || *body.Status == "degraded" || *body.Status == "revoked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "verified", "degraded", "revoked"}))
+		}
+	}
+	if body.ListingMode != nil {
+		if !(*body.ListingMode == "custom_app" || *body.ListingMode == "oin") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.listing_mode", *body.ListingMode, []any{"custom_app", "oin"}))
+		}
+	}
+	for _, e := range body.VerificationReasons {
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "secret_rejected" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "secret_rejected", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		}
+	}
+	if body.LastVerifiedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_verified_at", *body.LastVerifiedAt, goa.FormatDateTime))
+	}
+	if body.LastError != nil {
+		if !(*body.LastError == "credential_rejected" || *body.LastError == "okta_unreachable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.last_error", *body.LastError, []any{"credential_rejected", "okta_unreachable"}))
+		}
+	}
+	if body.ActiveKey != nil {
+		if err2 := ValidateIdentityProviderConnectionActiveKeyResponseBody(body.ActiveKey); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Checklist {
+		if e != nil {
+			if err2 := ValidateIdentityProviderConnectionChecklistItemResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.ApplicationsSync != nil {
+		if err2 := ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body.ApplicationsSync); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretResponseBody runs the validations defined on
+// ReplaceClientSecretResponseBody
+func ValidateReplaceClientSecretResponseBody(body *ReplaceClientSecretResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.OrgURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_url", "body"))
+	}
+	if body.IssuerURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url", "body"))
+	}
+	if body.ListingMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("listing_mode", "body"))
 	}
 	if body.ClientIDSubmitted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_submitted", "body"))
@@ -4467,8 +5172,8 @@ func ValidateSubmitClientIDResponseBody(body *SubmitClientIDResponseBody) (err e
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "secret_rejected" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "secret_rejected", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -4528,9 +5233,6 @@ func ValidateVerifyResponseBody(body *VerifyResponseBody) (err error) {
 	if body.ListingMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("listing_mode", "body"))
 	}
-	if body.JwksURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_url", "body"))
-	}
 	if body.ClientIDSubmitted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_submitted", "body"))
 	}
@@ -4580,8 +5282,8 @@ func ValidateVerifyResponseBody(body *VerifyResponseBody) (err error) {
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "secret_rejected" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "secret_rejected", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -4652,9 +5354,6 @@ func ValidateRecordAgentResponseBody(body *RecordAgentResponseBody) (err error) 
 	if body.ListingMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("listing_mode", "body"))
 	}
-	if body.JwksURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_url", "body"))
-	}
 	if body.ClientIDSubmitted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_submitted", "body"))
 	}
@@ -4704,8 +5403,8 @@ func ValidateRecordAgentResponseBody(body *RecordAgentResponseBody) (err error) 
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "secret_rejected" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "secret_rejected", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -4765,9 +5464,6 @@ func ValidateRevokeResponseBody(body *RevokeResponseBody) (err error) {
 	if body.ListingMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("listing_mode", "body"))
 	}
-	if body.JwksURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_url", "body"))
-	}
 	if body.ClientIDSubmitted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_submitted", "body"))
 	}
@@ -4817,8 +5513,8 @@ func ValidateRevokeResponseBody(body *RevokeResponseBody) (err error) {
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "secret_rejected" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "secret_rejected", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -4879,9 +5575,6 @@ func ValidateSyncApplicationsResponseBody(body *SyncApplicationsResponseBody) (e
 	if body.ListingMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("listing_mode", "body"))
 	}
-	if body.JwksURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_url", "body"))
-	}
 	if body.ClientIDSubmitted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_submitted", "body"))
 	}
@@ -4931,8 +5624,8 @@ func ValidateSyncApplicationsResponseBody(body *SyncApplicationsResponseBody) (e
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "secret_rejected" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "secret_rejected", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {
@@ -5601,6 +6294,318 @@ func ValidateSubmitClientIDGatewayErrorResponseBody(body *SubmitClientIDGatewayE
 // ValidateSubmitClientIDUnavailableResponseBody runs the validations defined
 // on submitClientId_unavailable_response_body
 func ValidateSubmitClientIDUnavailableResponseBody(body *SubmitClientIDUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretFailedPreconditionResponseBody runs the
+// validations defined on replaceClientSecret_failed_precondition_response_body
+func ValidateReplaceClientSecretFailedPreconditionResponseBody(body *ReplaceClientSecretFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretRateLimitExceededResponseBody runs the
+// validations defined on replaceClientSecret_rate_limit_exceeded_response_body
+func ValidateReplaceClientSecretRateLimitExceededResponseBody(body *ReplaceClientSecretRateLimitExceededResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretUnauthorizedResponseBody runs the validations
+// defined on replaceClientSecret_unauthorized_response_body
+func ValidateReplaceClientSecretUnauthorizedResponseBody(body *ReplaceClientSecretUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretForbiddenResponseBody runs the validations
+// defined on replaceClientSecret_forbidden_response_body
+func ValidateReplaceClientSecretForbiddenResponseBody(body *ReplaceClientSecretForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretBadRequestResponseBody runs the validations
+// defined on replaceClientSecret_bad_request_response_body
+func ValidateReplaceClientSecretBadRequestResponseBody(body *ReplaceClientSecretBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretNotFoundResponseBody runs the validations defined
+// on replaceClientSecret_not_found_response_body
+func ValidateReplaceClientSecretNotFoundResponseBody(body *ReplaceClientSecretNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretConflictResponseBody runs the validations defined
+// on replaceClientSecret_conflict_response_body
+func ValidateReplaceClientSecretConflictResponseBody(body *ReplaceClientSecretConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretUnsupportedMediaResponseBody runs the validations
+// defined on replaceClientSecret_unsupported_media_response_body
+func ValidateReplaceClientSecretUnsupportedMediaResponseBody(body *ReplaceClientSecretUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretInvalidResponseBody runs the validations defined
+// on replaceClientSecret_invalid_response_body
+func ValidateReplaceClientSecretInvalidResponseBody(body *ReplaceClientSecretInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretInvariantViolationResponseBody runs the
+// validations defined on replaceClientSecret_invariant_violation_response_body
+func ValidateReplaceClientSecretInvariantViolationResponseBody(body *ReplaceClientSecretInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretUnexpectedResponseBody runs the validations
+// defined on replaceClientSecret_unexpected_response_body
+func ValidateReplaceClientSecretUnexpectedResponseBody(body *ReplaceClientSecretUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretGatewayErrorResponseBody runs the validations
+// defined on replaceClientSecret_gateway_error_response_body
+func ValidateReplaceClientSecretGatewayErrorResponseBody(body *ReplaceClientSecretGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReplaceClientSecretUnavailableResponseBody runs the validations
+// defined on replaceClientSecret_unavailable_response_body
+func ValidateReplaceClientSecretUnavailableResponseBody(body *ReplaceClientSecretUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7414,9 +8419,6 @@ func ValidateOktaIdentityProviderConnectionResponseBody(body *OktaIdentityProvid
 	if body.ListingMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("listing_mode", "body"))
 	}
-	if body.JwksURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("jwks_url", "body"))
-	}
 	if body.ClientIDSubmitted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_submitted", "body"))
 	}
@@ -7466,8 +8468,8 @@ func ValidateOktaIdentityProviderConnectionResponseBody(body *OktaIdentityProvid
 		}
 	}
 	for _, e := range body.VerificationReasons {
-		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "secret_rejected" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "secret_rejected", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
 		}
 	}
 	if body.LastVerifiedAt != nil {

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -38,6 +39,42 @@ const (
 )
 
 var stubAssertionSecret = []byte("stub-assertion-secret-0123456789abcdef")
+
+// stubCiphertextPrefix marks a stubDecrypter ciphertext; the plaintext follows it.
+const stubCiphertextPrefix = "enc:"
+
+// stubDecrypter decrypts stubCiphertextPrefix-prefixed values, or fails with err.
+type stubDecrypter struct {
+	mu    sync.Mutex
+	err   error
+	calls int
+}
+
+func (d *stubDecrypter) Decrypt(ciphertext string) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.calls++
+	if d.err != nil {
+		return "", d.err
+	}
+	plaintext, ok := strings.CutPrefix(ciphertext, stubCiphertextPrefix)
+	if !ok {
+		return "", errors.New("stub decrypter: not a stub ciphertext")
+	}
+	return plaintext, nil
+}
+
+func (d *stubDecrypter) Calls() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.calls
+}
+
+func (d *stubDecrypter) setErr(err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.err = err
+}
 
 // fakeClock is shared by the client and the stub so iat checks agree.
 type fakeClock struct {
@@ -199,6 +236,29 @@ type stubOkta struct {
 	tokenRedirect           string
 	tokenPending429         int
 	overrides               map[string]http.HandlerFunc
+
+	// clientSecret, when set, makes the token endpoint require
+	// client_secret_basic with this secret instead of a client assertion.
+	clientSecret string
+
+	// basicAuthHeaders records each raw Authorization header on token requests.
+	basicAuthHeaders []string
+
+	// tokenForms records each token request form.
+	tokenForms []url.Values
+
+	// bearerTokens are issued tokens usable with the Bearer scheme and no proof.
+	bearerTokens map[string]bool
+
+	// resourceRequests records the Authorization scheme and DPoP header count
+	// of each resource request.
+	resourceRequests []resourceRequest
+}
+
+// resourceRequest is the auth shape of one resource request seen by the stub.
+type resourceRequest struct {
+	scheme      string
+	dpopHeaders int
 }
 
 func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
@@ -243,6 +303,11 @@ func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 		tokenRedirect:           "",
 		tokenPending429:         0,
 		overrides:               map[string]http.HandlerFunc{},
+		clientSecret:            "",
+		basicAuthHeaders:        nil,
+		tokenForms:              nil,
+		bearerTokens:            map[string]bool{},
+		resourceRequests:        nil,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /oauth2/v1/token", s.handleToken)
@@ -344,6 +409,30 @@ func (s *stubOkta) setTokenPending429(n int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.tokenPending429 = n
+}
+
+func (s *stubOkta) setClientSecret(secret string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clientSecret = secret
+}
+
+func (s *stubOkta) tokenAuthHeaders() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.basicAuthHeaders)
+}
+
+func (s *stubOkta) recordedTokenForms() []url.Values {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.tokenForms)
+}
+
+func (s *stubOkta) recordedResourceRequests() []resourceRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.resourceRequests)
 }
 
 func (s *stubOkta) setTokenNonce(nonce string) {
@@ -546,6 +635,19 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.mu.Lock()
+	s.basicAuthHeaders = append(s.basicAuthHeaders, r.Header.Get("Authorization"))
+	s.tokenForms = append(s.tokenForms, r.PostForm)
+	clientSecret := s.clientSecret
+	s.mu.Unlock()
+	if clientSecret != "" {
+		if !s.checkBasicAuth(w, r, clientSecret) {
+			return
+		}
+		s.issueToken(w, r, proof, thumbprint)
+		return
+	}
+
 	// Like Okta, the assertion jti burns before the nonce check.
 	assertion := r.Form.Get("client_assertion")
 	if assertion == "" {
@@ -593,7 +695,34 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_client", "error_description": "The client_assertion token has already been used"})
 		return
 	}
+	s.issueToken(w, r, proof, thumbprint)
+}
 
+// checkBasicAuth verifies RFC 6749 §2.3.1 client_secret_basic: form-urlencoded
+// credentials in the Authorization header and none in the body.
+func (s *stubOkta) checkBasicAuth(w http.ResponseWriter, r *http.Request, clientSecret string) bool {
+	for _, param := range []string{"client_id", "client_secret", "client_assertion", "client_assertion_type"} {
+		if r.PostForm.Has(param) {
+			s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request", "error_description": "unexpected " + param})
+			return false
+		}
+	}
+	rawUser, rawSecret, ok := r.BasicAuth()
+	if !ok {
+		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "missing basic auth"})
+		return false
+	}
+	user, userErr := url.QueryUnescape(rawUser)
+	secret, secretErr := url.QueryUnescape(rawSecret)
+	if userErr != nil || secretErr != nil || user != stubClientID || secret != clientSecret {
+		s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client", "error_description": "Client authentication failed."})
+		return false
+	}
+	return true
+}
+
+// issueToken runs the nonce and scope checks shared by both client auth methods.
+func (s *stubOkta) issueToken(w http.ResponseWriter, r *http.Request, proof proofRecord, thumbprint string) {
 	s.mu.Lock()
 	requireNonce, nonce, granted, tokenType, scopeErr, emitNonce := s.requireTokenNonce, s.tokenNonce, s.grantedScopes, s.tokenType, s.scopeErrorCode, s.emitTokenNonce
 	if s.rotateTokenNonce {
@@ -625,6 +754,9 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 	s.tokenCount++
 	token := fmt.Sprintf("stub-access-token-%d-%s", s.tokenCount, uuid.NewString())
 	s.tokens[token] = thumbprint
+	if strings.EqualFold(tokenType, oauthwire.TokenTypeBearer) {
+		s.bearerTokens[token] = true
+	}
 	s.mu.Unlock()
 
 	// RFC 9449 §8.2: a nonce on a successful response is used on the next request without a challenge.
@@ -641,12 +773,21 @@ func (s *stubOkta) handleToken(w http.ResponseWriter, r *http.Request) {
 
 func (s *stubOkta) resource(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		scheme, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
+		s.mu.Lock()
+		s.resourceRequests = append(s.resourceRequests, resourceRequest{scheme: scheme, dpopHeaders: len(r.Header.Values("DPoP"))})
+		bearer := s.bearerTokens[token]
+		s.mu.Unlock()
+		// RFC 6750 §2.1: an unbound token authorizes on its own, with no proof.
+		if scheme == oauthwire.TokenTypeBearer && bearer && len(r.Header.Values("DPoP")) == 0 {
+			next(w, r)
+			return
+		}
 		// RFC 9449 §4.3 step 1: exactly one DPoP header field, checked before the token lookup.
 		if n := len(r.Header.Values("DPoP")); n != 1 {
 			s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_dpop_proof", "error_description": fmt.Sprintf("expected one DPoP header, got %d", n)})
 			return
 		}
-		scheme, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
 		s.mu.Lock()
 		thumb, known := s.tokens[token]
 		s.mu.Unlock()
@@ -827,11 +968,12 @@ func (f *fakeSleeper) Waits() []time.Duration {
 }
 
 type testClient struct {
-	client  *httpClient
-	stub    *stubOkta
-	signer  *stubSigner
-	sleeper *fakeSleeper
-	clock   *fakeClock
+	client    *httpClient
+	stub      *stubOkta
+	signer    *stubSigner
+	decrypter *stubDecrypter
+	sleeper   *fakeSleeper
+	clock     *fakeClock
 }
 
 func (tc testClient) currentNonce() string {
@@ -853,7 +995,8 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	factory, ok := NewClientFactory(logger, policy, signer).(*clientFactory)
+	decrypter := &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0}
+	factory, ok := NewClientFactory(logger, policy, signer, decrypter).(*clientFactory)
 	require.True(t, ok)
 
 	cfg.OrgURL = stub.srv.URL
@@ -865,8 +1008,11 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 	if cfg.OrganizationID == "" {
 		cfg.OrganizationID = "org_test"
 	}
-	if cfg.JSONWebKeySetID == uuid.Nil {
+	if cfg.JSONWebKeySetID == uuid.Nil && cfg.AuthMethod != remotesessions.TokenEndpointAuthMethodBasic {
 		cfg.JSONWebKeySetID = uuid.New()
+	}
+	if secret, ok := strings.CutPrefix(cfg.ClientSecretEncrypted, stubCiphertextPrefix); ok && cfg.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic {
+		stub.setClientSecret(secret)
 	}
 
 	client, err := factory.Client(cfg)
@@ -883,7 +1029,7 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 	impl.now = clock.Now
 	impl.jitter = func() time.Duration { return maxRateLimitJitter / 2 }
 
-	return testClient{client: impl, stub: stub, signer: signer, sleeper: sleeper, clock: clock}
+	return testClient{client: impl, stub: stub, signer: signer, decrypter: decrypter, sleeper: sleeper, clock: clock}
 }
 
 func testConfig() Config {
@@ -893,9 +1039,20 @@ func testConfig() Config {
 		AudienceFormat:        "",
 		RemoteSessionClientID: uuid.Nil,
 		OrganizationID:        "",
-		JSONWebKeySetID:       uuid.Nil,
+		AuthMethod:            "",
+		JSONWebKeySetID:       uuid.New(),
+		ClientSecretEncrypted: "",
 		MaxPages:              0,
 	}
+}
+
+// basicTestConfig is a client_secret_basic Config whose secret the stub requires.
+func basicTestConfig(secret string) Config {
+	cfg := testConfig()
+	cfg.AuthMethod = remotesessions.TokenEndpointAuthMethodBasic
+	cfg.JSONWebKeySetID = uuid.Nil
+	cfg.ClientSecretEncrypted = stubCiphertextPrefix + secret
+	return cfg
 }
 
 func newDefaultTestClient(t *testing.T) testClient {

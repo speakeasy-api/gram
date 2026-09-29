@@ -66,6 +66,8 @@ WHERE ec.id = @id
 
 -- The managed client, its set, and the set's active key. The key join is LEFT
 -- so a revoked connection (live client, live set, no live keys) still resolves.
+-- The set join is LEFT for client-secret clients, which have no set; a client
+-- that references a set must still find it live.
 -- Organization-level only: the client, its issuer, and the set all carry the
 -- connection's organization scope, and the set must be marked by the same connection.
 -- name: GetManagedClient :one
@@ -82,7 +84,7 @@ JOIN remote_session_issuers AS i
  AND i.organization_id = c.organization_id
  AND i.project_id IS NULL
  AND i.deleted IS FALSE
-JOIN json_web_key_sets AS s
+LEFT JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
  AND s.id = c.json_web_key_set_id
  AND s.identity_provider_connection_id = c.identity_provider_connection_id
@@ -95,7 +97,8 @@ LEFT JOIN json_web_keys AS k
 WHERE c.organization_id = @organization_id
   AND c.project_id IS NULL
   AND c.identity_provider_connection_id = @identity_provider_connection_id
-  AND c.deleted IS FALSE;
+  AND c.deleted IS FALSE
+  AND (c.json_web_key_set_id IS NULL OR s.id IS NOT NULL);
 
 -- While pending, updated_at records observed publication (there is no published_at column).
 -- A pending key is not timed until its publication commit has been observed.
@@ -300,10 +303,12 @@ WHERE identity_provider_connection_id = @identity_provider_connection_id
 RETURNING *;
 
 -- Only the provisioner writes a managed client's client_id, and only while the
--- provisioning placeholder is still in place.
+-- provisioning placeholder is still in place. A client-secret client receives
+-- its secret in the same write.
 -- name: SetManagedClientID :one
 UPDATE remote_session_clients
 SET client_id = @client_id,
+    client_secret_encrypted = sqlc.narg(client_secret_encrypted),
     upstream_rejected_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -311,6 +316,33 @@ WHERE id = @id
   AND project_id IS NULL
   AND identity_provider_connection_id = @identity_provider_connection_id
   AND client_id = @placeholder_client_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: SetManagedClientSecret :one
+UPDATE remote_session_clients
+SET client_secret_encrypted = @client_secret_encrypted,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- Revocation withdraws a client-secret client's credential.
+-- name: ClearManagedClientSecret :one
+UPDATE remote_session_clients
+SET client_secret_encrypted = NULL,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND token_endpoint_auth_method = 'client_secret_basic'
   AND deleted IS FALSE
 RETURNING *;
 

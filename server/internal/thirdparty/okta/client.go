@@ -49,7 +49,7 @@ const hardMaxPages = 500
 var defaultScopes = []string{"okta.apps.read", "okta.users.read", "okta.groups.read"}
 
 // Config identifies the Okta org and the remote session client whose
-// private_key_jwt credential authenticates against it.
+// credential authenticates against it.
 type Config struct {
 	// OrgURL is the Okta org base URL, for example https://example.okta.com.
 	OrgURL string
@@ -68,11 +68,34 @@ type Config struct {
 	// OrganizationID is the Gram organization that owns the credential.
 	OrganizationID string
 
-	// JSONWebKeySetID is the organization key set holding the signing key.
+	// AuthMethod is the token endpoint client authentication; empty means
+	// private_key_jwt.
+	AuthMethod remotesessions.TokenEndpointAuthMethod
+
+	// JSONWebKeySetID is the organization key set holding the signing key;
+	// required for private_key_jwt only.
 	JSONWebKeySetID uuid.UUID
+
+	// ClientSecretEncrypted is the encrypted client secret; required for
+	// client_secret_basic only and decrypted per token request.
+	ClientSecretEncrypted string
+
+	// RequireDPoP refuses unbound tokens even for client_secret_basic. Set it
+	// once a connection has been seen DPoP-bound so it cannot silently fall
+	// back to Bearer.
+	RequireDPoP bool
 
 	// MaxPages caps how many pages a list call follows; zero uses 50.
 	MaxPages int
+}
+
+// ErrClientSecretUndecryptable means the stored client secret could not be
+// decrypted, so no token request was sent.
+var ErrClientSecretUndecryptable = errors.New("okta: client secret could not be decrypted")
+
+// SecretDecrypter decrypts a stored client secret; *encryption.Client satisfies it.
+type SecretDecrypter interface {
+	Decrypt(ciphertext string) (string, error)
 }
 
 type cachedToken struct {
@@ -89,6 +112,8 @@ type httpClient struct {
 	cfg        Config
 	httpClient *guardian.HTTPClient
 	signer     remotesessions.TokenEndpointAssertionSigner
+	decrypter  SecretDecrypter
+	authMethod remotesessions.TokenEndpointAuthMethod
 	key        *dpop.Key
 	orgURL     *url.URL
 	tokenURL   *url.URL
@@ -116,13 +141,37 @@ var _ Client = (*httpClient)(nil)
 // ephemeral DPoP key and token cache. The client never follows redirects:
 // a 3xx from Okta surfaces as an APIError so credentials are only ever sent
 // to the configured org.
-func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotesessions.TokenEndpointAssertionSigner, cfg Config) (Client, error) {
+func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotesessions.TokenEndpointAssertionSigner, decrypter SecretDecrypter, cfg Config) (Client, error) {
 	orgURL, err := parseOrgURL(cfg.OrgURL)
 	if err != nil {
 		return nil, err
 	}
 	if cfg.ClientID == "" {
 		return nil, errors.New("okta: client id is required")
+	}
+	authMethod := cfg.AuthMethod
+	if authMethod == "" {
+		authMethod = remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
+	}
+	switch authMethod {
+	case remotesessions.TokenEndpointAuthMethodPrivateKeyJWT:
+		if signer == nil {
+			return nil, errors.New("okta: private_key_jwt requires an assertion signer")
+		}
+		if cfg.JSONWebKeySetID == uuid.Nil {
+			return nil, errors.New("okta: private_key_jwt requires a key set")
+		}
+	case remotesessions.TokenEndpointAuthMethodBasic:
+		if cfg.ClientSecretEncrypted == "" {
+			return nil, errors.New("okta: client_secret_basic requires a client secret")
+		}
+		if decrypter == nil {
+			return nil, errors.New("okta: client_secret_basic requires a secret decrypter")
+		}
+	case remotesessions.TokenEndpointAuthMethodPost, remotesessions.TokenEndpointAuthMethodNone:
+		return nil, fmt.Errorf("okta: unsupported token endpoint auth method %q", authMethod)
+	default:
+		return nil, fmt.Errorf("okta: unsupported token endpoint auth method %q", authMethod)
 	}
 	if cfg.AudienceFormat != string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint) {
 		return nil, fmt.Errorf("okta: audience format %q must be %q", cfg.AudienceFormat, remotesessions.TokenEndpointAuthAudienceTokenEndpoint)
@@ -153,6 +202,8 @@ func NewClient(logger *slog.Logger, client *guardian.HTTPClient, signer remotese
 		cfg:           cfg,
 		httpClient:    &noRedirect,
 		signer:        signer,
+		decrypter:     decrypter,
+		authMethod:    authMethod,
 		key:           key,
 		orgURL:        orgURL,
 		tokenURL:      tokenURL,
@@ -377,7 +428,7 @@ func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*Scop
 			missing = append(missing, s)
 		}
 	}
-	if strings.EqualFold(tok.tokenType, dpop.TokenType) && coversScopes(have, defaultScopes) {
+	if c.acceptsTokenType(tok.tokenType) && coversScopes(have, defaultScopes) {
 		c.mu.Lock()
 		c.cached = tok
 		c.mu.Unlock()
@@ -388,6 +439,17 @@ func (c *httpClient) VerifyScopes(ctx context.Context, required []string) (*Scop
 		DPoPBound: strings.EqualFold(tok.tokenType, dpop.TokenType),
 		ExpiresAt: tok.expiresAt,
 	}, nil
+}
+
+// acceptsTokenType reports whether a minted token may be used. private_key_jwt
+// requires a DPoP-bound token (RFC 9449 §5); client_secret_basic also accepts
+// Bearer because Okta OIN API Service apps may not bind tokens, unless the
+// connection is pinned to DPoP.
+func (c *httpClient) acceptsTokenType(tokenType string) bool {
+	if strings.EqualFold(tokenType, dpop.TokenType) {
+		return true
+	}
+	return c.authMethod == remotesessions.TokenEndpointAuthMethodBasic && !c.cfg.RequireDPoP && strings.EqualFold(tokenType, oauthwire.TokenTypeBearer)
 }
 
 func coversScopes(have map[string]struct{}, scopes []string) bool {
@@ -486,21 +548,25 @@ func (c *httpClient) do(ctx context.Context, method string, target *url.URL) ([]
 			return nil, nil, err
 		}
 
-		// RFC 9449 §7.3, §11.1: every attempt, including retries, signs a fresh proof with a new jti and iat.
-		proof, err := c.key.Proof(method, target, dpop.ProofOptions{AccessToken: tok.accessToken, Nonce: c.nonce.Current(), IssuedAt: c.now()})
-		if err != nil {
-			return nil, nil, fmt.Errorf("okta resource proof: %w", err)
-		}
-
 		req, err := http.NewRequestWithContext(ctx, method, target.String(), nil)
 		if err != nil {
 			return nil, nil, fmt.Errorf("build okta request: %w", err)
 		}
 		req.Header.Set("Accept", "application/json")
-		// RFC 9449 §7.1: the DPoP-bound token uses the DPoP authorization scheme.
-		req.Header.Set("Authorization", dpop.TokenType+" "+tok.accessToken)
-		// RFC 9449 §4.1, §7: exactly one DPoP header carrying a proof with ath.
-		req.Header.Set(dpop.HeaderName, proof)
+		if strings.EqualFold(tok.tokenType, dpop.TokenType) {
+			// RFC 9449 §7.3, §11.1: every attempt, including retries, signs a fresh proof with a new jti and iat.
+			proof, err := c.key.Proof(method, target, dpop.ProofOptions{AccessToken: tok.accessToken, Nonce: c.nonce.Current(), IssuedAt: c.now()})
+			if err != nil {
+				return nil, nil, fmt.Errorf("okta resource proof: %w", err)
+			}
+			// RFC 9449 §7.1: the DPoP-bound token uses the DPoP authorization scheme.
+			req.Header.Set("Authorization", dpop.TokenType+" "+tok.accessToken)
+			// RFC 9449 §4.1, §7: exactly one DPoP header carrying a proof with ath.
+			req.Header.Set(dpop.HeaderName, proof)
+		} else {
+			// RFC 6750 §2.1: an unbound token uses the Bearer scheme and no proof.
+			req.Header.Set("Authorization", oauthwire.TokenTypeBearer+" "+tok.accessToken)
+		}
 
 		status, header, body, err := c.send(req)
 		if err != nil {
@@ -612,7 +678,7 @@ func (c *httpClient) acquireMint(ctx context.Context) error {
 
 func (c *httpClient) releaseMint() { <-c.mintAdmission }
 
-// token returns the cached DPoP token or mints one under mint admission.
+// token returns the cached token or mints one under mint admission.
 func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
 	if err := ctx.Err(); err != nil {
 		return noToken, fmt.Errorf("get okta token: %w", err)
@@ -633,9 +699,9 @@ func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
 	if err != nil {
 		return cachedToken{}, err
 	}
-	// RFC 9449 §5: a token_type other than DPoP means the token is not sender-constrained, so discard it.
-	if !strings.EqualFold(tok.tokenType, dpop.TokenType) {
-		return cachedToken{}, fmt.Errorf("okta token response type %q is not DPoP", tok.tokenType)
+	// RFC 9449 §5: a token_type other than DPoP means the token is not sender-constrained.
+	if !c.acceptsTokenType(tok.tokenType) {
+		return cachedToken{}, fmt.Errorf("okta token type %q is not accepted for %s", tok.tokenType, c.authMethod)
 	}
 
 	c.mu.Lock()
@@ -645,8 +711,8 @@ func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
 }
 
 // mint runs a client-credentials grant, retrying once for use_dpop_nonce and
-// up to maxRateLimitRetries times for 429. Every attempt signs a fresh
-// assertion because Okta burns the jti on first use.
+// up to maxRateLimitRetries times for 429. Every private_key_jwt attempt signs
+// a fresh assertion because Okta burns the jti on first use.
 func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, error) {
 	nonce := c.nonce.Current()
 	nonceRetried := false
@@ -710,18 +776,34 @@ func parseTokenResponse(body []byte, now time.Time) (cachedToken, error) {
 	}, nil
 }
 
-// requestToken signs one assertion and posts it to the token endpoint,
-// returning the raw response for mint to interpret.
+// requestToken authenticates one client-credentials request and posts it to
+// the token endpoint, returning the raw response for mint to interpret.
 func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []string) (int, http.Header, []byte, error) {
-	assertion, err := c.signer.SignClientAssertion(ctx, remotesessions.ClientAssertionRequest{
+	auth := remotesessions.TokenEndpointClientAuth{
+		Method:                c.authMethod,
 		RemoteSessionClientID: c.cfg.RemoteSessionClientID,
 		OrganizationID:        c.cfg.OrganizationID,
 		JSONWebKeySetID:       c.cfg.JSONWebKeySetID,
 		ClientID:              c.cfg.ClientID,
-		Audience:              c.audience,
-	})
+		ClientSecret:          "",
+		AssertionAudience:     c.audience,
+		AssertionSigner:       c.signer,
+	}
+	if c.authMethod == remotesessions.TokenEndpointAuthMethodBasic {
+		secret, err := c.decrypter.Decrypt(c.cfg.ClientSecretEncrypted)
+		if err != nil {
+			return 0, nil, nil, fmt.Errorf("decrypt okta client secret: %w: %w", ErrClientSecretUndecryptable, err)
+		}
+		auth.ClientSecret = secret
+	}
+
+	form := url.Values{"grant_type": {oauthwire.GrantTypeClientCredentials}}
+	if len(scopes) > 0 {
+		form.Set("scope", strings.Join(scopes, " "))
+	}
+	req, err := remotesessions.NewTokenEndpointRequest(ctx, c.tokenURL.String(), form, auth)
 	if err != nil {
-		return 0, nil, nil, fmt.Errorf("sign okta client assertion: %w", err)
+		return 0, nil, nil, fmt.Errorf("build okta token request: %w", err)
 	}
 
 	// RFC 9449 §5: the token request carries a fresh proof for POST on the token endpoint, without ath.
@@ -729,23 +811,6 @@ func (c *httpClient) requestToken(ctx context.Context, nonce string, scopes []st
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("okta token proof: %w", err)
 	}
-
-	form := url.Values{
-		"grant_type":            {oauthwire.GrantTypeClientCredentials},
-		"client_id":             {c.cfg.ClientID},
-		"client_assertion_type": {oauthwire.ClientAssertionTypeJWTBearer},
-		"client_assertion":      {assertion},
-	}
-	if len(scopes) > 0 {
-		form.Set("scope", strings.Join(scopes, " "))
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenURL.String(), strings.NewReader(form.Encode()))
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("build okta token request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
 	req.Header.Set(dpop.HeaderName, proof)
 
 	status, header, body, err := c.send(req)

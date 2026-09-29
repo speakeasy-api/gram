@@ -31,6 +31,63 @@ func (q *Queries) BackdatePendingRotationPublication(ctx context.Context, arg Ba
 	return err
 }
 
+const clearManagedClientSecret = `-- name: ClearManagedClientSecret :one
+UPDATE remote_session_clients
+SET client_secret_encrypted = NULL,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id IS NULL
+  AND identity_provider_connection_id = $3
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+`
+
+type ClearManagedClientSecretParams struct {
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
+// Revocation withdraws a client-secret client's credential.
+func (q *Queries) ClearManagedClientSecret(ctx context.Context, arg ClearManagedClientSecretParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, clearManagedClientSecret, arg.ID, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const countIdentityProviderConnectionsCreatedSince = `-- name: CountIdentityProviderConnectionsCreatedSince :one
 SELECT COUNT(*)
 FROM identity_provider_connections
@@ -300,7 +357,7 @@ JOIN remote_session_issuers AS i
  AND i.organization_id = c.organization_id
  AND i.project_id IS NULL
  AND i.deleted IS FALSE
-JOIN json_web_key_sets AS s
+LEFT JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
  AND s.id = c.json_web_key_set_id
  AND s.identity_provider_connection_id = c.identity_provider_connection_id
@@ -314,6 +371,7 @@ WHERE c.organization_id = $1
   AND c.project_id IS NULL
   AND c.identity_provider_connection_id = $2
   AND c.deleted IS FALSE
+  AND (c.json_web_key_set_id IS NULL OR s.id IS NOT NULL)
 `
 
 type GetManagedClientParams struct {
@@ -323,8 +381,8 @@ type GetManagedClientParams struct {
 
 type GetManagedClientRow struct {
 	RemoteSessionClient RemoteSessionClient
-	JsonWebKeySetID     uuid.UUID
-	ExternalKeyID       uuid.UUID
+	JsonWebKeySetID     uuid.NullUUID
+	ExternalKeyID       uuid.NullUUID
 	JsonWebKeyID        uuid.NullUUID
 	Kid                 pgtype.Text
 	ActivatedAt         pgtype.Timestamptz
@@ -332,6 +390,8 @@ type GetManagedClientRow struct {
 
 // The managed client, its set, and the set's active key. The key join is LEFT
 // so a revoked connection (live client, live set, no live keys) still resolves.
+// The set join is LEFT for client-secret clients, which have no set; a client
+// that references a set must still find it live.
 // Organization-level only: the client, its issuer, and the set all carry the
 // connection's organization scope, and the set must be marked by the same connection.
 func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientParams) (GetManagedClientRow, error) {
@@ -974,19 +1034,21 @@ func (q *Queries) RotationPublicationReady(ctx context.Context, arg RotationPubl
 const setManagedClientID = `-- name: SetManagedClientID :one
 UPDATE remote_session_clients
 SET client_id = $1,
+    client_secret_encrypted = $2,
     upstream_rejected_at = NULL,
     updated_at = clock_timestamp()
-WHERE id = $2
-  AND organization_id = $3
+WHERE id = $3
+  AND organization_id = $4
   AND project_id IS NULL
-  AND identity_provider_connection_id = $4
-  AND client_id = $5
+  AND identity_provider_connection_id = $5
+  AND client_id = $6
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type SetManagedClientIDParams struct {
 	ClientID                     string
+	ClientSecretEncrypted        pgtype.Text
 	ID                           uuid.UUID
 	OrganizationID               pgtype.Text
 	IdentityProviderConnectionID uuid.NullUUID
@@ -994,10 +1056,12 @@ type SetManagedClientIDParams struct {
 }
 
 // Only the provisioner writes a managed client's client_id, and only while the
-// provisioning placeholder is still in place.
+// provisioning placeholder is still in place. A client-secret client receives
+// its secret in the same write.
 func (q *Queries) SetManagedClientID(ctx context.Context, arg SetManagedClientIDParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, setManagedClientID,
 		arg.ClientID,
+		arg.ClientSecretEncrypted,
 		arg.ID,
 		arg.OrganizationID,
 		arg.IdentityProviderConnectionID,
@@ -1023,6 +1087,68 @@ func (q *Queries) SetManagedClientID(ctx context.Context, arg SetManagedClientID
 		&i.ClientIDMetadataUri,
 		&i.LegacyCallbackUrl,
 		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const setManagedClientSecret = `-- name: SetManagedClientSecret :one
+UPDATE remote_session_clients
+SET client_secret_encrypted = $1,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id IS NULL
+  AND identity_provider_connection_id = $4
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SetManagedClientSecretParams struct {
+	ClientSecretEncrypted        pgtype.Text
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
+func (q *Queries) SetManagedClientSecret(ctx context.Context, arg SetManagedClientSecretParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, setManagedClientSecret,
+		arg.ClientSecretEncrypted,
+		arg.ID,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
 		&i.ResourceIdentifier,
 		&i.ResourceName,
 		&i.ResourceDocumentation,

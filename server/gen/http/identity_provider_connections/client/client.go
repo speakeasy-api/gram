@@ -24,6 +24,10 @@ type Client struct {
 	// submitClientId endpoint.
 	SubmitClientIDDoer goahttp.Doer
 
+	// ReplaceClientSecret Doer is the HTTP client used to make requests to the
+	// replaceClientSecret endpoint.
+	ReplaceClientSecretDoer goahttp.Doer
+
 	// Verify Doer is the HTTP client used to make requests to the verify endpoint.
 	VerifyDoer goahttp.Doer
 
@@ -66,19 +70,20 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateDoer:           doer,
-		SubmitClientIDDoer:   doer,
-		VerifyDoer:           doer,
-		GetDoer:              doer,
-		RecordAgentDoer:      doer,
-		RevokeDoer:           doer,
-		SyncApplicationsDoer: doer,
-		ListApplicationsDoer: doer,
-		RestoreResponseBody:  restoreBody,
-		scheme:               scheme,
-		host:                 host,
-		decoder:              dec,
-		encoder:              enc,
+		CreateDoer:              doer,
+		SubmitClientIDDoer:      doer,
+		ReplaceClientSecretDoer: doer,
+		VerifyDoer:              doer,
+		GetDoer:                 doer,
+		RecordAgentDoer:         doer,
+		RevokeDoer:              doer,
+		SyncApplicationsDoer:    doer,
+		ListApplicationsDoer:    doer,
+		RestoreResponseBody:     restoreBody,
+		scheme:                  scheme,
+		host:                    host,
+		decoder:                 dec,
+		encoder:                 enc,
 	}
 }
 
@@ -125,6 +130,30 @@ func (c *Client) SubmitClientID() goa.Endpoint {
 		resp, err := c.SubmitClientIDDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("identityProviderConnections", "submitClientId", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ReplaceClientSecret returns an endpoint that makes HTTP requests to the
+// identityProviderConnections service replaceClientSecret server.
+func (c *Client) ReplaceClientSecret() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReplaceClientSecretRequest(c.encoder)
+		decodeResponse = DecodeReplaceClientSecretResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReplaceClientSecretRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReplaceClientSecretDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identityProviderConnections", "replaceClientSecret", err)
 		}
 		return decodeResponse(resp)
 	}
