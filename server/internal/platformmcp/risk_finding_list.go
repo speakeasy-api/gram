@@ -76,19 +76,15 @@ type RiskFindingListService struct {
 	now           func() time.Time
 }
 
-// NewRiskFindingListService returns nil when the Postgres dependencies or the
-// cursor key are missing. A nil ClickHouse reader is allowed: such a deployment
-// serves every organization from Postgres.
+// NewRiskFindingListService requires configured Postgres and ClickHouse readers
+// and panics if the cursor key is missing. Store selection is feature-flag driven.
 func NewRiskFindingListService(db *pgxpool.Pool, clickhouse RiskFindingListReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) *RiskFindingListService {
-	codec, err := newRiskCursorCodec(key)
-	if db == nil || organizations == nil || err != nil {
-		return nil
-	}
+	codec := newRiskCursorCodec(key)
 	return &RiskFindingListService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, postgres: riskrepo.New(db), clickhouse: clickhouse, cursor: codec, now: time.Now}
 }
 
 func (s *RiskFindingListService) valid() bool {
-	return s != nil && s.projects != nil && s.organizations != nil && s.postgres != nil && s.cursor != nil && s.now != nil
+	return s != nil
 }
 
 type ListRiskFindingPageInput struct {
@@ -304,9 +300,6 @@ func pushdownPolicyIDs(policies map[string]riskrepo.ListRiskFindingPoliciesRow, 
 // A flag evaluation failure fails closed rather than silently switching store
 // mid-pagination.
 func (s *RiskFindingListService) useClickHouse(ctx context.Context, principal Principal, project ResolvedProject) (bool, error) {
-	if s.clickhouse == nil {
-		return false, nil
-	}
 	orgSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
 	if err != nil || orgSlug == "" {
 		return false, ErrUnavailable
