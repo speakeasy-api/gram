@@ -269,9 +269,6 @@ func TestStartupRejectsInvalidSigningConfiguration(t *testing.T) {
 		_, err := New(c[0], c[1], c[2], false)
 		require.Error(t, err, "case %d", i)
 	}
-	disabled, err := New("", "", "", false)
-	require.NoError(t, err)
-	require.Nil(t, disabled)
 	require.Empty(t, servedKeys(t, "").Keys)
 }
 
@@ -287,7 +284,7 @@ func TestStartupRequiresPKCS8PrivateAndSPKIPublicKeys(t *testing.T) {
 	require.ErrorContains(t, err, "SubjectPublicKeyInfo")
 }
 
-func TestMissingSigningConfigurationDisablesAssertions(t *testing.T) {
+func TestStartupRequiresSigningConfiguration(t *testing.T) {
 	t.Parallel()
 	private, public := keyPEM(t, 2048)
 	for _, config := range [][3]string{
@@ -300,7 +297,7 @@ func TestMissingSigningConfigurationDisablesAssertions(t *testing.T) {
 		{private, public, "\t"},
 	} {
 		issuer, err := New(config[0], config[1], config[2], false)
-		require.NoError(t, err)
+		require.ErrorContains(t, err, "are required")
 		require.Nil(t, issuer)
 	}
 }

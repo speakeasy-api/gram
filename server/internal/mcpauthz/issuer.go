@@ -51,11 +51,11 @@ type Target struct {
 	ResourceIdentifier string
 }
 
-// New returns a signer when all three settings are present. Missing settings
-// disable signing; a complete configuration must contain valid keys and issuer.
+// New returns a signer. All three settings are required, and the configuration
+// must contain valid keys and issuer.
 func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, error) {
 	if strings.TrimSpace(privatePEM) == "" || strings.TrimSpace(publicPEM) == "" || strings.TrimSpace(issuerURL) == "" {
-		return nil, nil
+		return nil, errors.New("GRAM_AUTHZ_PRIVATE_KEY, GRAM_AUTHZ_PUBLIC_KEYS and GRAM_AUTHZ_ISSUER_URL are required (run `mise run zero:tunnel-identity` locally)")
 	}
 	u, err := url.Parse(issuerURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" ||

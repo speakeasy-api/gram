@@ -48,6 +48,10 @@ done
 
 echo ✅ Updated all port mappings for new worktree
 
+# The server refuses to start without a caller identity signing key. This is a
+# no-op when the key pair was copied from the main worktree above.
+mise run zero:tunnel-identity
+
 # Ports are randomized, so `wt list`'s URL column can't derive them from the
 # branch name. Store the dashboard port as a per-branch var for it to read.
 # Best-effort: this is display metadata, and the script runs under `set -e` as a

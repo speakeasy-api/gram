@@ -71,6 +71,7 @@ import (
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
@@ -351,6 +352,9 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	t.Helper()
 
 	ctx := t.Context()
+	if callerAssertions == nil {
+		callerAssertions, _ = callerIssuerForTest(t)
+	}
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardianOpts...)
 	require.NoError(t, err)
@@ -745,4 +749,15 @@ func requireTelemetryRowCount(t *testing.T, where string, want uint64, args ...a
 func newTestMCPServiceWithCallerAssertions(t *testing.T, issuer *mcpauthz.Issuer) (context.Context, *testInstance) {
 	t.Helper()
 	return newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
+}
+
+// createTestUser stores a user so authentication can resolve its profile, as
+// it does for every caller of a private tunneled or meta endpoint.
+func createTestUser(t *testing.T, ctx context.Context, ti *testInstance, id string) urn.SessionSubject {
+	t.Helper()
+	_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID: id, Email: id + "@example.test", DisplayName: "Test user",
+	})
+	require.NoError(t, err)
+	return urn.NewUserSubject(id)
 }

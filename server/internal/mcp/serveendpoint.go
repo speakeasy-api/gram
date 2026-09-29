@@ -791,7 +791,7 @@ func (s *Service) serveTunneledBackend(
 		return err
 	}
 
-	if !mcpServer.UserSessionIssuerID.Valid && s.tunnelManager.issuesCallerAssertions(mcpServer.Visibility) {
+	if !mcpServer.UserSessionIssuerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPrivate {
 		resourceIdentifier, err = s.resolveUpstreamResource(ctx, logger, endpoint.ProjectID, mcpServer)
 		if err != nil {
 			return err

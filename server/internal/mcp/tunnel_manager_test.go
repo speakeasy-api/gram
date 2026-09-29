@@ -101,18 +101,4 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	require.Nil(t, pinned.CallerAssertion)
 	remoteProxy := proxyManager.BuildTarget(logger, proxy.ServerIdentity{RemoteMCPServerID: uuid.NewString(), McpServerID: wrapper.String()}, "https://remote.example", nil, mcpservers.VisibilityPrivate, "org_test", project.String(), "", "", nil)
 	require.Nil(t, remoteProxy.CallerAssertion)
-	manager.callerAssertions = nil
-	server.Visibility = mcpservers.VisibilityPrivate
-	disabled, err := manager.buildProxy(ctx, logger, buildProxyParams{
-		ClientAffinityKey:  "",
-		ProjectID:          project,
-		OrganizationID:     "org_test",
-		MCPServer:          server,
-		ResourceIdentifier: "",
-		UpstreamAuth:       "",
-		WWWAuthenticate:    "",
-		Selection:          nil,
-	})
-	require.NoError(t, err)
-	require.Nil(t, disabled.CallerAssertion)
 }

@@ -132,7 +132,7 @@ func (m *tunnelManager) buildProxy(
 		params.Selection,
 		options...,
 	)
-	if m.issuesCallerAssertions(mcpServer.Visibility) {
+	if mcpServer.Visibility == mcpservers.VisibilityPrivate {
 		target := mcpauthz.Target{
 			OrganizationID:     params.OrganizationID,
 			ProjectID:          params.ProjectID,
@@ -154,10 +154,6 @@ func (m *tunnelManager) buildProxy(
 	p.DisableRedirects = true
 	p.GuardianClientOptions = m.guardianClientOptions()
 	return p, nil
-}
-
-func (m *tunnelManager) issuesCallerAssertions(visibility string) bool {
-	return m.callerAssertions != nil && visibility == mcpservers.VisibilityPrivate
 }
 
 // guardianClientOptions builds the shared client options for dialing tunnel

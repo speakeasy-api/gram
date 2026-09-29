@@ -12,10 +12,12 @@ AICP issues the assertions. Pin these values in your verifier:
 - Public JWKS: `https://tunnel.speakeasy.com/.well-known/jwks.json`
 
 The tunnel gateway serves the JWKS endpoint from its public-key bundle. The
-application serving tiers hold the private key and sign assertions when
-`GRAM_AUTHZ_PRIVATE_KEY`, `GRAM_AUTHZ_PUBLIC_KEYS` and `GRAM_AUTHZ_ISSUER_URL`
-are all present. Missing settings disable signing; invalid keys or an invalid
-issuer in a complete configuration cause startup to fail.
+application serving tiers hold the private key and sign assertions. They
+require `GRAM_AUTHZ_PRIVATE_KEY`, `GRAM_AUTHZ_PUBLIC_KEYS` and
+`GRAM_AUTHZ_ISSUER_URL`; missing settings, invalid keys or an invalid issuer
+cause startup to fail. Locally, `./zero` (or `mise run zero:tunnel-identity`)
+writes a signing key pair to `mise.local.toml`, and `mise.toml` sets the local
+tunnel gateway as the issuer.
 
 The issuer and JWKS URL are independent of your server's OAuth provider and
 custom domain. You do not need to configure a per-server assertion issuer in Gram.

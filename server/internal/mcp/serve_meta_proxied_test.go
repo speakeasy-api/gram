@@ -237,7 +237,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_ForwardsEachMembersOwnBearer(t *te
 	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-cred-a", "", []uuid.UUID{sharedIssuerID})
 	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-cred-b", "", []uuid.UUID{sharedIssuerID})
 
-	subject := urn.NewUserSubject("meta-cred-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "meta-cred-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-member-a", upstreamA.url)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
 
@@ -297,7 +297,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_DropsCallerMetaUpstream(t *testing
 	t.Cleanup(recorder.Close)
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member-nometa", 0, recorder.URL)
 
-	subject := urn.NewUserSubject("meta-nometa-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "meta-nometa-user-"+uuid.NewString())
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
 
 	body := makeMetaRPCBody(t, "tools/call", map[string]any{
@@ -346,7 +346,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_AmbiguousCredentialMakesNoCall(t *
 	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-ambig-a", "", []uuid.UUID{sharedIssuerID})
 	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-ambig-b", "", []uuid.UUID{sharedIssuerID})
 
-	subject := urn.NewUserSubject("meta-ambig-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "meta-ambig-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-one", upstream.url)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-two", upstream.url)
 
@@ -384,7 +384,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_NoCredentialCallsAnonymously(t *te
 	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-anon-b", "", []uuid.UUID{sharedIssuerID})
 	clientC := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-anon-c", "", []uuid.UUID{sharedIssuerID})
 
-	subject := urn.NewUserSubject("meta-anon-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "meta-anon-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientC, subject, "token-elsewhere", "https://elsewhere.example.com/mcp")
 
@@ -429,7 +429,7 @@ func TestServePublic_MetaEndpoint_PartialProviderConnectionsServe(t *testing.T) 
 	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-a", "", []uuid.UUID{sharedIssuerID})
 	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-b", "", []uuid.UUID{sharedIssuerID})
 
-	subject := urn.NewUserSubject("meta-partial-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "meta-partial-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
 
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
@@ -471,7 +471,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnauthorizedNamesAnonymousDial(t *
 	t.Cleanup(deny.Close)
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member", 0, deny.URL)
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-401", "", []uuid.UUID{sharedIssuerID})
-	subject := urn.NewUserSubject("meta-401-user-" + uuid.NewString())
+	subject := createTestUser(t, ctx, ti, "meta-401-user-"+uuid.NewString())
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
 
 	// A legacy grant with no resource routes nowhere: the dial is anonymous.
