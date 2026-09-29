@@ -298,6 +298,45 @@ func BuildListRemoteSessionsPayload(remoteSessionsListRemoteSessionsPrincipalID 
 	return v, nil
 }
 
+// BuildCountRemoteSessionsPayload builds the payload for the remoteSessions
+// countRemoteSessions endpoint from CLI flags.
+func BuildCountRemoteSessionsPayload(remoteSessionsCountRemoteSessionsRemoteSessionClientID string, remoteSessionsCountRemoteSessionsSessionToken string, remoteSessionsCountRemoteSessionsApikeyToken string, remoteSessionsCountRemoteSessionsProjectSlugInput string) (*remotesessions.CountRemoteSessionsPayload, error) {
+	var err error
+	var remoteSessionClientID string
+	{
+		remoteSessionClientID = remoteSessionsCountRemoteSessionsRemoteSessionClientID
+		err = goa.MergeErrors(err, goa.ValidateFormat("remote_session_client_id", remoteSessionClientID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsCountRemoteSessionsSessionToken != "" {
+			sessionToken = &remoteSessionsCountRemoteSessionsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionsCountRemoteSessionsApikeyToken != "" {
+			apikeyToken = &remoteSessionsCountRemoteSessionsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsCountRemoteSessionsProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsCountRemoteSessionsProjectSlugInput
+		}
+	}
+	v := &remotesessions.CountRemoteSessionsPayload{}
+	v.RemoteSessionClientID = remoteSessionClientID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildRevokeRemoteSessionPayload builds the payload for the remoteSessions
 // revokeRemoteSession endpoint from CLI flags.
 func BuildRevokeRemoteSessionPayload(remoteSessionsRevokeRemoteSessionID string, remoteSessionsRevokeRemoteSessionSessionToken string, remoteSessionsRevokeRemoteSessionApikeyToken string, remoteSessionsRevokeRemoteSessionProjectSlugInput string) (*remotesessions.RevokeRemoteSessionPayload, error) {

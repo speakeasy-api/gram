@@ -82,6 +82,35 @@ var _ = Service("remoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoteSessions"}`)
 	})
 
+	Method("countRemoteSessions", func() {
+		Description("Count the distinct people holding a live remote_session minted through one remote_session_client. Scoped like listRemoteSessions: only sessions whose issuer and client are reachable from the caller's project count. A client shared by several MCP servers counts people across all of them.")
+
+		Payload(func() {
+			Attribute("remote_session_client_id", String, "The remote_session_client whose sessions to count.", func() {
+				Format(FormatUUID)
+			})
+			Required("remote_session_client_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(CountRemoteSessionsResult)
+
+		HTTP(func() {
+			GET("/rpc/remoteSessions.count")
+			Param("remote_session_client_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "countRemoteSessions")
+		Meta("openapi:extension:x-speakeasy-name-override", "count")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoteSessionsCount"}`)
+	})
+
 	Method("revokeRemoteSession", func() {
 		Description("Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.")
 
@@ -348,6 +377,14 @@ var RemoteSession = Type("RemoteSession", func() {
 	})
 
 	Required("id", "subject_urn", "user_session_issuer_id", "remote_session_client_id", "access_expires_at", "has_refresh_token", "scopes", "created_at", "updated_at")
+})
+
+var CountRemoteSessionsResult = Type("CountRemoteSessionsResult", func() {
+	Description("Result type for counting the people signed in through a remote_session_client.")
+
+	Attribute("subjects", Int64, "Distinct subjects with a live remote_session through the client.")
+
+	Required("subjects")
 })
 
 var ListRemoteSessionsResult = Type("ListRemoteSessionsResult", func() {

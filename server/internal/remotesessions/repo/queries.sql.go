@@ -1036,6 +1036,34 @@ func (q *Queries) CountRemoteSessionClientsByIssuerID(ctx context.Context, remot
 	return count, err
 }
 
+const countRemoteSessionSubjectsByClientID = `-- name: CountRemoteSessionSubjectsByClientID :one
+SELECT COUNT(DISTINCT s.subject_urn)::bigint AS subjects
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
+  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $2::text)))
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND s.remote_session_client_id = $3::uuid
+`
+
+type CountRemoteSessionSubjectsByClientIDParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionClientID uuid.UUID
+}
+
+// Distinct people signed in through one client. Scoped exactly like
+// ListRemoteSessionsByProjectID so a count never reveals sessions the list
+// would hide from this project.
+func (q *Queries) CountRemoteSessionSubjectsByClientID(ctx context.Context, arg CountRemoteSessionSubjectsByClientIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRemoteSessionSubjectsByClientID, arg.ProjectID, arg.OrganizationID, arg.RemoteSessionClientID)
+	var subjects int64
+	err := row.Scan(&subjects)
+	return subjects, err
+}
+
 const countTenantRemoteSessionClientsByIssuerID = `-- name: CountTenantRemoteSessionClientsByIssuerID :one
 SELECT COUNT(*)
 FROM remote_session_clients

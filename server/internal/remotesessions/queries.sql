@@ -1907,6 +1907,20 @@ WHERE (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.org
 ORDER BY s.id DESC
 LIMIT sqlc.arg('limit_value');
 
+-- name: CountRemoteSessionSubjectsByClientID :one
+-- Distinct people signed in through one client. Scoped exactly like
+-- ListRemoteSessionsByProjectID so a count never reveals sessions the list
+-- would hide from this project.
+SELECT COUNT(DISTINCT s.subject_urn)::bigint AS subjects
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND s.remote_session_client_id = @remote_session_client_id::uuid;
+
 -- name: GetRemoteSessionByID :one
 -- Both the provenance issuer and remote client must be reachable from the
 -- caller's project. This keeps project-tier client credentials confined to
