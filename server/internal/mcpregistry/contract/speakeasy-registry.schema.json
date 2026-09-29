@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Speakeasy AI Control Plane metadata extensions",
+  "type": "object",
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "properties": {
+        "com.speakeasy.ai/registry": {
+          "type": "object",
+          "description": "Backend-owned first recorded publication. Historical publication dates may be unknown.",
+          "readOnly": true,
+          "properties": {
+            "publishedAt": {
+              "type": "string",
+              "format": "date-time",
+              "readOnly": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "com.speakeasy.ai/catalog": {
+          "type": "object",
+          "description": "Staff-maintained catalog metadata, visible to all authenticated registry consumers. Never include secrets.",
+          "properties": {
+            "documentationUrl": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^[hH][tT][tT][pP][sS]?://[^/?#@:\\s][^/?#@\\s]*([/?#]\\S*)?$",
+              "description": "Public documentation URL. HTTP and HTTPS are supported; HTTPS is recommended. Never include secrets."
+            }
+          }
+        }
+      }
+    }
+  }
+}

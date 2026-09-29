@@ -14,36 +14,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// listFromClickHouse reports whether the project-wide risk events listing
-// should serve from ClickHouse for this org. Per-org PostHog rollout flag,
-// same evaluation shape as overviewFromClickHouse. A nil provider, missing
-// ClickHouse connection, or a failed lookup degrades to the Postgres path.
-func (s *Service) listFromClickHouse(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	if s.findingsCH == nil || s.flags == nil {
-		return false
-	}
-	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, groups)
-	if err != nil {
-		s.logger.WarnContext(ctx, "risk-list-from-clickhouse flag check failed; serving from postgres",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-		)
-		return false
-	}
-	return on
-}
-
 // listResultsByProjectFromClickHouse serves the project-wide (non-chat-scoped)
-// ListRiskResults page from the ClickHouse risk_findings table. Rows come back
-// pre-redacted — the store never holds raw match content — so Match and Spans
-// are always nil and MatchRedacted carries the ingest-time display string.
+// ListRiskResults page from the ClickHouse risk_findings table, the only store
+// holding MCP-seam findings. Rows come back pre-redacted (the store never
+// holds raw match content), so Match and Spans are always nil and
+// MatchRedacted carries the ingest-time display string.
 // Chat titles and tool-call block ids are enriched from Postgres per page
 // because both mutate after ingest.
 func (s *Service) listResultsByProjectFromClickHouse(
@@ -104,8 +84,8 @@ func (s *Service) listResultsByProjectFromClickHouse(
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk findings from clickhouse").LogError(ctx, s.logger)
 	}
 
-	// Best-effort total, mirroring the Postgres path where a failed count
-	// degrades to zero rather than failing the page.
+	// Best-effort total: a failed count degrades to zero rather than failing
+	// the page.
 	var totalCount int64
 	if count, err := s.findingsCH.CountRiskFindings(ctx, params); err != nil {
 		s.logger.WarnContext(ctx, "count risk findings from clickhouse", attr.SlogError(err))
@@ -130,14 +110,12 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-// visiblePolicyIDs resolves the enabled-policy pushdown: ClickHouse cannot
-// join risk_policies, so the Postgres side decides which policies the listing
-// may show. Default view = enabled, non-deleted policies. An explicit policy
-// filter narrows to that policy and deliberately includes disabled (but not
-// deleted) ones, matching the Postgres list's semantics of surfacing a
-// disabled policy's historical findings when asked for directly. Deleted
-// policies resolve to an empty list — their ClickHouse rows linger until TTL,
-// and the pushdown is what hides them.
+// visiblePolicyIDs resolves the policy pushdown: ClickHouse cannot join
+// risk_policies, so the Postgres side decides which policies the listing may
+// show. The default view covers every non-deleted policy, disabled ones
+// included, so disabling a policy keeps its history visible. An explicit
+// policy filter narrows to that policy. Deleted policies resolve to nothing;
+// their ClickHouse rows linger until TTL and the pushdown is what hides them.
 func (s *Service) visiblePolicyIDs(ctx context.Context, projectID uuid.UUID, policyID uuid.NullUUID) ([]string, error) {
 	if policyID.Valid {
 		if _, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID.UUID, ProjectID: projectID}); err != nil {
@@ -149,9 +127,9 @@ func (s *Service) visiblePolicyIDs(ctx context.Context, projectID uuid.UUID, pol
 		return []string{policyID.UUID.String()}, nil
 	}
 
-	policies, err := s.repo.ListEnabledRiskPoliciesByProject(ctx, projectID)
+	policies, err := s.repo.ListRiskPolicies(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("list enabled risk policies: %w", err)
+		return nil, fmt.Errorf("list risk policies: %w", err)
 	}
 	ids := make([]string, 0, len(policies))
 	for _, policy := range policies {

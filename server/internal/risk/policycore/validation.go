@@ -160,14 +160,17 @@ func isKnownMCPToolAnnotation(annotation string) bool {
 	return slices.Contains(knownMCPToolAnnotations, annotation)
 }
 
-// ValidateMCPScopeOwnership requires every selected server or gateway to
-// belong to the policy's project.
-func ValidateMCPScopeOwnership(scope *MCPScope, projectServerIDs []uuid.UUID) error {
+// ValidateMCPScopeOwnership requires every selected target to belong to the
+// policy's project or the code-owned Platform MCP registry.
+func ValidateMCPScopeOwnership(scope *MCPScope, projectServerIDs, platformToolsetIDs []uuid.UUID) error {
 	if scope == nil {
 		return nil
 	}
-	owned := make(map[uuid.UUID]struct{}, len(projectServerIDs))
+	owned := make(map[uuid.UUID]struct{}, len(projectServerIDs)+len(platformToolsetIDs))
 	for _, id := range projectServerIDs {
+		owned[id] = struct{}{}
+	}
+	for _, id := range platformToolsetIDs {
 		owned[id] = struct{}{}
 	}
 	for _, server := range scope.Servers {

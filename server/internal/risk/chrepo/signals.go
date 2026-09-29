@@ -19,6 +19,9 @@ type RiskSignalWindowParams struct {
 	WideFrom       time.Time
 	From           time.Time
 	To             time.Time
+	// MCPServerID narrows every read to one concrete MCP server. Empty means
+	// no narrowing.
+	MCPServerID string
 }
 
 // signalFindings is the doubled-window analog of overviewFindings: the same
@@ -38,7 +41,7 @@ func signalFindings(p RiskSignalWindowParams, columns ...squirrel.Sqlizer) squir
 	for _, column := range columns {
 		sb = sb.Column(column)
 	}
-	return sb.
+	sb = sb.
 		FromSelect(latest, "latest").
 		Where("rn = 1").
 		Where("dead_letter_reason = ''").
@@ -47,6 +50,7 @@ func signalFindings(p RiskSignalWindowParams, columns ...squirrel.Sqlizer) squir
 		// false_positive_at-only rows written before the suppression
 		// convergence age out under the table's 90-day TTL.
 		Where("false_positive_at IS NULL")
+	return withMCPServerFilter(sb, p.MCPServerID)
 }
 
 // signalUserExpr is the display identity a distinct-user count groups on,
@@ -84,6 +88,8 @@ type RiskSignalAggregate struct {
 	UsersCur          uint64
 	UsersPrev         uint64
 	TeamsCur          uint64
+	MCPServerIDs      []string
+	ToolNames         []string
 	FirstSeen         time.Time
 	LastSeen          time.Time
 	AvgConfidence     float64
@@ -113,6 +119,8 @@ func (q *Queries) ListRiskSignalAggregates(ctx context.Context, p RiskSignalWind
 		squirrel.Alias(squirrel.Expr("uniqExactIf("+signalUserExpr+", "+signalUserNonEmpty+" AND created_at >= ?)", p.From), "users_cur"),
 		squirrel.Alias(squirrel.Expr("uniqExactIf("+signalUserExpr+", "+signalUserNonEmpty+" AND created_at < ?)", p.From), "users_prev"),
 		squirrel.Alias(squirrel.Expr("uniqExactIf(team, team != '' AND created_at >= ?)", p.From), "teams_cur"),
+		squirrel.Alias(squirrel.Expr("groupUniqArrayIf(mcp_server_id, mcp_server_id != '' AND created_at >= ?)", p.From), "g_mcp_server_ids"),
+		squirrel.Alias(squirrel.Expr("groupUniqArrayIf(tool_name, tool_name != '' AND created_at >= ?)", p.From), "g_tool_names"),
 		squirrel.Alias(squirrel.Expr("minIf(message_created_at, created_at >= ?)", p.From), "first_seen"),
 		squirrel.Alias(squirrel.Expr("maxIf(message_created_at, created_at >= ?)", p.From), "last_seen"),
 		// avgIf over an empty window is NaN; ifNotFinite pins it to zero so
@@ -150,6 +158,8 @@ func (q *Queries) ListRiskSignalAggregates(ctx context.Context, p RiskSignalWind
 			&row.UsersCur,
 			&row.UsersPrev,
 			&row.TeamsCur,
+			&row.MCPServerIDs,
+			&row.ToolNames,
 			&row.FirstSeen,
 			&row.LastSeen,
 			&row.AvgConfidence,
@@ -314,4 +324,50 @@ func (q *Queries) GetRiskSignalSplitCounts(ctx context.Context, p RiskSignalWind
 	}
 
 	return counts, nil
+}
+
+// RiskMCPServerCount is one concrete MCP server's live finding count.
+type RiskMCPServerCount struct {
+	MCPServerID string
+	Findings    uint64
+}
+
+// ListRiskMCPServerCounts returns deduplicated live finding counts per
+// concrete MCP server over [From, To), largest first. Findings without server
+// attribution are omitted. Any MCPServerID on the params is ignored: the
+// picker this feeds must list every server, not just the selected one.
+func (q *Queries) ListRiskMCPServerCounts(ctx context.Context, p RiskOverviewWindowParams, limit uint64) ([]RiskMCPServerCount, error) {
+	p.MCPServerID = ""
+	query, args, err := overviewFindings(p,
+		"mcp_server_id",
+		"uniqExact(id) AS findings",
+	).
+		Where("mcp_server_id != ''").
+		GroupBy("mcp_server_id").
+		OrderBy("findings DESC", "mcp_server_id ASC").
+		Limit(limit).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build risk mcp server counts query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query risk mcp server counts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []RiskMCPServerCount
+	for rows.Next() {
+		var row RiskMCPServerCount
+		if err := rows.Scan(&row.MCPServerID, &row.Findings); err != nil {
+			return nil, fmt.Errorf("scan risk mcp server counts row: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read risk mcp server counts: %w", err)
+	}
+
+	return out, nil
 }

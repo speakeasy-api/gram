@@ -87,10 +87,11 @@ SELECT
 FROM generate_series(1,60) n;
 
 -- name: CreateEntry :one
-INSERT INTO mcp_registry_entries(data, published)
+INSERT INTO mcp_registry_entries(data, published, published_at)
 SELECT
     sqlc.arg(data)::jsonb,
-    true
+    true,
+    sqlc.arg(published_at)::timestamptz
 WHERE octet_length(sqlc.arg(data)::jsonb::text) <= sqlc.arg(stored_record_limit)::bigint
 RETURNING *;
 
@@ -113,8 +114,11 @@ RETURNING *;
 UPDATE mcp_registry_entries
 SET
     published = @published,
+    published_at = CASE WHEN NOT published AND @published THEN COALESCE(published_at, sqlc.narg(published_at)::timestamptz) ELSE published_at END,
+    data = sqlc.arg(data)::jsonb,
     updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
 WHERE id = @id
+AND (NOT @published::boolean OR octet_length(sqlc.arg(data)::jsonb::text) <= sqlc.arg(stored_record_limit)::bigint)
 RETURNING *;
 
 -- name: SerializedRegistryRecordBytes :one

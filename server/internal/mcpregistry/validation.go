@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
@@ -51,6 +54,9 @@ func (v *Validator) validate(raw json.RawMessage, byteLimit int) []Issue {
 	if len(raw) > byteLimit {
 		return []Issue{{Path: "", Message: "record exceeds byte limit"}}
 	}
+	if !validJSONUnicode(raw) {
+		return []Issue{{Path: "", Message: "record must contain valid Unicode text"}}
+	}
 	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
 		return []Issue{{Path: "", Message: "expected exactly one JSON value"}}
@@ -61,6 +67,14 @@ func (v *Validator) validate(raw json.RawMessage, byteLimit int) []Issue {
 	object, ok := value.(map[string]any)
 	if !ok {
 		return []Issue{{Path: "", Message: "expected object"}}
+	}
+	meta, _ := object["_meta"].(map[string]any)
+	catalog, _ := meta["com.speakeasy.ai/catalog"].(map[string]any)
+	if documentationURL, ok := catalog["documentationUrl"].(string); ok {
+		parsed, err := url.Parse(documentationURL)
+		if err != nil || parsed.Hostname() == "" || parsed.User != nil {
+			return []Issue{{Path: "/_meta/com.speakeasy.ai~1catalog/documentationUrl", Message: "absolute HTTP(S) URL with a host and without userinfo required"}}
+		}
 	}
 	server, _ := object["server"].(map[string]any)
 	name, _ := server["name"].(string)
@@ -119,4 +133,42 @@ func validationIssues(err error) []Issue {
 	}
 	visit(root)
 	return issues
+}
+
+// encoding/json replaces malformed UTF-8 and unpaired escaped surrogates with
+// U+FFFD. Reject them before decoding keys, matching PostgreSQL jsonb admission.
+// JSON syntax validation remains the decoder's responsibility.
+func validJSONUnicode(raw []byte) bool {
+	if !utf8.Valid(raw) {
+		return false
+	}
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '\\' {
+			continue
+		}
+		i++
+		if i+4 >= len(raw) || raw[i] != 'u' {
+			continue
+		}
+		code, err := strconv.ParseUint(string(raw[i+1:i+5]), 16, 16)
+		if err != nil {
+			continue
+		}
+		i += 4
+		if code >= 0xdc00 && code <= 0xdfff {
+			return false
+		}
+		if code < 0xd800 || code > 0xdbff {
+			continue
+		}
+		if i+6 >= len(raw) || string(raw[i+1:i+3]) != `\u` {
+			return false
+		}
+		low, err := strconv.ParseUint(string(raw[i+3:i+7]), 16, 16)
+		if err != nil || low < 0xdc00 || low > 0xdfff {
+			return false
+		}
+		i += 6
+	}
+	return true
 }

@@ -21,7 +21,7 @@ func registerRiskFindingListTools(reg *Registrar, service riskFindingListLister)
 	available := service != nil && service.valid()
 	registerRiskFindingListTool(reg, &mcp.Tool{
 		Name: riskFindingListToolName, Title: "List Risk Findings",
-		Description: "List individual risk findings in an exact project or the organization's literal default project, newest message first, with the matched value redacted to a length and hash fingerprint that never reaches the model. Filter by message-time window, policy, chat, category, rule substring, user substring, assistant linkage, or unique match; page with an opaque cursor, 25 per page by default and at most 50. Each finding carries a stable id for later dismissal, its severity band and score, and an organization-scoped user pseudonym shared with list_watchdog_findings. Prefer get_risk_rule_breakdown to size a finding set, and list_watchdog_findings for severity-first rule triage.",
+		Description: "List individual risk findings in an exact project or the organization's literal default project, newest message first, with the matched value redacted to a length and hash fingerprint that never reaches the model. Filter by message-time window, policy, chat, MCP server, category, rule substring, user substring, assistant linkage, or unique match; page with an opaque cursor, 25 per page by default and at most 50. Each finding carries a stable id for later dismissal, its severity band and score, and an organization-scoped user pseudonym shared with list_watchdog_findings. Prefer get_risk_rule_breakdown to size a finding set, and list_watchdog_findings for severity-first rule triage.",
 		Annotations: readOnlyAnnotations(), InputSchema: riskFindingListSchema(),
 	}, available, func(ctx context.Context, principal Principal, input ListRiskFindingPageInput) (ListRiskFindingPageOutput, error) {
 		return service.List(ctx, principal, input)
@@ -65,8 +65,9 @@ func riskFindingListSchema() *jsonschema.Schema {
 	properties := riskFindingPageProperties()
 	properties["from"] = &jsonschema.Schema{Type: "string", Description: "Inclusive message time in RFC3339. Omit for no lower bound."}
 	properties["to"] = &jsonschema.Schema{Type: "string", Description: "Exclusive message time in RFC3339. Omit for no upper bound."}
-	properties["policy_id"] = uuidSchema("Optional exact policy ID. A disabled policy's historical findings are listed only under this filter.")
-	properties["chat_id"] = uuidSchema("Optional exact chat ID. Where the organization's listing is not yet served from the analytics store, chat_id must be the only filter.")
+	properties["policy_id"] = uuidSchema("Optional exact policy ID, including a disabled policy. Without it, findings from every non-deleted policy are listed.")
+	properties["chat_id"] = uuidSchema("Optional exact chat ID. Combines with the other filters.")
+	properties["mcp_server_id"] = uuidSchema("Optional exact MCP server ID; only findings on tool calls through that server.")
 	properties["category"] = enumSchema(riskCategoryKeys()...)
 	properties["category"].Description = "Optional exact risk category key."
 	properties["rule_id"] = stringSchema("Optional case-insensitive substring of the rule identifier, such as secret.", 1, 128)

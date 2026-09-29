@@ -50,7 +50,7 @@ type remotePolicyLookup struct {
 	policy policycore.Policy
 }
 
-func (l remotePolicyLookup) ListEnabledForMCPServer(context.Context, string, uuid.UUID, uuid.UUID, string) ([]policycore.Policy, error) {
+func (l remotePolicyLookup) ListEnabledForMCP(context.Context, string, uuid.UUID, policycore.MCPTarget) ([]policycore.Policy, error) {
 	return []policycore.Policy{l.policy}, nil
 }
 

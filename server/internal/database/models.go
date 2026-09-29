@@ -1491,11 +1491,12 @@ type McpRegistry struct {
 }
 
 type McpRegistryEntry struct {
-	ID        uuid.UUID
-	Data      []byte
-	Published bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID          uuid.UUID
+	Data        []byte
+	Published   bool
+	PublishedAt pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }
 
 // Research-agent output for an approval request. Findings are gathered and cited, never adjudicated — the admin decides.

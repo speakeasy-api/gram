@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
@@ -235,8 +236,9 @@ type testInstance struct {
 	cacheDeletes                 *countingCache
 	chConn                       clickhouse.Conn
 	// assetStorage backs content-part reads on the ClickHouse reveal path.
-	assetStorage  blobio.Reader
-	riskPublisher gcp.Publisher[*meteringv1.MeterReading]
+	assetStorage     blobio.Reader
+	riskPublisher    gcp.Publisher[*meteringv1.MeterReading]
+	platformToolsets map[string]platformtools.Toolset
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -289,6 +291,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		chConn:           chConn,
 		assetStorage:     assetstest.NewTestBlobStore(t),
 		riskPublisher:    nil,
+		platformToolsets: platformtools.BuildToolsets(platformtools.ToolsetDependencies{}),
 	}
 	for _, configureInstance := range configure {
 		configureInstance(ti)
@@ -300,7 +303,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	}, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(ti.riskPublisher))
+	}, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(ti.riskPublisher), ti.platformToolsets)
 
 	return ctx, ti
 }

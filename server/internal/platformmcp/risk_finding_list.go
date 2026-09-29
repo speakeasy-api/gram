@@ -12,11 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
@@ -51,36 +48,22 @@ type RiskFindingListReader interface {
 	ListRiskRuleCountsByCategory(context.Context, chrepo.RiskOverviewWindowParams, string, []string, uint64) ([]chrepo.RiskOverviewRuleCount, error)
 }
 
-// riskFindingPostgresReader is the Postgres read path, served when the
-// organization's listing is not yet on ClickHouse. It is the only store that
-// holds raw match content, which is why every row it returns is redacted here.
-type riskFindingPostgresReader interface {
-	ListRiskFindingPolicies(context.Context, riskrepo.ListRiskFindingPoliciesParams) ([]riskrepo.ListRiskFindingPoliciesRow, error)
-	ListRiskResultsByProjectFound(context.Context, riskrepo.ListRiskResultsByProjectFoundParams) ([]riskrepo.ListRiskResultsByProjectFoundRow, error)
-	ListRiskResultsByChatFound(context.Context, riskrepo.ListRiskResultsByChatFoundParams) ([]riskrepo.ListRiskResultsByChatFoundRow, error)
-	ListRiskResultsGroupedByChat(context.Context, riskrepo.ListRiskResultsGroupedByChatParams) ([]riskrepo.ListRiskResultsGroupedByChatRow, error)
-	ListRiskRulesByCategory(context.Context, riskrepo.ListRiskRulesByCategoryParams) ([]riskrepo.ListRiskRulesByCategoryRow, error)
-}
-
 // RiskFindingListService serves individual risk findings, their per-chat
-// rollup and per-rule counts for one category. It reads the same store as the
-// dashboard's Risk Events listing: ClickHouse where the organization's listing
-// flag allows, Postgres otherwise.
+// rollup and per-rule counts for one category from ClickHouse, the same store
+// as the dashboard's Risk Events listing. Postgres supplies project and policy
+// lookups, since ClickHouse cannot join risk_policies.
 type RiskFindingListService struct {
-	projects      riskProjectResolver
-	organizations OrganizationSlugResolver
-	flags         feature.Provider
-	postgres      riskFindingPostgresReader
-	clickhouse    RiskFindingListReader
-	cursor        *riskCursorCodec
-	now           func() time.Time
+	projects   riskProjectResolver
+	policies   findingPolicyReader
+	clickhouse RiskFindingListReader
+	cursor     *riskCursorCodec
+	now        func() time.Time
 }
 
-// NewRiskFindingListService requires configured Postgres and ClickHouse readers
-// and panics if the cursor key is missing. Store selection is feature-flag driven.
-func NewRiskFindingListService(db *pgxpool.Pool, clickhouse RiskFindingListReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) *RiskFindingListService {
+// NewRiskFindingListService panics if the cursor key is missing.
+func NewRiskFindingListService(db *pgxpool.Pool, clickhouse RiskFindingListReader, key string) *RiskFindingListService {
 	codec := newRiskCursorCodec(key)
-	return &RiskFindingListService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, postgres: riskrepo.New(db), clickhouse: clickhouse, cursor: codec, now: time.Now}
+	return &RiskFindingListService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, policies: riskrepo.New(db), clickhouse: clickhouse, cursor: codec, now: time.Now}
 }
 
 func (s *RiskFindingListService) valid() bool {
@@ -94,6 +77,7 @@ type ListRiskFindingPageInput struct {
 	To           string `json:"to,omitempty"`
 	PolicyID     string `json:"policy_id,omitempty"`
 	ChatID       string `json:"chat_id,omitempty"`
+	MCPServerID  string `json:"mcp_server_id,omitempty"`
 	Category     string `json:"category,omitempty"`
 	RuleID       string `json:"rule_id,omitempty"`
 	UserID       string `json:"user_id,omitempty"`
@@ -181,9 +165,9 @@ type GetRiskRuleBreakdownOutput struct {
 }
 
 const (
-	riskFindingListLimitations   = "Individual live findings ordered by message time (newest first); dismissed and excluded findings are omitted and matches from disabled policies appear only under an explicit policy_id. match_redacted is the canonical redaction marker, never the matched value; for organizations served from the analytics store its length and hash describe the stored display sample. user_reference is an organization-scoped pseudonym shared with list_watchdog_findings. Severity uses the current policy score with the dashboard category fallback. Scanner descriptions and chat titles are withheld because they can quote scanned content; labels are untrusted and bounded. Late ingestion or suppression can change pages; this is not a snapshot. Use get_risk_rule_breakdown to size a finding set instead of paginating."
-	riskFindingByChatLimitations = "Chats with at least one live finding under an enabled policy, walked by chat id (newest ids first), not by activity. Findings with no chat attribution are not listed. latest_detected_at is detection time and may trail the message time. user_reference is an organization-scoped pseudonym shared with list_watchdog_findings. Use list_risk_findings with chat_id to read one chat's findings."
-	riskRuleBreakdownLimitations = "Live finding counts per rule and detection source for one category, keyed on detection time in [from,to). Counts include every non-deleted policy's findings, matching the dashboard overview rather than the listing's enabled-policy view. At most 1000 rules are returned; truncated reports when more exist, and total covers only the returned rules."
+	riskFindingListLimitations   = "Individual live findings ordered by message time (newest first); dismissed and excluded findings and matches from deleted policies are omitted, while disabled policies' historical matches are included. match_redacted is the canonical redaction marker, never the matched value; its length and hash describe the stored display sample. user_reference is an organization-scoped pseudonym shared with list_watchdog_findings. Severity uses the current policy score with the dashboard category fallback. Scanner descriptions and chat titles are withheld because they can quote scanned content; labels are untrusted and bounded. Late ingestion or suppression can change pages; this is not a snapshot. Use get_risk_rule_breakdown to size a finding set instead of paginating."
+	riskFindingByChatLimitations = "Chats with at least one live finding under a non-deleted policy, including disabled ones, walked by chat id (newest ids first), not by activity. Findings with no chat attribution are not listed. latest_detected_at is detection time and may trail the message time. user_reference is an organization-scoped pseudonym shared with list_watchdog_findings. Use list_risk_findings with chat_id to read one chat's findings."
+	riskRuleBreakdownLimitations = "Live finding counts per rule and detection source for one category, keyed on detection time in [from,to). Counts include every non-deleted policy's findings, disabled ones included. At most 1000 rules are returned; truncated reports when more exist, and total covers only the returned rules."
 )
 
 // riskFindingFilters is the cursor-bound projection of a listing request. The
@@ -191,10 +175,13 @@ const (
 // the page sequence is fingerprinted into the cursor kind so a cursor replayed
 // with different filters is refused instead of returning a scrambled page.
 type riskFindingFilters struct {
-	From         string `json:"from"`
-	To           string `json:"to"`
-	PolicyID     string `json:"policy_id"`
-	ChatID       string `json:"chat_id"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	PolicyID string `json:"policy_id"`
+	ChatID   string `json:"chat_id"`
+	// omitempty keeps the cursor kind of unfiltered listings unchanged, so
+	// cursors issued before this filter existed stay valid.
+	MCPServerID  string `json:"mcp_server_id,omitempty"`
 	Category     string `json:"category"`
 	RuleID       string `json:"rule_id"`
 	UserID       string `json:"user_id"`
@@ -258,7 +245,7 @@ func riskFindingPageLimit(value int) (int, error) {
 // keyed by id, or fails closed when the project has more than the bounded
 // lookup can score, so severity is never silently understated.
 func (s *RiskFindingListService) visiblePolicies(ctx context.Context, principal Principal, project ResolvedProject) (map[string]riskrepo.ListRiskFindingPoliciesRow, error) {
-	policies, err := s.postgres.ListRiskFindingPolicies(ctx, riskrepo.ListRiskFindingPoliciesParams{ProjectID: project.ID, OrganizationID: principal.OrganizationID, PageLimit: riskFindingPolicyLimit + 1})
+	policies, err := s.policies.ListRiskFindingPolicies(ctx, riskrepo.ListRiskFindingPoliciesParams{ProjectID: project.ID, OrganizationID: principal.OrganizationID, PageLimit: riskFindingPolicyLimit + 1})
 	if err != nil {
 		return nil, fmt.Errorf("%w: read finding policies", ErrUnavailable)
 	}
@@ -275,10 +262,10 @@ func (s *RiskFindingListService) visiblePolicies(ctx context.Context, principal 
 	return byID, nil
 }
 
-// pushdownPolicyIDs mirrors the dashboard listing's visible-policy rule for
-// the ClickHouse store, which cannot join risk_policies: enabled policies by
-// default, or exactly the requested policy including a disabled one. The
-// result is sorted so the pushdown is deterministic in tests and query logs.
+// pushdownPolicyIDs is the policy set ClickHouse filters on: every visible
+// (non-deleted) policy by default, enabled or not, or exactly the requested
+// one. Deleted policies' rows linger in ClickHouse until TTL, so they must be
+// excluded here. Sorted so the pushdown is deterministic.
 func pushdownPolicyIDs(policies map[string]riskrepo.ListRiskFindingPoliciesRow, policyID uuid.NullUUID) []string {
 	if policyID.Valid {
 		if _, ok := policies[policyID.UUID.String()]; ok {
@@ -287,28 +274,11 @@ func pushdownPolicyIDs(policies map[string]riskrepo.ListRiskFindingPoliciesRow, 
 		return nil
 	}
 	ids := make([]string, 0, len(policies))
-	for id, policy := range policies {
-		if policy.Enabled {
-			ids = append(ids, id)
-		}
+	for id := range policies {
+		ids = append(ids, id)
 	}
 	slices.Sort(ids)
 	return ids
-}
-
-// useClickHouse decides which store answers, per organization and project.
-// A flag evaluation failure fails closed rather than silently switching store
-// mid-pagination.
-func (s *RiskFindingListService) useClickHouse(ctx context.Context, principal Principal, project ResolvedProject) (bool, error) {
-	orgSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil || orgSlug == "" {
-		return false, ErrUnavailable
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagRiskListFromClickHouse, principal.OrganizationID, feature.OrgProjectGroups(orgSlug, project.Slug))
-	if err != nil {
-		return false, fmt.Errorf("%w: evaluate finding listing store", ErrUnavailable)
-	}
-	return evaluation == feature.EvaluationEnabled, nil
 }
 
 func (s *RiskFindingListService) List(ctx context.Context, principal Principal, input ListRiskFindingPageInput) (ListRiskFindingPageOutput, error) {
@@ -338,13 +308,22 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 	if err != nil {
 		return zero, err
 	}
-	chatID, err := parseOptionalRiskUUID(input.ChatID)
-	if err != nil {
+	if _, err := parseOptionalRiskUUID(input.ChatID); err != nil {
 		return zero, err
 	}
 	assistantID, err := parseOptionalRiskUUID(input.AssistantID)
 	if err != nil {
 		return zero, err
+	}
+	mcpServerID, err := parseOptionalRiskUUID(input.MCPServerID)
+	if err != nil {
+		return zero, err
+	}
+	if mcpServerID.Valid {
+		// Findings store server ids in canonical lowercase form, and the
+		// analytics filter compares strings, so an uppercase spelling that
+		// parses would otherwise match nothing.
+		input.MCPServerID = mcpServerID.UUID.String()
 	}
 	if input.Category != "" && !validRiskCategory(input.Category) {
 		return zero, ErrRiskReadInvalid
@@ -352,7 +331,7 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 	if len(input.RuleID) > 128 || len(input.UserID) > 256 || (assistantID.Valid && input.NonAssistant) {
 		return zero, ErrRiskReadInvalid
 	}
-	filters := riskFindingFilters{From: input.From, To: input.To, PolicyID: input.PolicyID, ChatID: input.ChatID, Category: input.Category, RuleID: input.RuleID, UserID: input.UserID, AssistantID: input.AssistantID, NonAssistant: input.NonAssistant, UniqueMatch: input.UniqueMatch}
+	filters := riskFindingFilters{From: input.From, To: input.To, PolicyID: input.PolicyID, ChatID: input.ChatID, MCPServerID: input.MCPServerID, Category: input.Category, RuleID: input.RuleID, UserID: input.UserID, AssistantID: input.AssistantID, NonAssistant: input.NonAssistant, UniqueMatch: input.UniqueMatch}
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -368,21 +347,11 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 		}
 		cursor = &decoded
 	}
-	clickhouse, err := s.useClickHouse(ctx, principal, project)
-	if err != nil {
-		return zero, err
-	}
 	policies, err := s.visiblePolicies(ctx, principal, project)
 	if err != nil {
 		return zero, err
 	}
-
-	var findings []RiskFinding
-	if clickhouse {
-		findings, err = s.listFromClickHouse(ctx, principal, project, policies, filters, policyID, from, to, cursor, limit)
-	} else {
-		findings, err = s.listFromPostgres(ctx, principal, project, policies, filters, policyID, chatID, assistantID, from, to, cursor, limit)
-	}
+	findings, err := s.listFindings(ctx, principal, project, policies, filters, policyID, from, to, cursor, limit)
 	if err != nil {
 		return zero, err
 	}
@@ -404,7 +373,7 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 	return output, nil
 }
 
-func (s *RiskFindingListService) listFromClickHouse(ctx context.Context, principal Principal, project ResolvedProject, policies map[string]riskrepo.ListRiskFindingPoliciesRow, filters riskFindingFilters, policyID uuid.NullUUID, from, to *time.Time, cursor *riskCursor, limit int) ([]RiskFinding, error) {
+func (s *RiskFindingListService) listFindings(ctx context.Context, principal Principal, project ResolvedProject, policies map[string]riskrepo.ListRiskFindingPoliciesRow, filters riskFindingFilters, policyID uuid.NullUUID, from, to *time.Time, cursor *riskCursor, limit int) ([]RiskFinding, error) {
 	policyIDs := pushdownPolicyIDs(policies, policyID)
 	if len(policyIDs) == 0 {
 		return []RiskFinding{}, nil
@@ -413,7 +382,7 @@ func (s *RiskFindingListService) listFromClickHouse(ctx context.Context, princip
 		OrganizationID:  principal.OrganizationID,
 		ProjectID:       project.ID.String(),
 		PolicyIDs:       policyIDs,
-		MCPServerID:     "",
+		MCPServerID:     filters.MCPServerID,
 		ChatID:          filters.ChatID,
 		From:            from,
 		To:              to,
@@ -453,81 +422,8 @@ func (s *RiskFindingListService) listFromClickHouse(ctx context.Context, princip
 	return findings, nil
 }
 
-func (s *RiskFindingListService) listFromPostgres(ctx context.Context, principal Principal, project ResolvedProject, policies map[string]riskrepo.ListRiskFindingPoliciesRow, filters riskFindingFilters, policyID, chatID, assistantID uuid.NullUUID, from, to *time.Time, cursor *riskCursor, limit int) ([]RiskFinding, error) {
-	cursorAt := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
-	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if cursor != nil {
-		cursorAt = pgtype.Timestamptz{Time: cursor.CreatedAt, InfinityModifier: pgtype.Finite, Valid: true}
-		cursorID = uuid.NullUUID{UUID: cursor.ID, Valid: true}
-	}
-	pageLimit := conv.SafeInt32(limit + 1)
-	findings := make([]RiskFinding, 0, limit+1)
-	if chatID.Valid {
-		// The chat-scoped Postgres listing takes no other filter. Refusing the
-		// combination is safer than serving a page that silently ignores it.
-		narrowed := filters
-		narrowed.ChatID = ""
-		if narrowed != (riskFindingFilters{}) {
-			return nil, ErrRiskReadInvalid
-		}
-		rows, err := s.postgres.ListRiskResultsByChatFound(ctx, riskrepo.ListRiskResultsByChatFoundParams{ChatID: chatID.UUID, ProjectID: project.ID, CursorMessageCreatedAt: cursorAt, CursorID: cursorID, PageLimit: pageLimit})
-		if err != nil {
-			return nil, fmt.Errorf("%w: list chat findings", ErrUnavailable)
-		}
-		for _, row := range rows {
-			finding := s.postgresFinding(principal.OrganizationID, policies, row.RiskPolicyID, row.Source, row.RuleID, row.Tags, row.Confidence, row.MessageCreatedAt, row.Match)
-			finding.ID = row.ID.String()
-			finding.PolicyVersion = row.RiskPolicyVersion
-			finding.ChatID = row.ChatID.String()
-			finding.ChatMessageID = nullUUIDString(row.ChatMessageID)
-			finding.UserReference = riskUserReference(s.cursor.key, principal.OrganizationID, conv.FromPGTextOrEmpty[string](row.ChatUserID))
-			findings = append(findings, finding)
-		}
-		return findings, nil
-	}
-	rows, err := s.postgres.ListRiskResultsByProjectFound(ctx, riskrepo.ListRiskResultsByProjectFoundParams{
-		UniqueMatch:            filters.UniqueMatch,
-		PolicyID:               policyID,
-		ProjectID:              project.ID,
-		FromTime:               pgOptionalTime(from),
-		ToTime:                 pgOptionalTime(to),
-		RuleID:                 filters.RuleID,
-		UserID:                 filters.UserID,
-		ExternalUserIds:        nil,
-		NonAssistant:           filters.NonAssistant,
-		AssistantID:            assistantID,
-		Category:               filters.Category,
-		CursorMessageCreatedAt: cursorAt,
-		CursorID:               cursorID,
-		PageLimit:              pageLimit,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("%w: list project findings", ErrUnavailable)
-	}
-	for _, row := range rows {
-		finding := s.postgresFinding(principal.OrganizationID, policies, row.RiskPolicyID, row.Source, row.RuleID, row.Tags, row.Confidence, row.MessageCreatedAt, row.Match)
-		finding.ID = row.ID.String()
-		finding.PolicyVersion = row.RiskPolicyVersion
-		finding.ChatID = row.ChatID.String()
-		finding.ChatMessageID = nullUUIDString(row.ChatMessageID)
-		finding.UserReference = riskUserReference(s.cursor.key, principal.OrganizationID, conv.FromPGTextOrEmpty[string](row.ChatUserID))
-		findings = append(findings, finding)
-	}
-	return findings, nil
-}
-
-// postgresFinding maps the columns shared by both Postgres listings. Postgres
-// rows carry the raw match, so the redaction happens here and nowhere later.
-func (s *RiskFindingListService) postgresFinding(org string, policies map[string]riskrepo.ListRiskFindingPoliciesRow, policyID uuid.UUID, source string, ruleID pgtype.Text, tags []string, confidence pgtype.Float8, messageCreatedAt pgtype.Timestamptz, match pgtype.Text) RiskFinding {
-	rule := conv.FromPGTextOrEmpty[string](ruleID)
-	finding := s.finding(policies, policyID.String(), source, rule, string(categories.Classify(source, rule)), tags, confidence.Float64, messageCreatedAt.Time)
-	finding.MatchRedacted = risk.RedactMatchAll(conv.FromPGTextOrEmpty[string](match), org)
-	return finding
-}
-
-// finding builds the store-independent part of a row. Every label is untrusted
-// content bounded by findingLabel; the match is set by the caller because the
-// two stores redact from different inputs.
+// finding builds the row fields shared with other finding reads. Every label
+// is untrusted content bounded by findingLabel.
 func (s *RiskFindingListService) finding(policies map[string]riskrepo.ListRiskFindingPoliciesRow, policyID, source, ruleID, category string, tags []string, confidence float64, messageCreatedAt time.Time) RiskFinding {
 	score := risk.SignalScore(policies[policyID].Score, category)
 	bounded := make([]string, 0, len(tags))
@@ -573,40 +469,25 @@ func (s *RiskFindingListService) ListByChat(ctx context.Context, principal Princ
 		}
 		cursorChat = uuid.NullUUID{UUID: decoded.ID, Valid: true}
 	}
-	clickhouse, err := s.useClickHouse(ctx, principal, project)
+	policies, err := s.visiblePolicies(ctx, principal, project)
 	if err != nil {
 		return zero, err
 	}
 
-	// Both stores walk chat ids downward from an inclusive cursor and return
-	// one extra row, whose chat id seeds the next cursor.
+	// Walks chat ids downward from an inclusive cursor and reads one extra
+	// row, whose chat id seeds the next cursor.
 	chats := make([]RiskFindingChatSummary, 0, limit+1)
-	if clickhouse {
-		policies, err := s.visiblePolicies(ctx, principal, project)
-		if err != nil {
-			return zero, err
+	if policyIDs := pushdownPolicyIDs(policies, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); len(policyIDs) > 0 {
+		params := chrepo.GroupRiskFindingsByChatParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), PolicyIDs: policyIDs, CursorChatID: "", Limit: uint64(limit) + 1} // #nosec G115 -- riskFindingPageLimit caps at 50.
+		if cursorChat.Valid {
+			params.CursorChatID = cursorChat.UUID.String()
 		}
-		policyIDs := pushdownPolicyIDs(policies, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-		if len(policyIDs) > 0 {
-			params := chrepo.GroupRiskFindingsByChatParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), PolicyIDs: policyIDs, CursorChatID: "", Limit: uint64(limit) + 1} // #nosec G115 -- riskFindingPageLimit caps at 50.
-			if cursorChat.Valid {
-				params.CursorChatID = cursorChat.UUID.String()
-			}
-			rows, err := s.clickhouse.GroupRiskFindingsByChat(ctx, params)
-			if err != nil {
-				return zero, fmt.Errorf("%w: group findings by chat", ErrUnavailable)
-			}
-			for _, row := range rows {
-				chats = append(chats, RiskFindingChatSummary{ChatID: row.ChatID, UserReference: riskUserReference(s.cursor.key, principal.OrganizationID, row.ExternalUserID), FindingsCount: safeFindingCount(row.FindingsCount), LatestDetectedAt: row.LatestDetected.UTC().Format(time.RFC3339Nano)})
-			}
-		}
-	} else {
-		rows, err := s.postgres.ListRiskResultsGroupedByChat(ctx, riskrepo.ListRiskResultsGroupedByChatParams{ProjectID: project.ID, Cursor: cursorChat, PageLimit: conv.SafeInt32(limit + 1)})
+		rows, err := s.clickhouse.GroupRiskFindingsByChat(ctx, params)
 		if err != nil {
 			return zero, fmt.Errorf("%w: group findings by chat", ErrUnavailable)
 		}
 		for _, row := range rows {
-			chats = append(chats, RiskFindingChatSummary{ChatID: row.ChatID.String(), UserReference: riskUserReference(s.cursor.key, principal.OrganizationID, conv.FromPGTextOrEmpty[string](row.ChatUserID)), FindingsCount: row.FindingsCount, LatestDetectedAt: row.LatestDetected.Time.UTC().Format(time.RFC3339Nano)})
+			chats = append(chats, RiskFindingChatSummary{ChatID: row.ChatID, UserReference: riskUserReference(s.cursor.key, principal.OrganizationID, row.ExternalUserID), FindingsCount: safeFindingCount(row.FindingsCount), LatestDetectedAt: row.LatestDetected.UTC().Format(time.RFC3339Nano)})
 		}
 	}
 
@@ -672,43 +553,21 @@ func (s *RiskFindingListService) RuleBreakdown(ctx context.Context, principal Pr
 	if err != nil {
 		return zero, fmt.Errorf("resolve risk rule breakdown project: %w", err)
 	}
-	clickhouse, err := s.useClickHouse(ctx, principal, project)
+	policies, err := s.visiblePolicies(ctx, principal, project)
 	if err != nil {
 		return zero, err
 	}
 
-	// Both stores read one row past the bound so truncation is detected
-	// without an unbounded fetch.
+	// Reads one row past the bound so truncation is detected without an
+	// unbounded fetch.
 	rules := make([]RiskRuleCount, 0, riskRuleBreakdownLimit+1)
-	if clickhouse {
-		// Deleted policies' rows linger in ClickHouse until TTL, so the
-		// non-deleted set is pushed down where Postgres joins risk_policies.
-		policies, err := s.visiblePolicies(ctx, principal, project)
-		if err != nil {
-			return zero, err
-		}
-		policyIDs := make([]string, 0, len(policies))
-		for id := range policies {
-			policyIDs = append(policyIDs, id)
-		}
-		slices.Sort(policyIDs)
-		var rows []chrepo.RiskOverviewRuleCount
-		if len(policyIDs) > 0 {
-			rows, err = s.clickhouse.ListRiskRuleCountsByCategory(ctx, chrepo.RiskOverviewWindowParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), From: from, To: to}, input.Category, policyIDs, riskRuleBreakdownLimit+1)
-			if err != nil {
-				return zero, fmt.Errorf("%w: count findings by rule", ErrUnavailable)
-			}
-		}
-		for _, row := range rows {
-			rules = append(rules, RiskRuleCount{RuleID: findingLabel(row.RuleID), Source: findingLabel(row.Source), Findings: safeFindingCount(row.Findings)})
-		}
-	} else {
-		rows, err := s.postgres.ListRiskRulesByCategory(ctx, riskrepo.ListRiskRulesByCategoryParams{Category: input.Category, ProjectID: project.ID, FromTime: pgOptionalTime(&from), ToTime: pgOptionalTime(&to), PageLimit: pgtype.Int4{Int32: riskRuleBreakdownLimit + 1, Valid: true}})
+	if policyIDs := pushdownPolicyIDs(policies, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); len(policyIDs) > 0 {
+		rows, err := s.clickhouse.ListRiskRuleCountsByCategory(ctx, chrepo.RiskOverviewWindowParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), From: from, To: to}, input.Category, policyIDs, riskRuleBreakdownLimit+1)
 		if err != nil {
 			return zero, fmt.Errorf("%w: count findings by rule", ErrUnavailable)
 		}
 		for _, row := range rows {
-			rules = append(rules, RiskRuleCount{RuleID: findingLabel(row.RuleID), Source: findingLabel(row.Source), Findings: row.Findings})
+			rules = append(rules, RiskRuleCount{RuleID: findingLabel(row.RuleID), Source: findingLabel(row.Source), Findings: safeFindingCount(row.Findings)})
 		}
 	}
 
@@ -737,20 +596,6 @@ func riskCategoryKeys() []string {
 		keys = append(keys, string(def.Category))
 	}
 	return keys
-}
-
-func pgOptionalTime(value *time.Time) pgtype.Timestamptz {
-	if value == nil {
-		return pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
-	}
-	return pgtype.Timestamptz{Time: *value, InfinityModifier: pgtype.Finite, Valid: true}
-}
-
-func nullUUIDString(value uuid.NullUUID) string {
-	if !value.Valid {
-		return ""
-	}
-	return value.UUID.String()
 }
 
 // safeFindingCount clamps a ClickHouse count into the signed range the wire
