@@ -150,19 +150,25 @@ type MCPToolExposureMutationOutput struct {
 // MCPToolExposureService reads what a project can expose and what one server
 // exposes, and applies incremental changes to the latter.
 type MCPToolExposureService struct {
-	db          *pgxpool.Pool
-	queries     *platformrepo.Queries
-	logger      *slog.Logger
-	audit       *audit.Logger
-	authorizer  *authz.Engine
+	db      *pgxpool.Pool
+	queries *platformrepo.Queries
+	logger  *slog.Logger
+	audit   *audit.Logger
+	// engine checks the resource-scoped mcp:write grant, exactly as the
+	// dashboard's own toolset update does.
+	engine *authz.Engine
+	// admin re-checks org:admin live through the shared authorizer, so a
+	// denial keeps the challenge and audit behavior every other
+	// admin-gated Platform MCP path records.
+	admin       Authorizer
 	cursors     *toolInventoryCursorCodec
 	publication plugins.PublicationRequests
 	publisher   plugins.PluginPublishSignaler
 	now         func() time.Time
 }
 
-func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, authorizer *authz.Engine, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler) (*MCPToolExposureService, error) {
-	if logger == nil || db == nil || auditLogger == nil || authorizer == nil {
+func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler) (*MCPToolExposureService, error) {
+	if logger == nil || db == nil || auditLogger == nil || engine == nil || admin == nil {
 		return nil, ErrMCPToolExposureInvalid
 	}
 	cursors, err := newToolInventoryCursorCodec(cursorKeyMaterial)
@@ -170,13 +176,13 @@ func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogge
 		return nil, err
 	}
 	return &MCPToolExposureService{
-		db: db, queries: platformrepo.New(db), logger: logger, audit: auditLogger, authorizer: authorizer,
+		db: db, queries: platformrepo.New(db), logger: logger, audit: auditLogger, engine: engine, admin: admin,
 		cursors: cursors, publication: publication, publisher: publisher, now: time.Now,
 	}, nil
 }
 
 func (s *MCPToolExposureService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.authorizer != nil && s.cursors != nil && s.now != nil
+	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && s.now != nil
 }
 
 // ListProjectTools reports the tools a project's latest completed deployment
@@ -245,16 +251,31 @@ func (s *MCPToolExposureService) Exposure(ctx context.Context, principal Princip
 	return s.exposure(ctx, s.queries, principal, projectID, mcpID)
 }
 
-func (s *MCPToolExposureService) exposure(ctx context.Context, queries *platformrepo.Queries, principal Principal, projectID, mcpID uuid.UUID) (MCPToolExposure, error) {
+// exposureRow is the untruncated read. The public projection bounds the tool
+// list it reports, so anything that has to reason about the whole committed
+// list — the version token, the removable set — uses the row instead.
+func (s *MCPToolExposureService) exposureRow(ctx context.Context, queries *platformrepo.Queries, principal Principal, projectID, mcpID uuid.UUID) (platformrepo.GetPlatformMCPServerToolExposureRow, error) {
 	row, err := queries.GetPlatformMCPServerToolExposure(ctx, platformrepo.GetPlatformMCPServerToolExposureParams{
 		OrganizationID: principal.OrganizationID, McpServerID: mcpID, ProjectID: projectID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return MCPToolExposure{}, ErrMCPToolExposureMissing
+		return platformrepo.GetPlatformMCPServerToolExposureRow{}, ErrMCPToolExposureMissing
 	}
 	if err != nil {
-		return MCPToolExposure{}, fmt.Errorf("get platform MCP server tool exposure: %w", err)
+		return platformrepo.GetPlatformMCPServerToolExposureRow{}, fmt.Errorf("get platform MCP server tool exposure: %w", err)
 	}
+	return row, nil
+}
+
+func (s *MCPToolExposureService) exposure(ctx context.Context, queries *platformrepo.Queries, principal Principal, projectID, mcpID uuid.UUID) (MCPToolExposure, error) {
+	row, err := s.exposureRow(ctx, queries, principal, projectID, mcpID)
+	if err != nil {
+		return MCPToolExposure{}, err
+	}
+	return toolExposureFromRow(projectID, mcpID, row), nil
+}
+
+func toolExposureFromRow(projectID, mcpID uuid.UUID, row platformrepo.GetPlatformMCPServerToolExposureRow) MCPToolExposure {
 	urns, truncated := boundedRows(row.ToolUrns, maxExposedToolURNs)
 	return MCPToolExposure{
 		ToolsetID:       row.ToolsetID.String(),
@@ -264,7 +285,7 @@ func (s *MCPToolExposureService) exposure(ctx context.Context, queries *platform
 		ToolURNs:        slices.Clone(urns),
 		Truncated:       truncated,
 		toolsetVersion:  row.ToolsetVersion,
-	}, nil
+	}
 }
 
 func (s *MCPToolExposureService) AddTools(ctx context.Context, principal Principal, input ChangeMCPToolsInput) (MCPToolExposureMutationOutput, error) {
@@ -303,15 +324,12 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 	if err != nil {
 		return MCPToolExposureMutationOutput{}, err
 	}
-	// A fresh read before acting: it proves the target is a hosted server this
-	// caller can change, and gives the version the transaction re-checks.
-	// The version and the tool names are checked inside the transaction, not
-	// here: a retry of a change that already committed must replay its stored
-	// result rather than report a conflict against the list it itself moved.
-	if _, err := s.Exposure(ctx, principal, project.ID, mcpID); err != nil {
-		return MCPToolExposureMutationOutput{}, s.classifyTargetError(err)
-	}
-
+	// The fresh target read, the version check and the tool-name check all
+	// happen inside the receipt transaction. Doing any of them here would
+	// defeat replay: a retry of a change that already committed would report a
+	// conflict against the list it itself moved, or not_found once the target
+	// was deleted or unlinked afterwards, instead of returning the stored
+	// result the idempotency key promises.
 	normalized := toolExposureMutationRequest{
 		Operation: operation, ProjectID: project.ID.String(), MCPID: mcpID.String(),
 		ToolURNs: toolURNStrings(requested), ExpectedVersion: input.ExpectedVersion,
@@ -346,25 +364,28 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			// Re-read the exposure through the transaction. The toolsets helper
 			// then takes the toolset row lock and recomputes the list from the
 			// committed one, so a concurrent writer cannot be overwritten.
-			locked, err := s.exposure(ctx, s.queries.WithTx(tx), principal, project.ID, mcpID)
+			row, err := s.exposureRow(ctx, s.queries.WithTx(tx), principal, project.ID, mcpID)
 			if err != nil {
 				return toolExposureReceipt{}, s.classifyTargetError(err)
 			}
+			locked := toolExposureFromRow(project.ID, mcpID, row)
 			if !hmac.Equal([]byte(locked.ExposureVersion), []byte(input.ExpectedVersion)) {
 				return toolExposureReceipt{}, toolExposureConflict()
 			}
-			toolsetID, err = uuid.Parse(locked.ToolsetID)
-			if err != nil {
-				return toolExposureReceipt{}, toolExposureUnavailable(err)
+			toolsetID = row.ToolsetID
+			// Both halves refuse a name they cannot act on rather than
+			// reporting it as unchanged. A tool the server already exposes is
+			// still removable after its definition is gone, so a name already
+			// on the server counts as known.
+			if err := s.requireKnownTools(ctx, s.queries.WithTx(tx), principal, project.ID, requested, row.ToolUrns); err != nil {
+				return toolExposureReceipt{}, err
 			}
 			change := toolsets.ToolExposureChange{Add: requested}
 			if operation == operationRemoveMCPTools {
 				change = toolsets.ToolExposureChange{Remove: requested}
-			} else if err := s.requireKnownTools(ctx, s.queries.WithTx(tx), principal, project.ID, requested); err != nil {
-				return toolExposureReceipt{}, err
 			}
 			actor := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}
-			applied, err := toolsets.ChangeToolsetToolsInTransaction(ctx, tx, s.logger, s.audit, actor, toolsetID, toolsetVersionFromExposure(locked), change)
+			applied, err := toolsets.ChangeToolsetToolsInTransaction(ctx, tx, s.logger, s.audit, actor, toolsetID, row.ToolsetVersion, change)
 			if err != nil {
 				return toolExposureReceipt{}, classifyToolExposureError(err)
 			}
@@ -484,9 +505,21 @@ func (s *MCPToolExposureService) validate(input ChangeMCPToolsInput) (uuid.UUID,
 	return projectID, mcpID, requested, nil
 }
 
+// resolveTarget authorizes before it looks anything up. Resolving the named
+// project first would let an organization administrator without mcp:write tell
+// a real project from an invented one by comparing not_found against a
+// permission denial, which is a project-id oracle.
 func (s *MCPToolExposureService) resolveTarget(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID) (ResolvedProject, error) {
 	if principal.OrganizationID == "" || principal.UserID == "" {
 		return ResolvedProject{}, toolExposureInvalid("The tool exposure request is missing its caller identity.")
+	}
+	if err := s.admin.RequireLiveOrgAdmin(ctx, principal); err != nil {
+		return ResolvedProject{}, toolExposureAuthorizationError(err, authz.ScopeOrgAdmin)
+	}
+	// Checked against the ids the caller named, before anything confirms they
+	// exist, so the answer is the same for a real and an invented target.
+	if err := s.engine.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpID.String(), projectID.String())); err != nil {
+		return ResolvedProject{}, toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
 	}
 	project, err := s.queries.ResolvePlatformMCPProjectByID(ctx, platformrepo.ResolvePlatformMCPProjectByIDParams{OrganizationID: principal.OrganizationID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -495,19 +528,14 @@ func (s *MCPToolExposureService) resolveTarget(ctx context.Context, principal Pr
 	if err != nil {
 		return ResolvedProject{}, fmt.Errorf("resolve live tool exposure project: %w", err)
 	}
-	if err := s.authorizer.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpID.String(), project.ID.String())); err != nil {
-		return ResolvedProject{}, toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
-	}
-	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}); err != nil {
-		return ResolvedProject{}, toolExposureAuthorizationError(err, authz.ScopeOrgAdmin)
-	}
 	return ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}, nil
 }
 
-// requireKnownTools refuses the whole batch and names every tool the project
-// does not generate. Skipping them silently would report success for a tool
-// the server never gained.
-func (s *MCPToolExposureService) requireKnownTools(ctx context.Context, queries *platformrepo.Queries, principal Principal, projectID uuid.UUID, requested []urn.Tool) error {
+// requireKnownTools refuses the whole batch and names every tool that is
+// neither generated by the project nor already on the server. Skipping them
+// silently would report a no-op for a name the caller mistyped, which reads
+// exactly like "that tool was already in the state you wanted".
+func (s *MCPToolExposureService) requireKnownTools(ctx context.Context, queries *platformrepo.Queries, principal Principal, projectID uuid.UUID, requested []urn.Tool, exposed []string) error {
 	values := toolURNStrings(requested)
 	known, err := queries.ListPlatformMCPProjectToolURNs(ctx, platformrepo.ListPlatformMCPProjectToolURNsParams{
 		ProjectID: projectID, OrganizationID: principal.OrganizationID, ToolUrns: values,
@@ -515,8 +543,11 @@ func (s *MCPToolExposureService) requireKnownTools(ctx context.Context, queries 
 	if err != nil {
 		return fmt.Errorf("verify platform MCP project tools: %w", err)
 	}
-	present := make(map[string]bool, len(known))
+	present := make(map[string]bool, len(known)+len(exposed))
 	for _, value := range known {
+		present[value] = true
+	}
+	for _, value := range exposed {
 		present[value] = true
 	}
 	var unknown []string
@@ -530,7 +561,7 @@ func (s *MCPToolExposureService) requireKnownTools(ctx context.Context, queries 
 	}
 	return &MCPToolExposureError{
 		Code: "invalid_request", UnknownTools: unknown, Cause: ErrMCPToolExposureInvalid,
-		Message: "This project's latest deployment does not produce every named tool, so nothing was changed. List the project's tools again; a tool pushed after that deployment finished is not available until the new one completes.",
+		Message: "Some of the named tools are neither produced by this project's latest deployment nor already on this MCP server, so nothing was changed. List the project's tools again; a tool pushed after that deployment finished is not available until the new one completes.",
 	}
 }
 
@@ -564,6 +595,12 @@ func classifyToolExposureError(err error) error {
 
 func toolExposureAuthorizationError(err error, scope authz.Scope) error {
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
+		return &ExternalAuthorizationError{RequiredScope: string(scope), cause: err}
+	}
+	// RequireLiveOrgAdmin reports a lapsed membership as this package's own
+	// forbidden sentinel rather than a shareable error; it is still a denial
+	// and must carry the same required-permission challenge.
+	if errors.Is(err, ErrForbidden) {
 		return &ExternalAuthorizationError{RequiredScope: string(scope), cause: err}
 	}
 	return err
@@ -616,13 +653,6 @@ func toolExposureVersion(projectID, mcpServerID, toolsetID uuid.UUID, version in
 	}
 	digest := sha256.Sum256(payload)
 	return hex.EncodeToString(digest[:])
-}
-
-// toolsetVersionFromExposure recovers the toolset version number the snapshot
-// was taken at. It is carried separately from the opaque token because the
-// toolsets package checks the version chain, not this package's token format.
-func toolsetVersionFromExposure(exposure MCPToolExposure) int64 {
-	return exposure.toolsetVersion
 }
 
 func toolURNStrings(tools []urn.Tool) []string {

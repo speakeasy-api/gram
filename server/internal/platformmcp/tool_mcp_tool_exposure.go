@@ -21,9 +21,9 @@ const (
 // so a tool never appears on and disappears from the catalogue as a deployment
 // composes or fails to compose the service behind it.
 func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, reader Reader) {
-	listTools := unavailableToolExposureHandler[ListProjectToolsInput, ListProjectToolsOutput]()
-	addTools := unavailableToolExposureHandler[ChangeMCPToolsInput, MCPToolExposureMutationOutput]()
-	removeTools := unavailableToolExposureHandler[ChangeMCPToolsInput, MCPToolExposureMutationOutput]()
+	listTools := unavailableToolExposureHandler[ListProjectToolsInput, ListProjectToolsOutput]("Listing a project's tools is not available on this server.")
+	addTools := unavailableToolExposureHandler[ChangeMCPToolsInput, MCPToolExposureMutationOutput](unavailableToolExposureChangeMessage)
+	removeTools := unavailableToolExposureHandler[ChangeMCPToolsInput, MCPToolExposureMutationOutput](unavailableToolExposureChangeMessage)
 	projects, _ := reader.(ProjectReadResolver)
 	if service.valid() && projects != nil {
 		listTools = func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectToolsInput) (*mcp.CallToolResult, ListProjectToolsOutput, error) {
@@ -95,10 +95,16 @@ type ProjectReadResolver interface {
 	ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
 }
 
-func unavailableToolExposureHandler[In, Out any]() mcp.ToolHandlerFor[In, Out] {
+const unavailableToolExposureChangeMessage = "Changing which tools an MCP server exposes is not available on this server."
+
+// unavailableToolExposureHandler takes its own message so a read's refusal
+// says the read is unavailable. Reusing the mutation's wording would tell a
+// caller that asked only to list a project's tools that it cannot change a
+// server, which is a different, more alarming claim.
+func unavailableToolExposureHandler[In, Out any](message string) mcp.ToolHandlerFor[In, Out] {
 	return func(_ context.Context, _ *mcp.CallToolRequest, _ In) (*mcp.CallToolResult, Out, error) {
 		var zero Out
-		payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: toolExposureFeature, Message: "Changing which tools an MCP server exposes is not available on this server."})
+		payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: toolExposureFeature, Message: message})
 		if err != nil {
 			return nil, zero, fmt.Errorf("encode unavailable MCP tool exposure result: %w", err)
 		}

@@ -2722,17 +2722,33 @@ func (q *Queries) InsertRemoteSessionEMABindingFixture(ctx context.Context, arg 
 
 const insertToolsetVersionFixture = `-- name: InsertToolsetVersionFixture :exec
 INSERT INTO toolset_versions (toolset_id, version, tool_urns)
-VALUES ($1, $2, $3::TEXT[])
+SELECT t.id, $1, $2::TEXT[]
+FROM toolsets t
+WHERE t.id = $3
+  AND t.project_id = $4
+  AND t.organization_id = $5
+  AND t.deleted IS FALSE
 `
 
 type InsertToolsetVersionFixtureParams struct {
-	ToolsetID uuid.UUID
-	Version   int64
-	ToolUrns  []string
+	Version        int64
+	ToolUrns       []string
+	ToolsetID      uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
+// Tenant-scoped on purpose: the insert only lands when the named toolset
+// really belongs to the named project and organization, so a fixture cannot
+// reach across tenants the way a bare toolset id would let it.
 func (q *Queries) InsertToolsetVersionFixture(ctx context.Context, arg InsertToolsetVersionFixtureParams) error {
-	_, err := q.db.Exec(ctx, insertToolsetVersionFixture, arg.ToolsetID, arg.Version, arg.ToolUrns)
+	_, err := q.db.Exec(ctx, insertToolsetVersionFixture,
+		arg.Version,
+		arg.ToolUrns,
+		arg.ToolsetID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	return err
 }
 

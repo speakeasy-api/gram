@@ -3577,6 +3577,63 @@ func TestGeneratePlatformMCPPackageEmitsMigrateWorkflow(t *testing.T) {
 	}
 }
 
+func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
+	t.Parallel()
+
+	files, err := PublicPlatformMCPFiles("https://app.getgram.ai", "17")
+	require.NoError(t, err)
+
+	const skillPath = "skills/expose-tools-on-mcp/SKILL.md"
+	claudeSkill := files["speakeasy/"+skillPath]
+	require.NotEmpty(t, claudeSkill)
+	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
+
+	workflow := string(claudeSkill)
+	cursor := 0
+	for _, tool := range []string{
+		"list_projects",
+		"list_project_tools",
+		"find_mcp",
+		"get_mcp",
+		"add_tools_to_mcp",
+		"remove_tools_from_mcp",
+		"get_mcp",
+	} {
+		token := "`" + tool + "`"
+		index := strings.Index(workflow[cursor:], token)
+		require.NotEqual(t, -1, index, "%s must appear in the required workflow order", tool)
+		cursor += index + len(token)
+	}
+	for _, guardrail := range []string{
+		"report that project discovery is incomplete and hand off to the AICP dashboard",
+		"Secrets never enter chat.",
+		"Never guess a tool identifier.",
+		"republishes every plugin that carries that server",
+		"a fresh idempotency key",
+		"`confirmed: true`",
+		"Nothing is dropped silently.",
+		"Do not choose for them",
+		"Never retry a mutation automatically",
+		"It is not available to managed project assistants",
+		"Use `send_platform_mcp_feedback` only after asking for consent",
+		"nothing was changed at all, not that part of the request landed",
+		"not that plugins or the people holding them have converged",
+	} {
+		require.Contains(t, workflow, guardrail)
+	}
+	for _, forbidden := range []string{
+		"Gram",
+		"api key",
+		"client_secret",
+		"Authorization:",
+		"hooks",
+		"speakeasy-skill-feedback",
+		"app.getgram.ai",
+	} {
+		require.NotContains(t, workflow, forbidden)
+	}
+}
+
 func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{

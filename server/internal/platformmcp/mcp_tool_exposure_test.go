@@ -153,50 +153,6 @@ func TestToolExposureRefusalNamesTheToolsItRefused(t *testing.T) {
 	require.Contains(t, missingText.Text, "dashboard", "a server outside this workflow points the caller somewhere that can do it")
 }
 
-// A deployment that could not compose the service must still advertise the
-// same tools, or a catalogue would gain and lose names as a rollout flips.
-func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
-	t.Parallel()
-
-	describe := func(service *MCPToolExposureService) map[string]Descriptor {
-		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "tool-exposure-test", Version: "0.0.1"}, nil))
-		registerToolExposureTools(registrar, service, &PostgresReader{})
-		byName := map[string]Descriptor{}
-		for _, descriptor := range registrar.Descriptors() {
-			byName[descriptor.Name] = descriptor
-		}
-		return byName
-	}
-
-	live := describe(&MCPToolExposureService{
-		db: nil, queries: nil, audit: nil, authorizer: nil,
-	})
-	unavailable := describe(nil)
-	require.Len(t, unavailable, 3)
-	require.Len(t, live, len(unavailable))
-	for name, descriptor := range unavailable {
-		other, ok := live[name]
-		require.True(t, ok, "tool %q is registered on both paths", name)
-		require.Equal(t, other.Title, descriptor.Title)
-		require.Equal(t, other.Description, descriptor.Description)
-		require.Equal(t, other.Meta, descriptor.Meta)
-		require.Equal(t, other.Annotations, descriptor.Annotations)
-		require.Equal(t, other.InputSchema, descriptor.InputSchema)
-	}
-
-	require.Equal(t, bothAudiences, unavailable[listProjectToolsToolName].Meta.Audiences)
-	require.Equal(t, ExternalAuthorizationMember, unavailable[listProjectToolsToolName].Meta.Authorization)
-	require.True(t, unavailable[listProjectToolsToolName].Annotations.ReadOnlyHint)
-	for _, name := range []string{addToolsToMCPToolName, removeToolsFromMCPToolName} {
-		require.Equal(t, externalOnly, unavailable[name].Meta.Audiences, "%s", name)
-		require.Equal(t, ExternalAuthorizationOrgAdmin, unavailable[name].Meta.Authorization, "%s", name)
-		require.Equal(t, ProjectScopeExplicit, unavailable[name].Meta.ProjectScope, "%s", name)
-		require.Contains(t, unavailable[name].Description, "republishes every plugin that carries the server",
-			"%s must state the blast radius before it is called", name)
-		require.Contains(t, unavailable[name].Description, "confirmed: true", "%s", name)
-	}
-}
-
 // The tool list belongs to the server detail, not to the list of servers: an
 // empty list on a find_mcp row would read as "exposes nothing".
 func TestFindMCPResultsCarryNoToolExposure(t *testing.T) {

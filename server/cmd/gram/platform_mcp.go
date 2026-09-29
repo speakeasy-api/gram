@@ -432,7 +432,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
-		WithToolExposure(newPlatformMCPToolExposure(config))
+		WithToolExposure(newPlatformMCPToolExposure(config, authorizer))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
@@ -643,9 +643,9 @@ func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets p
 // decide which tools a hosted MCP server exposes. A composition failure leaves
 // the tools registered as stable refusals rather than removing them from the
 // catalogue.
-func newPlatformMCPToolExposure(config platformMCPConfig) *platformmcp.MCPToolExposureService {
+func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp.Authorizer) *platformmcp.MCPToolExposureService {
 	service, err := platformmcp.NewMCPToolExposureService(
-		config.Logger, config.DB, config.AuditLogger, config.Authz, config.JWTSigningKey,
+		config.Logger, config.DB, config.AuditLogger, config.Authz, authorizer, config.JWTSigningKey,
 		config.PublicationRequests, config.PluginPublishSignaler,
 	)
 	if err != nil {
@@ -898,7 +898,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
-		WithToolExposure(newPlatformMCPToolExposure(config))
+		WithToolExposure(newPlatformMCPToolExposure(config, authorizer))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))

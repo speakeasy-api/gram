@@ -1760,5 +1760,13 @@ INSERT INTO function_tool_definitions (tool_urn, project_id, deployment_id, func
 VALUES (@tool_urn, @project_id, @deployment_id, @function_id, @runtime, @name, @description);
 
 -- name: InsertToolsetVersionFixture :exec
+-- Tenant-scoped on purpose: the insert only lands when the named toolset
+-- really belongs to the named project and organization, so a fixture cannot
+-- reach across tenants the way a bare toolset id would let it.
 INSERT INTO toolset_versions (toolset_id, version, tool_urns)
-VALUES (@toolset_id, @version, @tool_urns::TEXT[]);
+SELECT t.id, @version, @tool_urns::TEXT[]
+FROM toolsets t
+WHERE t.id = @toolset_id
+  AND t.project_id = @project_id
+  AND t.organization_id = @organization_id
+  AND t.deleted IS FALSE;
