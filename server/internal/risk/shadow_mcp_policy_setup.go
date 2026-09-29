@@ -42,10 +42,14 @@ func validateShadowMCPDisposition(disposition string, sources []string, action s
 // the policy editor uses, so a rejection names the configuration the caller
 // actually sent instead of leaving them to infer it.
 func shadowMCPPolicyShape(sources []string, action string) string {
-	if !slices.Contains(sources, shadowmcp.SourceShadowMCP) {
-		return fmt.Sprintf("detecting %s with the %q action", strings.Join(sources, ", "), action)
+	detection := "no built-in detectors"
+	switch {
+	case slices.Contains(sources, shadowmcp.SourceShadowMCP):
+		detection = shadowmcp.SourceShadowMCP
+	case len(sources) > 0:
+		detection = strings.Join(sources, ", ")
 	}
-	return fmt.Sprintf("detecting shadow_mcp with the %q action", action)
+	return fmt.Sprintf("detecting %s with the %q action", detection, action)
 }
 
 // shadowMCPRetiredAllowAllMessage explains why an allow_all policy cannot stop
