@@ -24,21 +24,23 @@ func (q *Queries) CountRegistryEntries(ctx context.Context) (int64, error) {
 }
 
 const createEntry = `-- name: CreateEntry :one
-INSERT INTO mcp_registry_entries(data, published)
+INSERT INTO mcp_registry_entries(data, published, published_at)
 SELECT
     $1::jsonb,
-    true
-WHERE octet_length($1::jsonb::text) <= $2::bigint
+    true,
+    $2::timestamptz
+WHERE octet_length($1::jsonb::text) <= $3::bigint
 RETURNING id, data, published, published_at, created_at, updated_at
 `
 
 type CreateEntryParams struct {
 	Data              []byte
+	PublishedAt       pgtype.Timestamptz
 	StoredRecordLimit int64
 }
 
 func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (McpRegistryEntry, error) {
-	row := q.db.QueryRow(ctx, createEntry, arg.Data, arg.StoredRecordLimit)
+	row := q.db.QueryRow(ctx, createEntry, arg.Data, arg.PublishedAt, arg.StoredRecordLimit)
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
@@ -416,18 +418,30 @@ const setEntryPublished = `-- name: SetEntryPublished :one
 UPDATE mcp_registry_entries
 SET
     published = $1,
+    published_at = CASE WHEN NOT published AND $1 THEN COALESCE(published_at, $2::timestamptz) ELSE published_at END,
+    data = $3::jsonb,
     updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
-WHERE id = $2
+WHERE id = $4
+AND (NOT $1::boolean OR octet_length($3::jsonb::text) <= $5::bigint)
 RETURNING id, data, published, published_at, created_at, updated_at
 `
 
 type SetEntryPublishedParams struct {
-	Published bool
-	ID        uuid.UUID
+	Published         bool
+	PublishedAt       pgtype.Timestamptz
+	Data              []byte
+	ID                uuid.UUID
+	StoredRecordLimit int64
 }
 
 func (q *Queries) SetEntryPublished(ctx context.Context, arg SetEntryPublishedParams) (McpRegistryEntry, error) {
-	row := q.db.QueryRow(ctx, setEntryPublished, arg.Published, arg.ID)
+	row := q.db.QueryRow(ctx, setEntryPublished,
+		arg.Published,
+		arg.PublishedAt,
+		arg.Data,
+		arg.ID,
+		arg.StoredRecordLimit,
+	)
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
