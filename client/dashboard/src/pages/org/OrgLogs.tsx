@@ -233,11 +233,11 @@ function OrgLogsInner({
                 className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
               >
                 Let tool calls proceed while Speakeasy is unreachable, instead
-                of blocking them (the default). Tool calls then only ever block
-                when a blocking policy fires — with no blocking policies,
-                nothing blocks (formerly Observability Mode). Events are still
-                recorded and scanned after recovery. Invalid credentials always
-                block.
+                of blocking them. Enabled by default for new organizations. Tool
+                calls then only ever block when a blocking policy fires — with
+                no blocking policies, nothing blocks (formerly Observability
+                Mode). Events are still recorded and scanned after recovery.
+                Invalid credentials always block.
               </Text>
             </Stack>
             {featuresData && (
