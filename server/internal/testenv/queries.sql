@@ -1714,10 +1714,10 @@ SELECT EXISTS (
 SELECT set_config('lock_timeout', @timeout::text, true);
 
 -- name: LockToolsetNowaitFixture :one
-SELECT id FROM toolsets WHERE project_id = @project_id AND slug = @slug FOR UPDATE NOWAIT;
+SELECT id FROM toolsets WHERE project_id = @project_id AND slug = @slug AND deleted IS FALSE FOR UPDATE NOWAIT;
 
 -- name: LockExternalOAuthMetadataNowaitFixture :one
-SELECT id FROM external_oauth_server_metadata WHERE id = @id FOR UPDATE NOWAIT;
+SELECT id FROM external_oauth_server_metadata WHERE id = @id AND project_id = @project_id FOR UPDATE NOWAIT;
 
 -- name: AcquireTestLockFixture :exec
 -- Transaction-scoped advisory locks for testing the synchronization helpers themselves.

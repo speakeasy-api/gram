@@ -17,7 +17,7 @@ func TestDeleteDefaultPluginWaitsForAdmissionLock(t *testing.T) {
 	t.Parallel()
 	// probeTimeout bounds the server lock probe.
 	const probeTimeout = 100 * time.Millisecond
-	ctx, ti := newTestPluginsService(t, probeTimeout)
+	ctx, ti := newTestPluginsServiceWithLockTimeout(t, probeTimeout)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	plugin, err := pluginsrepo.New(ti.conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{

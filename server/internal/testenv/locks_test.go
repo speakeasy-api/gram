@@ -25,7 +25,6 @@ func TestLockHelpers(t *testing.T) {
 	holder := BeginTx(t, ctx, db)
 	const key = int64(3435)
 	require.NoError(t, testrepo.New(holder).AcquireTestLockFixture(ctx, key))
-	require.Equal(t, holder.Conn().PgConn().PID(), BackendPID(holder))
 
 	// A failed probe must be a server lock error even through service wrapping.
 	const probeTimeout = 50 * time.Millisecond

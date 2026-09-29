@@ -131,18 +131,18 @@ func TestToolsetsService_ExternalOAuthWritersTakeToolsetLock(t *testing.T) {
 			}()
 
 			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, blockerPID, 1)
-			requireMetadataUnlocked(t, ctx, ti, attached.ExternalOauthServer.ID)
+			requireMetadataUnlocked(t, ctx, ti, uuid.MustParse(toolset.ProjectID), attached.ExternalOauthServer.ID)
 			require.NoError(t, blocker.Commit(ctx))
 			require.NoError(t, <-result)
 		})
 	}
 }
 
-func requireMetadataUnlocked(t *testing.T, ctx context.Context, ti *testInstance, externalOAuthServerID string) {
+func requireMetadataUnlocked(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, externalOAuthServerID string) {
 	t.Helper()
 	probe := testenv.BeginTx(t, ctx, ti.conn)
 	defer func() { require.NoError(t, probe.Rollback(ctx)) }()
 
-	_, err := testrepo.New(probe).LockExternalOAuthMetadataNowaitFixture(ctx, uuid.MustParse(externalOAuthServerID))
+	_, err := testrepo.New(probe).LockExternalOAuthMetadataNowaitFixture(ctx, testrepo.LockExternalOAuthMetadataNowaitFixtureParams{ID: uuid.MustParse(externalOAuthServerID), ProjectID: projectID})
 	require.NoError(t, err)
 }

@@ -3174,14 +3174,19 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 }
 
 const lockExternalOAuthMetadataNowaitFixture = `-- name: LockExternalOAuthMetadataNowaitFixture :one
-SELECT id FROM external_oauth_server_metadata WHERE id = $1 FOR UPDATE NOWAIT
+SELECT id FROM external_oauth_server_metadata WHERE id = $1 AND project_id = $2 FOR UPDATE NOWAIT
 `
 
-func (q *Queries) LockExternalOAuthMetadataNowaitFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockExternalOAuthMetadataNowaitFixture, id)
-	var id_2 uuid.UUID
-	err := row.Scan(&id_2)
-	return id_2, err
+type LockExternalOAuthMetadataNowaitFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockExternalOAuthMetadataNowaitFixture(ctx context.Context, arg LockExternalOAuthMetadataNowaitFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockExternalOAuthMetadataNowaitFixture, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockOpenRouterAPIKeyForUpdateFixture = `-- name: LockOpenRouterAPIKeyForUpdateFixture :one
@@ -3253,7 +3258,7 @@ func (q *Queries) LockPublishOutboxRowFixture(ctx context.Context, arg LockPubli
 }
 
 const lockToolsetNowaitFixture = `-- name: LockToolsetNowaitFixture :one
-SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE NOWAIT
+SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 AND deleted IS FALSE FOR UPDATE NOWAIT
 `
 
 type LockToolsetNowaitFixtureParams struct {

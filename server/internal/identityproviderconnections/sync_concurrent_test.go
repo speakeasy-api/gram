@@ -42,7 +42,7 @@ func TestApplicationsSync_WaitingApplyReadsCommittedWatermark(t *testing.T) {
 	// Observe the actual lock wait, not a sleep or merely goroutine startup.
 	// The watermark must still be old when the lock statement takes its
 	// snapshot; only then do we commit the newer watermark and release it.
-	testenv.WaitForQueryBlockedBy(t, ctx, si.conn.conn, blockerPID, "%LockSyncConnection%")
+	testenv.WaitForQueryBlockedBy(t, ctx, si.conn.conn, blockerPID, "-- name: LockSyncConnection :one\n%")
 
 	watermark := pgtype.Timestamptz{Time: time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond), Valid: true}
 	changed, err := apprepo.New(newer).MarkApplicationsSynced(ctx, apprepo.MarkApplicationsSyncedParams{
@@ -98,11 +98,11 @@ func TestApplicationsSync_RevokeBetweenLoadAndRunCreationLeavesNoRun(t *testing.
 		view, err = si.svc.Revoke(ctx, &gen.RevokePayload{SessionToken: nil, ID: verified.ID})
 		revoked <- err
 	}()
-	testenv.WaitForQueryBlockedBy(t, ctx, si.conn.conn, testenv.BackendPID(holder), "%LockOktaIdentityProviderConnection%")
+	testenv.WaitForQueryBlockedBy(t, ctx, si.conn.conn, testenv.BackendPID(holder), "-- name: LockOktaIdentityProviderConnection :one\n%")
 
 	ran := make(chan error, 1)
 	go func() { ran <- syncer.Run(ctx, id, false) }()
-	testenv.WaitForQueryBlockedBy(t, ctx, si.conn.conn, testenv.BackendPID(holder), "%LockSyncConnection%")
+	testenv.WaitForQueryBlockedBy(t, ctx, si.conn.conn, testenv.BackendPID(holder), "-- name: LockSyncConnection :one\n%")
 
 	require.NoError(t, holder.Commit(ctx))
 	for _, done := range []chan error{revoked, ran} {

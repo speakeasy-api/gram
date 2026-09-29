@@ -97,7 +97,12 @@ func (c *capturePublishSignaler) captured() []capturedPublishSignal {
 	return slices.Clone(c.signals)
 }
 
-func newTestPluginsService(t *testing.T, lockTimeout ...time.Duration) (context.Context, *testInstance) {
+func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestPluginsServiceWithLockTimeout(t, 0)
+}
+
+func newTestPluginsServiceWithLockTimeout(t *testing.T, lockTimeout time.Duration) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -107,8 +112,8 @@ func newTestPluginsService(t *testing.T, lockTimeout ...time.Duration) (context.
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
-	if len(lockTimeout) > 0 {
-		conn = testenv.NewLockTimeoutPool(t, conn, lockTimeout[0])
+	if lockTimeout > 0 {
+		conn = testenv.NewLockTimeoutPool(t, conn, lockTimeout)
 	}
 
 	redisClient, err := infra.NewRedisClient(t, 0)

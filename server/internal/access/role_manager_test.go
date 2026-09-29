@@ -224,10 +224,23 @@ func TestRoleManager_MemberRoleSyncSerializesManagersAndLocksMember(t *testing.T
 			waitCtx, cancel := context.WithCancel(ctx)
 			otherDone := make(chan struct{})
 			go func() { other.memberRoleSync(target)(waitCtx); close(otherDone) }()
-			t.Cleanup(func() { cancel(); <-otherDone })
+			// syncCompletionTimeout bounds cancellation cleanup for the contender.
+			const syncCompletionTimeout = time.Second
+			t.Cleanup(func() {
+				cancel()
+				select {
+				case <-otherDone:
+				case <-time.After(syncCompletionTimeout):
+					t.Error("second member sync did not finish after cancellation")
+				}
+			})
 			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, uint32(holderPID), 1)
 			cancel()
-			<-otherDone
+			select {
+			case <-otherDone:
+			case <-time.After(syncCompletionTimeout):
+				t.Fatal("second member sync did not finish after cancellation")
+			}
 			ti.roles.AssertNumberOfCalls(t, "UpdateMemberRoles", 1)
 
 			if name == "legacy" {
