@@ -45,6 +45,7 @@ jobs:
       webhooks-catalog: ${{ steps.gates.outputs.webhooks-catalog }}
       otel-collector: ${{ steps.gates.outputs.otel-collector }}
       tunnel: ${{ steps.gates.outputs.tunnel }}
+      preview-ui: ${{ steps.filter.outputs.preview-ui }}
       preview-retag-components: ${{ steps.preview-retag.outputs.components }}
       preview-tag: ${{ steps.preview-retag.outputs.tag }}
     steps:
@@ -2481,6 +2482,47 @@ jobs:
           openapi-file: ${{ env.SVIX_OPENAPI_FILE }}
           svix-api-key: ${{ secrets.SVIX_SYNC_KEY_US_PROD }}
           replace-all: true
+
+  preview-label:
+    name: Add the preview label
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs:
+      [
+        changes,
+        docker-build-server,
+        docker-build-client,
+        docker-build-pystreams,
+        preview-image-tags,
+        upload-dashboard-assets,
+      ]
+    permissions:
+      pull-requests: write
+    # Only on PR creation, so a manually removed label stays removed. Waits
+    # for every preview image tag, or the preview polls for missing images.
+    if: >-
+      !cancelled() &&
+      github.event_name == 'pull_request' &&
+      (github.event.action == 'opened' || github.event.action == 'ready_for_review') &&
+      !github.event.pull_request.draft &&
+      !github.event.pull_request.head.repo.fork &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      needs.changes.outputs.preview-ui == 'true' &&
+      (needs.changes.outputs.server != 'true' ||
+       needs.docker-build-server.result == 'success') &&
+      ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+       needs.docker-build-client.result == 'success') &&
+      (needs.changes.outputs.pystreams != 'true' ||
+       needs.docker-build-pystreams.result == 'success') &&
+      ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+       needs.upload-dashboard-assets.result == 'success') &&
+      contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result)
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Add the preview label
+        run: gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label preview
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
