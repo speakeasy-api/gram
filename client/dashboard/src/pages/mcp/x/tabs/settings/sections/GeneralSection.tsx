@@ -20,6 +20,13 @@ import { Network, Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { VerifyRemoteMcpUrlButton } from "@/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
+import { UpstreamUrlField } from "./UpstreamUrlField";
+import {
+  type UpstreamUrlDraft,
+  useUpstreamUrlDraft,
+} from "./useUpstreamUrlDraft";
 import {
   FooterSaveButton,
   SettingsSection,
@@ -29,10 +36,46 @@ import {
 // at 40 (see schema.sql / MCP_SERVER_NAME_MAX_LENGTH on the legacy page).
 const NAME_MAX_LENGTH = 40;
 
-export function BrandingSection({
+/**
+ * The server's basic facts: its icon and name, plus the upstream URL when a
+ * remote source backs it. One Save commits whatever changed.
+ */
+export function GeneralSection({
   mcpServer,
+  remoteMcpServer,
 }: {
   mcpServer: McpServer;
+  remoteMcpServer?: RemoteMcpServer;
+}): JSX.Element {
+  if (remoteMcpServer) {
+    return (
+      <RemoteGeneralSection
+        key={remoteMcpServer.id}
+        mcpServer={mcpServer}
+        remoteMcpServer={remoteMcpServer}
+      />
+    );
+  }
+  return <GeneralSectionContent mcpServer={mcpServer} upstream={null} />;
+}
+
+function RemoteGeneralSection({
+  mcpServer,
+  remoteMcpServer,
+}: {
+  mcpServer: McpServer;
+  remoteMcpServer: RemoteMcpServer;
+}): JSX.Element {
+  const upstream = useUpstreamUrlDraft(remoteMcpServer);
+  return <GeneralSectionContent mcpServer={mcpServer} upstream={upstream} />;
+}
+
+function GeneralSectionContent({
+  mcpServer,
+  upstream,
+}: {
+  mcpServer: McpServer;
+  upstream: UpstreamUrlDraft | null;
 }): JSX.Element {
   const [nameDraft, setNameDraft] = useState(mcpServer.name ?? "");
 
@@ -80,14 +123,17 @@ export function BrandingSection({
 
   const trimmedDraft = nameDraft.trim();
   const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
-  const dirty = nameDirty || metadataForm.brandingDirty;
-  const saving = update.isPending || metadataForm.isLoading;
+  const upstreamDirty = !!upstream?.dirty;
+  const dirty = nameDirty || metadataForm.brandingDirty || upstreamDirty;
+  const saving =
+    update.isPending || metadataForm.isLoading || !!upstream?.pending;
   const saveDisabled =
     !dirty ||
     trimmedDraft === "" ||
     trimmedDraft.length > NAME_MAX_LENGTH ||
     saving ||
-    (metadataUnresolved && metadataForm.brandingDirty);
+    (metadataUnresolved && metadataForm.brandingDirty) ||
+    (!!upstream?.dirty && upstream.invalid);
   const characterCount = `${nameDraft.length} of ${NAME_MAX_LENGTH} characters used`;
 
   const handleSave = async () => {
@@ -95,6 +141,12 @@ export function BrandingSection({
       if (metadataForm.brandingDirty) {
         await metadataForm.saveAsync();
       }
+
+      if (upstream?.dirty) {
+        await upstream.save();
+      }
+
+      // Last: a name change moves the route to the new slug.
 
       if (nameDirty) {
         const updated = await update.mutateAsync({
@@ -138,7 +190,7 @@ export function BrandingSection({
   return (
     <SettingsSection>
       <SettingsSection.Header>
-        <SettingsSection.Title>Display</SettingsSection.Title>
+        <SettingsSection.Title>General</SettingsSection.Title>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
@@ -212,6 +264,7 @@ export function BrandingSection({
               )}
             </Field>
           </div>
+          {upstream ? <UpstreamUrlField upstream={upstream} /> : null}
           {metadataUnresolved && !metadataResult.isLoading && (
             <FieldDescription className="text-destructive text-xs">
               Couldn't load current branding settings. Refresh the page before
@@ -221,10 +274,19 @@ export function BrandingSection({
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
-            {`Please use no more than ${NAME_MAX_LENGTH} characters.`}
+            {upstream?.dirty
+              ? "Verify before saving to confirm the upstream URL answers as an MCP server."
+              : `Please use no more than ${NAME_MAX_LENGTH} characters.`}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope scope="mcp:write" level="component">
+              {upstream ? (
+                <VerifyRemoteMcpUrlButton
+                  state={upstream.verify}
+                  url={upstream.draft}
+                  disabled={upstream.pending || upstream.invalid}
+                />
+              ) : null}
               <FooterSaveButton
                 pending={saving}
                 disabled={saveDisabled}
