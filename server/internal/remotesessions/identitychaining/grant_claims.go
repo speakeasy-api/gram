@@ -50,7 +50,7 @@ func (claims grantClaims) check(header jose.Header, idpIssuer, upstreamSubject s
 	if err := claims.ValidateWithLeeway(jwt.Expected{Issuer: "", Subject: "", AnyAudience: nil, ID: "", Time: now}, maxClockSkew); err != nil {
 		return fmt.Errorf("temporal claims: %w", err)
 	}
-	if claims.Expiry.Time().Sub(now) > idjag.MaxLifetime+maxClockSkew {
+	if claims.Expiry.Time().Sub(now) > idjag.MaxLifetime+maxClockSkew || claims.Expiry.Time().Sub(claims.IssuedAt.Time()) > idjag.MaxLifetime+maxClockSkew {
 		return errors.New("exp exceeds the maximum ID-JAG lifetime")
 	}
 	if claims.Subject == "" || claims.Subject != upstreamSubject {
@@ -59,16 +59,26 @@ func (claims grantClaims) check(header jose.Header, idpIssuer, upstreamSubject s
 	if claims.ClientID != sel.externalClientID {
 		return errors.New("client_id is not the selected resource client")
 	}
-	if len(claims.Resource) > 0 && string(claims.Resource) != "null" {
+	// An omitted resource is permitted by the profile; a present one, including
+	// null, must name exactly the canonical upstream resource.
+	if len(claims.Resource) > 0 {
 		resources, err := claims.resources()
 		if err != nil || len(resources) != 1 || resources[0] != sel.resource {
 			return errors.New("resource is not the canonical upstream resource")
 		}
 	}
-	if len(sel.scopes) > 0 {
-		for scope := range strings.FieldsSeq(claims.Scope) {
+	// A present scope must be exactly the requested set: extra scopes exceed
+	// the binding, and missing ones would record a grant never made.
+	if claims.Scope != "" && len(sel.scopes) > 0 {
+		granted := strings.Fields(claims.Scope)
+		for _, scope := range granted {
 			if !slices.Contains(sel.scopes, scope) {
 				return errors.New("scope exceeds the requested scope")
+			}
+		}
+		for _, scope := range sel.scopes {
+			if !slices.Contains(granted, scope) {
+				return errors.New("scope narrows the requested scope")
 			}
 		}
 	}
@@ -77,6 +87,9 @@ func (claims grantClaims) check(header jose.Header, idpIssuer, upstreamSubject s
 
 // resources reads a resource claim that may be one string or an array.
 func (claims grantClaims) resources() ([]string, error) {
+	if string(claims.Resource) == "null" {
+		return nil, errors.New("resource claim is null")
+	}
 	var one string
 	if err := json.Unmarshal(claims.Resource, &one); err == nil {
 		return []string{one}, nil

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 
@@ -207,4 +208,22 @@ func TestIdentityProviderEndpointVerifyAssertion(t *testing.T) {
 	_, err = endpoint.VerifyAssertion(t.Context(), mintRSAAccessToken(t, forger, jose.RS256, "oauth-id-jag+jwt"), &claims)
 	require.Error(t, err)
 	require.NotErrorIs(t, err, ErrJWTKeySetUnavailable, "a forged signature is a verdict on the token, not the key set")
+}
+
+func TestClientTokenEndpoint_PrivateKeyJWTRequiresKeySet(t *testing.T) {
+	t.Parallel()
+	m, enc := newClientEndpointManager(t)
+	row := resourceClientRow(t, enc, "https://as.resource.example.test/token")
+	row.TokenEndpointAuthMethod = pgtype.Text{String: string(TokenEndpointAuthMethodPrivateKeyJWT), Valid: true}
+	row.ClientSecretEncrypted = pgtype.Text{}
+	_, err := m.clientTokenEndpoint(row)
+	require.ErrorIs(t, err, ErrTokenEndpointConfiguration, "a private_key_jwt client without a key set cannot sign, so it is misconfigured, not transiently failing")
+}
+
+func TestTokenEndpointErrorCode_DropsUnsafeCodes(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "invalid_grant", tokenEndpointErrorCode("invalid_grant"))
+	require.Empty(t, tokenEndpointErrorCode("bad\ncode"), "control characters never reach logs")
+	require.Empty(t, tokenEndpointErrorCode(`quoted"code`))
+	require.Empty(t, tokenEndpointErrorCode(strings.Repeat("x", maxTokenEndpointErrorCodeBytes+1)), "oversized codes are dropped")
 }
