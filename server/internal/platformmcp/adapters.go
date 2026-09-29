@@ -347,6 +347,7 @@ type PostgresReader struct {
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
 	eventFeed                 *EventFeedReadService
+	networkIngress            *NetworkIngressStatusService
 	authz                     *authz.Engine
 	shadowInventory           *ShadowInventoryService
 	shadowDecisions           *ShadowDecisionService
@@ -372,6 +373,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,
 		eventFeed:                 nil,
+		networkIngress:            nil,
 		authz:                     nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,
