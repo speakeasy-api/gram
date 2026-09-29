@@ -9690,6 +9690,7 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT okta_resource_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT okta_resource_connections_observed_result_observed_at_check CHECK ((observed_result IS NULL) = (observed_at IS NULL)),
   CONSTRAINT okta_resource_connections_resource_check CHECK (btrim(resource) <> ''),
   CONSTRAINT okta_resource_connections_audience_check CHECK (btrim(audience) <> ''),
   CONSTRAINT okta_resource_connections_okta_application_id_check CHECK (okta_application_id IS NULL OR btrim(okta_application_id) <> ''),
