@@ -616,6 +616,9 @@ func TestUpdateRemoteSessionClient_LegacyCallbackURLRequiresPlatformAdmin(t *tes
 	}
 	_, err = ti.service.UpdateRemoteSessionClient(ctx, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
+	unchanged, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.False(t, unchanged.LegacyCallbackURL, "a refused update must not change the flag")
 
 	updated, err := ti.service.UpdateRemoteSessionClient(withAdmin(t, ctx), payload)
 	require.NoError(t, err)

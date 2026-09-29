@@ -9,6 +9,7 @@ import {
   PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import {
   invalidateAllOrganizationRemoteSessionClient,
@@ -58,6 +59,9 @@ export default function RemoteSessionClientDetail(): JSX.Element {
   });
   const { data: issuer } = useOrganizationRemoteSessionIssuer({ id: issuerId });
   const queryClient = useQueryClient();
+  // The organization update endpoint requires org:admin, which a platform
+  // admin browsing with org:read alone does not have.
+  const { hasAnyScope } = useRBAC();
   const migrate = useUpdateOrganizationRemoteSessionClientMutation({
     onSuccess: async () => {
       await invalidateAllOrganizationRemoteSessionClient(queryClient, {
@@ -164,6 +168,7 @@ export default function RemoteSessionClientDetail(): JSX.Element {
                     })
                   }
                   isMigrating={migrate.isPending}
+                  canMigrate={hasAnyScope(["org:admin"])}
                   className="mb-6 max-w-3xl"
                 />
               )}

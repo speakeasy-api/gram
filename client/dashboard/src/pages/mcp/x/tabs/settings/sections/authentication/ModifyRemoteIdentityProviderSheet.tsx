@@ -23,6 +23,8 @@ import {
   invalidateAllMcpServers,
   useMcpServers,
 } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
@@ -157,9 +159,17 @@ function ModifyRemoteIdentityProviderSheetBody({
       });
     },
     onSuccess: async () => {
-      await invalidateAllRemoteSessionClients(queryClient, {
-        refetchType: "all",
-      });
+      // The client detail page reads the organization-scoped queries, so
+      // refresh those as well as this project's list.
+      await Promise.all([
+        invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
+        invalidateAllOrganizationRemoteSessionClient(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllOrganizationRemoteSessionClients(queryClient, {
+          refetchType: "all",
+        }),
+      ]);
       toast.success("Client migrated to the new callback URL");
     },
     onError: (error) => {

@@ -85,11 +85,15 @@ export function LegacyCallbackAlert({
   legacyCallbackUrl,
   onMigrate,
   isMigrating = false,
+  canMigrate = true,
   className,
 }: {
   legacyCallbackUrl: boolean;
   onMigrate: () => void;
   isMigrating?: boolean;
+  // False when the caller lacks the permission the save needs, so the button
+  // is hidden rather than offered only to fail.
+  canMigrate?: boolean;
   className?: string;
 }): JSX.Element | null {
   const isPlatformAdmin = useIsPlatformAdmin();
@@ -109,13 +113,15 @@ export function LegacyCallbackAlert({
           compatibility mode with the URL. Register the new URL in order to
           migrate it.
         </span>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setConfirming(true)}
-        >
-          <Button.Text>Migrate</Button.Text>
-        </Button>
+        {canMigrate && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setConfirming(true)}
+          >
+            <Button.Text>Migrate</Button.Text>
+          </Button>
+        )}
       </div>
       <ConfirmDialog
         open={confirming}

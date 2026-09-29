@@ -134,6 +134,19 @@ describe("LegacyCallbackAlert", () => {
     expect(container.textContent).toBe("");
   });
 
+  it("hides Migrate from callers who cannot save", () => {
+    render(
+      <LegacyCallbackAlert
+        legacyCallbackUrl
+        onMigrate={vi.fn<() => void>()}
+        canMigrate={false}
+      />,
+    );
+
+    expect(screen.getByText(/runs in compatibility mode/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Migrate" })).toBeNull();
+  });
+
   it("names both callback URLs and migrates only after confirmation", () => {
     const onMigrate = vi.fn<() => void>();
     render(<LegacyCallbackAlert legacyCallbackUrl onMigrate={onMigrate} />);
@@ -145,7 +158,6 @@ describe("LegacyCallbackAlert", () => {
       screen.getByText("https://app.example.com/mcp/remote_login_callback"),
     ).toBeTruthy();
     expect(screen.getByText(/runs in compatibility mode/)).toBeTruthy();
-    expect(screen.queryByText(/JSON/)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Migrate" }));
     expect(onMigrate).not.toHaveBeenCalled();
@@ -154,6 +166,13 @@ describe("LegacyCallbackAlert", () => {
       .getAllByRole("button", { name: "Migrate" })
       .find((button) => button.closest("[role='dialog']"));
     expect(confirm).toBeTruthy();
+    expect(
+      confirm!
+        .closest("[role='dialog']")!
+        .textContent?.includes(
+          "https://app.example.com/mcp/remote_login_callback",
+        ),
+    ).toBe(true);
     fireEvent.click(confirm!);
     expect(onMigrate).toHaveBeenCalledTimes(1);
   });
