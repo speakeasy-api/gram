@@ -358,32 +358,21 @@ func TestRiskFindingsMCPInProcess(t *testing.T) {
 	require.Len(t, reader.params, calls, "authorization denial must not reach storage")
 }
 
-type findingFlagGate struct {
-	riskMutationFlagProvider
-	disabled feature.Flag
-}
-
-func (f *findingFlagGate) EvaluateFlag(_ context.Context, flag feature.Flag, _ string, _ map[string]string) (feature.Evaluation, error) {
-	if flag == f.disabled {
-		return feature.EvaluationDisabled, nil
-	}
-	return feature.EvaluationEnabled, nil
-}
-
-func TestRiskFindingsIndependentFeatureGates(t *testing.T) {
+func TestRiskFindingsWatchdogGate(t *testing.T) {
 	t.Parallel()
 
-	for _, flag := range []feature.Flag{feature.FlagRiskWatchdog, feature.FlagRiskListFromClickHouse} {
-		s, r, p := findingsFixture(t)
-		s.flags = &findingFlagGate{disabled: flag}
-		_, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{})
-		require.ErrorIs(t, err, ErrRiskFeatureNotEnabled)
-		require.Empty(t, r.params)
-		require.Zero(t, p.calls)
-	}
-	s, r, _ := findingsFixture(t)
-	s.flags = &riskMutationFlagProvider{err: errors.New("flag unavailable")}
+	s, r, p := findingsFixture(t)
+	flags := &riskMutationFlagProvider{evaluation: feature.EvaluationDisabled}
+	s.flags = flags
 	_, err := s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{})
+	require.ErrorIs(t, err, ErrRiskFeatureNotEnabled)
+	require.Equal(t, feature.FlagRiskWatchdog, flags.flag)
+	require.Empty(t, r.params)
+	require.Zero(t, p.calls)
+
+	s, r, _ = findingsFixture(t)
+	s.flags = &riskMutationFlagProvider{err: errors.New("flag unavailable")}
+	_, err = s.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingsInput{})
 	require.ErrorIs(t, err, ErrUnavailable)
 	require.Empty(t, r.params)
 }

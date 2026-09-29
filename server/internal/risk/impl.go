@@ -146,9 +146,9 @@ type Service struct {
 	// the realtime scanner uses. Optional: when nil the eval endpoint returns
 	// un-matched verdicts (judge unavailable).
 	promptJudge promptpolicy.Evaluator
-	// findingsCH reads the ClickHouse risk_findings table for the overview
-	// endpoint when FlagRiskOverviewFromClickHouse is on for the org.
-	// Optional: when nil the overview always serves from Postgres.
+	// findingsCH reads the ClickHouse risk_findings table: always for the
+	// project-wide listing and reveal, and for the overview endpoint when
+	// FlagRiskOverviewFromClickHouse is on for the org.
 	findingsCH *chrepo.Queries
 	// assetStorage reads chat content part assets for the ClickHouse reveal
 	// path, the same store the batch analysis activity hydrates parts from.
@@ -1329,11 +1329,8 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		}
 		return s.listResultsByChat(ctx, *authCtx.ProjectID, chatID, cursor, pageSize, totalCount)
 	}
-	// A policy filter is applied alongside the other filters rather than
-	// short-circuiting to a separate listing, so combinations like
-	// policy_id + rule_id are honored. When set, the count is scoped to that
-	// policy (and includes disabled policies for historical findings) to match
-	// the list query's semantics.
+	// A policy filter narrows the pushdown alongside the other filters, so
+	// combinations like policy_id + rule_id are honored.
 	var policyIDInput *string
 	if payload.PolicyID != nil && *payload.PolicyID != "" {
 		policyIDInput = payload.PolicyID
@@ -1380,39 +1377,14 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		return nil, oops.E(oops.CodeInvalid, err, "invalid to").LogError(ctx, s.logger)
 	}
 
-	useClickHouse := s.listFromClickHouse(ctx, authCtx)
-	if mcpServerID != "" {
-		// MCP-attributed findings have no Postgres mirror. Never silently
-		// ignore the filter by falling back to the chat-only store.
-		if s.findingsCH == nil {
-			return nil, oops.E(oops.CodeUnexpected, nil, "MCP server filtering requires ClickHouse")
-		}
-		useClickHouse = true
+	var from, to *time.Time
+	if fromTime.Valid {
+		from = &fromTime.Time
 	}
-	if useClickHouse {
-		var from, to *time.Time
-		if fromTime.Valid {
-			from = &fromTime.Time
-		}
-		if toTime.Valid {
-			to = &toTime.Time
-		}
-		return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
+	if toTime.Valid {
+		to = &toTime.Time
 	}
-
-	var totalCount int64
-	if policyID.Valid {
-		totalCount, err = s.repo.CountRiskResultsByProjectAndPolicy(ctx, repo.CountRiskResultsByProjectAndPolicyParams{
-			ProjectID:    *authCtx.ProjectID,
-			RiskPolicyID: policyID.UUID,
-		})
-	} else {
-		totalCount, err = s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
-	}
-	if err != nil {
-		totalCount = 0
-	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount, policyID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, fromTime, toTime)
+	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -1499,42 +1471,9 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 		return nil, oops.C(oops.CodeInvalid)
 	}
 
-	// When the listing serves from ClickHouse, listed ids may only exist there
-	// (Postgres result writes are being retired), so the reveal must resolve
-	// against the same store — reconstructing the raw match from the original
-	// chat data per the finding's stored surface metadata.
-	if s.listFromClickHouse(ctx, authCtx) {
-		return s.unmaskRiskResultFromClickHouse(ctx, authCtx, id)
-	}
-
-	row, err := s.repo.GetRiskResultByID(ctx, repo.GetRiskResultByIDParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk result not found").LogError(ctx, s.logger)
-	}
-
-	if err := s.authz.Require(ctx, authz.ChatReadCheck(row.ChatID.String())); err != nil {
-		return nil, err
-	}
-
-	if err := s.audit.LogRiskResultUnmask(ctx, s.db, audit.LogRiskResultUnmaskEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		RiskResultID:     row.ID,
-		ChatID:           row.ChatID,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "record risk result unmask audit log").LogError(ctx, s.logger)
-	}
-
-	return &gen.RiskUnmaskResultResult{
-		ID:    row.ID.String(),
-		Match: conv.FromPGTextOrEmpty[string](row.Match),
-	}, nil
+	// The reveal resolves against ClickHouse, the store the listing serves
+	// ids from, reconstructing the raw match from the original chat data.
+	return s.unmaskRiskResultFromClickHouse(ctx, authCtx, id)
 }
 
 // redactRiskResult converts a RiskResult into a RiskResultRedacted by
@@ -1936,43 +1875,6 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	for i, row := range rows {
 		cid := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, row.ChatContentPartID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
-		if i == pageSize {
-			// Cursor from the LAST RETURNED row (not this extra row): the
-			// next-page predicate is a strict (message_created_at, id) <, so a
-			// cursor pointing at the extra row would skip it entirely.
-			last := rows[pageSize-1]
-			nextCursor = &riskResultsCursor{MessageCreatedAt: last.MessageCreatedAt.Time, ID: last.ID}
-		}
-	}
-	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
-}
-
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor *riskResultsCursor, pageSize int, totalCount int64, policyID uuid.NullUUID, category string, ruleID string, userID string, externalUserIDs []string, uniqueMatch bool, nonAssistant bool, assistantID uuid.NullUUID, fromTime, toTime pgtype.Timestamptz) (*gen.ListRiskResultsResult, error) {
-	cursorCreatedAt, cursorID := cursorToParams(cursor)
-	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
-		ProjectID:              projectID,
-		PolicyID:               policyID,
-		FromTime:               fromTime,
-		ToTime:                 toTime,
-		Category:               category,
-		RuleID:                 ruleID,
-		UserID:                 userID,
-		ExternalUserIds:        externalUserIDs,
-		UniqueMatch:            uniqueMatch,
-		NonAssistant:           nonAssistant,
-		AssistantID:            assistantID,
-		CursorMessageCreatedAt: cursorCreatedAt,
-		CursorID:               cursorID,
-		PageLimit:              conv.SafeInt32(pageSize + 1),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results").LogError(ctx, s.logger)
-	}
-	results := make([]*types.RiskResult, 0, len(rows))
-	var nextCursor *riskResultsCursor
-	for i, row := range rows {
-		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, row.ChatContentPartID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
 		if i == pageSize {
 			// Cursor from the LAST RETURNED row (not this extra row): the
 			// next-page predicate is a strict (message_created_at, id) <, so a

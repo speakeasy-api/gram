@@ -65,8 +65,8 @@ func riskFindingListSchema() *jsonschema.Schema {
 	properties := riskFindingPageProperties()
 	properties["from"] = &jsonschema.Schema{Type: "string", Description: "Inclusive message time in RFC3339. Omit for no lower bound."}
 	properties["to"] = &jsonschema.Schema{Type: "string", Description: "Exclusive message time in RFC3339. Omit for no upper bound."}
-	properties["policy_id"] = uuidSchema("Optional exact policy ID. A disabled policy's historical findings are listed only under this filter.")
-	properties["chat_id"] = uuidSchema("Optional exact chat ID. Where the organization's listing is not yet served from the analytics store, chat_id must be the only filter.")
+	properties["policy_id"] = uuidSchema("Optional exact policy ID, including a disabled policy. Without it, findings from every non-deleted policy are listed.")
+	properties["chat_id"] = uuidSchema("Optional exact chat ID. Combines with the other filters.")
 	properties["category"] = enumSchema(riskCategoryKeys()...)
 	properties["category"].Description = "Optional exact risk category key."
 	properties["rule_id"] = stringSchema("Optional case-insensitive substring of the rule identifier, such as secret.", 1, 128)

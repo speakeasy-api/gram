@@ -751,7 +751,8 @@ type ReleaseSessionQuarantineResponseBody struct {
 type ListRiskResultsResponseBody struct {
 	// The list of risk results.
 	Results []*RiskResultResponseBody `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
-	// Total number of findings across all enabled policies.
+	// Total number of findings matching the filters across all non-deleted
+	// policies.
 	TotalCount *int64 `form:"total_count,omitempty" json:"total_count,omitempty" xml:"total_count,omitempty"`
 	// Cursor for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
@@ -762,7 +763,8 @@ type ListRiskResultsResponseBody struct {
 type ListRiskResultsForAgentResponseBody struct {
 	// The list of risk results with match content redacted to opaque fingerprints.
 	Results []*RiskResultRedactedResponseBody `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
-	// Total number of findings across all enabled policies.
+	// Total number of findings matching the filters across all non-deleted
+	// policies.
 	TotalCount *int64 `form:"total_count,omitempty" json:"total_count,omitempty" xml:"total_count,omitempty"`
 	// Cursor for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
@@ -792,7 +794,8 @@ type ListRiskResultsByChatResponseBody struct {
 type ListDismissedRiskResultsResponseBody struct {
 	// The list of risk results.
 	Results []*RiskResultResponseBody `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
-	// Total number of findings across all enabled policies.
+	// Total number of findings matching the filters across all non-deleted
+	// policies.
 	TotalCount *int64 `form:"total_count,omitempty" json:"total_count,omitempty" xml:"total_count,omitempty"`
 	// Cursor for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
