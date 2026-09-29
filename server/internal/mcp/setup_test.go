@@ -353,7 +353,9 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 
 	ctx := t.Context()
 	if callerAssertions == nil {
-		callerAssertions, _ = callerIssuerForTest(t)
+		var err error
+		callerAssertions, err = sharedCallerIssuer()
+		require.NoError(t, err)
 	}
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardianOpts...)

@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -39,18 +40,41 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
+func newCallerIssuer() (*mcpauthz.Issuer, *rsa.PublicKey, error) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, nil, fmt.Errorf("generate caller assertion key: %w", err)
+	}
+	private, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal caller assertion private key: %w", err)
+	}
+	public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal caller assertion public key: %w", err)
+	}
+	issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://gram.example", false)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create caller assertion issuer: %w", err)
+	}
+	return issuer, &key.PublicKey, nil
+}
+
+// callerIssuerForTest returns an issuer with its own key, for tests that
+// verify assertions against a known public key.
 func callerIssuerForTest(t *testing.T) (*mcpauthz.Issuer, *rsa.PublicKey) {
 	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	issuer, key, err := newCallerIssuer()
 	require.NoError(t, err)
-	private, err := x509.MarshalPKCS8PrivateKey(key)
-	require.NoError(t, err)
-	public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
-	require.NoError(t, err)
-	issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://gram.example", false)
-	require.NoError(t, err)
-	return issuer, &key.PublicKey
+	return issuer, key
 }
+
+// sharedCallerIssuer is the default issuer for test services, generated once
+// per test binary because RSA key generation is slow.
+var sharedCallerIssuer = sync.OnceValues(func() (*mcpauthz.Issuer, error) {
+	issuer, _, err := newCallerIssuer()
+	return issuer, err
+})
 
 func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 	t.Parallel()
