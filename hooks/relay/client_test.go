@@ -289,7 +289,10 @@ func TestCauseDetailIsBoundedAndRedacted(t *testing.T) {
 
 	t.Run("truncation never leaves a broken rune", func(t *testing.T) {
 		t.Parallel()
-		detail := sanitizeCauseDetail(strings.Repeat("é", maxCauseDetail))
+		// A 3-byte rune so the byte cut lands mid-rune: 85 runes fill 255 of
+		// the 256 bytes, leaving the 86th split. A 2-byte rune would divide
+		// the cap evenly and never exercise the guard.
+		detail := sanitizeCauseDetail(strings.Repeat("€", 86))
 		require.True(t, utf8.ValidString(detail))
 	})
 }
