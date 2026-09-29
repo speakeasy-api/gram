@@ -1494,7 +1494,7 @@ func newStartCommand() *cli.Command {
 			anthropicinference.Attach(mux, logger, anthropicinference.NewService(logger, db, chatWriter, riskScanner), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
-			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
+			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 
 			var slackDirectoryProvider slackdirectoryconnections.Provider
 			if c.String("slack-client-id") != "" && c.String("slack-client-id") != "unset" && c.String("slack-client-secret") != "" && c.String("slack-client-secret") != "unset" {
