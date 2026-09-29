@@ -76,9 +76,26 @@ func sensors() []Sensor {
 	instructions := "Evaluate the message"
 	options := []classifier.Option{classifier.NewOption("a", classifier.Text("first")), classifier.NewOption("b", classifier.Text("second"))}
 	return []Sensor{
-		{ID: "multi", Mode: "multi_label", Instructions: &instructions, Signals: options},
-		{ID: "choice", Mode: "exclusive", Instructions: &instructions, Signals: options},
-		{ID: "score", Mode: "ordered_score", Instructions: &instructions, Signals: options},
+		{ID: "multi", Slug: "multi-label", Mode: "multi_label", Instructions: &instructions, Signals: options, SignalSlugs: map[classifier.OptionKey]string{"a": "first", "b": "second"}},
+		{ID: "choice", Slug: "exclusive", Mode: "exclusive", Instructions: &instructions, Signals: options, SignalSlugs: map[classifier.OptionKey]string{"a": "first", "b": "second"}},
+		{ID: "score", Slug: "ordered-score", Mode: "ordered_score", Instructions: &instructions, Signals: options, SignalSlugs: map[classifier.OptionKey]string{"a": "first", "b": "second"}},
+	}
+}
+
+func TestCompileSensorRequiresAllSlugs(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []int{0, 1, 2} {
+		t.Run(sensors()[mode].Mode, func(t *testing.T) {
+			t.Parallel()
+			sensor := sensors()[mode]
+			sensor.Slug = ""
+			_, ready := compileSensor(sensor)
+			require.False(t, ready)
+			sensor = sensors()[mode]
+			delete(sensor.SignalSlugs, "b")
+			_, ready = compileSensor(sensor)
+			require.False(t, ready)
+		})
 	}
 }
 
@@ -147,6 +164,16 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 		require.Equal(t, m.GetCreatedAt(), a.GetMessageCreatedAt())
 	}
 	require.Len(t, pub.readings[0].GetMultiLabel().GetSignals(), 2)
+	require.Equal(t, "multi-label", pub.readings[0].GetSensorSlug())
+	require.Equal(t, "first", pub.readings[0].GetMultiLabel().GetSignals()[0].GetSignalSlug())
+	require.Equal(t, "second", pub.readings[0].GetMultiLabel().GetSignals()[1].GetSignalSlug())
+	require.Equal(t, "exclusive", pub.readings[1].GetSensorSlug())
+	require.Equal(t, "second", pub.readings[1].GetChoice().GetSelectedSignalSlug())
+	require.Equal(t, "first", pub.readings[1].GetChoice().GetDistribution()[0].GetSignalSlug())
+	require.Equal(t, "second", pub.readings[1].GetChoice().GetDistribution()[1].GetSignalSlug())
+	require.Equal(t, "ordered-score", pub.readings[2].GetSensorSlug())
+	require.Equal(t, "first", pub.readings[2].GetScore().GetDistribution()[0].GetSignalSlug())
+	require.Equal(t, "second", pub.readings[2].GetScore().GetDistribution()[1].GetSignalSlug())
 	require.Equal(t, "b", pub.readings[1].GetChoice().GetSelectedSignalId())
 	require.InDelta(t, 0.8, pub.readings[2].GetScore().GetExpectedIndex(), 1e-9)
 }
@@ -221,6 +248,7 @@ func TestHandlerOversizedReadingIsPermanentAndPreservesOtherReadings(t *testing.
 	// without constructing hundreds of thousands of classifier outcomes.
 	largeKey := classifier.OptionKey(strings.Repeat("a", maxReadingBytes))
 	definitions[0].Signals = []classifier.Option{classifier.NewOption(largeKey, classifier.Text("large"))}
+	definitions[0].SignalSlugs = map[classifier.OptionKey]string{largeKey: "large"}
 	var answer classifier.Answer
 	answer.Noul = &classifier.NoulAnswer{Probability: 0.5}
 	result := classifier.NewResult([]classifier.QuestionOutcome{
