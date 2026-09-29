@@ -85,6 +85,7 @@ type Chainer struct {
 	delegation *remotesessions.DelegationService
 	keys       *jwks.KeyResolver
 	locks      cache.Cache
+	observer   Observer
 	now        func() time.Time
 }
 
@@ -100,6 +101,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challeng
 		delegation: delegation,
 		keys:       keys,
 		locks:      locks,
+		observer:   nil,
 		now:        time.Now,
 	}
 }
@@ -172,7 +174,8 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 
 	attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
 	defer cancel()
-	token, outcome := c.acquire(attemptCtx, logger, req, sel)
+	startedAt := c.now()
+	token, outcome, grantValidated := c.acquire(attemptCtx, logger, req, sel)
 	if !outcome.Succeeded() {
 		logger.WarnContext(ctx, "identity chaining failed",
 			attr.SlogOutcome(string(outcome.Reason)),
@@ -189,6 +192,17 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 			}
 		}
 	}
+	// After publishing to waiters; the caller waits at most observeTimeout.
+	c.observe(ctx, logger, Observation{
+		OrganizationID:  req.OrganizationID,
+		TrustedIssuerID: sel.trustedIssuerID,
+		RemoteIssuerID:  sel.remoteIssuerID,
+		RemoteIssuer:    sel.issuer,
+		Resource:        sel.resource,
+		Outcome:         outcome,
+		GrantValidated:  grantValidated,
+		StartedAt:       startedAt,
+	})
 	return token, outcome
 }
 

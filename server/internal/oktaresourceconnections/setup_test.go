@@ -57,6 +57,7 @@ type instance struct {
 	q            *repo.Queries
 	orgID        string
 	connectionID uuid.UUID
+	oktaIssuerID uuid.UUID
 	flags        *feature.InMemory
 	authCtx      *contextvalues.AuthContext
 }
@@ -101,7 +102,7 @@ func newTestService(t *testing.T) (context.Context, *instance) {
 	svc := oktaresourceconnections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), flags)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID), authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource))
 
-	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, flags: flags, authCtx: authCtx}
+	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, oktaIssuerID: uuid.Nil, flags: flags, authCtx: authCtx}
 	si.connectionID = createConnection(t, ctx, si)
 	return ctx, si
 }
@@ -110,6 +111,7 @@ func createConnection(t *testing.T, ctx context.Context, si *instance) uuid.UUID
 	t.Helper()
 	connectionID := provisiontest.CreateConnection(t, ctx, si.conn, si.orgID, identityproviderconnections.ProviderOkta)
 	issuerID := provisiontest.CreateIssuer(t, ctx, si.conn, si.orgID, uuid.NullUUID{}, "https://tenant.okta.com/oauth2/v1/token")
+	si.oktaIssuerID = issuerID
 	issuer, err := si.q.GetIssuerFixture(ctx, issuerID)
 	require.NoError(t, err)
 	clientID, err := si.q.CreateIssuerClientFixture(ctx, repo.CreateIssuerClientFixtureParams{
@@ -182,6 +184,12 @@ func createResourceIssuer(t *testing.T, ctx context.Context, si *instance, orgID
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
+	if capable {
+		// Confirming with the shared audience then reads as connected, not a mismatch.
+		n, err = si.q.SetIssuerURLFixture(ctx, repo.SetIssuerURLFixtureParams{Issuer: audience, ID: issuerID})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+	}
 	return issuerID
 }
 

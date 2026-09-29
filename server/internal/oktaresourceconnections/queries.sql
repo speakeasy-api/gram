@@ -7,6 +7,7 @@ SELECT
   , o.org_url
   , o.agent_id
   , o.agent_app_id
+  , o.remote_session_issuer_id
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -47,6 +48,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
   , i.authorization_grant_profiles_supported
@@ -104,6 +106,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
   , i.authorization_grant_profiles_supported
@@ -244,8 +247,27 @@ WHERE organization_id = @organization_id
   AND resource = @resource
 FOR UPDATE;
 
--- A row is the confirmation. Repeating it updates the audience and keeps the
--- recorded app instance unless a new one is given.
+-- The observer's unlocked first read, so an unchanged result costs no lock.
+-- name: GetResourceConnection :one
+SELECT *
+FROM okta_resource_connections
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND remote_session_issuer_id = @remote_session_issuer_id
+  AND resource = @resource;
+
+-- Skips a row another observer or a confirmation holds, so the proxied
+-- request never waits on readiness bookkeeping.
+-- name: GetResourceConnectionForObservation :one
+SELECT *
+FROM okta_resource_connections
+WHERE id = @id
+  AND organization_id = @organization_id
+FOR UPDATE SKIP LOCKED;
+
+-- A row is the confirmation. Repeating it updates the audience, keeps the
+-- recorded app instance unless a new one is given, and clears the observed
+-- result so a stale failure does not outlive the fix it was confirmed for.
 -- name: UpsertResourceConnection :one
 INSERT INTO okta_resource_connections (
   organization_id,
@@ -265,8 +287,22 @@ INSERT INTO okta_resource_connections (
 ON CONFLICT (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource) DO UPDATE
 SET audience = EXCLUDED.audience,
     okta_application_id = COALESCE(EXCLUDED.okta_application_id, okta_resource_connections.okta_application_id),
+    observed_result = NULL,
+    observed_at = NULL,
     updated_at = clock_timestamp()
 RETURNING *;
+
+-- Records an exchange observation. updated_at stays the confirmation time,
+-- so an attempt that started before the latest confirmation or observation
+-- never lands.
+-- name: RecordObservation :execrows
+UPDATE okta_resource_connections
+SET observed_result = @observed_result,
+    observed_at = @observed_at
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND updated_at < @observed_at
+  AND (observed_at IS NULL OR observed_at < @observed_at);
 
 -- Reset withdraws the confirmation for the upstream; every server sharing it
 -- reads as unconfirmed again. Observed evidence goes with the row.
@@ -291,6 +327,12 @@ UPDATE remote_session_issuers
 SET grant_types_supported = @grant_types_supported::text[],
     authorization_grant_profiles_supported = @authorization_grant_profiles_supported::text[],
     metadata_fetched_at = clock_timestamp()
+WHERE id = @id;
+
+-- Test fixture: an issuer identifier, e.g. to match a confirmed audience.
+-- name: SetIssuerURLFixture :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer
 WHERE id = @id;
 
 -- Test fixture: a snapshot row for an identity provider app instance.

@@ -162,6 +162,13 @@ func TestConfirmAndReset(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, si.authCtx.UserID, record.ActorID)
 
+	// An audience other than the upstream issuer cannot work.
+	require.Equal(t, "broken", rowA.State)
+	require.Equal(t, "audience_mismatch", conv.PtrValOr(rowA.BrokenReason, ""))
+	require.True(t, rowA.Pending)
+	_, err = confirm(t, ctx, si, audience, nil, a.serverID, b.serverID)
+	require.NoError(t, err)
+
 	// Connected rows vanish from the default list; include_all keeps them.
 	require.Empty(t, list(t, ctx, si, false).Servers)
 	require.Len(t, list(t, ctx, si, true).Servers, 2)

@@ -20,21 +20,45 @@ const (
 	StateNotApplicable   State = "not_applicable"
 	StateNeedsAgent      State = "needs_agent"
 	StateNeedsConnection State = "needs_connection"
+	StateBroken          State = "broken"
 	StateConnected       State = "connected"
+	StateVerified        State = "verified"
 )
 
 // Why a server is not applicable.
 const ReasonNoIDJAG = "no_idjag"
+
+// Result is what an identity chaining exchange showed about an upstream's
+// resource connection.
+type Result string
+
+const (
+	ResultVerified           Result = "verified"
+	ResultDownstreamRejected Result = "downstream_rejected"
+	ResultConnectionMissing  Result = "connection_missing"
+	ResultScopeNotAllowed    Result = "scope_not_allowed"
+	ResultClientAuthFailed   Result = "client_auth_failed"
+)
+
+// Why a server is broken, beyond the observed results.
+const ReasonAudienceMismatch = "audience_mismatch"
 
 // Inputs are the facts the derivation consumes; none of them is a state.
 type Inputs struct {
 	AdvertisesIDJAG bool
 	AgentRecorded   bool
 	Confirmed       bool
+
+	// AudienceMismatch: the confirmed audience is not the upstream issuer,
+	// which the exchange always requests, so it cannot succeed.
+	AudienceMismatch bool
+
+	// Observed is the latest exchange result since confirmation, if any.
+	Observed Result
 }
 
 // Derive applies the precedence top-down. Connected is the administrator's
-// word; whether the exchange works is learned by the exchange path.
+// word; verified is the exchange path's.
 func Derive(in Inputs) State {
 	if NotApplicableReason(in) != "" {
 		return StateNotApplicable
@@ -42,10 +66,22 @@ func Derive(in Inputs) State {
 	if !in.AgentRecorded {
 		return StateNeedsAgent
 	}
-	if !in.Confirmed {
+	switch {
+	case !in.Confirmed:
 		return StateNeedsConnection
+	// A working exchange outranks any static check.
+	case in.Observed == ResultVerified:
+		return StateVerified
+	// A wrong audience also surfaces as a missing connection; name the cause.
+	case BrokenReason(in) == ReasonAudienceMismatch:
+		return StateBroken
+	case in.Observed == ResultConnectionMissing:
+		return StateNeedsConnection
+	case BrokenReason(in) != "":
+		return StateBroken
+	default:
+		return StateConnected
 	}
-	return StateConnected
 }
 
 // NotApplicableReason is empty when the server can take part at all.
@@ -56,10 +92,27 @@ func NotApplicableReason(in Inputs) string {
 	return ""
 }
 
+// BrokenReason is empty unless a confirmed connection is known not to work.
+func BrokenReason(in Inputs) string {
+	if !in.Confirmed || in.Observed == ResultVerified {
+		return ""
+	}
+	if in.AudienceMismatch {
+		return ReasonAudienceMismatch
+	}
+	switch in.Observed {
+	case ResultDownstreamRejected, ResultScopeNotAllowed, ResultClientAuthFailed:
+		return string(in.Observed)
+	case ResultVerified, ResultConnectionMissing, "":
+		return ""
+	}
+	return ""
+}
+
 // Pending reports whether the administrator still has something to do.
 func (s State) Pending() bool {
 	switch s {
-	case StateNeedsAgent, StateNeedsConnection:
+	case StateNeedsAgent, StateNeedsConnection, StateBroken:
 		return true
 	default:
 		return false

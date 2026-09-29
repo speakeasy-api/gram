@@ -215,7 +215,7 @@ WHERE organization_id = $1
   AND identity_provider_connection_id = $2
   AND remote_session_issuer_id = $3
   AND resource = $4
-RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, created_at, updated_at
+RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
 `
 
 type DeleteResourceConnectionParams struct {
@@ -243,6 +243,8 @@ func (q *Queries) DeleteResourceConnection(ctx context.Context, arg DeleteResour
 		&i.Resource,
 		&i.Audience,
 		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -278,6 +280,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
   , i.authorization_grant_profiles_supported
@@ -339,6 +342,7 @@ type GetEligibleServerRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
+	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
 	GrantTypesSupported                 []string
 	AuthorizationGrantProfilesSupported []string
@@ -360,6 +364,7 @@ func (q *Queries) GetEligibleServer(ctx context.Context, arg GetEligibleServerPa
 		&i.Name,
 		&i.Slug,
 		&i.IssuerID,
+		&i.Issuer,
 		&i.MetadataFetchedAt,
 		&i.GrantTypesSupported,
 		&i.AuthorizationGrantProfilesSupported,
@@ -396,6 +401,7 @@ SELECT
   , o.org_url
   , o.agent_id
   , o.agent_app_id
+  , o.remote_session_issuer_id
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -407,11 +413,12 @@ WHERE c.organization_id = $1
 `
 
 type GetLiveConnectionRow struct {
-	ID         uuid.UUID
-	Status     string
-	OrgUrl     string
-	AgentID    pgtype.Text
-	AgentAppID pgtype.Text
+	ID                    uuid.UUID
+	Status                string
+	OrgUrl                string
+	AgentID               pgtype.Text
+	AgentAppID            pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
 }
 
 // The organization's live Okta connection with the display fields readiness
@@ -425,6 +432,7 @@ func (q *Queries) GetLiveConnection(ctx context.Context, organizationID string) 
 		&i.OrgUrl,
 		&i.AgentID,
 		&i.AgentAppID,
+		&i.RemoteSessionIssuerID,
 	)
 	return i, err
 }
@@ -451,8 +459,83 @@ func (q *Queries) GetOktaApplicationLabel(ctx context.Context, arg GetOktaApplic
 	return label, err
 }
 
+const getResourceConnection = `-- name: GetResourceConnection :one
+SELECT id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
+FROM okta_resource_connections
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+  AND remote_session_issuer_id = $3
+  AND resource = $4
+`
+
+type GetResourceConnectionParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	RemoteSessionIssuerID        uuid.UUID
+	Resource                     string
+}
+
+// The observer's unlocked first read, so an unchanged result costs no lock.
+func (q *Queries) GetResourceConnection(ctx context.Context, arg GetResourceConnectionParams) (OktaResourceConnection, error) {
+	row := q.db.QueryRow(ctx, getResourceConnection,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+	)
+	var i OktaResourceConnection
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.IdentityProviderConnectionID,
+		&i.RemoteSessionIssuerID,
+		&i.Resource,
+		&i.Audience,
+		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getResourceConnectionForObservation = `-- name: GetResourceConnectionForObservation :one
+SELECT id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
+FROM okta_resource_connections
+WHERE id = $1
+  AND organization_id = $2
+FOR UPDATE SKIP LOCKED
+`
+
+type GetResourceConnectionForObservationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Skips a row another observer or a confirmation holds, so the proxied
+// request never waits on readiness bookkeeping.
+func (q *Queries) GetResourceConnectionForObservation(ctx context.Context, arg GetResourceConnectionForObservationParams) (OktaResourceConnection, error) {
+	row := q.db.QueryRow(ctx, getResourceConnectionForObservation, arg.ID, arg.OrganizationID)
+	var i OktaResourceConnection
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.IdentityProviderConnectionID,
+		&i.RemoteSessionIssuerID,
+		&i.Resource,
+		&i.Audience,
+		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getResourceConnectionForUpdate = `-- name: GetResourceConnectionForUpdate :one
-SELECT id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, created_at, updated_at
+SELECT id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
 FROM okta_resource_connections
 WHERE organization_id = $1
   AND identity_provider_connection_id = $2
@@ -484,6 +567,8 @@ func (q *Queries) GetResourceConnectionForUpdate(ctx context.Context, arg GetRes
 		&i.Resource,
 		&i.Audience,
 		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -576,6 +661,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
   , i.authorization_grant_profiles_supported
@@ -631,6 +717,7 @@ type ListEligibleServersRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
+	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
 	GrantTypesSupported                 []string
 	AuthorizationGrantProfilesSupported []string
@@ -662,6 +749,7 @@ func (q *Queries) ListEligibleServers(ctx context.Context, organizationID string
 			&i.Name,
 			&i.Slug,
 			&i.IssuerID,
+			&i.Issuer,
 			&i.MetadataFetchedAt,
 			&i.GrantTypesSupported,
 			&i.AuthorizationGrantProfilesSupported,
@@ -767,7 +855,7 @@ func (q *Queries) ListIssuerClients(ctx context.Context, arg ListIssuerClientsPa
 
 const listResourceConnections = `-- name: ListResourceConnections :many
 SELECT
-    r.id, r.organization_id, r.identity_provider_connection_id, r.remote_session_issuer_id, r.resource, r.audience, r.okta_application_id, r.created_at, r.updated_at
+    r.id, r.organization_id, r.identity_provider_connection_id, r.remote_session_issuer_id, r.resource, r.audience, r.okta_application_id, r.observed_result, r.observed_at, r.created_at, r.updated_at
   , a.label AS okta_application_label
 FROM okta_resource_connections AS r
 LEFT JOIN okta_applications AS a
@@ -809,6 +897,8 @@ func (q *Queries) ListResourceConnections(ctx context.Context, arg ListResourceC
 			&i.OktaResourceConnection.Resource,
 			&i.OktaResourceConnection.Audience,
 			&i.OktaResourceConnection.OktaApplicationID,
+			&i.OktaResourceConnection.ObservedResult,
+			&i.OktaResourceConnection.ObservedAt,
 			&i.OktaResourceConnection.CreatedAt,
 			&i.OktaResourceConnection.UpdatedAt,
 			&i.OktaApplicationLabel,
@@ -857,6 +947,39 @@ func (q *Queries) LockLiveConnection(ctx context.Context, arg LockLiveConnection
 	return i, err
 }
 
+const recordObservation = `-- name: RecordObservation :execrows
+UPDATE okta_resource_connections
+SET observed_result = $1,
+    observed_at = $2
+WHERE id = $3
+  AND organization_id = $4
+  AND updated_at < $2
+  AND (observed_at IS NULL OR observed_at < $2)
+`
+
+type RecordObservationParams struct {
+	ObservedResult pgtype.Text
+	ObservedAt     pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Records an exchange observation. updated_at stays the confirmation time,
+// so an attempt that started before the latest confirmation or observation
+// never lands.
+func (q *Queries) RecordObservation(ctx context.Context, arg RecordObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordObservation,
+		arg.ObservedResult,
+		arg.ObservedAt,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setIssuerGrantCapabilitiesFixture = `-- name: SetIssuerGrantCapabilitiesFixture :execrows
 UPDATE remote_session_issuers
 SET grant_types_supported = $1::text[],
@@ -875,6 +998,26 @@ type SetIssuerGrantCapabilitiesFixtureParams struct {
 // profile and jwt-bearer.
 func (q *Queries) SetIssuerGrantCapabilitiesFixture(ctx context.Context, arg SetIssuerGrantCapabilitiesFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setIssuerGrantCapabilitiesFixture, arg.GrantTypesSupported, arg.AuthorizationGrantProfilesSupported, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setIssuerURLFixture = `-- name: SetIssuerURLFixture :execrows
+UPDATE remote_session_issuers
+SET issuer = $1
+WHERE id = $2
+`
+
+type SetIssuerURLFixtureParams struct {
+	Issuer string
+	ID     uuid.UUID
+}
+
+// Test fixture: an issuer identifier, e.g. to match a confirmed audience.
+func (q *Queries) SetIssuerURLFixture(ctx context.Context, arg SetIssuerURLFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setIssuerURLFixture, arg.Issuer, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -962,8 +1105,10 @@ INSERT INTO okta_resource_connections (
 ON CONFLICT (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource) DO UPDATE
 SET audience = EXCLUDED.audience,
     okta_application_id = COALESCE(EXCLUDED.okta_application_id, okta_resource_connections.okta_application_id),
+    observed_result = NULL,
+    observed_at = NULL,
     updated_at = clock_timestamp()
-RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, created_at, updated_at
+RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
 `
 
 type UpsertResourceConnectionParams struct {
@@ -975,8 +1120,9 @@ type UpsertResourceConnectionParams struct {
 	OktaApplicationID            pgtype.Text
 }
 
-// A row is the confirmation. Repeating it updates the audience and keeps the
-// recorded app instance unless a new one is given.
+// A row is the confirmation. Repeating it updates the audience, keeps the
+// recorded app instance unless a new one is given, and clears the observed
+// result so a stale failure does not outlive the fix it was confirmed for.
 func (q *Queries) UpsertResourceConnection(ctx context.Context, arg UpsertResourceConnectionParams) (OktaResourceConnection, error) {
 	row := q.db.QueryRow(ctx, upsertResourceConnection,
 		arg.OrganizationID,
@@ -995,6 +1141,8 @@ func (q *Queries) UpsertResourceConnection(ctx context.Context, arg UpsertResour
 		&i.Resource,
 		&i.Audience,
 		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

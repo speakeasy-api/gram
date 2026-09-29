@@ -3,12 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   appInstanceOptions,
   AUDIENCE_MAX_RUNES,
+  brokenReasonLabel,
+  brokenReasonSummary,
   buildConfirmRequests,
   clientBindingNote,
+  hasConfirmation,
   isConfirmable,
   normalizeAudience,
   notApplicableReasonLabel,
   notApplicableReasonSummary,
+  observedNote,
   XAA_CONFIRM_BATCH,
   xaaStateLabel,
   xaaStateVariant,
@@ -27,6 +31,48 @@ describe("appInstanceOptions", () => {
       { id: "0oa2", label: "Onboarding · 0oa2" },
       { id: "0oa3", label: "Linear" },
     ]);
+  });
+});
+
+describe("exchange observations", () => {
+  it("names and colors the exchange-backed states", () => {
+    expect(xaaStateLabel("verified")).toBe("Verified");
+    expect(xaaStateVariant("verified")).toBe("success");
+    expect(xaaStateLabel("broken")).toBe("Not working");
+    expect(xaaStateVariant("broken")).toBe("destructive");
+  });
+
+  it("explains why a confirmed server is not working", () => {
+    expect(brokenReasonSummary("audience_mismatch")).toBe(
+      "Issuer URL does not match.",
+    );
+    expect(brokenReasonLabel("downstream_rejected")).toMatch(/trust/);
+    expect(brokenReasonSummary(undefined)).toBe("");
+  });
+
+  it("treats every row with a recorded confirmation as confirmed", () => {
+    expect(hasConfirmation({ state: "broken", confirmedAt: new Date() })).toBe(
+      true,
+    );
+    expect(hasConfirmation({ state: "verified", confirmedAt: undefined })).toBe(
+      false,
+    );
+    expect(
+      hasConfirmation({ state: "not_applicable", confirmedAt: new Date() }),
+    ).toBe(false);
+  });
+
+  it("notes a confirmation the exchange contradicted", () => {
+    expect(
+      observedNote({
+        state: "needs_connection",
+        observedResult: "connection_missing",
+      }),
+    ).toMatchObject({ tooltip: expect.stringMatching(/confirm again/) });
+    expect(observedNote({ state: "needs_connection" })).toBeUndefined();
+    expect(
+      observedNote({ state: "verified", observedResult: "verified" }),
+    ).toBeUndefined();
   });
 });
 

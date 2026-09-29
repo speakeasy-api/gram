@@ -2268,7 +2268,7 @@ webhooks:
                 required: true
     audit_log.okta_resource_connection_event_v1:
         post:
-            description: Emitted when an organization confirms or resets a Cross App Access resource connection
+            description: Emitted when an organization confirms or resets a Cross App Access resource connection, or an exchange changes its observed result
             operationId: audit_log.okta_resource_connection_event_v1
             requestBody:
                 content:
