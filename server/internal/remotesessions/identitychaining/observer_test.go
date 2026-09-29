@@ -2,11 +2,12 @@ package identitychaining
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type observerFunc func(context.Context, Observation) error
@@ -16,10 +17,12 @@ func (f observerFunc) ObserveAttempt(ctx context.Context, o Observation) error {
 }
 
 func TestObserverRegistration(t *testing.T) {
+	t.Parallel()
+	logger := testenv.NewLogger(t)
 	var c Chainer
 	var calls int
 	want := Observation{Resource: "https://resource.example", StartedAt: time.Now()}
-	observe := func() { c.observe(context.Background(), slog.Default(), want) }
+	observe := func() { c.observe(context.Background(), logger, want) }
 	observe() // A zero-value chainer has no observer.
 	c.SetObserver(observerFunc(func(_ context.Context, got Observation) error {
 		calls++
@@ -37,6 +40,8 @@ func TestObserverRegistration(t *testing.T) {
 }
 
 func TestObserverCanReplaceItself(t *testing.T) {
+	t.Parallel()
+	logger := testenv.NewLogger(t)
 	var c Chainer
 	var calls atomic.Int64
 	replacement := observerFunc(func(context.Context, Observation) error {
@@ -50,8 +55,8 @@ func TestObserverCanReplaceItself(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		c.observe(context.Background(), slog.Default(), Observation{})
-		c.observe(context.Background(), slog.Default(), Observation{})
+		c.observe(context.Background(), logger, Observation{})
+		c.observe(context.Background(), logger, Observation{})
 	}()
 	select {
 	case <-done:
@@ -64,6 +69,8 @@ func TestObserverCanReplaceItself(t *testing.T) {
 }
 
 func TestObserverConcurrentSetAndObserve(t *testing.T) {
+	t.Parallel()
+	logger := testenv.NewLogger(t)
 	var c Chainer
 	var calls atomic.Int64
 	observer := observerFunc(func(context.Context, Observation) error {
@@ -80,7 +87,7 @@ func TestObserverConcurrentSetAndObserve(t *testing.T) {
 					c.SetObserver(observer)
 					c.SetObserver(nil)
 				} else {
-					c.observe(context.Background(), slog.Default(), Observation{})
+					c.observe(context.Background(), logger, Observation{})
 				}
 			}
 		})
@@ -88,7 +95,7 @@ func TestObserverConcurrentSetAndObserve(t *testing.T) {
 	close(start)
 	wg.Wait()
 	c.SetObserver(observer)
-	c.observe(context.Background(), slog.Default(), Observation{})
+	c.observe(context.Background(), logger, Observation{})
 	if calls.Load() == 0 {
 		t.Fatal("observer was never called")
 	}

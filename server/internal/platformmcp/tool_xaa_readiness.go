@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -94,10 +95,10 @@ func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 		result, err := service.connections.List(ctx, &srv.ListPayload{IncludeAll: true})
 		if err != nil {
 			if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
-				switch shareable.Code {
-				case oops.CodeForbidden, oops.CodeUnauthorized:
+				if shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized {
 					return xaaReadinessRefusal("forbidden", "XAA readiness requires organization administration and server read access.")
-				case oops.CodeFailedPrecondition:
+				}
+				if shareable.Code == oops.CodeFailedPrecondition {
 					return xaaReadinessRefusal("setup_required", "Connect an identity provider before checking XAA readiness.")
 				}
 			}
@@ -116,5 +117,8 @@ func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 
 func xaaReadinessRefusal(code, message string) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
 	payload, err := json.Marshal(featureUnavailableResult{Code: code, Feature: "xaa_readiness", Message: message})
-	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}}, GetXAAReadinessOutput{}, err
+	if err != nil {
+		return nil, GetXAAReadinessOutput{}, fmt.Errorf("marshal XAA readiness refusal: %w", err)
+	}
+	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}}, GetXAAReadinessOutput{}, nil
 }

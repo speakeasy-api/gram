@@ -90,6 +90,7 @@ func TestXAAReadinessProjectsExistingStatesWithoutLeakingSnapshot(t *testing.T) 
 	t.Parallel()
 	for _, state := range []string{"not_applicable", "needs_agent", "needs_connection", "broken", "connected", "verified"} {
 		t.Run(state, func(t *testing.T) {
+			t.Parallel()
 			observation, at, reason := "success", "2026-01-01T00:00:00Z", "downstream_rejected"
 			reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{TotalCount: 99, Servers: []*srv.OktaResourceConnectionServer{
 				{ProjectID: xaaProjectID, McpServerID: "hidden-server", State: "hidden-state"},
@@ -139,6 +140,7 @@ func TestXAAReadinessRefusals(t *testing.T) {
 		{name: "invalid server", code: "invalid_request", server: "not-a-uuid"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			reader := &xaaReaderStub{err: tc.serviceErr, result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{{ProjectID: xaaProjectID, McpServerID: "44444444-4444-4444-8444-444444444444", State: "verified"}}}}
 			service := &xaaReadinessService{connections: reader, enabled: func(context.Context, string) (bool, error) { return tc.enabled, tc.flagErr }}
 			if tc.absent {
@@ -157,7 +159,10 @@ func TestXAAReadinessRefusals(t *testing.T) {
 			}
 			result := xaaCall(t, session, project, server)
 			require.True(t, result.IsError)
-			text := result.Content[0].(*mcp.TextContent).Text
+			require.Len(t, result.Content, 1)
+			content, ok := result.Content[0].(*mcp.TextContent)
+			require.True(t, ok)
+			text := content.Text
 			require.Contains(t, text, `"code":"`+tc.code+`"`)
 			require.NotContains(t, text, "private")
 			require.Equal(t, tc.calls, reader.calls)

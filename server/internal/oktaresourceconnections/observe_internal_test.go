@@ -77,6 +77,7 @@ func TestSupersedes(t *testing.T) {
 
 	for _, previous := range []Result{ResultVerified, ResultConnectionMissing} {
 		t.Run(string(previous)+" rejects older contradictory completion", func(t *testing.T) {
+			t.Parallel()
 			rc := row(previous, observed)
 			older := observed.Add(time.Minute)
 			newer := observed.Add(2 * time.Minute)

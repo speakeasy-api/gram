@@ -103,6 +103,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challeng
 		delegation: delegation,
 		keys:       keys,
 		locks:      locks,
+		observerMu: sync.RWMutex{},
 		observer:   nil,
 		now:        time.Now,
 	}
