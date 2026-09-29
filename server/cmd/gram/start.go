@@ -1808,6 +1808,7 @@ func newStartCommand() *cli.Command {
 				PublicationRequests:      plugins.PublicationRequests{Enabled: publicationEmit},
 				TemporalEnv:              temporalEnv,
 				Skills:                   skillsService,
+				SkillInsights:            telemetryrepo.New(chDB),
 				RiskPolicyApprovals:      mcpApprovalService,
 				RiskPolicySignaler:       riskSignaler,
 				RiskPolicyCache:          shadowMCPClient,

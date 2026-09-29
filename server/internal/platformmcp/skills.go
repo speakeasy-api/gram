@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -182,16 +183,26 @@ type SkillsService struct {
 	grants   SkillAuthorizer
 	gate     CatalogRegistrationGateChecker
 	budget   OperationBudget
+
+	// insights and insightsBudget back the skill insight tools. Both are attached by
+	// WithInsights; a nil reader keeps those tools registered as stubs.
+	insights       SkillInsightsReader
+	insightsBudget OperationBudget
+
+	now func() time.Time
 }
 
 func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, projects SkillProjectResolver, grants SkillAuthorizer, gate CatalogRegistrationGateChecker, budget OperationBudget) *SkillsService {
 	return &SkillsService{
-		skills:   skills,
-		targets:  targets,
-		projects: projects,
-		grants:   grants,
-		gate:     gate,
-		budget:   budget,
+		skills:         skills,
+		targets:        targets,
+		projects:       projects,
+		grants:         grants,
+		gate:           gate,
+		budget:         budget,
+		insights:       nil,
+		insightsBudget: OperationBudget{Connection: nil, Organization: nil},
+		now:            time.Now,
 	}
 }
 
@@ -207,6 +218,14 @@ func (s *SkillsService) valid() bool {
 // so a caller reaches exactly the projects its own grants reach and the audit
 // row names the person, not the surface.
 func (s *SkillsService) begin(ctx context.Context, principal Principal, projectSlug string) (context.Context, ResolvedProject, error) {
+	return s.beginWith(ctx, principal, projectSlug, s.budget)
+}
+
+// beginWith is begin metered on a caller-chosen allowance. Authoring and
+// distribution share the skills budget; a read that is really a telemetry
+// aggregate is charged to the observability lane instead, so neither workflow
+// can spend the other's allowance.
+func (s *SkillsService) beginWith(ctx context.Context, principal Principal, projectSlug string, budget OperationBudget) (context.Context, ResolvedProject, error) {
 	if !s.valid() {
 		return ctx, ResolvedProject{}, ErrSkillsUnavailable
 	}
@@ -220,7 +239,7 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 	if !enabled {
 		return ctx, ResolvedProject{}, ErrSkillsUnavailable
 	}
-	if err := s.budget.Allow(ctx, principal); err != nil {
+	if err := budget.Allow(ctx, principal); err != nil {
 		return ctx, ResolvedProject{}, err
 	}
 	project, err := s.projects.ResolveProject(ctx, principal.OrganizationID, projectSlug)
