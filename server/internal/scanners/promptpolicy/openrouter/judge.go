@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/riskhealth"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -53,6 +54,12 @@ const (
 	// reject that constraint (see call()).
 	maxRationaleLen = 500
 )
+
+// errMalformedVerdict marks a judge answer Gram could not turn into a verdict.
+// The provider served the call, so it is not an outage on their side, but the
+// policy still went unevaluated — which availability telemetry has to say out
+// loud rather than fold into a generic error.
+var errMalformedVerdict = errors.New("malformed prompt policy verdict")
 
 // SystemPrompt is the judge's system message. It frames the policy and message
 // as untrusted data (not instructions), defines the structured JSON the user
@@ -89,6 +96,7 @@ type Judge struct {
 	logger      *slog.Logger
 	tracer      trace.Tracer
 	metrics     *judgeMetrics
+	health      *riskhealth.Metrics
 	client      openrouter.CompletionClient
 	limiter     *ratelimit.Limiter
 	stokenCodec *stokens.Codec
@@ -102,6 +110,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		logger:      logger,
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"),
 		metrics:     newJudgeMetrics(meterProvider, logger),
+		health:      riskhealth.NewMetrics(meterProvider, logger),
 		client:      client,
 		limiter:     limiter,
 		stokenCodec: stokens.NewCodec(),
@@ -113,7 +122,14 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 // client or an empty prompt/text yields (nil, nil). On judge error or timeout it
 // returns a non-nil error so callers can apply policy fail-mode.
 func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
-	if j == nil || j.client == nil {
+	if j == nil {
+		return nil, nil
+	}
+	if j.client == nil {
+		// A prompt policy the customer enabled cannot be evaluated because no
+		// judge is wired in this deployment. It fails open silently, which is
+		// the exact shape of outage this counter exists to surface.
+		j.health.RecordDegraded(ctx, in.OrgID, riskhealth.ComponentPromptPolicyJudge, riskhealth.ReasonNotConfigured)
 		return nil, nil
 	}
 	// Skip only when there is nothing to judge. An empty body is NOT enough:
@@ -153,6 +169,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		)
 	case !res.Allowed:
 		j.metrics.RecordRateLimited(ctx, in.OrgID)
+		j.health.RecordDegraded(ctx, in.OrgID, riskhealth.ComponentPromptPolicyJudge, riskhealth.ReasonThrottled)
 		span.SetAttributes(attribute.Bool("risk.judge.rate_limited", true))
 		span.SetStatus(codes.Error, "llm judge rate limited")
 		j.logger.WarnContext(ctx, "llm judge rate limited",
@@ -166,6 +183,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	callResult, err := j.call(ctx, in, judgePrompt)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	j.metrics.RecordEvaluation(ctx, in.OrgID, outcome, time.Since(start))
+	j.recordHealth(ctx, in.OrgID, err)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "llm judge call failed")
@@ -209,10 +227,27 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 func (j *Judge) contextDone(ctx context.Context, span trace.Span, orgID string, err error) error {
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	j.metrics.RecordEvaluation(ctx, orgID, outcome, 0)
+	j.recordHealth(ctx, orgID, err)
 	if span != nil {
 		span.SetAttributes(attr.Outcome(outcome))
 	}
 	return fmt.Errorf("llm judge call: %w", err)
+}
+
+// recordHealth reports this evaluation on the cross-engine availability
+// counter, which is what a single Datadog query can ask "are customer prompt
+// policies still being evaluated?" against.
+func (j *Judge) recordHealth(ctx context.Context, orgID string, err error) {
+	switch {
+	case err == nil:
+		j.health.RecordCompleted(ctx, orgID, riskhealth.ComponentPromptPolicyJudge)
+	case riskhealth.IsCanceled(err):
+		j.health.RecordCanceled(ctx, orgID, riskhealth.ComponentPromptPolicyJudge)
+	case errors.Is(err, errMalformedVerdict):
+		j.health.RecordDegraded(ctx, orgID, riskhealth.ComponentPromptPolicyJudge, riskhealth.ReasonMalformedResponse)
+	default:
+		j.health.RecordDegraded(ctx, orgID, riskhealth.ComponentPromptPolicyJudge, riskhealth.ReasonFromError(err))
+	}
 }
 
 type judgeCallResult struct {
@@ -263,11 +298,11 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt str
 		return judgeCallResult{}, fmt.Errorf("openrouter object completion: %w", err)
 	}
 	if response == nil || response.Message == nil {
-		return judgeCallResult{}, fmt.Errorf("empty completion response")
+		return judgeCallResult{}, fmt.Errorf("%w: empty completion response", errMalformedVerdict)
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {
-		return judgeCallResult{}, fmt.Errorf("empty completion content")
+		return judgeCallResult{}, fmt.Errorf("%w: empty completion content", errMalformedVerdict)
 	}
 
 	var verdict struct {
@@ -276,7 +311,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt str
 		Rationale  string  `json:"rationale"`
 	}
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return judgeCallResult{}, fmt.Errorf("parse judge response: %w", err)
+		return judgeCallResult{}, fmt.Errorf("%w: parse judge response: %w", errMalformedVerdict, err)
 	}
 	// Clamp confidence and cap rationale length in code - the schema no longer
 	// enforces these (see the schema note above re: Anthropic route 400s).
