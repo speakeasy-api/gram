@@ -32,11 +32,6 @@ import {
   ResourceIdentifierSection,
 } from "./sections/ResourceIdentifierSection";
 import type { SourceBackedDeleteTarget } from "./sections/sourceDelete";
-import {
-  MCP_SOURCE_NAME_SECTION_ID,
-  RemoteSourceNameSection,
-  TunneledSourceNameSection,
-} from "./sections/SourceNameSection";
 import { RemoteMcpSessionsSection } from "./sections/RemoteMcpSessionsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
 import {
@@ -53,7 +48,6 @@ import {
 const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_SERVER_URL_SECTION_ID,
   MCP_AUTHENTICATION_SECTION_ID,
-  MCP_SOURCE_NAME_SECTION_ID,
   MCP_UPSTREAM_URL_SECTION_ID,
   MCP_RESOURCE_IDENTIFIER_SECTION_ID,
   MCP_PUBLIC_ACCESS_SECTION_ID,
@@ -149,10 +143,10 @@ export function SettingsTab({
             a peer of it. */}
         <AuthenticationSection mcpServer={mcpServer} />
         {remoteMcpServer ? (
-          <Fragment key={remoteMcpServer.id}>
-            <RemoteSourceNameSection remoteMcpServer={remoteMcpServer} />
-            <UpstreamUrlSection remoteMcpServer={remoteMcpServer} />
-          </Fragment>
+          <UpstreamUrlSection
+            key={remoteMcpServer.id}
+            remoteMcpServer={remoteMcpServer}
+          />
         ) : null}
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
@@ -180,12 +174,6 @@ export function SettingsTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <BrandingSection mcpServer={mcpServer} />
-      {tunneledMcpServer ? (
-        <TunneledSourceNameSection
-          key={tunneledMcpServer.id}
-          tunneledMcpServer={tunneledMcpServer}
-        />
-      ) : null}
       {isUnproxied ? null : (
         <>
           <ServerUrlSection

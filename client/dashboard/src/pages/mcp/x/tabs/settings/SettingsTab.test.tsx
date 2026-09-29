@@ -36,11 +36,6 @@ vi.mock("./sections/ToolFilteringSection", () => ({
 vi.mock("./sections/NetworkAccessSection", () => ({
   NetworkAccessSection: () => <h2>Network Access</h2>,
 }));
-vi.mock("./sections/SourceNameSection", () => ({
-  MCP_SOURCE_NAME_SECTION_ID: "source-name",
-  RemoteSourceNameSection: () => <h2>Source Name</h2>,
-  TunneledSourceNameSection: () => <h2>Source Name</h2>,
-}));
 vi.mock("./sections/UpstreamUrlSection", () => ({
   MCP_UPSTREAM_URL_SECTION_ID: "upstream-url",
   UpstreamUrlSection: () => <h2>Upstream URL</h2>,
@@ -128,7 +123,6 @@ describe("SettingsTab", () => {
       // Upstream headers are the Identity panel's Custom Headers disclosure
       // not a section of their own.
       "Identity",
-      "Source Name",
       "Upstream URL",
       "Server URL",
       "Network Access",
@@ -143,7 +137,6 @@ describe("SettingsTab", () => {
       renderSettings(server({ tunneledMcpServerId: "tunneled-source-1" })),
     ).toEqual([
       "Display",
-      "Source Name",
       "Server URL",
       "Network Access",
       "Authentication",
