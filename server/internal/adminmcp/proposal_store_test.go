@@ -79,7 +79,7 @@ func newProposalFixture(t *testing.T, name string) proposalFixture {
 func featureProposal(organizationID, key string, enabled bool) NewProposal {
 	arguments, _ := json.Marshal(map[string]any{"feature": "logs", "enabled": enabled})
 	expected, _ := json.Marshal(map[string]any{"feature": "logs", "enabled": !enabled})
-	preview, _ := json.Marshal(map[string]any{"organization_id": organizationID, "before": !enabled, "after": enabled})
+	preview, _ := json.Marshal(map[string]any{"organization_id": organizationID, "feature": "logs", "before": !enabled, "after": enabled})
 	return NewProposal{
 		Operation: OperationSetOrganizationFeature, SchemaVersion: 1,
 		Target:         ProposalTarget{OrganizationID: organizationID},

@@ -30,6 +30,7 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), f.db, redisClient)
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
 	writer := &featureWriter{store: f.store, mutator: productfeatures.NewMutator(features, audit.NewLogger()), writes: writes, baseURL: "https://staff.example.test" + Path}
+	tools := newWriteTools(f.store, writes, writer.baseURL, map[WriteOperation]operationWriter{OperationSetOrganizationFeature: writer}) //nolint:exhaustive // Only the implemented operation is dispatched.
 	staff := &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: "staff@example.test"}
 	principal := Principal{Subject: f.owner.SubjectURN, Email: staff.Email, ClientID: "test-client", ClientRowID: f.owner.ClientRowID.String(), ConnectionID: f.owner.ConnectionID.String(), Generation: f.owner.Generation.String(), Scopes: []string{ScopeRead, ScopeWrite}, staff: staff}
 	ctx := contextvalues.SetAdminAuthContext(context.WithValue(t.Context(), principalKey{}, principal), staff)
@@ -66,23 +67,25 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 	require.ErrorIs(t, err, ErrProposalConflict)
 	id, err := uuid.Parse(prepared.ProposalID)
 	require.NoError(t, err)
-	_, err = writer.execute(ctx, ProposalIDInput{ProposalID: id.String()})
+	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: id.String()})
 	require.ErrorIs(t, err, ErrProposalNotApproved)
 
 	verifier := &fakeAdminVerifier{result: staff}
 	memory := testenv.NewMemoryCache()
 	approval := newStaffProposalApproval(f.store, NewStaffOAuthAuthorization(nil, nil, memory, verifier, f.cipher, staffAudience), memory, writes)
-	approval.revalidate = map[WriteOperation]ProposalRevalidator{OperationSetOrganizationFeature: writer.revalidate} //nolint:exhaustive // Only selected write operations are enabled by this test.
+	approval.operations = map[WriteOperation]approvableOperation{OperationSetOrganizationFeature: writer} //nolint:exhaustive // Only selected write operations are enabled by this test.
 	handler := middleware.AdminOriginCheck(nil)(approval.Handler())
 	page := httptest.NewRecorder()
 	handler.ServeHTTP(page, approvalRequest(http.MethodGet, id, nil, "browser-session"))
 	require.Equal(t, http.StatusOK, page.Code)
+	require.Contains(t, page.Body.String(), "Synthetic A")
+	require.Contains(t, page.Body.String(), "<td>logs feature</td><td>Off</td><td>On</td>")
 	form := approvalForm(t, page.Body.String())
 	accepted := httptest.NewRecorder()
 	handler.ServeHTTP(accepted, approvalRequest(http.MethodPost, id, form, "browser-session"))
 	require.Equal(t, http.StatusOK, accepted.Code)
 
-	result, err := writer.execute(ctx, ProposalIDInput{ProposalID: id.String()})
+	result, err := tools.execute(ctx, ProposalIDInput{ProposalID: id.String()})
 	require.NoError(t, err)
 	require.Equal(t, string(ProposalSucceeded), result.Status)
 	var change struct {
@@ -97,16 +100,20 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 	require.True(t, cached)
 	require.Equal(t, 1, countWriteEvents(t, f.db, id, "executed"))
 
-	result, err = writer.execute(ctx, ProposalIDInput{ProposalID: id.String()})
+	result, err = tools.execute(ctx, ProposalIDInput{ProposalID: id.String()})
 	require.NoError(t, err)
 	require.True(t, result.Replay)
 	require.Equal(t, 1, countWriteEvents(t, f.db, id, "executed"))
+	status, err := tools.status(ctx, ProposalIDInput{ProposalID: id.String()})
+	require.NoError(t, err)
+	require.Equal(t, string(ProposalSucceeded), status.Status)
+	require.JSONEq(t, `{"changed":true}`, string(status.Result))
 
 	other := ctx
 	otherPrincipal := principal
 	otherPrincipal.Subject = "user:other-staff"
 	other = context.WithValue(other, principalKey{}, otherPrincipal)
-	_, err = writer.execute(other, ProposalIDInput{ProposalID: id.String()})
+	_, err = tools.execute(other, ProposalIDInput{ProposalID: id.String()})
 	require.ErrorIs(t, err, ErrProposalNotFound)
 	f.reauth()
 	_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgB, Feature: "logs", Enabled: true, RetryKey: "old-connection"})
@@ -136,8 +143,9 @@ func TestFeatureWriteStaleStateAndDisabledSwitch(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ProposalInvalidated, closed.Status)
 	writer.writes = WriteConfig{}
+	tools := newWriteTools(f.store, writer.writes, "", map[WriteOperation]operationWriter{OperationSetOrganizationFeature: writer}) //nolint:exhaustive // Only the implemented operation is dispatched.
 	_, err = writer.prepare(t.Context(), PrepareFeatureInput{OrganizationID: f.orgA, Feature: "logs", Enabled: true, RetryKey: "disabled"})
 	require.ErrorIs(t, err, ErrWriteDisabled)
-	_, err = writer.execute(t.Context(), ProposalIDInput{ProposalID: p.ID.String()})
+	_, err = tools.execute(t.Context(), ProposalIDInput{ProposalID: p.ID.String()})
 	require.ErrorIs(t, err, ErrWriteDisabled)
 }

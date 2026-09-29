@@ -546,7 +546,7 @@ func newAdminCommand() *cli.Command {
 				staffOAuth.Attach(mux)
 				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
 				staffRuntime := adminmcp.NewRuntime(staffAuth, staffOAuth.ProtectedResourceURL(), adminService)
-				if err := adminmcp.AttachFeatureWrites(staffRuntime, staffOAuth, productFeatures, writes); err != nil {
+				if err := adminmcp.AttachWrites(staffRuntime, staffOAuth, productFeatures, writes); err != nil {
 					return fmt.Errorf("configure staff Admin MCP write tools: %w", err)
 				}
 				mux.Handle(http.MethodPost, adminmcp.Path, staffRuntime.Handler().ServeHTTP)

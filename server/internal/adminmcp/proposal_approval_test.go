@@ -1,6 +1,7 @@
 package adminmcp
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
@@ -18,6 +20,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+// allowOperation renders the stored feature preview but skips state
+// revalidation, so these tests exercise only the browser approval checks.
+type allowOperation struct{ *featureWriter }
+
+func (allowOperation) revalidate(context.Context, pgx.Tx, Proposal) error { return nil }
+
+func allowFeatureApprovals() map[WriteOperation]approvableOperation {
+	return map[WriteOperation]approvableOperation{OperationSetOrganizationFeature: allowOperation{&featureWriter{}}} //nolint:exhaustive // Only the implemented operation is approvable.
+}
 
 func approvalRequest(method string, id uuid.UUID, form url.Values, session string) *http.Request {
 	path := Path + "/proposals/" + id.String()
@@ -60,7 +72,7 @@ func TestStaffProposalApprovalBrowserFlow(t *testing.T) {
 	memory := testenv.NewMemoryCache()
 	authorization := NewStaffOAuthAuthorization(nil, nil, memory, verifier, f.cipher, staffAudience)
 	approval := newStaffProposalApproval(f.store, authorization, memory, WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}) //nolint:exhaustive // Only selected write operations are enabled by this test.
-	approval.revalidate = map[WriteOperation]ProposalRevalidator{OperationSetOrganizationFeature: allowProposalBrowser}                                                          //nolint:exhaustive // Only selected write operations are enabled by this test.
+	approval.operations = allowFeatureApprovals()
 	handler := middleware.AdminOriginCheck(nil)(approval.Handler())
 
 	login := httptest.NewRecorder()
@@ -78,6 +90,8 @@ func TestStaffProposalApprovalBrowserFlow(t *testing.T) {
 	require.Contains(t, page.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'")
 	require.Contains(t, page.Body.String(), p.ProposalDigest)
 	require.Contains(t, page.Body.String(), p.Target.OrganizationID)
+	require.Contains(t, page.Body.String(), "Turn the logs feature on")
+	require.Contains(t, page.Body.String(), "<td>logs feature</td><td>Off</td><td>On</td>")
 	require.NotContains(t, page.Body.String(), "browser-session")
 	form := approvalForm(t, page.Body.String())
 	post := func(values url.Values, session string) *httptest.ResponseRecorder {
@@ -122,7 +136,7 @@ func TestStaffProposalApprovalRequiresLinkedWritableConnection(t *testing.T) {
 	memory := testenv.NewMemoryCache()
 	authorization := NewStaffOAuthAuthorization(nil, nil, memory, verifier, f.cipher, staffAudience)
 	approval := newStaffProposalApproval(f.store, authorization, memory, WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}) //nolint:exhaustive // Only selected write operations are enabled by this test.
-	approval.revalidate = map[WriteOperation]ProposalRevalidator{OperationSetOrganizationFeature: allowProposalBrowser}                                                          //nolint:exhaustive // Only selected write operations are enabled by this test.
+	approval.operations = allowFeatureApprovals()
 	handler := approval.Handler()
 
 	get := func() *httptest.ResponseRecorder {
