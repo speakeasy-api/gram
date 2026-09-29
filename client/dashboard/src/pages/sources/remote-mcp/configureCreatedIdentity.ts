@@ -1,11 +1,13 @@
 import { isNotFoundError } from "@/lib/errors";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
-import { pickPreferredAuthMethod } from "@/pages/mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import {
+  preferredScopes,
+  serverIdentityAuthMethod,
+} from "@/lib/remote-identity/model/clientConfiguration";
 import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { CommitServerIdentityConfigurationResult } from "@gram/client/models/components/commitserveridentityconfigurationresult.js";
-import type { ServerIdentityClientConfigurationTokenEndpointAuthMethod } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import type {
   McpServer,
   McpServerVisibility,
@@ -41,27 +43,6 @@ export type ConfigureCreatedIdentityResult =
       message: string;
       userIdentity?: CommitServerIdentityConfigurationResult;
     };
-
-// The issuer form's method list is wider than what this RPC accepts: it also
-// carries private_key_jwt, which the composite cannot express. In practice
-// pickPreferredAuthMethod never returns it — it falls back to
-// client_secret_basic when nothing recognized is advertised — so this narrows
-// the type at the boundary rather than changing which method is sent.
-function rpcAuthMethod(
-  supported: string[],
-): ServerIdentityClientConfigurationTokenEndpointAuthMethod {
-  switch (pickPreferredAuthMethod(supported)) {
-    case "client_secret_post":
-      return "client_secret_post";
-    case "none":
-      return "none";
-    case "client_secret_basic":
-    // The composite has no private_key_jwt; pickPreferredAuthMethod cannot
-    // return it either, so this only satisfies exhaustiveness.
-    case "private_key_jwt":
-      return "client_secret_basic";
-  }
-}
 
 export async function configureCreatedRemoteMcpIdentity({
   client,
@@ -261,7 +242,7 @@ export async function configureCreatedRemoteMcpIdentity({
           clientMode: "auto",
           clientConfiguration: {
             scope: scopes.length > 0 ? scopes : undefined,
-            tokenEndpointAuthMethod: rpcAuthMethod(issuerAuthMethods),
+            tokenEndpointAuthMethod: serverIdentityAuthMethod(issuerAuthMethods),
           },
         },
       },
@@ -397,22 +378,6 @@ async function setMcpServerVisibility(
     undefined,
     options,
   );
-}
-
-function preferredScopes(
-  protectedResourceScopes: string[] | undefined,
-  authorizationServerScopes: string[] | undefined,
-): string[] {
-  const resourceScopes = nonEmptyStrings(protectedResourceScopes);
-  return resourceScopes.length > 0
-    ? resourceScopes
-    : nonEmptyStrings(authorizationServerScopes);
-}
-
-function nonEmptyStrings(values: string[] | undefined): string[] {
-  return (values ?? [])
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
 }
 
 function configured(

@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   authenticationProbe: vi.fn(),
   protectedResourceMetadata: vi.fn(),
   fetchMetadata: vi.fn(),
+  discoverProtectedResource: vi.fn(),
   commit: vi.fn(),
   detach: vi.fn(),
 }));
@@ -59,6 +60,9 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     remoteSessions: { commitServerIdentityConfiguration: mocks.commit },
     remoteSessionIssuers: { fetchMetadata: mocks.fetchMetadata },
+    remoteMcp: {
+      discoverProtectedResourceMetadata: mocks.discoverProtectedResource,
+    },
   }),
 }));
 
@@ -244,6 +248,7 @@ beforeEach(() => {
     status: "registered",
     manualSetupRequired: false,
   });
+  mocks.discoverProtectedResource.mockResolvedValue({ available: false });
   mocks.invalidateHeaders.mockResolvedValue(undefined);
   mocks.detach.mockResolvedValue({});
   mocks.authenticationProbe.mockReturnValue("available");
@@ -308,6 +313,53 @@ describe("RemoteMcpIdentitySectionBody", () => {
           mcpServerId: "mcp-server-1",
           providerId: "provider-1",
           clientMode: "auto",
+        }),
+      }),
+    );
+  });
+
+  it("requests the protected resource's scopes, not every advertised one", async () => {
+    // Left empty, the server asks for everything the issuer advertises — the
+    // request that broke Salesforce logins. Settings has to send the same
+    // RFC 9728 scopes the create flow does.
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
+              scopesSupported: ["read", "write", "admin", "refresh_token"],
+              tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+            },
+          ],
+        },
+      },
+    });
+    mocks.discoverProtectedResource.mockResolvedValue({
+      available: true,
+      metadata: { scopesSupported: ["read", " "] },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          clientMode: "auto",
+          clientConfiguration: expect.objectContaining({
+            scope: ["read"],
+            tokenEndpointAuthMethod: "client_secret_post",
+          }),
         }),
       }),
     );

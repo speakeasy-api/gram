@@ -1,4 +1,5 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import type { Gram } from "@gram/client";
 import { slugify } from "@/lib/constants";
 import {
   deriveRemoteSessionIssuerNameFromUrl,
@@ -7,10 +8,16 @@ import {
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
+import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import {
+  preferredScopes,
+  serverIdentityAuthMethod,
+} from "../model/clientConfiguration";
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
 import { useClientHasSessions } from "../queries/useClientSessions";
 import { useProtectedResourceMetadata } from "../queries/useProtectedResourceMetadata";
@@ -61,6 +68,25 @@ type UserIdentityStatus =
 function sameSite(issuerHost: string, upstreamHost: string): boolean {
   if (issuerHost === "" || upstreamHost === "") return false;
   return issuerHost === upstreamHost || upstreamHost.endsWith(`.${issuerHost}`);
+}
+
+// The probe only runs up front while a provider is being discovered. A server
+// that already matched one still needs the resource's scopes at save time, so
+// read them then. A failed probe is not fatal: the issuer's list is the
+// fallback preferredScopes already defines.
+async function protectedResourceScopes(
+  client: Gram,
+  remoteMcpServerId: string,
+): Promise<string[] | undefined> {
+  if (!remoteMcpServerId) return undefined;
+  try {
+    const result = await client.remoteMcp.discoverProtectedResourceMetadata({
+      discoverProtectedResourceMetadataRequestBody: { remoteMcpServerId },
+    });
+    return result.available ? result.metadata?.scopesSupported : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function hostOf(url: string | undefined | null): string {
@@ -374,8 +400,9 @@ export function useUserIdentityDraft({
       // read its metadata now and send the whole record with the commit.
       let createProvider = undefined;
       let providerId: string | undefined = selectedIssuer?.id;
+      let draft: RemoteSessionIssuerDraft | null = null;
       if (selectedDiscovered && discoveredIssuerUrl) {
-        const draft =
+        draft =
           discoveredMetadata ??
           (await client.remoteSessionIssuers.fetchMetadata({
             fetchIssuerMetadataRequestBody: { issuer: discoveredIssuerUrl },
@@ -418,6 +445,37 @@ export function useUserIdentityDraft({
         };
       }
 
+      let clientConfiguration: ServerIdentityClientConfiguration | undefined;
+      if (!existingClient) {
+        // A new client asks for what this server's protected resource
+        // advertises, exactly as the create flow does. Left empty, the server
+        // falls back to every scope the issuer advertises — the request that
+        // broke Salesforce logins.
+        const resourceScopes =
+          prm.metadata?.scopesSupported ??
+          (await protectedResourceScopes(client, remoteMcpServerId));
+        const scopes = preferredScopes(
+          resourceScopes,
+          selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
+        );
+        const secret = manualNeeded ? clientSecret.trim() : "";
+        clientConfiguration = {
+          clientId: manualNeeded ? clientId.trim() : undefined,
+          clientSecret: secret || undefined,
+          scope: scopes.length > 0 ? scopes : undefined,
+          // A manual client without a secret is a public client; naming a
+          // secret-based method for it is refused by the server.
+          tokenEndpointAuthMethod:
+            manualNeeded && !secret
+              ? "none"
+              : serverIdentityAuthMethod(
+                  selectedIssuer?.tokenEndpointAuthMethodsSupported ??
+                    draft?.tokenEndpointAuthMethodsSupported ??
+                    [],
+                ),
+        };
+      }
+
       return await client.remoteSessions.commitServerIdentityConfiguration({
         commitServerIdentityConfigurationForm: {
           mcpServerId,
@@ -425,14 +483,7 @@ export function useUserIdentityDraft({
           createProvider,
           clientMode,
           existingClientId: existingClient?.id,
-          clientConfiguration: existingClient
-            ? undefined
-            : {
-                clientId: manualNeeded ? clientId.trim() : undefined,
-                clientSecret: manualNeeded
-                  ? clientSecret.trim() || undefined
-                  : undefined,
-              },
+          clientConfiguration,
         },
       });
     },
