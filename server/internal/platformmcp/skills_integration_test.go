@@ -147,6 +147,57 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 	})
 	require.Equal(t, distributed.DistributionID, repeat.DistributionID)
 	require.Len(t, listSkillDistributions(t, ctx, fixture.conn, fixture.project.ID, created.Skill.ID), 1)
+
+	// The listing names the plugin the distribution resolved to and says the
+	// distribution follows the skill's latest version, since nothing was pinned.
+	listed := callSkillsTool[ListSkillDistributionsOutput](t, ctx, session, "list_skill_distributions", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+		"plugin":       "Marketing",
+	})
+	require.Len(t, listed.Distributions, 1)
+	require.Equal(t, distributed.DistributionID, listed.Distributions[0].ID)
+	require.Equal(t, SkillTarget{Kind: SkillTargetPlugin, ID: fixture.marketingPluginID.String(), Name: "Marketing"}, listed.Distributions[0].Target)
+	require.True(t, listed.Distributions[0].FollowsLatest)
+	require.Empty(t, listed.Distributions[0].PinnedVersionID)
+	require.Equal(t, revised.Version.ID, listed.Distributions[0].ResolvedVersionID)
+	require.Empty(t, listed.NextCursor)
+
+	// Taking the skill back is gated on the user's explicit confirmation, and
+	// an unconfirmed call revokes nothing.
+	unconfirmed := callSkillsRefusal(t, ctx, session, "undistribute_skill", map[string]any{
+		"project_slug":    fixture.project.Slug,
+		"skill_id":        created.Skill.ID,
+		"plugin":          "marketing",
+		"confirmed":       false,
+		"idempotency_key": "revoke-marketing",
+	})
+	require.Equal(t, "confirmation_required", unconfirmed.Code)
+	require.Len(t, listSkillDistributions(t, ctx, fixture.conn, fixture.project.ID, created.Skill.ID), 1)
+
+	revoked := callSkillsTool[UndistributeSkillOutput](t, ctx, session, "undistribute_skill", map[string]any{
+		"project_slug":    fixture.project.Slug,
+		"skill_id":        created.Skill.ID,
+		"plugin":          "marketing",
+		"confirmed":       true,
+		"idempotency_key": "revoke-marketing",
+	})
+	require.Equal(t, distributed.Target, revoked.Target)
+	require.Equal(t, created.Skill.ID, revoked.SkillID)
+	require.Empty(t, listSkillDistributions(t, ctx, fixture.conn, fixture.project.ID, created.Skill.ID))
+
+	// A repeat finds nothing left to revoke and reports the same end state.
+	again := callSkillsTool[UndistributeSkillOutput](t, ctx, session, "undistribute_skill", map[string]any{
+		"project_slug":    fixture.project.Slug,
+		"skill_id":        created.Skill.ID,
+		"plugin":          "marketing",
+		"confirmed":       true,
+		"idempotency_key": "revoke-marketing",
+	})
+	require.Equal(t, revoked, again)
+	require.Empty(t, callSkillsTool[ListSkillDistributionsOutput](t, ctx, session, "list_skill_distributions", map[string]any{
+		"project_slug": fixture.project.Slug,
+	}).Distributions)
 }
 
 // A skill lives in one project, and naming another project's plugin must not
@@ -375,6 +426,21 @@ func TestPlatformMCPSkillWriterCanAuthorButCannotDistribute(t *testing.T) {
 		"plugin":       "marketing",
 	})
 	require.Equal(t, "permission_denied", refusal.Code)
+
+	listed := callSkillsTool[ListSkillDistributionsOutput](t, ctx, fixture.session, "list_skill_distributions", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     created.Skill.ID,
+	})
+	require.Empty(t, listed.Distributions)
+
+	revocation := callSkillsRefusal(t, ctx, fixture.session, "undistribute_skill", map[string]any{
+		"project_slug":    fixture.project.Slug,
+		"skill_id":        created.Skill.ID,
+		"plugin":          "marketing",
+		"confirmed":       true,
+		"idempotency_key": "revoke-as-writer",
+	})
+	require.Equal(t, "permission_denied", revocation.Code)
 }
 
 func TestPlatformMCPSkillsToolsRefuseAUserWithoutGrants(t *testing.T) {
@@ -396,6 +462,11 @@ func TestPlatformMCPSkillsToolsRefuseAUserWithoutGrants(t *testing.T) {
 		{name: "list_skill_feedback", arguments: map[string]any{"project_slug": fixture.project.Slug, "skill_id": uuid.NewString()}},
 		{name: "list_skill_suggestions", arguments: map[string]any{"project_slug": fixture.project.Slug}},
 		{name: "list_skill_suggestion_feedback", arguments: map[string]any{"project_slug": fixture.project.Slug, "change_id": uuid.NewString()}},
+		{name: "list_skill_distributions", arguments: map[string]any{"project_slug": fixture.project.Slug}},
+		// An existing plugin and a missing one refuse identically, so the
+		// refusal cannot be used to learn which plugins the project has.
+		{name: "list_skill_distributions", arguments: map[string]any{"project_slug": fixture.project.Slug, "plugin": "marketing"}},
+		{name: "list_skill_distributions", arguments: map[string]any{"project_slug": fixture.project.Slug, "plugin": "nowhere"}},
 	} {
 		refusal = callSkillsRefusal(t, ctx, fixture.session, call.name, call.arguments)
 		require.Equal(t, "forbidden", refusal.Code, call.name)

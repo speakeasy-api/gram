@@ -239,12 +239,13 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls",
 		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
-		"create_skill", "add_skill_version", "update_skill_metadata",
+		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
 		"list_my_sessions", "continue_session",
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
 	}
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["distribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["undistribute_skill"])
 	for _, resource := range registrar.resources {
 		if resource.Meta.servesAudience(AudienceExternal) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
