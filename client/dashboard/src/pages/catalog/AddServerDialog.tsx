@@ -1,4 +1,8 @@
 import { catalogLogoClassName } from "./logo";
+import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { useOrganization } from "@/contexts/Auth";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
 import { useAgentCredentialFields } from "@/lib/remote-identity";
@@ -200,10 +204,21 @@ export function AddServerDialog({
   // Use enriched servers (with remotes) for the workflow. Callers that run
   // without a visible dialog can never answer the selectRemotes phase, so
   // multi-remote servers install every endpoint for them.
+  // Guardrails are an interactive step (there is nobody to draft a policy in a
+  // headless or auto-started install) and follow the policy admin permission.
+  const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  const mcpScoped =
+    useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const releaseState = useRemoteMcpInstallWorkflow({
     servers: enrichedServers,
     projectSlug,
     autoSelectRemotes: !!(autoStartInstall || headless),
+    offerGuardrails:
+      mcpScoped &&
+      !autoStartInstall &&
+      !headless &&
+      hasScope("org:admin", organization.id),
   });
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");
   const autoStartRef = useRef(false);
@@ -442,6 +457,8 @@ function dialogTitle(
   switch (releaseState.phase) {
     case "complete":
       return "Added to Project";
+    case "guardrails":
+      return "Add guardrails";
     case "installing":
       return "Adding to Project";
     case "selectRemotes": {
@@ -467,6 +484,8 @@ function phaseDescription(
       return isSingle
         ? "Add this MCP server to your project."
         : "Configure and add these MCP servers to your project.";
+    case "guardrails":
+      return "Protect these servers before they take traffic.";
     case "installing":
       return "Creating MCP servers...";
     case "complete":
@@ -500,6 +519,10 @@ function PhaseContent({
           bulk={bulk}
           onClose={onClose}
         />
+      );
+    case "guardrails":
+      return (
+        <CatalogGuardrailsPhase releaseState={releaseState} onClose={onClose} />
       );
     case "installing":
       return <InstallStatusList statuses={releaseState.statuses} />;
@@ -744,16 +767,26 @@ function ConfigurePhaseContent({
     missingRequiredHeaders === 0 &&
     !userIdentityPermissionBlocked;
 
+  // With guardrails on offer, finishing Configure moves to that step; the
+  // install itself starts from there.
+  const advance = (configureSkipped = false) => {
+    if (releaseState.continueToGuardrails) {
+      releaseState.continueToGuardrails({ configureSkipped });
+    } else {
+      void releaseState.startInstall();
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && canSubmit) {
       e.preventDefault();
-      void releaseState.startInstall();
+      advance();
     }
   };
 
   useEffect(() => {
     if (nothingToConfigure && releaseState.canInstall) {
-      void releaseState.startInstall();
+      advance(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on install readiness changes, not on every releaseState update
   }, [nothingToConfigure, releaseState.canInstall]);
@@ -819,20 +852,17 @@ function ConfigurePhaseContent({
               disabled={
                 !releaseState.canInstall || userIdentityPermissionBlocked
               }
-              onClick={() => {
-                void releaseState.startInstall();
-              }}
+              onClick={() => advance()}
             >
               <Button.Text>Skip for now</Button.Text>
             </Button>
           )}
-          <Button
-            disabled={!canSubmit}
-            onClick={() => {
-              void releaseState.startInstall();
-            }}
-          >
-            <Button.Text>Add to Project</Button.Text>
+          <Button disabled={!canSubmit} onClick={() => advance()}>
+            <Button.Text>
+              {releaseState.continueToGuardrails
+                ? "Continue"
+                : "Add to Project"}
+            </Button.Text>
           </Button>
         </div>
       </Dialog.Footer>
@@ -1314,6 +1344,8 @@ function CompletePhaseContent({
         </div>
       )}
 
+      <GuardrailOutcomeNotice outcome={releaseState.guardrail} />
+
       {/* Per-server results — only shown if something failed */}
       {!allSucceeded && (
         <div>
@@ -1341,6 +1373,40 @@ function CompletePhaseContent({
           </Button>
         </Dialog.Footer>
       )}
+    </div>
+  );
+}
+
+/** What became of the guardrail requested during install. A failure is spelled
+ *  out: the servers exist either way, and the fix is a step on each server. */
+export function GuardrailOutcomeNotice({
+  outcome,
+}: {
+  outcome: CompletePhase["guardrail"];
+}): JSX.Element | null {
+  if (!outcome) return null;
+  if (outcome.status === "created") {
+    return (
+      <div className="border p-3">
+        <Text small className="font-medium">
+          Guardrail created
+        </Text>
+        <Text small muted>
+          {outcome.name} is active and scoped to the added servers. Review it
+          under the server&apos;s Guardrails tab.
+        </Text>
+      </div>
+    );
+  }
+  return (
+    <div className="border-destructive/40 border p-3" role="alert">
+      <Text small className="text-destructive font-medium">
+        Guardrail was not created
+      </Text>
+      <Text small muted>
+        The servers were added, but &quot;{outcome.name}&quot; could not be
+        created: {outcome.error}. Add it from each server&apos;s Guardrails tab.
+      </Text>
     </div>
   );
 }

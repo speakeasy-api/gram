@@ -21,6 +21,8 @@ import {
 } from "@/hooks/usePrivateMcpServerUrls";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import {
   MCPServerAvailabilityToggle,
   MCPServerStatusDropdown,
@@ -56,6 +58,7 @@ import {
   LayoutDashboard,
   Plug,
   Settings as SettingsIcon,
+  ShieldCheck,
   Users,
   Wrench,
 } from "lucide-react";
@@ -286,6 +289,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const { hasScope, hasAnyScope } = useRBAC();
+  const mcpScoped =
+    useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const organization = useOrganization();
   const pluginScope = usePluginQueryScope();
   const canWritePlugins = usePluginWriteAccess();
@@ -414,6 +419,14 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     !!mcpServer &&
     hasScope("org:read", organization.id) &&
     hasScope("mcp:read", mcpServer.id);
+
+  // Guardrails police traffic that passes through Gram, so unproxied servers
+  // (which never do) have none. Admin-only, like the policies it manages.
+  const canViewGuardrails =
+    mcpScoped &&
+    !!mcpServer &&
+    !isUnproxied &&
+    hasScope("org:admin", organization.id);
 
   // A Remote MCP server's identity is derived, so the readiness item reads the
   // same answer the pill does. Judging it on a bound client alone reported
@@ -545,6 +558,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             Icon: Users,
             href: mcpServerTabHref(routes, idOrSlug, "team-access"),
             active: activeTab === "team-access",
+          },
+        ]
+      : []),
+    ...(canViewGuardrails
+      ? [
+          {
+            key: "guardrails",
+            title: "Guardrails",
+            Icon: ShieldCheck,
+            href: mcpServerTabHref(routes, idOrSlug, "guardrails"),
+            active: activeTab === "guardrails",
           },
         ]
       : []),

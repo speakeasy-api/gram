@@ -1966,7 +1966,7 @@ function SensitivitySection({
   );
 }
 
-function ActionStep({
+export function ActionStep({
   action,
   setAction,
   audienceType,

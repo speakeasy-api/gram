@@ -33,6 +33,11 @@ import type { RemoteMcpCreationIdentity } from "./configureCreatedIdentity";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
 import { useAgentCredentialFields } from "@/lib/remote-identity";
+import { NewServerGuardrailSection } from "@/pages/security/server-guardrails/NewServerGuardrailSection";
+import {
+  guardrailFailureMessage,
+  useNewServerGuardrail,
+} from "@/pages/security/server-guardrails/useNewServerGuardrail";
 
 // Both backends are, to the administrator, the same thing: a server that lives
 // at a URL somewhere else. The only difference is whether Gram sits in the
@@ -57,6 +62,7 @@ function CreateRemoteMcpForm() {
   const createRemote = useCreateRemoteMcpSource();
   const createUnproxied = useCreateUnproxiedMcpSource();
   const issuerQuery = useEffectiveUserSessionIssuers();
+  const newGuardrail = useNewServerGuardrail();
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -136,6 +142,7 @@ function CreateRemoteMcpForm() {
       return;
     }
     if (issuerSelectionBlocked) return;
+    if (mode === "proxied" && !newGuardrail.validation.ok) return;
 
     const trimmedName = name.trim();
     try {
@@ -165,6 +172,18 @@ function CreateRemoteMcpForm() {
               ? agentCredential.authorizationValue.trim()
               : undefined,
         });
+      // The guardrail is attempted only now that the server exists. If it
+      // fails the server stays, the failure is reported, and the user lands on
+      // the server's Guardrails tab, where the guardrail can be added again.
+      const guardrailOutcome = await newGuardrail.createFor(mcpServer);
+      const guardrailFailed = guardrailOutcome.status === "failed";
+      if (guardrailOutcome.status === "failed") {
+        toast.error(guardrailFailureMessage(guardrailOutcome), {
+          duration: 12000,
+        });
+      } else if (guardrailOutcome.status === "created") {
+        toast.success(`Guardrail "${guardrailOutcome.name}" created`);
+      }
       if (identityConfiguration.status === "setup-required") {
         toast.warning(
           `MCP server added but kept disabled. ${identityConfiguration.message}`,
@@ -181,6 +200,8 @@ function CreateRemoteMcpForm() {
       );
       if (flow.gatewayId) {
         await flow.complete(mcpServer.id);
+      } else if (guardrailFailed) {
+        routes.mcp.x.guardrails.goTo(mcpServerRouteParam(mcpServer));
       } else {
         routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
       }
@@ -349,6 +370,14 @@ function CreateRemoteMcpForm() {
             />
           ) : null}
 
+          {mode === "proxied" && isVerified ? (
+            <NewServerGuardrailSection
+              guardrail={newGuardrail}
+              serverName={upstreamName}
+              disabled={creationLocked || isPending}
+            />
+          ) : null}
+
           {isCreateError && createError && (
             <Alert variant="error" dismissible={false}>
               {createError.message}
@@ -376,6 +405,7 @@ function CreateRemoteMcpForm() {
                   isVerified &&
                   identityMode === "user" &&
                   !canCreateIdentity) ||
+                (mode === "proxied" && !newGuardrail.validation.ok) ||
                 issuerSelectionBlocked
               }
             >

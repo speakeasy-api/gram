@@ -1,7 +1,14 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { catalogPresetState } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AddServerDialog } from "./AddServerDialog";
+import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
 
 const mocks = vi.hoisted(() => ({
   getServerDetails: vi.fn(),
@@ -9,12 +16,16 @@ const mocks = vi.hoisted(() => ({
   onOpenChange: vi.fn(),
   reset: vi.fn(),
   startInstall: vi.fn(),
+  continueToGuardrails: vi.fn(),
+  skip: vi.fn(),
+  installWithGuardrail: vi.fn(),
   updateServerConfig: vi.fn(),
   workflow: vi.fn(),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1", slug: "default" }),
+  useOrganization: () => ({ id: "org-1", slug: "acme" }),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -155,5 +166,76 @@ describe("AddServerDialog identity permissions", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
+  });
+});
+
+describe("AddServerDialog guardrails", () => {
+  it("continues to the guardrails step instead of installing when offered", async () => {
+    mocks.hasScope.mockReturnValue(true);
+    const configure = mocks.workflow();
+    mocks.workflow.mockReturnValue({
+      ...configure,
+      continueToGuardrails: mocks.continueToGuardrails,
+    });
+    renderDialog();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(mocks.continueToGuardrails).toHaveBeenCalledWith({
+      configureSkipped: false,
+    });
+    expect(mocks.startInstall).not.toHaveBeenCalled();
+  });
+
+  it("offers to skip the guardrail or install with it", async () => {
+    mocks.workflow.mockReturnValue({
+      phase: "guardrails",
+      projectSlug: "default",
+      guardrail: catalogPresetState([
+        { name: "delete_issue", destructive: true },
+      ]),
+      updateGuardrail: vi.fn(),
+      serverNames: ["Test Server"],
+      installWithGuardrail: mocks.installWithGuardrail,
+      skip: mocks.skip,
+      goBack: vi.fn(),
+      isServerAlreadyInstalled: () => false,
+      reset: mocks.reset,
+    });
+    renderDialog();
+
+    expect(
+      await screen.findByText("Create a risk policy for Test Server"),
+    ).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    expect(mocks.skip).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Add to Project" }));
+    expect(mocks.installWithGuardrail).toHaveBeenCalled();
+  });
+
+  it("says plainly when the guardrail could not be created", () => {
+    render(
+      <GuardrailOutcomeNotice
+        outcome={{
+          status: "failed",
+          name: "Test Server guardrail",
+          error: "policy limit reached",
+        }}
+      />,
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Guardrail was not created");
+    expect(alert.textContent).toContain("policy limit reached");
+  });
+
+  it("confirms a created guardrail", () => {
+    render(
+      <GuardrailOutcomeNotice
+        outcome={{ status: "created", name: "Test Server guardrail" }}
+      />,
+    );
+
+    expect(screen.getByText("Guardrail created")).toBeDefined();
   });
 });

@@ -25,6 +25,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { invalidateAllGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { invalidateAllRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import {
   invalidateAllRemoteMcpServers,
@@ -41,6 +42,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
+import { useDetectorMode } from "@/pages/security/use-detector-mode";
+import {
+  buildServerGuardrailRequest,
+  catalogPresetState,
+  type ServerGuardrailState,
+  type ServerTool,
+} from "@/pages/security/server-guardrails/server-guardrail-policy";
 
 export const ISSUER_LOOKUP_FAILED_MESSAGE =
   "Couldn't load your organization's user session issuers. Try again.";
@@ -48,6 +56,7 @@ export const ISSUER_LOOKUP_FAILED_MESSAGE =
 type InstallPhaseName =
   | "selectRemotes"
   | "configure"
+  | "guardrails"
   | "installing"
   | "complete";
 
@@ -69,6 +78,11 @@ interface MultiRemoteServerConfig {
   remotes: ExternalMCPRemote[];
   selectedRemoteUrls: Set<string>;
 }
+
+/** How the optional guardrail for an install ended. */
+export type GuardrailOutcome =
+  | { status: "created"; name: string }
+  | { status: "failed"; name: string; error: string };
 
 export interface ServerInstallStatus {
   key: string;
@@ -144,6 +158,29 @@ export interface ConfigurePhase extends WorkflowBase {
   startInstall: () => Promise<void>;
   /** Go back to selectRemotes phase (only available if there were multi-remote servers) */
   goBack?: () => void;
+  /**
+   * Set when the caller offers guardrails: moves on to the Guardrails phase
+   * instead of installing right away.
+   */
+  continueToGuardrails?: (options?: { configureSkipped?: boolean }) => void;
+}
+
+export interface GuardrailsPhase extends WorkflowBase {
+  phase: "guardrails";
+  /** The guardrail being drafted, pre-filled from the servers' tool annotations. */
+  guardrail: ServerGuardrailState;
+  updateGuardrail: (
+    update: (state: ServerGuardrailState) => ServerGuardrailState,
+  ) => void;
+  /** Servers the guardrail will cover, by display name. */
+  serverNames: string[];
+  /** Install and create the guardrail, scoped to every server that installs. */
+  installWithGuardrail: () => Promise<void>;
+  /** Install without a guardrail. */
+  skip: () => Promise<void>;
+  /** Back to the Configure phase. Absent when Configure had nothing to ask,
+   *  so going back would only bounce forward again. */
+  goBack?: () => void;
 }
 
 interface InstallingPhase extends WorkflowBase {
@@ -154,11 +191,14 @@ interface InstallingPhase extends WorkflowBase {
 export interface CompletePhase extends WorkflowBase {
   phase: "complete";
   statuses: ServerInstallStatus[];
+  /** Absent unless a guardrail was requested. */
+  guardrail?: GuardrailOutcome;
 }
 
 export type RemoteMcpInstallWorkflow =
   | SelectRemotesPhase
   | ConfigurePhase
+  | GuardrailsPhase
   | InstallingPhase
   | CompletePhase;
 
@@ -172,6 +212,11 @@ interface UseRemoteMcpInstallWorkflowOptions {
    * (onboarding), which have no UI to select from.
    */
   autoSelectRemotes?: boolean;
+  /**
+   * Add a skippable Guardrails step between Configure and the install. Off for
+   * headless callers, which have no UI to draft a policy in.
+   */
+  offerGuardrails?: boolean;
 }
 
 /** Key into [ServerConfig.headerValues] for one header of one remote. */
@@ -363,8 +408,10 @@ export function useRemoteMcpInstallWorkflow({
   projectSlug,
   autoSelectRemotes = false,
   serverNameSuffix = "",
+  offerGuardrails = false,
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
+  const detectorMode = useDetectorMode();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
   const issuerQuery = useEffectiveUserSessionIssuers({});
@@ -404,6 +451,11 @@ export function useRemoteMcpInstallWorkflow({
   const [phase, setPhase] = useState<InstallPhaseName>("configure");
   const [serverConfigs, setServerConfigs] = useState<ServerConfig[]>([]);
   const [statuses, setStatuses] = useState<ServerInstallStatus[]>([]);
+  const [guardrail, setGuardrail] = useState<ServerGuardrailState | null>(null);
+  const [configureSkipped, setConfigureSkipped] = useState(false);
+  const [guardrailOutcome, setGuardrailOutcome] = useState<
+    GuardrailOutcome | undefined
+  >(undefined);
 
   // State for multi-remote server selection
   const [multiRemoteConfigs, setMultiRemoteConfigs] = useState<
@@ -766,132 +818,214 @@ export function useRemoteMcpInstallWorkflow({
     [client, defaultOrganizationIssuerId, orgSlug],
   );
 
-  const startInstall = useCallback(async () => {
-    if (!canInstall || phaseRef.current !== "configure") return;
+  const startInstall = useCallback(
+    async (options?: { guardrail?: ServerGuardrailState }) => {
+      if (
+        !canInstall ||
+        (phaseRef.current !== "configure" && phaseRef.current !== "guardrails")
+      ) {
+        return;
+      }
 
-    // Configs without a compatible endpoint can't be installed; report them as
-    // failed instead of blocking the rest of the batch (or, for headless
-    // callers, stalling forever with nothing to install).
-    const targets = serverConfigs
-      .filter((config) => config.remotes.length > 0)
-      .flatMap(buildInstallTargets);
-    const uninstallable = serverConfigs.filter(
-      (config) => config.remotes.length === 0,
-    );
+      // Configs without a compatible endpoint can't be installed; report them as
+      // failed instead of blocking the rest of the batch (or, for headless
+      // callers, stalling forever with nothing to install).
+      const targets = serverConfigs
+        .filter((config) => config.remotes.length > 0)
+        .flatMap(buildInstallTargets);
+      const uninstallable = serverConfigs.filter(
+        (config) => config.remotes.length === 0,
+      );
 
-    setPhase("installing");
-    setStatuses([
-      ...targets.map((target, index) => ({
-        key: `${index}-${target.remote.url}`,
-        name: target.name,
-        status: "pending" as const,
-      })),
-      ...uninstallable.map((config, index) => ({
-        key: `uninstallable-${index}`,
-        name: config.name,
-        status: "failed" as const,
-        error:
-          "This server does not expose a compatible remote endpoint and cannot be added.",
-      })),
-    ]);
+      setPhase("installing");
+      setStatuses([
+        ...targets.map((target, index) => ({
+          key: `${index}-${target.remote.url}`,
+          name: target.name,
+          status: "pending" as const,
+        })),
+        ...uninstallable.map((config, index) => ({
+          key: `uninstallable-${index}`,
+          name: config.name,
+          status: "failed" as const,
+          error:
+            "This server does not expose a compatible remote endpoint and cannot be added.",
+        })),
+      ]);
 
-    const reqOpts = projectSlug
-      ? { headers: { "gram-project": projectSlug } }
-      : undefined;
+      const reqOpts = projectSlug
+        ? { headers: { "gram-project": projectSlug } }
+        : undefined;
 
-    const setStatusAt = (
-      index: number,
-      updates: Partial<ServerInstallStatus>,
-    ) => {
-      setStatuses((prev) =>
-        prev.map((status, i) =>
-          i === index ? { ...status, ...updates } : status,
+      const setStatusAt = (
+        index: number,
+        updates: Partial<ServerInstallStatus>,
+      ) => {
+        setStatuses((prev) =>
+          prev.map((status, i) =>
+            i === index ? { ...status, ...updates } : status,
+          ),
+        );
+      };
+
+      let anyAuthConfigured = false;
+      let anyUnproxiedInstalled = false;
+      // Servers that were created, for scoping the guardrail. A server kept
+      // disabled for identity setup still exists and is still worth guarding.
+      const installedServerIds: string[] = [];
+      const iconPersistences: Promise<boolean>[] = [];
+      for (const [index, target] of targets.entries()) {
+        setStatusAt(index, { status: "creating" });
+        try {
+          const result = await installTarget(target, reqOpts);
+          iconPersistences.push(result.iconPersistence);
+          anyAuthConfigured ||= result.authConfigured;
+          anyUnproxiedInstalled ||= isFigmaCatalogServer(target.server);
+          installedServerIds.push(result.mcpServer.id);
+          const identitySetupRequired =
+            result.identityConfiguration?.status === "setup-required";
+          setStatusAt(index, {
+            status: identitySetupRequired ? "failed" : "completed",
+            mcpServerId: result.mcpServer.id,
+            mcpServerParam: mcpServerRouteParam(result.mcpServer),
+            mcpEndpointUrl: result.mcpEndpointUrl,
+            error:
+              result.identityConfiguration?.status === "setup-required"
+                ? `Server retained disabled. ${result.identityConfiguration.message}`
+                : undefined,
+            setupRequired:
+              result.identityConfiguration?.status === "setup-required"
+                ? result.identityConfiguration.message
+                : undefined,
+          });
+        } catch (err) {
+          setStatusAt(index, {
+            status: "failed",
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      // refetchType "all" forces the refetch even when there are no active
+      // observers, so list pages pick up the new servers on next mount.
+      const invalidations = [
+        invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteMcpServerHeaders(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        // Installs may have persisted a catalog icon into MCP metadata.
+        invalidateAllGetMcpMetadata(queryClient, { refetchType: "all" }),
+        // Every create links a fresh user_session_issuer.
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+      ];
+      // The issuer/client caches only change when auto-configuration actually
+      // ran to completion on at least one server.
+      if (anyAuthConfigured) {
+        invalidations.push(
+          invalidateAllRemoteSessionIssuers(queryClient, {
+            refetchType: "all",
+          }),
+          invalidateAllRemoteSessionClients(queryClient, {
+            refetchType: "all",
+          }),
+        );
+      }
+      // Unproxied installs (e.g. Figma) don't touch any of the remote-server
+      // caches above, so the Sources page's unproxied listing needs its own
+      // invalidation.
+      if (anyUnproxiedInstalled) {
+        invalidations.push(
+          invalidateAllUnproxiedMcpServers(queryClient, { refetchType: "all" }),
+        );
+      }
+      await Promise.all(invalidations);
+
+      // The guardrail is created only after the servers exist, and only covers
+      // the ones that installed. A failure leaves the servers in place and is
+      // reported on the Complete phase, where it can be retried from each
+      // server's Guardrails tab.
+      if (options?.guardrail) {
+        const installedIds = installedServerIds;
+        const name = guardrailNameFor(targets.map((target) => target.name));
+        if (installedIds.length > 0) {
+          try {
+            await client.risk.policies.create(
+              {
+                createRiskPolicyRequestBody: buildServerGuardrailRequest(
+                  options.guardrail,
+                  { mcpServerIds: installedIds, name, mode: detectorMode },
+                ),
+              },
+              undefined,
+              reqOpts,
+            );
+            await invalidateAllRiskListPolicies(queryClient, {
+              refetchType: "all",
+            });
+            setGuardrailOutcome({ status: "created", name });
+          } catch (err) {
+            setGuardrailOutcome({
+              status: "failed",
+              name,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
+
+      // Icon persistence runs detached from the install loop, so the metadata
+      // invalidation above usually fires before the logos land. Refetch again
+      // once they settle — without gating the "complete" transition on it. The
+      // persistence promises never reject, so Promise.all is safe here.
+      void Promise.all(iconPersistences).then((persisted) => {
+        if (persisted.some(Boolean)) {
+          return invalidateAllGetMcpMetadata(queryClient, {
+            refetchType: "all",
+          });
+        }
+        return undefined;
+      });
+
+      setPhase("complete");
+    },
+    [
+      canInstall,
+      client,
+      detectorMode,
+      installTarget,
+      projectSlug,
+      queryClient,
+      serverConfigs,
+    ],
+  );
+
+  const continueToGuardrails = useCallback(
+    (options?: { configureSkipped?: boolean }) => {
+      if (!canInstall || phaseRef.current !== "configure") return;
+      setConfigureSkipped(options?.configureSkipped === true);
+      setGuardrail(
+        catalogPresetState(
+          serverConfigs.flatMap((config) =>
+            serverToolsForPreset(config.server),
+          ),
         ),
       );
-    };
+      setPhase("guardrails");
+    },
+    [canInstall, serverConfigs],
+  );
 
-    let anyAuthConfigured = false;
-    let anyUnproxiedInstalled = false;
-    const iconPersistences: Promise<boolean>[] = [];
-    for (const [index, target] of targets.entries()) {
-      setStatusAt(index, { status: "creating" });
-      try {
-        const result = await installTarget(target, reqOpts);
-        iconPersistences.push(result.iconPersistence);
-        anyAuthConfigured ||= result.authConfigured;
-        anyUnproxiedInstalled ||= isFigmaCatalogServer(target.server);
-        const identitySetupRequired =
-          result.identityConfiguration?.status === "setup-required";
-        setStatusAt(index, {
-          status: identitySetupRequired ? "failed" : "completed",
-          mcpServerId: result.mcpServer.id,
-          mcpServerParam: mcpServerRouteParam(result.mcpServer),
-          mcpEndpointUrl: result.mcpEndpointUrl,
-          error:
-            result.identityConfiguration?.status === "setup-required"
-              ? `Server retained disabled. ${result.identityConfiguration.message}`
-              : undefined,
-          setupRequired:
-            result.identityConfiguration?.status === "setup-required"
-              ? result.identityConfiguration.message
-              : undefined,
-        });
-      } catch (err) {
-        setStatusAt(index, {
-          status: "failed",
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-
-    // refetchType "all" forces the refetch even when there are no active
-    // observers, so list pages pick up the new servers on next mount.
-    const invalidations = [
-      invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
-      invalidateAllRemoteMcpServerHeaders(queryClient, { refetchType: "all" }),
-      invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-      invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-      // Installs may have persisted a catalog icon into MCP metadata.
-      invalidateAllGetMcpMetadata(queryClient, { refetchType: "all" }),
-      // Every create links a fresh user_session_issuer.
-      invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
-    ];
-    // The issuer/client caches only change when auto-configuration actually
-    // ran to completion on at least one server.
-    if (anyAuthConfigured) {
-      invalidations.push(
-        invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
-        invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
-      );
-    }
-    // Unproxied installs (e.g. Figma) don't touch any of the remote-server
-    // caches above, so the Sources page's unproxied listing needs its own
-    // invalidation.
-    if (anyUnproxiedInstalled) {
-      invalidations.push(
-        invalidateAllUnproxiedMcpServers(queryClient, { refetchType: "all" }),
-      );
-    }
-    await Promise.all(invalidations);
-
-    // Icon persistence runs detached from the install loop, so the metadata
-    // invalidation above usually fires before the logos land. Refetch again
-    // once they settle — without gating the "complete" transition on it. The
-    // persistence promises never reject, so Promise.all is safe here.
-    void Promise.all(iconPersistences).then((persisted) => {
-      if (persisted.some(Boolean)) {
-        return invalidateAllGetMcpMetadata(queryClient, {
-          refetchType: "all",
-        });
-      }
-      return undefined;
-    });
-
-    setPhase("complete");
-  }, [canInstall, installTarget, projectSlug, queryClient, serverConfigs]);
+  const backToConfigure = useCallback(() => {
+    setPhase("configure");
+  }, []);
 
   const reset = useCallback(() => {
     setStatuses([]);
+    setGuardrail(null);
+    setConfigureSkipped(false);
+    setGuardrailOutcome(undefined);
     partitionServers();
   }, [partitionServers]);
 
@@ -922,11 +1056,54 @@ export function useRemoteMcpInstallWorkflow({
         installBlockedReason,
         startInstall,
         goBack: hasMultiRemoteServers ? goBack : undefined,
+        continueToGuardrails: offerGuardrails
+          ? continueToGuardrails
+          : undefined,
+        ...base,
+      };
+    case "guardrails":
+      return {
+        phase,
+        guardrail: guardrail ?? catalogPresetState([]),
+        updateGuardrail: (update) =>
+          setGuardrail((prev) => update(prev ?? catalogPresetState([]))),
+        serverNames: serverConfigs.map((config) => config.name),
+        installWithGuardrail: () =>
+          startInstall({ guardrail: guardrail ?? catalogPresetState([]) }),
+        skip: () => startInstall(),
+        goBack: configureSkipped ? undefined : backToConfigure,
         ...base,
       };
     case "installing":
       return { phase, statuses, ...base };
     case "complete":
-      return { phase, statuses, ...base };
+      return { phase, statuses, guardrail: guardrailOutcome, ...base };
   }
+}
+
+/** The annotated tools of a catalog server, for pre-filling its guardrail.
+ *  Empty until the catalog detail enrichment has loaded them. */
+function serverToolsForPreset(server: PulseMCPServer): ServerTool[] {
+  return (server.tools ?? []).flatMap((tool) =>
+    tool.name
+      ? [
+          {
+            name: tool.name,
+            destructive:
+              (tool.annotations as { destructiveHint?: boolean } | undefined)
+                ?.destructiveHint === true,
+          },
+        ]
+      : [],
+  );
+}
+
+/** One guardrail covers every server in the install, so the name names the
+ *  install rather than a single server. */
+function guardrailNameFor(serverNames: string[]): string {
+  const [first] = serverNames;
+  if (first === undefined) return "Catalog guardrail";
+  return serverNames.length === 1
+    ? `${first} guardrail`
+    : `${first} and ${serverNames.length - 1} more guardrail`;
 }

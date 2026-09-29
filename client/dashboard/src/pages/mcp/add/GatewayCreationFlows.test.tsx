@@ -65,6 +65,18 @@ vi.mock("@/contexts/Auth", async (importOriginal) => ({
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => true }),
 }));
+vi.mock("@/pages/security/server-guardrails/useNewServerGuardrail", () => ({
+  useNewServerGuardrail: () => ({
+    available: false,
+    enabled: false,
+    setEnabled: vi.fn(),
+    state: {},
+    updateState: vi.fn(),
+    validation: { ok: true },
+    createFor: () => Promise.resolve({ status: "skipped" }),
+  }),
+  guardrailFailureMessage: () => "",
+}));
 vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
   useEffectiveUserSessionIssuers: () => ({
     issuers: [],
