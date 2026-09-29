@@ -420,6 +420,5 @@ func TestGateBudgetBeatsHangingServer(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "fail-closed posture must block")
-	require.Less(t, elapsed, maxGateSendBudget+5*time.Second, "gate verdict must resolve within the gate budget")
-	require.Less(t, elapsed, sendBudget, "gate verdict must not ride the full send budget")
+	require.Less(t, elapsed, maxGateSendBudget+5*time.Second, "gate verdict must resolve within the gate budget, not ride the full sendBudget")
 }

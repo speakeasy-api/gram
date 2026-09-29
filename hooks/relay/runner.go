@@ -304,7 +304,7 @@ func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 			// JSON, a skewed server) is not an allow.
 			msg := strings.TrimSpace(res.decision.Message)
 			if msg == "" {
-				msg = "Speakeasy hooks could not read the server's verdict."
+				msg = causeMessage(causeUnreadable)
 			}
 			return verdict{block: true, message: msg, nudge: false, blockEffect: nil}
 		}

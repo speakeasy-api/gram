@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -102,6 +103,27 @@ func ingestTransport() http.RoundTripper {
 	transport.DialContext = (&net.Dialer{Timeout: connectTimeout, KeepAlive: 30 * time.Second}).DialContext
 	transport.TLSHandshakeTimeout = connectTimeout
 	return &deviceTransport{base: transport}
+}
+
+// maxCauseDetail bounds the diagnostic written to the debug log. The text
+// comes from the transport, and the SDK's APIError stringifies the whole
+// response body — an intermediary's error page would otherwise land, in full,
+// in a file people paste into support threads.
+const maxCauseDetail = 256
+
+// urlInError matches the request URL the transport quotes in its errors, so
+// redactURL can mask any credential-bearing parameters it carries.
+var urlInError = regexp.MustCompile(`https?://[^\s"]+`)
+
+// sanitizeCauseDetail bounds a transport error's text and masks secrets in any
+// URL it quotes, before it reaches the debug log.
+func sanitizeCauseDetail(detail string) string {
+	detail = strings.TrimSpace(urlInError.ReplaceAllStringFunc(detail, redactURL))
+	if len(detail) > maxCauseDetail {
+		// ToValidUTF8 drops the rune the cut may have split.
+		detail = strings.ToValidUTF8(detail[:maxCauseDetail], "") + "…"
+	}
+	return detail
 }
 
 // failureCause names why an exchange produced no usable status. They all
@@ -426,15 +448,20 @@ func interpretError(err error) ingestResult {
 			// read as an implicit allow in evaluate. Report a failed exchange
 			// instead — statusCode 0 also lets send replay it, and a duplicate
 			// delivery is safe under the reused Idempotency-Key.
+			// No decision message: httpMessage then renders the cause, so this
+			// failure carries the same slug as every other status-0 outcome.
+			// The detail omits err.Error() deliberately — it embeds the whole
+			// unparseable body, which is exactly the untrusted content that
+			// must not reach the debug log.
 			return ingestResult{
 				statusCode:   0,
-				decision:     decision{Decision: "", Reason: "", Message: "Speakeasy hooks could not read the server's verdict."},
+				decision:     decision{Decision: "", Reason: "", Message: ""},
 				authRejected: false,
 				failOpen:     nil,
 				skillCapture: nil,
 				blockEffect:  nil,
 				cause:        causeUnreadable,
-				causeDetail:  err.Error(),
+				causeDetail:  fmt.Sprintf("unparseable %d response", apiErr.StatusCode),
 			}
 		}
 		return ingestResult{
@@ -450,7 +477,7 @@ func interpretError(err error) ingestResult {
 	}
 	detail := ""
 	if err != nil {
-		detail = err.Error()
+		detail = sanitizeCauseDetail(err.Error())
 	}
 	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: classifyTransportError(err), causeDetail: detail}
 }

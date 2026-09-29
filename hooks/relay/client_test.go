@@ -8,13 +8,16 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/hooks/sdk/models/apierrors"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
@@ -193,7 +196,7 @@ func TestHTTPMessageNamesTheCause(t *testing.T) {
 		require.Equal(t, "Speakeasy hook returned HTTP 502", httpMessage(res))
 	})
 
-	for _, cause := range []failureCause{causeDNS, causeTLS, causeTimeout, causeCanceled, causeConnection, causeUnknown} {
+	for _, cause := range []failureCause{causeDNS, causeTLS, causeTimeout, causeCanceled, causeConnection, causeUnreadable, causeUnknown} {
 		t.Run("cause "+string(cause), func(t *testing.T) {
 			t.Parallel()
 			res := ingestResult{
@@ -241,4 +244,52 @@ func TestGateSurvivesSlowControlPlane(t *testing.T) {
 	require.NotContains(t, string(res.Stdout), `"permissionDecision":"deny"`,
 		"a control plane that answers inside the budget must not block the call")
 	require.NotContains(t, string(res.Stderr), "HTTP 0")
+}
+
+// TestUnparseableResponseNamesItsCause: an unparseable 2xx reports statusCode 0
+// like every transport failure, so it must carry the same slug rather than a
+// hardcoded sentence that bypasses causeMessage.
+func TestUnparseableResponseNamesItsCause(t *testing.T) {
+	t.Parallel()
+
+	res := interpretError(apierrors.NewAPIError("unknown content type", http.StatusOK, "<html>captive portal</html>", nil))
+
+	require.Equal(t, 0, res.statusCode)
+	require.Equal(t, causeUnreadable, res.cause)
+	require.Contains(t, httpMessage(res), "unreadable-response")
+}
+
+// TestCauseDetailIsBoundedAndRedacted: the debug log is a file people paste
+// into support threads. The SDK stringifies the whole response body into its
+// error, so an intermediary's page must not ride along, and a quoted URL must
+// not carry credentials.
+func TestCauseDetailIsBoundedAndRedacted(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an unparseable body never reaches the detail", func(t *testing.T) {
+		t.Parallel()
+		body := "<html>" + strings.Repeat("secret-portal-content", 200) + "</html>"
+		res := interpretError(apierrors.NewAPIError("unknown content type", http.StatusOK, body, nil))
+		require.NotContains(t, res.causeDetail, "secret-portal-content")
+		require.LessOrEqual(t, len(res.causeDetail), maxCauseDetail)
+	})
+
+	t.Run("a quoted URL is redacted", func(t *testing.T) {
+		t.Parallel()
+		detail := sanitizeCauseDetail(`Post "https://app.example.test/rpc/hooks.ingest?api_key=super-secret": dial tcp: refused`)
+		require.NotContains(t, detail, "super-secret")
+		require.Contains(t, detail, "app.example.test", "the host must survive so the diagnostic stays useful")
+	})
+
+	t.Run("an overlong detail is bounded", func(t *testing.T) {
+		t.Parallel()
+		detail := sanitizeCauseDetail(strings.Repeat("a", maxCauseDetail*4))
+		require.LessOrEqual(t, len([]rune(detail)), maxCauseDetail+1, "bounded, plus the ellipsis")
+	})
+
+	t.Run("truncation never leaves a broken rune", func(t *testing.T) {
+		t.Parallel()
+		detail := sanitizeCauseDetail(strings.Repeat("é", maxCauseDetail))
+		require.True(t, utf8.ValidString(detail))
+	})
 }
