@@ -3,7 +3,9 @@
 package demoseed
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -15,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -102,6 +105,7 @@ ANALYZE users; ANALYZE organization_metadata; ANALYZE organization_user_relation
 			}
 			var slowestPlan string
 			var slowestTime float64
+			incomplete := []string{}
 			// A timeout is recorded once, never silently discarded from a median.
 			measure := func(label, exec string) (float64, bool) {
 				times := []float64{}
@@ -110,7 +114,11 @@ ANALYZE users; ANALYZE organization_metadata; ANALYZE organization_user_relation
 					var data []byte
 					err := conn.QueryRow(ctx, "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) "+exec).Scan(&data)
 					if err != nil {
-						write("| %s | `%s` | TIMEOUT/error: %s | — | — | — |\n", label, exec, strings.ReplaceAll(err.Error(), "|", "/"))
+						if !adminPerfStatementTimeout(err) {
+							require.NoError(t, err, "unexpected EXPLAIN error: %s", exec)
+						}
+						incomplete = append(incomplete, label)
+						write("| %s | `%s` | INCOMPLETE: PostgreSQL statement timeout: %s | — | — | — |\n", label, exec, strings.ReplaceAll(err.Error(), "|", "/"))
 						return 0, false
 					}
 					require.NoError(t, json.Unmarshal(data, &last))
@@ -128,6 +136,41 @@ ANALYZE users; ANALYZE organization_metadata; ANALYZE organization_user_relation
 					slowestPlan = label + "\n" + string(compact)
 				}
 				return times[1], true
+			}
+			// These reads are outside EXPLAIN timing. Expected memberships come
+			// from the profile definition, never from another database query.
+			assertPreviews := func(exec string, ids []string) {
+				type preview struct {
+					UserID, OrgID, Name, Slug string
+					Count                     int64
+				}
+				expected := []preview{}
+				orderedUsers := slices.Clone(ids)
+				slices.Sort(orderedUsers)
+				for _, id := range orderedUsers {
+					require.True(t, strings.HasPrefix(id, "perf_user_"))
+					user, err := strconv.Atoi(strings.TrimPrefix(id, "perf_user_"))
+					require.NoError(t, err)
+					require.GreaterOrEqual(t, user, 1)
+					require.LessOrEqual(t, user, size)
+					orgs := adminPerfMemberships(user, size/5)
+					for _, org := range orgs[:min(3, len(orgs))] {
+						expected = append(expected, preview{id, fmt.Sprintf("perf_org_%d", org), fmt.Sprintf("Fictional Studio %06d", org), fmt.Sprintf("fictional-studio-%06d", org), int64(len(orgs))})
+					}
+				}
+				rows, err := conn.Query(ctx, exec)
+				require.NoError(t, err)
+				defer rows.Close()
+				actual := []preview{}
+				for rows.Next() {
+					var row preview
+					var disabledAt *time.Time
+					require.NoError(t, rows.Scan(&row.UserID, &row.OrgID, &row.Name, &row.Slug, &disabledAt, &row.Count))
+					require.Nil(t, disabledAt)
+					actual = append(actual, row)
+				}
+				require.NoError(t, rows.Err())
+				require.Equal(t, expected, actual, "exact preview ownership, order, identities and full per-user counts for %s", exec)
 			}
 			write("| Workload | Concrete EXECUTE parameters | Median planning + execution ms | Root buffers hit/read (run 3) | Root estimated/actual rows (run 3) | Root node |\n|---|---|---:|---:|---:|---|\n")
 			for _, c := range cases {
@@ -161,7 +204,14 @@ ANALYZE users; ANALYZE organization_metadata; ANALYZE organization_user_relation
 					preview := 0.0
 					vok := true
 					if len(ids) > 0 {
-						preview, vok = measure(label+" previews", "EXECUTE adminListUsersOrganizationPreviews("+adminPerfIDArray(ids)+")")
+						previewExec := "EXECUTE adminListUsersOrganizationPreviews(" + adminPerfIDArray(ids) + ")"
+						preview, vok = measure(label+" previews", previewExec)
+						if vok {
+							assertPreviews(previewExec, ids)
+						}
+					}
+					if !vok {
+						write("| %s TOTAL | incomplete: preview statement timeout | — | — | — | — |\n", label)
 					}
 					if vok {
 						write("| %s TOTAL (sum of medians, not wall latency) | total=%d, returned=%d | %.3f | — | — | — |\n", label, total, len(ids), page+count+preview)
@@ -169,8 +219,38 @@ ANALYZE users; ANALYZE organization_metadata; ANALYZE organization_user_relation
 				}
 			}
 			for _, offset := range []int{0, 150} {
-				measure("200-org overflow page", fmt.Sprintf("EXECUTE adminListUserOrganizations('perf_user_1',%d,50)", offset))
-				measure("200-org overflow count", "EXECUTE adminCountUserOrganizations('perf_user_1')")
+				pageExec := fmt.Sprintf("EXECUTE adminListUserOrganizations('perf_user_1',%d,50)", offset)
+				countExec := "EXECUTE adminCountUserOrganizations('perf_user_1')"
+				_, pok := measure("200-org overflow page", pageExec)
+				_, cok := measure("200-org overflow count", countExec)
+				if !pok || !cok {
+					write("| overflow offset %d assertions | INCOMPLETE: statement timeout | — | — | — | — |\n", offset)
+					continue
+				}
+				var total int64
+				require.NoError(t, conn.QueryRow(ctx, countExec).Scan(&total))
+				require.EqualValues(t, 200, total)
+				rows, err := conn.Query(ctx, pageExec)
+				require.NoError(t, err)
+				ids := []string{}
+				for rows.Next() {
+					var id, name, slug string
+					var disabledAt *time.Time
+					require.NoError(t, rows.Scan(&id, &name, &slug, &disabledAt))
+					expectedOrg := offset + len(ids) + 1
+					require.Equal(t, fmt.Sprintf("Fictional Studio %06d", expectedOrg), name)
+					require.Equal(t, fmt.Sprintf("fictional-studio-%06d", expectedOrg), slug)
+					require.Nil(t, disabledAt)
+					ids = append(ids, id)
+				}
+				require.NoError(t, rows.Err())
+				rows.Close()
+				expectedIDs := []string{}
+				for org := offset + 1; org <= offset+50; org++ {
+					expectedIDs = append(expectedIDs, fmt.Sprintf("perf_org_%d", org))
+				}
+				require.Equal(t, expectedIDs, ids, "exact 200-org membership pagination")
+				write("| overflow offset %d assertions | exact ordered org IDs %d–%d; count=200 verified | — | — | — | — |\n", offset, offset+1, offset+50)
 			}
 			if size == 100000 {
 				write("\n### Isolated index / candidate-ID experiment (not shipped)\n\n")
@@ -209,6 +289,7 @@ SELECT m.user_id FROM organization_metadata o JOIN organization_user_relationshi
 				require.NoError(t, err)
 				write("| Workload | Concrete EXECUTE parameters | Median planning + execution ms | Root buffers hit/read (run 3) | Root estimated/actual rows (run 3) | Root node |\n|---|---|---:|---:|---:|---|\n")
 				for _, term := range []string{"fictional", "absentneedle", "a", "st"} {
+					beforeTimeouts := len(incomplete)
 					params := "'{}','{}','{}','{%" + term + "%}'"
 					for _, offset := range []int{0, 50000} {
 						measure("GIN existing page "+term, fmt.Sprintf("EXECUTE adminListUsers(%s,%d,50)", params, offset))
@@ -216,6 +297,10 @@ SELECT m.user_id FROM organization_metadata o JOIN organization_user_relationshi
 					}
 					measure("GIN existing count "+term, "EXECUTE adminCountUsers("+params+")")
 					measure("GIN candidate count "+term, "EXECUTE candidateCount('%"+term+"%')")
+					if len(incomplete) > beforeTimeouts {
+						write("| experiment %s parity | INCOMPLETE: statement timeout; parity not checked | — | — | — | — |\n", term)
+						continue
+					}
 					// Compare every ordered ID and exact count, not just timing.
 					readIDs := func(sql string) []string {
 						rows, err := conn.Query(ctx, sql)
@@ -244,6 +329,11 @@ SELECT m.user_id FROM organization_metadata o JOIN organization_user_relationshi
 				_, err = conn.Exec(ctx, "ROLLBACK")
 				require.NoError(t, err)
 			}
+			if len(incomplete) > 0 {
+				write("\nINCOMPLETE profile: statement timeouts in %s. No full performance or assertion acceptance.\n", strings.Join(incomplete, ", "))
+			} else {
+				write("\nAll measurements completed; untimed exact preview identities/order/counts and both 200-org overflow pages/count passed.\n")
+			}
 			write("\nSlowest completed query, actual run-3 plan (compact node statistics):\n\n```text\n%s\n```\n\n", slowestPlan)
 		})
 	}
@@ -270,4 +360,64 @@ func compactAdminPlan(plan map[string]any) map[string]any {
 		out["Plans"] = nested
 	}
 	return out
+}
+
+func adminPerfStatementTimeout(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "57014" && pgErr.Message == "canceling statement due to statement timeout"
+}
+
+func TestAdminPerformanceStatementTimeout(t *testing.T) {
+	timeout := &pgconn.PgError{Code: "57014", Message: "canceling statement due to statement timeout"}
+	for _, tc := range []struct {
+		name    string
+		err     error
+		timeout bool
+	}{
+		{"nil", nil, false},
+		{"statement timeout", timeout, true},
+		{"wrapped timeout", fmt.Errorf("explain: %w", timeout), true},
+		{"undefined prepared statement", &pgconn.PgError{Code: "26000", Message: "prepared statement does not exist"}, false},
+		{"wrong parameter type", &pgconn.PgError{Code: "42804", Message: "datatype mismatch"}, false},
+		{"explicit cancellation", &pgconn.PgError{Code: "57014", Message: "canceling statement due to user request"}, false},
+		{"connection deadline", context.DeadlineExceeded, false},
+		{"decoding error", errors.New("cannot decode JSON"), false},
+		{"message alone", errors.New(timeout.Message), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) { require.Equal(t, tc.timeout, adminPerfStatementTimeout(tc.err)) })
+	}
+}
+
+// Names/slugs are zero-padded by the profile, so numeric org order is the
+// expected lower(name), slug, id ordering, including memberships wrapping N.
+func adminPerfMemberships(user, orgCount int) []int {
+	orgs := []int{}
+	if user == 1 {
+		for org := 1; org <= 200; org++ {
+			orgs = append(orgs, org)
+		}
+	} else {
+		for j := 1; j <= user%4; j++ {
+			orgs = append(orgs, (user+j-2)%orgCount+1)
+		}
+	}
+	slices.Sort(orgs)
+	return orgs
+}
+
+func TestAdminPerformanceMembershipExpectations(t *testing.T) {
+	for _, tc := range []struct {
+		user int
+		want []int
+	}{
+		{2, []int{2, 3}}, {3, []int{3, 4, 5}}, {4, []int{}}, {5, []int{5}}, {1999, []int{1, 1999, 2000}},
+	} {
+		require.Equal(t, tc.want, adminPerfMemberships(tc.user, 2000))
+	}
+	want := []int{}
+	for org := 1; org <= 200; org++ {
+		want = append(want, org)
+	}
+	require.Equal(t, want, adminPerfMemberships(1, 2000))
+	require.Equal(t, want, adminPerfMemberships(1, 20000))
 }

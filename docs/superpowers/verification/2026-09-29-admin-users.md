@@ -34,6 +34,12 @@ An initial exploratory run used the wrong positional pagination order and was di
 | mixed                            |     163.712 / 165.653 |     1806.099 / 1813.670 |
 | repeated org                     |       48.654 / 48.532 |       492.742 / 504.090 |
 
+### Review follow-up: measurement assertions
+
+The retained timings below are from the original corrected run, **not** refreshed measurements. A subsequent review fix adds untimed reads of the same prepared preview/overflow statements: exact requested user ownership, org IDs/names/slugs/order, per-user full membership counts, three previews with count 200 for `perf_user_1`, and exact overflow IDs 1–50 / 151–200 with count 200. Expected results come from the synthetic profile definition rather than another SQL query. Only PostgreSQL SQLSTATE `57014` with the statement-timeout message is recorded as incomplete; other SQL/decoding errors fail the test. Timeout labels propagate to profile/overflow/experiment summaries, and incomplete experiments do not claim parity.
+
+Follow-up validation: 40 targeted regression/fixture/safety tests passed (12.863 s). The full opt-in rerun passed (3 tests, 80.594 s) with both profiles' exact nested assertions verified and no incomplete measurements. Fresh output: `/tmp/admin-users-performance-review.md`, using the committed recorder; the original matrix/manual assessment remains unchanged. The 300 ms target still lacks performance acceptance.
+
 ### Fixture evidence
 
 The existing guarded local admin seed now includes six dedicated fictional lifecycle users, a five-membership user, a deleted membership, duplicate-name active/disabled orgs, missing name/login, and a recorded login. Existing fixtures already exceed a 50-user page. Local/environment/database/user/loopback gates and transactional ownership checks remain in place. Unit tests: 17 passing; safety/collision/concurrent/query checks: 29 passing; `seed:admin` ran successfully twice. Public demo SQL is unchanged.
