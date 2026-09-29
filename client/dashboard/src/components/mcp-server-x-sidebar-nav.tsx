@@ -647,9 +647,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
       {upstreamUrl ? (
         <SidebarUrlRow
-          label="Upstream URL"
+          label="Remote URL"
           url={upstreamUrl}
-          copyTooltip="Copy upstream URL"
+          copyTooltip="Copy remote URL"
         />
       ) : null}
 

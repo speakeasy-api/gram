@@ -39,7 +39,7 @@ import {
 const NAME_MAX_LENGTH = 40;
 
 /**
- * The server's basic facts: its icon and name, plus the upstream URL when a
+ * The server's basic facts: its icon and name, plus the remote URL when a
  * remote source backs it. One Save commits whatever changed.
  */
 export function GeneralSection({
@@ -225,10 +225,10 @@ function GeneralSectionContent({
               aria-label="Change icon"
               disabled={metadataUnresolved}
               onClick={() => fileInputRef.current?.click()}
-              className="bg-muted text-foreground relative flex size-16 shrink-0 items-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
+              className="bg-muted text-foreground relative flex size-20 shrink-0 items-center justify-center disabled:cursor-not-allowed disabled:opacity-50 [&_img]:size-full"
             >
               {metadataForm.logoUploadHandlers.renderFilePreview() ?? (
-                <Network aria-hidden="true" className="size-7" />
+                <Network aria-hidden="true" className="size-9" />
               )}
               <span className="border-input bg-background text-foreground absolute -right-1.5 -bottom-1.5 flex size-[22px] items-center justify-center border">
                 <Pencil aria-hidden="true" className="size-3" />
@@ -244,23 +244,14 @@ function GeneralSectionContent({
                 <FieldLabel htmlFor="mcp-server-display-name">
                   Display Name
                 </FieldLabel>
-                <div className="relative">
-                  <Input
-                    id="mcp-server-display-name"
-                    value={nameDraft}
-                    onChange={(value) => setNameDraft(value)}
-                    placeholder="My MCP server"
-                    aria-invalid={update.isError || nameTooLong}
-                    className={cn(
-                      "pr-10",
-                      nameTooLong && "border-warning-default",
-                    )}
-                  />
-                  <Pencil
-                    aria-hidden="true"
-                    className="text-muted-foreground pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2"
-                  />
-                </div>
+                <Input
+                  id="mcp-server-display-name"
+                  value={nameDraft}
+                  onChange={(value) => setNameDraft(value)}
+                  placeholder="My MCP server"
+                  aria-invalid={update.isError || nameTooLong}
+                  className={cn(nameTooLong && "border-warning-default")}
+                />
                 {nameTooLong ? (
                   <Text small warning className="block">
                     Display names can be up to {NAME_MAX_LENGTH} characters.
@@ -283,7 +274,7 @@ function GeneralSectionContent({
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
             {upstream?.dirty
-              ? "Verify before saving to confirm the upstream URL answers as an MCP server."
+              ? "Verify before saving to confirm the remote URL answers as an MCP server."
               : null}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>

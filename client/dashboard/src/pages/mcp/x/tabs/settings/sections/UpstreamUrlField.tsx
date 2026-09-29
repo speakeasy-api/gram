@@ -11,9 +11,9 @@ export function UpstreamUrlField({
   return (
     <Field
       data-invalid={upstream.fieldError ? true : undefined}
-      className="max-w-xl"
+      className="max-w-md"
     >
-      <FieldLabel htmlFor="mcp-upstream-url">Upstream URL</FieldLabel>
+      <FieldLabel htmlFor="mcp-upstream-url">Remote URL</FieldLabel>
       <Input
         id="mcp-upstream-url"
         value={upstream.draft}
