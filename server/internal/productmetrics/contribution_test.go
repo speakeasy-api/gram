@@ -186,6 +186,16 @@ func TestRegistryConflicts(t *testing.T) {
 	require.Error(t, r.Register(d))
 }
 
+func TestUnsupportedAttributeTypes(t *testing.T) {
+	t.Parallel()
+	for _, value := range []attribute.Value{attribute.ByteSliceValue([]byte{1}), attribute.SliceValue(attribute.StringValue("mixed"), attribute.Int64Value(1))} {
+		c := synthetic(Counter)
+		c.PointAttributes = []attribute.KeyValue{{Key: "unsupported", Value: value}}
+		_, err := Encode(c)
+		require.Error(t, err)
+	}
+}
+
 type capturePublisher struct{ messages []*pmv1.Contribution }
 
 func (p *capturePublisher) Publish(_ context.Context, m *pmv1.Contribution, _ ...gcp.PublishOption) gcp.PublishResult {

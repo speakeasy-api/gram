@@ -22,10 +22,10 @@ const (
 // Tenant is mandatory typed ownership, never inferred from producer attributes.
 type Tenant struct {
 	// OrganizationID identifies the owning organization.
-	OrganizationID string
+	OrganizationID string `json:"organization_id"`
 
 	// ProjectID identifies the owning project.
-	ProjectID uuid.UUID
+	ProjectID uuid.UUID `json:"project_id"`
 }
 
 // Number preserves integer precision; its zero value is intentionally invalid.
@@ -76,22 +76,22 @@ type Contribution struct {
 // representation is included so integer aggregation never coerces to float64.
 type Series struct {
 	// Tenant is typed ownership, also present in Resource.
-	Tenant Tenant
+	Tenant Tenant `json:"tenant"`
 
 	// Descriptor excludes description metadata.
-	Descriptor Definition
+	Descriptor Definition `json:"descriptor"`
 
 	// Resource is canonical resource attributes including typed ownership.
-	Resource string
+	Resource string `json:"resource"`
 
 	// Scope is canonical instrumentation scope attributes.
-	Scope string
+	Scope string `json:"scope"`
 
 	// Point is canonical point attributes.
-	Point string
+	Point string `json:"point"`
 
 	// NumberKind preserves the integer or floating representation.
-	NumberKind string
+	NumberKind string `json:"number_kind"`
 }
 
 // Validate checks the contract and returns a lossless, comparable series key.

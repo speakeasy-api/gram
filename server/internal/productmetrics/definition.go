@@ -22,22 +22,22 @@ const (
 // source observation time; each input is one delta increment or observation.
 type Definition struct {
 	// ScopeName identifies the instrumentation library.
-	ScopeName string
+	ScopeName string `json:"scope_name"`
 
 	// ScopeVersion identifies the instrumentation release.
-	ScopeVersion string
+	ScopeVersion string `json:"scope_version"`
 
 	// Name is an OTel metric name, without unit or instrument suffixes.
-	Name string
+	Name string `json:"name"`
 
 	// Description is metadata, not series identity.
-	Description string
+	Description string `json:"description"`
 
 	// Unit uses UCUM notation (including annotations such as {evaluation}).
-	Unit string
+	Unit string `json:"unit"`
 
 	// Instrument selects monotonic delta Sum or observation aggregation.
-	Instrument Instrument
+	Instrument Instrument `json:"instrument"`
 }
 
 var metricName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.\-/]{0,254}$`)

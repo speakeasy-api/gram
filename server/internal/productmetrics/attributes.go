@@ -39,6 +39,7 @@ func CanonicalAttributes(attrs []attribute.KeyValue) (string, error) {
 		value := a.Value.AsInterface()
 		// Normalize nil arrays to empty arrays while preserving their element type.
 		switch a.Value.Type() {
+		case attribute.STRING, attribute.BOOL, attribute.INT64, attribute.FLOAT64:
 		case attribute.STRINGSLICE:
 			value = append([]string{}, a.Value.AsStringSlice()...)
 		case attribute.BOOLSLICE:
@@ -47,6 +48,8 @@ func CanonicalAttributes(attrs []attribute.KeyValue) (string, error) {
 			value = append([]int64{}, a.Value.AsInt64Slice()...)
 		case attribute.FLOAT64SLICE:
 			value = append([]float64{}, a.Value.AsFloat64Slice()...)
+		case attribute.INVALID, attribute.BYTESLICE, attribute.SLICE:
+			return "", fmt.Errorf("unsupported attribute type")
 		}
 		b, err := json.Marshal(value)
 		if err != nil {
@@ -82,6 +85,8 @@ func attributesToProto(attrs []attribute.KeyValue) []*pmv1.Contribution_Attribut
 			v.SetIntegers(pmv1.Contribution_IntArray_builder{Values: a.Value.AsInt64Slice()}.Build())
 		case attribute.FLOAT64SLICE:
 			v.SetDoubles(pmv1.Contribution_DoubleArray_builder{Values: a.Value.AsFloat64Slice()}.Build())
+		case attribute.INVALID, attribute.BYTESLICE, attribute.SLICE:
+			// Encode validates attributes before constructing their wire values.
 		}
 		result = append(result, pmv1.Contribution_Attribute_builder{Key: new(string(a.Key)), Value: v}.Build())
 	}
