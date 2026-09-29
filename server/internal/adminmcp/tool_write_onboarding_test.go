@@ -22,8 +22,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// The catalogue's default board for an organisation with no saved selection.
-var defaultVisibleTasks = []string{"identity-provider", "anthropic-observability", "instrument-agents", "additional-agent-config"}
+// The catalogue's default board for an organisation with no saved selection:
+// every task except LiteLLM.
+var defaultVisibleTasks = []string{"identity-provider", "enable-logging", "anthropic-observability", "instrument-agents", "additional-agent-config", "confirm-traffic", "create-marketplace", "distribute-servers", "platform-mcp", "anthropic-admin-controls", "configure-policies"}
+
+// Every default task hidden by a {identity-provider, litellm} selection, in
+// catalogue order.
+var hiddenByLiteLLMSelection = []string{"enable-logging", "anthropic-observability", "instrument-agents", "additional-agent-config", "confirm-traffic", "create-marketplace", "distribute-servers", "platform-mcp", "anthropic-admin-controls", "configure-policies"}
 
 func newOnboardingWriter(f proposalFixture) (*onboardingWriter, *writeTools) {
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationOnboarding: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
@@ -80,19 +85,19 @@ func TestOnboardingWriteApprovalAndExecution(t *testing.T) {
 		require.Error(t, err, "prepare must refuse input %q", bad.RetryKey)
 	}
 
-	input := PrepareOnboardingInput{OrganizationID: f.orgA, VisibleTaskKeys: []string{"identity-provider", "enable-logging"}, RetryKey: "onboarding-1"}
+	input := PrepareOnboardingInput{OrganizationID: f.orgA, VisibleTaskKeys: []string{"identity-provider", "litellm"}, RetryKey: "onboarding-1"}
 	prepared, err := writer.prepare(ctx, input)
 	require.NoError(t, err)
 	require.Equal(t, "https://staff.example.test"+Path+"/proposals/"+prepared.ProposalID, prepared.ApprovalURL)
 	var preview onboardingPreview
 	require.NoError(t, json.Unmarshal(prepared.Preview, &preview))
-	require.Equal(t, []string{"enable-logging"}, preview.Show)
-	require.Equal(t, []string{"anthropic-observability", "instrument-agents", "additional-agent-config"}, preview.Hide)
-	require.Equal(t, 8, preview.Unchanged)
+	require.Equal(t, []string{"litellm"}, preview.Show)
+	require.Equal(t, hiddenByLiteLLMSelection, preview.Hide)
+	require.Equal(t, 1, preview.Unchanged)
 	require.Equal(t, onboardingSideEffects, preview.SideEffects)
 	require.Zero(t, setupTaskRows(t, f, f.orgA), "prepare does not write")
 
-	input.VisibleTaskKeys = []string{"enable-logging", "identity-provider"}
+	input.VisibleTaskKeys = []string{"litellm", "identity-provider"}
 	replay, err := writer.prepare(ctx, input)
 	require.NoError(t, err)
 	require.True(t, replay.Replay, "the stored selection is sorted, so key order does not matter")
@@ -100,7 +105,7 @@ func TestOnboardingWriteApprovalAndExecution(t *testing.T) {
 	id := uuid.MustParse(prepared.ProposalID)
 	stored, err := f.store.GetForOwner(t.Context(), id, f.owner)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"visible_task_keys":["enable-logging","identity-provider"]}`, string(stored.Arguments))
+	require.JSONEq(t, `{"visible_task_keys":["identity-provider","litellm"]}`, string(stored.Arguments))
 
 	// Two more proposals prepared from the same starting state. One is
 	// approved now; both must go stale once the first proposal executes.
@@ -125,8 +130,8 @@ func TestOnboardingWriteApprovalAndExecution(t *testing.T) {
 	handler.ServeHTTP(page, approvalRequest(http.MethodGet, id, nil, "browser-session"))
 	require.Equal(t, http.StatusOK, page.Code)
 	require.Contains(t, page.Body.String(), "Synthetic A")
-	require.Contains(t, page.Body.String(), "Show 1 and hide 3 onboarding tasks; 8 unchanged")
-	require.Contains(t, page.Body.String(), "<td>enable-logging task</td><td>Hidden</td><td>Shown</td>")
+	require.Contains(t, page.Body.String(), "Show 1 and hide 10 onboarding tasks; 1 unchanged")
+	require.Contains(t, page.Body.String(), "<td>litellm task</td><td>Hidden</td><td>Shown</td>")
 	require.Contains(t, page.Body.String(), "<td>instrument-agents task</td><td>Shown</td><td>Hidden</td>")
 	accepted := httptest.NewRecorder()
 	handler.ServeHTTP(accepted, approvalRequest(http.MethodPost, id, approvalForm(t, page.Body.String()), "browser-session"))
@@ -135,8 +140,10 @@ func TestOnboardingWriteApprovalAndExecution(t *testing.T) {
 	result, err := tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
 	require.NoError(t, err)
 	require.Equal(t, string(ProposalSucceeded), result.Status)
-	require.JSONEq(t, `{"shown":["enable-logging"],"hidden":["anthropic-observability","instrument-agents","additional-agent-config"]}`, string(result.Result))
-	require.Equal(t, []string{"identity-provider", "enable-logging"}, visibleTasks(t, f, f.orgA))
+	wantResult, err := json.Marshal(map[string][]string{"shown": {"litellm"}, "hidden": hiddenByLiteLLMSelection})
+	require.NoError(t, err)
+	require.JSONEq(t, string(wantResult), string(result.Result))
+	require.Equal(t, []string{"identity-provider", "litellm"}, visibleTasks(t, f, f.orgA))
 	config, err := organizations.LoadOnboardingConfiguration(t.Context(), f.db, f.orgA)
 	require.NoError(t, err)
 	require.Equal(t, new("gateway"), config.Preset, "the preset is never changed")
@@ -152,7 +159,7 @@ func TestOnboardingWriteApprovalAndExecution(t *testing.T) {
 	require.NotNil(t, entry.ActingClientID)
 	require.Equal(t, "test-client", *entry.ActingClientID)
 	require.Equal(t, int64(1), auditCount(t, f, audit.ActionOrganizationOnboardingUpdated))
-	require.Equal(t, int64(4), auditCount(t, f, audit.ActionOrganizationSetupTaskUpdated), "one event per changed task")
+	require.Equal(t, int64(11), auditCount(t, f, audit.ActionOrganizationSetupTaskUpdated), "one event per changed task")
 
 	result, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
 	require.NoError(t, err)
@@ -167,7 +174,7 @@ func TestOnboardingWriteApprovalAndExecution(t *testing.T) {
 	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: staleExecution.ProposalID})
 	require.ErrorIs(t, err, ErrStaleState)
 	require.Zero(t, countWriteEvents(t, f.db, approvedEarly.ID, "executed"))
-	require.Equal(t, []string{"identity-provider", "enable-logging"}, visibleTasks(t, f, f.orgA))
+	require.Equal(t, []string{"identity-provider", "litellm"}, visibleTasks(t, f, f.orgA))
 
 	otherPrincipal, ok := ctx.Value(principalKey{}).(Principal)
 	require.True(t, ok)
@@ -215,10 +222,12 @@ func TestOnboardingWriteRejectsInvalidStoredSelection(t *testing.T) {
 	require.NoError(t, tx.Commit(t.Context()))
 	expected, err := json.Marshal(state)
 	require.NoError(t, err)
+	noOp, err := json.Marshal(map[string][]string{"visible_task_keys": slices.Sorted(slices.Values(defaultVisibleTasks))})
+	require.NoError(t, err)
 
 	for key, arguments := range map[string]string{
 		"unknown": `{"visible_task_keys":["not-a-task"]}`,
-		"no-op":   `{"visible_task_keys":["additional-agent-config","anthropic-observability","identity-provider","instrument-agents"]}`,
+		"no-op":   string(noOp),
 		"missing": `{}`,
 	} {
 		input := featureProposal(f.orgA, "invalid-"+key, true)
