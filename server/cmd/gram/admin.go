@@ -262,6 +262,12 @@ func newAdminCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
+			Name:     "workos-environment-id",
+			Usage:    "WorkOS environment ID used to link organizations to the WorkOS dashboard. Leave unset to hide those links.",
+			EnvVars:  []string{"WORKOS_ENVIRONMENT_ID"},
+			Required: false,
+		},
+		&cli.StringFlag{
 			Name:     "workos-endpoint",
 			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's mock-workos mode for fully-local development.",
 			EnvVars:  []string{"WORKOS_API_URL"},
@@ -490,6 +496,7 @@ func newAdminCommand() *cli.Command {
 				}
 			}
 			adminService.SetMCPServerURL(mcpServerURL)
+			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err

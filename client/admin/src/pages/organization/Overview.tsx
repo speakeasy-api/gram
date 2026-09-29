@@ -1,7 +1,7 @@
 import { useRef, useState, type JSX, type Ref } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { LoaderCircle } from "lucide-react";
+import { ExternalLinkIcon, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
@@ -385,11 +385,27 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           </Row>
           <Row label="WorkOS org ID">
             {org.workos_id ? (
-              <CopyValue
-                label="WorkOS org ID"
-                value={org.workos_id}
-                className="text-sm"
-              />
+              <span className="flex min-w-0 items-center gap-1">
+                <CopyValue
+                  label="WorkOS org ID"
+                  value={org.workos_id}
+                  className="text-sm"
+                />
+                {/* Absent when the deployment has no WorkOS environment set. */}
+                {org.workos_dashboard_url ? (
+                  <Button asChild variant="ghost" size="icon-xs">
+                    <a
+                      href={org.workos_dashboard_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Open in WorkOS"
+                      title="Open in WorkOS"
+                    >
+                      <ExternalLinkIcon aria-hidden="true" />
+                    </a>
+                  </Button>
+                ) : null}
+              </span>
             ) : (
               <span className="text-muted-foreground text-sm">-</span>
             )}

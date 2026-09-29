@@ -608,6 +608,10 @@ type UpdateOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -662,6 +666,10 @@ type DisableOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -705,6 +713,10 @@ type EnableOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -748,6 +760,10 @@ type GetOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -832,6 +848,10 @@ type ExtendTrialResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -875,6 +895,10 @@ type CreateOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -918,6 +942,10 @@ type RearmTrialResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -1019,6 +1047,10 @@ type SetStripeCustomerResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -1525,6 +1557,10 @@ type StartTrialResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -1568,6 +1604,10 @@ type ChangeTrialEndDateResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -13715,6 +13755,10 @@ type AdminOrganizationResponseBody struct {
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
 	// Stripe customer ID, if billing metadata has a customer.
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
 	// Current Stripe subscription ID, if subscribed.
@@ -14289,6 +14333,7 @@ func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrga
 		Slug:                 res.Slug,
 		AccountType:          res.AccountType,
 		WorkosID:             res.WorkosID,
+		WorkosDashboardURL:   res.WorkosDashboardURL,
 		StripeCustomerID:     res.StripeCustomerID,
 		StripeSubscriptionID: res.StripeSubscriptionID,
 		Whitelisted:          res.Whitelisted,
@@ -14338,6 +14383,7 @@ func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOr
 		Slug:                 res.Slug,
 		AccountType:          res.AccountType,
 		WorkosID:             res.WorkosID,
+		WorkosDashboardURL:   res.WorkosDashboardURL,
 		StripeCustomerID:     res.StripeCustomerID,
 		StripeSubscriptionID: res.StripeSubscriptionID,
 		Whitelisted:          res.Whitelisted,
@@ -14364,6 +14410,7 @@ func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrga
 		Slug:                 res.Slug,
 		AccountType:          res.AccountType,
 		WorkosID:             res.WorkosID,
+		WorkosDashboardURL:   res.WorkosDashboardURL,
 		StripeCustomerID:     res.StripeCustomerID,
 		StripeSubscriptionID: res.StripeSubscriptionID,
 		Whitelisted:          res.Whitelisted,
@@ -14390,6 +14437,7 @@ func NewGetOrganizationResponseBody(res *admin.AdminOrganization) *GetOrganizati
 		Slug:                 res.Slug,
 		AccountType:          res.AccountType,
 		WorkosID:             res.WorkosID,
+		WorkosDashboardURL:   res.WorkosDashboardURL,
 		StripeCustomerID:     res.StripeCustomerID,
 		StripeSubscriptionID: res.StripeSubscriptionID,
 		Whitelisted:          res.Whitelisted,
@@ -14516,6 +14564,7 @@ func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialRespon
 		Slug:                 res.Slug,
 		AccountType:          res.AccountType,
 		WorkosID:             res.WorkosID,
+		WorkosDashboardURL:   res.WorkosDashboardURL,
 		StripeCustomerID:     res.StripeCustomerID,
 		StripeSubscriptionID: res.StripeSubscriptionID,
 		Whitelisted:          res.Whitelisted,
@@ -14542,6 +14591,7 @@ func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrga
 		Slug:                 res.Slug,
 		AccountType:          res.AccountType,
 		WorkosID:             res.WorkosID,
+		WorkosDashboardURL:   res.WorkosDashboardURL,
 		StripeCustomerID:     res.StripeCustomerID,
 		StripeSubscriptionID: res.StripeSubscriptionID,
 		Whitelisted:          res.Whitelisted,
@@ -14568,6 +14618,7 @@ func NewRearmTrialResponseBody(res *admin.AdminOrganization) *RearmTrialResponse
 		Slug:                 res.Slug,
 		AccountType:          res.AccountType,
 		WorkosID:             res.WorkosID,
+		WorkosDashboardURL:   res.WorkosDashboardURL,
 		StripeCustomerID:     res.StripeCustomerID,
 		StripeSubscriptionID: res.StripeSubscriptionID,
 		Whitelisted:          res.Whitelisted,
@@ -14677,6 +14728,7 @@ func NewSetStripeCustomerResponseBody(res *admin.AdminOrganization) *SetStripeCu
 		Slug:                 res.Slug,
 		AccountType:          res.AccountType,
 		WorkosID:             res.WorkosID,
+		WorkosDashboardURL:   res.WorkosDashboardURL,
 		StripeCustomerID:     res.StripeCustomerID,
 		StripeSubscriptionID: res.StripeSubscriptionID,
 		Whitelisted:          res.Whitelisted,
@@ -15297,6 +15349,7 @@ func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponse
 		Slug:                 res.Slug,
 		AccountType:          res.AccountType,
 		WorkosID:             res.WorkosID,
+		WorkosDashboardURL:   res.WorkosDashboardURL,
 		StripeCustomerID:     res.StripeCustomerID,
 		StripeSubscriptionID: res.StripeSubscriptionID,
 		Whitelisted:          res.Whitelisted,
@@ -15323,6 +15376,7 @@ func NewChangeTrialEndDateResponseBody(res *admin.AdminOrganization) *ChangeTria
 		Slug:                 res.Slug,
 		AccountType:          res.AccountType,
 		WorkosID:             res.WorkosID,
+		WorkosDashboardURL:   res.WorkosDashboardURL,
 		StripeCustomerID:     res.StripeCustomerID,
 		StripeSubscriptionID: res.StripeSubscriptionID,
 		Whitelisted:          res.Whitelisted,
