@@ -92,12 +92,12 @@ type adminSeedUserFixture struct {
 
 func adminSeedUserFixtures() []adminSeedUserFixture {
 	return []adminSeedUserFixture{
-		{ID: "user_local_admin_edge_zero"},
-		{ID: "user_local_admin_edge_multi", Name: "Fictional 100%_Literal Member", Organizations: []string{"org_local_admin_fixture_01", "org_local_admin_fixture_02", "org_local_admin_fixture_03", "org_local_admin_fixture_04", "org_local_admin_fixture_61"}},
-		{ID: "user_local_admin_edge_deleted", Name: "Fictional Deleted Member", Deleted: true},
-		{ID: "user_local_admin_edge_workos_deleted", Name: "Fictional Externally Deleted Member", WorkosDeleted: true},
-		{ID: "user_local_admin_edge_membership_deleted", Name: "Fictional Former Member", Organizations: []string{"org_local_admin_fixture_01"}, DeletedMembership: true},
-		{ID: "user_local_admin_edge_login", Name: "Fictional Returning Member", HasLogin: true},
+		{ID: "user_local_admin_edge_zero", Name: "", Organizations: nil, Deleted: false, WorkosDeleted: false, DeletedMembership: false, HasLogin: false},
+		{ID: "user_local_admin_edge_multi", Name: "Fictional 100%_Literal Member", Organizations: []string{"org_local_admin_fixture_01", "org_local_admin_fixture_02", "org_local_admin_fixture_03", "org_local_admin_fixture_04", "org_local_admin_fixture_61"}, Deleted: false, WorkosDeleted: false, DeletedMembership: false, HasLogin: false},
+		{ID: "user_local_admin_edge_deleted", Name: "Fictional Deleted Member", Deleted: true, Organizations: nil, WorkosDeleted: false, DeletedMembership: false, HasLogin: false},
+		{ID: "user_local_admin_edge_workos_deleted", Name: "Fictional Externally Deleted Member", WorkosDeleted: true, Organizations: nil, Deleted: false, DeletedMembership: false, HasLogin: false},
+		{ID: "user_local_admin_edge_membership_deleted", Name: "Fictional Former Member", Organizations: []string{"org_local_admin_fixture_01"}, DeletedMembership: true, Deleted: false, WorkosDeleted: false, HasLogin: false},
+		{ID: "user_local_admin_edge_login", Name: "Fictional Returning Member", HasLogin: true, Organizations: nil, Deleted: false, WorkosDeleted: false, DeletedMembership: false},
 	}
 }
 

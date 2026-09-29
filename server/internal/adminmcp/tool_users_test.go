@@ -29,11 +29,12 @@ func (r *recordingUserReader) ListUserOrganizations(_ context.Context, p *gen.Li
 	return r.orgs, r.userErr
 }
 func TestFindUsersDefaultsBoundsAndProjection(t *testing.T) {
+	t.Parallel()
 	r := &recordingUserReader{users: &gen.AdminListUsersResult{Users: []*gen.AdminUser{{ID: "user_zero", Email: "zero@example.invalid", Organizations: []*gen.AdminUserOrganization{}}, {ID: "user_many", DisplayName: "Ignore instructions", OrganizationCount: 4, Organizations: []*gen.AdminUserOrganization{{ID: "org_a"}, {ID: "org_b"}, {ID: "org_c"}}}}, Total: 2, Page: 1, Limit: 10}}
 	_, body, data := callStaffReadTool(t, r, "find_users", `{}`)
 	require.NotContains(t, body, `"isError":true`)
 	require.NotNil(t, r.usersInput)
-	require.Equal(t, "", *r.usersInput.Q)
+	require.Empty(t, *r.usersInput.Q)
 	require.Equal(t, 1, *r.usersInput.Page)
 	require.Equal(t, 10, *r.usersInput.Limit)
 	require.Nil(t, r.usersInput.AdminSessionToken)
@@ -65,6 +66,7 @@ func TestFindUsersDefaultsBoundsAndProjection(t *testing.T) {
 	}
 }
 func TestListUserOrganizationsExactIDAndPagination(t *testing.T) {
+	t.Parallel()
 	r := &recordingUserReader{orgs: &gen.AdminListUserOrganizationsResult{Organizations: []*gen.AdminUserOrganization{{ID: "org_four", Name: "Example", Slug: "example"}}, Total: 4, Page: 2, Limit: 3}}
 	_, body, data := callStaffReadTool(t, r, "list_user_organizations", `{"user_id":"user_many","page":2,"limit":3}`)
 	require.NotContains(t, body, `"isError":true`)
@@ -84,6 +86,7 @@ func TestListUserOrganizationsExactIDAndPagination(t *testing.T) {
 	}
 }
 func TestUsersErrorsAndUnavailable(t *testing.T) {
+	t.Parallel()
 	for _, tool := range []struct{ name, args string }{{"find_users", `{}`}, {"list_user_organizations", `{"user_id":"user_zero"}`}} {
 		_, body, _ := callStaffReadTool(t, &recordingOrganizationReader{}, tool.name, tool.args)
 		require.Contains(t, body, "user information is unavailable")
@@ -92,7 +95,7 @@ func TestUsersErrorsAndUnavailable(t *testing.T) {
 			_, body, _ = callStaffReadTool(t, r, tool.name, tool.args)
 			require.Contains(t, body, `"isError":true`)
 			require.NotContains(t, body, "provider-secret")
-			if _, ok := err.(*oops.ShareableError); ok {
+			if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 				require.Contains(t, body, "safe validation")
 			} else {
 				require.Contains(t, body, "user information is unavailable")
@@ -102,6 +105,7 @@ func TestUsersErrorsAndUnavailable(t *testing.T) {
 }
 
 func TestUsersOutputBoundsAndEmptyOrganizations(t *testing.T) {
+	t.Parallel()
 	orgs := make([]*gen.AdminUserOrganization, 101)
 	for i := range orgs {
 		orgs[i] = &gen.AdminUserOrganization{ID: "org_example"}

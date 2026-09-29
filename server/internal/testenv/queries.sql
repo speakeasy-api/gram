@@ -1674,3 +1674,13 @@ AND p.proname IN ('validate_remote_session_ema_binding_scope', 'guard_remote_ses
 -- Test fixture: represent a binding created without application lifecycle defaults.
 UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
 WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id;
+
+-- name: SetUserLifecycleFixture :exec
+-- Test-only fixture: independently controls local/provider deletion and login
+-- timestamps, including restoring local state without clearing provider deletion.
+-- Users are global identities and have no project_id.
+UPDATE users
+SET deleted_at = sqlc.narg('deleted_at')::timestamptz,
+    workos_deleted_at = sqlc.narg('workos_deleted_at')::timestamptz,
+    last_login = sqlc.narg('last_login')::timestamptz
+WHERE id = @id;

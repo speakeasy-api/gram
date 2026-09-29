@@ -16,7 +16,7 @@ type UserSearchTerm struct {
 // ParseUserSearch parses the bounded, AND-only admin user search grammar.
 func ParseUserSearch(query string) ([]UserSearchTerm, error) {
 	if len(query) > 2048 {
-		return nil, errors.New("Search must be at most 2048 UTF-8 bytes.")
+		return nil, errors.New("search must be at most 2048 UTF-8 bytes")
 	}
 	chars := []rune(query)
 	terms := make([]UserSearchTerm, 0)
@@ -26,7 +26,7 @@ func ParseUserSearch(query string) ([]UserSearchTerm, error) {
 			continue
 		}
 		if len(terms) == 20 {
-			return nil, errors.New("Search supports at most 20 terms.")
+			return nil, errors.New("search supports at most 20 terms")
 		}
 		field := "any"
 		start := i
@@ -36,10 +36,10 @@ func ParseUserSearch(query string) ([]UserSearchTerm, error) {
 		if i < len(chars) && chars[i] == ':' {
 			field = strings.ToLower(string(chars[start:i]))
 			if strings.ContainsAny(field, "()") || strings.HasPrefix(field, "-") || strings.HasPrefix(field, "!") {
-				return nil, errors.New("Unsupported search syntax; quote it to search for literal text.")
+				return nil, errors.New("unsupported search syntax; quote it to search for literal text")
 			}
 			if field != "name" && field != "email" && field != "org" {
-				return nil, errors.New("Unknown search field; use name:, email:, or org:.")
+				return nil, errors.New("unknown search field; supported fields are name, email, and org")
 			}
 			i++
 		} else {
@@ -57,16 +57,16 @@ func ParseUserSearch(query string) ([]UserSearchTerm, error) {
 				i++
 			}
 			if i == len(chars) {
-				return nil, errors.New("Unclosed quote in search term.")
+				return nil, errors.New("unclosed quote in search term")
 			}
 			i++
 			if i < len(chars) && !unicode.IsSpace(chars[i]) {
-				return nil, errors.New("Separate search terms with whitespace; quote the whole value.")
+				return nil, errors.New("separate search terms with whitespace; quote the whole value")
 			}
 		} else {
 			for i < len(chars) && !unicode.IsSpace(chars[i]) {
 				if chars[i] == '"' {
-					return nil, errors.New("Separate search terms with whitespace; quote the whole value.")
+					return nil, errors.New("separate search terms with whitespace; quote the whole value")
 				}
 				value.WriteRune(chars[i])
 				i++
@@ -74,13 +74,13 @@ func ParseUserSearch(query string) ([]UserSearchTerm, error) {
 		}
 		text := value.String()
 		if text == "" {
-			return nil, errors.New("Search terms must have a value.")
+			return nil, errors.New("search terms must have a value")
 		}
 		if !quoted && (strings.EqualFold(text, "OR") || strings.EqualFold(text, "NOT") || strings.ContainsAny(text, "()") || strings.HasPrefix(text, "-") || strings.HasPrefix(text, "!") || (strings.HasPrefix(text, "/") && strings.HasSuffix(text, "/"))) {
-			return nil, errors.New("Unsupported search syntax; quote it to search for literal text.")
+			return nil, errors.New("unsupported search syntax; quote it to search for literal text")
 		}
 		if utf8.RuneCountInString(text) > 256 {
-			return nil, errors.New("Search terms must be at most 256 Unicode code points.")
+			return nil, errors.New("search terms must be at most 256 Unicode code points")
 		}
 		terms = append(terms, UserSearchTerm{Field: field, Value: text})
 	}

@@ -15,7 +15,7 @@ import (
 )
 
 // Validate here as well as in Goa: staff MCP calls the service directly.
-func userPagination(page, limit *int) (int, int, int32, error) {
+func userPagination(page, limit *int) (int, int32, int32, error) {
 	p, l := 1, 50
 	if page != nil {
 		p = *page
@@ -26,7 +26,11 @@ func userPagination(page, limit *int) (int, int, int32, error) {
 	if p < 1 || l < 1 || l > 100 || p-1 > math.MaxInt32/l {
 		return 0, 0, 0, oops.E(oops.CodeInvalid, nil, "page must be positive, limit must be 1–100, and offset must fit int32")
 	}
-	return p, l, int32((p - 1) * l), nil
+	offset := (p - 1) * l
+	if offset < 0 || offset > math.MaxInt32 {
+		return 0, 0, 0, oops.E(oops.CodeInvalid, nil, "offset must fit int32")
+	}
+	return p, int32(l), int32(offset), nil
 }
 
 func userTimestamp(t pgtype.Timestamptz) *string {
@@ -50,7 +54,7 @@ func (s *Service) ListUsers(ctx context.Context, payload *gen.ListUsersPayload) 
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, nil, "%s", err.Error())
 	}
-	params := repo.AdminListUsersParams{PageLimit: int32(limit), PageOffset: offset, NamePatterns: []string{}, EmailPatterns: []string{}, OrgPatterns: []string{}, AnyPatterns: []string{}}
+	params := repo.AdminListUsersParams{PageLimit: limit, PageOffset: offset, NamePatterns: []string{}, EmailPatterns: []string{}, OrgPatterns: []string{}, AnyPatterns: []string{}}
 	escape := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	for _, term := range terms {
 		pattern := "%" + escape.Replace(term.Value) + "%"
@@ -78,7 +82,7 @@ func (s *Service) ListUsers(ctx context.Context, payload *gen.ListUsersPayload) 
 	ids := make([]string, 0, len(rows))
 	byID := make(map[string]*gen.AdminUser, len(rows))
 	for _, row := range rows {
-		user := &gen.AdminUser{ID: row.ID, Email: row.Email, DisplayName: row.DisplayName, LastLogin: userTimestamp(row.LastLogin), Organizations: []*gen.AdminUserOrganization{}}
+		user := &gen.AdminUser{ID: row.ID, Email: row.Email, DisplayName: row.DisplayName, LastLogin: userTimestamp(row.LastLogin), Organizations: []*gen.AdminUserOrganization{}, OrganizationCount: 0}
 		users = append(users, user)
 		ids = append(ids, row.ID)
 		byID[row.ID] = user
@@ -94,7 +98,7 @@ func (s *Service) ListUsers(ctx context.Context, payload *gen.ListUsersPayload) 
 			user.Organizations = append(user.Organizations, &gen.AdminUserOrganization{ID: row.ID, Name: row.Name, Slug: row.Slug, DisabledAt: userTimestamp(row.DisabledAt)})
 		}
 	}
-	return &gen.AdminListUsersResult{Users: users, Total: total, Page: page, Limit: limit}, nil
+	return &gen.AdminListUsersResult{Users: users, Total: total, Page: page, Limit: int(limit)}, nil
 }
 
 func (s *Service) ListUserOrganizations(ctx context.Context, payload *gen.ListUserOrganizationsPayload) (*gen.AdminListUserOrganizationsResult, error) {
@@ -113,7 +117,7 @@ func (s *Service) ListUserOrganizations(ctx context.Context, payload *gen.ListUs
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count user organizations").LogError(ctx, s.logger)
 	}
-	rows, err := q.AdminListUserOrganizations(ctx, repo.AdminListUserOrganizationsParams{UserID: payload.UserID, PageLimit: int32(limit), PageOffset: offset})
+	rows, err := q.AdminListUserOrganizations(ctx, repo.AdminListUserOrganizationsParams{UserID: payload.UserID, PageLimit: limit, PageOffset: offset})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user organizations").LogError(ctx, s.logger)
 	}
@@ -121,5 +125,5 @@ func (s *Service) ListUserOrganizations(ctx context.Context, payload *gen.ListUs
 	for _, row := range rows {
 		organizations = append(organizations, &gen.AdminUserOrganization{ID: row.ID, Name: row.Name, Slug: row.Slug, DisabledAt: userTimestamp(row.DisabledAt)})
 	}
-	return &gen.AdminListUserOrganizationsResult{Organizations: organizations, Total: total, Page: page, Limit: limit}, nil
+	return &gen.AdminListUserOrganizationsResult{Organizations: organizations, Total: total, Page: page, Limit: int(limit)}, nil
 }

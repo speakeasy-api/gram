@@ -5048,6 +5048,34 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 	return err
 }
 
+const setUserLifecycleFixture = `-- name: SetUserLifecycleFixture :exec
+UPDATE users
+SET deleted_at = $1::timestamptz,
+    workos_deleted_at = $2::timestamptz,
+    last_login = $3::timestamptz
+WHERE id = $4
+`
+
+type SetUserLifecycleFixtureParams struct {
+	DeletedAt       pgtype.Timestamptz
+	WorkosDeletedAt pgtype.Timestamptz
+	LastLogin       pgtype.Timestamptz
+	ID              string
+}
+
+// Test-only fixture: independently controls local/provider deletion and login
+// timestamps, including restoring local state without clearing provider deletion.
+// Users are global identities and have no project_id.
+func (q *Queries) SetUserLifecycleFixture(ctx context.Context, arg SetUserLifecycleFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserLifecycleFixture,
+		arg.DeletedAt,
+		arg.WorkosDeletedAt,
+		arg.LastLogin,
+		arg.ID,
+	)
+	return err
+}
+
 const setUserPlatformAdminFixture = `-- name: SetUserPlatformAdminFixture :exec
 UPDATE users
 SET admin = $1

@@ -12,31 +12,41 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 )
 
 func TestListUsers(t *testing.T) {
+	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
-	_, err := db.Exec(ctx, `INSERT INTO users(id,email,display_name,deleted_at,workos_deleted_at) VALUES
- ('user_zero','zero@example.invalid','',NULL,NULL),
- ('user_a','TIE@example.invalid','100%_Literal',NULL,NULL),
- ('user_b','tie@example.invalid','100XXLiteral',NULL,NULL),
- ('user_c','c@example.invalid','Same Name',NULL,NULL),
- ('user_d','d@example.invalid','Same Name',NULL,NULL),
- ('user_deleted','deleted@example.invalid','Deleted',now(),NULL),
- ('user_workos','workos@example.invalid','Deleted',NULL,now())`)
-	require.NoError(t, err)
+	fixtures := testrepo.New(db)
+	for _, user := range []testrepo.InsertUserFixtureParams{
+		{ID: "user_zero", Email: "zero@example.invalid", DisplayName: ""},
+		{ID: "user_a", Email: "TIE@example.invalid", DisplayName: "100%_Literal"},
+		{ID: "user_b", Email: "tie@example.invalid", DisplayName: "100XXLiteral"},
+		{ID: "user_c", Email: "c@example.invalid", DisplayName: "Same Name"},
+		{ID: "user_d", Email: "d@example.invalid", DisplayName: "Same Name"},
+		{ID: "user_deleted", Email: "deleted@example.invalid", DisplayName: "Deleted"},
+		{ID: "user_workos", Email: "workos@example.invalid", DisplayName: "Deleted"},
+	} {
+		require.NoError(t, fixtures.InsertUserFixture(ctx, user))
+	}
+	require.NoError(t, fixtures.SetUserLifecycleFixture(ctx, testrepo.SetUserLifecycleFixtureParams{ID: "user_deleted", DeletedAt: conv.ToPGTimestamptz(time.Now())}))
+	require.NoError(t, fixtures.SetUserLifecycleFixture(ctx, testrepo.SetUserLifecycleFixtureParams{ID: "user_workos", WorkosDeletedAt: conv.ToPGTimestamptz(time.Now())}))
 	for i, name := range []string{"Studio", "North", "Duplicate", "Duplicate", "Removed"} {
 		id := fmt.Sprintf("org_users_%d", i)
-		seedOrg(t, ctx, db, orgFixture{id: id, name: name, slug: fmt.Sprintf("users-%d", i)})
-		_, err = db.Exec(ctx, `INSERT INTO organization_user_relationships(organization_id,user_id) VALUES($1,'user_a')`, id)
-		require.NoError(t, err)
+		fixture := orgFixture{id: id, name: name, slug: fmt.Sprintf("users-%d", i)}
+		if i == 0 {
+			fixture.disabledAt = new(time.Now())
+		}
+		seedOrg(t, ctx, db, fixture)
+		require.NoError(t, fixtures.CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: id, UserID: conv.ToPGText("user_a")}))
 	}
-	_, err = db.Exec(ctx, `UPDATE organization_metadata SET disabled_at=now() WHERE id='org_users_0'; UPDATE organization_user_relationships SET deleted_at=now() WHERE organization_id='org_users_4'`)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, "org_users_4"))
 	for _, tt := range []struct {
 		q     string
 		count int64
@@ -51,6 +61,7 @@ func TestListUsers(t *testing.T) {
 		{"org:duplicate org:users", 1, []string{"user_a"}},
 	} {
 		t.Run(tt.q, func(t *testing.T) {
+			t.Parallel()
 			r, e := svc.ListUsers(ctx, &gen.ListUsersPayload{Q: &tt.q})
 			require.NoError(t, e)
 			require.Equal(t, tt.count, r.Total)
@@ -108,19 +119,24 @@ func TestListUsers(t *testing.T) {
 }
 
 func TestListUserOrganizations(t *testing.T) {
+	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
-	_, err := db.Exec(ctx, `INSERT INTO users(id,email,display_name,deleted_at,workos_deleted_at) VALUES ('eligible','eligible@example.invalid','',NULL,NULL),('deleted','deleted@example.invalid','',now(),NULL),('provider','provider@example.invalid','',NULL,now())`)
-	require.NoError(t, err)
+	fixtures := testrepo.New(db)
+	for _, id := range []string{"eligible", "deleted", "provider"} {
+		require.NoError(t, fixtures.InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: id, Email: id + "@example.invalid", DisplayName: ""}))
+	}
+	now := conv.ToPGTimestamptz(time.Now())
+	require.NoError(t, fixtures.SetUserLifecycleFixture(ctx, testrepo.SetUserLifecycleFixtureParams{ID: "deleted", DeletedAt: now}))
+	require.NoError(t, fixtures.SetUserLifecycleFixture(ctx, testrepo.SetUserLifecycleFixtureParams{ID: "provider", WorkosDeletedAt: now}))
 	for _, id := range []string{"missing", "deleted", "provider"} {
 		_, err := svc.ListUserOrganizations(ctx, &gen.ListUserOrganizationsPayload{UserID: id})
 		assertOopsCode(t, err, oops.CodeNotFound)
 	}
-	_, err = db.Exec(ctx, `UPDATE users SET deleted_at=now() WHERE id='provider'; UPDATE users SET deleted_at=NULL WHERE id='provider'`)
-	require.NoError(t, err)
-	_, err = svc.ListUserOrganizations(ctx, &gen.ListUserOrganizationsPayload{UserID: "provider"})
+	require.NoError(t, fixtures.SetUserLifecycleFixture(ctx, testrepo.SetUserLifecycleFixtureParams{ID: "provider", DeletedAt: now, WorkosDeletedAt: now}))
+	require.NoError(t, fixtures.SetUserLifecycleFixture(ctx, testrepo.SetUserLifecycleFixtureParams{ID: "provider", WorkosDeletedAt: now}))
+	_, err := svc.ListUserOrganizations(ctx, &gen.ListUserOrganizationsPayload{UserID: "provider"})
 	assertOopsCode(t, err, oops.CodeNotFound)
-	_, err = db.Exec(ctx, `UPDATE users SET workos_deleted_at=NULL, last_login='2026-01-01T12:00:00Z' WHERE id='provider'`)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.SetUserLifecycleFixture(ctx, testrepo.SetUserLifecycleFixtureParams{ID: "provider", LastLogin: conv.ToPGTimestamptz(time.Date(2026, time.January, 1, 12, 0, 0, 0, time.UTC))}))
 	restored, err := svc.ListUserOrganizations(ctx, &gen.ListUserOrganizationsPayload{UserID: "provider"})
 	require.NoError(t, err)
 	require.Zero(t, restored.Total)
@@ -152,6 +168,7 @@ func TestListUserOrganizations(t *testing.T) {
 }
 
 func TestListUsers_HTTPAuthentication(t *testing.T) {
+	t.Parallel()
 	ctx, svc, _ := newTestAdminService(t)
 	svc.tracer = testenv.NewTracerProvider(t).Tracer("admin_users_test")
 	mux := goahttp.NewMuxer()
@@ -186,9 +203,11 @@ func TestListUsers_HTTPAuthentication(t *testing.T) {
 }
 
 func TestListUsers_LiteralBackslashAndIndependentTerms(t *testing.T) {
+	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
-	_, err := db.Exec(ctx, `INSERT INTO users(id,email,display_name) VALUES ('literal','literal@example.invalid',$1),('other','other@example.invalid','pathX100XX')`, `path\100%_`)
-	require.NoError(t, err)
+	fixtures := testrepo.New(db)
+	require.NoError(t, fixtures.InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: "literal", Email: "literal@example.invalid", DisplayName: `path\100%_`}))
+	require.NoError(t, fixtures.InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: "other", Email: "other@example.invalid", DisplayName: "pathX100XX"}))
 	for _, q := range []string{`name:"path\100%_"`, `email:literal name:100`, `PATH email:literal`} {
 		r, err := svc.ListUsers(ctx, &gen.ListUsersPayload{Q: &q})
 		require.NoError(t, err)
@@ -198,6 +217,7 @@ func TestListUsers_LiteralBackslashAndIndependentTerms(t *testing.T) {
 }
 
 func TestListUsers_HTTPNonstaffAndBounds(t *testing.T) {
+	t.Parallel()
 	ctx, svc, _ := newTestAdminService(t)
 	mux := goahttp.NewMuxer()
 	Attach(mux, svc)

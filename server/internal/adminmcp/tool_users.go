@@ -4,6 +4,7 @@ package adminmcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 
@@ -96,7 +97,7 @@ func registerUserTools(server *mcp.Server, reads UserReader) {
 			return nil, out, err
 		}
 		if _, err := admin.ParseUserSearch(input.Query); err != nil {
-			return nil, out, err
+			return nil, out, fmt.Errorf("invalid user search: %w", err)
 		}
 		result, err := reads.ListUsers(ctx, &gen.ListUsersPayload{Q: &input.Query, Page: &page, Limit: &limit})
 		if err != nil {

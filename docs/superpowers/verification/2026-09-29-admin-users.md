@@ -36,9 +36,9 @@ An initial exploratory run used the wrong positional pagination order and was di
 
 ### Review follow-up: measurement assertions
 
-The retained timings below are from the original corrected run, **not** refreshed measurements. A subsequent review fix adds untimed reads of the same prepared preview/overflow statements: exact requested user ownership, org IDs/names/slugs/order, per-user full membership counts, three previews with count 200 for `perf_user_1`, and exact overflow IDs 1–50 / 151–200 with count 200. Expected results come from the synthetic profile definition rather than another SQL query. Only PostgreSQL SQLSTATE `57014` with the statement-timeout message is recorded as incomplete; other SQL/decoding errors fail the test. Timeout labels propagate to profile/overflow/experiment summaries, and incomplete experiments do not claim parity.
+The retained timings below are from the original corrected run, **not** refreshed measurements. A subsequent review fix added untimed reads of the same prepared preview/overflow statements: exact requested user ownership, org IDs/names/slugs/order, per-user full membership counts, three previews with count 200 for `perf_user_1`, and exact overflow IDs 1–50 / 151–200 with count 200. Expected results come from the synthetic profile definition rather than another SQL query. Only PostgreSQL SQLSTATE `57014` with the statement-timeout message is recorded as incomplete; other SQL/decoding errors fail the test. Timeout labels propagate to profile/overflow/experiment summaries, and incomplete experiments do not claim parity.
 
-Follow-up validation: 40 targeted regression/fixture/safety tests passed (12.863 s). The full opt-in rerun passed (3 tests, 80.594 s) with both profiles' exact nested assertions verified and no incomplete measurements. Fresh output: `/tmp/admin-users-performance-review.md`, using the committed recorder; the original matrix/manual assessment remains unchanged. The 300 ms target still lacks performance acceptance.
+Follow-up validation: 40 targeted regression/fixture/safety tests passed (12.863 s). The full opt-in rerun passed (3 tests, 80.594 s) with both profiles' exact nested assertions verified and no incomplete measurements. Fresh output: `/tmp/admin-users-performance-review.md`, using the then-committed recorder; the original matrix/manual assessment remains unchanged. The 300 ms target still lacks performance acceptance.
 
 ### Fixture evidence
 
@@ -46,13 +46,63 @@ The existing guarded local admin seed now includes six dedicated fictional lifec
 
 ---
 
-Reproduce from repository root:
+### Recorder retirement and executable reproduction
 
-```sh
-ADMIN_USERS_PERF_REPORT=/tmp/admin-users-performance.md mise run test:server -tags=demoseed_safety ./internal/demoseed -run '^TestAdminUserSearchPerformance$' -count=1 -timeout=8m
-```
+The opt-in `admin_performance_test.go` was temporary experimental tooling and
+has been removed, including tests only of that recorder. Actual API, membership,
+authorization, seed isolation and seed idempotency tests remain. All timings above
+and below are historical evidence, **not new measurements**. The scaling limitation
+and lack of acceptance against the 300 ms target remain unchanged.
 
-The recorder replaces its output file. Compare the fresh /tmp report with the retained matrix below; preserve this manually written assessment. Relative output paths resolve from server/internal/demoseed.
+The following standard-library extraction produces **complete executable SQL**
+from the exact statements, profile inserts, concrete page/count/preview/overflow
+arguments, candidate statements and index experiment retained below. No Go recorder
+is needed. Run only against a disposable, migrated, empty local database (never the
+running application, shared development database, or production). Each profile has
+its own transaction and rolls back. The guard refuses a database with any users,
+organizations or memberships. Inspect the generated files before execution.
+
+````sh
+python3 - <<'PYSQL'
+from pathlib import Path
+import re
+text = Path("docs/superpowers/verification/2026-09-29-admin-users.md").read_text()
+prepared = text.split("## Exact prepared statements\n", 1)[1].split("## Profile construction", 1)[0]
+profiles = text.split("### 10000 users / 2000 orgs\n", 1)[1]
+small, large = profiles.split("### 100000 users / 20000 orgs\n", 1)
+for size, section in [(10000, small), (100000, large)]:
+    # SQL fences include profile construction, plus the 100k-only index experiment.
+    # Table EXECUTEs retain the exact returned page IDs used for preview measurements.
+    parts = re.split(r"(```sql\n.*?```)", prepared + section, flags=re.S)
+    out = ["\\set ON_ERROR_STOP on", "BEGIN;", "SET LOCAL lock_timeout='1s';",
+           "SET LOCAL statement_timeout='5s';",
+           "SELECT 1 / CASE WHEN EXISTS (SELECT 1 FROM users) OR EXISTS (SELECT 1 FROM organization_metadata) OR EXISTS (SELECT 1 FROM organization_user_relationships) THEN 0 ELSE 1 END;"]
+    for part in parts:
+        if part.startswith("```sql\n"):
+            out.append(part[len("```sql\n"):-3])
+            if "ANALYZE users" in part:
+                out.append("SET LOCAL statement_timeout='1500ms';")
+        else:
+            for statement in re.findall(r"`(EXECUTE [^`]+)`", part):
+                # Three warm sequential observations; do not invent a median on timeout.
+                for run in range(3):
+                    out.extend(["SAVEPOINT measurement;", "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + statement.rstrip(';') + ";", "ROLLBACK TO SAVEPOINT measurement;"])
+    out.append("ROLLBACK;")
+    Path(f"/tmp/admin-users-{size}.sql").write_text("\n".join(out) + "\n")
+PYSQL
+# Set PGHOST/PGPORT/PGUSER/PGDATABASE for your disposable local database yourself.
+# No application configuration or credentials are read by the extraction.
+psql -X -f /tmp/admin-users-10000.sql > /tmp/admin-users-10000-plans.log
+psql -X -f /tmp/admin-users-100000.sql > /tmp/admin-users-100000-plans.log
+````
+
+`ON_ERROR_STOP` deliberately stops on errors (including statement timeout); report
+that workload as incomplete, never as a successful median. Transaction disconnect
+rolls back on failure. For successful workloads, compute the median of the three
+planning-plus-execution times, then sum page/count/actual-preview medians as in the
+historical matrix; these are not end-to-end latency. Savepoints ensure the experimental
+write timing does not accumulate updates. The full SQL and concrete argument tables
+below are the reproduction source of truth, not an abbreviated query sketch.
 
 ## Exact prepared statements
 

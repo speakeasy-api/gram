@@ -21,7 +21,7 @@ export function parseUserSearch(query: string): ParsedUserSearch {
   if (new TextEncoder().encode(query).length > 2048) {
     return {
       ok: false,
-      message: "Search must be at most 2048 UTF-8 bytes.",
+      message: "search must be at most 2048 UTF-8 bytes",
       start: 0,
       end: query.length,
     };
@@ -39,7 +39,7 @@ export function parseUserSearch(query: string): ParsedUserSearch {
       while (end < query.length && !whitespace.test(query[end]!)) end++;
       return { ok: false, message, start, end };
     };
-    if (terms.length === 20) return error("Search supports at most 20 terms.");
+    if (terms.length === 20) return error("search supports at most 20 terms");
     let field: UserSearchTerm["field"] = "any";
     while (
       i < query.length &&
@@ -52,10 +52,12 @@ export function parseUserSearch(query: string): ParsedUserSearch {
       const prefix = query.slice(start, i).toLowerCase();
       if (/[()]/.test(prefix) || /^[!-]/.test(prefix))
         return error(
-          "Unsupported search syntax; quote it to search for literal text.",
+          "unsupported search syntax; quote it to search for literal text",
         );
       if (prefix !== "name" && prefix !== "email" && prefix !== "org") {
-        return error("Unknown search field; use name:, email:, or org:.");
+        return error(
+          "unknown search field; supported fields are name, email, and org",
+        );
       }
       field = prefix;
       i++;
@@ -72,28 +74,28 @@ export function parseUserSearch(query: string): ParsedUserSearch {
           i++;
         value += query[i++];
       }
-      if (i === query.length) return error("Unclosed quote in search term.");
+      if (i === query.length) return error("unclosed quote in search term");
       i++;
       if (i < query.length && !whitespace.test(query[i]!))
         return error(
-          "Separate search terms with whitespace; quote the whole value.",
+          "separate search terms with whitespace; quote the whole value",
         );
     } else {
       while (i < query.length && !whitespace.test(query[i]!)) {
         if (query[i] === '"')
           return error(
-            "Separate search terms with whitespace; quote the whole value.",
+            "separate search terms with whitespace; quote the whole value",
           );
         value += query[i++];
       }
     }
-    if (value === "") return error("Search terms must have a value.");
+    if (value === "") return error("search terms must have a value");
     if (!quoted && unsupported(value))
       return error(
-        "Unsupported search syntax; quote it to search for literal text.",
+        "unsupported search syntax; quote it to search for literal text",
       );
     if ([...value].length > 256)
-      return error("Search terms must be at most 256 Unicode code points.");
+      return error("search terms must be at most 256 Unicode code points");
     terms.push({ field, value, start, end: i });
   }
   return { ok: true, terms };

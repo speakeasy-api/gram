@@ -159,10 +159,13 @@ func TestContextToolReturnsOnlyAuthenticatedContext(t *testing.T) {
 }
 
 func TestRuntimeUserToolsRecheckLiveStaffOnEveryInvocation(t *testing.T) {
+	t.Parallel()
 	for _, tool := range []struct{ name, args string }{{"find_users", `{}`}, {"list_user_organizations", `{"user_id":"user_zero"}`}} {
 		t.Run(tool.name, func(t *testing.T) {
+			t.Parallel()
 			for _, failure := range []string{"revoked", "nonstaff", "scope", "customer"} {
 				t.Run(failure, func(t *testing.T) {
+					t.Parallel()
 					auth, store, verifier, token := staffAuthFixture(t)
 					reads := &recordingUserReader{users: &gen.AdminListUsersResult{}, orgs: &gen.AdminListUserOrganizationsResult{}}
 					handler := NewRuntime(auth, "", reads).Handler()

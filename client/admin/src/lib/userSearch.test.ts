@@ -67,7 +67,7 @@ it("retains UTF-16 source spans, including prefixes and quotes", () => {
   });
   expect(parseUserSearch('😀 org:"x"tail')).toEqual({
     ok: false,
-    message: "Separate search terms with whitespace; quote the whole value.",
+    message: "separate search terms with whitespace; quote the whole value",
     start: 3,
     end: 14,
   });
