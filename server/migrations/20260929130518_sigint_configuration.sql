@@ -3,6 +3,7 @@ CREATE TABLE "sigint_custom_signals" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "project_id" uuid NOT NULL,
   "name" text NOT NULL,
+  "slug" text NOT NULL,
   "description" text NULL,
   "classifier_criteria" text NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -16,11 +17,14 @@ CREATE TABLE "sigint_custom_signals" (
 CREATE INDEX "sigint_custom_signals_project_id_id_idx" ON "sigint_custom_signals" ("project_id", "id") WHERE (deleted IS FALSE);
 -- Create index "sigint_custom_signals_project_id_id_key" to table: "sigint_custom_signals"
 CREATE UNIQUE INDEX "sigint_custom_signals_project_id_id_key" ON "sigint_custom_signals" ("project_id", "id");
+-- Create index "sigint_custom_signals_project_id_slug_key" to table: "sigint_custom_signals"
+CREATE UNIQUE INDEX "sigint_custom_signals_project_id_slug_key" ON "sigint_custom_signals" ("project_id", "slug");
 -- Create "sigint_sensors" table
 CREATE TABLE "sigint_sensors" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "project_id" uuid NOT NULL,
   "name" text NOT NULL,
+  "slug" text NOT NULL,
   "description" text NULL,
   "instructions" text NULL,
   "mode" text NOT NULL,
@@ -35,6 +39,8 @@ CREATE TABLE "sigint_sensors" (
 CREATE INDEX "sigint_sensors_project_id_id_idx" ON "sigint_sensors" ("project_id", "id") WHERE (deleted IS FALSE);
 -- Create index "sigint_sensors_project_id_id_key" to table: "sigint_sensors"
 CREATE UNIQUE INDEX "sigint_sensors_project_id_id_key" ON "sigint_sensors" ("project_id", "id");
+-- Create index "sigint_sensors_project_id_slug_key" to table: "sigint_sensors"
+CREATE UNIQUE INDEX "sigint_sensors_project_id_slug_key" ON "sigint_sensors" ("project_id", "slug");
 -- Create "sigint_sensor_signals" table
 CREATE TABLE "sigint_sensor_signals" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),

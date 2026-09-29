@@ -9964,6 +9964,7 @@ CREATE TABLE IF NOT EXISTS sigint_custom_signals (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   name TEXT NOT NULL,
+  slug TEXT NOT NULL,
   description TEXT,
   classifier_criteria TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -9978,6 +9979,9 @@ CREATE TABLE IF NOT EXISTS sigint_custom_signals (
 CREATE UNIQUE INDEX IF NOT EXISTS sigint_custom_signals_project_id_id_key
 ON sigint_custom_signals (project_id, id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_custom_signals_project_id_slug_key
+ON sigint_custom_signals (project_id, slug);
+
 CREATE INDEX IF NOT EXISTS sigint_custom_signals_project_id_id_idx
 ON sigint_custom_signals (project_id, id) WHERE deleted IS FALSE;
 
@@ -9985,6 +9989,7 @@ CREATE TABLE IF NOT EXISTS sigint_sensors (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   name TEXT NOT NULL,
+  slug TEXT NOT NULL,
   description TEXT,
   instructions TEXT,
   mode TEXT NOT NULL,
@@ -9999,6 +10004,9 @@ CREATE TABLE IF NOT EXISTS sigint_sensors (
 
 CREATE UNIQUE INDEX IF NOT EXISTS sigint_sensors_project_id_id_key
 ON sigint_sensors (project_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_sensors_project_id_slug_key
+ON sigint_sensors (project_id, slug);
 
 CREATE INDEX IF NOT EXISTS sigint_sensors_project_id_id_idx
 ON sigint_sensors (project_id, id) WHERE deleted IS FALSE;
