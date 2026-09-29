@@ -45,7 +45,8 @@ type Repository struct{ db *pgxpool.Pool }
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
 // Load pins ownership to the organization and project in the same SQL statement.
-// Empty sensors and deleted/mismatched projects yield no runnable definitions.
+// Empty sensors are retained for draft accounting; deleted/mismatched projects
+// yield no definitions.
 func (r *Repository) Load(ctx context.Context, org string, project uuid.UUID) ([]Sensor, error) {
 	rows, err := repo.New(r.db).LoadEvaluationSensors(ctx, repo.LoadEvaluationSensorsParams{ProjectID: project, OrganizationID: org})
 	if err != nil {
@@ -61,12 +62,15 @@ func (r *Repository) Load(ctx context.Context, org string, project uuid.UUID) ([
 			}
 			sensors = append(sensors, Sensor{ID: id, Slug: row.SensorSlug, Mode: row.Mode, Instructions: instructions, Signals: nil, SignalSlugs: make(map[classifier.OptionKey]string)})
 		}
+		if !row.SignalID.Valid {
+			continue
+		}
 		var description classifier.Entry
 		if row.ClassifierCriteria.Valid {
 			description = classifier.Text(row.ClassifierCriteria.String)
 		}
-		sensors[len(sensors)-1].Signals = append(sensors[len(sensors)-1].Signals, classifier.NewOption(classifier.OptionKey(row.SignalID.String()), description))
-		sensors[len(sensors)-1].SignalSlugs[classifier.OptionKey(row.SignalID.String())] = row.SignalSlug
+		sensors[len(sensors)-1].Signals = append(sensors[len(sensors)-1].Signals, classifier.NewOption(classifier.OptionKey(row.SignalID.UUID.String()), description))
+		sensors[len(sensors)-1].SignalSlugs[classifier.OptionKey(row.SignalID.UUID.String())] = row.SignalSlug.String
 	}
 	return sensors, nil
 }
