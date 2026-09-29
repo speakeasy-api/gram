@@ -221,6 +221,112 @@ describe("useHeaderDrafts", () => {
     expect(result.current.drafts[0]?.staticValue).toBe("mine");
   });
 
+  it("drops the submitted values even when a write fails", async () => {
+    mocks.create.mockRejectedValue(new Error("upstream rejected"));
+    const { result } = renderDrafts();
+
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        name: "X-Api-Key",
+        staticValue: "sk-test",
+      }),
+    );
+
+    await act(async () => {
+      await expect(result.current.save()).rejects.toThrow("upstream rejected");
+    });
+
+    // The failed request still carried the plaintext secret.
+    expect(mocks.resetCreate).toHaveBeenCalled();
+    expect(mocks.resetUpdate).toHaveBeenCalled();
+    expect(mocks.resetRemove).toHaveBeenCalled();
+    // Resetting the mutation must not also swallow the failure.
+    expect(result.current.error?.message).toBe("upstream rejected");
+  });
+
+  it("keeps a saved secret untouched while Secret stays ticked", async () => {
+    mocks.headers.mockReturnValue(
+      headersResult([
+        serverHeader({
+          id: "header-key",
+          name: "X-Api-Key",
+          value: "***",
+          isSecret: true,
+        }),
+      ]),
+    );
+    const { result } = renderDrafts();
+
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        isRequired: true,
+      }),
+    );
+    await act(async () => {
+      await result.current.save();
+    });
+
+    const form =
+      mocks.update.mock.calls[0]?.[0]?.request?.updateServerHeaderForm;
+    expect(form).toMatchObject({ id: "header-key", isSecret: true });
+    expect(form).not.toHaveProperty("value");
+  });
+
+  it("asks for a new value before storing a saved secret as non-secret", async () => {
+    // The server never reveals a stored secret as plain text, and the
+    // redaction placeholder must never become the credential.
+    mocks.headers.mockReturnValue(
+      headersResult([
+        serverHeader({
+          id: "header-key",
+          name: "X-Api-Key",
+          value: "***",
+          isSecret: true,
+        }),
+      ]),
+    );
+    const { result } = renderDrafts();
+
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        isSecret: false,
+      }),
+    );
+
+    expect(result.current.fieldErrors.get("header-key")).toEqual({
+      field: "value",
+      message: 'Enter a new value for "X-Api-Key" to store it as non-secret.',
+    });
+    await act(async () => {
+      await expect(result.current.save()).resolves.toBe(false);
+    });
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        staticValue: "public-key",
+      }),
+    );
+    expect(result.current.validationError).toBeNull();
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(mocks.update.mock.calls[0]?.[0]).toMatchObject({
+      request: {
+        updateServerHeaderForm: {
+          id: "header-key",
+          isSecret: false,
+          value: "public-key",
+        },
+      },
+    });
+  });
+
   it("refuses to write rows that would not validate", async () => {
     const { result } = renderDrafts();
 

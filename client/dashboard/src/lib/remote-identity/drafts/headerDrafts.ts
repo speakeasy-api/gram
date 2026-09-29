@@ -72,12 +72,15 @@ const DENIED_PASS_THROUGH_SOURCES = new Set([
 // A saved secret shows its redacted placeholder (`***`) in the value field. As
 // long as the user leaves that placeholder untouched, we keep the existing
 // secret rather than overwriting it with the literal redaction string.
-function isUnchangedSecret(draft: HeaderDraft): boolean {
-  // Deliberately not conditioned on the current isSecret toggle: what makes
-  // the value unchanged is that the placeholder was never typed over. Reading
-  // the toggle here meant that un-ticking Secret on an untouched row stored
-  // the literal redaction string as the upstream credential.
+function isUntouchedSecret(draft: HeaderDraft): boolean {
   return draft.hadSecret && draft.staticValue === REDACTED_SECRET;
+}
+
+// The server keeps a stored value only for a row that stays secret, and it
+// never reveals one as plain text. So an untouched secret can be kept only
+// while Secret is still ticked; un-ticking it needs a freshly typed value.
+function isKeptSecret(draft: HeaderDraft): boolean {
+  return isUntouchedSecret(draft) && draft.isSecret;
 }
 
 export function draftsEqual(a: HeaderDraft[], b: HeaderDraft[]): boolean {
@@ -177,11 +180,19 @@ export function headerDraftErrors(
       }
     }
 
-    if (
-      draft.source === "static" &&
-      !isUnchangedSecret(draft) &&
-      draft.staticValue.trim() === ""
-    ) {
+    if (draft.source === "static" && isUntouchedSecret(draft)) {
+      // Never write the literal placeholder as the credential, and never ask
+      // the server to reveal the stored secret as plain text.
+      if (!draft.isSecret) {
+        errors.set(draft.key, {
+          field: "value",
+          message: `Enter a new value for "${name}" to store it as non-secret.`,
+        });
+      }
+      continue;
+    }
+
+    if (draft.source === "static" && draft.staticValue.trim() === "") {
       errors.set(draft.key, {
         field: "value",
         message: `Header "${name}" needs a static value.`,
@@ -261,13 +272,15 @@ export function headerDraftToWriteFields(
     };
   }
 
-  if (isUnchangedSecret(draft)) {
-    // Omitting `value` is what tells the server to keep the stored secret, so
-    // the toggle can still travel on its own.
-    return {
-      ...base,
-      isSecret: draft.isSecret,
-    };
+  if (isKeptSecret(draft)) {
+    // Omitting `value` is what tells the server to keep the stored secret.
+    return { ...base, isSecret: true };
+  }
+
+  if (isUntouchedSecret(draft)) {
+    // headerDraftErrors holds Save closed on this row; refuse here too so the
+    // redaction placeholder can never become the stored credential.
+    throw new Error(`Header "${base.name}" needs a new value.`);
   }
 
   return {

@@ -154,6 +154,10 @@ export function useHeaderDrafts({
   const createHeader = useCreateRemoteMcpServerHeaderMutation();
   const updateHeader = useUpdateRemoteMcpServerHeaderMutation();
   const deleteHeader = useDeleteRemoteMcpServerHeaderMutation();
+  // Held here rather than read off the mutations: those are reset after every
+  // write so they stop holding the submitted secret, and reset clears their
+  // error too.
+  const [writeError, setWriteError] = useState<Error | null>(null);
 
   const validationError = validateDrafts(drafts, identityMode, managedHeaderId);
   const fieldErrors = headerDraftErrors(drafts, identityMode, managedHeaderId);
@@ -180,43 +184,52 @@ export function useHeaderDrafts({
       drafts.flatMap((draft) => (draft.id ? [draft.id] : [])),
     );
 
-    for (const draft of baseline) {
-      // The Authorization row belongs to the identity section. It is absent
-      // from these drafts precisely when identity has just written it, and
-      // deleting it here would undo the save that ran moments ago.
-      if (!draft.id || draft.id === managedHeaderId) continue;
-      if (keptIds.has(draft.id)) continue;
-      await deleteHeader.mutateAsync({ request: { id: draft.id } });
-    }
-
-    for (const draft of drafts) {
-      // Guard on the id first: an unsaved row and an absent managed header are
-      // both undefined, and skipping those would never create anything.
-      if (draft.id && draft.id === managedHeaderId) continue;
-      const fields = headerDraftToWriteFields(draft);
-      if (!draft.id) {
-        await createHeader.mutateAsync({
-          request: {
-            createServerHeaderForm: { remoteMcpServerId, ...fields },
-          },
-        });
-        continue;
+    setWriteError(null);
+    try {
+      for (const draft of baseline) {
+        // The Authorization row belongs to the identity section. It is absent
+        // from these drafts precisely when identity has just written it, and
+        // deleting it here would undo the save that ran moments ago.
+        if (!draft.id || draft.id === managedHeaderId) continue;
+        if (keptIds.has(draft.id)) continue;
+        await deleteHeader.mutateAsync({ request: { id: draft.id } });
       }
 
-      const previous = baselineById.get(draft.id);
-      if (previous && draftsEqual([draft], [previous])) continue;
+      for (const draft of drafts) {
+        // Guard on the id first: an unsaved row and an absent managed header are
+        // both undefined, and skipping those would never create anything.
+        if (draft.id && draft.id === managedHeaderId) continue;
+        const fields = headerDraftToWriteFields(draft);
+        if (!draft.id) {
+          await createHeader.mutateAsync({
+            request: {
+              createServerHeaderForm: { remoteMcpServerId, ...fields },
+            },
+          });
+          continue;
+        }
 
-      await updateHeader.mutateAsync({
-        request: { updateServerHeaderForm: { id: draft.id, ...fields } },
-      });
+        const previous = baselineById.get(draft.id);
+        if (previous && draftsEqual([draft], [previous])) continue;
+
+        await updateHeader.mutateAsync({
+          request: { updateServerHeaderForm: { id: draft.id, ...fields } },
+        });
+      }
+    } catch (error) {
+      setWriteError(
+        error instanceof Error ? error : new Error("Failed to save headers"),
+      );
+      throw error;
+    } finally {
+      // react-query keeps a settled mutation's request variables, and for
+      // these that means the plaintext secret stays readable in client state
+      // long after the write — failed writes included. Nothing reads them
+      // again, so drop them.
+      createHeader.reset();
+      updateHeader.reset();
+      deleteHeader.reset();
     }
-
-    // react-query keeps a settled mutation's request variables, and for these
-    // that means the plaintext secret stays readable in client state long
-    // after the write. Nothing reads them again, so drop them.
-    createHeader.reset();
-    updateHeader.reset();
-    deleteHeader.reset();
 
     await invalidateAllRemoteMcpServerHeaders(queryClient, {
       refetchType: "all",
@@ -256,7 +269,7 @@ export function useHeaderDrafts({
     fieldErrors,
     reportErrors: isDirty && !pristineSuggestions,
     saving,
-    error: createHeader.error ?? updateHeader.error ?? deleteHeader.error,
+    error: writeError,
     addHeader: () => setDrafts((current) => [...current, newHeaderDraft()]),
     replaceHeader: (index, draft) =>
       setDrafts((current) =>
