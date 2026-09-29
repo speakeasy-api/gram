@@ -1,0 +1,66 @@
+edition = "2024";
+
+package gram.sigint.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1";
+
+// Reading is one successful sensor evaluation of one conversation message.
+// Delivery and evaluation are at-least-once: the same id can carry different
+// answers from different attempts. Storage consumers choose the winning attempt.
+message Reading {
+  enum MessageRole {
+    MESSAGE_ROLE_UNSPECIFIED = 0;
+    MESSAGE_ROLE_USER = 1;
+    MESSAGE_ROLE_ASSISTANT = 2;
+  }
+  message Probability {
+    string signal_id = 1;
+    double probability = 2;
+  }
+  message MultiLabel {
+    repeated Probability signals = 1;
+  }
+  message Choice {
+    string selected_signal_id = 1;
+    repeated Probability distribution = 2;
+    double confidence = 3;
+  }
+  message Score {
+    double expected_index = 1;
+    // Low-to-high level order; index defines the level score.
+    repeated Probability distribution = 2;
+    double confidence = 3;
+  }
+
+  // UUIDv5 identity of tenant, immutable logical message ID, and sensor ID.
+  // Configuration changes between attempts do not change this identity.
+  string id = 1;
+  string evaluation_attempt_id = 2;
+  string organization_id = 3;
+  string project_id = 4;
+  string conversation_id = 5;
+  string message_id = 6;
+  MessageRole message_role = 7;
+  string sensor_id = 8;
+  string message_created_at = 9; // UTC RFC3339Nano source time.
+  string evaluated_at = 10; // UTC RFC3339Nano completion time.
+  reserved 11;
+  reserved input_hash;
+  // Effective configuration for traceability; not part of reading identity.
+  string definition_hash = 12;
+  string configured_model = 13;
+  // A logical evaluation may span multiple provider requests/model versions.
+  repeated string models = 14;
+  string compiler_version = 15;
+  oneof result {
+    MultiLabel multi_label = 16;
+    Choice choice = 17;
+    Score score = 18;
+  }
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: { seconds: 345600 /* 4 days */ }
+  };
+}

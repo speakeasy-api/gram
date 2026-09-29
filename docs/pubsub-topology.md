@@ -59,6 +59,7 @@ flowchart LR
   t_gram_risk_v1_presidio_enforcer_dlq(["gram-risk-v1-presidio-enforcer-dlq<br/>(dlq)"]):::dlq
   t_gram_risk_v1_prompt_injection_analysis(["gram-risk-v1-prompt-injection-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_prompt_policy_analysis(["gram-risk-v1-prompt-policy-analysis<br/>(topic)"]):::topic
+  t_gram_sigint_v1_reading(["gram-sigint-v1-reading<br/>(topic)"]):::topic
   t_gram_telemetry_v1_log_record(["gram-telemetry-v1-log-record<br/>(topic)"]):::topic
   t_gram_telemetry_v1_session_observed(["gram-telemetry-v1-session-observed<br/>(topic)"]):::topic
   t_gram_telemetry_v1_session_observed_ch_writer_dlq(["gram-telemetry-v1-session-observed-ch-writer-dlq<br/>(dlq)"]):::dlq
@@ -94,6 +95,7 @@ flowchart LR
   s_gram_risk_v1_presidio_enforcer["gram-risk-v1-presidio-enforcer<br/>(sub)"]:::sub
   s_gram_risk_v1_prompt_injection_analyzer["gram-risk-v1-prompt-injection-analyzer<br/>(sub)"]:::sub
   s_gram_risk_v1_prompt_policy_analyzer["gram-risk-v1-prompt-policy-analyzer<br/>(sub)"]:::sub
+  s_gram_sigint_v1_evaluator["gram-sigint-v1-evaluator<br/>(sub)"]:::sub
   s_gram_telemetry_v1_noop["gram-telemetry-v1-noop<br/>(sub)"]:::sub
   s_gram_telemetry_v1_session_observed_ch_writer["gram-telemetry-v1-session-observed-ch-writer<br/>(sub)"]:::sub
   s_gram_telemetry_v1_tool_call_log_relay["gram-telemetry-v1-tool-call-log-relay<br/>(sub)"]:::sub
@@ -201,6 +203,7 @@ flowchart LR
   s_gram_risk_v1_presidio_enforcer -. dead-letter .-> t_gram_risk_v1_presidio_enforcer_dlq
   t_gram_risk_v1_prompt_injection_analysis --> s_gram_risk_v1_prompt_injection_analyzer
   t_gram_risk_v1_prompt_policy_analysis --> s_gram_risk_v1_prompt_policy_analyzer
+  t_gram_conversation_v1_message --> s_gram_sigint_v1_evaluator
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_noop
   t_gram_telemetry_v1_session_observed --> s_gram_telemetry_v1_session_observed_ch_writer
   s_gram_telemetry_v1_session_observed_ch_writer -. dead-letter .-> t_gram_telemetry_v1_session_observed_ch_writer_dlq
@@ -266,14 +269,16 @@ flowchart LR
   s_gram_risk_v1_prompt_injection_analyzer --> c53
   c54[\"📥<br/>server/cmd/gram/streams.go<br/>promptPolicyHandler"\]:::go
   s_gram_risk_v1_prompt_policy_analyzer --> c54
-  c55[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
-  s_gram_telemetry_v1_noop --> c55
-  c56[\"📥<br/>server/cmd/gram/streams.go<br/>telemetry.NewSessionObservedHandler<br/>(batch)"\]:::go
-  s_gram_telemetry_v1_session_observed_ch_writer --> c56
-  c57[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallLogRelayHandler<br/>(batch)"\]:::go
-  s_gram_telemetry_v1_tool_call_log_relay --> c57
-  c58[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
-  s_gram_webhooks_v1_svix_relay --> c58
+  c55[\"📥<br/>server/cmd/gram/streams.go<br/>sensorEvaluator<br/>(batch)"\]:::go
+  s_gram_sigint_v1_evaluator --> c55
+  c56[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
+  s_gram_telemetry_v1_noop --> c56
+  c57[\"📥<br/>server/cmd/gram/streams.go<br/>telemetry.NewSessionObservedHandler<br/>(batch)"\]:::go
+  s_gram_telemetry_v1_session_observed_ch_writer --> c57
+  c58[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallLogRelayHandler<br/>(batch)"\]:::go
+  s_gram_telemetry_v1_tool_call_log_relay --> c58
+  c59[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
+  s_gram_webhooks_v1_svix_relay --> c59
 ```
 
 ## Topics
@@ -324,6 +329,7 @@ flowchart LR
 | [`gram-risk-v1-presidio-enforcer-dlq`](../infra/proto/gram/risk/v1/presidio_enforcer.proto) | DLQ | 10m | — |
 | [`gram-risk-v1-prompt-injection-analysis`](../infra/proto/gram/risk/v1/prompt_injection_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_prompt_injection.go`](../server/internal/background/activities/risk_analysis/scan_prompt_injection.go) |
 | [`gram-risk-v1-prompt-policy-analysis`](../infra/proto/gram/risk/v1/prompt_policy_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/prompt_judge_batch.go`](../server/internal/background/activities/risk_analysis/prompt_judge_batch.go) |
+| [`gram-sigint-v1-reading`](../infra/proto/gram/sigint/v1/reading.proto) | topic | 4d | — |
 | [`gram-telemetry-v1-log-record`](../infra/proto/gram/telemetry/v1/log_record.proto) | topic | 7d | [`server/internal/telemetry/log_publisher.go`](../server/internal/telemetry/log_publisher.go) |
 | [`gram-telemetry-v1-session-observed`](../infra/proto/gram/telemetry/v1/session_observed.proto) | topic | 7d | [`server/cmd/gram/replaysessions.go`](../server/cmd/gram/replaysessions.go)<br/>[`server/internal/chat/message_store.go`](../server/internal/chat/message_store.go) |
 | [`gram-telemetry-v1-session-observed-ch-writer-dlq`](../infra/proto/gram/telemetry/v1/session_observed_ch_writer.proto) | DLQ | 7d | — |
@@ -364,6 +370,7 @@ flowchart LR
 | [`gram-risk-v1-presidio-enforcer`](../infra/proto/gram/risk/v1/presidio_enforcer.proto) | `gram-risk-v1-presidio-enforcement` | 10s | `gram-risk-v1-presidio-enforcer-dlq` | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
 | [`gram-risk-v1-prompt-injection-analyzer`](../infra/proto/gram/risk/v1/prompt_injection_analyzer.proto) | `gram-risk-v1-prompt-injection-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-prompt-policy-analyzer`](../infra/proto/gram/risk/v1/prompt_policy_analyzer.proto) | `gram-risk-v1-prompt-policy-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-sigint-v1-evaluator`](../infra/proto/gram/sigint/v1/evaluator.proto) | `gram-conversation-v1-message` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-noop`](../infra/proto/gram/telemetry/v1/noop.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-session-observed-ch-writer`](../infra/proto/gram/telemetry/v1/session_observed_ch_writer.proto) | `gram-telemetry-v1-session-observed` | 1m | `gram-telemetry-v1-session-observed-ch-writer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-tool-call-log-relay`](../infra/proto/gram/telemetry/v1/tool_call_log_relay.proto) | `gram-telemetry-v1-log-record` | 1m | `gram-telemetry-v1-tool-call-log-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
@@ -376,4 +383,5 @@ flowchart LR
 - Topic `gram-otel-v1-log-record` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-metric` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-span` has no publisher in `server/` or `pystreams/`.
+- Topic `gram-sigint-v1-reading` has no publisher in `server/` or `pystreams/`.
 
