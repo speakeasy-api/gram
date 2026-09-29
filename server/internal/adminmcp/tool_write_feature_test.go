@@ -166,8 +166,8 @@ func TestFeatureWriteStaleStateAndDisabledSwitch(t *testing.T) {
 }
 
 // A stored proposal naming a feature outside the allowlist can only come from
-// direct database access. Approval invalidates it, and execution refuses it
-// even when approval was bypassed.
+// direct database access. Approval refuses it, and execution refuses it even
+// when approval was bypassed.
 func TestFeatureWriteRejectsUnreviewedStoredFeature(t *testing.T) {
 	t.Parallel()
 	f := newProposalFixture(t, "admin_mcp_feature_unreviewed")
