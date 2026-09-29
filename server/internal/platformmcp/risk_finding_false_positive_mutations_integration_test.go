@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,6 +19,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
+type recordingFalsePositiveStore struct {
+	mu         sync.Mutex
+	suppressed []uuid.UUID
+	reversed   []uuid.UUID
+}
+
+func (s *recordingFalsePositiveStore) AppendFalsePositiveSuppression(_ context.Context, _, _, _, _, _ string, ids []uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.suppressed = append(s.suppressed, ids...)
+	return nil
+}
+
+func (s *recordingFalsePositiveStore) AppendFalsePositiveReversal(_ context.Context, _, _, _ string, ids []uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reversed = append(s.reversed, ids...)
+	return nil
+}
+
 func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 	t.Parallel()
 
@@ -31,9 +52,10 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
+	findingsStore := &recordingFalsePositiveStore{}
 	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-finding-test-key")
 	require.NoError(t, err)
-	handlers, err := NewRiskMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil), nil, risk.NewFalsePositiveCore(audit.NewLogger()))
+	handlers, err := NewRiskMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil), nil, risk.NewFalsePositiveCore(audit.NewLogger(), findingsStore))
 	require.NoError(t, err)
 	require.NotNil(t, handlers.MarkFindingsFalsePositive)
 	require.NotNil(t, handlers.UnmarkFindingsFalsePositive)
@@ -68,6 +90,7 @@ func TestRiskFindingFalsePositiveHandlersPartitionReplayAndAudit(t *testing.T) {
 	requireFindingDismissed(t, ctx, conn, project.ID, first, true)
 	requireFindingDismissed(t, ctx, conn, project.ID, second, true)
 	requireFindingDismissed(t, ctx, conn, project.ID, third, false)
+	require.ElementsMatch(t, []uuid.UUID{first, unknown, second}, findingsStore.suppressed, "every requested id is appended to the findings store")
 
 	dismissAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionRiskResultDismiss)
 	require.NoError(t, err)

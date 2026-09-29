@@ -1336,6 +1336,17 @@ func redactResultMatchInPlace(r *types.RiskResult, orgID string) {
 	r.Spans = nil
 }
 
+func parseOptionalMCPServerID(raw *string) (string, error) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return "", nil
+	}
+	id, err := uuid.Parse(*raw)
+	if err != nil {
+		return "", oops.E(oops.CodeInvalid, err, "invalid MCP server ID")
+	}
+	return id.String(), nil
+}
+
 // listRiskResultsRaw is the shared, always-unredacted fetch behind both
 // ListRiskResults (which may redact its output) and ListRiskResultsForAgent
 // (which always redacts). Keeping this as the single source of raw data
@@ -1357,13 +1368,9 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	}
 
 	pageSize := resolvePageSize(payload.Limit)
-	mcpServerID := ""
-	if payload.McpServerID != nil && strings.TrimSpace(*payload.McpServerID) != "" {
-		id, err := uuid.Parse(*payload.McpServerID)
-		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid MCP server ID")
-		}
-		mcpServerID = id.String()
+	mcpServerID, err := parseOptionalMCPServerID(payload.McpServerID)
+	if err != nil {
+		return nil, err
 	}
 	chatID := ""
 	if payload.ChatID != nil && strings.TrimSpace(*payload.ChatID) != "" {

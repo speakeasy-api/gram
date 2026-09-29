@@ -209,10 +209,9 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	require.Equal(t, int64(0), timeSeries["pii|"+bucket(109*time.Hour)])
 }
 
-// TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow covers the case
-// enqueueFalsePositiveMirror actually produces: a finding's original row
-// (false_positive_at NULL) plus a later-inserted row sharing the SAME id with
-// false_positive_at set. A naive "row satisfies false_positive_at IS NULL"
+// TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow covers a finding's
+// original row (false_positive_at NULL) plus a later direct dismissal copy
+// sharing the same id. A naive "row satisfies false_positive_at IS NULL"
 // filter would still count the id via the stale original row; only picking
 // each id's most-recently-inserted row before filtering excludes it.
 func TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow(t *testing.T) {
