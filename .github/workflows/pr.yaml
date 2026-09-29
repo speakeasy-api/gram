@@ -2497,26 +2497,8 @@ jobs:
       ]
     permissions:
       pull-requests: write
-    # Labels UI PRs with `preview` once, when they are opened (or leave
-    # draft), so reviewers get a preview app without asking for one. Later
-    # commits never touch the label: removing it by hand sticks, which lets
-    # the preview sweeper drop the database.
-    #
-    # The `preview` label triggers gram-infra's gram-app-previews
-    # ApplicationSet, whose wait-for-images PreSync hook polls GCR for the
-    # pr-<number>-<sha8> tags of every component. Labelling before those tags
-    # exist leaves the hook polling for images that never arrive (this is
-    # what #2749 cleaned up), so the label is only added once this run has
-    # produced a complete tag set.
-    #
-    # A component's tag comes either from its docker build job or, when that
-    # job is skipped, from preview-image-tags aliasing main's image. Those two
-    # sources are keyed off the same `changes` gates, so readiness is checked
-    # as "gate closed, or the build succeeded" rather than as "not failed".
-    # `skipped` on its own is not enough: docker-build-server also needs
-    # server-build-lint, so a lint failure skips it under the default
-    # success() condition while its gate is open — leaving no server tag for
-    # preview-retag to have aliased either.
+    # Only on PR creation, so a manually removed label stays removed. Waits
+    # for every preview image tag, or the preview polls for missing images.
     if: >-
       !cancelled() &&
       github.event_name == 'pull_request' &&
