@@ -328,3 +328,95 @@ func TestGetRiskSignals_PolicyScoreDrivesBase(t *testing.T) {
 	// A window-union policy leak would drag this down to 1.7.
 	require.InDelta(t, 6.9, result.PreviousOrgRiskScore, 0.001)
 }
+
+// TestGetRiskSignals_MCPServerFilter asserts the mcp_server_id filter narrows
+// signals, KPIs and exposure to one server, that signals report the servers
+// and tools they were observed on, and that the per-server counts endpoint
+// ignores the filter and omits unattributed findings.
+func TestGetRiskSignals_MCPServerFilter(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	from := time.Now().UTC().AddDate(0, 0, -30).Truncate(24 * time.Hour)
+	to := from.AddDate(0, 0, 7)
+	chat := uuid.Must(uuid.NewV7())
+	msg := func() uuid.UUID { return uuid.Must(uuid.NewV7()) }
+
+	serverA := uuid.NewString()
+	serverB := uuid.NewString()
+
+	finding := func(at time.Duration, ruleID, server, tool string) chrepo.RiskFindingRow {
+		row := chOverviewFinding(t, projectID, orgID, chat, msg(), from.Add(at), "gitleaks", ruleID, "alice@example.com")
+		row.MCPServerID = server
+		row.ToolName = tool
+		return row
+	}
+	rows := []chrepo.RiskFindingRow{
+		finding(36*time.Hour, "secret.github_pat", serverA, "delete_pet"),
+		finding(37*time.Hour, "secret.github_pat", serverA, "update_order"),
+		finding(38*time.Hour, "secret.github_pat", serverB, "get_issue"),
+		finding(39*time.Hour, "secret.aws_access_token", serverB, "get_issue"),
+		// No server attribution: excluded from the counts, still a signal
+		// when unfiltered.
+		finding(40*time.Hour, "secret.github_pat", "", ""),
+	}
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, rows))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	window := &gen.GetRiskSignalsPayload{
+		From: new(from.Format(time.RFC3339)),
+		To:   new(to.Format(time.RFC3339)),
+	}
+
+	unfiltered, err := ti.service.GetRiskSignals(ctx, window)
+	require.NoError(t, err)
+	require.Equal(t, int64(5), unfiltered.Findings)
+	require.Len(t, unfiltered.Signals, 2)
+	for _, signal := range unfiltered.Signals {
+		if signal.RuleID == "secret.github_pat" {
+			require.ElementsMatch(t, []string{serverA, serverB}, signal.McpServerIds)
+			require.Equal(t, []string{"delete_pet", "get_issue", "update_order"}, signal.ToolNames)
+		}
+	}
+
+	window.McpServerID = &serverA
+	filtered, err := ti.service.GetRiskSignals(ctx, window)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), filtered.Findings)
+	require.Len(t, filtered.Signals, 1)
+	require.Equal(t, "secret.github_pat", filtered.Signals[0].RuleID)
+	require.Equal(t, []string{serverA}, filtered.Signals[0].McpServerIds)
+	require.Equal(t, []string{"delete_pet", "update_order"}, filtered.Signals[0].ToolNames)
+	require.Len(t, filtered.Exposure, 1)
+
+	counts, err := ti.service.GetRiskMcpServerCounts(ctx, &gen.GetRiskMcpServerCountsPayload{
+		From: new(from.Format(time.RFC3339)),
+		To:   new(to.Format(time.RFC3339)),
+	})
+	require.NoError(t, err)
+	require.Len(t, counts.Servers, 2)
+	byServer := map[string]int64{}
+	for _, server := range counts.Servers {
+		byServer[server.McpServerID] = server.Findings
+	}
+	require.Equal(t, map[string]int64{serverA: 2, serverB: 2}, byServer)
+}
+
+// TestGetRiskMcpServerCounts_RequiresOrgAdmin asserts the counts endpoint
+// denies callers without the org:admin scope.
+func TestGetRiskMcpServerCounts_RequiresOrgAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn)
+
+	_, err := ti.service.GetRiskMcpServerCounts(ctx, &gen.GetRiskMcpServerCountsPayload{From: nil, To: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}

@@ -71,6 +71,11 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		return nil, oops.E(oops.CodeNotImplemented, nil, "risk signals require the ClickHouse findings store").LogError(ctx, s.logger)
 	}
 
+	mcpServerID := ""
+	if payload.McpServerID != nil {
+		mcpServerID = *payload.McpServerID
+	}
+
 	organizationID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
 	wideFrom := from.Add(-to.Sub(from))
@@ -81,6 +86,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		WideFrom:       wideFrom,
 		From:           from,
 		To:             to,
+		MCPServerID:    mcpServerID,
 	}
 
 	currentWindow := chrepo.RiskOverviewWindowParams{
@@ -88,6 +94,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		ProjectID:      projectID,
 		From:           from,
 		To:             to,
+		MCPServerID:    mcpServerID,
 	}
 	// Ceiling division: rounding the width down would let an unaligned window
 	// straddle riskSignalSparkBuckets+2 buckets and silently drop findings
@@ -194,6 +201,8 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 			apps = []string{}
 		}
 		slices.Sort(apps)
+		mcpServerIDs := sortedNonNil(agg.MCPServerIDs)
+		toolNames := sortedNonNil(agg.ToolNames)
 
 		signals = append(signals, &gen.RiskSignal{
 			Key:              "rule:" + agg.RuleID,
@@ -202,6 +211,8 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 			Description:      agg.Description,
 			DetectionSources: sources,
 			Apps:             apps,
+			McpServerIds:     mcpServerIDs,
+			ToolNames:        toolNames,
 			Severity:         severityForScore(score),
 			RiskScore:        score,
 			Findings:         safeCount(agg.FindingsCur),
@@ -431,4 +442,63 @@ func maxPolicyScore(policyIDs []string, scores map[string]float64) float64 {
 		}
 	}
 	return best
+}
+
+// sortedNonNil returns a sorted copy of values, never nil so the JSON field
+// serializes as an empty array.
+func sortedNonNil(values []string) []string {
+	out := slices.Clone(values)
+	if out == nil {
+		return []string{}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// riskMCPServerCountLimit caps the per-server counts returned; a project has
+// far fewer concrete servers in practice.
+const riskMCPServerCountLimit = 500
+
+// GetRiskMcpServerCounts serves the MCP server filter pickers: live finding
+// counts per concrete server over the window. ClickHouse-only, gated like
+// GetRiskSignals.
+func (s *Service) GetRiskMcpServerCounts(ctx context.Context, payload *gen.GetRiskMcpServerCountsPayload) (*gen.RiskMcpServerCountsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	from, to, err := resolveRiskOverviewWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid window").LogError(ctx, s.logger)
+	}
+
+	if s.findingsCH == nil {
+		return nil, oops.E(oops.CodeNotImplemented, nil, "mcp server counts require the ClickHouse findings store").LogError(ctx, s.logger)
+	}
+
+	rows, err := s.findingsCH.ListRiskMCPServerCounts(ctx, chrepo.RiskOverviewWindowParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      authCtx.ProjectID.String(),
+		From:           from,
+		To:             to,
+		MCPServerID:    "",
+	}, riskMCPServerCountLimit)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server finding counts").LogError(ctx, s.logger)
+	}
+
+	servers := make([]*gen.RiskMcpServerCount, 0, len(rows))
+	for _, row := range rows {
+		servers = append(servers, &gen.RiskMcpServerCount{
+			McpServerID: row.MCPServerID,
+			Findings:    safeCount(row.Findings),
+		})
+	}
+
+	return &gen.RiskMcpServerCountsResult{Servers: servers}, nil
 }

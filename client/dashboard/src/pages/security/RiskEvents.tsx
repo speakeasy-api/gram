@@ -14,6 +14,8 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { useOrganization } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { cn } from "@/lib/utils";
@@ -24,6 +26,7 @@ import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useRiskMcpServerCounts } from "@gram/client/react-query/riskMcpServerCounts.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -33,6 +36,11 @@ import { History } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
+import {
+  enforcementOutcomeLabel,
+  isBlockingOutcome,
+  mcpServerDisplayName,
+} from "./risk-outcome";
 import { useDismissFinding } from "./useDismissFinding";
 import { useSetupExclusionRule } from "./useSetupExclusionRule";
 import {
@@ -63,6 +71,9 @@ import {
 // a sentence or two of rationale, where every other column holds a label.
 const RISK_EVENTS_GRID =
   "grid grid-cols-[28px_88px_172px_minmax(0,1.3fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
+// MCP-scoped layout: the actions track also holds the enforcement outcome.
+const RISK_EVENTS_GRID_MCP =
+  "grid grid-cols-[28px_88px_172px_minmax(0,1.3fr)_minmax(0,0.95fr)_minmax(0,0.85fr)_minmax(0,2.2fr)_minmax(0,0.9fr)_150px] gap-3";
 
 // Signal severity palette: band → text / row-edge classes. Colors are
 // token-derived — brand red hsl(4,67%,47%) (--color-brand-red-500) is reserved
@@ -125,13 +136,14 @@ function SignalScore({ score }: { score: number | undefined }): JSX.Element {
 }
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
-// are pinned (always visible in the bar); the rest live behind "More filters".
+// and the MCP server are pinned (always visible in the bar); the rest live
+// behind "More filters".
 // `listRiskResults` already accepts from/to, so the date range needs no backend
 // change. (Source isn't a list param, so it's intentionally omitted here.)
 const RISK_FILTERS = defineFilters([
   { id: "policy_id", label: "Policy", kind: "select", pinned: true },
   { id: "date", label: "Date range", kind: "daterange", pinned: true },
-  { id: "mcp_server_id", label: "MCP server", kind: "select" },
+  { id: "mcp_server_id", label: "MCP server", kind: "select", pinned: true },
   {
     id: "rule_id",
     label: "Rule ID",
@@ -224,6 +236,9 @@ export default function RiskEvents(): JSX.Element {
     [policiesData?.policies],
   );
 
+  const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
+  const mcpScoped = mcpScopedFlag.status === "enabled";
+
   const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
@@ -231,6 +246,41 @@ export default function RiskEvents(): JSX.Element {
     () => mcpServersData?.mcpServers ?? [],
     [mcpServersData?.mcpServers],
   );
+  // Per-server finding counts for the picker. The endpoint caps the window at
+  // 31 days, so "all time" falls back to the last 30 days.
+  const countsWindow = useMemo(() => {
+    const end = to ?? new Date();
+    const start = from ?? new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return { from: start, to: end };
+  }, [from, to]);
+  const { data: serverCountsData } = useRiskMcpServerCounts(
+    countsWindow,
+    undefined,
+    { throwOnError: false, enabled: mcpScoped },
+  );
+  const findingsByServer = useMemo(
+    () =>
+      new Map(
+        (serverCountsData?.servers ?? []).map((row) => [
+          row.mcpServerId,
+          row.findings,
+        ]),
+      ),
+    [serverCountsData?.servers],
+  );
+  const mcpServerNameById = useMemo(
+    () =>
+      mcpScoped
+        ? new Map(
+            mcpServers.map((server) => [
+              server.id,
+              mcpServerDisplayName(server),
+            ]),
+          )
+        : null,
+    [mcpScoped, mcpServers],
+  );
+
   // Powers the rule_id filter autocomplete: surface only rules that actually
   // have findings in this project's recent window.
   const { data: overviewData } = useRiskOverview({}, undefined, {
@@ -296,17 +346,31 @@ export default function RiskEvents(): JSX.Element {
         label: p.enabled === false ? `${p.name} (inactive)` : p.name,
         value: p.id,
       })),
-      mcp_server_id: mcpServers.map((server) => ({
-        label: server.name?.trim() || server.slug || server.id.slice(0, 8),
-        value: server.id,
-      })),
+      mcp_server_id: mcpServers.map((server) => {
+        const findings = findingsByServer.get(server.id);
+        const name = mcpServerDisplayName(server);
+        return {
+          label:
+            mcpScoped && findings != null
+              ? `${name} · ${findings.toLocaleString()} findings`
+              : name,
+          value: server.id,
+        };
+      }),
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
       assistant: [
         { label: "No assistant", value: NO_ASSISTANT },
         ...assistants.map((a) => ({ label: a.name, value: a.id })),
       ],
     }),
-    [policies, mcpServers, ruleSuggestions, assistants],
+    [
+      policies,
+      mcpServers,
+      mcpScoped,
+      findingsByServer,
+      ruleSuggestions,
+      assistants,
+    ],
   );
 
   const fromIso = from?.toISOString();
@@ -490,6 +554,7 @@ export default function RiskEvents(): JSX.Element {
             <RiskEventsHeader
               selection={selection}
               headerRef={headerMeasure.ref}
+              mcpScoped={mcpScoped}
             />
           </div>
         }
@@ -537,6 +602,7 @@ export default function RiskEvents(): JSX.Element {
           results={visibleResults}
           policyNameById={policyNameById}
           policyScoreById={policyScoreById}
+          mcpServerNameById={mcpServerNameById}
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
           selection={selection}
@@ -578,15 +644,17 @@ function InactivePolicyNotice({
 function RiskEventsHeader({
   selection,
   headerRef,
+  mcpScoped,
 }: {
   selection: RowSelection<RiskResult>;
   headerRef: (node: HTMLDivElement | null) => void;
+  mcpScoped: boolean;
 }) {
   return (
     <div
       ref={headerRef}
       className={cn(
-        RISK_EVENTS_GRID,
+        mcpScoped ? RISK_EVENTS_GRID_MCP : RISK_EVENTS_GRID,
         // whitespace-nowrap keeps two-word labels ("Session Name") on one
         // line when their fr track compresses.
         "text-eyebrow bg-muted/30 shrink-0 items-center border-b px-5 py-2.5 whitespace-nowrap",
@@ -602,7 +670,9 @@ function RiskEventsHeader({
       <div className="min-w-0">Severity</div>
       <div className="min-w-0">Timestamp</div>
       <div className="min-w-0">Category / Rule</div>
-      <div className="min-w-0 whitespace-nowrap">Session Name</div>
+      <div className="min-w-0 whitespace-nowrap">
+        {mcpScoped ? "Session · Tool" : "Session Name"}
+      </div>
       <div className="min-w-0">User</div>
       <div className="min-w-0">Evidence</div>
       <div className="min-w-0">Policy</div>
@@ -623,6 +693,7 @@ function RiskEventsRows({
   selection,
   onDismiss,
   onSetupExclusion,
+  mcpServerNameById,
 }: {
   error: Error | null;
   filtered: boolean;
@@ -635,6 +706,9 @@ function RiskEventsRows({
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
+  // Set only when MCP-scoped guardrails are enabled; switches the rows to the
+  // server/tool + outcome layout.
+  mcpServerNameById: Map<string, string> | null;
 }) {
   const rowVirtualizer = useVirtualizer({
     count: results.length,
@@ -699,6 +773,7 @@ function RiskEventsRows({
               selection={selection}
               onDismiss={onDismiss}
               onSetupExclusion={onSetupExclusion}
+              mcpServerNameById={mcpServerNameById}
             />
           </div>
         );
@@ -715,6 +790,7 @@ export function RiskEventsRow({
   selection,
   onDismiss,
   onSetupExclusion,
+  mcpServerNameById = null,
 }: {
   result: RiskResult;
   policyName: string | undefined;
@@ -723,7 +799,16 @@ export function RiskEventsRow({
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
+  mcpServerNameById?: Map<string, string> | null;
 }): JSX.Element {
+  const mcpScoped = mcpServerNameById != null;
+  const serverName = result.mcpServerId
+    ? (mcpServerNameById?.get(result.mcpServerId) ??
+      result.mcpServerId.slice(0, 8))
+    : null;
+  const outcomeLabel = mcpScoped
+    ? enforcementOutcomeLabel(result.enforcementOutcome)
+    : null;
   const isShadowMCP = isShadowMcpSource(result.source);
   // Judge and LLM analyzer findings carry their evidence as a rationale.
   const isEventSource = isRationaleSource(result.source);
@@ -764,7 +849,7 @@ export function RiskEventsRow({
       role={result.chatId ? "button" : undefined}
       tabIndex={result.chatId ? 0 : undefined}
       className={cn(
-        RISK_EVENTS_GRID,
+        mcpScoped ? RISK_EVENTS_GRID_MCP : RISK_EVENTS_GRID,
         "hover:bg-muted/30 w-full items-center border-b border-l-2 px-5 py-3 text-left text-sm transition-colors",
         edgeRating ? SEVERITY_EDGE[edgeRating] : "border-l-transparent",
         !result.chatId && "cursor-default",
@@ -820,8 +905,21 @@ export function RiskEventsRow({
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
         <RuleLabel source={result.source} ruleId={result.ruleId} />
       </div>
-      <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-        {result.chatTitle ?? "Untitled"}
+      <div className="text-muted-foreground min-w-0 font-mono text-xs">
+        <div className="truncate">{result.chatTitle ?? "Untitled"}</div>
+        {mcpScoped && serverName ? (
+          <div
+            className="text-muted-foreground/70 truncate"
+            title={
+              result.toolName
+                ? `${serverName} · ${result.toolName}`
+                : serverName
+            }
+          >
+            {serverName}
+            {result.toolName ? ` · ${result.toolName}` : ""}
+          </div>
+        ) : null}
       </div>
       <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
         <IdentityLink identifier={identityRefForUserKey(result.userId)}>
@@ -859,10 +957,23 @@ export function RiskEventsRow({
         {policyName ?? "-"}
       </div>
       <div
-        className="flex min-w-0 justify-center"
+        className="flex min-w-0 items-center justify-center gap-2"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
+        {outcomeLabel ? (
+          <span
+            className={cn(
+              "truncate font-mono text-xs",
+              isBlockingOutcome(result.enforcementOutcome)
+                ? "text-foreground font-medium"
+                : "text-muted-foreground",
+            )}
+            title={outcomeLabel}
+          >
+            {outcomeLabel}
+          </span>
+        ) : null}
         <MoreActions actions={rowActions} />
       </div>
     </div>

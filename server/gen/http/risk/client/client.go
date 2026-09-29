@@ -105,6 +105,10 @@ type Client struct {
 	// getRiskSignals endpoint.
 	GetRiskSignalsDoer goahttp.Doer
 
+	// GetRiskMcpServerCounts Doer is the HTTP client used to make requests to the
+	// getRiskMcpServerCounts endpoint.
+	GetRiskMcpServerCountsDoer goahttp.Doer
+
 	// GetRiskAnalysisStatus Doer is the HTTP client used to make requests to the
 	// getRiskAnalysisStatus endpoint.
 	GetRiskAnalysisStatusDoer goahttp.Doer
@@ -263,6 +267,7 @@ func NewClient(
 		GetRiskUserBreakdownDoer:           doer,
 		GetRiskRuleBreakdownDoer:           doer,
 		GetRiskSignalsDoer:                 doer,
+		GetRiskMcpServerCountsDoer:         doer,
 		GetRiskAnalysisStatusDoer:          doer,
 		GetRiskPolicyStatusDoer:            doer,
 		CreateRiskPolicyBypassRequestDoer:  doer,
@@ -823,6 +828,30 @@ func (c *Client) GetRiskSignals() goa.Endpoint {
 		resp, err := c.GetRiskSignalsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "getRiskSignals", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRiskMcpServerCounts returns an endpoint that makes HTTP requests to the
+// risk service getRiskMcpServerCounts server.
+func (c *Client) GetRiskMcpServerCounts() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRiskMcpServerCountsRequest(c.encoder)
+		decodeResponse = DecodeGetRiskMcpServerCountsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRiskMcpServerCountsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRiskMcpServerCountsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getRiskMcpServerCounts", err)
 		}
 		return decodeResponse(resp)
 	}

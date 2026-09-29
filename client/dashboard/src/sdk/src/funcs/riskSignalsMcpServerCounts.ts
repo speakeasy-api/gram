@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  RiskSignalsResult,
-  RiskSignalsResult$inboundSchema,
-} from "../models/components/risksignalsresult.js";
+  RiskMcpServerCountsResult,
+  RiskMcpServerCountsResult$inboundSchema,
+} from "../models/components/riskmcpservercountsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  GetRiskSignalsRequest,
-  GetRiskSignalsRequest$outboundSchema,
-  GetRiskSignalsSecurity,
-} from "../models/operations/getrisksignals.js";
+  GetRiskMcpServerCountsRequest,
+  GetRiskMcpServerCountsRequest$outboundSchema,
+  GetRiskMcpServerCountsSecurity,
+} from "../models/operations/getriskmcpservercounts.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getRiskSignals risk
+ * getRiskMcpServerCounts risk
  *
  * @remarks
- * Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.
+ * Get live finding counts per concrete MCP server over a window, largest first. Powers the MCP server filter pickers on Risk Events and Watchdog. Served from the ClickHouse findings store.
  */
-export function riskSignalsGet(
+export function riskSignalsMcpServerCounts(
   client: GramCore,
-  request?: GetRiskSignalsRequest | undefined,
-  security?: GetRiskSignalsSecurity | undefined,
+  request?: GetRiskMcpServerCountsRequest | undefined,
+  security?: GetRiskMcpServerCountsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    RiskSignalsResult,
+    RiskMcpServerCountsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function riskSignalsGet(
 
 async function $do(
   client: GramCore,
-  request?: GetRiskSignalsRequest | undefined,
-  security?: GetRiskSignalsSecurity | undefined,
+  request?: GetRiskMcpServerCountsRequest | undefined,
+  security?: GetRiskMcpServerCountsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      RiskSignalsResult,
+      RiskMcpServerCountsResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,7 +95,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(z.optional(GetRiskSignalsRequest$outboundSchema), value),
+    (value) =>
+      z.parse(z.optional(GetRiskMcpServerCountsRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -104,11 +105,10 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.getSignals")();
+  const path = pathToFunc("/rpc/risk.getMcpServerCounts")();
 
   const query = encodeFormQuery({
     "from": payload?.from,
-    "mcp_server_id": payload?.mcp_server_id,
     "to": payload?.to,
   });
 
@@ -158,7 +158,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getRiskSignals",
+    operationID: "getRiskMcpServerCounts",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -203,7 +203,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    RiskSignalsResult,
+    RiskMcpServerCountsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -214,7 +214,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, RiskSignalsResult$inboundSchema),
+    M.json(200, RiskMcpServerCountsResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

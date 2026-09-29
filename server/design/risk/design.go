@@ -814,6 +814,9 @@ var _ = Service("risk", func() {
 			Attribute("to", String, "Exclusive end of the signals window. Defaults to now.", func() {
 				Format(FormatDateTime)
 			})
+			Attribute("mcp_server_id", String, "Optional concrete MCP server ID. When set, every signal, KPI and exposure figure is computed from findings on that server only.", func() {
+				Format(FormatUUID)
+			})
 		})
 
 		Result(RiskSignalsResult)
@@ -825,6 +828,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("from")
 			Param("to")
+			Param("mcp_server_id")
 			Response(StatusOK)
 		})
 
@@ -832,6 +836,39 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.signals")
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSignals"}`)
+	})
+
+	Method("getRiskMcpServerCounts", func() {
+		Description("Get live finding counts per concrete MCP server over a window, largest first. Powers the MCP server filter pickers on Risk Events and Watchdog. Served from the ClickHouse findings store.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("from", String, "Inclusive start of the window. Defaults to 7 days before to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window. Defaults to now.", func() {
+				Format(FormatDateTime)
+			})
+		})
+
+		Result(RiskMcpServerCountsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.getMcpServerCounts")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskMcpServerCounts")
+		Meta("openapi:extension:x-speakeasy-group", "risk.signals")
+		Meta("openapi:extension:x-speakeasy-name-override", "mcpServerCounts")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskMcpServerCounts"}`)
 	})
 
 	Method("getRiskAnalysisStatus", func() {
@@ -2178,10 +2215,12 @@ var RiskSignal = Type("RiskSignal", func() {
 	Attribute("last_seen", String, "Event time of the latest finding in the window.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("mcp_server_ids", ArrayOf(String), "Concrete MCP server IDs the findings in this signal were observed on. Empty when no finding carries server attribution.")
+	Attribute("tool_names", ArrayOf(String), "Concrete tool names the findings in this signal were observed on. Empty when no finding carries tool attribution.")
 	Attribute("top_users", ArrayOf(RiskSignalTopUser), "Top users by finding count within the signal.")
 	Attribute("sparkline", ArrayOf(Int64), "Deduplicated finding counts per equal-width time bucket across the window, oldest bucket first. Powers the per-signal trend sparkline.")
 
-	Required("key", "rule_id", "category", "description", "detection_sources", "apps", "severity", "risk_score", "findings", "previous_findings", "users", "teams", "first_seen", "last_seen", "top_users", "sparkline")
+	Required("key", "rule_id", "category", "description", "detection_sources", "apps", "mcp_server_ids", "tool_names", "severity", "risk_score", "findings", "previous_findings", "users", "teams", "first_seen", "last_seen", "top_users", "sparkline")
 })
 
 var RiskExposureSlice = Type("RiskExposureSlice", func() {
@@ -2208,6 +2247,19 @@ var RiskAnalysisStatusResult = Type("RiskAnalysisStatusResult", func() {
 	Attribute("last_run_outcome", String, "How the most recent closed run ended: completed, failed, canceled, terminated, continued_as_new, timed_out, or unknown. continued_as_new is the normal outcome for a long-lived coordinator that rolled its history over, so treat it like completed. Set only when state is idle.")
 
 	Required("state")
+})
+
+var RiskMcpServerCount = Type("RiskMcpServerCount", func() {
+	Attribute("mcp_server_id", String, "Concrete MCP server ID.")
+	Attribute("findings", Int64, "Deduplicated live findings on this server in the window.")
+
+	Required("mcp_server_id", "findings")
+})
+
+var RiskMcpServerCountsResult = Type("RiskMcpServerCountsResult", func() {
+	Attribute("servers", ArrayOf(RiskMcpServerCount), "Per-server finding counts, largest first. Servers with no findings are omitted.")
+
+	Required("servers")
 })
 
 var RiskSignalsResult = Type("RiskSignalsResult", func() {

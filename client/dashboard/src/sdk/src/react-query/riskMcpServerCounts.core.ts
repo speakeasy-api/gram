@@ -8,26 +8,26 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskSignalsGet } from "../funcs/riskSignalsGet.js";
+import { riskSignalsMcpServerCounts } from "../funcs/riskSignalsMcpServerCounts.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { RiskSignalsResult } from "../models/components/risksignalsresult.js";
+import { RiskMcpServerCountsResult } from "../models/components/riskmcpservercountsresult.js";
 import {
-  GetRiskSignalsRequest,
-  GetRiskSignalsSecurity,
-} from "../models/operations/getrisksignals.js";
+  GetRiskMcpServerCountsRequest,
+  GetRiskMcpServerCountsSecurity,
+} from "../models/operations/getriskmcpservercounts.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskSignalsQueryData = RiskSignalsResult;
+export type RiskMcpServerCountsQueryData = RiskMcpServerCountsResult;
 
-export function prefetchRiskSignals(
+export function prefetchRiskMcpServerCounts(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: GetRiskSignalsRequest | undefined,
-  security?: GetRiskSignalsSecurity | undefined,
+  request?: GetRiskMcpServerCountsRequest | undefined,
+  security?: GetRiskMcpServerCountsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildRiskSignalsQuery(
+    ...buildRiskMcpServerCountsQuery(
       client$,
       request,
       security,
@@ -36,27 +36,28 @@ export function prefetchRiskSignals(
   });
 }
 
-export function buildRiskSignalsQuery(
+export function buildRiskMcpServerCountsQuery(
   client$: GramCore,
-  request?: GetRiskSignalsRequest | undefined,
-  security?: GetRiskSignalsSecurity | undefined,
+  request?: GetRiskMcpServerCountsRequest | undefined,
+  security?: GetRiskMcpServerCountsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<RiskSignalsQueryData>;
+  queryFn: (
+    context: QueryFunctionContext,
+  ) => Promise<RiskMcpServerCountsQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskSignals({
+    queryKey: queryKeyRiskMcpServerCounts({
       from: request?.from,
       to: request?.to,
-      mcpServerId: request?.mcpServerId,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
-    queryFn: async function riskSignalsQueryFn(
+    queryFn: async function riskMcpServerCountsQueryFn(
       ctx,
-    ): Promise<RiskSignalsQueryData> {
+    ): Promise<RiskMcpServerCountsQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -68,7 +69,7 @@ export function buildRiskSignalsQuery(
         signal: sig,
       };
 
-      return unwrapAsync(riskSignalsGet(
+      return unwrapAsync(riskSignalsMcpServerCounts(
         client$,
         request,
         security,
@@ -78,15 +79,14 @@ export function buildRiskSignalsQuery(
   };
 }
 
-export function queryKeyRiskSignals(
+export function queryKeyRiskMcpServerCounts(
   parameters: {
     from?: Date | undefined;
     to?: Date | undefined;
-    mcpServerId?: string | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "signals", "get", parameters];
+  return ["@gram/client", "signals", "mcpServerCounts", parameters];
 }
