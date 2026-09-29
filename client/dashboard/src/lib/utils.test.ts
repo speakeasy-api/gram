@@ -105,7 +105,10 @@ describe("agentEgressHosts", () => {
     ["https://app.getgram.ai", ["app.getgram.ai"]],
     ["https://ai.speakeasy.com", ["ai.speakeasy.com", "app.getgram.ai"]],
     ["https://dev.getgram.ai", ["dev.getgram.ai"]],
-    ["https://dev.ai.speakeasy.com", ["dev.ai.speakeasy.com", "dev.getgram.ai"]],
+    [
+      "https://dev.ai.speakeasy.com",
+      ["dev.ai.speakeasy.com", "dev.getgram.ai"],
+    ],
     ["https://localhost:8080", ["localhost"]],
   ])("allows %s egress to %j", (serverURL, expected) => {
     expect(agentEgressHosts(serverURL)).toEqual(expected);
