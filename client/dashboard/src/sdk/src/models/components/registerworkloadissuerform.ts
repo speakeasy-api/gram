@@ -10,7 +10,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
  */
 export type RegisterWorkloadIssuerForm = {
   /**
-   * Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Re-checked on every lookup rather than at write time, so clearing it makes wildcard rules already written inert immediately.
+   * Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.
    */
   allowWildcardAdmission?: boolean | undefined;
   /**
