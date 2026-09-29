@@ -535,6 +535,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetOktaApplicationSyncCandidates)
 	temporalWorker.RegisterActivity(activities.RunOktaApplicationSync)
 	temporalWorker.RegisterActivity(activities.FinalizeOktaApplicationSync)
+	temporalWorker.RegisterActivity(activities.RequestRoleProvisioningSweep)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
 	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
@@ -675,6 +676,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
+	temporalWorker.RegisterWorkflow(RoleProvisioningSweepWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetSweepWorkflow)
@@ -770,6 +772,10 @@ func NewTemporalWorker(
 // degrades a background pipeline rather than the request path.
 func (w *Workers) registerSchedules(ctx context.Context) {
 	env, logger, opts := w.env, w.logger, w.opts
+	// Local database repair is independent of plugin publication rollout flags.
+	if err := addRoleProvisioningSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "register role provisioning sweep", attr.SlogError(err))
+	}
 	if w.networkIngressQueue != "" {
 		if err := addNetworkIngressSweep(ctx, env); err != nil {
 			logger.ErrorContext(ctx, "register network ingress sweep", attr.SlogError(err))

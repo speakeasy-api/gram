@@ -237,7 +237,7 @@ func (s *Service) Configure(ctx context.Context, in ConfigureInput) (int64, erro
 	}); err != nil {
 		return 0, fmt.Errorf("audit provisioning configuration: %w", err)
 	}
-	if err = hints.Emit(ctx, tx, hints.Hint{RoleURN: "", PluginID: uuid.Nil, OrganizationID: in.OrganizationID}); err != nil {
+	if err = hints.Emit(ctx, tx, hints.Hint{RoleURN: "", PluginID: uuid.Nil, OrganizationID: in.OrganizationID, GlobalRoleURN: "", GlobalSweep: false, AfterOrganizationID: "", AfterRoleURN: ""}); err != nil {
 		return 0, fmt.Errorf("emit maintenance hint: %w", err)
 	}
 	if err = tx.Commit(ctx); err != nil {

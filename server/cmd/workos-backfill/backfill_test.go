@@ -13,13 +13,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	pluginsv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"google.golang.org/protobuf/proto"
 )
 
 var infra *testenv.Environment
@@ -1150,6 +1153,20 @@ func TestBackfillWorkOSOrganization_MissingRoleSoftDeleted(t *testing.T) {
 	require.True(t, role.Deleted)
 	require.True(t, role.WorkosDeleted)
 	require.Empty(t, role.WorkosLastEventID.String)
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	var roleHints []*pluginsv1.RoleProvisioningRequested
+	for _, row := range rows {
+		if row.Topic != "gram.plugins.v1.RoleProvisioningRequested" || row.OrganizationID != organizationID {
+			continue
+		}
+		hint := new(pluginsv1.RoleProvisioningRequested)
+		require.NoError(t, proto.Unmarshal(row.Message, hint))
+		roleHints = append(roleHints, hint)
+	}
+	require.Len(t, roleHints, 1)
+	require.Equal(t, "role:organization:"+role.ID.String(), roleHints[0].GetRoleUrn())
+
 }
 
 func newWorkOSSnapshotClient(t *testing.T, ctx context.Context, org workos.Organization, roles []workos.Role, members []workos.Member) *workos.StubClient {
@@ -1427,4 +1444,37 @@ func TestBackfillWorkOSOrganization_RelationshipNewerThanSnapshotNotDeprovisione
 	})
 	require.NoError(t, err)
 	require.False(t, relationship.Deleted)
+}
+
+func TestBackfillWorkOSGlobalRoles_EmitsSnapshotAndMissingRoleHints(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn := newBackfillTestConn(t, "global_snapshot_hints")
+	q := accessrepo.New(conn)
+	now := time.Now().Add(-time.Hour)
+	require.NoError(t, q.UpsertGlobalRole(ctx, accessrepo.UpsertGlobalRoleParams{WorkosSlug: "obsolete", WorkosName: "Obsolete", WorkosCreatedAt: conv.ToPGTimestamptz(now), WorkosUpdatedAt: conv.ToPGTimestamptz(now), WorkosLastEventID: conv.ToPGText("")}))
+	activity := NewBackfillWorkOSGlobalRoles(testenv.NewLogger(t), conn, workos.NewStubClient())
+	require.NoError(t, activity.Do(ctx))
+	role, err := q.GetGlobalRoleBySlug(ctx, "obsolete")
+	require.NoError(t, err)
+	require.True(t, role.Deleted)
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	var urns []string
+	for _, row := range rows {
+		if row.Topic != "gram.plugins.v1.RoleProvisioningRequested" || row.OrganizationID != "" {
+			continue
+		}
+		hint := new(pluginsv1.RoleProvisioningRequested)
+		require.NoError(t, proto.Unmarshal(row.Message, hint))
+		require.Empty(t, hint.GetOrganizationId())
+		urns = append(urns, hint.GetGlobalRoleUrn())
+	}
+	require.Contains(t, urns, "role:global:"+role.ID.String())
+	for _, slug := range []string{"admin", "member"} {
+		role, err := q.GetGlobalRoleBySlug(ctx, slug)
+		require.NoError(t, err)
+		require.Contains(t, urns, "role:global:"+role.ID.String())
+	}
+	require.Len(t, urns, 3)
 }

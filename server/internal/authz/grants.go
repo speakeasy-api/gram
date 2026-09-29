@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
 )
 
 const (
@@ -98,9 +100,16 @@ func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID 
 // in an existing transaction (e.g. provisioning an org from a WorkOS webhook).
 // Callers that only have a pool should use SeedSystemRoleGrants. Idempotent:
 // roles that already hold grants are skipped.
-func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+func SeedSystemRoleGrantsTx(ctx context.Context, dbtx pgx.Tx, organizationID string) error {
 	q := repo.New(dbtx)
-	for roleSlug, grants := range SystemRoleGrants {
+	// Bootstrap can lock multiple global rows; every caller uses the same order.
+	roleSlugs := make([]string, 0, len(SystemRoleGrants))
+	for roleSlug := range SystemRoleGrants {
+		roleSlugs = append(roleSlugs, roleSlug)
+	}
+	slices.Sort(roleSlugs)
+	for _, roleSlug := range roleSlugs {
+		grants := SystemRoleGrants[roleSlug]
 		existingRole, err := q.GetGlobalRoleBySlug(ctx, roleSlug)
 		seedRole := false
 		switch {
@@ -123,15 +132,31 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 				description = "Member role"
 			}
 			now := time.Now().UTC()
-			if err := q.UpsertGlobalRole(ctx, repo.UpsertGlobalRoleParams{
+			roleID, err := q.SeedGlobalRole(ctx, repo.SeedGlobalRoleParams{
 				WorkosSlug:        roleSlug,
 				WorkosName:        name,
 				WorkosDescription: conv.ToPGTextEmpty(description),
 				WorkosCreatedAt:   conv.ToPGTimestamptz(now),
 				WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
 				WorkosLastEventID: conv.ToPGTextEmpty(""),
-			}); err != nil {
+			})
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				// Another writer already made the role live; no mutation, no hint.
+			case err != nil:
 				return fmt.Errorf("seed %s role: %w", roleSlug, err)
+			default:
+				if err := hints.Emit(ctx, dbtx, hints.Hint{
+					OrganizationID:      "",
+					RoleURN:             "",
+					PluginID:            uuid.Nil,
+					GlobalRoleURN:       "role:global:" + roleID.String(),
+					GlobalSweep:         false,
+					AfterOrganizationID: "",
+					AfterRoleURN:        "",
+				}); err != nil {
+					return fmt.Errorf("enqueue seeded %s role: %w", roleSlug, err)
+				}
 			}
 		}
 

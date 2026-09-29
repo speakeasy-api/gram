@@ -247,6 +247,119 @@ func (q *Queries) ListAssociations(ctx context.Context, arg ListAssociationsPara
 	return items, nil
 }
 
+const listCleanupPluginPrincipals = `-- name: ListCleanupPluginPrincipals :many
+SELECT pa.principal_urn FROM plugin_assignments pa
+JOIN plugins p ON p.id = pa.plugin_id AND p.organization_id = pa.organization_id
+WHERE p.id = $1 AND p.project_id = $2 AND p.organization_id = $3
+ORDER BY pa.principal_urn
+`
+
+type ListCleanupPluginPrincipalsParams struct {
+	PluginID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ListCleanupPluginPrincipals(ctx context.Context, arg ListCleanupPluginPrincipalsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listCleanupPluginPrincipals, arg.PluginID, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var principal_urn string
+		if err := rows.Scan(&principal_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, principal_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMaintenanceOrganizations = `-- name: ListMaintenanceOrganizations :many
+SELECT o.id FROM organization_metadata o WHERE o.id > $1 AND (
+ EXISTS (SELECT 1 FROM organization_role_provisioning_settings s WHERE s.organization_id = o.id AND s.enabled)
+ OR EXISTS (SELECT 1 FROM role_provisioning_settings s WHERE s.organization_id = o.id AND ($2::text = '' OR s.role_urn = $2))
+ OR EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.organization_id = o.id AND a.principal_urn LIKE 'role:%' AND ($2::text = '' OR a.principal_urn = $2))
+) ORDER BY o.id LIMIT $3
+`
+
+type ListMaintenanceOrganizationsParams struct {
+	AfterOrganizationID string
+	GlobalRoleUrn       string
+	PageSize            int32
+}
+
+func (q *Queries) ListMaintenanceOrganizations(ctx context.Context, arg ListMaintenanceOrganizationsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listMaintenanceOrganizations, arg.AfterOrganizationID, arg.GlobalRoleUrn, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMaintenanceRoles = `-- name: ListMaintenanceRoles :many
+SELECT role_urn::text AS role_urn FROM (
+ SELECT 'role:organization:' || r.id::text AS role_urn FROM organization_roles r WHERE r.organization_id = $1 AND NOT r.deleted AND NOT r.workos_deleted AND $2::uuid = '00000000-0000-0000-0000-000000000000'
+ UNION SELECT 'role:global:' || g.id::text FROM global_roles g WHERE NOT g.deleted AND NOT g.workos_deleted AND $2::uuid = '00000000-0000-0000-0000-000000000000'
+ UNION SELECT s.role_urn FROM role_provisioning_settings s WHERE s.organization_id = $1 AND ($2::uuid = '00000000-0000-0000-0000-000000000000' OR EXISTS (SELECT 1 FROM role_plugin_associations a WHERE a.role_provisioning_setting_id = s.id AND a.plugin_id = $2))
+ UNION SELECT a.principal_urn FROM plugin_assignments a WHERE a.organization_id = $1 AND a.principal_urn LIKE 'role:%' AND ($2::uuid = '00000000-0000-0000-0000-000000000000' OR a.plugin_id = $2)
+ UNION SELECT $3::text WHERE $3::text <> ''
+) roles WHERE role_urn > $4 AND ($3::text = '' OR role_urn = $3) ORDER BY role_urn LIMIT $5
+`
+
+type ListMaintenanceRolesParams struct {
+	OrganizationID string
+	PluginID       uuid.UUID
+	RoleUrn        string
+	AfterRoleUrn   string
+	PageSize       int32
+}
+
+// Settings retain association identity for deleted roles/plugins; manual
+// audiences also participate in cleanup when provisioning is disabled.
+func (q *Queries) ListMaintenanceRoles(ctx context.Context, arg ListMaintenanceRolesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listMaintenanceRoles,
+		arg.OrganizationID,
+		arg.PluginID,
+		arg.RoleUrn,
+		arg.AfterRoleUrn,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var role_urn string
+		if err := rows.Scan(&role_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, role_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjects = `-- name: ListProjects :many
 SELECT p.id FROM projects p
 LEFT JOIN plugins pl ON pl.project_id = p.id AND pl.organization_id = p.organization_id AND pl.deleted IS FALSE
@@ -267,6 +380,48 @@ func (q *Queries) ListProjects(ctx context.Context, organizationID string) ([]uu
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoleAssignmentTargets = `-- name: ListRoleAssignmentTargets :many
+SELECT p.id, p.project_id FROM plugins p
+JOIN projects pr ON pr.id = p.project_id AND pr.organization_id = p.organization_id
+JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
+WHERE p.organization_id = $1 AND pa.principal_urn = $2
+ORDER BY p.id
+LIMIT $3
+`
+
+type ListRoleAssignmentTargetsParams struct {
+	OrganizationID string
+	RoleUrn        string
+	BatchSize      int32
+}
+
+type ListRoleAssignmentTargetsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Cleanup is tenant-wide, not restricted to provisioned associations or live
+// plugins/projects. Tombstones retain assignments and must be cleaned too.
+func (q *Queries) ListRoleAssignmentTargets(ctx context.Context, arg ListRoleAssignmentTargetsParams) ([]ListRoleAssignmentTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listRoleAssignmentTargets, arg.OrganizationID, arg.RoleUrn, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRoleAssignmentTargetsRow
+	for rows.Next() {
+		var i ListRoleAssignmentTargetsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -305,6 +460,47 @@ func (q *Queries) ListRoleSettings(ctx context.Context, organizationID pgtype.Te
 	return items, nil
 }
 
+const lockCleanupPlugin = `-- name: LockCleanupPlugin :one
+SELECT id, name, slug FROM plugins
+WHERE id = $1 AND project_id = $2 AND organization_id = $3 FOR UPDATE
+`
+
+type LockCleanupPluginParams struct {
+	PluginID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type LockCleanupPluginRow struct {
+	ID   uuid.UUID
+	Name string
+	Slug string
+}
+
+func (q *Queries) LockCleanupPlugin(ctx context.Context, arg LockCleanupPluginParams) (LockCleanupPluginRow, error) {
+	row := q.db.QueryRow(ctx, lockCleanupPlugin, arg.PluginID, arg.ProjectID, arg.OrganizationID)
+	var i LockCleanupPluginRow
+	err := row.Scan(&i.ID, &i.Name, &i.Slug)
+	return i, err
+}
+
+const lockCleanupProject = `-- name: LockCleanupProject :one
+SELECT id FROM projects WHERE id = $1 AND organization_id = $2 FOR NO KEY UPDATE
+`
+
+type LockCleanupProjectParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Match live reconciliation: receipt FK checks must not reverse admission order.
+func (q *Queries) LockCleanupProject(ctx context.Context, arg LockCleanupProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockCleanupProject, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockGlobalRole = `-- name: LockGlobalRole :one
 SELECT workos_name FROM global_roles WHERE id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE FOR SHARE
 `
@@ -314,6 +510,23 @@ func (q *Queries) LockGlobalRole(ctx context.Context, id uuid.UUID) (string, err
 	var workos_name string
 	err := row.Scan(&workos_name)
 	return workos_name, err
+}
+
+const lockGlobalRoleLiveness = `-- name: LockGlobalRoleLiveness :one
+SELECT workos_name, (NOT deleted AND NOT workos_deleted)::boolean AS live
+FROM global_roles WHERE id = $1 FOR SHARE
+`
+
+type LockGlobalRoleLivenessRow struct {
+	WorkosName string
+	Live       bool
+}
+
+func (q *Queries) LockGlobalRoleLiveness(ctx context.Context, id uuid.UUID) (LockGlobalRoleLivenessRow, error) {
+	row := q.db.QueryRow(ctx, lockGlobalRoleLiveness, id)
+	var i LockGlobalRoleLivenessRow
+	err := row.Scan(&i.WorkosName, &i.Live)
+	return i, err
 }
 
 const lockOrganization = `-- name: LockOrganization :one
@@ -350,8 +563,32 @@ func (q *Queries) LockOrganizationRole(ctx context.Context, arg LockOrganization
 	return workos_name, err
 }
 
+const lockOrganizationRoleLiveness = `-- name: LockOrganizationRoleLiveness :one
+SELECT workos_name, (NOT deleted AND NOT workos_deleted)::boolean AS live
+FROM organization_roles WHERE id = $1 AND organization_id = $2 FOR UPDATE
+`
+
+type LockOrganizationRoleLivenessParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type LockOrganizationRoleLivenessRow struct {
+	WorkosName string
+	Live       bool
+}
+
+// Lock tombstones too: a concurrent reactivation must not pass between the
+// liveness read and assignment cleanup. Global readers share the snapshot lock.
+func (q *Queries) LockOrganizationRoleLiveness(ctx context.Context, arg LockOrganizationRoleLivenessParams) (LockOrganizationRoleLivenessRow, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationRoleLiveness, arg.ID, arg.OrganizationID)
+	var i LockOrganizationRoleLivenessRow
+	err := row.Scan(&i.WorkosName, &i.Live)
+	return i, err
+}
+
 const lockProject = `-- name: LockProject :one
-SELECT id FROM projects WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE FOR UPDATE
+SELECT id FROM projects WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE FOR NO KEY UPDATE
 `
 
 type LockProjectParams struct {
@@ -359,6 +596,8 @@ type LockProjectParams struct {
 	OrganizationID string
 }
 
+// Permit receipt FK KEY SHARE locks acquired before admission. NO KEY UPDATE
+// still serializes project updates/deletion without blocking new FK references.
 func (q *Queries) LockProject(ctx context.Context, arg LockProjectParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockProject, arg.ProjectID, arg.OrganizationID)
 	var id uuid.UUID
@@ -380,6 +619,33 @@ type RecordAttemptParams struct {
 func (q *Queries) RecordAttempt(ctx context.Context, arg RecordAttemptParams) error {
 	_, err := q.db.Exec(ctx, recordAttempt, arg.ErrorCode, arg.OrganizationID, arg.RoleUrn)
 	return err
+}
+
+const removeDeletedRoleAssignment = `-- name: RemoveDeletedRoleAssignment :execrows
+DELETE FROM plugin_assignments pa USING plugins p
+WHERE pa.plugin_id = p.id AND pa.organization_id = p.organization_id
+ AND p.id = $1 AND p.project_id = $2 AND p.organization_id = $3
+ AND pa.principal_urn = $4
+`
+
+type RemoveDeletedRoleAssignmentParams struct {
+	PluginID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RoleUrn        string
+}
+
+func (q *Queries) RemoveDeletedRoleAssignment(ctx context.Context, arg RemoveDeletedRoleAssignmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeDeletedRoleAssignment,
+		arg.PluginID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RoleUrn,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const renameRolePlugin = `-- name: RenameRolePlugin :exec

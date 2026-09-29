@@ -14,6 +14,12 @@ message RoleProvisioningRequested {
   // Optional narrowing hints. Absent identifiers request organization-wide work.
   string role_urn = 2;
   string plugin_id = 3;
+  // Global role changes fan out to organizations, including stale audiences.
+  string global_role_urn = 4;
+  string after_organization_id = 5;
+  string after_role_urn = 6;
+  // Hourly recovery uses the same bounded organization fanout.
+  bool global_sweep = 7;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {seconds: 604800}

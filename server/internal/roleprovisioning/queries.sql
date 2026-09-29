@@ -25,8 +25,10 @@ LEFT JOIN plugins pl ON pl.project_id = p.id AND pl.organization_id = p.organiza
 WHERE p.organization_id = @organization_id AND p.deleted IS FALSE
 GROUP BY p.id ORDER BY count(pl.id) DESC, p.created_at ASC, p.id ASC;
 
+-- Permit receipt FK KEY SHARE locks acquired before admission. NO KEY UPDATE
+-- still serializes project updates/deletion without blocking new FK references.
 -- name: LockProject :one
-SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE FOR UPDATE;
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE FOR NO KEY UPDATE;
 
 -- name: LockOrganizationRole :one
 SELECT workos_name FROM organization_roles
@@ -108,3 +110,61 @@ WHERE o.id = @organization_id;
 -- name: ListRoleSettings :many
 SELECT role_urn, enabled, project_id FROM role_provisioning_settings
 WHERE organization_id = @organization_id ORDER BY role_urn;
+
+-- Lock tombstones too: a concurrent reactivation must not pass between the
+-- liveness read and assignment cleanup. Global readers share the snapshot lock.
+-- name: LockOrganizationRoleLiveness :one
+SELECT workos_name, (NOT deleted AND NOT workos_deleted)::boolean AS live
+FROM organization_roles WHERE id = @id AND organization_id = @organization_id FOR UPDATE;
+
+-- name: LockGlobalRoleLiveness :one
+SELECT workos_name, (NOT deleted AND NOT workos_deleted)::boolean AS live
+FROM global_roles WHERE id = @id FOR SHARE;
+
+-- Cleanup is tenant-wide, not restricted to provisioned associations or live
+-- plugins/projects. Tombstones retain assignments and must be cleaned too.
+-- name: ListRoleAssignmentTargets :many
+SELECT p.id, p.project_id FROM plugins p
+JOIN projects pr ON pr.id = p.project_id AND pr.organization_id = p.organization_id
+JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
+WHERE p.organization_id = @organization_id AND pa.principal_urn = @role_urn
+ORDER BY p.id
+LIMIT @batch_size;
+
+-- Match live reconciliation: receipt FK checks must not reverse admission order.
+-- name: LockCleanupProject :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id FOR NO KEY UPDATE;
+
+-- name: LockCleanupPlugin :one
+SELECT id, name, slug FROM plugins
+WHERE id = @plugin_id AND project_id = @project_id AND organization_id = @organization_id FOR UPDATE;
+
+-- name: RemoveDeletedRoleAssignment :execrows
+DELETE FROM plugin_assignments pa USING plugins p
+WHERE pa.plugin_id = p.id AND pa.organization_id = p.organization_id
+ AND p.id = @plugin_id AND p.project_id = @project_id AND p.organization_id = @organization_id
+ AND pa.principal_urn = @role_urn;
+
+-- name: ListCleanupPluginPrincipals :many
+SELECT pa.principal_urn FROM plugin_assignments pa
+JOIN plugins p ON p.id = pa.plugin_id AND p.organization_id = pa.organization_id
+WHERE p.id = @plugin_id AND p.project_id = @project_id AND p.organization_id = @organization_id
+ORDER BY pa.principal_urn;
+
+-- Settings retain association identity for deleted roles/plugins; manual
+-- audiences also participate in cleanup when provisioning is disabled.
+-- name: ListMaintenanceRoles :many
+SELECT role_urn::text AS role_urn FROM (
+ SELECT 'role:organization:' || r.id::text AS role_urn FROM organization_roles r WHERE r.organization_id = @organization_id AND NOT r.deleted AND NOT r.workos_deleted AND @plugin_id::uuid = '00000000-0000-0000-0000-000000000000'
+ UNION SELECT 'role:global:' || g.id::text FROM global_roles g WHERE NOT g.deleted AND NOT g.workos_deleted AND @plugin_id::uuid = '00000000-0000-0000-0000-000000000000'
+ UNION SELECT s.role_urn FROM role_provisioning_settings s WHERE s.organization_id = @organization_id AND (@plugin_id::uuid = '00000000-0000-0000-0000-000000000000' OR EXISTS (SELECT 1 FROM role_plugin_associations a WHERE a.role_provisioning_setting_id = s.id AND a.plugin_id = @plugin_id))
+ UNION SELECT a.principal_urn FROM plugin_assignments a WHERE a.organization_id = @organization_id AND a.principal_urn LIKE 'role:%' AND (@plugin_id::uuid = '00000000-0000-0000-0000-000000000000' OR a.plugin_id = @plugin_id)
+ UNION SELECT @role_urn::text WHERE @role_urn::text <> ''
+) roles WHERE role_urn > @after_role_urn AND (@role_urn::text = '' OR role_urn = @role_urn) ORDER BY role_urn LIMIT @page_size;
+
+-- name: ListMaintenanceOrganizations :many
+SELECT o.id FROM organization_metadata o WHERE o.id > @after_organization_id AND (
+ EXISTS (SELECT 1 FROM organization_role_provisioning_settings s WHERE s.organization_id = o.id AND s.enabled)
+ OR EXISTS (SELECT 1 FROM role_provisioning_settings s WHERE s.organization_id = o.id AND (@global_role_urn::text = '' OR s.role_urn = @global_role_urn))
+ OR EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.organization_id = o.id AND a.principal_urn LIKE 'role:%' AND (@global_role_urn::text = '' OR a.principal_urn = @global_role_urn))
+) ORDER BY o.id LIMIT @page_size;

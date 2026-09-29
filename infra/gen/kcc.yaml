@@ -881,6 +881,10 @@ pubsub:
           string organization_id = 1;
           string role_urn = 2;
           string plugin_id = 3;
+          string global_role_urn = 4;
+          string after_organization_id = 5;
+          string after_role_urn = 6;
+          bool global_sweep = 7;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1685,6 +1689,24 @@ pubsub:
         name: gram-plugins-v1-publication-requested
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-role-provisioning-consumer
+      topic_proto_message: gram-plugins-v1-role-provisioning-requested
+    name: gram-plugins-v1-role-provisioning-consumer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-plugins-v1-role-provisioning-consumer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-plugins-v1-role-provisioning-requested
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analyzer
       topic_proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analyzer
@@ -2157,6 +2179,13 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-plugins-v1-publication-scheduler
     name: gram-plugins-v1-publication-scheduler-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      dlq_for: gram-plugins-v1-role-provisioning-consumer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-role-provisioning-consumer
+    name: gram-plugins-v1-role-provisioning-consumer-dlq
     spec:
       messageRetentionDuration: 604800s
   - labels:

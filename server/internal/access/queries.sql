@@ -184,6 +184,36 @@ ON CONFLICT (workos_slug) DO UPDATE SET
     workos_deleted_at = NULL,
     updated_at = clock_timestamp();
 
+-- name: SeedGlobalRole :one
+-- Bootstrap only missing/deleted built-in global roles. The conflict predicate
+-- rechecks under the row lock so concurrent seeders neither rewrite live roles
+-- nor emit duplicate global maintenance hints. Global roles have no project scope.
+INSERT INTO global_roles (
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    @workos_slug,
+    @workos_name,
+    @workos_description,
+    @workos_created_at,
+    @workos_updated_at,
+    @workos_last_event_id
+)
+ON CONFLICT (workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, global_roles.workos_last_event_id),
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE global_roles.deleted_at IS NOT NULL
+RETURNING id;
+
 -- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = @workos_deleted_at,

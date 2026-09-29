@@ -1674,3 +1674,30 @@ AND p.proname IN ('validate_remote_session_ema_binding_scope', 'guard_remote_ses
 -- Test fixture: represent a binding created without application lifecycle defaults.
 UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
 WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id;
+
+-- name: GetRoleLifecyclePluginFixture :one
+-- Include deleted plugins to assert retained state after lifecycle cleanup.
+SELECT * FROM plugins WHERE id = @plugin_id AND organization_id = @organization_id;
+
+-- name: ListRoleLifecycleAssociationsFixture :many
+-- Include retired associations, which production reconciliation deliberately hides.
+SELECT a.* FROM role_plugin_associations a
+JOIN role_provisioning_settings s ON s.id = a.role_provisioning_setting_id
+WHERE s.organization_id = @organization_id AND s.role_urn = @role_urn;
+
+-- name: DeleteRoleLifecycleOutboxFixture :exec
+-- Simulate dropped lifecycle deliveries without claiming unrelated messages.
+DELETE FROM publish_outbox WHERE topic = @topic;
+
+-- name: GetRoleLifecycleRetentionSnapshotFixture :one
+-- Exact whole-clone retention snapshot: cleanup must not mutate retained resources.
+SELECT jsonb_build_object(
+ 'plugins',(SELECT jsonb_agg(to_jsonb(p) ORDER BY id) FROM plugins p),
+ 'servers',(SELECT jsonb_agg(to_jsonb(s) ORDER BY id) FROM plugin_servers s),
+ 'associations',(SELECT jsonb_agg(to_jsonb(a) ORDER BY id) FROM role_plugin_associations a),
+ 'settings',(SELECT jsonb_agg(to_jsonb(r) ORDER BY id) FROM role_provisioning_settings r)
+ )::text;
+
+-- name: SetGlobalRoleLocalDeletionFixture :exec
+-- Global roles have no project scope. Model local deletion independently of WorkOS.
+UPDATE global_roles SET deleted_at = clock_timestamp() WHERE id = @role_id;

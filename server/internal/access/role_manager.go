@@ -26,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
+	provisioningrepo "github.com/speakeasy-api/gram/server/internal/roleprovisioning/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -230,6 +232,9 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 // CreateRoleTx performs the local role, grant, member-assignment, and audit
 // writes on tx. It neither commits tx nor contacts WorkOS.
 func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.CreateRolePayload) (RoleCreateResult, RoleReconciliation, error) {
+	if _, err := provisioningrepo.New(tx).LockOrganization(ctx, gramOrgID); err != nil {
+		return RoleCreateResult{}, RoleReconciliation{}, fmt.Errorf("lock organization for role mutation: %w", err)
+	}
 	roleSlug, err := slugify(payload.Name)
 	if err != nil {
 		return RoleCreateResult{}, RoleReconciliation{}, err
@@ -334,6 +339,18 @@ func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "log access role creation").LogError(ctx, r.logger)
 	}
 
+	if err := hints.Emit(ctx, tx, hints.Hint{
+		OrganizationID:      gramOrgID,
+		RoleURN:             createdRole.PrincipalURN,
+		PluginID:            uuid.Nil,
+		GlobalRoleURN:       "",
+		GlobalSweep:         false,
+		AfterOrganizationID: "",
+		AfterRoleURN:        "",
+	}); err != nil {
+		return RoleCreateResult{}, RoleReconciliation{}, fmt.Errorf("enqueue role source maintenance: %w", err)
+	}
+
 	return RoleCreateResult{
 		Role: roleViewFromLocalRoleAndGrants(createdRole, roleGrants),
 		Slug: roleSlug,
@@ -389,6 +406,9 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 // UpdateRoleTx performs the local role, grant, member-assignment, and audit
 // writes on tx. It neither commits tx nor contacts WorkOS.
 func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.UpdateRolePayload) (RoleUpdateResult, RoleReconciliation, error) {
+	if _, err := provisioningrepo.New(tx).LockOrganization(ctx, gramOrgID); err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, fmt.Errorf("lock organization for role mutation: %w", err)
+	}
 	roleID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid role ID").LogError(ctx, r.logger)
@@ -563,6 +583,18 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "log access role update").LogError(ctx, r.logger)
 	}
 
+	if err := hints.Emit(ctx, tx, hints.Hint{
+		OrganizationID:      gramOrgID,
+		RoleURN:             updatedRole.PrincipalURN,
+		PluginID:            uuid.Nil,
+		GlobalRoleURN:       "",
+		GlobalSweep:         false,
+		AfterOrganizationID: "",
+		AfterRoleURN:        "",
+	}); err != nil {
+		return RoleUpdateResult{}, RoleReconciliation{}, fmt.Errorf("enqueue role source maintenance: %w", err)
+	}
+
 	return RoleUpdateResult{
 		Before: existingRole,
 		After:  updatedRoleView,
@@ -586,7 +618,10 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	// Match assignment/update lock order: role first, then member rows.
+	// Serialize organization intent before taking role and member locks.
+	if _, err := provisioningrepo.New(tx).LockOrganization(ctx, gramOrgID); err != nil {
+		return localRole{}, fmt.Errorf("lock organization for role deletion: %w", err)
+	}
 	roleUUID, err := uuid.Parse(currentRole.ID)
 	if err != nil {
 		return localRole{}, oops.E(oops.CodeBadRequest, err, "invalid role ID").LogError(ctx, r.logger)
@@ -690,6 +725,18 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 		RoleSlug:         currentRole.Slug,
 	}); err != nil {
 		return localRole{}, oops.E(oops.CodeUnexpected, err, "log access role deletion").LogError(ctx, r.logger)
+	}
+
+	if err := hints.Emit(ctx, tx, hints.Hint{
+		OrganizationID:      gramOrgID,
+		RoleURN:             currentRole.PrincipalURN,
+		PluginID:            uuid.Nil,
+		GlobalRoleURN:       "",
+		GlobalSweep:         false,
+		AfterOrganizationID: "",
+		AfterRoleURN:        "",
+	}); err != nil {
+		return localRole{}, fmt.Errorf("enqueue role source maintenance: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

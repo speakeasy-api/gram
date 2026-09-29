@@ -96,6 +96,21 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type Plugin struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	// Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).
+	IsDefault pgtype.Bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
+}
+
 type PublishOutboxDeadLetter struct {
 	ID             int64
 	PublicID       uuid.UUID
@@ -135,4 +150,16 @@ type RiskResult struct {
 	FalsePositiveAt     pgtype.Timestamptz
 	FalsePositiveReason pgtype.Text
 	CreatedAt           pgtype.Timestamptz
+}
+
+type RolePluginAssociation struct {
+	ID                        uuid.UUID
+	RoleProvisioningSettingID uuid.NullUUID
+	ProjectID                 uuid.NullUUID
+	PluginID                  uuid.NullUUID
+	IsCurrent                 bool
+	RetiredAt                 pgtype.Timestamptz
+	LastAutomaticName         pgtype.Text
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
 }

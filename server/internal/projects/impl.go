@@ -37,6 +37,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -237,6 +239,9 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating project creation audit log").LogError(ctx, s.logger)
 	}
 
+	if err := hints.Emit(ctx, dbtx, hints.Hint{OrganizationID: payload.OrganizationID, RoleURN: "", PluginID: uuid.Nil, GlobalRoleURN: "", GlobalSweep: false, AfterOrganizationID: "", AfterRoleURN: ""}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue project eligibility maintenance").LogError(ctx, s.logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving project creation").LogError(ctx, s.logger)
 	}
@@ -569,6 +574,11 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// Match provisioning and audience writers: admission precedes the project row.
+	if err := admission.LockProject(ctx, dbtx, projectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock project admission for deletion")
+	}
+
 	pr := s.repo.WithTx(dbtx)
 	// Exclude first binding creation before checking references. Preparation
 	// holds a project SHARE lock until its binding transaction commits.
@@ -611,6 +621,9 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return oops.E(oops.CodeUnexpected, err, "error creating project deletion audit log").LogError(ctx, s.logger)
 	}
 
+	if err := hints.Emit(ctx, dbtx, hints.Hint{OrganizationID: authCtx.ActiveOrganizationID, RoleURN: "", PluginID: uuid.Nil, GlobalRoleURN: "", GlobalSweep: false, AfterOrganizationID: "", AfterRoleURN: ""}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue project eligibility maintenance").LogError(ctx, s.logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error saving project deletion").LogError(ctx, s.logger)
 	}

@@ -66,3 +66,35 @@ func TestEmitValidationAndFailure(t *testing.T) {
 	tx.err = failure
 	require.ErrorIs(t, Emit(t.Context(), tx, Hint{OrganizationID: "org_fixture"}), failure)
 }
+
+func TestEmitGlobalAndContinuation(t *testing.T) {
+	t.Parallel()
+	role := "role:global:" + uuid.NewString()
+	for _, hint := range []Hint{
+		{GlobalRoleURN: role},
+		{GlobalRoleURN: role, AfterOrganizationID: "org_cursor"},
+		{GlobalSweep: true, AfterOrganizationID: "org_cursor"},
+		{OrganizationID: "org_fixture", AfterRoleURN: role},
+	} {
+		tx := &recordingTx{}
+		require.NoError(t, Emit(t.Context(), tx, hint))
+		event := new(pluginsv1.RoleProvisioningRequested)
+		body, ok := tx.args[3].([]byte)
+		require.True(t, ok)
+		require.NoError(t, proto.Unmarshal(body, event))
+		require.Equal(t, hint.GlobalRoleURN, event.GetGlobalRoleUrn())
+		require.Equal(t, hint.GlobalSweep, event.GetGlobalSweep())
+		require.Equal(t, hint.AfterOrganizationID, event.GetAfterOrganizationId())
+		require.Equal(t, hint.AfterRoleURN, event.GetAfterRoleUrn())
+	}
+	for _, hint := range []Hint{
+		{GlobalRoleURN: role, OrganizationID: "org_fixture"},
+		{GlobalRoleURN: "role:organization:" + uuid.NewString()},
+		{GlobalSweep: true, RoleURN: role},
+		{OrganizationID: "org_fixture", AfterOrganizationID: "org_cursor"},
+	} {
+		tx := &recordingTx{}
+		require.Error(t, Emit(t.Context(), tx, hint))
+		require.Empty(t, tx.args)
+	}
+}

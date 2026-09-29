@@ -233,7 +233,7 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 		return Result{}, fmt.Errorf("check role plugin association: %w", err)
 	}
 	if missingOrigin {
-		if err := hints.Emit(ctx, tx, hints.Hint{OrganizationID: plugin.OrganizationID, RoleURN: "", PluginID: plugin.ID}); err != nil {
+		if err := hints.Emit(ctx, tx, hints.Hint{OrganizationID: plugin.OrganizationID, RoleURN: "", PluginID: plugin.ID, GlobalRoleURN: "", GlobalSweep: false, AfterOrganizationID: "", AfterRoleURN: ""}); err != nil {
 			return Result{}, fmt.Errorf("emit assignment maintenance hint: %w", err)
 		}
 	}

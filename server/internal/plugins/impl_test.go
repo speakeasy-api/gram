@@ -18,7 +18,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
+	pluginsv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -36,6 +38,7 @@ import (
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -338,6 +341,15 @@ func TestPluginsService_DeletePlugin(t *testing.T) {
 	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "To Delete"})
 	require.NoError(t, err)
 
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	beforeRows, err := testrepo.New(ti.conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	beforeIDs := make(map[int64]bool, len(beforeRows))
+	for _, row := range beforeRows {
+		beforeIDs[row.ID] = true
+	}
+
 	err = ti.service.DeletePlugin(ctx, &gen.DeletePluginPayload{ID: created.ID})
 	require.NoError(t, err)
 
@@ -348,6 +360,22 @@ func TestPluginsService_DeletePlugin(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+
+	afterRows, err := testrepo.New(ti.conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	var lifecycleHints []*pluginsv1.RoleProvisioningRequested
+	for _, row := range afterRows {
+		if beforeIDs[row.ID] || row.Topic != "gram.plugins.v1.RoleProvisioningRequested" {
+			continue
+		}
+		require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID)
+		hint := new(pluginsv1.RoleProvisioningRequested)
+		require.NoError(t, proto.Unmarshal(row.Message, hint))
+		lifecycleHints = append(lifecycleHints, hint)
+	}
+	require.Len(t, lifecycleHints, 1)
+	expected := pluginsv1.RoleProvisioningRequested_builder{OrganizationId: new(authCtx.ActiveOrganizationID), PluginId: new(created.ID)}.Build()
+	require.True(t, proto.Equal(expected, lifecycleHints[0]), "unexpected lifecycle hint: %s", lifecycleHints[0])
 }
 
 func TestPluginsService_AddPluginServer(t *testing.T) {

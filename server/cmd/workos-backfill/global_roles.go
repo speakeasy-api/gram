@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
 )
 
 type BackfillWorkOSGlobalRoles struct {
@@ -83,6 +85,21 @@ func (b *BackfillWorkOSGlobalRoles) Do(ctx context.Context) error {
 		}); err != nil {
 			return fmt.Errorf("upsert global role %q: %w", role.Slug, err)
 		}
+		savedRole, err := repo.GetGlobalRoleBySlug(ctx, role.Slug)
+		if err != nil {
+			return fmt.Errorf("get global role for provisioning hint: %w", err)
+		}
+		if err := hints.Emit(ctx, tx, hints.Hint{
+			OrganizationID:      "",
+			RoleURN:             "",
+			PluginID:            uuid.Nil,
+			GlobalRoleURN:       "role:global:" + savedRole.ID.String(),
+			GlobalSweep:         false,
+			AfterOrganizationID: "",
+			AfterRoleURN:        "",
+		}); err != nil {
+			return fmt.Errorf("enqueue role source maintenance: %w", err)
+		}
 	}
 
 	localRoles, err := repo.ListGlobalRoles(ctx)
@@ -113,6 +130,17 @@ func (b *BackfillWorkOSGlobalRoles) Do(ctx context.Context) error {
 			WorkosLastEventID: conv.ToPGText(""),
 		}); err != nil {
 			return fmt.Errorf("mark global role %q deleted: %w", localRole.WorkosSlug, err)
+		}
+		if err := hints.Emit(ctx, tx, hints.Hint{
+			OrganizationID:      "",
+			RoleURN:             "",
+			PluginID:            uuid.Nil,
+			GlobalRoleURN:       "role:global:" + localRole.ID.String(),
+			GlobalSweep:         false,
+			AfterOrganizationID: "",
+			AfterRoleURN:        "",
+		}); err != nil {
+			return fmt.Errorf("enqueue role source maintenance: %w", err)
 		}
 		b.logger.DebugContext(ctx, "soft-deleted WorkOS global role missing from snapshot", attr.SlogAccessRoleSlug(localRole.WorkosSlug))
 	}

@@ -913,6 +913,16 @@ func (q *Queries) DeleteOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const deleteRoleLifecycleOutboxFixture = `-- name: DeleteRoleLifecycleOutboxFixture :exec
+DELETE FROM publish_outbox WHERE topic = $1
+`
+
+// Simulate dropped lifecycle deliveries without claiming unrelated messages.
+func (q *Queries) DeleteRoleLifecycleOutboxFixture(ctx context.Context, topic string) error {
+	_, err := q.db.Exec(ctx, deleteRoleLifecycleOutboxFixture, topic)
+	return err
+}
+
 const detachRemoteSessionClientFromUserSessionIssuer = `-- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
 DELETE FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = $1
@@ -1886,6 +1896,52 @@ func (q *Queries) GetRemoteSessionEMABindingFixture(ctx context.Context, id uuid
 	var i GetRemoteSessionEMABindingFixtureRow
 	err := row.Scan(&i.UserSessionIssuerID, &i.Generation)
 	return i, err
+}
+
+const getRoleLifecyclePluginFixture = `-- name: GetRoleLifecyclePluginFixture :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted FROM plugins WHERE id = $1 AND organization_id = $2
+`
+
+type GetRoleLifecyclePluginFixtureParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+}
+
+// Include deleted plugins to assert retained state after lifecycle cleanup.
+func (q *Queries) GetRoleLifecyclePluginFixture(ctx context.Context, arg GetRoleLifecyclePluginFixtureParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getRoleLifecyclePluginFixture, arg.PluginID, arg.OrganizationID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getRoleLifecycleRetentionSnapshotFixture = `-- name: GetRoleLifecycleRetentionSnapshotFixture :one
+SELECT jsonb_build_object(
+ 'plugins',(SELECT jsonb_agg(to_jsonb(p) ORDER BY id) FROM plugins p),
+ 'servers',(SELECT jsonb_agg(to_jsonb(s) ORDER BY id) FROM plugin_servers s),
+ 'associations',(SELECT jsonb_agg(to_jsonb(a) ORDER BY id) FROM role_plugin_associations a),
+ 'settings',(SELECT jsonb_agg(to_jsonb(r) ORDER BY id) FROM role_provisioning_settings r)
+ )::text
+`
+
+// Exact whole-clone retention snapshot: cleanup must not mutate retained resources.
+func (q *Queries) GetRoleLifecycleRetentionSnapshotFixture(ctx context.Context) (string, error) {
+	row := q.db.QueryRow(ctx, getRoleLifecycleRetentionSnapshotFixture)
+	var column_1 string
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getSessionHandoffLinkFixture = `-- name: GetSessionHandoffLinkFixture :one
@@ -3093,6 +3149,48 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 			&i.FalsePositiveAt,
 			&i.FalsePositiveReason,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoleLifecycleAssociationsFixture = `-- name: ListRoleLifecycleAssociationsFixture :many
+SELECT a.id, a.role_provisioning_setting_id, a.project_id, a.plugin_id, a.is_current, a.retired_at, a.last_automatic_name, a.created_at, a.updated_at FROM role_plugin_associations a
+JOIN role_provisioning_settings s ON s.id = a.role_provisioning_setting_id
+WHERE s.organization_id = $1 AND s.role_urn = $2
+`
+
+type ListRoleLifecycleAssociationsFixtureParams struct {
+	OrganizationID pgtype.Text
+	RoleUrn        string
+}
+
+// Include retired associations, which production reconciliation deliberately hides.
+func (q *Queries) ListRoleLifecycleAssociationsFixture(ctx context.Context, arg ListRoleLifecycleAssociationsFixtureParams) ([]RolePluginAssociation, error) {
+	rows, err := q.db.Query(ctx, listRoleLifecycleAssociationsFixture, arg.OrganizationID, arg.RoleUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RolePluginAssociation
+	for rows.Next() {
+		var i RolePluginAssociation
+		if err := rows.Scan(
+			&i.ID,
+			&i.RoleProvisioningSettingID,
+			&i.ProjectID,
+			&i.PluginID,
+			&i.IsCurrent,
+			&i.RetiredAt,
+			&i.LastAutomaticName,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -4575,6 +4673,16 @@ type SetFunctionToolVariablesParams struct {
 
 func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionToolVariablesParams) error {
 	_, err := q.db.Exec(ctx, setFunctionToolVariables, arg.Variables, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setGlobalRoleLocalDeletionFixture = `-- name: SetGlobalRoleLocalDeletionFixture :exec
+UPDATE global_roles SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+// Global roles have no project scope. Model local deletion independently of WorkOS.
+func (q *Queries) SetGlobalRoleLocalDeletionFixture(ctx context.Context, roleID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setGlobalRoleLocalDeletionFixture, roleID)
 	return err
 }
 

@@ -25,14 +25,18 @@ const (
 // organization settings and role/plugin state; identifiers may already be gone.
 // Emission is independent of marketplace publication and GitHub connectivity.
 type RoleProvisioningRequested struct {
-	state                     protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_OrganizationId *string                `protobuf:"bytes,1,opt,name=organization_id,json=organizationId"`
-	xxx_hidden_RoleUrn        *string                `protobuf:"bytes,2,opt,name=role_urn,json=roleUrn"`
-	xxx_hidden_PluginId       *string                `protobuf:"bytes,3,opt,name=plugin_id,json=pluginId"`
-	XXX_raceDetectHookData    protoimpl.RaceDetectHookData
-	XXX_presence              [1]uint32
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state                          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_OrganizationId      *string                `protobuf:"bytes,1,opt,name=organization_id,json=organizationId"`
+	xxx_hidden_RoleUrn             *string                `protobuf:"bytes,2,opt,name=role_urn,json=roleUrn"`
+	xxx_hidden_PluginId            *string                `protobuf:"bytes,3,opt,name=plugin_id,json=pluginId"`
+	xxx_hidden_GlobalRoleUrn       *string                `protobuf:"bytes,4,opt,name=global_role_urn,json=globalRoleUrn"`
+	xxx_hidden_AfterOrganizationId *string                `protobuf:"bytes,5,opt,name=after_organization_id,json=afterOrganizationId"`
+	xxx_hidden_AfterRoleUrn        *string                `protobuf:"bytes,6,opt,name=after_role_urn,json=afterRoleUrn"`
+	xxx_hidden_GlobalSweep         bool                   `protobuf:"varint,7,opt,name=global_sweep,json=globalSweep"`
+	XXX_raceDetectHookData         protoimpl.RaceDetectHookData
+	XXX_presence                   [1]uint32
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *RoleProvisioningRequested) Reset() {
@@ -90,19 +94,76 @@ func (x *RoleProvisioningRequested) GetPluginId() string {
 	return ""
 }
 
+func (x *RoleProvisioningRequested) GetGlobalRoleUrn() string {
+	if x != nil {
+		if x.xxx_hidden_GlobalRoleUrn != nil {
+			return *x.xxx_hidden_GlobalRoleUrn
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *RoleProvisioningRequested) GetAfterOrganizationId() string {
+	if x != nil {
+		if x.xxx_hidden_AfterOrganizationId != nil {
+			return *x.xxx_hidden_AfterOrganizationId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *RoleProvisioningRequested) GetAfterRoleUrn() string {
+	if x != nil {
+		if x.xxx_hidden_AfterRoleUrn != nil {
+			return *x.xxx_hidden_AfterRoleUrn
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *RoleProvisioningRequested) GetGlobalSweep() bool {
+	if x != nil {
+		return x.xxx_hidden_GlobalSweep
+	}
+	return false
+}
+
 func (x *RoleProvisioningRequested) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 7)
 }
 
 func (x *RoleProvisioningRequested) SetRoleUrn(v string) {
 	x.xxx_hidden_RoleUrn = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 7)
 }
 
 func (x *RoleProvisioningRequested) SetPluginId(v string) {
 	x.xxx_hidden_PluginId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 7)
+}
+
+func (x *RoleProvisioningRequested) SetGlobalRoleUrn(v string) {
+	x.xxx_hidden_GlobalRoleUrn = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 7)
+}
+
+func (x *RoleProvisioningRequested) SetAfterOrganizationId(v string) {
+	x.xxx_hidden_AfterOrganizationId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 7)
+}
+
+func (x *RoleProvisioningRequested) SetAfterRoleUrn(v string) {
+	x.xxx_hidden_AfterRoleUrn = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 7)
+}
+
+func (x *RoleProvisioningRequested) SetGlobalSweep(v bool) {
+	x.xxx_hidden_GlobalSweep = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 7)
 }
 
 func (x *RoleProvisioningRequested) HasOrganizationId() bool {
@@ -126,6 +187,34 @@ func (x *RoleProvisioningRequested) HasPluginId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
 }
 
+func (x *RoleProvisioningRequested) HasGlobalRoleUrn() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
+func (x *RoleProvisioningRequested) HasAfterOrganizationId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *RoleProvisioningRequested) HasAfterRoleUrn() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+}
+
+func (x *RoleProvisioningRequested) HasGlobalSweep() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
+}
+
 func (x *RoleProvisioningRequested) ClearOrganizationId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_OrganizationId = nil
@@ -141,6 +230,26 @@ func (x *RoleProvisioningRequested) ClearPluginId() {
 	x.xxx_hidden_PluginId = nil
 }
 
+func (x *RoleProvisioningRequested) ClearGlobalRoleUrn() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_GlobalRoleUrn = nil
+}
+
+func (x *RoleProvisioningRequested) ClearAfterOrganizationId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_AfterOrganizationId = nil
+}
+
+func (x *RoleProvisioningRequested) ClearAfterRoleUrn() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
+	x.xxx_hidden_AfterRoleUrn = nil
+}
+
+func (x *RoleProvisioningRequested) ClearGlobalSweep() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
+	x.xxx_hidden_GlobalSweep = false
+}
+
 type RoleProvisioningRequested_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -148,6 +257,12 @@ type RoleProvisioningRequested_builder struct {
 	// Optional narrowing hints. Absent identifiers request organization-wide work.
 	RoleUrn  *string
 	PluginId *string
+	// Global role changes fan out to organizations, including stale audiences.
+	GlobalRoleUrn       *string
+	AfterOrganizationId *string
+	AfterRoleUrn        *string
+	// Hourly recovery uses the same bounded organization fanout.
+	GlobalSweep *bool
 }
 
 func (b0 RoleProvisioningRequested_builder) Build() *RoleProvisioningRequested {
@@ -155,16 +270,32 @@ func (b0 RoleProvisioningRequested_builder) Build() *RoleProvisioningRequested {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 7)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RoleUrn != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 7)
 		x.xxx_hidden_RoleUrn = b.RoleUrn
 	}
 	if b.PluginId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 7)
 		x.xxx_hidden_PluginId = b.PluginId
+	}
+	if b.GlobalRoleUrn != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 7)
+		x.xxx_hidden_GlobalRoleUrn = b.GlobalRoleUrn
+	}
+	if b.AfterOrganizationId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 7)
+		x.xxx_hidden_AfterOrganizationId = b.AfterOrganizationId
+	}
+	if b.AfterRoleUrn != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 7)
+		x.xxx_hidden_AfterRoleUrn = b.AfterRoleUrn
+	}
+	if b.GlobalSweep != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 7)
+		x.xxx_hidden_GlobalSweep = *b.GlobalSweep
 	}
 	return m0
 }
@@ -173,11 +304,15 @@ var File_gram_plugins_v1_role_provisioning_requested_proto protoreflect.FileDesc
 
 const file_gram_plugins_v1_role_provisioning_requested_proto_rawDesc = "" +
 	"\n" +
-	"1gram/plugins/v1/role_provisioning_requested.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x88\x01\n" +
+	"1gram/plugins/v1/role_provisioning_requested.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xad\x02\n" +
 	"\x19RoleProvisioningRequested\x12'\n" +
 	"\x0forganization_id\x18\x01 \x01(\tR\x0eorganizationId\x12\x19\n" +
 	"\brole_urn\x18\x02 \x01(\tR\aroleUrn\x12\x1b\n" +
-	"\tplugin_id\x18\x03 \x01(\tR\bpluginId:\n" +
+	"\tplugin_id\x18\x03 \x01(\tR\bpluginId\x12&\n" +
+	"\x0fglobal_role_urn\x18\x04 \x01(\tR\rglobalRoleUrn\x122\n" +
+	"\x15after_organization_id\x18\x05 \x01(\tR\x13afterOrganizationId\x12$\n" +
+	"\x0eafter_role_urn\x18\x06 \x01(\tR\fafterRoleUrn\x12!\n" +
+	"\fglobal_sweep\x18\a \x01(\bR\vglobalSweep:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$BCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\beditionsp\xe9\a"
 
 var file_gram_plugins_v1_role_provisioning_requested_proto_msgTypes = make([]protoimpl.MessageInfo, 1)

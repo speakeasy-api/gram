@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n1gram/plugins/v1/role_provisioning_requested.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x88\x01\n\x19RoleProvisioningRequested\x12\'\n\x0forganization_id\x18\x01 \x01(\tR\x0eorganizationId\x12\x19\n\x08role_urn\x18\x02 \x01(\tR\x07roleUrn\x12\x1b\n\tplugin_id\x18\x03 \x01(\tR\x08pluginId:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\xf5$BCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n1gram/plugins/v1/role_provisioning_requested.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xad\x02\n\x19RoleProvisioningRequested\x12\'\n\x0forganization_id\x18\x01 \x01(\tR\x0eorganizationId\x12\x19\n\x08role_urn\x18\x02 \x01(\tR\x07roleUrn\x12\x1b\n\tplugin_id\x18\x03 \x01(\tR\x08pluginId\x12&\n\x0fglobal_role_urn\x18\x04 \x01(\tR\rglobalRoleUrn\x12\x32\n\x15\x61\x66ter_organization_id\x18\x05 \x01(\tR\x13\x61\x66terOrganizationId\x12$\n\x0e\x61\x66ter_role_urn\x18\x06 \x01(\tR\x0c\x61\x66terRoleUrn\x12!\n\x0cglobal_sweep\x18\x07 \x01(\x08R\x0bglobalSweep:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\xf5$BCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,5 +36,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_ROLEPROVISIONINGREQUESTED']._loaded_options = None
   _globals['_ROLEPROVISIONINGREQUESTED']._serialized_options = b'\212\265\030\006\022\004\010\200\365$'
   _globals['_ROLEPROVISIONINGREQUESTED']._serialized_start=100
-  _globals['_ROLEPROVISIONINGREQUESTED']._serialized_end=236
+  _globals['_ROLEPROVISIONINGREQUESTED']._serialized_end=401
 # @@protoc_insertion_point(module_scope)

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
+	provisioningrepo "github.com/speakeasy-api/gram/server/internal/roleprovisioning/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -219,6 +222,9 @@ func uniqueOrganizationSlug(ctx context.Context, repo orgslug.Lookup, name, fall
 }
 
 func backfillOrganizationRoles(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, organizationID string, roles []workos.Role) error {
+	if _, err := provisioningrepo.New(dbtx).LockOrganization(ctx, organizationID); err != nil {
+		return fmt.Errorf("lock organization for role snapshot: %w", err)
+	}
 	repo := accessrepo.New(dbtx)
 	snapshotSlugs := make(map[string]time.Time)
 
@@ -256,7 +262,7 @@ func backfillOrganizationRoles(ctx context.Context, logger *slog.Logger, dbtx pg
 			continue
 		}
 
-		if _, err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		savedRole, err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 			OrganizationID:    organizationID,
 			WorkosSlug:        role.Slug,
 			WorkosName:        role.Name,
@@ -264,8 +270,20 @@ func backfillOrganizationRoles(ctx context.Context, logger *slog.Logger, dbtx pg
 			WorkosCreatedAt:   conv.ToPGTimestamptz(createdAt),
 			WorkosUpdatedAt:   conv.ToPGTimestamptz(updatedAt),
 			WorkosLastEventID: conv.ToPGText(""),
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("upsert organization role %q: %w", role.Slug, err)
+		}
+		if err := hints.Emit(ctx, dbtx, hints.Hint{
+			OrganizationID:      organizationID,
+			RoleURN:             "role:organization:" + savedRole.ID.String(),
+			PluginID:            uuid.Nil,
+			GlobalRoleURN:       "",
+			GlobalSweep:         false,
+			AfterOrganizationID: "",
+			AfterRoleURN:        "",
+		}); err != nil {
+			return fmt.Errorf("enqueue role source maintenance: %w", err)
 		}
 	}
 
@@ -305,6 +323,17 @@ func backfillOrganizationRoles(ctx context.Context, logger *slog.Logger, dbtx pg
 		rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+localRole.ID.String())
 		if err := authz.DeleteRoleGrants(ctx, repo, organizationID, rolePrincipal.String()); err != nil {
 			return fmt.Errorf("delete grants for organization role %q: %w", localRole.WorkosSlug, err)
+		}
+		if err := hints.Emit(ctx, dbtx, hints.Hint{
+			OrganizationID:      organizationID,
+			RoleURN:             rolePrincipal.String(),
+			PluginID:            uuid.Nil,
+			GlobalRoleURN:       "",
+			GlobalSweep:         false,
+			AfterOrganizationID: "",
+			AfterRoleURN:        "",
+		}); err != nil {
+			return fmt.Errorf("enqueue role source maintenance: %w", err)
 		}
 		logger.DebugContext(ctx, "soft-deleted WorkOS organization role missing from snapshot", attr.SlogAccessRoleSlug(localRole.WorkosSlug))
 	}

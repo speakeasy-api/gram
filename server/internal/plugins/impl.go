@@ -55,6 +55,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -827,6 +828,9 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 
 	if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "enqueue plugin publication").LogError(ctx, s.logger)
+	}
+	if err := hints.Emit(ctx, tx, hints.Hint{OrganizationID: ac.ActiveOrganizationID, PluginID: pluginID, RoleURN: "", GlobalRoleURN: "", GlobalSweep: false, AfterOrganizationID: "", AfterRoleURN: ""}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue role plugin maintenance").LogError(ctx, s.logger)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)

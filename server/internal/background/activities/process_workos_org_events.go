@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,6 +27,8 @@ import (
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
+	provisioningrepo "github.com/speakeasy-api/gram/server/internal/roleprovisioning/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -280,7 +283,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 // ShouldProcessEvent guard against duplicate apply. The returned effects are
 // run by the caller after the transaction commits. workosOrgID is the
 // organization whose event stream is being processed.
-func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosOrgID string, event events.Event) (postCommitEffects, error) {
+func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, workosOrgID string, event events.Event) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	switch event.Event {
@@ -369,7 +372,7 @@ type resolvedWorkOSOrganization struct {
 //
 // WorkOS owns name/workos_id/cursor metadata, but never updates an existing
 // Gram slug. New org slugs are chosen once and uniqued locally.
-func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (postCommitEffects, error) {
+func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) (postCommitEffects, error) {
 	var effects postCommitEffects
 
 	var payload workosOrganizationEventPayload
@@ -387,11 +390,7 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 		if err := createOrganizationFromWorkOSEvent(ctx, repo, payload, event.ID, resolved.organizationID); err != nil {
 			return effects, err
 		}
-		tx, ok := dbtx.(pgx.Tx)
-		if !ok {
-			return effects, fmt.Errorf("seed organization default entitlements requires a transaction")
-		}
-		if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, resolved.organizationID); err != nil {
+		if err := productfeatures.SeedOrganizationDefaultsTx(ctx, dbtx, resolved.organizationID); err != nil {
 			return effects, fmt.Errorf("seed organization default entitlements for organization %q from workos event: %w", payload.ID, err)
 		}
 	default:
@@ -591,7 +590,7 @@ type workosRoleEventPayload struct {
 
 // handleRoleUpsert applies an organization_role.created or
 // organization_role.updated event.
-func handleRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+func handleRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) error {
 	var payload workosRoleEventPayload
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		return oops.Permanent(fmt.Errorf("unmarshal role event payload: %w", err))
@@ -600,7 +599,7 @@ func handleRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DB
 	return upsertOrganizationRole(ctx, logger, dbtx, event, payload)
 }
 
-func upsertOrganizationRole(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosRoleEventPayload) error {
+func upsertOrganizationRole(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event, payload workosRoleEventPayload) error {
 	org, err := orgrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -610,6 +609,9 @@ func upsertOrganizationRole(ctx context.Context, logger *slog.Logger, dbtx datab
 		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
 	}
 
+	if _, err := provisioningrepo.New(dbtx).LockOrganization(ctx, org.ID); err != nil {
+		return fmt.Errorf("lock organization for role mutation: %w", err)
+	}
 	repo := accessrepo.New(dbtx)
 	existing, err := repo.GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
 		OrganizationID: org.ID,
@@ -631,7 +633,7 @@ func upsertOrganizationRole(ctx context.Context, logger *slog.Logger, dbtx datab
 		return nil
 	}
 
-	if _, err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+	role, err := repo.UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID:    org.ID,
 		WorkosSlug:        payload.Slug,
 		WorkosName:        payload.Name,
@@ -639,14 +641,26 @@ func upsertOrganizationRole(ctx context.Context, logger *slog.Logger, dbtx datab
 		WorkosCreatedAt:   conv.ToPGTimestamptz(payload.CreatedAt),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosLastEventID: conv.ToPGText(event.ID),
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("upsert organization role %q: %w", payload.Slug, err)
 	}
 
+	if err := hints.Emit(ctx, dbtx, hints.Hint{
+		OrganizationID:      org.ID,
+		RoleURN:             "role:organization:" + role.ID.String(),
+		PluginID:            uuid.Nil,
+		GlobalRoleURN:       "",
+		GlobalSweep:         false,
+		AfterOrganizationID: "",
+		AfterRoleURN:        "",
+	}); err != nil {
+		return fmt.Errorf("enqueue role source maintenance: %w", err)
+	}
 	return nil
 }
 
-func handleRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+func handleRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) error {
 	var payload workosRoleEventPayload
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		return oops.Permanent(fmt.Errorf("unmarshal role delete event payload: %w", err))
@@ -666,6 +680,9 @@ func handleRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx database.D
 		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
 	}
 
+	if _, err := provisioningrepo.New(dbtx).LockOrganization(ctx, org.ID); err != nil {
+		return fmt.Errorf("lock organization for role mutation: %w", err)
+	}
 	repo := accessrepo.New(dbtx)
 	existing, err := repo.GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
 		OrganizationID: org.ID,
@@ -704,6 +721,17 @@ func handleRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx database.D
 		return fmt.Errorf("delete grants for role %q: %w", payload.Slug, err)
 	}
 
+	if err := hints.Emit(ctx, dbtx, hints.Hint{
+		OrganizationID:      org.ID,
+		RoleURN:             rolePrincipal.String(),
+		PluginID:            uuid.Nil,
+		GlobalRoleURN:       "",
+		GlobalSweep:         false,
+		AfterOrganizationID: "",
+		AfterRoleURN:        "",
+	}); err != nil {
+		return fmt.Errorf("enqueue role source maintenance: %w", err)
+	}
 	return nil
 }
 

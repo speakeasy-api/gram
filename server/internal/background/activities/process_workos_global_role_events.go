@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/events"
@@ -14,9 +15,9 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 )
@@ -154,7 +155,7 @@ func (p *ProcessWorkOSGlobalRoleEvents) handleEvent(ctx context.Context, logger 
 	return event.ID, nil
 }
 
-func upsertGlobalRole(ctx context.Context, dbtx database.DBTX, event events.Event, payload workosRoleEventPayload) error {
+func upsertGlobalRole(ctx context.Context, dbtx pgx.Tx, event events.Event, payload workosRoleEventPayload) error {
 	repo := accessrepo.New(dbtx)
 
 	existing, err := repo.GetGlobalRoleBySlug(ctx, payload.Slug)
@@ -182,10 +183,25 @@ func upsertGlobalRole(ctx context.Context, dbtx database.DBTX, event events.Even
 		return fmt.Errorf("upsert global role %q: %w", payload.Slug, err)
 	}
 
+	role, err := repo.GetGlobalRoleBySlug(ctx, payload.Slug)
+	if err != nil {
+		return fmt.Errorf("get global role for provisioning hint: %w", err)
+	}
+	if err := hints.Emit(ctx, dbtx, hints.Hint{
+		OrganizationID:      "",
+		RoleURN:             "",
+		PluginID:            uuid.Nil,
+		GlobalRoleURN:       "role:global:" + role.ID.String(),
+		GlobalSweep:         false,
+		AfterOrganizationID: "",
+		AfterRoleURN:        "",
+	}); err != nil {
+		return fmt.Errorf("enqueue role source maintenance: %w", err)
+	}
 	return nil
 }
 
-func deleteGlobalRole(ctx context.Context, dbtx database.DBTX, event events.Event, payload workosRoleEventPayload) error {
+func deleteGlobalRole(ctx context.Context, dbtx pgx.Tx, event events.Event, payload workosRoleEventPayload) error {
 	deletedAt := payload.DeletedAt
 	if deletedAt == nil || deletedAt.IsZero() {
 		deletedAt = &event.CreatedAt
@@ -215,6 +231,17 @@ func deleteGlobalRole(ctx context.Context, dbtx database.DBTX, event events.Even
 		WorkosLastEventID: conv.ToPGText(event.ID),
 	}); err != nil {
 		return fmt.Errorf("mark global role %q deleted: %w", payload.Slug, err)
+	}
+	if err := hints.Emit(ctx, dbtx, hints.Hint{
+		OrganizationID:      "",
+		RoleURN:             "",
+		PluginID:            uuid.Nil,
+		GlobalRoleURN:       "role:global:" + existing.ID.String(),
+		GlobalSweep:         false,
+		AfterOrganizationID: "",
+		AfterRoleURN:        "",
+	}); err != nil {
+		return fmt.Errorf("enqueue role source maintenance: %w", err)
 	}
 	return nil
 }

@@ -12,12 +12,14 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	provisioningrepo "github.com/speakeasy-api/gram/server/internal/roleprovisioning/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -530,4 +532,56 @@ func TestRoleManager_ReplaceRoleAssignmentSoftDeletesPreviousRole(t *testing.T) 
 	}
 	require.Equal(t, 1, activeCount)
 	require.Equal(t, 1, deletedCount)
+}
+
+func TestRoleManager_CreateRoleTxHintRollsBackWithRole(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: Caller-owned transaction exercises atomic source/hint rollback and lock contention.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	created, _, err := ti.service.roleMgr.CreateRoleTx(ctx, tx, authCtx.ActiveOrganizationID, mockidp.MockOrgID, RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, "test_actor")}, &gen.CreateRolePayload{Name: "Transactional Role"})
+	require.NoError(t, err)
+	_, _, err = ti.service.roleMgr.UpdateRoleTx(ctx, tx, authCtx.ActiveOrganizationID, mockidp.MockOrgID, RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, "test_actor")}, &gen.UpdateRolePayload{ID: created.Role.ID, Name: conv.PtrEmpty("Renamed Role")})
+	require.NoError(t, err)
+	pending, err := testrepo.New(tx).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	count := 0
+	for _, row := range pending {
+		if row.Topic == "gram.plugins.v1.RoleProvisioningRequested" && row.OrganizationID == authCtx.ActiveOrganizationID {
+			count++
+		}
+	}
+	require.Equal(t, 2, count)
+	require.NoError(t, tx.Rollback(ctx))
+	committed, err := testrepo.New(ti.conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	for _, row := range committed {
+		require.False(t, row.Topic == "gram.plugins.v1.RoleProvisioningRequested" && row.OrganizationID == authCtx.ActiveOrganizationID)
+	}
+	_, err = accessrepo.New(ti.conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{OrganizationID: authCtx.ActiveOrganizationID, WorkosSlug: "transactional-role"})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestRoleManager_CreateRoleTxRequiresOrganizationLock(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	locked, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: Hold the organization lock in a separate transaction for the contention test.
+	require.NoError(t, err)
+	defer func() { _ = locked.Rollback(ctx) }()
+	_, err = provisioningrepo.New(locked).LockOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: Caller-owned transaction exercises atomic source/hint rollback and lock contention.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	deadline, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	_, _, err = ti.service.roleMgr.CreateRoleTx(deadline, tx, authCtx.ActiveOrganizationID, mockidp.MockOrgID, RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, "test_actor")}, &gen.CreateRolePayload{Name: "Blocked Role"})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	_, err = accessrepo.New(ti.conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{OrganizationID: authCtx.ActiveOrganizationID, WorkosSlug: "blocked-role"})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	provisioningrepo "github.com/speakeasy-api/gram/server/internal/roleprovisioning/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -253,6 +254,10 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		roleUUID, parseErr := uuid.Parse(roleID)
 		if parseErr != nil || roleUUID == uuid.Nil {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
+		}
+		// Match the shared role writer and reconciler before locking the version.
+		if _, lockErr := provisioningrepo.New(tx).LockOrganization(ctx, principal.OrganizationID); lockErr != nil {
+			return AccessRoleMutationReceiptResult{}, accessRoleMutationUnavailable(lockErr)
 		}
 		if _, lockErr := accessrepo.New(tx).LockOrganizationRoleByID(ctx, accessrepo.LockOrganizationRoleByIDParams{OrganizationID: principal.OrganizationID, ID: roleUUID}); errors.Is(lockErr, pgx.ErrNoRows) {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()

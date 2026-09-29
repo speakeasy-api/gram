@@ -2870,6 +2870,60 @@ func (q *Queries) ReplaceOrganizationRoleAssignment(ctx context.Context, arg Rep
 	return column_1, err
 }
 
+const seedGlobalRole = `-- name: SeedGlobalRole :one
+INSERT INTO global_roles (
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+ON CONFLICT (workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, global_roles.workos_last_event_id),
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE global_roles.deleted_at IS NOT NULL
+RETURNING id
+`
+
+type SeedGlobalRoleParams struct {
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+// Bootstrap only missing/deleted built-in global roles. The conflict predicate
+// rechecks under the row lock so concurrent seeders neither rewrite live roles
+// nor emit duplicate global maintenance hints. Global roles have no project scope.
+func (q *Queries) SeedGlobalRole(ctx context.Context, arg SeedGlobalRoleParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedGlobalRole,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const softDeleteAgentRoleAssignmentsByRole = `-- name: SoftDeleteAgentRoleAssignmentsByRole :exec
 UPDATE agent_role_assignments
 SET deleted_at = clock_timestamp(),

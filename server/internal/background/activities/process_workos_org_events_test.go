@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 
+	pluginsv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -25,10 +26,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"google.golang.org/protobuf/proto"
 )
 
 func newOrgEventsTestConn(t *testing.T, name string) *pgxpool.Pool {
@@ -942,6 +945,12 @@ func TestProcessWorkOSGlobalRoleEvents_UpsertAndDelete(t *testing.T) {
 	require.True(t, role.Deleted)
 	require.True(t, role.WorkosDeleted)
 	require.Equal(t, "event_01HZG2", role.WorkosLastEventID.String)
+	hints := readRoleSourceHints(t, ctx, conn, "")
+	require.Len(t, hints, 2)
+	for _, hint := range hints {
+		require.Equal(t, "role:global:"+role.ID.String(), hint.GetGlobalRoleUrn())
+	}
+
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationRoleUpsertAndDelete(t *testing.T) {
@@ -1032,6 +1041,12 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleUpsertAndDelete(t *test
 	})
 	require.NoError(t, err)
 	require.Empty(t, grants, "principal_grants should be cascade-deleted on role delete")
+	hints := readRoleSourceHints(t, ctx, conn, externalID)
+	require.Len(t, hints, 2)
+	for _, hint := range hints {
+		require.Equal(t, "role:organization:"+role.ID.String(), hint.GetRoleUrn())
+	}
+
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSkippedWhenStale(t *testing.T) {
@@ -2223,4 +2238,37 @@ func TestProcessWorkOSOrganizationEvents_MembershipReactivationRestoresAccess(t 
 		}
 	}
 	require.Equal(t, 1, active)
+}
+
+func readRoleSourceHints(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org string) []*pluginsv1.RoleProvisioningRequested {
+	t.Helper()
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	var result []*pluginsv1.RoleProvisioningRequested
+	for _, row := range rows {
+		if row.Topic != "gram.plugins.v1.RoleProvisioningRequested" || row.OrganizationID != org {
+			continue
+		}
+		hint := new(pluginsv1.RoleProvisioningRequested)
+		require.NoError(t, proto.Unmarshal(row.Message, hint))
+		result = append(result, hint)
+	}
+	return result
+}
+
+func TestProcessWorkOSGlobalRoleEvents_HintFailureRollsBackRoleAndCursor(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "role_hint_failure")
+	_, err := conn.Exec(ctx, `ALTER TABLE publish_outbox ADD CONSTRAINT reject_role_hint CHECK (topic <> 'gram.plugins.v1.RoleProvisioningRequested') NOT VALID`) //nolint:glint // notestingrawsql: Test-only DDL injects an outbox write failure; SQLc cannot express this constraint.
+	require.NoError(t, err)
+	event := events.Event{ID: "event_hint_failure", Event: "role.created", CreatedAt: time.Now(), Data: []byte(`{"slug":"hint-failure","name":"Hint Failure","created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T10:00:00Z"}`)}
+	activity := activities.NewProcessWorkOSGlobalRoleEvents(testenv.NewLogger(t), conn, newWorkOSClientWithEvents([][]events.Event{{event}}))
+	_, err = activity.Do(ctx, activities.ProcessWorkOSGlobalRoleEventsParams{})
+	require.Error(t, err)
+	_, err = accessrepo.New(conn).GetGlobalRoleBySlug(ctx, "hint-failure")
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, activities.WorkosGlobalRoleCursorKey)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.Empty(t, readRoleSourceHints(t, ctx, conn, ""))
 }

@@ -38,6 +38,7 @@ import (
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
@@ -64,6 +65,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -72,6 +74,7 @@ import (
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -254,7 +257,7 @@ func newStreamsCommand() *cli.Command {
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, networkIngressQueueFlags()...)
-	flags = append(flags, pluginPublicationConsumeFlag())
+	flags = append(flags, pluginPublicationConsumeFlag(), pluginPublicationEmitFlag())
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
@@ -647,6 +650,9 @@ func newStreamsCommand() *cli.Command {
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
+				// Provisioning is local database maintenance, independent of publication rollout.
+				roleProvisioner := roleprovisioning.New(db, audit.NewLogger(), admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger)), plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)})
+				mustReceiveBatchWithResult(rg, &pluginsv1.RoleProvisioningRequested{}, &pluginsv1.RoleProvisioningConsumer{}, roleprovisioning.NewConsumer(logger, db, roleProvisioner), gcp.BatchReceiveSettings{MaxMessages: 10, MaxBytes: constants.MiB, MaxLatency: time.Second})
 				if c.Bool(pluginPublicationConsumeFlagName) {
 					publicationHandler := plugins.NewPublicationHandler(logger, db, (&background.TemporalPluginPublisher{TemporalEnv: temporalEnv}).SignalPluginPublish)
 					organizationPublicationHandler := plugins.NewOrganizationPublicationHandler(logger, db)

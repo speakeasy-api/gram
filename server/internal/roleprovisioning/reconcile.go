@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/hints"
 	"github.com/speakeasy-api/gram/server/internal/roleprovisioning/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
@@ -37,8 +38,8 @@ type resolvedAdmission struct {
 }
 
 // Reconcile handles one role, using current committed intent. Lifecycle source
-// hooks, deleted-role fanout, batch continuation and repair scheduling belong to
-// callers. Inactive roles never create or restore a plugin.
+// hooks, deleted-role fanout and repair scheduling belong to callers. Deleted-role
+// cleanup emits its own durable continuation. Inactive roles never create or restore a plugin.
 func (s *Service) Reconcile(ctx context.Context, organizationID, roleURN string, actor Actor) (Result, error) {
 	if organizationID == "" || actor.Principal.IsZero() || s.audit == nil {
 		return Result{}, ErrInvalid
@@ -64,19 +65,27 @@ func (s *Service) Reconcile(ctx context.Context, organizationID, roleURN string,
 	if _, err = q.LockOrganization(ctx, organizationID); err != nil {
 		return Result{}, fmt.Errorf("lock organization: %w", err)
 	}
+	// A hint is not a deletion instruction. Lock the current role, including
+	// tombstones, before checking provisioning settings or touching audiences.
+	name, live, err := lockRoleLiveness(ctx, q, organizationID, roleURN)
+	if err != nil {
+		return Result{}, err
+	}
+	if !live {
+		if err = s.cleanupDeletedRole(ctx, tx, organizationID, roleURN, actor); err != nil {
+			return Result{}, err
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return Result{}, fmt.Errorf("commit deleted role cleanup: %w", err)
+		}
+		return Result{PluginID: uuid.Nil, Pending: "", Publication: "", Skipped: true}, nil
+	}
 	config, err := q.GetSettings(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Result{PluginID: uuid.Nil, Pending: "", Publication: "", Skipped: true}, nil
 	}
 	if err != nil {
 		return Result{}, fmt.Errorf("read provisioning settings: %w", err)
-	}
-	name, err := lockRole(ctx, q, organizationID, roleURN)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Result{PluginID: uuid.Nil, Pending: "", Publication: "", Skipped: true}, nil
-	}
-	if err != nil {
-		return Result{}, err
 	}
 	if !config.Enabled {
 		return Result{PluginID: uuid.Nil, Pending: "", Publication: "", Skipped: true}, nil
@@ -328,4 +337,104 @@ func roleSlug(name, role string, attempt int) string {
 		base = base[:limit]
 	}
 	return base + "-" + suffix
+}
+
+// lockRoleLiveness deliberately does not filter deleted rows in SQL. PostgreSQL
+// rechecks the locked row after a concurrent source update commits, so an old
+// deletion hint observes reactivation and follows normal live-role maintenance.
+func lockRoleLiveness(ctx context.Context, q *repo.Queries, org, role string) (string, bool, error) {
+	parts := strings.Split(role, ":")
+	if len(parts) != 3 || parts[0] != "role" {
+		return "", false, ErrInvalid
+	}
+	id, err := uuid.Parse(parts[2])
+	if err != nil || id.String() != parts[2] {
+		return "", false, ErrInvalid
+	}
+	var name string
+	var live bool
+	switch parts[1] {
+	case "organization":
+		row, readErr := q.LockOrganizationRoleLiveness(ctx, repo.LockOrganizationRoleLivenessParams{ID: id, OrganizationID: org})
+		name, live, err = row.WorkosName, row.Live, readErr
+	case "global":
+		row, readErr := q.LockGlobalRoleLiveness(ctx, id)
+		name, live, err = row.WorkosName, row.Live, readErr
+	default:
+		return "", false, ErrInvalid
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("lock role liveness: %w", err)
+	}
+	return name, live, nil
+}
+
+const deletedRoleCleanupBatchSize = 100
+
+func (s *Service) cleanupDeletedRole(ctx context.Context, tx pgx.Tx, org, role string, actor Actor) error {
+	q := repo.New(tx)
+	targets, err := q.ListRoleAssignmentTargets(ctx, repo.ListRoleAssignmentTargetsParams{OrganizationID: org, RoleUrn: role, BatchSize: deletedRoleCleanupBatchSize})
+	if err != nil {
+		return fmt.Errorf("list deleted role assignments: %w", err)
+	}
+	projects := make([]uuid.UUID, 0, len(targets))
+	for _, target := range targets {
+		projects = append(projects, target.ProjectID)
+	}
+	slices.SortFunc(projects, compareID)
+	projects = slices.Compact(projects)
+	// Preserve the shared lock order: organization -> role -> ordered project
+	// admission -> projects -> ordered plugins. Associations are retained and
+	// never pre-locked: cleanup changes no content, names, or provisioning intent.
+	for _, project := range projects {
+		if err = admission.LockProject(ctx, tx, project); err != nil {
+			return fmt.Errorf("lock cleanup admission: %w", err)
+		}
+	}
+	for _, project := range projects {
+		_, err = q.LockCleanupProject(ctx, repo.LockCleanupProjectParams{OrganizationID: org, ProjectID: project})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("lock cleanup project: %w", err)
+		}
+	}
+	for _, target := range targets {
+		plugin, err := q.LockCleanupPlugin(ctx, repo.LockCleanupPluginParams{OrganizationID: org, ProjectID: target.ProjectID, PluginID: target.ID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("lock cleanup plugin: %w", err)
+		}
+		// Exact deletion is necessarily an audience reduction. Unlike AddOrigin,
+		// it needs no rollout/admission I/O or validation of unrelated principals.
+		changed, err := q.RemoveDeletedRoleAssignment(ctx, repo.RemoveDeletedRoleAssignmentParams{OrganizationID: org, ProjectID: target.ProjectID, PluginID: target.ID, RoleUrn: role})
+		if err != nil {
+			return fmt.Errorf("remove deleted role assignment: %w", err)
+		}
+		if changed == 0 {
+			continue
+		}
+		principals, err := q.ListCleanupPluginPrincipals(ctx, repo.ListCleanupPluginPrincipalsParams{OrganizationID: org, ProjectID: target.ProjectID, PluginID: target.ID})
+		if err != nil {
+			return fmt.Errorf("read cleanup audience: %w", err)
+		}
+		if err = s.audit.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{OrganizationID: org, ProjectID: target.ProjectID, Actor: actor.Principal, ActorDisplayName: nil, ActorSlug: nil, PluginID: plugin.ID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: principals}); err != nil {
+			return fmt.Errorf("audit deleted role cleanup: %w", err)
+		}
+	}
+	// The removed assignments are the cursor: redelivery drains the next batch,
+	// not the same work. Commit the continuation with the removals so a crash
+	// cannot strand the remaining targets. A full final batch may enqueue one
+	// empty pass, which emits nothing. Each pass reacquires organization/role
+	// locks and checks liveness, so reactivation supersedes stale delete hints.
+	if len(targets) == deletedRoleCleanupBatchSize {
+		if err = hints.Emit(ctx, tx, hints.Hint{OrganizationID: org, RoleURN: role, PluginID: uuid.Nil, GlobalRoleURN: "", GlobalSweep: false, AfterOrganizationID: "", AfterRoleURN: ""}); err != nil {
+			return fmt.Errorf("continue deleted role cleanup: %w", err)
+		}
+	}
+	// Assignment-only changes affect delivery selection, never package bytes.
+	return nil
 }
