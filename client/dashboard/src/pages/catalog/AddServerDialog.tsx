@@ -25,6 +25,7 @@ import {
   Plus,
   Server as ServerIcon,
   Settings,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -1353,10 +1354,38 @@ function InstallStatusRow({
 }) {
   const routes = useTargetRoutes(releaseState);
   const isCompleted = status.status === "completed" && status.mcpServerParam;
-  const needsIdentitySetup =
-    status.status === "failed" &&
-    status.mcpServerParam &&
-    status.error?.startsWith("Server retained disabled.");
+  const setupRequired =
+    status.status === "failed" && status.mcpServerParam
+      ? status.setupRequired
+      : undefined;
+
+  if (setupRequired) {
+    // Created, but held disabled until identity is finished: a next step,
+    // not a failure, so it reads in warning tones and says what to do.
+    return (
+      <routes.mcp.x.settings.Link
+        params={[status.mcpServerParam!]}
+        hash="authentication"
+        className="block no-underline transition-opacity hover:no-underline hover:opacity-80"
+      >
+        <div className="flex items-start gap-3 border p-2">
+          <TriangleAlert className="text-default-warning mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <Text small className="truncate">
+              {status.name}
+            </Text>
+            <Text small muted>
+              Added, but disabled until identity is set up. {setupRequired}
+            </Text>
+          </div>
+          <span className="text-foreground flex shrink-0 items-center gap-1 text-xs font-medium">
+            Finish setup
+            <ArrowRight className="h-3 w-3" />
+          </span>
+        </div>
+      </routes.mcp.x.settings.Link>
+    );
+  }
 
   const content = (
     <div className="flex items-center gap-3 border p-2">
@@ -1371,7 +1400,7 @@ function InstallStatusRow({
         )}
       </div>
       <div className="flex items-center gap-2">
-        {(isCompleted || needsIdentitySetup) && (
+        {isCompleted && (
           <ArrowRight className="text-muted-foreground h-3 w-3" />
         )}
         <InstallStatusIcon status={status.status} />
@@ -1387,18 +1416,6 @@ function InstallStatusRow({
       >
         {content}
       </routes.mcp.x.Link>
-    );
-  }
-
-  if (needsIdentitySetup) {
-    return (
-      <routes.mcp.x.settings.Link
-        params={[status.mcpServerParam!]}
-        hash="authentication"
-        className="block no-underline transition-opacity hover:no-underline hover:opacity-80"
-      >
-        {content}
-      </routes.mcp.x.settings.Link>
     );
   }
 
