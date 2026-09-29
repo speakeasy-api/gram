@@ -190,6 +190,12 @@ export interface GuardrailsPhase extends WorkflowBase {
   installWithGuardrail: () => Promise<void>;
   /** Install without a guardrail. */
   skip: () => Promise<void>;
+  /**
+   * Install without a guardrail and resolve to the ids of the installed
+   * servers Gram proxies, so the caller can open the full policy editor
+   * scoped to them.
+   */
+  installForCustomizing: () => Promise<string[]>;
   /** Back to the Configure phase. Absent when Configure had nothing to ask,
    *  so going back would only bounce forward again. */
   goBack?: () => void;
@@ -831,12 +837,14 @@ export function useRemoteMcpInstallWorkflow({
   );
 
   const startInstall = useCallback(
-    async (options?: { guardrail?: ServerGuardrailState }) => {
+    async (options?: {
+      guardrail?: ServerGuardrailState;
+    }): Promise<string[]> => {
       if (
         !canInstall ||
         (phaseRef.current !== "configure" && phaseRef.current !== "guardrails")
       ) {
-        return;
+        return [];
       }
 
       // Configs without a compatible endpoint can't be installed; report them as
@@ -1012,6 +1020,7 @@ export function useRemoteMcpInstallWorkflow({
       });
 
       setPhase("complete");
+      return installedServerIds;
     },
     [
       canInstall,
@@ -1077,7 +1086,9 @@ export function useRemoteMcpInstallWorkflow({
         setHeaderValue,
         canInstall,
         installBlockedReason,
-        startInstall,
+        startInstall: async () => {
+          await startInstall();
+        },
         goBack: hasMultiRemoteServers ? goBack : undefined,
         continueToGuardrails: offerGuardrails
           ? continueToGuardrails
@@ -1093,9 +1104,15 @@ export function useRemoteMcpInstallWorkflow({
         servers: serverConfigs
           .filter((config) => !isFigmaCatalogServer(config.server))
           .map(guardrailServerSummary),
-        installWithGuardrail: () =>
-          startInstall({ guardrail: guardrail ?? catalogPresetState([]) }),
-        skip: () => startInstall(),
+        installWithGuardrail: async () => {
+          await startInstall({
+            guardrail: guardrail ?? catalogPresetState([]),
+          });
+        },
+        skip: async () => {
+          await startInstall();
+        },
+        installForCustomizing: () => startInstall(),
         goBack: configureSkipped ? undefined : backToConfigure,
         ...base,
       };

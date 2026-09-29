@@ -9,7 +9,9 @@ import {
   type RuleCategory,
 } from "@/pages/security/policy-data";
 import { SeverityBadge } from "@/pages/security/risk-ui";
-import { ServerGuardrailsForm } from "@/pages/security/server-guardrails/ServerGuardrailsForm";
+import { policyNewPrefillQuery } from "@/pages/security/policy-new-prefill";
+import { useRoutes } from "@/routes";
+import { useNavigate } from "react-router";
 import {
   effectiveAction,
   hasFlagOnlyCategory,
@@ -53,9 +55,31 @@ export function CatalogGuardrailsPhase({
   const mode = useDetectorMode();
   const [enabled, setEnabled] = useState(true);
   const [customizing, setCustomizing] = useState(false);
+  const routes = useRoutes(
+    releaseState.projectSlug
+      ? { projectSlug: releaseState.projectSlug }
+      : undefined,
+  );
+  const navigate = useNavigate();
+  // The full editor needs the servers to exist (to scope to them and list
+  // their tools), so customizing installs first, then opens it pre-filled.
+  const customize = async () => {
+    setCustomizing(true);
+    const mcpServerIds = await releaseState.installForCustomizing();
+    if (mcpServerIds.length === 0) return;
+    void navigate(
+      routes.policyCenter.new.href() +
+        policyNewPrefillQuery({
+          categories: guardrail.categories,
+          mcpServerIds,
+          action: effectiveAction(guardrail),
+          score: guardrail.score,
+          ...(single ? { name: `${single.name} guardrail` } : {}),
+        }),
+    );
+  };
   const { guardrail, servers } = releaseState;
   const single = servers.length === 1 ? servers[0] : undefined;
-  const scopeName = single?.name ?? `${servers.length} servers`;
   const valid = validateServerGuardrail(guardrail).ok;
 
   return (
@@ -107,23 +131,13 @@ export function CatalogGuardrailsPhase({
             <button
               type="button"
               className="text-foreground font-medium underline underline-offset-2"
-              onClick={() => setCustomizing((open) => !open)}
+              disabled={customizing}
+              onClick={() => void customize()}
             >
-              {customizing ? "hide options" : "customize now"}
+              customize now
             </button>
-            .
+            : the server is added and the full policy editor opens.
           </Text>
-          {customizing ? (
-            <div className="max-h-[40vh] overflow-y-auto pr-1">
-              <ServerGuardrailsForm
-                state={guardrail}
-                onChange={releaseState.updateGuardrail}
-                toolsSource={{ status: "unavailable" }}
-                serverName={scopeName}
-                mode={mode}
-              />
-            </div>
-          ) : null}
         </>
       ) : null}
 

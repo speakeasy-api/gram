@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   continueToGuardrails: vi.fn(),
   skip: vi.fn(),
   installWithGuardrail: vi.fn(),
+  installForCustomizing: vi.fn(),
+  navigate: vi.fn(),
   updateServerConfig: vi.fn(),
   workflow: vi.fn(),
 }));
@@ -38,6 +40,17 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: mocks.hasScope,
     isLoading: false,
+  }),
+}));
+
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => mocks.navigate,
+}));
+
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    policyCenter: { new: { href: () => "/p/risk-policies/new" } },
   }),
 }));
 
@@ -206,6 +219,7 @@ describe("AddServerDialog guardrails", () => {
         },
       ],
       installWithGuardrail: mocks.installWithGuardrail,
+      installForCustomizing: mocks.installForCustomizing,
       skip: mocks.skip,
       goBack: vi.fn(),
       isServerAlreadyInstalled: () => false,
@@ -250,6 +264,30 @@ describe("AddServerDialog guardrails", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Add to Project" }));
     expect(mocks.skip).toHaveBeenCalledTimes(1);
+    expect(mocks.installWithGuardrail).not.toHaveBeenCalled();
+  });
+
+  it("installs, then opens the full editor pre-filled, on customize now", async () => {
+    mocks.installForCustomizing.mockResolvedValue(["srv-1"]);
+    mocks.workflow.mockReturnValue(
+      guardrailsPhase([{ name: "search", destructive: false }]),
+    );
+    renderDialog();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "customize now" }),
+    );
+
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    const url = new URL(
+      mocks.navigate.mock.calls[0]![0] as string,
+      "https://x",
+    );
+    expect(url.pathname).toBe("/p/risk-policies/new");
+    expect(url.searchParams.get("kind")).toBe("standard");
+    expect(url.searchParams.get("mcp_server_id")).toBe("srv-1");
+    expect(url.searchParams.get("action")).toBe("warn");
+    expect(url.searchParams.get("name")).toBe("Test Server guardrail");
     expect(mocks.installWithGuardrail).not.toHaveBeenCalled();
   });
 
