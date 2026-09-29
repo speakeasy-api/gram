@@ -15,23 +15,23 @@ through.
 
 ## Variables
 
-| Variable                           | Purpose                                                                                                          |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `GRAM_HOOKS_SERVER_URL`            | Gram API base the events are posted to. Defaults to `https://app.getgram.ai`.                                    |
-| `GRAM_HOOKS_SITE_URL`              | Dashboard origin browser sign-in opens, for deployments that serve the dashboard off the API domain (local dev). |
-| `GRAM_HOOKS_PROJECT_SLUG`          | Project the events route to.                                                                                     |
-| `GRAM_HOOKS_ORG_ID`                | Organization the cached credential is scoped to.                                                                 |
-| `GRAM_HOOKS_ORG_KEY`               | Shared org-wide hooks key, used when no per-user key resolves.                                                   |
+| Variable                           | Purpose                                                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `GRAM_HOOKS_SERVER_URL`            | Gram API base the events are posted to. Defaults to `https://app.getgram.ai`.                                             |
+| `GRAM_HOOKS_SITE_URL`              | Dashboard origin browser sign-in opens, for deployments that serve the dashboard off the API domain (local dev).          |
+| `GRAM_HOOKS_PROJECT_SLUG`          | Project the events route to.                                                                                              |
+| `GRAM_HOOKS_ORG_ID`                | Organization the cached credential is scoped to.                                                                          |
+| `GRAM_HOOKS_ORG_KEY`               | Shared org-wide hooks key, used when no per-user key resolves.                                                            |
 | `GRAM_HOOKS_API_KEY`               | Explicit hooks-scoped key; wins over the cached one. The generic `GRAM_API_KEY` is an MCP credential and is ignored here. |
-| `GRAM_HOOKS_AUTH_FILE`             | Credential cache path. Defaults to `$XDG_CONFIG_HOME/gram/hooks-auth.env`.                                       |
-| `GRAM_HOOKS_BROWSER_LOGIN`         | `1`/`true` lets a fresh machine mint a per-user key through the dashboard.                                       |
-| `GRAM_HOOKS_DISABLE_LOCAL_AUTH`    | `1` suppresses interactive sign-in, for shared gateways and CI images.                                           |
-| `GRAM_HOOKS_LOGIN_FORCE`           | `1` re-mints a credential even when one is cached, and bypasses the sign-in cooldown.                            |
-| `GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS` | How long a browser sign-in waits for its callback. Defaults to 240.                                              |
-| `GRAM_HOOKS_FAIL_OPEN`             | `1`/`true` allows the action when no verdict is obtainable (server unreachable, or 5xx).                         |
-| `GRAM_HOOKS_NONBLOCKING`           | Legacy fail-open posture baked into older plugins. `GRAM_HOOKS_OBSERVABILITY_MODE` is its older name.            |
-| `GRAM_HOOKS_DEBUG_LOG`             | Path the binary appends diagnostics to. Unset means no diagnostics.                                              |
-| `GRAM_HOOKS_HOME`                  | Directory the plugin's bootstrap script caches the downloaded binary in. Read by the bootstrap, not the binary.  |
+| `GRAM_HOOKS_AUTH_FILE`             | Credential cache path. Defaults to `$XDG_CONFIG_HOME/gram/hooks-auth.env`.                                                |
+| `GRAM_HOOKS_BROWSER_LOGIN`         | `1`/`true` lets a fresh machine mint a per-user key through the dashboard.                                                |
+| `GRAM_HOOKS_DISABLE_LOCAL_AUTH`    | `1` suppresses interactive sign-in, for shared gateways and CI images.                                                    |
+| `GRAM_HOOKS_LOGIN_FORCE`           | `1` re-mints a credential even when one is cached, and bypasses the sign-in cooldown.                                     |
+| `GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS` | How long a browser sign-in waits for its callback. Defaults to 240.                                                       |
+| `GRAM_HOOKS_FAIL_OPEN`             | `1`/`true` allows the action when no verdict is obtainable (server unreachable, or 5xx).                                  |
+| `GRAM_HOOKS_NONBLOCKING`           | Legacy fail-open posture baked into older plugins. `GRAM_HOOKS_OBSERVABILITY_MODE` is its older name.                     |
+| `GRAM_HOOKS_DEBUG_LOG`             | Path the binary appends diagnostics to. Unset means no diagnostics.                                                       |
+| `GRAM_HOOKS_HOME`                  | Directory the plugin's bootstrap script caches the downloaded binary in. Read by the bootstrap, not the binary.           |
 
 ## Collecting a debug log
 
