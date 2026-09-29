@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -55,9 +56,9 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	})
 	require.NoError(t, err)
 
-	resourceIssuer, resourceClient := uuid.New(), uuid.New()
-	require.NoError(t, fixtures.SeedDelegationLoaderIssuerFixture(ctx, testrepo.SeedDelegationLoaderIssuerFixtureParams{ID: resourceIssuer, OrganizationID: pgtype.Text{String: org, Valid: true}, Slug: "resource-as", Issuer: testResourceIssuer, AuthorizationEndpoint: pgtype.Text{}, TokenEndpoint: pgtype.Text{}, JwksUri: pgtype.Text{}}))
-	require.NoError(t, fixtures.SeedDelegationLoaderClientFixture(ctx, testrepo.SeedDelegationLoaderClientFixtureParams{ID: resourceClient, OrganizationID: org, RemoteSessionIssuerID: resourceIssuer, ClientID: testResourceClient, Scope: nil}))
+	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
+	require.NoError(t, err)
+	resourceIssuer, resourceClient := prepareResourceClient(t, db, enc, org, testResourceIssuer, testResourceIssuer+"/token", testResourceClient, "resource-secret")
 	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: "https://api.resource.example.test"}
 	binding, generation := bindResource(t, db, req, resourceIssuer, resourceClient, testResource, remotesessions.PreparationStateReady)
 	session, err := repo.New(db).UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
@@ -66,8 +67,6 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	})
 	require.NoError(t, err)
 
-	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
-	require.NoError(t, err)
 	chainer := &Chainer{logger: testenv.NewLogger(t), db: db, enc: enc, challenges: nil, delegation: nil, keys: nil, locks: nil, now: time.Now}
 	return chainStoreFixture{
 		db:      db,
@@ -80,6 +79,44 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 		},
 		sessionID: session.ID,
 	}
+}
+
+// prepareResourceClient registers an organization-owned resource authorization
+// server and a client_secret_post client that passes identity chaining
+// readiness: the issuer advertises the ID-JAG profile and the JWT bearer grant,
+// and the client holds the grant and its secret.
+func prepareResourceClient(t *testing.T, db *pgxpool.Pool, enc *encryption.Client, org, issuerURL, tokenEndpoint, clientID, secret string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	q := repo.New(db)
+	issuer, err := q.CreateRemoteSessionIssuer(t.Context(), repo.CreateRemoteSessionIssuerParams{
+		OrganizationID: pgtype.Text{String: org, Valid: true}, Slug: "resource-as-" + uuid.NewString()[:8], Issuer: issuerURL,
+		TokenEndpoint:                       pgtype.Text{String: tokenEndpoint, Valid: true},
+		GrantTypesSupported:                 []string{oauthwire.GrantTypeJWTBearer},
+		AuthorizationGrantProfilesSupported: []string{oauthwire.GrantProfileIDJAG},
+		TokenEndpointAuthMethodsSupported:   []string{oauthwire.AuthMethodClientSecretPost},
+		ScopesSupported:                     []string{}, ResponseTypesSupported: []string{}, CodeChallengeMethodsSupported: []string{},
+		IntrospectionEndpointAuthMethodsSupported: []string{}, IDTokenSigningAlgValuesSupported: []string{}, ClaimsSupported: []string{},
+	})
+	require.NoError(t, err)
+	encrypted, err := enc.Encrypt([]byte(secret))
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+		OrganizationID: pgtype.Text{String: org, Valid: true}, RemoteSessionIssuerID: issuer.ID, ClientID: clientID,
+		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
+		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodClientSecretPost, Valid: true},
+		Scope:                   []string{},
+	})
+	require.NoError(t, err)
+	f := chainStoreFixture{db: db}
+	f.setClientGrants(t, org, client.ID, []string{oauthwire.GrantTypeJWTBearer})
+	return issuer.ID, client.ID
+}
+
+// setClientGrants records the grants a resource client is registered for.
+func (f chainStoreFixture) setClientGrants(t *testing.T, org string, client uuid.UUID, grants []string) {
+	t.Helper()
+	_, err := repo.New(f.db).SetEMAClientGrants(t.Context(), repo.SetEMAClientGrantsParams{GrantTypes: grants, ID: client, ProjectID: uuid.NullUUID{}, OrganizationID: pgtype.Text{String: org, Valid: true}})
+	require.NoError(t, err)
 }
 
 // bindResource prepares a binding for resource the way the preparation API
@@ -238,7 +275,7 @@ func TestStore_RejectsSubstitutedCredentialUse(t *testing.T) {
 		{"another organization", func(req *Request, _ *selection) { req.OrganizationID = "org-other" }, false},
 		{"another human", func(req *Request, _ *selection) { req.UserID = "user-other" }, false},
 		{"another project", func(req *Request, _ *selection) { req.ProjectID = uuid.New() }, false},
-		{"another resource", func(_ *Request, sel *selection) { sel.resource = "https://api.resource.example.test" }, false},
+		{"another resource", func(_ *Request, sel *selection) { sel.resource = "https://other.resource.example.test/" }, false},
 		{"another delegation client", func(_ *Request, sel *selection) { sel.trustedClientID = uuid.New() }, true},
 		{"another binding", func(_ *Request, sel *selection) { sel.bindingID = uuid.New() }, true},
 		{"changed scopes", func(_ *Request, sel *selection) { sel.scopes = []string{"read", "write"} }, true},
@@ -341,8 +378,9 @@ func TestStore_SelectBinding(t *testing.T) {
 		for _, state := range []string{remotesessions.PreparationStateUnlinked, remotesessions.PreparationStateConfigurationRequired} {
 			f := newChainStoreFixture(t)
 			f.addSlashVariantBinding(t, state)
-			_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
-			require.Equal(t, bindingNotReady, outcome, "the sole ready binding is selected, then judged by readiness (%s leftover)", state)
+			sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
+			require.Equal(t, success, outcome, "the sole ready binding is selected (%s leftover)", state)
+			require.Equal(t, f.sel.bindingID, sel.bindingID)
 		}
 	})
 }
@@ -350,17 +388,26 @@ func TestStore_SelectBinding(t *testing.T) {
 func TestStore_GovernsOnlyBoundUpstreams(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	require.False(t, f.chainer.Governs(t.Context(), f.req), "a binding that fails readiness does not govern the upstream")
+	require.True(t, f.chainer.Governs(t.Context(), f.req), "a single ready binding governs the upstream")
 
 	unbound := f.req
 	unbound.UpstreamResource = "https://unbound.example.test"
 	require.False(t, f.chainer.Governs(t.Context(), unbound), "an upstream without a binding keeps the strict gate")
 
 	f.addSlashVariantBinding(t, remotesessions.PreparationStateUnlinked)
-	require.False(t, f.chainer.Governs(t.Context(), f.req), "an unlinked leftover binding does not claim the upstream")
+	require.True(t, f.chainer.Governs(t.Context(), f.req), "an unlinked leftover binding does not displace the ready one")
 
 	f.addSlashVariantBinding(t, remotesessions.PreparationStateReady)
 	require.True(t, f.chainer.Governs(t.Context(), f.req), "ambiguous ready bindings still claim the upstream")
+}
+
+func TestStore_BindingFailingReadinessDoesNotGovern(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	f.setClientGrants(t, f.req.OrganizationID, f.sel.clientID, []string{oauthwire.GrantTypeAuthorizationCode})
+	_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
+	require.Equal(t, bindingNotReady, outcome)
+	require.False(t, f.chainer.Governs(t.Context(), f.req), "a binding whose client lost the JWT bearer grant keeps the strict gate")
 }
 
 func TestStore_SignInReplacesEarlierCredential(t *testing.T) {

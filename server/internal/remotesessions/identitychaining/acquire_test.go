@@ -143,6 +143,7 @@ func TestRedeem_RejectsUnusableResponses(t *testing.T) {
 	}{
 		{"narrowed scope", map[string]any{"access_token": "t", "token_type": "Bearer", "expires_in": 3600, "scope": "read"}, ReasonInsufficientScope},
 		{"proof of possession token", map[string]any{"access_token": "t", "token_type": "DPoP", "expires_in": 3600}, ReasonMalformedResponse},
+		{"no access token", map[string]any{"token_type": "Bearer", "expires_in": 3600}, ReasonMalformedResponse},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -253,7 +254,7 @@ func (v claimsVerifier) VerifyAssertion(_ context.Context, _ string, dest ...any
 func validGrantClaims(sel selection, now time.Time) map[string]any {
 	return map[string]any{
 		"iss": testIdPIssuer, "sub": testUpstreamSubject, "aud": sel.issuer,
-		"client_id": sel.externalClientID, "resource": sel.resource, "scope": "read",
+		"client_id": sel.externalClientID, "resource": sel.resource, "scope": "read write",
 		"iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(), "jti": uuid.NewString(),
 	}
 }
@@ -292,6 +293,9 @@ func TestValidateGrant_RejectsUnboundClaims(t *testing.T) {
 		{"expired", "oauth-id-jag+jwt", func(c map[string]any, now time.Time) { c["exp"] = now.Add(-5 * time.Minute).Unix() }},
 		{"missing iat", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { delete(c, "iat") }},
 		{"excessive lifetime", "oauth-id-jag+jwt", func(c map[string]any, now time.Time) { c["exp"] = now.Add(time.Hour).Unix() }},
+		{"issued long before expiry", "oauth-id-jag+jwt", func(c map[string]any, now time.Time) { c["iat"] = now.Add(-2 * time.Hour).Unix() }},
+		{"null resource", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["resource"] = nil }},
+		{"narrowed scope", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["scope"] = "read" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

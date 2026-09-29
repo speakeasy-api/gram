@@ -4800,9 +4800,25 @@ WHERE EXISTS (
       AND b.remote_session_client_id = @remote_session_client_id::uuid
       AND b.resource = @resource::text AND b.state = 'ready'
   )
+  -- The resource client and its issuer must still be live and reachable from
+  -- the project.
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients AS rc
+    JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id AND ri.deleted IS FALSE
+      AND (ri.project_id = @project_id::uuid OR (ri.project_id IS NULL AND (ri.organization_id = @organization_id::text OR ri.organization_id IS NULL)))
+    WHERE rc.id = @remote_session_client_id::uuid AND rc.remote_session_issuer_id = @remote_session_issuer_id::uuid AND rc.deleted IS FALSE
+      AND (rc.project_id = @project_id::uuid OR (rc.project_id IS NULL AND rc.organization_id = @organization_id::text))
+  )
   AND EXISTS (
     SELECT 1 FROM trusted_issuer_sessions AS s
     JOIN user_session_issuers AS usi ON usi.trusted_remote_session_client_id = s.remote_session_client_id
+    -- The trusted registration must still be a live, organization-owned client
+    -- of the live issuer the user session issuer trusts.
+    JOIN remote_session_clients AS tc ON tc.id = usi.trusted_remote_session_client_id
+      AND tc.remote_session_issuer_id = usi.trusted_remote_session_issuer_id
+      AND tc.project_id IS NULL AND tc.organization_id = @organization_id::text AND tc.deleted IS FALSE
+    JOIN remote_session_issuers AS ti ON ti.id = tc.remote_session_issuer_id
+      AND ti.project_id IS NULL AND (ti.organization_id = @organization_id::text OR ti.organization_id IS NULL) AND ti.deleted IS FALSE
     WHERE s.id = @trusted_issuer_session_id::uuid AND s.deleted IS FALSE
       AND s.credential_obtained_at IS NOT DISTINCT FROM sqlc.narg('trusted_credential_obtained_at')::timestamptz
       AND s.observation_status IS DISTINCT FROM 'reauthentication_required'

@@ -146,7 +146,7 @@ func (c *Chainer) redeem(ctx context.Context, resourceAS tokenPoster, grant stri
 		return none, classifyEndpointError(StageRedemption, err)
 	}
 	malformed := newOutcome(StageRedemption, ReasonMalformedResponse, ConfidenceVerified, false)
-	if tok.TokenType() != "" && !strings.EqualFold(tok.TokenType(), "bearer") {
+	if tok.AccessToken() == "" || (tok.TokenType() != "" && !strings.EqualFold(tok.TokenType(), "bearer")) {
 		return none, malformed
 	}
 	granted := sel.scopes

@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	if err := cleanup(); err != nil {
-		log.Printf("cleanup test infrastructure: %v", err)
+		log.Fatalf("cleanup test infrastructure: %v", err)
 	}
 	os.Exit(code)
 }

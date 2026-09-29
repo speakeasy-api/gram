@@ -1,6 +1,14 @@
 package remotesessions
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+)
+
+// maxTokenEndpointErrorCodeBytes bounds a provider error code carried into
+// logs and error messages. Registered codes are under 40 bytes.
+const maxTokenEndpointErrorCodeBytes = 64
 
 // TokenEndpointError is a token endpoint failure reduced to what callers
 // classify on. It never carries the provider's response body.
@@ -31,4 +39,20 @@ func (e *TokenEndpointError) Error() string {
 	default:
 		return fmt.Sprintf("token endpoint rejected the grant: status %d", e.StatusCode)
 	}
+}
+
+// tokenEndpointErrorCode canonicalizes a provider error code, dropping any code
+// that is oversized or outside RFC 6749 §5.2's NQSCHAR set so provider output
+// cannot inject control characters or bulk into logs and errors.
+func tokenEndpointErrorCode(raw string) string {
+	code := oautherr.CanonicalTokenErrorCode(raw)
+	if code == "" || len(code) > maxTokenEndpointErrorCodeBytes {
+		return ""
+	}
+	for i := range len(code) {
+		if c := code[i]; c < 0x20 || c > 0x7e || c == '"' || c == '\\' {
+			return ""
+		}
+	}
+	return code
 }

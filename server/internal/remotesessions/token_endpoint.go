@@ -75,7 +75,7 @@ func (e *TokenEndpoint) Post(ctx context.Context, form url.Values) (TokenRespons
 	if resp.StatusCode/100 != 2 {
 		code := ""
 		if parsed, ok := oautherr.ParseTokenError(body); ok {
-			code = oautherr.CanonicalTokenErrorCode(parsed.Code)
+			code = tokenEndpointErrorCode(parsed.Code)
 		}
 		return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: code, Transport: false, Signing: false}
 	}
@@ -85,7 +85,7 @@ func (e *TokenEndpoint) Post(ctx context.Context, form url.Values) (TokenRespons
 	}
 	if tok.AccessToken() == "" {
 		if parsed, ok := oautherr.ParseTokenError(body); ok {
-			return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: oautherr.CanonicalTokenErrorCode(parsed.Code), Transport: false, Signing: false}
+			return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: tokenEndpointErrorCode(parsed.Code), Transport: false, Signing: false}
 		}
 		return none, errors.New("token response has no access_token")
 	}
@@ -116,7 +116,7 @@ func (m *ChallengeManager) clientTokenEndpoint(client repo.GetRemoteSessionClien
 		}
 	}
 	method, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, secret)
-	if err != nil {
+	if err != nil || (method == TokenEndpointAuthMethodPrivateKeyJWT && !client.JsonWebKeySetID.Valid) {
 		return nil, ErrTokenEndpointConfiguration
 	}
 	audience, err := ResolveTokenEndpointAuthAudience(client.TokenEndpointAuthAudienceFormat.String, clientAssertionIssuer(client.IssuerMetadata, client.IssuerUrl), client.TokenEndpoint.String)
