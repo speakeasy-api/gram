@@ -43,7 +43,16 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	require.NoError(t, routes.Publish(ctx, tunnel.String(), "http://gateway.example", time.Hour))
 	manager := newTunnelManager(routes, "", proxyManager, nil, issuer)
 	server := &mcpserversrepo.McpServer{ID: wrapper, TunneledMcpServerID: conv.ToNullUUID(tunnel), Visibility: mcpservers.VisibilityPrivate}
-	p, err := manager.buildProxy(ctx, "", logger, project, "org_test", server, "", "upstream-oauth", "", nil, remotemcp.WithMetaMCPServerID(meta))
+	p, err := manager.buildProxy(ctx, logger, buildProxyParams{
+		ClientAffinityKey:  "",
+		ProjectID:          project,
+		OrganizationID:     "org_test",
+		MCPServer:          server,
+		ResourceIdentifier: "",
+		UpstreamAuth:       "upstream-oauth",
+		WWWAuthenticate:    "",
+		Selection:          nil,
+	}, remotemcp.WithMetaMCPServerID(meta))
 	require.NoError(t, err)
 	require.NotNil(t, p.CallerAssertion)
 	raw, err := p.CallerAssertion(ctx)
@@ -56,7 +65,16 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	require.NotContains(t, claims, "user_id")
 	require.NotEqual(t, meta, claims["aud"])
 	resource := "https://mcp.internal.example.com/a%2Fb/?tenant=example/"
-	configured, err := manager.buildProxy(ctx, "", logger, project, "org_test", server, resource, "upstream-oauth", "", nil, remotemcp.WithMetaMCPServerID(meta))
+	configured, err := manager.buildProxy(ctx, logger, buildProxyParams{
+		ClientAffinityKey:  "",
+		ProjectID:          project,
+		OrganizationID:     "org_test",
+		MCPServer:          server,
+		ResourceIdentifier: resource,
+		UpstreamAuth:       "upstream-oauth",
+		WWWAuthenticate:    "",
+		Selection:          nil,
+	}, remotemcp.WithMetaMCPServerID(meta))
 	require.NoError(t, err)
 	raw, err = configured.CallerAssertion(ctx)
 	require.NoError(t, err)
@@ -66,7 +84,16 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, resource, claims["aud"])
 	server.Visibility = mcpservers.VisibilityPublic
-	publicProxy, err := manager.buildProxy(ctx, "", logger, project, "org_test", server, "", "", "", nil)
+	publicProxy, err := manager.buildProxy(ctx, logger, buildProxyParams{
+		ClientAffinityKey:  "",
+		ProjectID:          project,
+		OrganizationID:     "org_test",
+		MCPServer:          server,
+		ResourceIdentifier: "",
+		UpstreamAuth:       "",
+		WWWAuthenticate:    "",
+		Selection:          nil,
+	})
 	require.NoError(t, err)
 	require.Nil(t, publicProxy.CallerAssertion)
 	// Pinned public sessions use BuildTarget directly.
@@ -76,7 +103,16 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	require.Nil(t, remoteProxy.CallerAssertion)
 	manager.callerAssertions = nil
 	server.Visibility = mcpservers.VisibilityPrivate
-	disabled, err := manager.buildProxy(ctx, "", logger, project, "org_test", server, "", "", "", nil)
+	disabled, err := manager.buildProxy(ctx, logger, buildProxyParams{
+		ClientAffinityKey:  "",
+		ProjectID:          project,
+		OrganizationID:     "org_test",
+		MCPServer:          server,
+		ResourceIdentifier: "",
+		UpstreamAuth:       "",
+		WWWAuthenticate:    "",
+		Selection:          nil,
+	})
 	require.NoError(t, err)
 	require.Nil(t, disabled.CallerAssertion)
 }

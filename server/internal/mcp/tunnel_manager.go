@@ -44,25 +44,47 @@ func newTunnelManager(routes route.Store, forwardToken string, proxyManager *rem
 	}
 }
 
+type buildProxyParams struct {
+	// ClientAffinityKey pins route selection, forwarding headers, and retry to
+	// a stable client identity: runtime callers derive it from the request,
+	// while consent-time enumeration derives it from the challenge state so
+	// every request of one enumeration session lands on the same gateway.
+	ClientAffinityKey string
+
+	// ProjectID is the destination server's project.
+	ProjectID uuid.UUID
+
+	// OrganizationID is the destination server's owning organization.
+	OrganizationID string
+
+	// MCPServer is the tunneled destination server.
+	MCPServer *mcpserversrepo.McpServer
+
+	// ResourceIdentifier is the saved audience for caller assertions; empty
+	// uses the tunneled server ID.
+	ResourceIdentifier string
+
+	// UpstreamAuth is the Authorization value forwarded upstream. Empty
+	// forwards none; the incoming Authorization header is always dropped.
+	UpstreamAuth string
+
+	// WWWAuthenticate replaces the upstream's challenge on 401/403. Empty
+	// relays the upstream challenge verbatim.
+	WWWAuthenticate string
+
+	// Selection restricts the tools exposed through this proxy.
+	Selection *toolfilter.SessionSelection
+}
+
 // buildProxy constructs the tunnel-backed proxy for one request.
-// clientAffinityKey pins route selection, forwarding headers, and retry to a
-// stable client identity: runtime callers derive it from the request, while
-// consent-time enumeration derives it from the challenge state so every
-// request of one enumeration session lands on the same gateway.
 func (m *tunnelManager) buildProxy(
 	ctx context.Context,
-	clientAffinityKey string,
 	logger *slog.Logger,
-	projectID uuid.UUID,
-	organizationID string,
-	mcpServer *mcpserversrepo.McpServer,
-	resourceIdentifier string,
-	upstreamAuth string,
-	wwwAuthenticate string,
-	selection *toolfilter.SessionSelection,
+	params buildProxyParams,
 	options ...remotemcp.BuildOption,
 ) (*proxy.Proxy, error) {
-	if m == nil || m.proxyManager == nil {
+	mcpServer := params.MCPServer
+	if m.proxyManager == nil {
 		return nil, oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
 	}
 
@@ -75,7 +97,7 @@ func (m *tunnelManager) buildProxy(
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "list tunnel routes").LogError(ctx, logger)
 	}
-	addr, ok := tunnelrouting.SelectRoute(clientAffinityKey, candidates, nil)
+	addr, ok := tunnelrouting.SelectRoute(params.ClientAffinityKey, candidates, nil)
 	if !ok {
 		// Nowhere to route the request. Tunnel outages are likely customer-side
 		// rather than something the platform administrators can control. While
@@ -101,27 +123,27 @@ func (m *tunnelManager) buildProxy(
 			MetaMCPServerID:     "",
 		},
 		gatewayURL,
-		tunnelrouting.Headers(tunnelID, m.forwardToken, clientAffinityKey),
+		tunnelrouting.Headers(tunnelID, m.forwardToken, params.ClientAffinityKey),
 		mcpServer.Visibility,
-		organizationID,
-		projectID.String(),
-		upstreamAuth,
-		wwwAuthenticate,
-		selection,
+		params.OrganizationID,
+		params.ProjectID.String(),
+		params.UpstreamAuth,
+		params.WWWAuthenticate,
+		params.Selection,
 		options...,
 	)
 	if m.issuesCallerAssertions(mcpServer.Visibility) {
 		target := mcpauthz.Target{
-			OrganizationID:     organizationID,
-			ProjectID:          projectID,
+			OrganizationID:     params.OrganizationID,
+			ProjectID:          params.ProjectID,
 			TunnelID:           mcpServer.TunneledMcpServerID.UUID,
-			ResourceIdentifier: resourceIdentifier,
+			ResourceIdentifier: params.ResourceIdentifier,
 		}
 		p.CallerAssertion = func(ctx context.Context) (string, error) {
 			return m.callerAssertions.Mint(ctx, target)
 		}
 	}
-	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
+	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, params.ClientAffinityKey, m.forwardToken)
 	p.UpstreamResponseInterceptor = func(_ context.Context, resp *http.Response) error {
 		if rejection := tunnelrouting.GatewayFailureRejection(resp); rejection != nil {
 			return rejection
@@ -135,7 +157,7 @@ func (m *tunnelManager) buildProxy(
 }
 
 func (m *tunnelManager) issuesCallerAssertions(visibility string) bool {
-	return m != nil && m.callerAssertions != nil && visibility == mcpservers.VisibilityPrivate
+	return m.callerAssertions != nil && visibility == mcpservers.VisibilityPrivate
 }
 
 // guardianClientOptions builds the shared client options for dialing tunnel

@@ -381,7 +381,16 @@ func (s *Service) standaloneValidationTarget(
 	// One state-derived affinity key pins the handshake and its close to a single gateway.
 	affinity := tunnelrouting.HashedClientAffinityKey("consent-validate", challengeState.ID)
 	return ctx, validationTarget{name: name, build: probeProxyBuilder(func(ctx context.Context) (*proxy.Proxy, error) {
-		p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, endpoint.OrganizationID, &server, endpoint.UpstreamResource, token, "", nil, remotemcp.WithoutToolsCallIdentityCoverage())
+		p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
+			ClientAffinityKey:  affinity,
+			ProjectID:          endpoint.ProjectID,
+			OrganizationID:     endpoint.OrganizationID,
+			MCPServer:          &server,
+			ResourceIdentifier: endpoint.UpstreamResource,
+			UpstreamAuth:       token,
+			WWWAuthenticate:    "",
+			Selection:          nil,
+		}, remotemcp.WithoutToolsCallIdentityCoverage())
 		if berr != nil {
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 		}

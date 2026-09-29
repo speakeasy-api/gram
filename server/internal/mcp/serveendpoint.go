@@ -798,7 +798,16 @@ func (s *Service) serveTunneledBackend(
 		}
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, organizationID, mcpServer, resourceIdentifier, upstreamAuth, wwwAuthenticate, selection)
+	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
+		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
+		ProjectID:          endpoint.ProjectID,
+		OrganizationID:     organizationID,
+		MCPServer:          mcpServer,
+		ResourceIdentifier: resourceIdentifier,
+		UpstreamAuth:       upstreamAuth,
+		WWWAuthenticate:    wwwAuthenticate,
+		Selection:          selection,
+	})
 	if err != nil {
 		return err
 	}

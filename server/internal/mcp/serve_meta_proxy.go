@@ -186,7 +186,16 @@ func (s *Service) routeMetaMember(
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
 		return memberDial{anonymous: upstreamToken == "", build: func(ctx context.Context) (*proxy.Proxy, error) {
-			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, member.projectID, gate.organizationID, &serverRow, member.tunneledResourceIdentifier, upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
+			p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
+				ClientAffinityKey:  affinity,
+				ProjectID:          member.projectID,
+				OrganizationID:     gate.organizationID,
+				MCPServer:          &serverRow,
+				ResourceIdentifier: member.tunneledResourceIdentifier,
+				UpstreamAuth:       upstreamToken,
+				WWWAuthenticate:    "",
+				Selection:          gate.toolSelection,
+			}, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 			}
