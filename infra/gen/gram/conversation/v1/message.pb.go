@@ -647,7 +647,9 @@ func (*message_Body_) isMessage_Content() {}
 
 func (*message_BodyReference) isMessage_Content() {}
 
-// Only values observed by ingestion are populated; absence means unknown.
+// Attribution captured when ingestion produces this snapshot. Message user,
+// billing user and provider account are independent facts; consumers must not
+// substitute one for another. Missing fields mean unknown or unassigned.
 type Message_Provenance struct {
 	state                        protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_Source            *string                `protobuf:"bytes,1,opt,name=source"`
@@ -1099,11 +1101,19 @@ type Message_Provenance_builder struct {
 	// Canonical normalized ingestion source.
 	Source            *string
 	ExternalMessageId *string
-	UserId            *string
-	ExternalUserId    *string
-	AssistantId       *string
-	Provider          *string
-	Model             *string
+	// Gram user ID attached to the persisted message. Identifies the person the
+	// message is attributed to, not necessarily its author: assistant responses
+	// can carry the requesting user's ID. Does not allocate billing usage.
+	UserId *string
+	// Opaque user ID reported by the source system, not a Gram user/account ID.
+	// Interpret within organization_id and source. Can exist without user_id
+	// when ingestion has not resolved the external identity to a Gram user.
+	ExternalUserId *string
+	// Gram assistant UUID associated with the workload, supplied by the producer.
+	// Identifies an assistant resource, not a human user or provider account.
+	AssistantId *string
+	Provider    *string
+	Model       *string
 	// Source replay marker, not Pub/Sub redelivery.
 	Replayed *bool
 	// Adapter slug reported by ingestion; distinct from the hook source.
@@ -1113,11 +1123,16 @@ type Message_Provenance_builder struct {
 	// Device hostname and client user agent observed by ingestion.
 	Hostname  *string
 	UserAgent *string
-	// Observed actor email; not inferred from the provider account.
+	// Message actor email explicitly observed by ingestion. Not a current Gram
+	// directory lookup, a billing-user email, or an inferred provider-account email.
 	UserEmail *string
 	Account   *Message_Account
-	// Gram user explicitly allocated usage by the ingestion producer.
-	// Independent of user_id; absence means no billing user was assigned.
+	// Gram user ID to which the ingestion producer explicitly allocates usage,
+	// using the same attribution as agent-session storage metering. May differ
+	// from user_id or exist without it (e.g. an assistant's generated compaction
+	// message allocated to the chat owner). Interpret with organization_id.
+	// This is usage attribution, not proof that a charge occurred. Absence means
+	// unassigned; consumers must not fall back to user_id or an account owner.
 	BillingUserId *string
 }
 
@@ -1185,8 +1200,9 @@ func (b0 Message_Provenance_builder) Build() *Message_Provenance {
 	return m0
 }
 
-// Observed provider-account attribution. Classification may be known even
-// when ingestion could not resolve a persisted account identity.
+// The external AI account/credentials used for the source session, as resolved
+// by ingestion. Not the Gram user allocated usage or the organization's Gram
+// billing plan. Classification may be known without a persisted account ID.
 type Message_Account struct {
 	state                    protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_UserAccountId *string                `protobuf:"bytes,1,opt,name=user_account_id,json=userAccountId"`
@@ -1307,10 +1323,19 @@ func (x *Message_Account) ClearBillingMode() {
 type Message_Account_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// Gram user_accounts UUID, not a provider-issued account identifier.
+	// UUID of Gram's user_accounts record representing the external AI account.
+	// Not a Gram user ID, provider-issued account ID, or billing-user selection.
 	UserAccountId *string
-	AccountType   *string
-	// Billing mode resolved at ingestion, not a downstream billing decision.
+	// Gram's ingestion-time classification: "team" for company-associated
+	// accounts/credentials, "personal" for personal accounts. May be inferred
+	// from provider organization and identity evidence or assigned by an import
+	// adapter; not necessarily a provider-reported plan or verified ownership.
+	// Absence means no classification was supplied.
+	AccountType *string
+	// How the external AI account is billed: "metered" for usage-based billing,
+	// "flat_rate" for subscription/seat billing, "unknown" when undetermined.
+	// Resolved from source-account/provider-organization configuration; absence
+	// means undeclared. Does not determine Gram pricing or select a billing user.
 	BillingMode *string
 }
 
