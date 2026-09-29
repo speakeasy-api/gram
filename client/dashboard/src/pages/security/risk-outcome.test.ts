@@ -6,11 +6,19 @@ import {
 } from "./risk-outcome";
 
 describe("enforcementOutcomeLabel", () => {
-  it("labels every recorded outcome and skips unrecorded ones", () => {
-    expect(enforcementOutcomeLabel("denied")).toBe("Denied");
-    expect(enforcementOutcomeLabel("warned_acknowledged")).toBe(
-      "Warned · acknowledged",
-    );
+  it.each([
+    ["logged", "Logged"],
+    ["denied", "Denied"],
+    ["withheld", "Withheld"],
+    ["warned_pending", "Warned · pending"],
+    ["warned_acknowledged", "Warned · acknowledged"],
+    ["warned_abandoned", "Warned · abandoned"],
+    ["quarantined", "Quarantined"],
+  ] as const)("labels %s as %s", (outcome, label) => {
+    expect(enforcementOutcomeLabel(outcome)).toBe(label);
+  });
+
+  it("skips an unrecorded outcome", () => {
     expect(enforcementOutcomeLabel(undefined)).toBeNull();
   });
 });
@@ -18,9 +26,12 @@ describe("enforcementOutcomeLabel", () => {
 describe("isBlockingOutcome", () => {
   it("flags denied, withheld and quarantined only", () => {
     expect(isBlockingOutcome("denied")).toBe(true);
+    expect(isBlockingOutcome("withheld")).toBe(true);
     expect(isBlockingOutcome("quarantined")).toBe(true);
     expect(isBlockingOutcome("logged")).toBe(false);
     expect(isBlockingOutcome("warned_pending")).toBe(false);
+    expect(isBlockingOutcome("warned_acknowledged")).toBe(false);
+    expect(isBlockingOutcome("warned_abandoned")).toBe(false);
     expect(isBlockingOutcome(undefined)).toBe(false);
   });
 });

@@ -99,6 +99,10 @@ function SignalServers({
   const names = shown.map((id) => serverLabel(id, serverNames)).join(", ");
   const tools = signal.toolNames.slice(0, 3).join(", ");
   const toolOverflow = signal.toolNames.length - 3;
+  // Servers and tools are separate lists, so they only read as `server · tool`
+  // when there is one server; across several, the tools are labeled as a
+  // separate list rather than implied to belong to each server.
+  const toolsLabel = signal.mcpServerIds.length > 1 ? "tools: " : "";
   return (
     <div className="text-muted-foreground flex min-w-0 items-center gap-2 font-mono text-xs">
       <span
@@ -109,7 +113,7 @@ function SignalServers({
         {names}
         {hidden > 0 ? ` +${hidden}` : ""}
         {tools
-          ? ` · ${tools}${toolOverflow > 0 ? ` +${toolOverflow}` : ""}`
+          ? ` · ${toolsLabel}${tools}${toolOverflow > 0 ? ` +${toolOverflow}` : ""}`
           : ""}
       </span>
     </div>

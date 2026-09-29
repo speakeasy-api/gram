@@ -77,6 +77,7 @@ type ListRiskFindingPageInput struct {
 	To           string `json:"to,omitempty"`
 	PolicyID     string `json:"policy_id,omitempty"`
 	ChatID       string `json:"chat_id,omitempty"`
+	MCPServerID  string `json:"mcp_server_id,omitempty"`
 	Category     string `json:"category,omitempty"`
 	RuleID       string `json:"rule_id,omitempty"`
 	UserID       string `json:"user_id,omitempty"`
@@ -174,10 +175,13 @@ const (
 // the page sequence is fingerprinted into the cursor kind so a cursor replayed
 // with different filters is refused instead of returning a scrambled page.
 type riskFindingFilters struct {
-	From         string `json:"from"`
-	To           string `json:"to"`
-	PolicyID     string `json:"policy_id"`
-	ChatID       string `json:"chat_id"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	PolicyID string `json:"policy_id"`
+	ChatID   string `json:"chat_id"`
+	// omitempty keeps the cursor kind of unfiltered listings unchanged, so
+	// cursors issued before this filter existed stay valid.
+	MCPServerID  string `json:"mcp_server_id,omitempty"`
 	Category     string `json:"category"`
 	RuleID       string `json:"rule_id"`
 	UserID       string `json:"user_id"`
@@ -311,13 +315,23 @@ func (s *RiskFindingListService) List(ctx context.Context, principal Principal, 
 	if err != nil {
 		return zero, err
 	}
+	mcpServerID, err := parseOptionalRiskUUID(input.MCPServerID)
+	if err != nil {
+		return zero, err
+	}
+	if mcpServerID.Valid {
+		// Findings store server ids in canonical lowercase form, and the
+		// analytics filter compares strings, so an uppercase spelling that
+		// parses would otherwise match nothing.
+		input.MCPServerID = mcpServerID.UUID.String()
+	}
 	if input.Category != "" && !validRiskCategory(input.Category) {
 		return zero, ErrRiskReadInvalid
 	}
 	if len(input.RuleID) > 128 || len(input.UserID) > 256 || (assistantID.Valid && input.NonAssistant) {
 		return zero, ErrRiskReadInvalid
 	}
-	filters := riskFindingFilters{From: input.From, To: input.To, PolicyID: input.PolicyID, ChatID: input.ChatID, Category: input.Category, RuleID: input.RuleID, UserID: input.UserID, AssistantID: input.AssistantID, NonAssistant: input.NonAssistant, UniqueMatch: input.UniqueMatch}
+	filters := riskFindingFilters{From: input.From, To: input.To, PolicyID: input.PolicyID, ChatID: input.ChatID, MCPServerID: input.MCPServerID, Category: input.Category, RuleID: input.RuleID, UserID: input.UserID, AssistantID: input.AssistantID, NonAssistant: input.NonAssistant, UniqueMatch: input.UniqueMatch}
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -368,7 +382,7 @@ func (s *RiskFindingListService) listFindings(ctx context.Context, principal Pri
 		OrganizationID:  principal.OrganizationID,
 		ProjectID:       project.ID.String(),
 		PolicyIDs:       policyIDs,
-		MCPServerID:     "",
+		MCPServerID:     filters.MCPServerID,
 		ChatID:          filters.ChatID,
 		From:            from,
 		To:              to,

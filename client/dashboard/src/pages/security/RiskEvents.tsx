@@ -165,6 +165,9 @@ const RISK_FILTERS = defineFilters([
   { id: "assistant", label: "Assistant", kind: "select" },
 ]);
 
+// The per-server counts endpoint rejects windows longer than this.
+const MAX_COUNTS_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
+
 // Sentinel option value for the assistant filter meaning "chats with no
 // assistant link" — maps to the API's non_assistant flag rather than an
 // assistant_id. Assistant ids are UUIDs, so this can't collide.
@@ -246,17 +249,19 @@ export default function RiskEvents(): JSX.Element {
     () => mcpServersData?.mcpServers ?? [],
     [mcpServersData?.mcpServers],
   );
-  // Per-server finding counts for the picker. The endpoint caps the window at
-  // 31 days, so "all time" falls back to the last 30 days.
+  // Per-server finding counts for the picker, for the selected range. The
+  // endpoint rejects windows over 31 days, so longer or open-ended ranges show
+  // the servers without counts rather than counts for a different range.
   const countsWindow = useMemo(() => {
+    if (!from) return null;
     const end = to ?? new Date();
-    const start = from ?? new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
-    return { from: start, to: end };
+    if (end.getTime() - from.getTime() > MAX_COUNTS_WINDOW_MS) return null;
+    return { from, to: end };
   }, [from, to]);
   const { data: serverCountsData } = useRiskMcpServerCounts(
-    countsWindow,
+    countsWindow ?? {},
     undefined,
-    { throwOnError: false, enabled: mcpScoped },
+    { throwOnError: false, enabled: mcpScoped && countsWindow !== null },
   );
   const findingsByServer = useMemo(
     () =>
