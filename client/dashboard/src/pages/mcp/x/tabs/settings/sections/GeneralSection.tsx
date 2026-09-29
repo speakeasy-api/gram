@@ -7,6 +7,8 @@ import {
   FieldLabel,
 } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { Text } from "@/components/ui/Text";
+import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -134,7 +136,7 @@ function GeneralSectionContent({
     saving ||
     (metadataUnresolved && metadataForm.brandingDirty) ||
     (!!upstream?.dirty && upstream.invalid);
-  const characterCount = `${nameDraft.length} of ${NAME_MAX_LENGTH} characters used`;
+  const nameTooLong = trimmedDraft.length > NAME_MAX_LENGTH;
 
   const handleSave = async () => {
     try {
@@ -194,7 +196,7 @@ function GeneralSectionContent({
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          <div className="flex items-center gap-5">
+          <div className="flex items-start gap-5">
             <input
               ref={fileInputRef}
               type="file"
@@ -232,39 +234,45 @@ function GeneralSectionContent({
                 <Pencil aria-hidden="true" className="size-3" />
               </span>
             </button>
-            <Field
-              data-invalid={update.isError ? true : undefined}
-              className="max-w-md flex-1"
-            >
-              <FieldLabel htmlFor="mcp-server-display-name">
-                Display Name
-              </FieldLabel>
-              <div className="relative">
-                <Input
-                  id="mcp-server-display-name"
-                  value={nameDraft}
-                  onChange={(value) => setNameDraft(value)}
-                  placeholder="My MCP server"
-                  maxLength={NAME_MAX_LENGTH}
-                  aria-invalid={update.isError}
-                  className="pr-10"
-                />
-                <Pencil
-                  aria-hidden="true"
-                  className="text-muted-foreground pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2"
-                />
-              </div>
-              {nameDirty && (
-                <FieldDescription className="pl-1 text-xs">
-                  {characterCount}
-                </FieldDescription>
-              )}
-              {update.isError && (
-                <FieldError>{update.error.message}</FieldError>
-              )}
-            </Field>
+            {/* Both fields share one column so their left edges line up
+                beside the icon rather than one of them wrapping under it. */}
+            <div className="flex max-w-xl min-w-0 flex-1 flex-col gap-4">
+              <Field
+                data-invalid={update.isError ? true : undefined}
+                className="max-w-md"
+              >
+                <FieldLabel htmlFor="mcp-server-display-name">
+                  Display Name
+                </FieldLabel>
+                <div className="relative">
+                  <Input
+                    id="mcp-server-display-name"
+                    value={nameDraft}
+                    onChange={(value) => setNameDraft(value)}
+                    placeholder="My MCP server"
+                    aria-invalid={update.isError || nameTooLong}
+                    className={cn(
+                      "pr-10",
+                      nameTooLong && "border-warning-default",
+                    )}
+                  />
+                  <Pencil
+                    aria-hidden="true"
+                    className="text-muted-foreground pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2"
+                  />
+                </div>
+                {nameTooLong ? (
+                  <Text small warning className="block">
+                    Display names can be up to {NAME_MAX_LENGTH} characters.
+                  </Text>
+                ) : null}
+                {update.isError && (
+                  <FieldError>{update.error.message}</FieldError>
+                )}
+              </Field>
+              {upstream ? <UpstreamUrlField upstream={upstream} /> : null}
+            </div>
           </div>
-          {upstream ? <UpstreamUrlField upstream={upstream} /> : null}
           {metadataUnresolved && !metadataResult.isLoading && (
             <FieldDescription className="text-destructive text-xs">
               Couldn't load current branding settings. Refresh the page before
@@ -276,7 +284,7 @@ function GeneralSectionContent({
           <SettingsSection.FooterHint>
             {upstream?.dirty
               ? "Verify before saving to confirm the upstream URL answers as an MCP server."
-              : `Please use no more than ${NAME_MAX_LENGTH} characters.`}
+              : null}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope scope="mcp:write" level="component">
