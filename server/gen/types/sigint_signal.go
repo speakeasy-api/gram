@@ -9,6 +9,8 @@ package types
 
 // SigintSignal is the result type of the sigint service createSignal method.
 type SigintSignal struct {
+	// Project-scoped signal identifier for analytics and integrations
+	Slug Slug
 	// Signal ID
 	ID string
 	// Owning project ID

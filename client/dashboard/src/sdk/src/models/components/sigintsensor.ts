@@ -59,6 +59,10 @@ export type SigintSensor = {
    */
   signalIds: Array<string>;
   /**
+   * A short url-friendly label that uniquely identifies a resource.
+   */
+  slug: string;
+  /**
    * Last update time
    */
   updatedAt: Date;
@@ -84,6 +88,7 @@ export const SigintSensor$inboundSchema: z.ZodMiniType<SigintSensor, unknown> =
       name: z.string(),
       project_id: z.string(),
       signal_ids: z.array(z.string()),
+      slug: z.string(),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),

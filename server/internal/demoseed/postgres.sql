@@ -522,48 +522,48 @@ BEGIN
   -- by two sensors, while Draft campaign intentionally has no memberships so
   -- the incomplete authoring state remains visible.
   INSERT INTO sigint_custom_signals
-    (id, project_id, name, description, classifier_criteria)
+    (id, project_id, name, slug, description, classifier_criteria)
   VALUES
-    (demo.det_uuid('gram-demo-sigint-signal-api'), proj_a, 'API',
+    (demo.det_uuid('gram-demo-sigint-signal-api'), proj_a, 'API', 'api',
      'Requests involving the public or internal API.',
      'The conversation concerns API endpoints, requests, responses, or contracts.'),
-    (demo.det_uuid('gram-demo-sigint-signal-database'), proj_a, 'Database',
+    (demo.det_uuid('gram-demo-sigint-signal-database'), proj_a, 'Database', 'database',
      'Requests involving persistent data stores.',
      'The conversation concerns queries, migrations, schemas, or database operations.'),
-    (demo.det_uuid('gram-demo-sigint-signal-authentication'), proj_a, 'Authentication',
+    (demo.det_uuid('gram-demo-sigint-signal-authentication'), proj_a, 'Authentication', 'authentication',
      'Requests involving identity and authentication.',
      'The conversation concerns sign-in, credentials, sessions, or identity providers.'),
-    (demo.det_uuid('gram-demo-sigint-signal-worker'), proj_a, 'Worker',
+    (demo.det_uuid('gram-demo-sigint-signal-worker'), proj_a, 'Worker', 'worker',
      'Requests primarily involving asynchronous workers.',
      'The conversation concerns background jobs, queues, or worker processes.'),
-    (demo.det_uuid('gram-demo-sigint-signal-low'), proj_a, 'Low',
+    (demo.det_uuid('gram-demo-sigint-signal-low'), proj_a, 'Low', 'low',
      'Little or no customer impact.',
      'The issue is cosmetic or has a straightforward workaround.'),
-    (demo.det_uuid('gram-demo-sigint-signal-medium'), proj_a, 'Medium',
+    (demo.det_uuid('gram-demo-sigint-signal-medium'), proj_a, 'Medium', 'medium',
      'Noticeable but bounded customer impact.',
      'The issue impairs a workflow but does not make the product broadly unavailable.'),
-    (demo.det_uuid('gram-demo-sigint-signal-high'), proj_a, 'High',
+    (demo.det_uuid('gram-demo-sigint-signal-high'), proj_a, 'High', 'high',
      'Severe or widespread customer impact.',
      'The issue blocks a critical workflow or affects many customers.'),
-    (demo.det_uuid('gram-demo-sigint-signal-launch'), proj_a, 'Launch',
+    (demo.det_uuid('gram-demo-sigint-signal-launch'), proj_a, 'Launch', 'launch',
      'A future product launch campaign.', NULL),
-    (demo.det_uuid('gram-demo-sigint-signal-renewal'), proj_a, 'Renewal',
+    (demo.det_uuid('gram-demo-sigint-signal-renewal'), proj_a, 'Renewal', 'renewal',
      'A future customer renewal campaign.', NULL);
 
   INSERT INTO sigint_sensors
-    (id, project_id, name, description, instructions, mode)
+    (id, project_id, name, slug, description, instructions, mode)
   VALUES
     (demo.det_uuid('gram-demo-sigint-sensor-service-areas'), proj_a,
-     'Service areas', 'Labels every service area discussed in a conversation.',
+     'Service areas', 'service-areas', 'Labels every service area discussed in a conversation.',
      'Select every product service that materially appears.', 'multi_label'),
     (demo.det_uuid('gram-demo-sigint-sensor-primary-service'), proj_a,
-     'Primary service', 'Chooses the service most central to a conversation.',
+     'Primary service', 'primary-service', 'Chooses the service most central to a conversation.',
      'Choose the single service that best describes the main request.', 'exclusive'),
     (demo.det_uuid('gram-demo-sigint-sensor-impact'), proj_a,
-     'Customer impact', 'Orders conversations by customer impact.',
+     'Customer impact', 'customer-impact', 'Orders conversations by customer impact.',
      'Score impact from low to high using the supplied levels.', 'ordered_score'),
     (demo.det_uuid('gram-demo-sigint-sensor-draft-campaign'), proj_a,
-     'Draft campaign', 'An incomplete campaign classifier awaiting its labels.',
+     'Draft campaign', 'draft-campaign', 'An incomplete campaign classifier awaiting its labels.',
      NULL, 'multi_label');
 
   INSERT INTO sigint_sensor_signals

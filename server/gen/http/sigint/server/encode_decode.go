@@ -2379,6 +2379,7 @@ func EncodeDeleteSensorError(encoder func(context.Context, http.ResponseWriter) 
 // *SigintSignalResponseBody from a value of type *types.SigintSignal.
 func marshalTypesSigintSignalToSigintSignalResponseBody(v *types.SigintSignal) *SigintSignalResponseBody {
 	res := &SigintSignalResponseBody{
+		Slug:               string(v.Slug),
 		ID:                 v.ID,
 		ProjectID:          v.ProjectID,
 		Name:               v.Name,
@@ -2395,6 +2396,7 @@ func marshalTypesSigintSignalToSigintSignalResponseBody(v *types.SigintSignal) *
 // *SigintSensorResponseBody from a value of type *types.SigintSensor.
 func marshalTypesSigintSensorToSigintSensorResponseBody(v *types.SigintSensor) *SigintSensorResponseBody {
 	res := &SigintSensorResponseBody{
+		Slug:         string(v.Slug),
 		ID:           v.ID,
 		ProjectID:    v.ProjectID,
 		Name:         v.Name,
