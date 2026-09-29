@@ -94,7 +94,7 @@ export function parseUserSearch(query: string): ParsedUserSearch {
       return error(
         "unsupported search syntax; quote it to search for literal text",
       );
-    if ([...value].length > 256)
+    if (Array.from(value).length > 256)
       return error("search terms must be at most 256 Unicode code points");
     terms.push({ field, value, start, end: i });
   }
