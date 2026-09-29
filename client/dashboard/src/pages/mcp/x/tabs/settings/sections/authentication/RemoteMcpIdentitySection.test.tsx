@@ -29,8 +29,18 @@ const mocks = vi.hoisted(() => ({
   authenticationProbe: vi.fn(),
   protectedResourceMetadata: vi.fn(),
   fetchMetadata: vi.fn(),
+  discoverProtectedResource: vi.fn(),
   commit: vi.fn(),
   detach: vi.fn(),
+  toastSuccess: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: mocks.toastSuccess,
+    error: vi.fn(),
+    warning: vi.fn(),
+  },
 }));
 
 vi.mock("@/routes", () => ({
@@ -59,6 +69,9 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     remoteSessions: { commitServerIdentityConfiguration: mocks.commit },
     remoteSessionIssuers: { fetchMetadata: mocks.fetchMetadata },
+    remoteMcp: {
+      discoverProtectedResourceMetadata: mocks.discoverProtectedResource,
+    },
   }),
 }));
 
@@ -123,6 +136,7 @@ vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
 vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
   useCreateRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.create,
+    reset: vi.fn(),
     isPending: false,
     error: null,
   }),
@@ -131,6 +145,7 @@ vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
 vi.mock("@gram/client/react-query/updateRemoteMcpServerHeader.js", () => ({
   useUpdateRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.update,
+    reset: vi.fn(),
     isPending: false,
     error: null,
   }),
@@ -139,6 +154,7 @@ vi.mock("@gram/client/react-query/updateRemoteMcpServerHeader.js", () => ({
 vi.mock("@gram/client/react-query/deleteRemoteMcpServerHeader.js", () => ({
   useDeleteRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.remove,
+    reset: vi.fn(),
     isPending: false,
     error: null,
   }),
@@ -244,6 +260,7 @@ beforeEach(() => {
     status: "registered",
     manualSetupRequired: false,
   });
+  mocks.discoverProtectedResource.mockResolvedValue({ available: false });
   mocks.invalidateHeaders.mockResolvedValue(undefined);
   mocks.detach.mockResolvedValue({});
   mocks.authenticationProbe.mockReturnValue("available");
@@ -264,7 +281,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
         "Each user signs in to Linear as themselves and keeps their own permissions.",
       ),
     ).toBeDefined();
-    expect(screen.getByRole("radio", { name: /Agent Identity/ })).toBeDefined();
+    expect(
+      screen.getByRole("radio", { name: /Service Account/ }),
+    ).toBeDefined();
     expect(screen.getByRole("radio", { name: /No Identity/ })).toBeDefined();
   });
 
@@ -280,6 +299,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
               slug: "linear",
               projectId: "project-1",
               clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
             },
           ],
         },
@@ -311,6 +332,82 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
+  it("requests the protected resource's scopes, not every advertised one", async () => {
+    // Left empty, the server asks for everything the issuer advertises — the
+    // request that broke Salesforce logins. Settings has to send the same
+    // RFC 9728 scopes the create flow does.
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
+              scopesSupported: ["read", "write", "admin", "refresh_token"],
+              tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+            },
+          ],
+        },
+      },
+    });
+    mocks.discoverProtectedResource.mockResolvedValue({
+      available: true,
+      metadata: { scopesSupported: ["read", " "] },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          clientMode: "auto",
+          clientConfiguration: expect.objectContaining({
+            scope: ["read"],
+            tokenEndpointAuthMethod: "client_secret_post",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("will not auto-configure a provider missing its OAuth endpoints", () => {
+    // Advertising CIMD is a claim about registration, not about being usable:
+    // without both endpoints the registration would persist an identity
+    // nobody can complete a login through.
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: undefined,
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Auto-Configure")).toBeNull();
+  });
+
   it("opens the provider and registration menus on click", () => {
     mocks.issuers.mockReturnValue({
       data: {
@@ -323,6 +420,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
               slug: "linear",
               projectId: "project-1",
               clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
             },
           ],
         },
@@ -439,7 +538,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     // visible for cleanup rather than forbidding the move.
     expect(
       screen
-        .getByRole("radio", { name: /Agent Identity/ })
+        .getByRole("radio", { name: /Service Account/ })
         .getAttribute("aria-checked"),
     ).toBe("true");
     expect(
@@ -475,6 +574,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
               issuer: "https://id.example",
               slug: "example",
               clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
             },
           ],
         },
@@ -649,7 +750,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("previews the Authorization header without revealing the credential", async () => {
     const { container } = renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
 
     const input = screen.getByLabelText("Token");
     fireEvent.change(input, { target: { value: "bearer-secret-value" } });
@@ -679,7 +780,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("labels Basic and Manual credential inputs without exposing their values", () => {
     const { container } = renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
     fireEvent.click(screen.getByRole("button", { name: "Basic" }));
 
     fireEvent.change(screen.getByLabelText("Username"), {
@@ -740,7 +841,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("keeps password managers out of the credential fields", () => {
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
     fireEvent.click(screen.getByRole("button", { name: "Basic" }));
 
     // A username next to a password is exactly the shape a manager treats as a
@@ -763,7 +864,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("keeps Client Credentials visible but unselectable", () => {
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
 
     expect(screen.getByText("Coming soon")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: /Client credentials/ }));
@@ -771,7 +872,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.getByLabelText("Token")).toBeDefined();
   });
 
-  it("blocks Agent Identity and describes legacy pass-through Authorization honestly", () => {
+  it("blocks Service Account and describes legacy pass-through Authorization honestly", () => {
     mocks.headers.mockReturnValue({
       data: {
         headers: [
@@ -797,7 +898,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Agent Identity/,
+          name: /Service Account/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -833,11 +934,11 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Agent Identity/,
+          name: /Service Account/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
     expect(screen.queryByLabelText("Token")).toBeNull();
   });
 
@@ -860,13 +961,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Agent Identity/,
+          name: /Service Account/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
   });
 
-  it("removes the Agent credential only once Save is confirmed", async () => {
+  it("removes the Service Account credential only once Save is confirmed", async () => {
     mocks.headers.mockReturnValue({
       data: { headers: [configuredHeader()] },
       isLoading: false,
@@ -889,6 +990,92 @@ describe("RemoteMcpIdentitySectionBody", () => {
         request: { id: "header-1" },
       }),
     );
+  });
+
+  it("discloses both removals when No Identity unlinks a provider and a credential", () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("unlinks the identity provider");
+    expect(dialog.textContent).toContain(
+      "removes the static Authorization credential",
+    );
+  });
+
+  it("lets Custom Headers own a credential row it already removed", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(screen.getByText("Custom Headers"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove header Authorization" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    // One delete, from the header save: a second one from the identity side
+    // would fail on a row that is already gone.
+    await waitFor(() =>
+      expect(mocks.remove).toHaveBeenCalledWith({
+        request: { id: "header-1" },
+      }),
+    );
+    expect(mocks.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report the identity removed when the deferred delete fails", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    mocks.remove.mockRejectedValue(new Error("delete refused"));
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(screen.getByText("Custom Headers"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove header Authorization" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    // The header save owns this delete; until it lands the credential is
+    // still live upstream, so success must not be claimed.
+    await waitFor(() => expect(mocks.remove).toHaveBeenCalledOnce());
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith("Identity removed");
   });
 
   it("links shared-source guidance to identity provider management", () => {

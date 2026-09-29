@@ -875,6 +875,10 @@ func validateHeaderValueSource(name string, value *string, valueFromRequestHeade
 		return fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", name)
 	}
 
+	if hasValueFromRequestHeader && proxy.IsDeniedPassThroughSource(*valueFromRequestHeader) {
+		return fmt.Errorf("header %q: %q cannot be forwarded upstream", name, *valueFromRequestHeader)
+	}
+
 	if hasValueFromRequestHeader && isSecret {
 		return fmt.Errorf("header %q: pass-through headers cannot be marked as secret", name)
 	}

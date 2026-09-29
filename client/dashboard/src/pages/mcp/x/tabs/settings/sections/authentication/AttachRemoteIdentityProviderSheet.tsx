@@ -57,9 +57,9 @@ import {
   dynamicClientRegistrationAvailability,
   narrowTokenEndpointAuthMethod,
   parseScopes,
-  pickPreferredAuthMethod,
   TUNNELED_DCR_PERMISSION_MESSAGE,
 } from "./issuerFormUtils";
+import { pickPreferredAuthMethod } from "@/lib/remote-identity/model/clientConfiguration";
 import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
 import { selectExistingClient } from "./selectExistingClient";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
