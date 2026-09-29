@@ -8,8 +8,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type testAuthenticator struct {
@@ -150,4 +156,56 @@ func TestContextToolReturnsOnlyAuthenticatedContext(t *testing.T) {
 	require.Equal(t, []string{"inspect staff admin context"}, message.Result.StructuredContent.Workflows)
 	require.NotContains(t, response.Body.String(), "test-token")
 	require.NotContains(t, response.Body.String(), "test-connection")
+}
+
+func TestRuntimeUserToolsRecheckLiveStaffOnEveryInvocation(t *testing.T) {
+	for _, tool := range []struct{ name, args string }{{"find_users", `{}`}, {"list_user_organizations", `{"user_id":"user_zero"}`}} {
+		t.Run(tool.name, func(t *testing.T) {
+			for _, failure := range []string{"revoked", "nonstaff", "scope", "customer"} {
+				t.Run(failure, func(t *testing.T) {
+					auth, store, verifier, token := staffAuthFixture(t)
+					reads := &recordingUserReader{users: &gen.AdminListUsersResult{}, orgs: &gen.AdminListUserOrganizationsResult{}}
+					handler := NewRuntime(auth, "", reads).Handler()
+					invoke := func(token string) *httptest.ResponseRecorder {
+						req := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"`+tool.name+`","arguments":`+tool.args+`}}`))
+						req.Header.Set("Authorization", "Bearer "+token)
+						req.Header.Set("Content-Type", "application/json")
+						req.Header.Set("Accept", "application/json, text/event-stream")
+						response := httptest.NewRecorder()
+						handler.ServeHTTP(response, req)
+						return response
+					}
+					first := invoke(token)
+					require.Equal(t, http.StatusOK, first.Code)
+					require.NotContains(t, first.Body.String(), `"isError":true`)
+					require.Equal(t, 1, store.calls)
+					require.Equal(t, 1, verifier.calls)
+					reads.usersInput = nil
+					reads.orgsInput = nil
+					switch failure {
+					case "revoked":
+						store.session.ActiveGeneration = "revoked-generation"
+					case "nonstaff":
+						verifier.err = oops.C(oops.CodeUnauthorized)
+					case "scope":
+						store.session.Scopes = []string{"admin:write"}
+					case "customer":
+						var err error
+						token, _, err = auth.signer.Mint(sessiontokens.MintParams{Subject: urn.NewUserSubject(staffSubject), Audience: "https://customer.example.test/mcp", Issuer: staffIssuer, Lifetime: time.Hour, ClientID: staffClient})
+						require.NoError(t, err)
+					}
+					second := invoke(token)
+					require.Equal(t, http.StatusUnauthorized, second.Code)
+					require.Nil(t, reads.usersInput)
+					require.Nil(t, reads.orgsInput)
+					if failure == "nonstaff" {
+						require.Equal(t, 2, verifier.calls)
+					}
+					if failure != "customer" {
+						require.Equal(t, 2, store.calls)
+					}
+				})
+			}
+		})
+	}
 }
