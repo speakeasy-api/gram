@@ -182,7 +182,7 @@ func TestVerifyConnection_PinnedUnboundKeepsMissingScope(t *testing.T) {
 		verification: &okta.ScopeVerification{Granted: []string{"okta.apps.read"}, Missing: []string{"okta.users.read"}, DPoPBound: false},
 		failing:      map[string]error{"ListApps": readErr},
 	}
-	outcome, err := verifyConnection(t.Context(), client, remotesessions.TokenEndpointAuthMethodPrivateKeyJWT, true)
+	outcome, err := verifyConnection(t.Context(), client, remotesessions.TokenEndpointAuthMethodBasic, true)
 	require.NoError(t, err)
 	require.Equal(t, StatusDegraded, outcome.Status)
 	require.Equal(t, []string{ReasonMissingScope, ReasonDPoPNotBound}, outcome.Reasons)
