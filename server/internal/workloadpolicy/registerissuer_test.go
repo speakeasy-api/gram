@@ -320,7 +320,7 @@ func TestRegisterIssuer_RendersNoDescriptionAsEmpty(t *testing.T) {
 }
 
 func registerWithTags(ctx context.Context, ti *testInstance, tags []string) (*gen.WorkloadIdentityPolicy, error) {
-	return ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+	policy, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
 		SessionToken:           nil,
 		ApikeyToken:            nil,
 		ProjectSlugInput:       nil,
@@ -332,6 +332,10 @@ func registerWithTags(ctx context.Context, ti *testInstance, tags []string) (*ge
 		Tags:                   tags,
 		ProjectScoped:          false,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("register issuer: %w", err)
+	}
+	return policy, nil
 }
 
 func TestRegisterIssuer_AcceptsATagAtTheLengthLimit(t *testing.T) {
