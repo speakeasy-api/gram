@@ -92669,7 +92669,7 @@ components:
                     description: The list of risk results with match content redacted to opaque fingerprints.
                 total_count:
                     type: integer
-                    description: Total number of findings across all enabled policies.
+                    description: Total number of findings matching the filters across all non-deleted policies.
                     format: int64
             required:
                 - results
@@ -92687,7 +92687,7 @@ components:
                     description: The list of risk results.
                 total_count:
                     type: integer
-                    description: Total number of findings across all enabled policies.
+                    description: Total number of findings matching the filters across all non-deleted policies.
                     format: int64
             required:
                 - results

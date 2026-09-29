@@ -240,11 +240,16 @@ export default function RiskEvents(): JSX.Element {
     () => (overviewData?.topRules ?? []).map((r) => r.ruleId).filter(Boolean),
     [overviewData?.topRules],
   );
+  // The default view includes disabled policies' historical findings, so their
+  // rows carry the same "(inactive)" label as the policy filter.
   const policyNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const policy of policies) {
       if (policy.name && policy.name.trim() !== "") {
-        m.set(policy.id, policy.name);
+        m.set(
+          policy.id,
+          policy.enabled === false ? `${policy.name} (inactive)` : policy.name,
+        );
       }
     }
     return m;
@@ -262,9 +267,8 @@ export default function RiskEvents(): JSX.Element {
   }, [policies]);
 
   // The policy currently selected in the filter, if any. When it's disabled the
-  // list still returns its historical findings (the backend drops the
-  // enabled-only filter for explicit policy selections), so we surface a notice
-  // that the user is viewing data for an inactive policy.
+  // list returns only its historical findings, so we surface a notice that the
+  // user is viewing data for an inactive policy.
   const selectedPolicy = useMemo(
     () => policies.find((p) => p.id === policyFilter),
     [policies, policyFilter],

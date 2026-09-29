@@ -831,7 +831,8 @@ type ListRiskResultsForAgentPayload struct {
 type ListRiskResultsForAgentResult struct {
 	// The list of risk results with match content redacted to opaque fingerprints.
 	Results []*types.RiskResultRedacted
-	// Total number of findings across all enabled policies.
+	// Total number of findings matching the filters across all non-deleted
+	// policies.
 	TotalCount int64
 	// Cursor for the next page of results.
 	NextCursor *string
@@ -886,7 +887,8 @@ type ListRiskResultsPayload struct {
 type ListRiskResultsResult struct {
 	// The list of risk results.
 	Results []*types.RiskResult
-	// Total number of findings across all enabled policies.
+	// Total number of findings matching the filters across all non-deleted
+	// policies.
 	TotalCount int64
 	// Cursor for the next page of results.
 	NextCursor *string

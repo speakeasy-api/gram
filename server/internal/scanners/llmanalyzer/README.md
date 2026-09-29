@@ -255,8 +255,8 @@ scanners.PublishFindings ─► Finding topic ─► FindingCHWriter ─► Clic
 ```
 
 - Findings are **ClickHouse-only**. No `risk_results` rows are written for
-  covered sources, so the org must also have `risk-list-from-clickhouse` and
-  `risk-overview-from-clickhouse` enabled.
+  covered sources, so the org must also have `risk-overview-from-clickhouse`
+  enabled.
 - The handler bypasses `AsyncShadowGate` (requests only reach the lane for
   orgs in the `llm` or `shadow` mode). It acks analyzer failures with nothing
   published and nacks only when the findings publish fails. A batch whose LLM
@@ -423,8 +423,8 @@ model) fails streams startup with `create risk llm client: …`.
   Evaluated in the API server (sync) and the worker (async) through
   `policyflags.ProjectFlagMode`; reads as `off` when the flag is off, absent,
   unrecognized or the provider errors.
-- The org must also have `risk-list-from-clickhouse` and
-  `risk-overview-from-clickhouse` on, or async findings are invisible.
+- The org must also have `risk-overview-from-clickhouse` on, or async
+  findings are missing from the overview.
 - The `gram-risk-v1-llm-*` topics and subscriptions must exist in the
   environment (`infra/gen/kcc.yaml`, see `docs/pubsub-topology.md`).
 
@@ -543,8 +543,8 @@ lives in streams. All three need the same environment.
    For a custom set, copy `server/flags.local.csv.example` to
    `server/flags.local.csv`, uncomment the `gram-risk-llm-analyzer` row with
    your organization id (`select id, slug from organization_metadata;`) and
-   the variant you want, add `risk-list-from-clickhouse` and
-   `risk-overview-from-clickhouse` rows, and point the env var at that file.
+   the variant you want, add a `risk-overview-from-clickhouse` row, and point
+   the env var at that file.
    The path must stay under `server/`. A row without the fourth column keeps
    the boolean contract and resolves to `llm` (the transition rule).
 

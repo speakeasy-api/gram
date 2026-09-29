@@ -1886,7 +1886,7 @@ var ListCustomDetectionRulesResult = Type("ListCustomDetectionRulesResult", func
 
 var ListRiskResultsResult = Type("ListRiskResultsResult", func() {
 	Attribute("results", ArrayOf(shared.RiskResult), "The list of risk results.")
-	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
+	Attribute("total_count", Int64, "Total number of findings matching the filters across all non-deleted policies.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("results", "total_count")
 })
@@ -1901,7 +1901,7 @@ var RiskUnmaskResultResult = Type("RiskUnmaskResultResult", func() {
 
 var ListRiskResultsForAgentResult = Type("ListRiskResultsForAgentResult", func() {
 	Attribute("results", ArrayOf(shared.RiskResultRedacted), "The list of risk results with match content redacted to opaque fingerprints.")
-	Attribute("total_count", Int64, "Total number of findings across all enabled policies.")
+	Attribute("total_count", Int64, "Total number of findings matching the filters across all non-deleted policies.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 	Required("results", "total_count")
 })
