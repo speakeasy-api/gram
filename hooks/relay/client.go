@@ -7,7 +7,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -22,10 +24,30 @@ import (
 
 const perAttemptTime = 10 * time.Second
 
-// sendBudget bounds one send end to end — the SDK's internal 30s retry budget
-// and the transport replays below stack, and a gating hook that outlives the
+// connectTimeout bounds the phases of an attempt a lossy network can stall
+// indefinitely: DNS plus the TCP handshake, and the TLS handshake. It has to
+// stay well under gateSendBudget. http.DefaultTransport's 30s dial timeout
+// let a single swallowed SYN consume a gating event's entire budget, so the
+// transport replays in send never ran for the one failure mode they exist
+// for and a dropped packet reached the developer as a block (DNO-1230).
+// Only connection setup is bounded; a slow server that did answer still gets
+// whatever remains of the send budget.
+const connectTimeout = 2 * time.Second
+
+// maxSendAttempts bounds the transport replays for one exchange: the first
+// try plus two more, each on a connection dialed fresh. The cap times
+// connectTimeout, plus the pauses, is what an event costs against a dead
+// network; two of the attempts fit inside the tighter gateSendBudget, which
+// is the binding constraint — further attempts would only push a gating
+// verdict past the provider's deadline, where it dissolves into an allow.
+const maxSendAttempts = 3
+
+// sendBudget bounds one send end to end — the SDK's 30s retry budget for
+// retryable statuses sits under it, and a gating hook that outlives the
 // provider's 60s timeout fails closed uncontrolled instead of returning a
-// verdict.
+// verdict. It is a ceiling for a slow control plane, not the cost of an
+// unreachable one: transport failures are bounded by maxSendAttempts long
+// before this.
 const sendBudget = 45 * time.Second
 
 // gateSendBudget bounds the synchronous verdict exchange for gating events.
@@ -44,6 +66,14 @@ const skillUploadBudget = 10 * time.Second
 // (429/5xx). A var rather than a const so tests that script 5xx responses can
 // shrink it below the wall clock they can afford.
 var retryMaxElapsedMS = 30_000
+
+// replayPause is the wait before transport replay attempt+1. It stays in the
+// hundreds of milliseconds deliberately: the failures it covers are dropped
+// packets and DNS blips that clear immediately, and a gating hook spends the
+// pause standing between the developer and their edit.
+func replayPause(attempt int) time.Duration {
+	return time.Duration(attempt+1) * 250 * time.Millisecond
+}
 
 // decision is the server's verdict for a hook event.
 type decision struct {
@@ -107,6 +137,32 @@ type client struct {
 	replayed bool
 }
 
+// dialContext opens the relay's TCP connections with connectTimeout covering
+// name resolution and the handshake. A var so tests can stand in for a
+// network that swallows connections instead of refusing them, which no
+// in-process listener can imitate.
+var dialContext = (&net.Dialer{
+	Timeout:   connectTimeout,
+	KeepAlive: 30 * time.Second,
+}).DialContext
+
+// newTransport mirrors http.DefaultTransport — including proxy discovery,
+// which corporate machines depend on — with connection setup bounded by
+// connectTimeout rather than its 30s/10s defaults.
+func newTransport() http.RoundTripper {
+	return &deviceTransport{base: &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialContext(ctx, network, addr)
+		},
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   connectTimeout,
+		ExpectContinueTimeout: 1 * time.Second,
+	}}
+}
+
 func newClient(serverURL string) *client {
 	return &client{
 		budget: sendBudget,
@@ -114,15 +170,25 @@ func newClient(serverURL string) *client {
 			sdk.WithServerURL(strings.TrimRight(serverURL, "/")),
 			sdk.WithClient(&http.Client{
 				Timeout:   perAttemptTime,
-				Transport: &deviceTransport{base: http.DefaultTransport},
+				Transport: newTransport(),
 				CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 					return http.ErrUseLastResponse
 				},
 			}),
-			// Retries cover connection errors and 429/5xx; the SDK rewinds the
-			// request body per attempt, so the Idempotency-Key header minted in
-			// send is reused across redeliveries. The elapsed cap keeps the
-			// worst case well under the 60s gating-hook timeout.
+			// Retries cover 429/5xx only; the SDK rewinds the request body per
+			// attempt, so the Idempotency-Key header minted in send is reused
+			// across redeliveries. The elapsed cap keeps the worst case well
+			// under the 60s gating-hook timeout.
+			//
+			// Transport failures are deliberately left to send's own replay
+			// loop. The SDK does retry the timeout-shaped ones, and stacking
+			// its 30s budget under maxSendAttempts multiplied out: an
+			// unreachable control plane held a fire-and-forget PostToolUse
+			// hook — and the agent waiting on it — for the full 45s
+			// sendBudget across sixteen connection attempts (DNO-1230). One
+			// bounded loop makes the worst case the attempt cap times
+			// connectTimeout, and the payload is spooled for the drain to
+			// replay either way.
 			sdk.WithRetryConfig(retry.Config{
 				Strategy: "backoff",
 				Backoff: &retry.BackoffStrategy{
@@ -131,7 +197,7 @@ func newClient(serverURL string) *client {
 					Exponent:        1.5,
 					MaxElapsedTime:  retryMaxElapsedMS,
 				},
-				RetryConnectionErrors: true,
+				RetryConnectionErrors: false,
 			}),
 		),
 	}
@@ -165,13 +231,13 @@ func (cl *client) uploadSkillContent(ctx context.Context, c creds, rawSHA256, co
 		if err == nil {
 			break
 		}
-		if interpretError(err).statusCode != 0 || attempt >= 2 || ctx.Err() != nil {
+		if interpretError(err).statusCode != 0 || attempt >= maxSendAttempts-1 || ctx.Err() != nil {
 			return err
 		}
 		select {
 		case <-ctx.Done():
 			return err
-		case <-time.After(time.Duration(attempt+1) * 250 * time.Millisecond):
+		case <-time.After(replayPause(attempt)):
 		}
 	}
 	if response == nil || response.StatusCode != http.StatusNoContent {
@@ -180,12 +246,15 @@ func (cl *client) uploadSkillContent(ctx context.Context, c creds, rawSHA256, co
 	return nil
 }
 
-// send posts the payload to the ingest endpoint authenticated with c. The
-// SDK's built-in retries do not replay connection errors for POSTs, so pure
-// transport failures (statusCode 0, the server was never reached) are replayed
-// here — safe because the Idempotency-Key is minted once and reused, and
-// necessary because a blocking hook would otherwise deny over one dropped
-// connection.
+// send posts the payload to the ingest endpoint authenticated with c. This
+// loop owns every transport replay (the SDK is configured to retry statuses
+// only), so pure transport failures — statusCode 0, the server was never
+// reached — are replayed here: safe because the Idempotency-Key is minted
+// once and reused, and necessary because a blocking hook would otherwise
+// deny over one dropped connection. connectTimeout is what makes the replays
+// reachable, and bounds the whole loop: each attempt abandons a stalled
+// connection early enough that the next one still fits in the caller's
+// budget.
 //
 // The caller mints idemKey (see deliver) so the same key survives beyond
 // this exchange: a payload spooled after a failed send replays under the
@@ -217,13 +286,13 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 			break
 		}
 		out := interpretError(err)
-		if out.statusCode != 0 || attempt >= 2 || ctx.Err() != nil {
+		if out.statusCode != 0 || attempt >= maxSendAttempts-1 || ctx.Err() != nil {
 			return out
 		}
 		select {
 		case <-ctx.Done():
 			return out
-		case <-time.After(time.Duration(attempt+1) * 250 * time.Millisecond):
+		case <-time.After(replayPause(attempt)):
 		}
 	}
 
@@ -293,7 +362,53 @@ func interpretError(err error) ingestResult {
 			blockEffect:  nil,
 		}
 	}
-	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}
+	return ingestResult{
+		statusCode:   0,
+		decision:     decision{Decision: "", Reason: "", Message: transportFailureMessage(err)},
+		authRejected: false,
+		failOpen:     nil,
+		skillCapture: nil,
+		blockEffect:  nil,
+	}
+}
+
+// transportFailureMessage renders the user-facing text for an exchange that
+// never reached the server. It replaces the bare "Speakeasy hook returned
+// HTTP 0", which told a blocked developer neither what had gone wrong nor
+// what to do about it (DNO-1230).
+func transportFailureMessage(err error) string {
+	msg := "Speakeasy hooks could not reach the Gram control plane"
+	if reason := transportReason(err); reason != "" {
+		msg += " (" + reason + ")"
+	}
+	return msg + ". This is usually a transient network problem; retry in a moment."
+}
+
+// transportReasonMax bounds the reason at roughly one terminal line. The
+// text lands in a deny message the provider renders verbatim, so an
+// unbounded error string would bury the retry advice that follows it.
+const transportReasonMax = 120
+
+// transportReason summarizes why a request produced no response. net/http
+// wraps the cause in a *url.Error that repeats the full request URL, which
+// says nothing a user can act on, so only the inner cause survives.
+func transportReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timed out"
+	}
+	reason := err.Error()
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Err != nil {
+		reason = urlErr.Err.Error()
+	}
+	reason = strings.Join(strings.Fields(reason), " ")
+	if runes := []rune(reason); len(runes) > transportReasonMax {
+		reason = strings.TrimSpace(string(runes[:transportReasonMax])) + "..."
+	}
+	return reason
 }
 
 func validRawSHA256(value string) bool {
@@ -324,6 +439,9 @@ func newIdempotencyToken() string {
 func httpMessage(res ingestResult) string {
 	if msg := strings.TrimSpace(res.decision.Message); msg != "" {
 		return msg
+	}
+	if res.statusCode == 0 {
+		return transportFailureMessage(nil)
 	}
 	return fmt.Sprintf("Speakeasy hook returned HTTP %d", res.statusCode)
 }
