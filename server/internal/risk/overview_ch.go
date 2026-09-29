@@ -135,32 +135,12 @@ func (s *Service) getRiskOverviewFromClickHouse(ctx context.Context, projectID u
 // the Postgres GROUP BY. The email lookup is tenant-bound to organizationID.
 func (s *Service) resolveOverviewUserEmails(ctx context.Context, organizationID string, rows []chrepo.RiskOverviewUserCount) ([]*gen.RiskOverviewUser, error) {
 	ids := make([]string, 0, len(rows))
-	seen := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
-		if row.UserID == "" {
-			continue
-		}
-		if _, ok := seen[row.UserID]; ok {
-			continue
-		}
-		seen[row.UserID] = struct{}{}
 		ids = append(ids, row.UserID)
 	}
-
-	emails := make(map[string]string, len(ids))
-	if len(ids) > 0 {
-		userRows, err := s.repo.ListUserEmailsByIDs(ctx, repo.ListUserEmailsByIDsParams{
-			OrganizationID: organizationID,
-			Ids:            ids,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("list user emails by ids: %w", err)
-		}
-		for _, user := range userRows {
-			if user.Email != "" {
-				emails[user.ID] = user.Email
-			}
-		}
+	emails, err := s.riskUserEmailsByID(ctx, organizationID, ids)
+	if err != nil {
+		return nil, err
 	}
 
 	type userKey struct {
@@ -198,6 +178,43 @@ func (s *Service) resolveOverviewUserEmails(ctx context.Context, organizationID 
 	}
 
 	return out, nil
+}
+
+// riskUserEmailsByID batch-resolves current display emails from internal user
+// ids. The query is organization-bound, so an id from another tenant cannot
+// disclose its email. Callers choose whether lookup failure is fatal or a
+// best-effort display fallback.
+func (s *Service) riskUserEmailsByID(ctx context.Context, organizationID string, rawIDs []string) (map[string]string, error) {
+	ids := make([]string, 0, len(rawIDs))
+	seen := make(map[string]struct{}, len(rawIDs))
+	for _, id := range rawIDs {
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	emails := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return emails, nil
+	}
+	userRows, err := s.repo.ListUserEmailsByIDs(ctx, repo.ListUserEmailsByIDsParams{
+		OrganizationID: organizationID,
+		Ids:            ids,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list user emails by ids: %w", err)
+	}
+	for _, user := range userRows {
+		if user.Email != "" {
+			emails[user.ID] = user.Email
+		}
+	}
+	return emails, nil
 }
 
 // fillCategoryTimeSeries expands the sparse (hour, category) cells ClickHouse

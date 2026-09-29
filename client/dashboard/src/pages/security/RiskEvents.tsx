@@ -25,6 +25,8 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskMcpServerCounts } from "@gram/client/react-query/riskMcpServerCounts.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
@@ -42,6 +44,12 @@ import {
   isBlockingOutcome,
   mcpServerDisplayName,
 } from "./risk-outcome";
+import { MCPFindingContext } from "./MCPFindingContext";
+import {
+  buildMCPFindingNames,
+  isMCPFinding,
+  type MCPFindingNames,
+} from "./mcp-finding-context";
 import { useDismissFinding } from "./useDismissFinding";
 import { useSetupExclusionRule } from "./useSetupExclusionRule";
 import {
@@ -295,6 +303,26 @@ export default function RiskEvents(): JSX.Element {
   const platformToolsets = useMemo(
     () => platformToolsetsData?.toolsets ?? [],
     [platformToolsetsData?.toolsets],
+  );
+  const { data: metaMcpServersData } = useMetaMcpServers(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
+  const metaMcpServers = useMemo(
+    () => metaMcpServersData?.metaMcpServers ?? [],
+    [metaMcpServersData?.metaMcpServers],
+  );
+  const { data: toolsetsData } = useListToolsets({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const toolsets = useMemo(
+    () => toolsetsData?.toolsets ?? [],
+    [toolsetsData?.toolsets],
+  );
+  const mcpFindingNames = useMemo(
+    () => buildMCPFindingNames([...mcpServers, ...metaMcpServers], toolsets),
+    [mcpServers, metaMcpServers, toolsets],
   );
   // Powers the rule_id filter autocomplete: surface only rules that actually
   // have findings in this project's recent window.
@@ -625,6 +653,7 @@ export default function RiskEvents(): JSX.Element {
           policyNameById={policyNameById}
           policyScoreById={policyScoreById}
           mcpServerNameById={mcpServerNameById}
+          mcpFindingNames={mcpFindingNames}
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
           selection={selection}
@@ -710,6 +739,7 @@ function RiskEventsRows({
   results,
   policyNameById,
   policyScoreById,
+  mcpFindingNames,
   scrollRef,
   onSelectChat,
   selection,
@@ -722,6 +752,7 @@ function RiskEventsRows({
   isLoading: boolean;
   results: RiskResult[];
   policyNameById: Map<string, string>;
+  mcpFindingNames: MCPFindingNames;
   policyScoreById: Map<string, number>;
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
@@ -791,6 +822,7 @@ function RiskEventsRows({
               result={result}
               policyName={policyNameById.get(result.policyId)}
               policyScore={policyScoreById.get(result.policyId)}
+              mcpFindingNames={mcpFindingNames}
               onSelectChat={onSelectChat}
               selection={selection}
               onDismiss={onDismiss}
@@ -808,6 +840,7 @@ export function RiskEventsRow({
   result,
   policyName,
   policyScore,
+  mcpFindingNames,
   onSelectChat,
   selection,
   onDismiss,
@@ -817,6 +850,7 @@ export function RiskEventsRow({
   result: RiskResult;
   policyName: string | undefined;
   policyScore: number | undefined;
+  mcpFindingNames?: MCPFindingNames;
   onSelectChat: (chatId: string | null) => void;
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
@@ -824,10 +858,6 @@ export function RiskEventsRow({
   mcpServerNameById?: Map<string, string> | null;
 }): JSX.Element {
   const mcpScoped = mcpServerNameById != null;
-  const serverName = result.mcpServerId
-    ? (mcpServerNameById?.get(result.mcpServerId) ??
-      result.mcpServerId.slice(0, 8))
-    : null;
   const outcomeLabel = mcpScoped
     ? enforcementOutcomeLabel(result.enforcementOutcome)
     : null;
@@ -928,20 +958,13 @@ export function RiskEventsRow({
         <RuleLabel source={result.source} ruleId={result.ruleId} />
       </div>
       <div className="text-muted-foreground min-w-0 font-mono text-xs">
-        <div className="truncate">{result.chatTitle ?? "Untitled"}</div>
-        {mcpScoped && serverName ? (
-          <div
-            className="text-muted-foreground/70 truncate"
-            title={
-              result.toolName
-                ? `${serverName} · ${result.toolName}`
-                : serverName
-            }
-          >
-            {serverName}
-            {result.toolName ? ` · ${result.toolName}` : ""}
-          </div>
-        ) : null}
+        {isMCPFinding(result) ? (
+          <MCPFindingContext finding={result} names={mcpFindingNames} />
+        ) : (
+          <span className="block truncate">
+            {result.chatTitle ?? "Untitled"}
+          </span>
+        )}
       </div>
       <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
         <IdentityLink identifier={identityRefForUserKey(result.userId)}>

@@ -150,14 +150,25 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		return nil, oops.E(oops.CodeUnexpected, err, "load risk signals from clickhouse").LogError(ctx, s.logger)
 	}
 
+	userIDs := make([]string, 0, len(userRows))
+	for _, row := range userRows {
+		if row.MCPFinding && row.UserID != "" {
+			userIDs = append(userIDs, row.UserID)
+		}
+	}
+	userEmails, err := s.riskUserEmailsByID(ctx, organizationID, userIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve risk signal MCP user emails").LogError(ctx, s.logger)
+	}
 	sparklines, sparkLen := signalSparklines(seriesRows, from, to, bucketSeconds)
 
-	topUsersByRule := signalTopUsersByRule(userRows)
+	topUsersByRule := signalTopUsersByRule(userRows, userEmails)
 
-	// Policy scores are configuration, not findings — the one deliberate
-	// Postgres read on this path. The operator's configured policy score is
-	// the base severity for every signal the policy matched; category
-	// defaults only cover findings with no policy attribution.
+	// Policy scores are configuration, not findings. MCP user display
+	// enrichment and policy scores are the two deliberate Postgres reads.
+	// The operator's configured policy score is the base severity for every
+	// signal the policy matched; category defaults only cover findings with no
+	// policy attribution.
 	policyScores, err := s.riskPolicyScores(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy scores").LogError(ctx, s.logger)
@@ -307,16 +318,16 @@ func signalSparklines(rows []chrepo.RiskSignalSeriesPoint, from, to time.Time, b
 	return out, length
 }
 
-// signalTopUsersByRule turns raw per-(rule, user) counts into display rows per
-// rule. Email precedence mirrors the overview's, but resolves entirely from
-// the denormalized ClickHouse columns: the ingest-stamped user_email, else an
-// @-containing external id, else "Unknown user". Raw groups that resolve to
-// the same display email merge — the external id is not part of the merge key
-// (several raw id spellings of one person collapse into one row) but the
-// first-seen non-empty id is kept as the row's representative id. Rows with
-// no resolvable email keep their raw id as identity so distinct unknown users
-// stay separate.
-func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount) map[string][]*gen.RiskSignalTopUser {
+// signalTopUsersByRule turns raw per-(rule, user, attribution-kind) counts into
+// display rows per rule. MCP rows prefer the current organization user email,
+// then the ingest-stamped email. Chat rows retain the existing stamped email
+// behavior. Both fall back to an @-containing external id, then "Unknown user".
+// Raw groups that resolve to the same display email merge. The external id is
+// not part of the merge key because several raw id spellings of one person
+// should collapse into one row, but the first non-empty id stays as the row's
+// representative id. Rows with no resolvable email keep their raw id as
+// identity so distinct unknown users stay separate.
+func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount, userEmails map[string]string) map[string][]*gen.RiskSignalTopUser {
 	// Exactly one of email/rawID is set, so an email identity can never
 	// collide with a raw id spelling of another user.
 	type userKey struct {
@@ -336,6 +347,9 @@ func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount) map[string][]*gen.R
 			continue
 		}
 		email := row.Email
+		if row.MCPFinding {
+			email = cmp.Or(userEmails[row.UserID], row.Email)
+		}
 		if email == "" && strings.Contains(row.ExternalUserID, "@") {
 			email = row.ExternalUserID
 		}
