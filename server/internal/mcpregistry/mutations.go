@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -48,7 +49,12 @@ func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, erro
 	if issues := s.validator.Validate(data); len(issues) > 0 {
 		return Entry{}, &InvalidError{Issues: issues}
 	}
-	row, err := repo.New(s.db).CreateEntry(ctx, repo.CreateEntryParams{Data: data, StoredRecordLimit: StoredRecordByteLimit})
+	publishedAt := time.Now().UTC().Truncate(time.Microsecond)
+	data, err := canonicalMetadata(data, time.Time{}, publishedAt)
+	if err != nil {
+		return Entry{}, err
+	}
+	row, err := repo.New(s.db).CreateEntry(ctx, repo.CreateEntryParams{Data: data, PublishedAt: pgtype.Timestamptz{Time: publishedAt, InfinityModifier: pgtype.Finite, Valid: true}, StoredRecordLimit: StoredRecordByteLimit})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Entry{}, storedSizeError()
 	}
@@ -107,6 +113,23 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 		}
 	}
 
+	publishedAt := old.PublishedAt
+	if published != nil && *published && !old.Published && publishedAt.IsZero() {
+		publishedAt = time.Now().UTC().Truncate(time.Microsecond)
+	}
+	// Unpublish must remain possible for invalid historical records.
+	if published == nil || *published {
+		source := data
+		if published != nil {
+			source = old.Data
+		}
+		data, err = canonicalMetadata(source, old.PublishedAt, publishedAt)
+		if err != nil {
+			return Entry{}, err
+		}
+	} else {
+		data = old.Data
+	}
 	var result Entry
 	if published == nil {
 		row, updateErr := q.UpdateEntry(ctx, repo.UpdateEntryParams{ID: id, Data: data, StoredRecordLimit: StoredRecordByteLimit})
@@ -115,7 +138,11 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 		}
 		result, err = entry(row, updateErr)
 	} else {
-		result, err = entry(q.SetEntryPublished(ctx, repo.SetEntryPublishedParams{ID: id, Published: *published}))
+		row, updateErr := q.SetEntryPublished(ctx, repo.SetEntryPublishedParams{ID: id, Published: *published, Data: data, PublishedAt: pgtype.Timestamptz{Time: publishedAt, InfinityModifier: pgtype.Finite, Valid: !publishedAt.IsZero()}, StoredRecordLimit: StoredRecordByteLimit})
+		if errors.Is(updateErr, pgx.ErrNoRows) {
+			return Entry{}, storedSizeError()
+		}
+		result, err = entry(row, updateErr)
 	}
 	if err != nil {
 		return Entry{}, err

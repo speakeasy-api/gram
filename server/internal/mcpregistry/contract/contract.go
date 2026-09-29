@@ -12,6 +12,9 @@ import (
 //go:embed record.schema.json
 var Schema []byte
 
+//go:embed gram.schema.json
+var GramSchema []byte
+
 func decode(raw []byte) (any, error) {
 	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
@@ -26,6 +29,15 @@ func Compile(raw []byte) (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
+	overlay, err := decode(GramSchema)
+	if err != nil {
+		return nil, err
+	}
+	root, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("registry contract must be an object")
+	}
+	root["allOf"] = []any{overlay}
 	c := jsonschema.NewCompiler()
 	c.AssertFormat()
 	if err := c.AddResource("record.schema.json", value); err != nil {

@@ -37,6 +37,16 @@ const record = await client.discoverVersion(security, {
 assert.equal(record.server.name, serverName);
 assert.equal(record.server.extension.nested, "retained");
 assert.equal(record._meta.extension, "retained");
+assert.equal(
+  record._meta["com.speakeasy.ai/catalog"].documentationUrl,
+  "https://example.test/docs",
+);
+assert.ok(
+  Number.isFinite(
+    Date.parse(record._meta["com.speakeasy.ai/registry"].publishedAt),
+  ),
+);
+assert.deepEqual(first.servers[0]._meta, record._meta);
 
 const versions = await client.discoverVersions(security, { serverName });
 assert.equal(versions.metadata.count, 1);

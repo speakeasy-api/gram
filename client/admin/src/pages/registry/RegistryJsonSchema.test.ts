@@ -27,7 +27,7 @@ function worker(text: string, modelUri = uri) {
 }
 
 it("registers the exact canonical offline schema only for registry models", () => {
-  expect(registryJsonDiagnostics.schemas?.[0]?.schema).toBe(canonical);
+  expect(registryJsonDiagnostics.schemas?.[0]?.schema).toMatchObject(canonical);
   expect(canonical.$schema).toBe(
     "https://json-schema.org/draft/2020-12/schema",
   );
@@ -84,4 +84,19 @@ it("resolves only bundled local references and does not fetch document schemas",
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+it("validates Gram documentation URLs alongside the unchanged upstream schema", async () => {
+  const raw = JSON.stringify({
+    server: { name: "example.test/docs", description: "Docs", version: "1" },
+    _meta: {
+      "com.speakeasy.ai/catalog": {
+        documentationUrl: "ftp://example.test/docs",
+      },
+    },
+  });
+  expect(await worker(raw).doValidation(uri)).not.toEqual([]);
+  expect(
+    await worker(raw.replace("ftp://", "https://")).doValidation(uri),
+  ).toEqual([]);
 });
