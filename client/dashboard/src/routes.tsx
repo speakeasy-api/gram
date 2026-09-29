@@ -112,6 +112,7 @@ import {
   WorkloadIssuersRoot,
 } from "./pages/workload-identities/WorkloadIssuers";
 import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
+import WorkloadIdentitiesRedirect from "./pages/workload-identities/WorkloadIdentitiesRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -700,6 +701,15 @@ const ROUTE_STRUCTURE = {
         },
       },
     },
+  },
+
+  // Legacy URL: the Workload Identities page became the Access Hub, so old
+  // bookmarks and links redirect there.
+  legacyWorkloadIdentities: {
+    title: "Workload Identities",
+    url: "workload-identities",
+    legacyRedirect: true,
+    component: WorkloadIdentitiesRedirect,
   },
 
   workloadIssuers: {

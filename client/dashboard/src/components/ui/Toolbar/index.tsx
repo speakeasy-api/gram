@@ -100,9 +100,11 @@ function ToolbarClusters({ children }: { children: ReactNode }): JSX.Element {
   return (
     <>
       {hasLeft && (
-        // flex-1 gives the cluster the bar's free space, so a search told to be
-        // w-full can fill it; controls with their own width are unaffected.
-        <div className="flex min-w-0 max-w-full flex-1 flex-wrap items-center gap-3">
+        // grow, not flex-1: the cluster takes the bar's free space so a search
+        // told to be w-full can fill it, but keeps its content width as its
+        // basis, so a narrow bar still wraps the right cluster onto its own
+        // line instead of squeezing both onto one.
+        <div className="flex min-w-0 max-w-full grow flex-wrap items-center gap-3">
           {search}
           {search != null && filters != null && (
             <div className="bg-border h-6 w-px shrink-0" />

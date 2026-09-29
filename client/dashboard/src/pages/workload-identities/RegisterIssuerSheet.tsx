@@ -39,6 +39,16 @@ const EMPTY: RegisterIssuerValues = {
   tags: [],
 };
 
+// The column caps a name at 100 characters, as the server does.
+const MAX_NAME_LENGTH = 100;
+
+function nameProblem(name: string): string | null {
+  if (Array.from(name.trim()).length > MAX_NAME_LENGTH) {
+    return `At most ${MAX_NAME_LENGTH} characters.`;
+  }
+  return null;
+}
+
 // The column caps a description at 500 characters, as the server does.
 const MAX_DESCRIPTION_LENGTH = 500;
 
@@ -73,8 +83,15 @@ function httpsUrlProblem(raw: string, isIssuer: boolean): string | null {
   if (!host.includes(".") || /^[\d.]+$/.test(host)) {
     return "Must name a fully qualified domain, not an IP address or a single-label host.";
   }
-  if (isIssuer && (parsed.search !== "" || parsed.hash !== "")) {
-    return "An issuer identifier carries no query string or fragment.";
+  // The server refuses these for both URLs. The raw string is checked rather
+  // than the parsed fields, which report nothing for a bare "?" or "#".
+  if (parsed.username !== "" || parsed.password !== "") {
+    return "Must not carry a username or password.";
+  }
+  if (trimmed.includes("?") || trimmed.includes("#")) {
+    return isIssuer
+      ? "An issuer identifier carries no query string or fragment."
+      : "Must not carry a query string or fragment.";
   }
 
   return null;
@@ -110,8 +127,11 @@ export function RegisterIssuerSheet({
   const tagProblem = tagsProblem(values.tags);
   const descProblem = descriptionProblem(values.description);
 
+  const nameError = nameProblem(values.name);
+
   const canSubmit =
     values.name.trim().length > 0 &&
+    nameError === null &&
     values.issuer.trim().length > 0 &&
     values.jwksUri.trim().length > 0 &&
     issuerProblem === null &&
@@ -150,11 +170,26 @@ export function RegisterIssuerSheet({
                 id="workload-issuer-name"
                 value={values.name}
                 placeholder="New platform"
+                aria-invalid={nameError !== null}
+                aria-describedby={
+                  nameError !== null ? "workload-issuer-name-error" : undefined
+                }
                 onChange={(value) => setValues({ ...values, name: value })}
               />
-              <Text muted small>
-                How this issuer is labeled here. Not used for matching.
-              </Text>
+              {nameError !== null ? (
+                <Text
+                  id="workload-issuer-name-error"
+                  role="alert"
+                  small
+                  destructive
+                >
+                  {nameError}
+                </Text>
+              ) : (
+                <Text muted small>
+                  How this issuer is labeled here. Not used for matching.
+                </Text>
+              )}
             </Stack>
 
             <Stack gap={2}>

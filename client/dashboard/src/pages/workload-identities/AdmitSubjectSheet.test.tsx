@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { AdmitSubjectSheet } from "./AdmitSubjectSheet";
 import { canAdmit } from "./subjectRule";
 
@@ -23,25 +23,17 @@ function issuer(overrides: Partial<WorkloadIssuer> = {}): WorkloadIssuer {
   };
 }
 
-function renderSheet(workloadIssuer: WorkloadIssuer): {
-  onSubmit: ReturnType<typeof vi.fn>;
-} {
-  const onSubmit = vi.fn();
-
+function renderSheet(workloadIssuer: WorkloadIssuer): void {
   render(
     <AdmitSubjectSheet
       open
       onOpenChange={() => {}}
-      onSubmit={(values) => {
-        onSubmit(values);
-      }}
+      onSubmit={() => {}}
       isPending={false}
       issuer={workloadIssuer}
       agents={[{ id: "22222222-2222-2222-2222-222222222222", name: "poc" }]}
     />,
   );
-
-  return { onSubmit };
 }
 
 function subjectField(): HTMLElement {

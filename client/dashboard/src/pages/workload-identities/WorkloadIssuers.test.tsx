@@ -109,11 +109,16 @@ async function search(query: string, expected: string[]) {
   await waitFor(() => expect(visiblePlatforms()).toEqual(expected));
 }
 
-it("replaces the tag chips with a free-text search", () => {
+it("finds platforms by free-text search, with no per-tag filter controls", () => {
   renderPage();
 
-  // No per-tag buttons: a tag is found by typing it.
-  expect(screen.queryByRole("button", { name: "production" })).toBeNull();
+  // A tag appears only as a label on the cards that carry it: nothing outside
+  // a card offers it as a filter, so a tag is found by typing it.
+  const productionLabels = screen.getAllByText("production");
+  expect(productionLabels.length).toBeGreaterThan(0);
+  for (const label of productionLabels) {
+    expect(label.closest("a")).not.toBeNull();
+  }
   expect(visiblePlatforms()).toEqual(["build", "staging", "legacy"]);
 });
 

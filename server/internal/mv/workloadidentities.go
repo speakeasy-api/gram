@@ -30,17 +30,10 @@ func BuildWorkloadIssuerView(row repo.WorkloadIssuer) *types.WorkloadIssuer {
 		AllowWildcardAdmission: row.AllowWildcardAdmission,
 		// Empty rather than nil, so a client never has to distinguish "no tags"
 		// from "field absent".
-		Tags:      tagsOrEmpty(row.Tags),
+		Tags:      conv.DefaultSlice(row.Tags, []string{}),
 		CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt: row.UpdatedAt.Time.Format(time.RFC3339),
 	}
-}
-
-func tagsOrEmpty(tags []string) []string {
-	if tags == nil {
-		return []string{}
-	}
-	return tags
 }
 
 // BuildWorkloadIssuerListView renders the trusted issuers in list order.
@@ -90,7 +83,7 @@ func BuildWorkloadAdmissionView(row repo.ListWorkloadAdmissionsRow) *types.Workl
 		Subject:          row.Subject,
 		MatchKind:        row.MatchKind,
 		Name:             conv.PtrValOrEmpty(conv.FromPGText[string](row.Name), ""),
-		Tags:             tagsOrEmpty(row.Tags),
+		Tags:             conv.DefaultSlice(row.Tags, []string{}),
 		AgentID:          agentID,
 		AgentName:        conv.PtrValOrEmpty(conv.FromPGText[string](row.AgentName), ""),
 		WildcardActive:   wildcardActive,

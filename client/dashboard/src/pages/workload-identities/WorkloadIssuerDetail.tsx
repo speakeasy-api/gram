@@ -99,8 +99,13 @@ function IssuerDetail(): JSX.Element {
     () =>
       (agentsQuery.data ?? [])
         // A suspended or revoked agent contributes no policy, so a machine
-        // assigned to one authenticates and can reach nothing.
-        .filter((agent) => agent.lifecycle === "active")
+        // assigned to one authenticates and can reach nothing. An agent waiting
+        // for a new owner is refused everywhere else agents are picked, so it is
+        // refused here too.
+        .filter(
+          (agent) =>
+            agent.lifecycle === "active" && !agent.ownerReassignmentRequiredAt,
+        )
         .map((agent) => ({ id: agent.id, name: agent.name })),
     [agentsQuery.data],
   );
@@ -112,7 +117,7 @@ function IssuerDetail(): JSX.Element {
       : (agentsQuery.data ?? []).length === 0
         ? "Create an agent first: every machine acts under an agent's policy."
         : agents.length === 0
-          ? "Every agent is suspended or revoked. Reactivate one to allow a machine."
+          ? "Every agent is suspended, revoked or waiting for a new owner. Reactivate or reassign one to allow a machine."
           : null;
 
   const admitSubject = useAdmitWorkloadSubjectMutation({
@@ -273,6 +278,9 @@ function IssuerDetail(): JSX.Element {
           name: label.length > 0 ? label : undefined,
           tags: values.tags,
           agentId: values.agentId,
+          // The admission is written at the platform's own tier, which the
+          // server requires to match the issuer it names.
+          projectScoped: issuer !== undefined && issuer.projectId !== "",
         },
       },
     });
