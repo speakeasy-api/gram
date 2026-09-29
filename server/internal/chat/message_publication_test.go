@@ -60,6 +60,28 @@ func TestConversationPublicationIncludesEmptyMessages(t *testing.T) {
 	require.True(t, messages[0].HasBody())
 	require.Empty(t, messages[0].GetBody().GetParts())
 	require.Empty(t, meterMessages(t, ti))
+	require.False(t, messages[0].GetProvenance().HasBillingUserId())
+}
+
+func TestConversationPublicationSeparatesActorAndBillingUser(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "u", "", "identity publication")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	params := minimalChatMessageParams(chatID, ti.projectID)
+	params.UserID = conv.ToPGText("message-user")
+	params.ExternalUserID = conv.ToPGText("external-user")
+	_, err := writer.Write(ctx, ti.projectID, []chat.MessageWrite{{Params: params, BillingUserID: "billing-user", UserEmail: "actor@example.test"}})
+	require.NoError(t, err)
+	messages := conversationMessages(t, ti)
+	require.Len(t, messages, 1)
+	p := messages[0].GetProvenance()
+	require.Equal(t, "billing-user", p.GetBillingUserId())
+	require.Equal(t, "message-user", p.GetUserId())
+	require.Equal(t, "external-user", p.GetExternalUserId())
+	require.Equal(t, "actor@example.test", p.GetUserEmail())
 }
 
 func TestConversationPublicationSupportsWrappedToolCalls(t *testing.T) {
@@ -174,7 +196,7 @@ func TestConversationPublicationPreservesImportedPartsAndRawContent(t *testing.T
 	part.ContentAssetUrl = assetURL
 	part.Kind = "text"
 	part.CreatedAt = conv.ToPGTimestamptz(time.Now())
-	writes := []chat.ExternalMessageWrite{{Params: params}}
+	writes := []chat.ExternalMessageWrite{{Params: params, BillingUserID: "import-billing-user"}}
 	attached := map[uuid.UUID][]repo.CreateChatContentPartParams{params.ID: {part}}
 	_, err = writer.WriteExternalWithContentParts(ctx, ti.projectID, writes, attached)
 	require.NoError(t, err)
@@ -183,6 +205,7 @@ func TestConversationPublicationPreservesImportedPartsAndRawContent(t *testing.T
 	messages := conversationMessages(t, ti)
 	require.Len(t, messages, 1)
 	body := messages[0].GetBody()
+	require.Equal(t, "import-billing-user", messages[0].GetProvenance().GetBillingUserId())
 	require.JSONEq(t, string(params.ContentRaw), string(body.GetSourceContentJson()))
 	require.Len(t, body.GetParts(), 2)
 	require.Equal(t, params.Content, body.GetParts()[0].GetText())

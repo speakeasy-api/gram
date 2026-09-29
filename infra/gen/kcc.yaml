@@ -85,6 +85,7 @@ pubsub:
             string user_agent = 12;
             string user_email = 13;
             Account account = 14;
+            string billing_user_id = 15;
           }
           message Account {
             string user_account_id = 1;

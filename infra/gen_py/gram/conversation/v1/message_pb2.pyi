@@ -25,7 +25,7 @@ class Message(_message.Message):
     ROLE_ASSISTANT: Message.Role
     ROLE_TOOL: Message.Role
     class Provenance(_message.Message):
-        __slots__ = ("source", "external_message_id", "user_id", "external_user_id", "assistant_id", "provider", "model", "replayed", "adapter", "hook_source", "hostname", "user_agent", "user_email", "account")
+        __slots__ = ("source", "external_message_id", "user_id", "external_user_id", "assistant_id", "provider", "model", "replayed", "adapter", "hook_source", "hostname", "user_agent", "user_email", "account", "billing_user_id")
         SOURCE_FIELD_NUMBER: _ClassVar[int]
         EXTERNAL_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
         USER_ID_FIELD_NUMBER: _ClassVar[int]
@@ -40,6 +40,7 @@ class Message(_message.Message):
         USER_AGENT_FIELD_NUMBER: _ClassVar[int]
         USER_EMAIL_FIELD_NUMBER: _ClassVar[int]
         ACCOUNT_FIELD_NUMBER: _ClassVar[int]
+        BILLING_USER_ID_FIELD_NUMBER: _ClassVar[int]
         source: str
         external_message_id: str
         user_id: str
@@ -54,7 +55,8 @@ class Message(_message.Message):
         user_agent: str
         user_email: str
         account: Message.Account
-        def __init__(self, source: _Optional[str] = ..., external_message_id: _Optional[str] = ..., user_id: _Optional[str] = ..., external_user_id: _Optional[str] = ..., assistant_id: _Optional[str] = ..., provider: _Optional[str] = ..., model: _Optional[str] = ..., replayed: _Optional[bool] = ..., adapter: _Optional[str] = ..., hook_source: _Optional[str] = ..., hostname: _Optional[str] = ..., user_agent: _Optional[str] = ..., user_email: _Optional[str] = ..., account: _Optional[_Union[Message.Account, _Mapping]] = ...) -> None: ...
+        billing_user_id: str
+        def __init__(self, source: _Optional[str] = ..., external_message_id: _Optional[str] = ..., user_id: _Optional[str] = ..., external_user_id: _Optional[str] = ..., assistant_id: _Optional[str] = ..., provider: _Optional[str] = ..., model: _Optional[str] = ..., replayed: _Optional[bool] = ..., adapter: _Optional[str] = ..., hook_source: _Optional[str] = ..., hostname: _Optional[str] = ..., user_agent: _Optional[str] = ..., user_email: _Optional[str] = ..., account: _Optional[_Union[Message.Account, _Mapping]] = ..., billing_user_id: _Optional[str] = ...) -> None: ...
     class Account(_message.Message):
         __slots__ = ("user_account_id", "account_type", "billing_mode")
         USER_ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
