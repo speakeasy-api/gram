@@ -225,19 +225,19 @@ function OrgLogsInner({
               <Stack direction="horizontal" align="center" gap={2}>
                 <Unplug className="text-muted-foreground h-4 w-4" />
                 <Text variant="body" className="font-medium">
-                  Fail Open During Outages
+                  Fail Open on Connection Failures and Timeouts
                 </Text>
               </Stack>
               <Text
                 variant="body"
                 className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
               >
-                Let tool calls proceed while Speakeasy is unreachable, instead
-                of blocking them. Enabled by default for new organizations. Tool
-                calls then only ever block when a blocking policy fires — with
-                no blocking policies, nothing blocks (formerly Observability
-                Mode). Events are still recorded and scanned after recovery.
-                Invalid credentials always block.
+                Let tool calls proceed when hooks cannot get a response from
+                Speakeasy because of a service outage, an unreliable or slow
+                network, or a request timeout. Enabled by default for new
+                organizations. Events are still recorded and scanned after
+                recovery. Explicit policy denials and invalid credentials still
+                block tool calls.
               </Text>
             </Stack>
             {featuresData && (
@@ -246,7 +246,7 @@ function OrgLogsInner({
                   checked={effectiveHooksFailOpenEnabled}
                   onCheckedChange={handleSetHooksFailOpen}
                   disabled={isMutatingLogs}
-                  aria-label="Fail open during outages"
+                  aria-label="Fail open on connection failures and timeouts"
                 />
               </RequireScope>
             )}
