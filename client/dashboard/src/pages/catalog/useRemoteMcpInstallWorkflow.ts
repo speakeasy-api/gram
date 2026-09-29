@@ -165,6 +165,17 @@ export interface ConfigurePhase extends WorkflowBase {
   continueToGuardrails?: (options?: { configureSkipped?: boolean }) => void;
 }
 
+/** What the Guardrails step shows about one server it would protect. */
+export interface GuardrailServerSummary {
+  key: string;
+  name: string;
+  registrySpecifier: string;
+  iconUrl?: string;
+  toolCount: number;
+  destructiveTools: string[];
+  oauth: boolean;
+}
+
 export interface GuardrailsPhase extends WorkflowBase {
   phase: "guardrails";
   /** The guardrail being drafted, pre-filled from the servers' tool annotations. */
@@ -172,8 +183,9 @@ export interface GuardrailsPhase extends WorkflowBase {
   updateGuardrail: (
     update: (state: ServerGuardrailState) => ServerGuardrailState,
   ) => void;
-  /** Servers the guardrail will cover, by display name. */
-  serverNames: string[];
+  /** The servers the guardrail will cover. Unproxied servers are left out:
+   *  their traffic never passes through Gram. */
+  servers: GuardrailServerSummary[];
   /** Install and create the guardrail, scoped to every server that installs. */
   installWithGuardrail: () => Promise<void>;
   /** Install without a guardrail. */
@@ -1078,7 +1090,9 @@ export function useRemoteMcpInstallWorkflow({
         guardrail: guardrail ?? catalogPresetState([]),
         updateGuardrail: (update) =>
           setGuardrail((prev) => update(prev ?? catalogPresetState([]))),
-        serverNames: serverConfigs.map((config) => config.name),
+        servers: serverConfigs
+          .filter((config) => !isFigmaCatalogServer(config.server))
+          .map(guardrailServerSummary),
         installWithGuardrail: () =>
           startInstall({ guardrail: guardrail ?? catalogPresetState([]) }),
         skip: () => startInstall(),
@@ -1090,6 +1104,21 @@ export function useRemoteMcpInstallWorkflow({
     case "complete":
       return { phase, statuses, guardrail: guardrailOutcome, ...base };
   }
+}
+
+function guardrailServerSummary(config: ServerConfig): GuardrailServerSummary {
+  const tools = serverToolsForPreset(config.server);
+  return {
+    key: config.server.registrySpecifier,
+    name: config.name,
+    registrySpecifier: config.server.registrySpecifier,
+    ...(config.server.iconUrl ? { iconUrl: config.server.iconUrl } : {}),
+    toolCount: tools.length || config.server.toolCount,
+    destructiveTools: tools
+      .filter((tool) => tool.destructive)
+      .map((tool) => tool.name),
+    oauth: config.server.supportsDcr,
+  };
 }
 
 /** The annotated tools of a catalog server, for pre-filling its guardrail.

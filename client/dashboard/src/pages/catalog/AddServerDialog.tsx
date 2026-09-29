@@ -460,7 +460,9 @@ function dialogTitle(
     case "complete":
       return "Added to Project";
     case "guardrails":
-      return "Add guardrails";
+      return releaseState.servers.length === 1
+        ? `Guardrails for ${releaseState.servers[0]!.name}`
+        : `Guardrails for ${releaseState.servers.length} servers`;
     case "installing":
       return "Adding to Project";
     case "selectRemotes": {
@@ -487,7 +489,9 @@ function phaseDescription(
         ? "Add this MCP server to your project."
         : "Configure and add these MCP servers to your project.";
     case "guardrails":
-      return "Protect these servers before they take traffic.";
+      return isSingle
+        ? "Protect this server before it takes traffic. Suggested from the catalog's tool annotations."
+        : "Protect these servers before they take traffic. Suggested from the catalog's tool annotations.";
     case "installing":
       return "Creating MCP servers...";
     case "complete":

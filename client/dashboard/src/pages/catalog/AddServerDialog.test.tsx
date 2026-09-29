@@ -187,30 +187,70 @@ describe("AddServerDialog guardrails", () => {
     expect(mocks.startInstall).not.toHaveBeenCalled();
   });
 
-  it("offers to skip the guardrail or install with it", async () => {
-    mocks.workflow.mockReturnValue({
+  function guardrailsPhase(tools: { name: string; destructive: boolean }[]) {
+    return {
       phase: "guardrails",
       projectSlug: "default",
-      guardrail: catalogPresetState([
-        { name: "delete_issue", destructive: true },
-      ]),
+      guardrail: catalogPresetState(tools),
       updateGuardrail: vi.fn(),
-      serverNames: ["Test Server"],
+      servers: [
+        {
+          key: "test/server",
+          name: "Test Server",
+          registrySpecifier: "test/server",
+          toolCount: tools.length,
+          destructiveTools: tools
+            .filter((t) => t.destructive)
+            .map((t) => t.name),
+          oauth: true,
+        },
+      ],
       installWithGuardrail: mocks.installWithGuardrail,
       skip: mocks.skip,
       goBack: vi.fn(),
       isServerAlreadyInstalled: () => false,
       reset: mocks.reset,
-    });
+    };
+  }
+
+  it("summarizes the recommended guardrail and installs with it", async () => {
+    mocks.workflow.mockReturnValue(
+      guardrailsPhase([
+        { name: "create_issue", destructive: false },
+        { name: "delete_issue", destructive: true },
+      ]),
+    );
     renderDialog();
 
+    expect(await screen.findByText("Guardrails for Test Server")).toBeDefined();
+    expect(screen.getByText("2 tools · 1 destructive · OAuth")).toBeDefined();
     expect(
-      await screen.findByText("Create a risk policy for Test Server"),
+      screen.getByText("Create a risk policy for this server"),
     ).toBeDefined();
+    expect(screen.getByText("delete_issue")).toBeDefined();
+    expect(
+      screen.getByText(/Destructive tool detection supports logging only/),
+    ).toBeDefined();
+
     fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
-    expect(mocks.skip).toHaveBeenCalled();
+    expect(mocks.skip).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Add to Project" }));
-    expect(mocks.installWithGuardrail).toHaveBeenCalled();
+    expect(mocks.installWithGuardrail).toHaveBeenCalledTimes(1);
+  });
+
+  it("warns by default and installs without a policy when switched off", async () => {
+    mocks.workflow.mockReturnValue(
+      guardrailsPhase([{ name: "search", destructive: false }]),
+    );
+    renderDialog();
+
+    expect(await screen.findByText("Warn & confirm · Severity")).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Create a risk policy" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add to Project" }));
+    expect(mocks.skip).toHaveBeenCalledTimes(1);
+    expect(mocks.installWithGuardrail).not.toHaveBeenCalled();
   });
 
   it("says plainly when the guardrail could not be created", () => {

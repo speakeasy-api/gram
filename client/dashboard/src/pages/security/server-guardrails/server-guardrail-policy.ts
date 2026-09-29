@@ -61,15 +61,21 @@ export function effectiveAction(state: ServerGuardrailState): PolicyAction {
   return hasFlagOnlyCategory(state.categories) ? "flag" : state.action;
 }
 
-/** Pre-fills a catalog install from the tools' annotations: destructive tools
- *  are inspected, and secrets and PII are logged. The destructive detector only
- *  logs, so the whole preset does. */
+/** Pre-fills a catalog install from the tools' annotations: secrets and PII
+ *  warn and ask for confirmation, and destructive tools are inspected when the
+ *  server has any. The destructive detector only supports logging, so a preset
+ *  that includes it logs. */
 export function catalogPresetState(tools: ServerTool[]): ServerGuardrailState {
   const categories = new Set<RuleCategory>(["secrets", "pii"]);
-  if (tools.some((tool) => tool.destructive)) {
+  const destructive = tools.some((tool) => tool.destructive);
+  if (destructive) {
     categories.add("destructive_tool");
   }
-  return { ...defaultServerGuardrailState(), categories };
+  return {
+    ...defaultServerGuardrailState(),
+    categories,
+    action: destructive ? "flag" : "warn",
+  };
 }
 
 export function destructiveToolNames(tools: ServerTool[]): string[] {

@@ -30,9 +30,10 @@ describe("catalogPresetState", () => {
     ]);
   });
 
-  it("omits the destructive detector when no tool is destructive", () => {
+  it("warns on secrets and PII when no tool is destructive", () => {
     const state = catalogPresetState([{ name: "read", destructive: false }]);
     expect(state.categories.has("destructive_tool")).toBe(false);
+    expect(effectiveAction(state)).toBe("warn");
   });
 });
 
