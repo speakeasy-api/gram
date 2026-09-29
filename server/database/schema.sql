@@ -6766,6 +6766,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_meta_mcp_server_id_ke
 CREATE INDEX IF NOT EXISTS plugin_servers_meta_mcp_server_id_idx
   ON plugin_servers (meta_mcp_server_id);
 
+-- Every other mcp_server_id index leads with plugin_id, so lookups keyed on
+-- the backend alone (inventory reads, the RESTRICT FK check) scan the table.
+-- Left unpartitioned on purpose: the FK check must see soft-deleted rows too.
+CREATE INDEX IF NOT EXISTS plugin_servers_mcp_server_id_idx
+  ON plugin_servers (mcp_server_id);
+
 -- Controls who receives a plugin. Reuses the RBAC principal URN pattern
 -- (role:slug, user:id, or * for all org members).
 CREATE TABLE IF NOT EXISTS plugin_assignments (
