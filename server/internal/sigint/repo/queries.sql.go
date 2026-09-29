@@ -715,6 +715,64 @@ func (q *Queries) ListSignals(ctx context.Context, arg ListSignalsParams) ([]Sig
 	return items, nil
 }
 
+const loadEvaluationSensors = `-- name: LoadEvaluationSensors :many
+SELECT sensor.id AS sensor_id, sensor.mode, sensor.instructions,
+       signal.id AS signal_id, signal.classifier_criteria
+FROM sigint_sensors AS sensor
+JOIN projects AS project ON project.id = sensor.project_id
+JOIN sigint_sensor_signals AS member
+  ON member.project_id = sensor.project_id AND member.sensor_id = sensor.id
+JOIN sigint_custom_signals AS signal
+  ON signal.project_id = member.project_id AND signal.id = member.signal_id
+WHERE sensor.project_id = $1
+  AND project.organization_id = $2
+  AND project.deleted IS FALSE
+  AND sensor.deleted IS FALSE
+  AND member.deleted IS FALSE
+  AND signal.deleted IS FALSE
+ORDER BY sensor.id, member.sort_order, member.id
+`
+
+type LoadEvaluationSensorsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type LoadEvaluationSensorsRow struct {
+	SensorID           uuid.UUID
+	Mode               string
+	Instructions       pgtype.Text
+	SignalID           uuid.UUID
+	ClassifierCriteria pgtype.Text
+}
+
+// One statement captures all active definitions and membership order consistently.
+func (q *Queries) LoadEvaluationSensors(ctx context.Context, arg LoadEvaluationSensorsParams) ([]LoadEvaluationSensorsRow, error) {
+	rows, err := q.db.Query(ctx, loadEvaluationSensors, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LoadEvaluationSensorsRow
+	for rows.Next() {
+		var i LoadEvaluationSensorsRow
+		if err := rows.Scan(
+			&i.SensorID,
+			&i.Mode,
+			&i.Instructions,
+			&i.SignalID,
+			&i.ClassifierCriteria,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockSigintProject = `-- name: LockSigintProject :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1::text, 1397313108))
 `
