@@ -38,6 +38,14 @@ import {
 // at 40 (see schema.sql / MCP_SERVER_NAME_MAX_LENGTH on the legacy page).
 const NAME_MAX_LENGTH = 40;
 
+// Iterating a string walks code points, which is what Postgres char_length
+// counts; .length would count UTF-16 units and flag emoji early.
+function codePointLength(value: string): number {
+  let count = 0;
+  for (const _ of value) count++;
+  return count;
+}
+
 /**
  * The server's basic facts: its icon and name, plus the remote URL when a
  * remote source backs it. One Save commits whatever changed.
@@ -126,7 +134,7 @@ function GeneralSectionContent({
   const trimmedDraft = nameDraft.trim();
   // Code points, not UTF-16 units: the column's check uses char_length, so an
   // emoji counts once here as it does in Postgres.
-  const nameTooLong = [...trimmedDraft].length > NAME_MAX_LENGTH;
+  const nameTooLong = codePointLength(trimmedDraft) > NAME_MAX_LENGTH;
   const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
   const upstreamDirty = !!upstream?.dirty;
   const dirty = nameDirty || metadataForm.brandingDirty || upstreamDirty;
