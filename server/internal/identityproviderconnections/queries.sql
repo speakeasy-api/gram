@@ -98,7 +98,7 @@ WHERE c.organization_id = @organization_id
   AND c.project_id IS NULL
   AND c.identity_provider_connection_id = @identity_provider_connection_id
   AND c.deleted IS FALSE
-  AND (c.json_web_key_set_id IS NULL OR s.id IS NOT NULL);
+  AND (s.id IS NOT NULL OR (c.json_web_key_set_id IS NULL AND c.token_endpoint_auth_method = 'client_secret_basic'));
 
 -- While pending, updated_at records observed publication (there is no published_at column).
 -- A pending key is not timed until its publication commit has been observed.
@@ -369,3 +369,12 @@ WHERE identity_provider_connection_id = @identity_provider_connection_id
   AND organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- TEST FIXTURE ONLY. Plants an auth method on a managed client without its
+-- matching credential material, which no production path produces.
+-- name: ForceManagedClientAuthMethodFixture :execrows
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = @token_endpoint_auth_method
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL;

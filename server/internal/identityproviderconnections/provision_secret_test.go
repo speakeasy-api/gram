@@ -116,6 +116,23 @@ func TestProvisionClient_SecretClientHasNoKeyMaterial(t *testing.T) {
 	require.Equal(t, fx.client, loaded)
 }
 
+func TestGetManagedClient_PrivateKeyJWTWithoutKeySetIsNotProvisioned(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestDB(t)
+	fx := provisionSecretClient(t, ctx, ti)
+
+	n, err := repo.New(ti.conn).ForceManagedClientAuthMethodFixture(ctx, repo.ForceManagedClientAuthMethodFixtureParams{
+		TokenEndpointAuthMethod: conv.ToPGText(string(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT)),
+		ID:                      fx.client.ClientRowID,
+		OrganizationID:          conv.ToPGText(ti.orgID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+
+	_, err = fx.provisioner.GetManagedClient(ctx, ti.orgID, fx.connectionID)
+	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned)
+}
+
 func TestProvisionClient_SecretClientIsIdempotent(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestDB(t)

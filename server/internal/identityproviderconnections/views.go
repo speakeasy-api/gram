@@ -22,10 +22,11 @@ func (r connectionRows) clientIDSubmitted() bool {
 	return r.Managed != nil && r.Managed.ClientID != PlaceholderClientID(r.Connection.Provider, r.Connection.ID)
 }
 
-// authMethod is the managed client's authentication; empty before provisioning.
+// authMethod is the managed client's authentication, or the listing mode's
+// before provisioning and after revocation.
 func (r connectionRows) authMethod() remotesessions.TokenEndpointAuthMethod {
-	if r.Managed == nil {
-		return ""
+	if r.Managed == nil || r.Managed.AuthMethod == "" {
+		return listingAuthMethod(r.Okta.ListingMode)
 	}
 	return r.Managed.AuthMethod
 }

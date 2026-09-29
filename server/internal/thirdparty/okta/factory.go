@@ -125,8 +125,7 @@ func (f *FakeFactory) Client(cfg Config) (Client, error) {
 	if !ok {
 		return nil, fmt.Errorf("okta: no fake fixtures for org url %q", cfg.OrgURL)
 	}
-	fake.useConfig(cfg)
-	return fake, nil
+	return &configuredFake{fake: fake, cfg: cfg}, nil
 }
 
 func (f *FakeFactory) Forget(uuid.UUID) {}

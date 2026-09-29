@@ -780,7 +780,7 @@ func (s *stubOkta) resource(next http.HandlerFunc) http.HandlerFunc {
 		s.mu.Unlock()
 		// RFC 6750 §2.1: an unbound token authorizes on its own, with no proof.
 		if scheme == oauthwire.TokenTypeBearer && bearer && len(r.Header.Values("DPoP")) == 0 {
-			next(w, r)
+			s.rateLimited(w, r, next)
 			return
 		}
 		// RFC 9449 §4.3 step 1: exactly one DPoP header field, checked before the token lookup.
@@ -821,22 +821,30 @@ func (s *stubOkta) resource(next http.HandlerFunc) http.HandlerFunc {
 			s.issuedNonces[s.emitResourceNonce] = true
 			w.Header().Set("DPoP-Nonce", s.emitResourceNonce)
 		}
-		if s.rateLimitLimit > 0 {
-			w.Header().Set("X-Rate-Limit-Limit", strconv.Itoa(s.rateLimitLimit))
-			w.Header().Set("X-Rate-Limit-Remaining", strconv.Itoa(s.rateLimitRemaining))
-			w.Header().Set("X-Rate-Limit-Reset", strconv.FormatInt(s.rateLimitReset, 10))
-		}
-		throttle := s.pending429 > 0
-		if throttle {
-			s.pending429--
-		}
 		s.mu.Unlock()
-		if throttle {
-			s.writeJSON(w, http.StatusTooManyRequests, map[string]string{"errorCode": "E0000047", "errorSummary": "API call exceeded rate limit due to too many requests."})
-			return
-		}
-		next(w, r)
+		s.rateLimited(w, r, next)
 	}
+}
+
+// rateLimited applies the rate-limit headers and queued 429s to every
+// authorized resource request, whatever its token scheme.
+func (s *stubOkta) rateLimited(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	s.mu.Lock()
+	if s.rateLimitLimit > 0 {
+		w.Header().Set("X-Rate-Limit-Limit", strconv.Itoa(s.rateLimitLimit))
+		w.Header().Set("X-Rate-Limit-Remaining", strconv.Itoa(s.rateLimitRemaining))
+		w.Header().Set("X-Rate-Limit-Reset", strconv.FormatInt(s.rateLimitReset, 10))
+	}
+	throttle := s.pending429 > 0
+	if throttle {
+		s.pending429--
+	}
+	s.mu.Unlock()
+	if throttle {
+		s.writeJSON(w, http.StatusTooManyRequests, map[string]string{"errorCode": "E0000047", "errorSummary": "API call exceeded rate limit due to too many requests."})
+		return
+	}
+	next(w, r)
 }
 
 func (s *stubOkta) handleOverride(w http.ResponseWriter, r *http.Request) {
