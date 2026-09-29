@@ -113,6 +113,7 @@ func TestParseRejectsMistakes(t *testing.T) {
 		"bad os":                          {edit: "linux: verify", want: "not supported or verify"},
 		"email in a note":                 {edit: "note: via hooks", want: "must not contain an email address or an id"},
 		"bad slug":                        {edit: "  - id: hooks\n", want: "must be lower-case words joined by dashes"},
+		"second document":                 {edit: "\n---\ncapabilities: []\n", want: "one document"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -146,6 +147,8 @@ func TestParseRejectsMistakes(t *testing.T) {
 				doc = strings.Replace(doc, tc.edit, "note: ask someone@example.com", 1)
 			case "bad slug":
 				doc = strings.Replace(doc, tc.edit, "  - id: Hooks_v2\n", 1)
+			case "second document":
+				doc += tc.edit
 			}
 			require.NotEqual(t, tiny, doc, "the edit must change the document")
 			_, err := Parse([]byte(doc))

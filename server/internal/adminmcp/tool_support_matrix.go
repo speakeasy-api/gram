@@ -138,7 +138,7 @@ func registerSupportMatrixTools(server *mcp.Server, reader SupportMatrixReader) 
 				}
 				cells, valid := projectSupportMatrixFacts(support.Cells)
 				factCount += len(cells)
-				if !valid || factCount > maxSupportMatrixFacts {
+				if !valid || factCount > maxSupportMatrixFacts || len(output.Mappings) >= maxSupportMatrixFacts {
 					return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
 				}
 				output.Mappings = append(output.Mappings, SupportMatrixMapping{

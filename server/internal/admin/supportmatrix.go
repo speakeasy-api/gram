@@ -44,14 +44,16 @@ func SeedSupportMatrix(ctx context.Context, db *pgxpool.Pool) error {
 	return nil
 }
 
+// seedEntry carries every field the seed queries read; an empty string stays
+// a string, since the columns it lands in are not nullable.
 type seedEntry struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
-	Vendor  string `json:"vendor,omitempty"`
-	Family  string `json:"family,omitempty"`
-	Surface string `json:"surface,omitempty"`
-	Plans   string `json:"plans,omitempty"`
-	Group   string `json:"group,omitempty"`
+	Vendor  string `json:"vendor"`
+	Family  string `json:"family"`
+	Surface string `json:"surface"`
+	Plans   string `json:"plans"`
+	Group   string `json:"group"`
 }
 
 // seedCatalog is the shape the seed queries read: the axes, in matrix order.

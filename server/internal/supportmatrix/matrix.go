@@ -10,7 +10,9 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"sync"
@@ -276,6 +278,11 @@ func Parse(data []byte) (*Matrix, error) {
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&matrix); err != nil {
 		return nil, fmt.Errorf("decode support matrix: %w", err)
+	}
+	// The revision hashes the whole file, so the whole file must be the
+	// matrix: a second document would change the hash and nothing else.
+	if err := decoder.Decode(new(yaml.Node)); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("decode support matrix: the file must hold one document")
 	}
 	if err := matrix.validate(); err != nil {
 		return nil, fmt.Errorf("invalid support matrix: %w", err)

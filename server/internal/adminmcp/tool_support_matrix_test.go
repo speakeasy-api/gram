@@ -79,8 +79,6 @@ func supportMatrixFixture() *gen.SupportMatrix {
 }
 
 //go:fix inline
-func ptr(s string) *string { return new(s) }
-
 func supportMatrixFacts(count int) map[string]*gen.SupportFact {
 	facts := make(map[string]*gen.SupportFact, count)
 	for index := range count {
@@ -195,6 +193,21 @@ func TestGetSupportMatrixFailsClosed(t *testing.T) {
 		{name: "oversized platforms on a method", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
 			matrix := supportMatrixFixture()
 			matrix.Methods[0].Platforms = oversizedPlatforms
+			return matrix
+		}()}},
+		{name: "too many mappings", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
+			matrix := supportMatrixFixture()
+			accounts := &gen.SupportAccounts{Personal: "supported", Team: "supported", Enterprise: "supported"}
+			// Eleven methods on two hundred platforms each: every entry is within
+			// bounds on its own, the mapping count is not.
+			matrix.Methods = nil
+			for method := range 11 {
+				platforms := make([]*gen.SupportPlatformSupport, 0, maxSupportMatrixEntries)
+				for platform := range maxSupportMatrixEntries {
+					platforms = append(platforms, &gen.SupportPlatformSupport{Platform: "product-" + strconv.Itoa(platform), Applicability: "na", Accounts: accounts, Cells: map[string]*gen.SupportFact{}})
+				}
+				matrix.Methods = append(matrix.Methods, &gen.SupportMethod{ID: "method-" + strconv.Itoa(method), Name: "Method", Vendor: "Vendor", Claims: map[string]*gen.SupportFact{}, Platforms: platforms})
+			}
 			return matrix
 		}()}},
 		{name: "too many total facts", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
