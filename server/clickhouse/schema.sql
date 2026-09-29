@@ -1,3 +1,98 @@
+-- Generic tenant metrics. Duplicate deliveries contribute again across batches.
+-- Infrastructure provisions the database and application principal before DDL.
+-- No marts grants: these tables have no customer-facing reporting view.
+CREATE TABLE product_metric_contributions (
+    organization_id String,
+    project_id UUID,
+    metric_name String,
+    scope_name String,
+    scope_version String,
+    unit String,
+    instrument LowCardinality(String),
+    description String,
+    number_kind LowCardinality(String),
+    resource_attributes Array(Tuple(key String, type String, value String)),
+    scope_attributes Array(Tuple(key String, type String, value String)),
+    point_attributes Array(Tuple(key String, type String, value String)),
+    contribution_id String,
+    event_time DateTime64(9, 'UTC'),
+    observed_at DateTime64(9, 'UTC'),
+    ingested_at DateTime64(9, 'UTC') DEFAULT now64(9),
+    integer_value Int64,
+    floating_value Float64
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(ingested_at)
+ORDER BY (organization_id, project_id, metric_name, event_time)
+TTL toDateTime(ingested_at) + INTERVAL 7 DAY
+COMMENT 'Append-oriented generic measurements retained seven days from ingestion for diagnostics and bounded rebuilds. No exactly-once guarantee';
+
+CREATE TABLE product_metric_sums_1m (
+    organization_id String,
+    project_id UUID,
+    metric_name String,
+    bucket DateTime('UTC'),
+    scope_name String,
+    scope_version String,
+    unit String,
+    number_kind LowCardinality(String),
+    resource_attributes Array(Tuple(key String, type String, value String)),
+    scope_attributes Array(Tuple(key String, type String, value String)),
+    point_attributes Array(Tuple(key String, type String, value String)),
+    integer_sum SimpleAggregateFunction(sum, Int128),
+    floating_sum SimpleAggregateFunction(sum, Float64),
+    contributions SimpleAggregateFunction(sum, UInt64)
+) ENGINE = AggregatingMergeTree
+PARTITION BY toYYYYMM(bucket)
+ORDER BY (organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit, number_kind, resource_attributes, scope_attributes, point_attributes)
+TTL bucket + INTERVAL 90 DAY
+COMMENT 'Monotonic delta sums over half-open UTC minute windows. Explicit sum reads are correct before merges. Late arrivals update retained buckets and current windows are partial';
+
+CREATE TABLE product_metric_histograms_1m (
+    organization_id String,
+    project_id UUID,
+    metric_name String,
+    bucket DateTime('UTC'),
+    scope_name String,
+    scope_version String,
+    unit String,
+    number_kind LowCardinality(String),
+    resource_attributes Array(Tuple(key String, type String, value String)),
+    scope_attributes Array(Tuple(key String, type String, value String)),
+    point_attributes Array(Tuple(key String, type String, value String)),
+    integer_sum SimpleAggregateFunction(sum, Int128),
+    floating_sum SimpleAggregateFunction(sum, Float64),
+    contributions SimpleAggregateFunction(sum, UInt64),
+    integer_min SimpleAggregateFunction(min, Int64),
+    integer_max SimpleAggregateFunction(max, Int64),
+    floating_min SimpleAggregateFunction(min, Float64),
+    floating_max SimpleAggregateFunction(max, Float64)
+) ENGINE = AggregatingMergeTree
+PARTITION BY toYYYYMM(bucket)
+ORDER BY (organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit, number_kind, resource_attributes, scope_attributes, point_attributes)
+TTL bucket + INTERVAL 90 DAY
+COMMENT 'Delivery-weighted histogram observations without buckets or quantiles. Mean is total sum divided by total count. No automatic zeros for missing minutes';
+
+CREATE MATERIALIZED VIEW product_metric_sums_1m_mv TO product_metric_sums_1m AS
+SELECT organization_id, project_id, metric_name, toStartOfMinute(event_time) AS bucket,
+    scope_name, scope_version, unit, number_kind, resource_attributes, scope_attributes, point_attributes,
+    sum(toInt128(integer_value)) AS integer_sum, sum(floating_value) AS floating_sum,
+    count() AS contributions
+FROM product_metric_contributions
+WHERE instrument = 'counter'
+GROUP BY organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit,
+    number_kind, resource_attributes, scope_attributes, point_attributes;
+
+CREATE MATERIALIZED VIEW product_metric_histograms_1m_mv TO product_metric_histograms_1m AS
+SELECT organization_id, project_id, metric_name, toStartOfMinute(event_time) AS bucket,
+    scope_name, scope_version, unit, number_kind, resource_attributes, scope_attributes, point_attributes,
+    sum(toInt128(integer_value)) AS integer_sum, sum(floating_value) AS floating_sum,
+    count() AS contributions, min(integer_value) AS integer_min, max(integer_value) AS integer_max,
+    min(floating_value) AS floating_min, max(floating_value) AS floating_max
+FROM product_metric_contributions
+WHERE instrument = 'histogram'
+GROUP BY organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit,
+    number_kind, resource_attributes, scope_attributes, point_attributes;
+
 CREATE TABLE IF NOT EXISTS telemetry_logs (
     -- OTel Log Record Identity
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.',
