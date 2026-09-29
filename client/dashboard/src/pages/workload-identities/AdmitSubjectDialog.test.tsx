@@ -46,9 +46,8 @@ function subjectField(): HTMLElement {
   return screen.getByLabelText("Subject");
 }
 
-// The message bound to the subject field, as opposed to the wildcard caution —
-// the shared Alert renders role="alert" too, so the role alone no longer tells
-// them apart.
+// The message bound to the subject field. The wildcard caution's Alert also
+// renders role="alert", so the role alone cannot tell them apart.
 function subjectWarning(): HTMLElement | null {
   return document.getElementById("admit-subject-warning");
 }
@@ -60,9 +59,8 @@ function admitButton(): HTMLButtonElement {
 }
 
 it("reads a terminated subject as a wildcard, with no separate control", () => {
-  // There is no Match selector: the terminator states the breadth, so a rule
-  // written with one is simply a wildcard rule. The value is kept literally,
-  // which is what gets stored.
+  // The terminator states the breadth, and the value is kept literally because
+  // that is what gets stored.
   renderDialog([issuer({ allowWildcardAdmission: true })]);
 
   fireEvent.change(subjectField(), {
@@ -78,11 +76,7 @@ it("reads a terminated subject as a wildcard, with no separate control", () => {
   expect(screen.queryByLabelText("Match")).toBeNull();
 });
 
-it("still warns about a literal star where the issuer forbids wildcards", () => {
-  // The switch above is only available when the issuer permits wildcards. Where
-  // it does not there is nothing to switch to, so the rule really would be an
-  // exact subject containing a star — which matches nothing — and the warning has
-  // to stand.
+it("refuses a wildcard rule where the issuer forbids wildcards", () => {
   const { onSubmit } = renderDialog([
     issuer({ allowWildcardAdmission: false }),
   ]);
@@ -114,8 +108,8 @@ it("blocks the submit on the warning alone, with everything else filled in", () 
   expect(canAdmit(complete)).toBe(true);
   expect(canAdmit({ ...complete, warning: "would admit nothing" })).toBe(false);
   // Both guard stale dialog state rather than anything the user can see: an
-  // issuer withdrawn elsewhere, or a wildcard left selected under an issuer that
-  // forbids it. Either would submit a request the server must reject.
+  // issuer withdrawn elsewhere, or a wildcard rule kept after switching to an
+  // issuer that forbids it. Either would submit a request the server must reject.
   expect(canAdmit({ ...complete, issuerExists: false })).toBe(false);
   expect(canAdmit({ ...complete, matchKindPermitted: false })).toBe(false);
 });
@@ -152,22 +146,17 @@ it("marks it invalid for a malformed wildcard too", () => {
 });
 
 it("says nothing about wildcards until the subject asks for one", () => {
-  // The old dialog announced the issuer's wildcard permission up front, beside a
-  // Match control. With no control and no terminator typed there is nothing to
-  // report, and a standing notice would be noise.
+  // With no terminator typed there is nothing to report, and a standing notice
+  // would be noise.
   renderDialog([issuer({ allowWildcardAdmission: false })]);
 
   expect(screen.queryByText(/does not permit wildcard matching/)).toBeNull();
 });
 
 it("names the subjects a wildcard rule would admit", () => {
-  // The caution replaces the setup-time switch on the issuer. It has to be
-  // concrete to be worth reading, so it names the stem rather than warning in
-  // the abstract.
+  // The caution names the stem rather than warning in the abstract.
   renderDialog([issuer({ allowWildcardAdmission: true })]);
 
-  // Pasting a terminated rule is what switches the match kind — the Match control
-  // is a Radix Select, so there is no native change event to fire at it.
   fireEvent.change(subjectField(), {
     target: { value: "wimse://identity.example.com/org/acme/agent/*" },
   });

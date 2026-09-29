@@ -55,8 +55,6 @@ it("warns when the stem ends in whitespace before its star", () => {
 });
 
 it("reads the match kind off the subject", () => {
-  // No control states this: the terminator is how a rule states its own breadth,
-  // so a separate selector could only disagree with the value.
   expect(inferMatchKind(`${STEM}a-1`)).toBe("exact");
   expect(inferMatchKind(`${STEM}*`)).toBe("wildcard");
   expect(inferMatchKind("")).toBe("exact");
