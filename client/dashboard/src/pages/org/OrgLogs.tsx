@@ -232,12 +232,9 @@ function OrgLogsInner({
                 variant="body"
                 className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
               >
-                Let tool calls proceed when hooks cannot get a response from
-                Speakeasy because of a service outage, an unreliable or slow
-                network, or a request timeout. Enabled by default for new
-                organizations. Events are still recorded and scanned after
-                recovery. Explicit policy denials and invalid credentials still
-                block tool calls.
+                Let hooks proceed through outages, slow or unreliable networks,
+                and timeouts. Explicit policy denials and invalid credentials
+                still block.
               </Text>
             </Stack>
             {featuresData && (
