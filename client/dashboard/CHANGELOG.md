@@ -1,5 +1,25 @@
 # dashboard
 
+## 0.128.0
+
+### Minor Changes
+
+- ecf54b8: Choose when a Slack assistant replies: only when @-mentioned, when @-mentioned and then for the rest of that thread, or to any message in its channels. Slack setup asks this in plain terms, and it can be changed later from the chat or the trigger settings. An assistant following a thread can step out once it is no longer needed, and an @-mention brings it back caught up on what it missed. It never replies to its own messages, and when it starts a new thread it can keep the replies in its current conversation.
+- 7181521: A grant made directly to a person for a specific resource now outranks a block they inherit from a role or from everyone. Administrators can block an MCP server for a role, including a directory-synced one, and still give individual members of that role access to it by name without changing role membership. A person's own blocks still apply, grants covering every resource do not outrank blocks, and agent grants never outrank blocks. The rule applies to every blockable permission (the organization, projects, MCP servers, environments, skills, plugins, and workloads). `access.listGrants` now reports each scope's `direct_selectors`, and the MCP server access page shows who keeps access through their own rules before a role or everyone is removed from a server.
+- 679c03b: Redesign how a remote MCP server's User Identity client is shown and changed. A connected client reads as "Connected" with how many people are signed in and its scopes, plus an Advanced link to the client. Clearing it offers an existing client, Auto-Configure or Manual credentials. Auto-Configure can choose between CIMD and DCR when the provider supports both, Manual can set scopes, and replacing a client asks first because everyone has to sign in again.
+
+### Patch Changes
+
+- 35621c4: Set the command palette's intent-resolved verbs apart under an "Actions" heading, and run reversible ones on the first Enter with an Undo in the toast. Only actions that cannot be undone, such as publishing the plugin marketplace, still ask for a second Enter.
+- 679c03b: Add `remoteSessions.count`, which returns how many distinct people hold a live session through one remote session client. The dashboard's User Identity row will use it to show how many people are signed in.
+- 0fb637f: Show members who hold a role through a directory role mapping on the Team page, the Roles & Permissions page, role filters, and role member counts. Members now report mapped roles in a separate `directory_role_ids` field, and the Team page marks them as coming from the directory because they cannot be removed there.
+- 7fef8b5: Enable hook fail-open during control-plane outages for newly created organizations. Existing organization settings and explicit fail-closed choices are preserved.
+- 679c03b: `remoteSessions.commitServerIdentityConfiguration` accepts an optional `registration_method` in auto client mode. `cimd`, the default, prefers a Client ID Metadata Document and falls back to dynamic client registration; `dcr` always registers dynamically.
+- f143e71: An MCP-scoped risk policy no longer requires at least one tool per selected server. An empty tool list (or unchecking every tool in the dashboard scope picker) is now normalized to "every tool on this server," matching what happens when no tool selection is made at all, instead of being rejected or silently dropping the server from the policy's scope.
+- f143e71: Fix the MCP scope picker losing focus on the server a user just deselected, jumping to whichever server happens to be first in the list instead. This made it look like individual tools could no longer be picked after unchecking a server with many tools.
+- 0be1824: Okta setup checklist: order the public-key steps the way the Okta console requires (save the key URL first, then switch client authentication), list the required API scopes and admin roles one per line, submit the client ID from its checklist step instead of a separate section, and make the group headings easier to see.
+- 2aa7341: Use a tunneled server's saved resource identifier as the audience of signed caller assertions. When the setting is empty, use `tunneled-mcp-server:<ID>`. Preserve trailing slashes and escaped characters when saving the identifier, and explain the audience setting in the dashboard. Show the organization ID that caller assertions carry in `organization_id` on tunneled MCP server settings.
+
 ## 0.127.0
 
 ### Minor Changes
