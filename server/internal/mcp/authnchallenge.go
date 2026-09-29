@@ -848,27 +848,31 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
 	switch {
 	case errors.Is(err, remotesessions.ErrNoValidToken):
-		// The Gram user-session token is valid, but a required upstream
-		// remote session for this issuer is missing or unusable, so the
-		// runtime issues a re-auth challenge pointing the user at
-		// {routeBase}/{slug}/connect. This 401 is byte-identical to an
-		// invalid-token rejection (both are CodeUnauthorized), so without
-		// this line the two are indistinguishable in production. The
-		// specific broken upstream (and its refresh reason) is logged by
-		// remotesessions.ResolveAccessToken.
-		endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected: upstream remote session missing or unusable",
-			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-			attr.SlogToolsetMCPSlug(endpoint.Slug),
-			attr.SlogMcpURL(authentication.mcpURL),
-			attr.SlogOAuthFailureReason(issuerGateReasonInvalidRemoteSession),
-		)
-		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonInvalidRemoteSession, authentication.mcpURL, authentication.surface)
-		return nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "")
+		return nil, s.rejectUnusableRemoteSession(ctx, w, authentication)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 	default:
 		return tokens, nil
 	}
+}
+
+// rejectUnusableRemoteSession answers a request whose Gram user-session token
+// is valid but a required upstream remote session for the issuer is missing or
+// unusable, with a re-auth challenge pointing the user at
+// {routeBase}/{slug}/connect. This 401 is byte-identical to an invalid-token
+// rejection (both are CodeUnauthorized), so without the log line the two are
+// indistinguishable in production. The specific broken upstream (and its
+// refresh reason) is logged by remotesessions.ResolveAccessToken.
+func (s *Service) rejectUnusableRemoteSession(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) error {
+	endpoint := authentication.endpoint
+	endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected: upstream remote session missing or unusable",
+		attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
+		attr.SlogToolsetMCPSlug(endpoint.Slug),
+		attr.SlogMcpURL(authentication.mcpURL),
+		attr.SlogOAuthFailureReason(issuerGateReasonInvalidRemoteSession),
+	)
+	s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonInvalidRemoteSession, authentication.mcpURL, authentication.surface)
+	return WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "")
 }
 
 // ApplyIssuerGate authenticates and immediately resolves upstream credentials.

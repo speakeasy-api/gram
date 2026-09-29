@@ -1776,9 +1776,9 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	return warnings
 }
 
-// issuerURLsEqual compares issuer identifiers byte-for-byte, as discovery and
+// IssuerURLsEqual compares issuer identifiers byte-for-byte, as discovery and
 // token validation require. A trailing slash is significant, not URL decoration.
-func issuerURLsEqual(a, b string) bool {
+func IssuerURLsEqual(a, b string) bool {
 	return a == b
 }
 

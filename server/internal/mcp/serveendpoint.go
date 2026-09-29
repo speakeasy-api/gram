@@ -221,7 +221,6 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// Credential resolution stays pending until backend dispatch: remote
 	// backends resolve immediately, while hosted tools/call waits until after
 	// kill-switch evaluation.
-	var upstreamTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var pendingIssuerGate *issuerGateAuthentication
 	var err error
 	var upstreamResource string
@@ -255,20 +254,12 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid, mcpServer.TunneledMcpServerID.Valid:
+		var upstreamToken string
 		if pendingIssuerGate != nil {
-			upstreamTokens, err = s.resolveIssuerGateAccessTokens(ctx, w, pendingIssuerGate)
+			upstreamToken, err = s.resolveDirectUpstreamToken(ctx, w, logger, pendingIssuerGate, upstreamResource, tunneledBackendIssuer(mcpServer))
 			if err != nil {
-				return fmt.Errorf("resolve issuer-gated upstream tokens: %w", err)
+				return err
 			}
-		}
-		upstreamToken, err := routeUpstreamToken(ctx, logger, upstreamTokens, upstreamResource, tunneledBackendIssuer(mcpServer))
-		var routeErr *upstreamRoutingError
-		switch {
-		case errors.As(err, &routeErr):
-			// routeUpstreamToken already logged the structured detail.
-			return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
-		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for proxied MCP backend").LogError(ctx, logger)
 		}
 		if mcpServer.RemoteMcpServerID.Valid {
 			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)

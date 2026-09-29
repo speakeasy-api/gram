@@ -472,7 +472,7 @@ func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentT
 	var all map[string]json.RawMessage
 	header, err := verifyIssuerSignedJWTWithKeyPolicy(ctx, e.keys, target.jwksURI, target.issuerID.String(), transport, accessToken, jwks.AllowedSignatureAlgorithms(), validateJWTVerificationKeyStrength, &claims, &all)
 	if err != nil {
-		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, errJWTKeySetUnavailable) {
+		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, ErrJWTKeySetUnavailable) {
 			return out
 		}
 		out.ran = true
@@ -697,7 +697,7 @@ func (e *SessionEnricher) decodeIntrospection(ctx context.Context, target enrich
 	if typ, _ := header.ExtraHeaders[jose.HeaderType].(string); !strings.EqualFold(strings.TrimPrefix(typ, "application/"), "token-introspection+jwt") {
 		return nil, errors.New("introspection jwt typ is not token-introspection+jwt")
 	}
-	if !issuerURLsEqual(claims.Issuer, target.issuerURL) {
+	if !IssuerURLsEqual(claims.Issuer, target.issuerURL) {
 		return nil, fmt.Errorf("introspection jwt issuer %q is not the grant's issuer", truncateForMessage(claims.Issuer))
 	}
 	now := time.Now()

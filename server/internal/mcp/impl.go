@@ -106,6 +106,7 @@ type IdentityResolver interface {
 
 type Service struct {
 	federatedLoginConsumer    FederatedLoginConsumer
+	identityChainer           identityChainer
 	logger                    *slog.Logger
 	tracer                    trace.Tracer
 	metrics                   *mcpmetrics.Metrics
@@ -434,6 +435,7 @@ func NewService(
 
 	service := &Service{
 		federatedLoginConsumer:    nil,
+		identityChainer:           nil,
 		consentBindings:           nil,
 		logger:                    logger,
 		tracer:                    tracer,

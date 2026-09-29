@@ -52,9 +52,15 @@ type metaGateContext struct {
 	// agentID is set only when this request is an agent gateway, which
 	// derives its members from the caller's delegated policy instead of
 	// stored membership rows.
-	agentID         uuid.UUID
-	organizationID  string
-	tokens          map[uuid.UUID]remotesessions.UpstreamToken
+	agentID        uuid.UUID
+	organizationID string
+	tokens         map[uuid.UUID]remotesessions.UpstreamToken
+	// userSessionIssuerID is the gated endpoint's issuer; uuid.Nil when ungated.
+	userSessionIssuerID uuid.UUID
+	// chainUpstream acquires a member's upstream token by identity chaining
+	// when routing finds none. Set only on the tools/call dispatch copy, so
+	// describe and consent probes never exchange; nil otherwise.
+	chainUpstream   func(ctx context.Context, upstreamResource string) (string, error)
 	toolSelection   *toolfilter.SessionSelection
 	authenticated   bool
 	sessionID       string
@@ -171,13 +177,16 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		agentID:        agentID,
 		organizationID: metaServer.OrganizationID,
 		tokens:         gateTokens,
-		toolSelection:  gateToolSelection,
-		authenticated:  false,
-		sessionID:      parseMcpSessionID(r.Header),
-		chatID:         r.Header.Get("Gram-Chat-ID"),
-		userID:         "",
-		externalUserID: "",
-		apiKeyID:       "",
+		// Uninitialized when ungated, which disables identity chaining.
+		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
+		chainUpstream:       nil,
+		toolSelection:       gateToolSelection,
+		authenticated:       false,
+		sessionID:           parseMcpSessionID(r.Header),
+		chatID:              r.Header.Get("Gram-Chat-ID"),
+		userID:              "",
+		externalUserID:      "",
+		apiKeyID:            "",
 		// Member dispatch carries this InEffect verbatim; nothing on the
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion: resolution,
