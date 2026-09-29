@@ -29,15 +29,12 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => rbac.isPlatformAdmin,
 }));
-vi.mock("@/lib/utils", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/utils")>()),
-  getServerURL: () => "https://app.example.com",
-}));
 vi.mock(
   "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils",
   () => ({
     remoteLoginCallbackURL: () =>
       "https://app.example.com/mcp/remote_login_callback",
+    legacyCallbackURL: () => "https://app.example.com/oauth/callback",
   }),
 );
 vi.mock("react-router", () => ({
@@ -123,13 +120,18 @@ describe("LegacyCallbackAlert", () => {
       <LegacyCallbackAlert
         legacyCallbackUrl={false}
         onMigrate={vi.fn<() => void>()}
+        canMigrate
       />,
     );
     expect(container.textContent).toBe("");
 
     rbac.isPlatformAdmin = false;
     rerender(
-      <LegacyCallbackAlert legacyCallbackUrl onMigrate={vi.fn<() => void>()} />,
+      <LegacyCallbackAlert
+        legacyCallbackUrl
+        onMigrate={vi.fn<() => void>()}
+        canMigrate
+      />,
     );
     expect(container.textContent).toBe("");
   });
@@ -149,7 +151,13 @@ describe("LegacyCallbackAlert", () => {
 
   it("names both callback URLs and migrates only after confirmation", () => {
     const onMigrate = vi.fn<() => void>();
-    render(<LegacyCallbackAlert legacyCallbackUrl onMigrate={onMigrate} />);
+    render(
+      <LegacyCallbackAlert
+        legacyCallbackUrl
+        onMigrate={onMigrate}
+        canMigrate
+      />,
+    );
 
     expect(
       screen.getByText("https://app.example.com/oauth/callback"),

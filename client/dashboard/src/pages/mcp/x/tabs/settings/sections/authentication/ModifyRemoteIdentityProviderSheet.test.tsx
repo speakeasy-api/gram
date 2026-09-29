@@ -19,6 +19,9 @@ const sdk = vi.hoisted(() => ({
   updateClient: vi.fn(async () => ({})),
 }));
 
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasAnyScope: () => true }),
+}));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     remoteSessionIssuers: { update: sdk.updateIssuer },

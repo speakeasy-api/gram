@@ -219,5 +219,19 @@ export function clientTypeHelp(
 // and CIMD clients send/publish it automatically, so this only surfaces
 // where the operator has to do that registration by hand.
 export function remoteLoginCallbackURL(): string {
-  return `${getServerURL()}/mcp/remote_login_callback`;
+  return `${callbackBaseURL()}/mcp/remote_login_callback`;
+}
+
+// legacyCallbackURL is the callback clients registered before
+// /mcp/remote_login_callback existed. The server still mounts it and forwards
+// into the current callback, for clients in legacy callback compatibility mode.
+export function legacyCallbackURL(): string {
+  return `${callbackBaseURL()}/oauth/callback`;
+}
+
+// The server trims a trailing slash from its public URL before building
+// redirect URIs, so the URLs shown here must too or they will not match what
+// is registered.
+function callbackBaseURL(): string {
+  return getServerURL().replace(/\/+$/, "");
 }

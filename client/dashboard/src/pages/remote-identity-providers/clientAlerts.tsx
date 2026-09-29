@@ -3,11 +3,13 @@ import { Button } from "@/components/ui/Button";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { remoteSessionScopeTier } from "@/lib/sources";
-import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useState } from "react";
 import { Link } from "react-router";
-import { remoteLoginCallbackURL } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import {
+  legacyCallbackURL,
+  remoteLoginCallbackURL,
+} from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 // IssuerScopeOverrideAlert warns beside a client's scope field that the parent
@@ -71,12 +73,6 @@ function EditScopeOverrideHint({
   return <>Edit the scope override in the {settings} instead.</>;
 }
 
-// The callback URL clients registered before /mcp/remote_login_callback
-// existed. The server still mounts it and forwards into the current callback.
-function legacyCallbackURL(): string {
-  return `${getServerURL()}/oauth/callback`;
-}
-
 // LegacyCallbackAlert flags, to platform admins only, a client registered
 // upstream with the legacy callback URL. Migrating clears compatibility mode,
 // so sign-ins send the current callback URL, which must already be registered
@@ -85,7 +81,7 @@ export function LegacyCallbackAlert({
   legacyCallbackUrl,
   onMigrate,
   isMigrating = false,
-  canMigrate = true,
+  canMigrate,
   className,
 }: {
   legacyCallbackUrl: boolean;
@@ -93,7 +89,7 @@ export function LegacyCallbackAlert({
   isMigrating?: boolean;
   // False when the caller lacks the permission the save needs, so the button
   // is hidden rather than offered only to fail.
-  canMigrate?: boolean;
+  canMigrate: boolean;
   className?: string;
 }): JSX.Element | null {
   const isPlatformAdmin = useIsPlatformAdmin();

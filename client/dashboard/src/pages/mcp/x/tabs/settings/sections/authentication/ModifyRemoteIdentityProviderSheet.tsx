@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
@@ -148,7 +149,9 @@ function ModifyRemoteIdentityProviderSheetBody({
   const queryClient = useQueryClient();
 
   // Migrating saves on its own, independent of the form below, the way the
-  // client detail page does it.
+  // client detail page does it. The project update endpoint requires
+  // project:write, so the button hides without it.
+  const { hasAnyScope } = useRBAC();
   const migrate = useMutation({
     mutationFn: async (clientId: string) => {
       await client.remoteSessionClients.update({
@@ -542,6 +545,7 @@ function ModifyRemoteIdentityProviderSheetBody({
             legacyCallbackUrl={primaryClient.legacyCallbackUrl}
             onMigrate={() => migrate.mutate(primaryClient.id)}
             isMigrating={migrate.isPending}
+            canMigrate={hasAnyScope(["project:write"])}
           />
         )}
 
