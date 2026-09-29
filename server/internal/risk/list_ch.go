@@ -21,9 +21,9 @@ import (
 
 // listResultsByProjectFromClickHouse serves the project-wide (non-chat-scoped)
 // ListRiskResults page from the ClickHouse risk_findings table, the only store
-// holding MCP-seam findings. Rows come back
-// pre-redacted — the store never holds raw match content — so Match and Spans
-// are always nil and MatchRedacted carries the ingest-time display string.
+// holding MCP-seam findings. Rows come back pre-redacted (the store never
+// holds raw match content), so Match and Spans are always nil and
+// MatchRedacted carries the ingest-time display string.
 // Chat titles and tool-call block ids are enriched from Postgres per page
 // because both mutate after ingest.
 func (s *Service) listResultsByProjectFromClickHouse(
@@ -84,8 +84,8 @@ func (s *Service) listResultsByProjectFromClickHouse(
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk findings from clickhouse").LogError(ctx, s.logger)
 	}
 
-	// Best-effort total, mirroring the Postgres path where a failed count
-	// degrades to zero rather than failing the page.
+	// Best-effort total: a failed count degrades to zero rather than failing
+	// the page.
 	var totalCount int64
 	if count, err := s.findingsCH.CountRiskFindings(ctx, params); err != nil {
 		s.logger.WarnContext(ctx, "count risk findings from clickhouse", attr.SlogError(err))

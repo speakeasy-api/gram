@@ -607,6 +607,7 @@ func (a *Reconcile) forEachRegexCandidate(
 				Path:           c.Path,
 				ToolCallID:     c.ToolCallID,
 				OrganizationID: run.organizationID,
+				RiskPolicyID:   "",
 			}
 
 			anchorKey := c.ChatMessageID + "\x00" + c.ContentPartID

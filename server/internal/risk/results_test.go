@@ -237,6 +237,48 @@ func TestListRiskResults_ByChatID(t *testing.T) {
 	require.Equal(t, chatIDStr, *result.Results[0].ChatID)
 }
 
+// A disabled policy's findings stay listed in chat detail, the by-chat
+// grouping and the total, so a Risk Events row never opens an empty chat. A
+// deleted policy's lingering rows stay hidden.
+func TestListRiskResults_ByChatID_DisabledPolicyFindingsListed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	disabled, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Disabled Chat Policy"), Enabled: new(false)})
+	require.NoError(t, err)
+	deleted, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Deleted Chat Policy")})
+	require.NoError(t, err)
+	disabledID := uuid.MustParse(disabled.ID)
+	deletedID := uuid.MustParse(deleted.ID)
+
+	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
+	seedRiskResult(t, ti, projectID, orgID, disabledID, 1, msgID, true)
+	seedRiskResult(t, ti, projectID, orgID, deletedID, 1, msgID, true)
+
+	// Soft-delete through the repo so the policy's risk_results rows linger.
+	require.NoError(t, riskrepo.New(ti.conn).DeleteRiskPolicy(ctx, riskrepo.DeleteRiskPolicyParams{ID: deletedID, ProjectID: projectID}))
+
+	chatIDStr := chatID.String()
+	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ChatID: &chatIDStr})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+	require.Equal(t, disabled.ID, result.Results[0].PolicyID)
+	require.Equal(t, int64(1), result.TotalCount)
+
+	byChat, err := ti.service.ListRiskResultsByChat(ctx, &gen.ListRiskResultsByChatPayload{})
+	require.NoError(t, err)
+	require.Len(t, byChat.Chats, 1)
+	require.Equal(t, chatIDStr, byChat.Chats[0].ChatID)
+	require.Equal(t, int64(1), byChat.Chats[0].FindingsCount)
+}
+
 func TestListRiskResults_ByChatID_IncludesContentPartFindings(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -499,8 +541,7 @@ func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, org
 }
 
 // The agent surface passes the ingest-time store redaction through untouched:
-// raw match content never reaches it, and a nil match must not collapse the
-// display to `<redacted len=0>`.
+// raw match content never reaches it.
 func TestListRiskResultsForAgent_RedactsGitleaksMatch(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

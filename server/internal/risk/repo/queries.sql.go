@@ -302,14 +302,14 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 const countAllFindings = `-- name: CountAllFindings :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results rr
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND rr.skill_version_id IS NULL
 `
 
-// Total for ListRiskResultsByProjectFound, which drops skill-anchored rows;
-// counting them here would page an empty list against a non-zero total.
+// Project-wide total_count reported with the chat-scoped ListRiskResults
+// page. Skill-anchored rows have no chat, so that listing never returns them.
 func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countAllFindings, projectID)
 	var column_1 int64
@@ -3127,12 +3127,11 @@ type ListFalsePositiveRiskResultsRow struct {
 
 // Powers the Dismissed tab: every result manually marked as a false positive
 // in this project, newest dismissal first. Cursor is (false_positive_at, id)
-// for stable pagination, matching the ListRiskResultsByProjectFound
-// convention. block_id is always the nil UUID (foundRowToResult maps that to
+// for stable pagination. block_id is always the nil UUID (foundRowToResult maps that to
 // a nil pointer) since the Dismissed tab doesn't need durable tool-call-block
 // links. LEFT JOINs both anchor tables (a result is anchored to exactly one,
 // per risk_results_anchor_check) so content-part-anchored dismissals are not
-// silently dropped, matching the ListRiskResultsByProjectFound convention.
+// silently dropped.
 func (q *Queries) ListFalsePositiveRiskResults(ctx context.Context, arg ListFalsePositiveRiskResultsParams) ([]ListFalsePositiveRiskResultsRow, error) {
 	rows, err := q.db.Query(ctx, listFalsePositiveRiskResults,
 		arg.ProjectID,
@@ -3199,7 +3198,7 @@ type ListLatestToolCallBlocksByMessageIDsRow struct {
 
 // Display enrichment for the ClickHouse-served risk events listing: the
 // latest live tool call block per chat message, mirroring the LATERAL join in
-// ListRiskResultsByProjectFound.
+// ListRiskResultsByChatFound.
 func (q *Queries) ListLatestToolCallBlocksByMessageIDs(ctx context.Context, arg ListLatestToolCallBlocksByMessageIDsParams) ([]ListLatestToolCallBlocksByMessageIDsRow, error) {
 	rows, err := q.db.Query(ctx, listLatestToolCallBlocksByMessageIDs, arg.ProjectID, arg.Ids)
 	if err != nil {
@@ -4025,7 +4024,7 @@ FROM risk_results rr
 LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
 LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT tcb.id AS block_id FROM tool_call_blocks tcb
   WHERE tcb.project_id = rr.project_id
@@ -4211,11 +4210,6 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	BlockID             uuid.UUID
 }
 
-// Unlike the other list queries, this does NOT require the policy to be
-// enabled. When the user explicitly filters to a specific policy we surface its
-// historical findings even after it has been turned off, so disabled policies
-// still show the matches they produced while active. Deleted policies remain
-// excluded. The frontend flags the inactive policy as historical data.
 func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg ListRiskResultsByProjectAndPolicyParams) ([]ListRiskResultsByProjectAndPolicyRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByProjectAndPolicy,
 		arg.ProjectID,
@@ -4283,7 +4277,7 @@ FROM risk_results rr
 LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
 LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND COALESCE(cm.chat_id, ccp.chat_id) IS NOT NULL
@@ -4422,8 +4416,8 @@ type ListRiskRulesByCategoryRow struct {
 }
 
 // Returns per-rule_id finding counts for a category within a window.
-// The CASE expression must stay in sync with ListRiskOverviewTimeSeriesFindings
-// and ListRiskResultsByProjectFound; all three classify rr.rule_id the same way.
+// The CASE expression must stay in sync with ListRiskOverviewTimeSeriesFindings;
+// both classify rr.rule_id the same way.
 // A NULL page_limit is LIMIT ALL: the dashboard reads every rule, while
 // bounded callers pass one extra row to detect truncation.
 func (q *Queries) ListRiskRulesByCategory(ctx context.Context, arg ListRiskRulesByCategoryParams) ([]ListRiskRulesByCategoryRow, error) {

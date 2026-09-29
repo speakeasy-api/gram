@@ -48,6 +48,8 @@ type unmaskFinding struct {
 	shadow bool
 	// exclusionID is the retro exclusion a held row is attributed to.
 	exclusionID *uuid.UUID
+	// riskPolicyID defaults to a fresh live policy in the fixture's project.
+	riskPolicyID string
 }
 
 // insertUnmaskFinding writes the fixture straight into risk_findings. Raw SQL
@@ -64,6 +66,9 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 	}
 	if f.ruleID == "" {
 		f.ruleID = "secret.test_rule"
+	}
+	if f.riskPolicyID == "" {
+		f.riskPolicyID = seedUnmaskPolicy(t, ti, uuid.MustParse(f.projectID), f.orgID, true).String()
 	}
 	// Relative timestamps: the table's 90-day created_at TTL would silently
 	// expire hardcoded dates once the calendar catches up.
@@ -95,13 +100,29 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 	`,
 		f.id, createdAt, f.orgID, f.projectID,
 		f.chatMessageID, f.contentPartID, f.chatID,
-		uuid.NewString(), int64(1), f.ruleID, f.source, "secrets", 1.0, []string{},
+		f.riskPolicyID, int64(1), f.ruleID, f.source, "secrets", 1.0, []string{},
 		f.startPos, f.endPos, f.deadLetterReason,
 		f.matchLen, f.matchRedacted,
 		nullableTime(f.excludedAt), nullableTime(f.falsePositiveAt), createdAt,
 		f.surface, f.field, f.path, f.toolCallID, f.shadow, nullableUUID(f.exclusionID),
 	))
 	return f.id
+}
+
+func seedUnmaskPolicy(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, enabled bool) uuid.UUID {
+	t.Helper()
+	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             uuid.New(),
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		Name:           "Unmask fixture",
+		Sources:        []string{"gitleaks"},
+		Enabled:        enabled,
+		Action:         "flag",
+		AudienceType:   "everyone",
+	})
+	require.NoError(t, err)
+	return policy.ID
 }
 
 func TestUnmaskRiskResult_ClickHouseContentSurface(t *testing.T) {
@@ -522,6 +543,7 @@ func TestUnmaskRiskResult_ClickHouseHiddenRowsNotFound(t *testing.T) {
 
 	foreign := base
 	foreign.projectID = uuid.NewString()
+	foreign.riskPolicyID = uuid.NewString()
 	foreignID := insertUnmaskFinding(t, ti, foreign)
 
 	shadow := base
@@ -862,4 +884,55 @@ func TestUnmaskRiskResult_ClickHouseCustomDerivedFieldScoped(t *testing.T) {
 	res, err = ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: functionRow.String()})
 	require.NoError(t, err)
 	require.Equal(t, function, res.Match, "a tool.function finding reveals the function half")
+}
+
+// TestUnmaskRiskResult_ClickHouseDeletedPolicyNotFound: a deleted policy's
+// rows linger in ClickHouse until TTL and must not be revealable, while a
+// disabled policy's findings stay revealable.
+func TestUnmaskRiskResult_ClickHouseDeletedPolicyNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	secret := "secret"
+	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
+	start := strings.Index("test message with a secret", secret)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)},
+		authz.NewGrant(authz.ScopeChatRead, chatID.String()),
+	)
+
+	disabledPolicyID := seedUnmaskPolicy(t, ti, projectID, orgID, false)
+	deletedPolicyID := seedUnmaskPolicy(t, ti, projectID, orgID, true)
+
+	base := unmaskFinding{
+		orgID:         orgID,
+		projectID:     projectID.String(),
+		chatMessageID: msgID.String(),
+		chatID:        chatID.String(),
+		startPos:      int32(start),
+		endPos:        int32(start + len(secret)),
+		matchLen:      uint32(len(secret)),
+		surface:       "content",
+	}
+	disabled := base
+	disabled.riskPolicyID = disabledPolicyID.String()
+	disabledRowID := insertUnmaskFinding(t, ti, disabled)
+	deleted := base
+	deleted.riskPolicyID = deletedPolicyID.String()
+	deletedRowID := insertUnmaskFinding(t, ti, deleted)
+
+	require.NoError(t, ti.service.DeleteRiskPolicy(ctx, &gen.DeleteRiskPolicyPayload{ID: deletedPolicyID.String()}))
+
+	res, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: disabledRowID.String()})
+	require.NoError(t, err)
+	require.Equal(t, secret, res.Match)
+
+	_, err = ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: deletedRowID.String()})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
