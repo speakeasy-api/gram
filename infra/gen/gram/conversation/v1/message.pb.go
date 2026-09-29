@@ -2221,7 +2221,7 @@ const file_gram_conversation_v1_message_proto_rawDesc = "" +
 	"\tROLE_USER\x10\x03\x12\x12\n" +
 	"\x0eROLE_ASSISTANT\x10\x04\x12\r\n" +
 	"\tROLE_TOOL\x10\x05:\n" +
-	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B\t\n" +
+	"\x8a\xb5\x18\x06\x12\x04\b\x80\x8c\x15B\t\n" +
 	"\acontentBMZKgithub.com/speakeasy-api/gram/infra/gen/gram/conversation/v1;conversationv1b\beditionsp\xe9\a"
 
 var file_gram_conversation_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
