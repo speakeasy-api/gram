@@ -2,7 +2,10 @@ import { SettingsSection } from "@/components/detail/settings-section";
 import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
+import { useMcpServerAuthTarget } from "./authentication/authTarget";
 import { UserIdentitySessionControls } from "./authentication/UserIdentitySessionControls";
+import { UserSessionIssuerField } from "./authentication/UserSessionIssuerField";
+import { useSelectableUserSessionIssuers } from "./authentication/useSelectableUserSessionIssuers";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 
 export function RemoteMcpSessionsSection({
@@ -10,6 +13,8 @@ export function RemoteMcpSessionsSection({
 }: {
   mcpServer: McpServer;
 }): JSX.Element {
+  const target = useMcpServerAuthTarget(mcpServer);
+  const selectableIssuers = useSelectableUserSessionIssuers(target);
   const userSessionIssuerId = mcpServer.userSessionIssuerId ?? undefined;
   const issuerQuery = useUserSessionIssuer(
     { id: userSessionIssuerId },
@@ -24,52 +29,59 @@ export function RemoteMcpSessionsSection({
   const failed = issuerQuery.isError || clientsQuery.isError;
   const userIdentityConfigured = clientsQuery.items.length > 0;
 
-  let content: JSX.Element;
+  let sessionControls: JSX.Element;
   if (loading) {
-    content = <Text muted>Loading session settings...</Text>;
+    sessionControls = (
+      <SessionsNotice>Loading session settings...</SessionsNotice>
+    );
   } else if (failed || !issuerQuery.data) {
-    content = (
-      <Text className="text-destructive">
-        Session settings could not be loaded.
-      </Text>
+    sessionControls = (
+      <SettingsSection.Body>
+        <Text className="text-destructive">
+          Session settings could not be loaded.
+        </Text>
+      </SettingsSection.Body>
     );
   } else if (!userIdentityConfigured) {
-    content = (
-      <Text muted>
+    sessionControls = (
+      <SessionsNotice>
         Session controls apply when User Identity is configured for this server.
-      </Text>
+      </SessionsNotice>
     );
   } else {
-    return (
-      <SettingsSection>
-        <SessionsHeader />
-        <SettingsSection.Panel>
-          <div className="divide-y">
-            <UserIdentitySessionControls userSessionIssuer={issuerQuery.data} />
-          </div>
-        </SettingsSection.Panel>
-      </SettingsSection>
+    sessionControls = (
+      <UserIdentitySessionControls userSessionIssuer={issuerQuery.data} />
     );
   }
 
   return (
     <SettingsSection>
-      <SessionsHeader />
+      <SettingsSection.Header>
+        <SettingsSection.Title>Sessions</SettingsSection.Title>
+        <SettingsSection.Description>
+          Control how long User Identity connections last and which MCP clients
+          may initiate them.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
       <SettingsSection.Panel>
-        <SettingsSection.Body>{content}</SettingsSection.Body>
+        <div className="divide-y">
+          <UserSessionIssuerField
+            target={target}
+            issuers={selectableIssuers.issuers}
+            isLoading={selectableIssuers.isLoading}
+            isError={selectableIssuers.isError}
+          />
+          {sessionControls}
+        </div>
       </SettingsSection.Panel>
     </SettingsSection>
   );
 }
 
-function SessionsHeader(): JSX.Element {
+function SessionsNotice({ children }: { children: string }): JSX.Element {
   return (
-    <SettingsSection.Header>
-      <SettingsSection.Title>Sessions</SettingsSection.Title>
-      <SettingsSection.Description>
-        Control how long User Identity connections last and which MCP clients
-        may initiate them.
-      </SettingsSection.Description>
-    </SettingsSection.Header>
+    <SettingsSection.Body>
+      <Text muted>{children}</Text>
+    </SettingsSection.Body>
   );
 }

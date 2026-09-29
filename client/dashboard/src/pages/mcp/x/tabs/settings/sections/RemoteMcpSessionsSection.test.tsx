@@ -14,6 +14,19 @@ vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
 vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
   useAllRemoteSessionClients: () => mocks.clients(),
 }));
+vi.mock("./authentication/authTarget", () => ({
+  useMcpServerAuthTarget: () => ({}),
+}));
+vi.mock("./authentication/useSelectableUserSessionIssuers", () => ({
+  useSelectableUserSessionIssuers: () => ({
+    issuers: [],
+    isLoading: false,
+    isError: false,
+  }),
+}));
+vi.mock("./authentication/UserSessionIssuerField", () => ({
+  UserSessionIssuerField: () => <span>User session issuer</span>,
+}));
 vi.mock("./authentication/UserIdentitySessionControls", () => ({
   UserIdentitySessionControls: () => (
     <div>
@@ -60,6 +73,12 @@ describe("RemoteMcpSessionsSection", () => {
 
     expect(screen.getByText("Session length")).toBeDefined();
     expect(screen.getByText("Client access")).toBeDefined();
+  });
+
+  it("offers the user session issuer whether or not User Identity is configured", () => {
+    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
+
+    expect(screen.getByText("User session issuer")).toBeDefined();
   });
 
   it("does not present User Identity controls for other modes", () => {
