@@ -97,6 +97,7 @@ function CreateTunneledMcpForm() {
     if (creationLocked) return;
     setTouched(true);
     if (validateDisplayName(name) !== null) return;
+    if (!newGuardrail.validation.ok) return;
 
     try {
       const result = await createSource.mutateAsync({

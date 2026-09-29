@@ -1039,9 +1039,9 @@ export function useRemoteMcpInstallWorkflow({
       setConfigureSkipped(options?.configureSkipped === true);
       setGuardrail(
         catalogPresetState(
-          serverConfigs.flatMap((config) =>
-            serverToolsForPreset(config.server),
-          ),
+          serverConfigs
+            .filter((config) => !isFigmaCatalogServer(config.server))
+            .flatMap((config) => serverToolsForPreset(config.server)),
         ),
       );
       setPhase("guardrails");

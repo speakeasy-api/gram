@@ -7,22 +7,22 @@ function policy(id: string, mcpScope: RiskPolicy["mcpScope"]): RiskPolicy {
 }
 
 describe("policiesForMcpServer", () => {
-  const orgWide = policy("org", undefined);
   const everyServer = policy("every", { allServers: true, servers: [] });
   const here = policy("here", { servers: [{ mcpServerId: "srv" }] });
-  const elsewhere = policy("else", { servers: [{ mcpServerId: "other" }] });
+  const viaGateway = policy("gw", { servers: [{ mcpServerId: "gateway-1" }] });
   const override = policy("override", {
     allServers: true,
     servers: [{ mcpServerId: "srv", tools: ["a"] }],
   });
 
-  it("separates named policies from inherited ones and drops the rest", () => {
+  it("keeps all-servers policies inherited and everything else scoped", () => {
     const result = policiesForMcpServer(
-      [orgWide, everyServer, here, elsewhere, override],
+      [everyServer, here, viaGateway, override],
       "srv",
     );
-    expect(result.scoped.map((p) => p.id)).toEqual(["here", "override"]);
-    expect(result.inherited.map((p) => p.id)).toEqual(["org", "every"]);
+    expect(result.scoped.map((p) => p.id)).toEqual(["here", "gw", "override"]);
+    expect(result.inherited.map((p) => p.id)).toEqual(["every"]);
+    expect(scopedToolsLabel(viaGateway, "srv")).toBe("Through a gateway");
   });
 });
 

@@ -132,6 +132,8 @@ function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
 
               return {
                 ...server,
+                // The guardrails preset reads tool annotations from these.
+                tools: details.tools ?? server.tools,
                 remotes: mergeRemoteHeaders(
                   server.remotes,
                   details.remotes as ExternalMCPRemote[] | undefined,

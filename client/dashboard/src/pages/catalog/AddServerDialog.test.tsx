@@ -246,10 +246,9 @@ describe("AddServerDialog guardrails", () => {
       screen.getByText(/Destructive tool detection supports logging only/),
     ).toBeDefined();
 
-    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
-    expect(mocks.skip).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Add to Project" }));
     expect(mocks.installWithGuardrail).toHaveBeenCalledTimes(1);
+    expect(mocks.skip).not.toHaveBeenCalled();
   });
 
   it("warns by default and installs without a policy when switched off", async () => {

@@ -13,7 +13,7 @@ import {
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
-import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useRiskListPoliciesForMcpServer } from "@gram/client/react-query/riskListPoliciesForMcpServer.js";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { AddServerGuardrailDialog } from "./AddServerGuardrailDialog";
@@ -55,38 +55,44 @@ export function GuardrailsTab({
 
   return (
     <RequireScope scope="org:admin" resourceId={organization.id} level="page">
-      <Stack gap={6} className="py-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="font-display text-3xl font-thin">Guardrails</h2>
-            <Text small muted>
-              Risk policies that inspect traffic through this server.
-            </Text>
+      <RequireScope scope="mcp:read" resourceId={mcpServer.id} level="page">
+        <Stack gap={6} className="py-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-3xl font-thin">Guardrails</h2>
+              <Text small muted>
+                Risk policies that inspect traffic through this server.
+              </Text>
+            </div>
+            <SegmentedControl<GuardrailsView>
+              value={view}
+              onChange={setView}
+              options={[
+                { value: "policies", label: "Policies" },
+                { value: "events", label: "Risk events" },
+              ]}
+            />
           </div>
-          <SegmentedControl<GuardrailsView>
-            value={view}
-            onChange={setView}
-            options={[
-              { value: "policies", label: "Policies" },
-              { value: "events", label: "Risk events" },
-            ]}
-          />
-        </div>
-        {view === "policies" ? (
-          <PoliciesView mcpServer={mcpServer} />
-        ) : (
-          <ServerRiskEvents mcpServer={mcpServer} />
-        )}
-      </Stack>
+          {view === "policies" ? (
+            <PoliciesView mcpServer={mcpServer} />
+          ) : (
+            <ServerRiskEvents mcpServer={mcpServer} />
+          )}
+        </Stack>
+      </RequireScope>
     </RequireScope>
   );
 }
 
 function PoliciesView({ mcpServer }: { mcpServer: McpServer }): JSX.Element {
   const routes = useRoutes();
-  const policiesQuery = useRiskListPolicies(undefined, undefined, {
-    throwOnError: false,
-  });
+  // The server resolves what applies here, including gateway membership, so
+  // the tab never re-derives scope rules on the client.
+  const policiesQuery = useRiskListPoliciesForMcpServer(
+    { mcpServerId: mcpServer.id },
+    undefined,
+    { throwOnError: false },
+  );
   const [adding, setAdding] = useState(false);
   const { scoped, inherited } = useMemo(
     () =>
@@ -129,7 +135,7 @@ function PoliciesView({ mcpServer }: { mcpServer: McpServer }): JSX.Element {
         <div>
           <h3 className="text-eyebrow">Inherited</h3>
           <Text small muted>
-            Org-wide policies that also apply here. Manage them under{" "}
+            Policies scoped to every MCP server. Manage them under{" "}
             <Link
               to={routes.policyCenter.href()}
               className="underline underline-offset-2"
@@ -141,7 +147,7 @@ function PoliciesView({ mcpServer }: { mcpServer: McpServer }): JSX.Element {
         </div>
         {policiesQuery.isError ? null : inherited.length === 0 ? (
           <Text small muted>
-            No org-wide policies apply to this server.
+            No all-servers policies apply to this server.
           </Text>
         ) : (
           <PolicyRows policies={inherited} detail={() => "All servers"} />
