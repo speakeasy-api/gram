@@ -716,8 +716,8 @@ func (q *Queries) ListSignals(ctx context.Context, arg ListSignalsParams) ([]Sig
 }
 
 const loadEvaluationSensors = `-- name: LoadEvaluationSensors :many
-SELECT sensor.id AS sensor_id, sensor.mode, sensor.instructions,
-       signal.id AS signal_id, signal.classifier_criteria
+SELECT sensor.id AS sensor_id, sensor.slug AS sensor_slug, sensor.mode, sensor.instructions,
+       signal.id AS signal_id, signal.slug AS signal_slug, signal.classifier_criteria
 FROM sigint_sensors AS sensor
 JOIN projects AS project ON project.id = sensor.project_id
 JOIN sigint_sensor_signals AS member
@@ -740,9 +740,11 @@ type LoadEvaluationSensorsParams struct {
 
 type LoadEvaluationSensorsRow struct {
 	SensorID           uuid.UUID
+	SensorSlug         string
 	Mode               string
 	Instructions       pgtype.Text
 	SignalID           uuid.UUID
+	SignalSlug         string
 	ClassifierCriteria pgtype.Text
 }
 
@@ -758,9 +760,11 @@ func (q *Queries) LoadEvaluationSensors(ctx context.Context, arg LoadEvaluationS
 		var i LoadEvaluationSensorsRow
 		if err := rows.Scan(
 			&i.SensorID,
+			&i.SensorSlug,
 			&i.Mode,
 			&i.Instructions,
 			&i.SignalID,
+			&i.SignalSlug,
 			&i.ClassifierCriteria,
 		); err != nil {
 			return nil, err

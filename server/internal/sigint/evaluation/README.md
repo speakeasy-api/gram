@@ -38,8 +38,11 @@ downstream processors account for repeated readings.
 The fixed namespace is UUIDv5(URL namespace, `gram:sigint:reading`). The UUID is
 serialized as a canonical string on the wire and can be stored in native UUID
 columns in PostgreSQL and ClickHouse.
-Each evaluation has a separate attempt UUID and completion timestamp. Definition
-hashes are metadata for traceability, not identity, and include mode, instructions,
+Each evaluation has a separate attempt UUID and completion timestamp.
+Sensor and signal slugs are always populated in readings from the same configuration
+snapshot. Choice results also carry the selected signal's slug. Slugs are metadata
+and do not affect reading identity.
+Definition hashes are metadata for traceability, not identity, and include mode, instructions,
 signal IDs, criteria and order. Message content
 is not hashed for reading identity or metadata. Inline and spilled protobuf bodies
 resolve to the same input. Source JSON preserves number representations; tool

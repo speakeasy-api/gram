@@ -5,8 +5,8 @@ SELECT pg_advisory_xact_lock(hashtextextended(@project_id::text, 1397313108));
 
 -- name: LoadEvaluationSensors :many
 -- One statement captures all active definitions and membership order consistently.
-SELECT sensor.id AS sensor_id, sensor.mode, sensor.instructions,
-       signal.id AS signal_id, signal.classifier_criteria
+SELECT sensor.id AS sensor_id, sensor.slug AS sensor_slug, sensor.mode, sensor.instructions,
+       signal.id AS signal_id, signal.slug AS signal_slug, signal.classifier_criteria
 FROM sigint_sensors AS sensor
 JOIN projects AS project ON project.id = sensor.project_id
 JOIN sigint_sensor_signals AS member
