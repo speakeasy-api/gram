@@ -273,7 +273,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
-		c, logger, tracerProvider, meterProvider, db, redisClient, featureFlags, completions, publishers, shadowMCPClient,
+		c, logger, tracerProvider, meterProvider, db, redisClient, featureFlags, completions, guardianPolicy, openRouter, publishers, shadowMCPClient,
 	)
 	if err != nil {
 		return err

@@ -678,6 +678,31 @@ func (q *Queries) CreateCustomDetectionRule(ctx context.Context, arg CreateCusto
 	return i, err
 }
 
+const createJudgeWindowMessageForTest = `-- name: CreateJudgeWindowMessageForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation)
+VALUES ($1, $2, 'user', $3, $4)
+RETURNING id
+`
+
+type CreateJudgeWindowMessageForTestParams struct {
+	ChatID     uuid.UUID
+	ProjectID  uuid.NullUUID
+	Content    string
+	Generation int32
+}
+
+func (q *Queries) CreateJudgeWindowMessageForTest(ctx context.Context, arg CreateJudgeWindowMessageForTestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createJudgeWindowMessageForTest,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Content,
+		arg.Generation,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createRiskExclusion = `-- name: CreateRiskExclusion :one
 
 INSERT INTO risk_exclusions (
@@ -1859,6 +1884,100 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getJudgeMessageWindow = `-- name: GetJudgeMessageWindow :many
+WITH target AS (
+  SELECT cm.id, cm.chat_id, cm.project_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.seq, cm.generation FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
+  JOIN projects p ON p.id = c.project_id
+  WHERE cm.id = $1::uuid AND cm.project_id = $3::uuid
+    AND p.organization_id = $4::text
+)
+SELECT evidence.id, evidence.role, LEFT(evidence.content, 4001)::text AS content,
+  COALESCE((SELECT jsonb_agg(jsonb_build_object('function', jsonb_build_object(
+    'name', LEFT(call->'function'->>'name', 257),
+    'arguments', LEFT(call->'function'->>'arguments', 4001))))
+    FROM jsonb_array_elements(jsonb_path_query_array(
+      COALESCE(NULLIF(CASE WHEN jsonb_typeof(evidence.tool_calls) = 'string'
+        THEN (evidence.tool_calls #>> '{}')::jsonb
+        ELSE evidence.tool_calls END, 'null'::jsonb), '[]'::jsonb),
+      '$[0 to 8]')) AS call), '[]'::jsonb)::text AS tool_calls
+FROM (
+SELECT n.id, n.chat_id, n.project_id, n.role, n.content, n.tool_calls, n.created_at, n.seq FROM target t
+JOIN LATERAL (
+  (SELECT prev.id, prev.chat_id, prev.project_id, prev.role, prev.content, prev.tool_calls, prev.created_at, prev.seq FROM chat_messages prev
+   WHERE prev.chat_id = t.chat_id AND prev.project_id = t.project_id AND prev.generation = t.generation
+     AND (prev.created_at, prev.seq) < (t.created_at, t.seq)
+   ORDER BY prev.created_at DESC, prev.seq DESC LIMIT 2)
+  UNION ALL
+  SELECT t.id, t.chat_id, t.project_id, t.role, t.content, t.tool_calls, t.created_at, t.seq
+  UNION ALL
+  (SELECT next.id, next.chat_id, next.project_id, next.role, next.content, next.tool_calls, next.created_at, next.seq FROM chat_messages next
+   WHERE next.chat_id = t.chat_id AND next.project_id = t.project_id AND next.generation = t.generation
+     AND (next.created_at, next.seq) > (t.created_at, t.seq)
+   ORDER BY next.created_at, next.seq LIMIT 2)
+) n ON TRUE
+UNION ALL
+(SELECT recent.id, recent.chat_id, recent.project_id, recent.role, recent.content, recent.tool_calls, recent.created_at, recent.seq FROM chat_messages recent
+ JOIN chats c ON c.id = recent.chat_id AND c.project_id = recent.project_id
+ JOIN projects p ON p.id = c.project_id
+ WHERE $1::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+   AND recent.chat_id = $2::uuid AND recent.project_id = $3::uuid
+   AND p.organization_id = $4::text
+   AND recent.generation = (SELECT MAX(latest.generation) FROM chat_messages latest
+     WHERE latest.chat_id = $2::uuid AND latest.project_id = $3::uuid)
+ ORDER BY recent.created_at DESC, recent.seq DESC LIMIT 4)
+) evidence
+ORDER BY evidence.created_at, evidence.seq
+`
+
+type GetJudgeMessageWindowParams struct {
+	AnchorID       uuid.UUID
+	ChatID         uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetJudgeMessageWindowRow struct {
+	ID        uuid.UUID
+	Role      string
+	Content   string
+	ToolCalls string
+}
+
+// Two bounded index probes around a tenant-validated anchor. Keep the target
+// even when no neighbors exist; an absent target is never a valid window.
+// Tool evidence remains valid JSON: one overflow call/rune preserves truncation
+// indicators in the renderer without transferring the full stored payload.
+func (q *Queries) GetJudgeMessageWindow(ctx context.Context, arg GetJudgeMessageWindowParams) ([]GetJudgeMessageWindowRow, error) {
+	rows, err := q.db.Query(ctx, getJudgeMessageWindow,
+		arg.AnchorID,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetJudgeMessageWindowRow
+	for rows.Next() {
+		var i GetJudgeMessageWindowRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCalls,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many

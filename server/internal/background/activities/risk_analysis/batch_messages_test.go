@@ -247,3 +247,18 @@ func TestRecordBatchResultsContinuesAfterPublishFailure(t *testing.T) {
 	require.Equal(t, request.GetChatMessageId(), envelope.GetAttributes()[metering.AttributeChatMessageID])
 	require.Equal(t, inlineBatchExecutionPath, published[0].GetAttributes()[metering.AttributeScanExecutionPath])
 }
+
+func TestBatchJudgeParentlessPartHasNoLiveHistory(t *testing.T) {
+	t.Parallel()
+	var msg batchMessage
+	msg.ContentPart = true
+	msg.ChatID = uuid.New()
+	msg.Content = "persisted part"
+	target := batchJudgeMessage(msg)
+	require.Equal(t, uuid.Nil, target.AnchorID)
+	require.Equal(t, uuid.Nil, target.ChatID)
+	msg.ParentChatMessageID = uuid.New()
+	target = batchJudgeMessage(msg)
+	require.Equal(t, msg.ParentChatMessageID, target.AnchorID)
+	require.Equal(t, msg.ChatID, target.ChatID)
+}

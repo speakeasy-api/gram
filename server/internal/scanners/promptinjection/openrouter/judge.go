@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -112,18 +111,19 @@ Return only JSON with "directive_kind", "target", "operational", and "rationale"
 
 // Engine is the OpenRouter-backed prompt-attack judge. Each message is judged
 // with a strict JSON schema, low temperature, and a hard timeout. Errors and
-// rate-limited calls fail open (SAFE) so a judge outage drops PI findings.
+// provider throttling yield UNAVAILABLE, so an outage cannot become a clean scan.
 type Engine struct {
-	logger      *slog.Logger
-	tracer      trace.Tracer
-	metrics     *metrics
-	client      gramopenrouter.CompletionClient
-	limiter     *ratelimit.Limiter
-	model       string
-	reasoning   string
-	temperature float64
-	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
-	stokenCodec *stokens.Codec
+	systemPrompt string
+	timeout      time.Duration
+	logger       *slog.Logger
+	tracer       trace.Tracer
+	metrics      *metrics
+	client       gramopenrouter.CompletionClient
+	model        string
+	reasoning    string
+	temperature  float64
+	schema       or.ChatJSONSchemaConfig // built once; the verdict shape is constant
+	stokenCodec  *stokens.Codec
 }
 
 type trajectoryTelemetry struct {
@@ -140,7 +140,6 @@ var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var (
 	safeResult          = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: Model, Provider: "openrouter"}
-	errTypedRateLimit   = errors.New("typed pi judge rate limited")
 	errMalformedVerdict = errors.New("malformed typed pi verdict")
 )
 
@@ -151,19 +150,20 @@ var unavailableResult = promptinjection.Result{Label: promptinjection.LabelUnava
 
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter) *Engine {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient) *Engine {
 	logger = logger.With(attr.SlogComponent("pi-llm-judge"))
 	strict := true
 	return &Engine{
-		logger:      logger,
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"),
-		metrics:     newMetrics(meterProvider, logger),
-		client:      client,
-		limiter:     limiter,
-		model:       Model,
-		reasoning:   ReasoningEffort,
-		temperature: defaultTemperature,
-		stokenCodec: stokens.NewCodec(),
+		systemPrompt: SystemPrompt,
+		timeout:      JudgeTimeout,
+		logger:       logger,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"),
+		metrics:      newMetrics(meterProvider, logger),
+		client:       client,
+		model:        Model,
+		reasoning:    ReasoningEffort,
+		temperature:  defaultTemperature,
+		stokenCodec:  stokens.NewCodec(),
 		schema: or.ChatJSONSchemaConfig{
 			Name:        "prompt_injection_typed_verdict",
 			Schema:      VerdictSchema(),
@@ -216,10 +216,6 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		)
 	}
 
-	// The rate-limit bucket is identical for every message in the batch, so
-	// resolve the spending key once rather than per message.
-	bucket := gramopenrouter.ResolveJudgeRateLimitKey(ctx, c.logger, c.client, req.OrgID, req.ProjectID, billing.ModelUsageSourcePromptInjection, c.model)
-
 	results := make([]promptinjection.Result, n)
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
@@ -246,40 +242,28 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		go func(i int, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID, bucket)
+			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID, nil)
 		}(i, msg, trajectory, userID)
 	}
 	wg.Wait()
 	return results, nil
 }
 
+// maxConfirmationPayloadBytes bounds serialized evidence, including JSON escaping
+// and decoded views; field-level rune limits alone do not bound the whole window.
+const maxConfirmationPayloadBytes = 256 << 10
+
 // classifyOne returns UNAVAILABLE for every fail-open path and SAFE only for a
 // judgement that cleared the content.
-func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, bucket string) promptinjection.Result {
-	// Bail before spending a rate-limit token (or making the call) on a context
-	// that is already canceled — otherwise a cancellation burst can drain the
-	// org's budget and throttle real requests into fail-open verdicts. (cubic)
+func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, window *judgemessage.Window) promptinjection.Result {
 	if ctx.Err() != nil {
 		return unavailableResult
 	}
 
-	// A Store outage is not a throttle: proceed rather than let limiter infra
-	// silence the scanner.
-	switch res, err := c.limiter.Allow(ctx, bucket); {
-	case err != nil:
-		c.logger.WarnContext(ctx, "pi judge rate limiter unavailable, allowing call",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(req.OrgID),
-		)
-	case !res.Allowed:
-		c.metrics.RecordRateLimited(ctx, req.OrgID, c.model, c.reasoning)
-		c.logger.WarnContext(ctx, "pi judge rate limited; failing open",
-			attr.SlogOrganizationID(req.OrgID),
-		)
-		return unavailableResult
-	}
-
 	contextState := observeTrajectory(trajectory)
+	if window != nil && len(window.Messages) > 1 {
+		contextState.contextPresent = true
+	}
 	ctx, span := c.tracer.Start(ctx, "risk.prompt_injection.classify.typed_event", trace.WithAttributes(
 		attr.OrganizationID(req.OrgID),
 		attr.ProjectID(req.ProjectID),
@@ -306,7 +290,27 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	)
 
 	prepared, countContent := prepareJudgePayload(msg, trajectory)
-	decisionCtx, cancel := context.WithTimeout(ctx, JudgeTimeout)
+	if window != nil {
+		var trajectoryPayload *judgemessage.TrajectoryPayload
+		if trajectory.HasContent() {
+			rendered := judgemessage.RenderTrajectory(trajectory)
+			trajectoryPayload = &rendered
+		}
+		var err error
+		prepared, err = json.Marshal(struct {
+			Window     judgemessage.Window             `json:"window"`
+			Trajectory *judgemessage.TrajectoryPayload `json:"trajectory,omitempty"`
+		}{Window: *window, Trajectory: trajectoryPayload})
+		if err != nil || len(prepared) > maxConfirmationPayloadBytes {
+			return unavailableResult
+		}
+		for i, evidence := range window.Messages {
+			if i != window.TargetIndex {
+				countContent = append(countContent, judgemessage.STokenContent(evidence)...)
+			}
+		}
+	}
+	decisionCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
 	start := time.Now()
@@ -435,9 +439,6 @@ func typedFailureReason(err error, outcome o11y.Outcome) string {
 	if err == nil {
 		return "none"
 	}
-	if errors.Is(err, errTypedRateLimit) {
-		return "rate_limited"
-	}
 	if outcome == o11y.OutcomeCanceled {
 		return "canceled"
 	}
@@ -465,47 +466,51 @@ type judgePayload struct {
 // (~1024 tokens on the Gemini judge model); below that it's a no-op. The
 // offline evaluator reuses it so measured token costs match the production
 // request shape.
-func SystemMessage() or.ChatMessages {
+func SystemMessage() or.ChatMessages { return systemMessage(SystemPrompt) }
+
+func systemMessage(prompt string) or.ChatMessages {
 	return or.CreateChatMessagesSystem(or.ChatSystemMessage{
-		Role: or.ChatSystemMessageRoleSystem,
+		ConfigurationUpdate: nil,
+		Role:                or.ChatSystemMessageRoleSystem,
 		Content: or.CreateChatSystemMessageContentArrayOfChatContentText([]or.ChatContentText{{
-			Type:         or.ChatContentTextTypeText,
-			Text:         SystemPrompt,
-			CacheControl: &or.ChatContentCacheControl{Type: or.ChatContentCacheControlTypeEphemeral, TTL: nil},
+			PromptCacheBreakpoint: nil,
+			Type:                  or.ChatContentTextTypeText,
+			Text:                  prompt,
+			CacheControl:          &or.ChatContentCacheControl{Type: or.ChatContentCacheControlTypeEphemeral, TTL: nil},
 		}}),
 		Name: nil,
 	})
 }
 
 func prepareJudgePayload(msg judgemessage.Message, trajectory judgemessage.Trajectory) ([]byte, []string) {
-	rendered := judgemessage.RenderPayload(msg)
-	countContent := judgemessage.STokenContent(rendered)
-	var trajectoryPayload *judgemessage.TrajectoryPayload
+	payload := judgePayload{Message: judgemessage.RenderPayload(msg), Trajectory: nil}
 	if trajectory.HasContent() {
-		renderedTrajectory := judgemessage.RenderTrajectory(trajectory)
-		trajectoryPayload = &renderedTrajectory
-		for _, value := range []string{
-			renderedTrajectory.PriorUserRequest,
-			renderedTrajectory.PriorUserRequestDecoded,
-			renderedTrajectory.RecentUntrustedContent,
-			renderedTrajectory.RecentUntrustedContentDecoded,
-		} {
-			if value != "" {
-				countContent = append(countContent, value)
-			}
-		}
+		rendered := judgemessage.RenderTrajectory(trajectory)
+		payload.Trajectory = &rendered
 	}
-	payload, err := json.Marshal(judgePayload{Message: rendered, Trajectory: trajectoryPayload})
+	prepared, err := json.Marshal(payload)
 	if err != nil {
 		return []byte(msg.Body), []string{msg.Body}
 	}
-	return payload, countContent
+	return prepared, judgePayloadContent(payload)
+}
+
+func judgePayloadContent(payload judgePayload) []string {
+	content := judgemessage.STokenContent(payload.Message)
+	if t := payload.Trajectory; t != nil {
+		for _, value := range []string{t.PriorUserRequest, t.PriorUserRequestDecoded, t.RecentUntrustedContent, t.RecentUntrustedContentDecoded} {
+			if value != "" {
+				content = append(content, value)
+			}
+		}
+	}
+	return content
 }
 
 func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload []byte, userID string) (Verdict, error) {
 
 	messages := []or.ChatMessages{
-		SystemMessage(),
+		systemMessage(c.systemPrompt),
 		or.CreateChatMessagesUser(or.ChatUserMessage{
 			Role:    or.ChatUserMessageRoleUser,
 			Content: or.CreateChatUserMessageContentStr(string(payload)),

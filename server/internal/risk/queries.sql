@@ -2331,3 +2331,57 @@ WHERE id = @id;
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
 WHERE id = @id;
+
+-- name: GetJudgeMessageWindow :many
+-- Two bounded index probes around a tenant-validated anchor. Keep the target
+-- even when no neighbors exist; an absent target is never a valid window.
+-- Tool evidence remains valid JSON: one overflow call/rune preserves truncation
+-- indicators in the renderer without transferring the full stored payload.
+WITH target AS (
+  SELECT cm.id, cm.chat_id, cm.project_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.seq, cm.generation FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
+  JOIN projects p ON p.id = c.project_id
+  WHERE cm.id = @anchor_id::uuid AND cm.project_id = @project_id::uuid
+    AND p.organization_id = @organization_id::text
+)
+SELECT evidence.id, evidence.role, LEFT(evidence.content, 4001)::text AS content,
+  COALESCE((SELECT jsonb_agg(jsonb_build_object('function', jsonb_build_object(
+    'name', LEFT(call->'function'->>'name', 257),
+    'arguments', LEFT(call->'function'->>'arguments', 4001))))
+    FROM jsonb_array_elements(jsonb_path_query_array(
+      COALESCE(NULLIF(CASE WHEN jsonb_typeof(evidence.tool_calls) = 'string'
+        THEN (evidence.tool_calls #>> '{}')::jsonb
+        ELSE evidence.tool_calls END, 'null'::jsonb), '[]'::jsonb),
+      '$[0 to 8]')) AS call), '[]'::jsonb)::text AS tool_calls
+FROM (
+SELECT n.id, n.chat_id, n.project_id, n.role, n.content, n.tool_calls, n.created_at, n.seq FROM target t
+JOIN LATERAL (
+  (SELECT prev.id, prev.chat_id, prev.project_id, prev.role, prev.content, prev.tool_calls, prev.created_at, prev.seq FROM chat_messages prev
+   WHERE prev.chat_id = t.chat_id AND prev.project_id = t.project_id AND prev.generation = t.generation
+     AND (prev.created_at, prev.seq) < (t.created_at, t.seq)
+   ORDER BY prev.created_at DESC, prev.seq DESC LIMIT 2)
+  UNION ALL
+  SELECT t.id, t.chat_id, t.project_id, t.role, t.content, t.tool_calls, t.created_at, t.seq
+  UNION ALL
+  (SELECT next.id, next.chat_id, next.project_id, next.role, next.content, next.tool_calls, next.created_at, next.seq FROM chat_messages next
+   WHERE next.chat_id = t.chat_id AND next.project_id = t.project_id AND next.generation = t.generation
+     AND (next.created_at, next.seq) > (t.created_at, t.seq)
+   ORDER BY next.created_at, next.seq LIMIT 2)
+) n ON TRUE
+UNION ALL
+(SELECT recent.id, recent.chat_id, recent.project_id, recent.role, recent.content, recent.tool_calls, recent.created_at, recent.seq FROM chat_messages recent
+ JOIN chats c ON c.id = recent.chat_id AND c.project_id = recent.project_id
+ JOIN projects p ON p.id = c.project_id
+ WHERE @anchor_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+   AND recent.chat_id = @chat_id::uuid AND recent.project_id = @project_id::uuid
+   AND p.organization_id = @organization_id::text
+   AND recent.generation = (SELECT MAX(latest.generation) FROM chat_messages latest
+     WHERE latest.chat_id = @chat_id::uuid AND latest.project_id = @project_id::uuid)
+ ORDER BY recent.created_at DESC, recent.seq DESC LIMIT 4)
+) evidence
+ORDER BY evidence.created_at, evidence.seq;
+
+-- name: CreateJudgeWindowMessageForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation)
+VALUES (@chat_id, @project_id, 'user', @content, @generation)
+RETURNING id;

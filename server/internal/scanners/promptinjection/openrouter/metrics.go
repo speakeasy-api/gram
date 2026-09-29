@@ -25,7 +25,6 @@ const (
 	meterTypedCallDuration     = "risk.prompt_injection.typed_call_duration"
 	meterTypedDecisionDuration = "risk.prompt_injection.typed_decision_duration"
 	meterTypedFailOpen         = "risk.prompt_injection.typed_fail_open_samples"
-	meterRateLimited           = "risk.prompt_injection.rate_limited"
 )
 
 type metrics struct {
@@ -41,7 +40,6 @@ type metrics struct {
 	callDuration     metric.Float64Histogram
 	decisionDuration metric.Float64Histogram
 	failOpen         metric.Int64Counter
-	rateLimited      metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -165,15 +163,6 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedFailOpen), attr.SlogError(err))
 	}
 
-	rateLimited, err := meter.Int64Counter(
-		meterRateLimited,
-		metric.WithDescription("Number of prompt-injection judge calls rejected by the per-org rate limiter"),
-		metric.WithUnit("{classification}"),
-	)
-	if err != nil {
-		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRateLimited), attr.SlogError(err))
-	}
-
 	return &metrics{
 		classifications:  classifications,
 		duration:         duration,
@@ -187,7 +176,6 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		callDuration:     callDuration,
 		decisionDuration: decisionDuration,
 		failOpen:         failOpen,
-		rateLimited:      rateLimited,
 	}
 }
 
@@ -333,17 +321,5 @@ func (m *metrics) RecordConfidence(ctx context.Context, orgID string, confidence
 	m.confidence.Record(ctx, confidence, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("stage", stageJudge),
-	))
-}
-
-// RecordRateLimited records a judge call rejected by the rate limiter.
-func (m *metrics) RecordRateLimited(ctx context.Context, orgID, model, reasoning string) {
-	if m.rateLimited == nil {
-		return
-	}
-	m.rateLimited.Add(ctx, 1, metric.WithAttributes(
-		attr.OrganizationID(orgID),
-		attribute.String("model", model),
-		attribute.String("reasoning", reasoning),
 	))
 }
