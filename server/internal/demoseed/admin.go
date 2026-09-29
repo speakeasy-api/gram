@@ -78,7 +78,27 @@ func adminSeedFixtures(now time.Time) []adminSeedFixture {
 			Members: counts[i%len(counts)], Disabled: i >= AdminSeedOrganizationsPerStatus, CreatedAt: dates[(i%AdminSeedOrganizationsPerStatus)%len(dates)],
 		}
 	}
+	fixtures[60].Name = fixtures[0].Name // Duplicate display names, distinct canonical targets.
 	return fixtures
+}
+
+// Dedicated fictional users cover lifecycle and overflow without changing the
+// organization-list fixtures' original membership distribution.
+type adminSeedUserFixture struct {
+	ID, Name                                            string
+	Organizations                                       []string
+	Deleted, WorkosDeleted, DeletedMembership, HasLogin bool
+}
+
+func adminSeedUserFixtures() []adminSeedUserFixture {
+	return []adminSeedUserFixture{
+		{ID: "user_local_admin_edge_zero"},
+		{ID: "user_local_admin_edge_multi", Name: "Fictional 100%_Literal Member", Organizations: []string{"org_local_admin_fixture_01", "org_local_admin_fixture_02", "org_local_admin_fixture_03", "org_local_admin_fixture_04", "org_local_admin_fixture_61"}},
+		{ID: "user_local_admin_edge_deleted", Name: "Fictional Deleted Member", Deleted: true},
+		{ID: "user_local_admin_edge_workos_deleted", Name: "Fictional Externally Deleted Member", WorkosDeleted: true},
+		{ID: "user_local_admin_edge_membership_deleted", Name: "Fictional Former Member", Organizations: []string{"org_local_admin_fixture_01"}, DeletedMembership: true},
+		{ID: "user_local_admin_edge_login", Name: "Fictional Returning Member", HasLogin: true},
+	}
 }
 
 // RunAdminSeed is deliberately independent of Run and RunLocalFixtures. It
@@ -176,6 +196,48 @@ func runAdminSeed(ctx context.Context, db *pgxpool.Pool, now time.Time) error {
 				int64(-8900000-(i+1)*1000-member), fixture.ID, userID, now)
 			if err != nil {
 				return fmt.Errorf("seed fictional membership: %w", err)
+			}
+		}
+	}
+	for i, fixture := range adminSeedUserFixtures() {
+		orgIDs := fixture.Organizations
+		if orgIDs == nil {
+			orgIDs = []string{}
+		}
+		var collision bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (
+   SELECT 1 FROM public.users WHERE id=$1 AND (email<>id||'@admin-seed.invalid' OR workos_id IS NOT NULL)
+   UNION ALL SELECT 1 FROM public.organization_user_relationships WHERE user_id=$1 AND NOT (organization_id=ANY($2::text[])))`, fixture.ID, orgIDs).Scan(&collision); err != nil {
+			return fmt.Errorf("validate fictional edge user: %w", err)
+		}
+		if collision {
+			return errors.New("admin seed edge user identity collision")
+		}
+		var deletedAt, workosDeletedAt, lastLogin *time.Time
+		if fixture.Deleted {
+			deletedAt = &now
+		}
+		if fixture.WorkosDeleted {
+			workosDeletedAt = &now
+		}
+		if fixture.HasLogin {
+			lastLogin = &now
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO public.users (id,email,display_name,deleted_at,workos_deleted_at,last_login)
+   VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO UPDATE SET display_name=EXCLUDED.display_name,
+   deleted_at=EXCLUDED.deleted_at,workos_deleted_at=EXCLUDED.workos_deleted_at,last_login=EXCLUDED.last_login,updated_at=$7`,
+			fixture.ID, fixture.ID+"@admin-seed.invalid", fixture.Name, deletedAt, workosDeletedAt, lastLogin, now); err != nil {
+			return fmt.Errorf("seed fictional edge user: %w", err)
+		}
+		for j, orgID := range orgIDs {
+			var membershipDeletedAt *time.Time
+			if fixture.DeletedMembership {
+				membershipDeletedAt = &now
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO public.organization_user_relationships (id,organization_id,user_id,deleted_at)
+    VALUES ($1,$2,$3,$4) ON CONFLICT (organization_id,user_id) DO UPDATE SET deleted_at=EXCLUDED.deleted_at,updated_at=$5`,
+				int64(-9200000-i*100-j), orgID, fixture.ID, membershipDeletedAt, now); err != nil {
+				return fmt.Errorf("seed fictional edge membership: %w", err)
 			}
 		}
 	}
