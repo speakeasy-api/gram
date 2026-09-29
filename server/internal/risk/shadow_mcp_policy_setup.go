@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -32,9 +33,40 @@ func validateShadowMCPDisposition(disposition string, sources []string, action s
 		return oops.E(oops.CodeInvalid, nil, "invalid shadow mcp disposition %q", disposition)
 	}
 	if disposition != "" && (action != "block" || !slices.Contains(sources, shadowmcp.SourceShadowMCP)) {
-		return oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
+		return oops.E(oops.CodeInvalid, nil, "shadow_mcp_disposition only applies to a policy that detects shadow_mcp and denies, and this policy is %s", shadowMCPPolicyShape(sources, action))
 	}
 	return nil
+}
+
+// shadowMCPPolicyShape describes a policy's detection and action in the words
+// the policy editor uses, so a rejection names the configuration the caller
+// actually sent instead of leaving them to infer it.
+func shadowMCPPolicyShape(sources []string, action string) string {
+	if !slices.Contains(sources, shadowmcp.SourceShadowMCP) {
+		return fmt.Sprintf("detecting %s with the %q action", strings.Join(sources, ", "), action)
+	}
+	return fmt.Sprintf("detecting shadow_mcp with the %q action", action)
+}
+
+// shadowMCPRetiredAllowAllMessage explains why an allow_all policy cannot stop
+// being a blocking shadow MCP policy, naming the specific edit that would do
+// it and the way out.
+func shadowMCPRetiredAllowAllMessage(currentSources []string, currentAction string, sources []string, action string) string {
+	var edits []string
+	if slices.Contains(currentSources, shadowmcp.SourceShadowMCP) && !slices.Contains(sources, shadowmcp.SourceShadowMCP) {
+		edits = append(edits, "turning off shadow_mcp detection")
+	}
+	if currentAction != action {
+		edits = append(edits, fmt.Sprintf("changing the action from %q to %q", currentAction, action))
+	}
+	edit := strings.Join(edits, " and ")
+	if edit == "" {
+		edit = "this change"
+	}
+	return fmt.Sprintf(
+		"this policy allows every shadow MCP server except the ones on its blocked list, so it only means anything while it detects shadow_mcp and denies; %s would leave its blocked list with nothing to enforce. Delete this policy and create the one you want instead",
+		edit,
+	)
 }
 
 // shadowMCPPolicyAutoName returns the fixed auto-generated name for a policy

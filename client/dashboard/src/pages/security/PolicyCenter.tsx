@@ -1822,20 +1822,30 @@ export function ActionPicker({
   formAction,
   setFormAction,
   flagOnlySelected = false,
+  pinnedAction,
 }: {
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
   flagOnlySelected?: boolean;
+  /** Pins the picker to one action and shows `reason` on every other option.
+   *  For policies whose action the server refuses to change at all. */
+  pinnedAction?: { value: PolicyAction; reason: string };
 }): JSX.Element {
   // Flag-only sources reject both block and warn (blocking-class); present them
   // as flag. Mirrors validateSourceAction in server/internal/risk/impl.go.
-  const actionValue =
-    flagOnlySelected && formAction !== "flag" ? "flag" : formAction;
+  const actionValue = pinnedAction
+    ? pinnedAction.value
+    : flagOnlySelected && formAction !== "flag"
+      ? "flag"
+      : formAction;
 
   return (
     <RadioGroup
       value={actionValue}
       onValueChange={(v) => {
+        if (pinnedAction && v !== pinnedAction.value) {
+          return;
+        }
         if (flagOnlySelected && v !== "flag") {
           return;
         }
@@ -1844,7 +1854,10 @@ export function ActionPicker({
       className="space-y-2.5"
     >
       {ACTION_OPTIONS.map((opt) => {
-        const disabled = flagOnlySelected && opt.value !== "flag";
+        const pinnedOut =
+          pinnedAction !== undefined && opt.value !== pinnedAction.value;
+        const disabled =
+          pinnedOut || (flagOnlySelected && opt.value !== "flag");
         const selected = actionValue === opt.value;
 
         return (
@@ -1876,8 +1889,9 @@ export function ActionPicker({
               </div>
               {disabled && (
                 <div className="text-destructive mt-1 text-xs font-medium">
-                  Destructive Tools and Destructive CLI Commands support
-                  flagging only.
+                  {pinnedOut
+                    ? pinnedAction.reason
+                    : "Destructive Tools and Destructive CLI Commands support flagging only."}
                 </div>
               )}
             </div>

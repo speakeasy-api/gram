@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shadowMCPPolicyInventoryQueryKey } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { PolicyNew, StandardPolicyEditor } from "./PolicyDetail";
+import { SHADOW_MCP_ALLOW_ALL_LOCK_REASON } from "./policy-shadow-mcp-setup";
 import { testAccessSummary } from "@/components/shadow-mcp/shadowMCPInventoryTestFixtures";
 
 const mocks = vi.hoisted(() => ({
@@ -19,7 +20,12 @@ const mocks = vi.hoisted(() => ({
   mutateUpdate: vi.fn(),
   kind: null as string | null,
   category: null as string | null,
-  detectorSelections: [] as Array<{ category: string; selected: boolean }>,
+  detectorSelections: [] as Array<{
+    category: string;
+    selected: boolean;
+    disabledReason?: string;
+  }>,
+  pinnedActions: [] as Array<{ value: string; reason: string } | undefined>,
 }));
 
 vi.mock("sonner", () => ({
@@ -105,7 +111,14 @@ vi.mock("./use-cel-status", () => ({
 }));
 
 vi.mock("./PolicyCenter", () => ({
-  ActionPicker: () => null,
+  ActionPicker: ({
+    pinnedAction,
+  }: {
+    pinnedAction?: { value: string; reason: string };
+  }) => {
+    mocks.pinnedActions.push(pinnedAction);
+    return null;
+  },
   CustomizeRulesSheet: () => null,
   PolicyAudiencePicker: () => null,
   RuleSelectList: () => null,
@@ -116,11 +129,13 @@ vi.mock("./DetectorCard", () => ({
   DetectorCard: ({
     category,
     selected,
+    disabledReason,
   }: {
     category: string;
     selected: boolean;
+    disabledReason?: string;
   }) => {
-    mocks.detectorSelections.push({ category, selected });
+    mocks.detectorSelections.push({ category, selected, disabledReason });
     return null;
   },
 }));
@@ -329,6 +344,78 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
       ]);
       expect(mocks.modeRenders.at(-1)).toBe("block");
     });
+  });
+});
+
+describe("StandardPolicyEditor allow_all posture lock", () => {
+  beforeEach(() => {
+    mocks.selectionRenders.length = 0;
+    mocks.modeRenders.length = 0;
+    mocks.kind = null;
+    mocks.category = null;
+    mocks.detectorSelections.length = 0;
+    mocks.pinnedActions.length = 0;
+    vi.clearAllMocks();
+    vi.mocked(useSdkClient).mockReturnValue({
+      access: { listShadowMCPInventory: vi.fn() },
+    } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  function renderEditor(policy: RiskPolicy) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <StandardPolicyEditor policy={policy} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+  }
+
+  function shadowMCPCard() {
+    return mocks.detectorSelections.find(
+      (selection) => selection.category === "shadow_mcp",
+    );
+  }
+
+  it("pins Deny and locks the Shadow MCP detector on an allow_all policy", () => {
+    mocks.step = "action";
+    renderEditor({
+      ...blockingPolicyWithDirtyDraftName(),
+      shadowMcpDisposition: "allow_all",
+    });
+    expect(mocks.pinnedActions.at(-1)).toEqual({
+      value: "block",
+      reason: SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
+    });
+
+    mocks.step = "detect";
+    renderEditor({
+      ...blockingPolicyWithDirtyDraftName(),
+      shadowMcpDisposition: "allow_all",
+    });
+    expect(shadowMCPCard()?.disabledReason).toBe(
+      SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
+    );
+  });
+
+  it("leaves a block_all policy's action and detector editable", () => {
+    mocks.step = "action";
+    renderEditor({
+      ...blockingPolicyWithDirtyDraftName(),
+      shadowMcpDisposition: "block_all",
+    });
+    expect(mocks.pinnedActions.at(-1)).toBeUndefined();
+
+    mocks.step = "detect";
+    renderEditor({
+      ...blockingPolicyWithDirtyDraftName(),
+      shadowMcpDisposition: "block_all",
+    });
+    expect(shadowMCPCard()).toBeDefined();
+    expect(shadowMCPCard()?.disabledReason).toBeUndefined();
   });
 });
 

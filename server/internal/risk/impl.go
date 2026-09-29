@@ -929,33 +929,48 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
 		}
 	}
-	// The disposition is immutable: accept only the policy's current effective
-	// value (so form round-trips stay valid); anything else is a posture
-	// switch, which requires delete + recreate. A policy with an explicitly
-	// stored disposition also cannot morph away from being a blocking shadow
-	// MCP policy via a sources/action change — that would silently drop the
-	// posture and orphan the blocked-URL list.
+	// A blocking shadow MCP policy is one that detects shadow_mcp and denies;
+	// its disposition says whether the server list it carries is a set of
+	// allowed exceptions (block_all) or a set of blocked servers (allow_all).
+	currentDisposition := shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, current.Sources, current.Action)
 	effectiveDisposition := shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, sources, action)
-	if current.ShadowMcpDisposition.Valid && current.ShadowMcpDisposition.String != "" && effectiveDisposition == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "cannot change the sources or action of a shadow mcp policy with a disposition; delete and recreate the policy instead")
+	// This edit retires the blocking posture: shadow_mcp left the sources, the
+	// action left block, or both.
+	retiresBlockingPosture := currentDisposition != "" && effectiveDisposition == ""
+	// An allow_all policy is its blocked-server list — outside the blocking
+	// posture there is nothing for that list to deny, and the policy would sit
+	// in the project's single blocking-policy slot enforcing nothing. A
+	// block_all policy's list is only a set of exceptions to a default deny,
+	// so it can retire the posture and give the exceptions up.
+	if retiresBlockingPosture && currentDisposition == ShadowMCPDispositionAllowAll {
+		return nil, oops.E(oops.CodeInvalid, nil, "%s", shadowMCPRetiredAllowAllMessage(current.Sources, current.Action, sources, action))
 	}
 
 	if payload.ShadowMcpDisposition != nil {
 		if effectiveDisposition == "" {
-			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
+			return nil, oops.E(oops.CodeInvalid, nil, "shadow_mcp_disposition only applies to a policy that detects shadow_mcp and denies, and this update leaves it %s", shadowMCPPolicyShape(sources, action))
 		}
 		if *payload.ShadowMcpDisposition != effectiveDisposition {
-			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition is immutable; delete and recreate the policy to switch posture")
+			return nil, oops.E(oops.CodeInvalid, nil, "a shadow mcp policy's disposition is chosen when it is created and cannot be edited: this policy is %q and cannot become %q. Delete it and create a %q policy instead", effectiveDisposition, *payload.ShadowMcpDisposition, *payload.ShadowMcpDisposition)
 		}
 	}
 
 	var shadowMCPAllowedURLs []string
+	allowedURLsSet := payload.ShadowMcpAllowedUrls != nil
 	audienceUpdateRequested := payload.AudienceType != nil || payload.AudiencePrincipalUrns != nil
 	if payload.ShadowMcpAllowedUrls != nil {
 		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, effectiveDisposition, payload.ShadowMcpAllowedUrls)
 		if err != nil {
 			return nil, err
 		}
+	}
+	// Retiring the posture retires the allowed-server exceptions with it,
+	// whether or not the caller thought to send an empty list. Leaving the
+	// bypass grants behind would silently reinstate them the next time the
+	// policy blocks again. The empty slice is load-bearing: a nil desired set
+	// means "preserve" to the grant reconciler.
+	if retiresBlockingPosture {
+		shadowMCPAllowedURLs, allowedURLsSet = []string{}, true
 	}
 
 	var shadowMCPBlockedURLs []string
@@ -1053,7 +1068,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		AudienceChanged:      audienceUpdateRequested,
 		AudienceDelta:        nil,
 		AllowedURLs:          shadowMCPAllowedURLs,
-		AllowedURLsSet:       payload.ShadowMcpAllowedUrls != nil,
+		AllowedURLsSet:       allowedURLsSet,
 		BlockedURLs:          shadowMCPBlockedURLs,
 		BlockedURLsSet:       payload.ShadowMcpBlockedUrls != nil,
 		EffectiveDisposition: effectiveDisposition,
