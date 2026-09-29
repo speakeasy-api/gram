@@ -37,4 +37,17 @@ func TestEvaluationSourceScopesAndOrdersDefinitions(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows[0].Signals, 1)
 	require.Equal(t, a.ID, string(rows[0].Signals[0].Key))
+	_, err = ti.service.DeleteSignal(ctx, &gen.DeleteSignalPayload{ID: a.ID})
+	require.NoError(t, err)
+	rows, err = source.Load(ctx, auth.ActiveOrganizationID, uuid.MustParse(sensor.ProjectID))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Empty(t, rows[0].Signals)
+	empty := createSensor(t, ctx, ti, "empty", "multi_label")
+	rows, err = source.Load(ctx, auth.ActiveOrganizationID, uuid.MustParse(empty.ProjectID))
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.Empty(t, row.Signals)
+	}
 }

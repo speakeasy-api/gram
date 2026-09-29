@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type memoryBlobs map[string][]byte
@@ -84,7 +87,7 @@ func TestInputRejectsCrossProjectAndIntegrityFailure(t *testing.T) {
 	require.Equal(t, "invalid_reference", permanentFailure.reason)
 	uri = "gs://test-bucket/" + m.GetProjectId() + "/body.pb"
 	m.SetBodyReference(reference(uri, "application/x-protobuf", data))
-	_, err = input(t.Context(), memoryBlobs{uri: []byte("corrupt")}, m)
+	_, err = input(t.Context(), memoryBlobs{uri: bytes.Repeat([]byte("x"), len(data))}, m)
 	require.ErrorAs(t, err, &permanentFailure)
 	require.Equal(t, "asset_integrity", permanentFailure.reason)
 }
@@ -97,6 +100,35 @@ func TestInputAssetUnavailableIsRetryable(t *testing.T) {
 	require.Error(t, err)
 	var permanentFailure *permanentError
 	require.NotErrorAs(t, err, &permanentFailure)
+}
+
+func TestInputResolvesFilesystemWriterLocator(t *testing.T) {
+	t.Parallel()
+	m := message()
+	expected, err := input(t.Context(), nil, m)
+	require.NoError(t, err)
+	data, err := proto.Marshal(m.GetBody())
+	require.NoError(t, err)
+	root, err := os.OpenRoot(t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+	store := assets.NewFSBlobStore(testenv.NewLogger(t), root)
+	w, locator, err := store.Write(t.Context(), m.GetProjectId()+"/body.pb", "application/x-protobuf", int64(len(data)))
+	require.NoError(t, err)
+	_, err = w.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	m.SetBodyReference(reference(locator.String(), "application/x-protobuf", data))
+	got, err := input(t.Context(), store, m)
+	require.NoError(t, err)
+	require.Equal(t, expected, got)
+	for _, uri := range []string{"file:another-project/body.pb", "file:" + m.GetProjectId() + "/../body.pb", "file:" + m.GetProjectId() + "/%2e%2e/body.pb"} {
+		m.GetBodyReference().SetUri(uri)
+		_, err := input(t.Context(), store, m)
+		var failed *permanentError
+		require.ErrorAs(t, err, &failed)
+		require.Equal(t, "invalid_reference", failed.reason)
+	}
 }
 
 func TestInputResolvesTextPartAndRejectsBinary(t *testing.T) {

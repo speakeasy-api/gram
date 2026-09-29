@@ -159,7 +159,9 @@ func (h *Handler) Handle(ctx context.Context, m *conversationv1.Message, _ gcp.M
 		outcomes[outcome.Key] = outcome
 	}
 	var retry error
-	if err := result.Err(); err != nil && !errors.Is(err, classifier.ErrRequestTooLarge) {
+	operationErr := result.Err()
+	permanentOperation := errors.Is(operationErr, classifier.ErrDisabled) || errors.Is(operationErr, classifier.ErrInvalidRequest)
+	if err := operationErr; err != nil && !permanentOperation && !errors.Is(err, classifier.ErrRequestTooLarge) {
 		retry = fmt.Errorf("evaluate sensors: %w", err)
 	}
 	var pending []gcp.PublishResult
@@ -168,7 +170,8 @@ func (h *Handler) Handle(ctx context.Context, m *conversationv1.Message, _ gcp.M
 		for _, q := range sensor.questions {
 			outcome, exists := outcomes[q.Key]
 			if !exists {
-				failed, transient = true, true
+				failed = true
+				transient = transient || !permanentOperation
 				continue
 			}
 			if outcome.Failure != nil {

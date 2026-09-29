@@ -50,11 +50,26 @@ func readReference(ctx context.Context, reader BlobReader, project string, ref *
 	// Backend bucket checks still apply. Explicit project paths also isolate local
 	// filesystem reads and prevent another tenant's asset being evaluated.
 	p := strings.TrimPrefix(u.Path, "/")
+	if u.Scheme == "file" {
+		if u.Opaque != "" {
+			p, err = url.PathUnescape(u.Opaque)
+			if err != nil {
+				return nil, permanent("invalid_reference")
+			}
+		} else if u.Host != "" {
+			p = u.Host + "/" + p
+		}
+	}
 	if path.Clean(p) != p || !strings.HasPrefix(p, project+"/") {
 		return nil, permanent("invalid_reference")
 	}
 	if u.Scheme != "gs" && u.Scheme != "s3" && u.Scheme != "file" {
 		return nil, permanent("invalid_reference")
+	}
+	if u.Scheme == "file" {
+		// FSBlobStore reads root-relative locators by stripping file://. Its
+		// writer's relative file:path form becomes opaque after serialization.
+		u = &url.URL{Scheme: "file", Host: project, Path: strings.TrimPrefix(p, project)}
 	}
 	if *remaining < 0 || ref.GetSizeBytes() > uint64(*remaining) {
 		return nil, permanent("content_too_large")
