@@ -46,12 +46,9 @@ type RiskFindingsService struct {
 	now           func() time.Time
 }
 
-func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) (*RiskFindingsService, error) {
-	codec, err := newRiskCursorCodec(key)
-	if err != nil {
-		return nil, fmt.Errorf("create risk findings cursor codec: %w", err)
-	}
-	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}, nil
+func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) *RiskFindingsService {
+	codec := newRiskCursorCodec(key)
+	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}
 }
 
 func (s *RiskFindingsService) valid() bool {
