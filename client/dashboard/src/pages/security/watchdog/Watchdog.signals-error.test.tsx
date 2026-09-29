@@ -64,6 +64,14 @@ vi.mock("@gram/client/react-query/riskSignals.js", () => ({
   invalidateAllRiskSignals: vi.fn(),
 }));
 
+vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  useMcpServers: () => ({ data: undefined }),
+}));
+
+vi.mock("@gram/client/react-query/riskMcpServerCounts.js", () => ({
+  useRiskMcpServerCounts: () => ({ data: undefined }),
+}));
+
 vi.mock("@gram/client/react-query/riskCreateExclusion.js", () => ({
   useRiskCreateExclusionMutation: () => ({ mutateAsync: vi.fn() }),
 }));

@@ -56251,6 +56251,121 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskGetCustomDetectionRule
                 type: query
+    /rpc/risk.getMcpServerCounts:
+        get:
+            description: Get live finding counts per concrete MCP server over a window, largest first. Powers the MCP server filter pickers on Risk Events and Watchdog. Served from the ClickHouse findings store.
+            operationId: getRiskMcpServerCounts
+            parameters:
+                - allowEmptyValue: true
+                  description: Inclusive start of the window. Defaults to 7 days before to.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive start of the window. Defaults to 7 days before to.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive end of the window. Defaults to now.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive end of the window. Defaults to now.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskMcpServerCountsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getRiskMcpServerCounts risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.signals
+            x-speakeasy-name-override: mcpServerCounts
+            x-speakeasy-react-hook:
+                name: RiskMcpServerCounts
     /rpc/risk.getOverview:
         get:
             description: Get risk overview metrics and trend data for the current project.
@@ -56810,6 +56925,14 @@ paths:
                   schema:
                     description: Exclusive end of the signals window. Defaults to now.
                     format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional concrete MCP server ID. When set, every signal, KPI and exposure figure is computed from findings on that server only.
+                  in: query
+                  name: mcp_server_id
+                  schema:
+                    description: Optional concrete MCP server ID. When set, every signal, KPI and exposure figure is computed from findings on that server only.
+                    format: uuid
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -57564,6 +57687,105 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskListExclusions
                 type: query
+    /rpc/risk.listMCPPlatformToolsets:
+        get:
+            description: List code-owned Platform MCP toolsets available as risk policy scope targets.
+            operationId: listMCPPlatformToolsets
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMCPPlatformToolsetsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listMCPPlatformToolsets risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: listMcpPlatformToolsets
+            x-speakeasy-react-hook:
+                name: RiskListMcpPlatformToolsets
     /rpc/risk.listPolicies:
         get:
             description: List all risk analysis policies for the current project.
@@ -92536,6 +92758,16 @@ components:
                         $ref: '#/components/schemas/Key'
             required:
                 - keys
+        ListMCPPlatformToolsetsResult:
+            type: object
+            properties:
+                toolsets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskMCPPlatformToolset'
+                    description: The available Platform MCP policy scope targets.
+            required:
+                - toolsets
         ListManagedDevicesResult:
             type: object
             properties:
@@ -92935,7 +93167,7 @@ components:
                     description: The list of risk results with match content redacted to opaque fingerprints.
                 total_count:
                     type: integer
-                    description: Total number of findings across all enabled policies.
+                    description: Total number of findings matching the filters across all non-deleted policies.
                     format: int64
             required:
                 - results
@@ -92953,7 +93185,7 @@ components:
                     description: The list of risk results.
                 total_count:
                     type: integer
-                    description: Total number of findings across all enabled policies.
+                    description: Total number of findings matching the filters across all non-deleted policies.
                     format: int64
             required:
                 - results
@@ -99977,6 +100209,39 @@ components:
                     format: uuid
             required:
                 - id
+        RiskMCPPlatformTool:
+            type: object
+            properties:
+                annotations:
+                    $ref: '#/components/schemas/ToolAnnotations'
+                name:
+                    type: string
+                    description: The Platform MCP tool name.
+            required:
+                - name
+        RiskMCPPlatformToolset:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The stable policy-scope identity for this Platform MCP toolset.
+                    format: uuid
+                name:
+                    type: string
+                    description: The display name for this Platform MCP toolset.
+                slug:
+                    type: string
+                    description: The reserved Platform MCP toolset slug.
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskMCPPlatformTool'
+                    description: The code-owned tools in this Platform MCP toolset.
+            required:
+                - id
+                - slug
+                - name
+                - tools
         RiskMCPScope:
             type: object
             properties:
@@ -100015,6 +100280,29 @@ components:
                     description: Custom tool names for this server. Omit to follow the policy tool rule; an empty list matches every tool on this server, unconditionally.
             required:
                 - mcp_server_id
+        RiskMcpServerCount:
+            type: object
+            properties:
+                findings:
+                    type: integer
+                    description: Deduplicated live findings on this server in the window.
+                    format: int64
+                mcp_server_id:
+                    type: string
+                    description: Concrete MCP server ID.
+            required:
+                - mcp_server_id
+                - findings
+        RiskMcpServerCountsResult:
+            type: object
+            properties:
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskMcpServerCount'
+                    description: Per-server finding counts, largest first. Servers with no findings are omitted.
+            required:
+                - servers
         RiskOverviewCategory:
             type: object
             properties:
@@ -100818,6 +101106,11 @@ components:
                     type: string
                     description: Event time of the latest finding in the window.
                     format: date-time
+                mcp_server_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Concrete MCP server IDs the findings in this signal were observed on. Empty when no finding carries server attribution.
                 previous_findings:
                     type: integer
                     description: Finding count in the equal-length window immediately before from.
@@ -100847,6 +101140,11 @@ components:
                     type: integer
                     description: Distinct teams with at least one finding in the window. Zero until team attribution is recorded on findings.
                     format: int64
+                tool_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Concrete tool names the findings in this signal were observed on. Empty when no finding carries tool attribution.
                 top_users:
                     type: array
                     items:
@@ -100864,6 +101162,8 @@ components:
                 - description
                 - detection_sources
                 - apps
+                - mcp_server_ids
+                - tool_names
                 - severity
                 - risk_score
                 - findings

@@ -2555,14 +2555,25 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	eg, egCtx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
-		var fetchErr error
+		hostedMCPMatchers, mcpServerMatchers, fetchErr := LoadToolUsageMatchers(egCtx, s.db, *authCtx.ProjectID)
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error listing MCP servers for project overview")
+		}
+		metaMCPMatchers, fetchErr := LoadMetaMCPMatchers(egCtx, s.db, *authCtx.ProjectID)
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error listing gateways for project overview")
+		}
+
 		clickHouseResult, fetchErr = overview.FetchClickHouse(egCtx, s.chRepo, overview.Params{
-			ProjectID:       projectID,
-			TimeStart:       timeStart,
-			TimeEnd:         timeEnd,
-			ComparisonStart: comparisonStart,
-			ComparisonEnd:   comparisonEnd,
-			SessionMode:     sessionMode,
+			ProjectID:         projectID,
+			TimeStart:         timeStart,
+			TimeEnd:           timeEnd,
+			ComparisonStart:   comparisonStart,
+			ComparisonEnd:     comparisonEnd,
+			SessionMode:       sessionMode,
+			HostedMCPMatchers: hostedMCPMatchers,
+			MCPServerMatchers: mcpServerMatchers,
+			MetaMCPMatchers:   metaMCPMatchers,
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving project overview ClickHouse data")
@@ -2654,7 +2665,6 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	// Resolve active counts and top lists now that every query has returned.
-	activeServersCount := int64(clickHouseResult.ActiveCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
 	var activeUsersCount int64
 	var topUsers []*telem_gen.TopUser
 	var llmClientBreakdown []*telem_gen.LLMClientUsage
@@ -2674,8 +2684,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		overrideMap[override.RawServerName] = override.DisplayName
 	}
 
-	// Apply overrides to top servers
+	// Apply overrides before trimming so alternate reported names that fold to
+	// one server do not leave the ranked list artificially short.
 	topServersWithOverrides := applyServerNameOverrides(clickHouseResult.TopServers, overrideMap)
+	activeServersCount := int64(clickHouseResult.ActiveCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
+	if len(topServersWithOverrides) > 10 {
+		topServersWithOverrides = topServersWithOverrides[:10]
+	}
 
 	// Convert to API types - build summaries with nested fields
 	return &telem_gen.GetProjectOverviewResult{
@@ -4074,6 +4089,7 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 
 		serverMatchers = append(serverMatchers, repo.MCPServerMatcher{
 			SourceID:    sourceID,
+			MCPServerID: server.ID.String(),
 			TargetType:  targetType,
 			TargetID:    targetID,
 			TargetLabel: targetLabel,

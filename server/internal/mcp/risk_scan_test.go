@@ -57,8 +57,8 @@ type hostedPolicyLookup struct {
 	scopedServerID uuid.UUID
 }
 
-func (l hostedPolicyLookup) ListEnabledForMCPServer(_ context.Context, _ string, _, serverID uuid.UUID, _ string) ([]policycore.Policy, error) {
-	if serverID != l.scopedServerID {
+func (l hostedPolicyLookup) ListEnabledForMCP(_ context.Context, _ string, _ uuid.UUID, target policycore.MCPTarget) ([]policycore.Policy, error) {
+	if target.ServerID != l.scopedServerID {
 		return []policycore.Policy{}, nil
 	}
 	return []policycore.Policy{l.policy}, nil
@@ -164,16 +164,18 @@ func TestRiskScan_PromptRetrieval(t *testing.T) {
 type consumingRiskScan struct {
 	t        *testing.T
 	payloads [][]byte
+	events   []mcpriskscan.Event
 }
 
 func (s *consumingRiskScan) Observe(_ context.Context, subject mcpriskscan.Subject) {
 	payload := bytes.Clone(subject.Payload.Bytes())
 	s.payloads = append(s.payloads, payload)
+	s.events = append(s.events, subject.Event)
 }
 
 func consumeRiskScanPayloads(t *testing.T, ti *testInstance) *consumingRiskScan {
 	t.Helper()
-	scanner := &consumingRiskScan{t: t, payloads: nil}
+	scanner := &consumingRiskScan{t: t, payloads: nil, events: nil}
 	noop := mcpriskscan.NewNoop(ti.tracerProvider, testenv.NewMeterProvider(t), ti.logger)
 	ti.service.SetRiskScanEvaluator(mcpriskscan.PrependObserver(scanner, noop))
 	return scanner

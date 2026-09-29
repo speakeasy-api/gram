@@ -1808,6 +1808,7 @@ func newStartCommand() *cli.Command {
 				PublicationRequests:      plugins.PublicationRequests{Enabled: publicationEmit},
 				TemporalEnv:              temporalEnv,
 				Skills:                   skillsService,
+				SkillInsights:            telemetryrepo.New(chDB),
 				RiskPolicyApprovals:      mcpApprovalService,
 				RiskPolicySignaler:       riskSignaler,
 				RiskPolicyCache:          shadowMCPClient,
@@ -1912,6 +1913,7 @@ func newStartCommand() *cli.Command {
 				riskchrepo.New(chDB),
 				assetStorage,
 				metering.NewRiskRecorder(publishers.MeterReadings),
+				platformToolsets,
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)

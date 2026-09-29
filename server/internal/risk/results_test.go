@@ -2,18 +2,21 @@ package risk_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -124,34 +127,9 @@ func seedContentPartFinding(t *testing.T, ti *testInstance, projectID uuid.UUID,
 	return partID
 }
 
-func TestListRiskResults_ByPolicy(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Results Test")})
-	require.NoError(t, err)
-
-	policyID, _ := uuid.Parse(policy.ID)
-	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
-
-	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
-		PolicyID: &policy.ID,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Results, 1)
-	require.Equal(t, "aws-access-key-id", *result.Results[0].RuleID)
-}
-
 // A disabled ("turned off") policy still holds the findings it produced while
-// active. When the user explicitly filters to that policy the list must surface
-// those historical findings rather than coming back empty, while the default
-// unfiltered view keeps hiding them (only active policies contribute there).
+// active. Both the explicit policy filter and the default view surface them,
+// with totals that match the listing.
 func TestListRiskResults_ByPolicy_DisabledPolicyShowsHistoricalFindings(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -160,37 +138,39 @@ func TestListRiskResults_ByPolicy_DisabledPolicyShowsHistoricalFindings(t *testi
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Disabled Policy Test")})
 	require.NoError(t, err)
 
-	policyID, _ := uuid.Parse(policy.ID)
-	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "")
+	at := time.Now().UTC().Add(-time.Hour)
+	finding := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, at, at, "gitleaks", "aws-access-key-id", "", "AKIA**************LE", "", "")
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	// Turn the policy off.
-	disabled := false
+	// Turn the policy off after it produced the finding.
 	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
 		ID:      policy.ID,
 		Name:    policy.Name,
-		Enabled: &disabled,
+		Enabled: new(false),
 	})
 	require.NoError(t, err)
 
-	// Explicit filter on the disabled policy surfaces its historical findings.
 	byPolicy, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
 		PolicyID: &policy.ID,
 	})
 	require.NoError(t, err)
 	require.Len(t, byPolicy.Results, 1, "disabled policy should still show its historical findings when filtered")
 	require.Equal(t, "aws-access-key-id", *byPolicy.Results[0].RuleID)
-	require.Equal(t, int64(1), byPolicy.TotalCount, "by-policy total count should match the listing, not the enabled-only aggregate")
+	require.Equal(t, int64(1), byPolicy.TotalCount)
 
-	// The default unfiltered view keeps excluding disabled-policy findings.
 	unfiltered, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
 	require.NoError(t, err)
-	require.Empty(t, unfiltered.Results, "unfiltered view should not include disabled-policy findings")
-	require.Equal(t, int64(0), unfiltered.TotalCount, "unfiltered total count should not include disabled-policy findings")
+	require.Len(t, unfiltered.Results, 1, "disabling a policy keeps its history in the default view")
+	require.Equal(t, finding.ID.String(), unfiltered.Results[0].ID)
+	require.Equal(t, int64(1), unfiltered.TotalCount)
 }
 
 // A policy filter must not swallow the other filters. Selecting a policy and a
@@ -204,16 +184,23 @@ func TestListRiskResults_ByPolicyAndRuleID(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Policy+Rule Filter")})
 	require.NoError(t, err)
-	policyID, _ := uuid.Parse(policy.ID)
+	otherPolicy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Other Policy")})
+	require.NoError(t, err)
 
-	_, injMsg := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, injMsg, "prompt_injection", "prompt_injection", "ignore previous instructions")
-
-	_, emailMsg := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, emailMsg, "presidio", "pii.email_address", "a@b.com")
+	at := time.Now().UTC().Add(-time.Hour)
+	injChat, injMsg := seedChatWithUser(t, ti, projectID, orgID, "")
+	injection := chListFinding(t, projectID, orgID, injChat, injMsg, policy.ID, at, at, "prompt_injection", "prompt_injection", "", "", "", "")
+	emailChat, emailMsg := seedChatWithUser(t, ti, projectID, orgID, "")
+	email := chListFinding(t, projectID, orgID, emailChat, emailMsg, policy.ID, at, at.Add(time.Minute), "presidio", "pii.email_address", "", "***@b.com", "", "")
+	// Same rule under another policy: the rule filter alone would match it.
+	otherInjection := chListFinding(t, projectID, orgID, injChat, injMsg, otherPolicy.ID, at, at.Add(2*time.Minute), "prompt_injection", "prompt_injection", "", "", "", "")
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{injection, email, otherInjection}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	ruleID := "prompt_injection"
 	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
@@ -222,7 +209,7 @@ func TestListRiskResults_ByPolicyAndRuleID(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1, "policy + rule_id filter should return only the matching rule")
-	require.Equal(t, "prompt_injection", *result.Results[0].RuleID)
+	require.Equal(t, injection.ID.String(), result.Results[0].ID)
 }
 
 func TestListRiskResults_ByChatID(t *testing.T) {
@@ -248,6 +235,48 @@ func TestListRiskResults_ByChatID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
 	require.Equal(t, chatIDStr, *result.Results[0].ChatID)
+}
+
+// A disabled policy's findings stay listed in chat detail, the by-chat
+// grouping and the total, so a Risk Events row never opens an empty chat. A
+// deleted policy's lingering rows stay hidden.
+func TestListRiskResults_ByChatID_DisabledPolicyFindingsListed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	disabled, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Disabled Chat Policy"), Enabled: new(false)})
+	require.NoError(t, err)
+	deleted, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Deleted Chat Policy")})
+	require.NoError(t, err)
+	disabledID := uuid.MustParse(disabled.ID)
+	deletedID := uuid.MustParse(deleted.ID)
+
+	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
+	seedRiskResult(t, ti, projectID, orgID, disabledID, 1, msgID, true)
+	seedRiskResult(t, ti, projectID, orgID, deletedID, 1, msgID, true)
+
+	// Soft-delete through the repo so the policy's risk_results rows linger.
+	require.NoError(t, riskrepo.New(ti.conn).DeleteRiskPolicy(ctx, riskrepo.DeleteRiskPolicyParams{ID: deletedID, ProjectID: projectID}))
+
+	chatIDStr := chatID.String()
+	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ChatID: &chatIDStr})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+	require.Equal(t, disabled.ID, result.Results[0].PolicyID)
+	require.Equal(t, int64(1), result.TotalCount)
+
+	byChat, err := ti.service.ListRiskResultsByChat(ctx, &gen.ListRiskResultsByChatPayload{})
+	require.NoError(t, err)
+	require.Len(t, byChat.Chats, 1)
+	require.Equal(t, chatIDStr, byChat.Chats[0].ChatID)
+	require.Equal(t, int64(1), byChat.Chats[0].FindingsCount)
 }
 
 func TestListRiskResults_ByChatID_IncludesContentPartFindings(t *testing.T) {
@@ -292,12 +321,21 @@ func TestListRiskResults_ProjectIncludesContentPartFindings(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Content Part Project List Test")})
 	require.NoError(t, err)
-	policyID, _ := uuid.Parse(policy.ID)
-	chatID, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	partID := seedContentPartFinding(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, chatID, msgID)
+
+	const secret = "SECRET_ATTACHMENT_TOKEN"
+	chatID, _ := seedChatWithUser(t, ti, projectID, orgID, "")
+	partID := uuid.Must(uuid.NewV7())
+	at := time.Now().UTC().Add(-time.Hour)
+	finding := chListFinding(t, projectID, orgID, chatID, uuid.Nil, policy.ID, at, at, "gitleaks", "generic-api-key", "", maskdisplay.Display("gitleaks", "generic-api-key", secret), "", "")
+	finding.ChatMessageID = ""
+	finding.ContentPartID = partID.String()
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
 	require.NoError(t, err)
@@ -307,64 +345,17 @@ func TestListRiskResults_ProjectIncludesContentPartFindings(t *testing.T) {
 	require.Nil(t, got.ChatMessageID)
 	require.NotNil(t, got.ChatContentPartID)
 	require.Equal(t, partID.String(), *got.ChatContentPartID)
+	require.Equal(t, chatID.String(), *got.ChatID)
 	require.Nil(t, got.Match, "project-level list remains redacted without chat:read")
 	require.Nil(t, got.Spans)
 	require.NotNil(t, got.MatchRedacted)
-	require.NotContains(t, *got.MatchRedacted, "SECRET_ATTACHMENT_TOKEN")
+	require.NotContains(t, *got.MatchRedacted, secret)
 }
 
-func TestListRiskResults_ExcludesNotFound(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Found Filter")})
-	require.NoError(t, err)
-
-	policyID, _ := uuid.Parse(policy.ID)
-	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, false)
-
-	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
-	require.NoError(t, err)
-	require.Empty(t, result.Results)
-}
-
-func TestListRiskResults_ByUserID(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("User Filter Test")})
-	require.NoError(t, err)
-	policyID, _ := uuid.Parse(policy.ID)
-
-	_, aliceMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "alice@example.com")
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, aliceMsg, true)
-
-	_, bobMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "bob@example.com")
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, bobMsg, true)
-
-	// Case-insensitive substring match against the chat's external user id, on
-	// the project-level path (no policy/chat filter).
-	userID := "ALICE"
-	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
-		UserID: &userID,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Results, 1)
-	require.Equal(t, "alice@example.com", *result.Results[0].UserID)
-}
-
-func TestListRiskResults_UserIDPrefersMessageIdentity(t *testing.T) {
+// A shared chat carries no identity of its own; the message does. The
+// chat-scoped Postgres listing must resolve the message's identity, the way
+// the ClickHouse store does at ingest (TestFindingCHWriter_ProcessBatch_ResolvesAttribution).
+func TestListRiskResults_ByChatIDPrefersMessageIdentity(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -377,9 +368,6 @@ func TestListRiskResults_UserIDPrefersMessageIdentity(t *testing.T) {
 	require.NoError(t, err)
 	policyID, _ := uuid.Parse(policy.ID)
 
-	// A shared chat carries no identity of its own; the message does. The
-	// listing must resolve the message's identity, the way the ClickHouse
-	// store does at ingest, both for the user_id filter and the returned row.
 	chatID, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 	require.NoError(t, riskrepo.New(ti.conn).SetChatMessageExternalUserIDForTest(ctx, riskrepo.SetChatMessageExternalUserIDForTestParams{
 		ExternalUserID: pgtype.Text{String: "carol@example.com", Valid: true},
@@ -387,105 +375,12 @@ func TestListRiskResults_UserIDPrefersMessageIdentity(t *testing.T) {
 		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	}))
 	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
-	_, otherMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "dave@example.com")
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, otherMsg, true)
 
-	userID := "CAROL"
-	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{UserID: &userID})
-	require.NoError(t, err)
-	require.Len(t, result.Results, 1)
-	require.Equal(t, chatID.String(), *result.Results[0].ChatID)
-	require.Equal(t, "carol@example.com", *result.Results[0].UserID)
-
-	// The chat-scoped listing resolves the same identity.
 	chatIDStr := chatID.String()
 	byChat, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ChatID: &chatIDStr})
 	require.NoError(t, err)
 	require.Len(t, byChat.Results, 1)
 	require.Equal(t, "carol@example.com", *byChat.Results[0].UserID)
-}
-
-// linkAssistantThread attaches a chat to a freshly created assistant so the
-// chat counts as "assistant-driven" for the non_assistant filter.
-func linkAssistantThread(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, chatID uuid.UUID) uuid.UUID {
-	t.Helper()
-	ctx := t.Context()
-
-	assistant, err := assistantsrepo.New(ti.conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
-		ProjectID:      projectID,
-		OrganizationID: orgID,
-		Name:           "Assistant " + uuid.NewString()[:8],
-		Model:          "anthropic/claude-opus-4.8",
-		Instructions:   "be helpful",
-		WarmTtlSeconds: 300,
-		MaxConcurrency: 1,
-		Status:         "active",
-	})
-	require.NoError(t, err)
-
-	require.NoError(t, ti.chatRepo.SeedAssistantThread(ctx, chatrepo.SeedAssistantThreadParams{
-		AssistantID:   assistant.ID,
-		ProjectID:     projectID,
-		CorrelationID: "corr-" + uuid.NewString()[:8],
-		ChatID:        chatID,
-	}))
-	return assistant.ID
-}
-
-// The assistant filter dimension: non_assistant surfaces only findings whose
-// chat is not linked to an assistant (the events most likely to be missing
-// user attribution), while assistant_id scopes to a single assistant's chats.
-func TestListRiskResults_NonAssistant(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Non-assistant Filter Test")})
-	require.NoError(t, err)
-	policyID, _ := uuid.Parse(policy.ID)
-
-	// One finding from an assistant-driven chat, one from a plain chat.
-	assistantChat, assistantMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "assistant@example.com")
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, assistantMsg, true)
-	assistantID := linkAssistantThread(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, assistantChat)
-
-	_, humanMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "human@example.com")
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, humanMsg, true)
-
-	// Without the filter, both findings are returned.
-	all, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
-	require.NoError(t, err)
-	require.Len(t, all.Results, 2)
-
-	// With non_assistant=true, only the non-assistant finding remains.
-	nonAssistant := true
-	filtered, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
-		NonAssistant: &nonAssistant,
-	})
-	require.NoError(t, err)
-	require.Len(t, filtered.Results, 1)
-	require.Equal(t, "human@example.com", *filtered.Results[0].UserID)
-
-	// With assistant_id, only that assistant's finding remains.
-	assistantIDStr := assistantID.String()
-	scoped, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
-		AssistantID: &assistantIDStr,
-	})
-	require.NoError(t, err)
-	require.Len(t, scoped.Results, 1)
-	require.Equal(t, "assistant@example.com", *scoped.Results[0].UserID)
-
-	// An assistant with no linked chats matches nothing.
-	otherAssistant := uuid.NewString()
-	empty, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
-		AssistantID: &otherAssistant,
-	})
-	require.NoError(t, err)
-	require.Empty(t, empty.Results)
 }
 
 func TestGetRiskPolicyStatus_WithAnalyzedMessages(t *testing.T) {
@@ -645,6 +540,8 @@ func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, org
 	return resultID
 }
 
+// The agent surface passes the ingest-time store redaction through untouched:
+// raw match content never reaches it.
 func TestListRiskResultsForAgent_RedactsGitleaksMatch(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -653,13 +550,21 @@ func TestListRiskResultsForAgent_RedactsGitleaksMatch(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Agent Redact")})
 	require.NoError(t, err)
 
-	policyID, _ := uuid.Parse(policy.ID)
-	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
+	const secret = "AKIAIOSFODNN7EXAMPLE"
+	display := maskdisplay.Display("gitleaks", "aws-access-key-id", secret)
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "")
+	at := time.Now().UTC().Add(-time.Hour)
+	finding := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, at, at, "gitleaks", "aws-access-key-id", "", display, "", "")
+	finding.StartPos = 0
+	finding.EndPos = int32(len(secret))
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListRiskResultsForAgent(ctx, &gen.ListRiskResultsForAgentPayload{
 		PolicyID: &policy.ID,
@@ -668,11 +573,9 @@ func TestListRiskResultsForAgent_RedactsGitleaksMatch(t *testing.T) {
 	require.Len(t, result.Results, 1)
 
 	got := result.Results[0]
-	// seedRiskResult uses match "AKIAIOSFODNN7EXAMPLE" (len 20).
-	require.NotContains(t, got.MatchRedacted, "AKIA", "raw secret leaked into redacted output")
-	require.Contains(t, got.MatchRedacted, "len=20")
-	require.Regexp(t, `^<redacted len=20 sha=[0-9a-f]{8}>$`, got.MatchRedacted)
-	require.True(t, got.PositionKnown, "position_known should be true when start/end pos are present")
+	require.Equal(t, display, got.MatchRedacted)
+	require.NotEqual(t, secret, got.MatchRedacted, "raw secret leaked into redacted output")
+	require.True(t, got.PositionKnown)
 	require.Equal(t, "aws-access-key-id", *got.RuleID)
 }
 
@@ -684,6 +587,8 @@ func TestListRiskResultsForAgent_ShadowMCPPassthrough(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
 
 	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
 		Name:    new("Shadow Passthrough"),
@@ -691,10 +596,12 @@ func TestListRiskResultsForAgent_ShadowMCPPassthrough(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	policyID, _ := uuid.Parse(policy.ID)
-	_, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 	const shadowMatch = "mcp__evil-server__"
-	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgID, "shadow_mcp", "unapproved-mcp", shadowMatch)
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "")
+	at := time.Now().UTC().Add(-time.Hour)
+	finding := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, at, at, "shadow_mcp", "unapproved-mcp", "", maskdisplay.Display("shadow_mcp", "unapproved-mcp", shadowMatch), "", "")
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.ListRiskResultsForAgent(ctx, &gen.ListRiskResultsForAgentPayload{
 		PolicyID: &policy.ID,
@@ -702,34 +609,6 @@ func TestListRiskResultsForAgent_ShadowMCPPassthrough(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
 	require.Equal(t, shadowMatch, result.Results[0].MatchRedacted, "shadow_mcp match should pass through verbatim")
-}
-
-func TestListRiskResultsForAgent_DeterministicFingerprintWithinOrg(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Dedupe")})
-	require.NoError(t, err)
-	policyID, _ := uuid.Parse(policy.ID)
-
-	_, msgA := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	_, msgB := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	const sameSecret = "sk-abc123def456"
-	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgA, "gitleaks", "openai-api-key", sameSecret)
-	seedRiskResultWith(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, msgB, "gitleaks", "openai-api-key", sameSecret)
-
-	result, err := ti.service.ListRiskResultsForAgent(ctx, &gen.ListRiskResultsForAgentPayload{
-		PolicyID: &policy.ID,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Results, 2)
-	require.Equal(t, result.Results[0].MatchRedacted, result.Results[1].MatchRedacted,
-		"identical secrets within the same org must produce identical fingerprints so the agent can dedupe")
 }
 
 func TestListRiskResultsForAgent_Unauthorized(t *testing.T) {

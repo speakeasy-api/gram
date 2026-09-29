@@ -12,6 +12,9 @@ import (
 //go:embed record.schema.json
 var Schema []byte
 
+//go:embed speakeasy-registry.schema.json
+var SpeakeasyRegistrySchema []byte
+
 func decode(raw []byte) (any, error) {
 	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
@@ -25,6 +28,23 @@ func Compile(raw []byte) (*jsonschema.Schema, error) {
 	value, err := decode(raw)
 	if err != nil {
 		return nil, err
+	}
+	overlay, err := decode(SpeakeasyRegistrySchema)
+	if err != nil {
+		return nil, err
+	}
+	root, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("registry contract must be an object")
+	}
+	if existing, present := root["allOf"]; present {
+		allOf, ok := existing.([]any)
+		if !ok || len(allOf) == 0 {
+			return nil, fmt.Errorf("registry contract allOf must be a nonempty array")
+		}
+		root["allOf"] = append(allOf, overlay)
+	} else {
+		root["allOf"] = []any{overlay}
 	}
 	c := jsonschema.NewCompiler()
 	c.AssertFormat()

@@ -2826,9 +2826,8 @@ LIMIT @row_limit;
 
 -- name: ListRiskFindingSpansForRecall :many
 -- Findings that drive inline masking of the recall digest. Message-anchored
--- rows only (the digest does not render content parts), with the canonical
--- suppression filters from risk's ListRiskResultsByChatFound: found, not
--- excluded, not swept as false positive, policy still enabled and not deleted.
+-- rows only (the digest does not render content parts): found, not excluded,
+-- not swept as false positive, policy still enabled and not deleted.
 -- Latest generation only, matching the transcript read: findings on
 -- superseded generations mask nothing the digest renders, so loading them
 -- would only let long, repeatedly compacted sessions inflate the scan.

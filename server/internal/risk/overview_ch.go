@@ -68,6 +68,7 @@ func (s *Service) getRiskOverviewFromClickHouse(ctx context.Context, projectID u
 		ProjectID:      projectID.String(),
 		From:           from,
 		To:             to,
+		MCPServerID:    "",
 	}
 
 	findingCounts, err := s.findingsCH.GetRiskOverviewFindingCounts(ctx, chWindow)

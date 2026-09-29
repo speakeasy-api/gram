@@ -448,17 +448,18 @@ func handleToolsCall(
 		toolName = descriptor.URN.Name
 	}
 	decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
-		Surface:        mcpriskscan.SurfaceHostedMCP,
-		Method:         mcpriskscan.MethodToolsCall,
-		OrganizationID: descriptor.OrganizationID,
-		ProjectID:      descriptor.ProjectID,
-		ServerID:       serverID,
-		MetaServerID:   payload.metaMcpServerID,
-		ToolsetID:      toolset.ID,
-		ToolName:       toolName,
-		ResourceURI:    "",
-		PromptName:     "",
-		ChatID:         payload.chatID,
+		Surface:         mcpriskscan.SurfaceHostedMCP,
+		Method:          mcpriskscan.MethodToolsCall,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        serverID,
+		MetaServerID:    payload.metaMcpServerID,
+		ToolsetID:       toolset.ID,
+		ToolName:        toolName,
+		ResourceURI:     "",
+		PromptName:      "",
+		ChatID:          payload.chatID,
+		ToolAnnotations: nil,
 	}, mcpriskscan.BorrowPayload(params.Arguments)))
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
