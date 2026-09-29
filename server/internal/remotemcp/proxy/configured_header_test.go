@@ -145,17 +145,26 @@ func TestConfiguredHeader_Resolve_PassThroughDeniedSource(t *testing.T) {
 		t.Run(source, func(t *testing.T) {
 			t.Parallel()
 
-			h := proxy.ConfiguredHeader{
+			req, err := http.NewRequest(http.MethodGet, "https://example.test", nil)
+			require.NoError(t, err)
+			req.Header.Set(source, "gram_session=secret")
+
+			// An optional row is dropped, so one leftover row does not fail
+			// every request to the server.
+			optional := proxy.ConfiguredHeader{
 				IsRequired:             false,
 				Name:                   "X-Upstream",
 				StaticValue:            "",
 				ValueFromRequestHeader: source,
 			}
-			req, err := http.NewRequest(http.MethodGet, "https://example.test", nil)
+			value, err := optional.Resolve(req)
 			require.NoError(t, err)
-			req.Header.Set(source, "gram_session=secret")
+			require.Empty(t, value)
 
-			value, err := h.Resolve(req)
+			// A required row can never be satisfied.
+			required := optional
+			required.IsRequired = true
+			value, err = required.Resolve(req)
 			require.Error(t, err)
 			require.Empty(t, value)
 			require.NotContains(t, err.Error(), "secret")

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// isDeniedPassThroughSource reports whether an inbound header may not be used
+// IsDeniedPassThroughSource reports whether an inbound header may not be used
 // as a pass-through source.
 //
 // isSkippedRequestHeader already refuses to copy Cookie upstream because it
@@ -17,7 +17,7 @@ import (
 //
 // Authorization is deliberately absent: forwarding the caller's own upstream
 // credential is what pass-through identity is for.
-func isDeniedPassThroughSource(name string) bool {
+func IsDeniedPassThroughSource(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "cookie", "set-cookie", "proxy-authorization":
 		return true
@@ -53,7 +53,13 @@ type ConfiguredHeader struct {
 func (h ConfiguredHeader) Resolve(userReq *http.Request) (string, error) {
 	switch {
 	case h.ValueFromRequestHeader != "":
-		if isDeniedPassThroughSource(h.ValueFromRequestHeader) {
+		if IsDeniedPassThroughSource(h.ValueFromRequestHeader) {
+			// Never read the source. An optional row is dropped rather than
+			// failing every request to a server that still carries one; a
+			// required row cannot be satisfied, so the request is refused.
+			if !h.IsRequired {
+				return "", nil
+			}
 			return "", fmt.Errorf("header %q cannot be populated from request header %q", h.Name, h.ValueFromRequestHeader)
 		}
 		value := userReq.Header.Get(h.ValueFromRequestHeader)
