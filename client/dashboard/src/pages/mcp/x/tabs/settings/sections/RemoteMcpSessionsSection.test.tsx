@@ -73,9 +73,10 @@ describe("RemoteMcpSessionsSection", () => {
 
     expect(screen.getByText("Session length")).toBeDefined();
     expect(screen.getByText("Client access")).toBeDefined();
+    expect(screen.getByText("User session issuer")).toBeDefined();
   });
 
-  it("offers the user session issuer whether or not User Identity is configured", () => {
+  it("offers the user session issuer before User Identity is configured", () => {
     render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
 
     expect(screen.getByText("User session issuer")).toBeDefined();

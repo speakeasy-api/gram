@@ -124,6 +124,9 @@ function GeneralSectionContent({
   );
 
   const trimmedDraft = nameDraft.trim();
+  // Code points, not UTF-16 units: the column's check uses char_length, so an
+  // emoji counts once here as it does in Postgres.
+  const nameTooLong = [...trimmedDraft].length > NAME_MAX_LENGTH;
   const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
   const upstreamDirty = !!upstream?.dirty;
   const dirty = nameDirty || metadataForm.brandingDirty || upstreamDirty;
@@ -132,11 +135,10 @@ function GeneralSectionContent({
   const saveDisabled =
     !dirty ||
     trimmedDraft === "" ||
-    trimmedDraft.length > NAME_MAX_LENGTH ||
+    nameTooLong ||
     saving ||
     (metadataUnresolved && metadataForm.brandingDirty) ||
     (!!upstream?.dirty && upstream.invalid);
-  const nameTooLong = trimmedDraft.length > NAME_MAX_LENGTH;
 
   const handleSave = async () => {
     try {

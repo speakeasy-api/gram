@@ -22,8 +22,15 @@ export function UpstreamUrlField({
         placeholder="https://example.com/mcp"
         disabled={upstream.pending}
         aria-invalid={upstream.fieldError ? true : undefined}
+        aria-describedby={
+          upstream.fieldError ? "mcp-upstream-url-error" : undefined
+        }
       />
-      {upstream.fieldError && <FieldError>{upstream.fieldError}</FieldError>}
+      {upstream.fieldError && (
+        <FieldError id="mcp-upstream-url-error">
+          {upstream.fieldError}
+        </FieldError>
+      )}
       <VerifyRemoteMcpUrlAlert state={upstream.verify} />
     </Field>
   );
