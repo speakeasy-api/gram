@@ -1155,9 +1155,10 @@ func TestCommitServerIdentityConfigurationAutoUsesDCRWhenRequested(t *testing.T)
 	}))
 	t.Cleanup(registrationServer.Close)
 
-	// The provider supports CIMD too, so without the request auto mode would
+	// The provider is CIMD-capable (it supports CIMD and accepts the public
+	// "none" method), so without the request auto mode would pick CIMD and
 	// never reach the registration endpoint.
-	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-requested-provider", registrationServer.URL, true, []string{"client_secret_post"})
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-requested-provider", registrationServer.URL, true, []string{"none", "client_secret_post"})
 	payload := autoServerIdentityPayload(targetID, providerID)
 	payload.RegistrationMethod = conv.PtrEmpty("dcr")
 	payload.ClientConfiguration.TokenEndpointAuthMethod = conv.PtrEmpty("client_secret_post")
