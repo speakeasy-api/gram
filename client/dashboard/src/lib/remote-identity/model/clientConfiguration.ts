@@ -1,4 +1,3 @@
-import { pickPreferredAuthMethod } from "@/pages/mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import type { ServerIdentityClientConfigurationTokenEndpointAuthMethod } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 
 /**
@@ -26,23 +25,50 @@ function nonEmptyStrings(values: string[] | undefined | null): string[] {
     .filter((value) => value.length > 0);
 }
 
-// The issuer form's method list is wider than what this RPC accepts: it also
-// carries private_key_jwt, which the composite cannot express. In practice
-// pickPreferredAuthMethod never returns it — it falls back to
-// client_secret_basic when nothing recognized is advertised — so this narrows
-// the type at the boundary rather than changing which method is sent.
+// Token endpoint authentication methods Speakeasy can use for a client it
+// registers, most preferred first.
+const PREFERRED_AUTH_METHODS = [
+  "client_secret_basic",
+  "client_secret_post",
+  "none",
+] as const;
+
+export type PreferredAuthMethod = (typeof PREFERRED_AUTH_METHODS)[number];
+
+/** The most preferred method the issuer advertises, or undefined for none. */
+function firstPreferredAuthMethod(
+  supported: readonly string[],
+): PreferredAuthMethod | undefined {
+  return PREFERRED_AUTH_METHODS.find((method) => supported.includes(method));
+}
+
+/**
+ * The method to pick in the issuer form from the issuer's advertised list.
+ * Preference order: client_secret_basic > client_secret_post > none.
+ *
+ * Falls back to client_secret_basic when the issuer advertises no recognized
+ * method, so DCR always sends one — upstreams that require an explicit method
+ * reject a registration that omits it ("No supported Token Endpoint Auth
+ * Method provided."). This fallback was the pre-#2910 server-side default.
+ */
+export function pickPreferredAuthMethod(
+  supported: readonly string[],
+): PreferredAuthMethod {
+  return firstPreferredAuthMethod(supported) ?? "client_secret_basic";
+}
+
+/**
+ * The method to register a server identity client with.
+ *
+ * An issuer that advertises nothing gets the RFC 8414 default,
+ * client_secret_basic. One that advertises only methods Speakeasy cannot use
+ * (private_key_jwt, say) gets undefined: naming client_secret_basic there
+ * would register a client the issuer refuses, so the field is omitted and the
+ * server decides.
+ */
 export function serverIdentityAuthMethod(
-  supported: string[],
-): ServerIdentityClientConfigurationTokenEndpointAuthMethod {
-  switch (pickPreferredAuthMethod(supported)) {
-    case "client_secret_post":
-      return "client_secret_post";
-    case "none":
-      return "none";
-    case "client_secret_basic":
-    // The composite has no private_key_jwt; pickPreferredAuthMethod cannot
-    // return it either, so this only satisfies exhaustiveness.
-    case "private_key_jwt":
-      return "client_secret_basic";
-  }
+  supported: readonly string[],
+): ServerIdentityClientConfigurationTokenEndpointAuthMethod | undefined {
+  if (supported.length === 0) return "client_secret_basic";
+  return firstPreferredAuthMethod(supported);
 }

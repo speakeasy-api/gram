@@ -1,5 +1,9 @@
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 
+// The preference rule lives with the remote identity model, which registers
+// clients too; the issuer form consumes it from there.
+export { pickPreferredAuthMethod } from "@/lib/remote-identity/model/clientConfiguration";
+
 // Snapshot of the issuer + RFC 8414 metadata for a given Issuer URL. Created
 // fresh on every successful discovery and seeded from saved records in the
 // Modify sheet. Drives the Discover/Reset slot and the URL-change reset.
@@ -99,23 +103,6 @@ export function clientSecretUpdateValue(
 ): string | undefined {
   if (isPrivateKeyJwtAuthMethod(method)) return undefined;
   return secret.trim() || undefined;
-}
-
-// Picks the preferred auth method from the issuer's advertised list.
-// Preference order: client_secret_basic > client_secret_post > none.
-// Falls back to client_secret_basic when the issuer advertises no recognized
-// method, so DCR always sends one — upstreams that require an explicit method
-// reject a registration that omits it ("No supported Token Endpoint Auth
-// Method provided."). This fallback was the pre-#2910 server-side default.
-export function pickPreferredAuthMethod(
-  supported: string[],
-): CreateRemoteSessionClientFormTokenEndpointAuthMethod {
-  const { ClientSecretBasic, ClientSecretPost, None } =
-    CreateRemoteSessionClientFormTokenEndpointAuthMethod;
-  for (const preferred of [ClientSecretBasic, ClientSecretPost, None]) {
-    if (supported.includes(preferred)) return preferred;
-  }
-  return ClientSecretBasic;
 }
 
 // Derive a unique slug from the Issuer URL's hostname. Mirrors the hyphen-style
