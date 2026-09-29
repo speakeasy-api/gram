@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	pmv1 "github.com/speakeasy-api/gram/infra/gen/gram/productmetrics/v1"
@@ -40,6 +41,12 @@ func Integer(value int64) Number { return Number{integer: value, floating: 0, ki
 
 // Float constructs a floating-point contribution, validated before publication.
 func Float(value float64) Number { return Number{integer: 0, floating: value, kind: "floating"} }
+
+// Int64 returns an integer without coercion, and false for another representation.
+func (n Number) Int64() (int64, bool) { return n.integer, n.kind == "integer" }
+
+// Float64 returns a float without coercion, and false for another representation.
+func (n Number) Float64() (float64, bool) { return n.floating, n.kind == "floating" }
 
 // Contribution is one producer-owned observation. IDs are diagnostic delivery
 // identities, never metric dimensions. Retry an observation with the same ID.
@@ -97,6 +104,9 @@ type Series struct {
 // Validate checks the contract and returns a lossless, comparable series key.
 func Validate(c Contribution) (Series, error) {
 	var zero Series
+	if !utf8.ValidString(c.Tenant.OrganizationID) || !utf8.ValidString(c.ID) {
+		return zero, fmt.Errorf("ownership and contribution ID must be UTF-8")
+	}
 	if c.Tenant.OrganizationID == "" || c.Tenant.ProjectID == uuid.Nil || c.ID == "" {
 		return zero, fmt.Errorf("tenant, project and contribution ID are required")
 	}

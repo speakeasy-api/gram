@@ -196,6 +196,26 @@ func TestUnsupportedAttributeTypes(t *testing.T) {
 	}
 }
 
+func TestRejectInvalidUTF8(t *testing.T) {
+	t.Parallel()
+	for _, attrs := range [][]attribute.KeyValue{
+		{attribute.String("key", "\xff")},
+		{attribute.String("\xff", "value")},
+		{attribute.StringSlice("key", []string{"\xff"})},
+	} {
+		_, err := CanonicalAttributes(attrs)
+		require.Error(t, err, "JSON replacement characters must not collapse distinct inputs")
+	}
+	c := synthetic(Counter)
+	c.Tenant.OrganizationID = "\xff"
+	_, err := Encode(c)
+	require.Error(t, err)
+	c = synthetic(Counter)
+	c.Definition.ScopeName = "\xff"
+	_, err = Encode(c)
+	require.Error(t, err)
+}
+
 type capturePublisher struct{ messages []*pmv1.Contribution }
 
 func (p *capturePublisher) Publish(_ context.Context, m *pmv1.Contribution, _ ...gcp.PublishOption) gcp.PublishResult {

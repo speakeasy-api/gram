@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"sync"
+	"unicode/utf8"
 )
 
 // Instrument identifies the supported measurement operation.
@@ -69,6 +70,9 @@ func NewRegistry(definitions ...Definition) (*Registry, error) {
 // Register permits description changes but rejects incompatible descriptors.
 // A scope version change is not a substitute for renaming incompatible metrics.
 func (r *Registry) Register(d Definition) error {
+	if !utf8.ValidString(d.ScopeName) || !utf8.ValidString(d.ScopeVersion) || !utf8.ValidString(d.Unit) || !utf8.ValidString(d.Description) {
+		return fmt.Errorf("metric descriptor strings must be UTF-8")
+	}
 	if d.ScopeName == "" || !metricName.MatchString(d.Name) || d.Unit == "" {
 		return fmt.Errorf("metric scope, valid name and UCUM unit are required")
 	}

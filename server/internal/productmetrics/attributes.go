@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	pmv1 "github.com/speakeasy-api/gram/infra/gen/gram/productmetrics/v1"
 	"go.opentelemetry.io/otel/attribute"
@@ -30,7 +31,7 @@ func CanonicalAttributes(attrs []attribute.KeyValue) (string, error) {
 	slices.SortFunc(attrs, func(a, b attribute.KeyValue) int { return strings.Compare(string(a.Key), string(b.Key)) })
 	encoded := make([]EncodedAttribute, 0, len(attrs))
 	for i, a := range attrs {
-		if a.Key == "" || (i > 0 && attrs[i-1].Key == a.Key) {
+		if a.Key == "" || !utf8.ValidString(string(a.Key)) || (i > 0 && attrs[i-1].Key == a.Key) {
 			return "", fmt.Errorf("empty or duplicate attribute key")
 		}
 		if a.Value.Type() == attribute.INVALID {
@@ -39,8 +40,17 @@ func CanonicalAttributes(attrs []attribute.KeyValue) (string, error) {
 		value := a.Value.AsInterface()
 		// Normalize nil arrays to empty arrays while preserving their element type.
 		switch a.Value.Type() {
-		case attribute.STRING, attribute.BOOL, attribute.INT64, attribute.FLOAT64:
+		case attribute.STRING:
+			if !utf8.ValidString(a.Value.AsString()) {
+				return "", fmt.Errorf("attribute string must be UTF-8")
+			}
+		case attribute.BOOL, attribute.INT64, attribute.FLOAT64:
 		case attribute.STRINGSLICE:
+			for _, v := range a.Value.AsStringSlice() {
+				if !utf8.ValidString(v) {
+					return "", fmt.Errorf("attribute array strings must be UTF-8")
+				}
+			}
 			value = append([]string{}, a.Value.AsStringSlice()...)
 		case attribute.BOOLSLICE:
 			value = append([]bool{}, a.Value.AsBoolSlice()...)
