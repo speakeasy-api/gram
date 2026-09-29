@@ -270,7 +270,7 @@ func TestServePlatformToolset_RiskScanUsesStableToolsetIdentityAndAnnotations(t 
 	event := scanner.events[0]
 	require.Equal(t, mcpriskscan.SurfacePlatformMCP, event.Surface)
 	require.Equal(t, platformtools.PlatformToolsetID(platformtools.ManagedAssistantPlatformToolsetSlug).String(), event.ServerID)
-	require.Equal(t, platformtools.ManagedAssistantPlatformToolsetSlug, event.ToolsetID)
+	require.Empty(t, event.ToolsetID, "platform toolsets have no persisted toolset id")
 	require.Equal(t, platformtools.ToolNameSearchLogs, event.ToolName)
 	require.NotNil(t, event.ToolAnnotations)
 	require.NotNil(t, event.ToolAnnotations.ReadOnlyHint)
@@ -523,7 +523,7 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 		require.Equal(t, authCtx.ProjectID.String(), event[attr.ProjectIDKey])
 		require.Equal(t, "list_projects", event[attr.ToolNameKey])
 		require.Equal(t, platformtools.PlatformToolsetID(platformtools.PlatformMCPReadToolsetSlug).String(), event[attr.McpServerIDKey])
-		require.Equal(t, platformtools.PlatformMCPReadToolsetSlug, event[attr.ToolsetIDKey])
+		require.Empty(t, event[attr.ToolsetIDKey])
 		require.Equal(t, mcpriskscan.MethodToolsCall, event["gram.mcp.risk.scan.method"])
 		require.Equal(t, mcpriskscan.PhaseRequest, event["gram.mcp.risk.scan.phase"])
 		require.Equal(t, "false", event["gram.mcp.risk.scan.identity_stamped"], "platform auth does not fabricate MCP principal provenance from AuthContext.UserID")

@@ -486,7 +486,7 @@ func (s *Service) callPlatformToolsetTool(
 		ProjectID:       descriptor.ProjectID,
 		ServerID:        platformtools.PlatformToolsetID(toolset.Slug).String(),
 		MetaServerID:    "",
-		ToolsetID:       toolset.Slug,
+		ToolsetID:       "",
 		ToolName:        descriptor.Name,
 		ResourceURI:     "",
 		PromptName:      "",
