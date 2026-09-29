@@ -252,7 +252,7 @@ describe("consent account confirmation", () => {
       document.querySelector("[data-agent-access-login] button")!,
     );
     await waitFor(() => expect(assignLocation).toHaveBeenCalledWith(target));
-    const options = fetchMock.mock.calls[1][1];
+    const options = fetchMock.mock.calls[1]![1];
     expect(options.method).toBe("POST");
     expect(options.credentials).toBe("same-origin");
     expect(options.body.get("action")).toBe("agent_session_handoff");

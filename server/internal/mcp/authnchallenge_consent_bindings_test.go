@@ -38,6 +38,10 @@ import (
 func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
+	// This flow requires secure dashboard origins; the generic fixture uses
+	// http://0.0.0.0, which is neither HTTPS nor a literal loopback redirect.
+	ti.serverURL.Scheme, ti.serverURL.Host = "https", "app.example.com"
+	ti.siteURL.Scheme, ti.siteURL.Host = "https", "app.example.com"
 	fx := newAgentConsentFixture(t, ctx, ti)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
 	seedPrincipalGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.userID), authz.ScopeProjectRead, fx.target.ProjectID.String())
@@ -184,6 +188,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	require.Contains(t, wrongUserPage.Body.String(), "Open Gram to sign in")
 	_, err = confirm(http.MethodPost, handoff.URL, alternateToken, csrfMatch[1])
 	require.Error(t, err, "different Gram user cannot confirm this challenge")
+	// These cases mutate one shared integration fixture and must run sequentially.
 	for name, mutate := range map[string]func(*sessions.Session){
 		"different organization": func(s *sessions.Session) { s.ActiveOrganizationID = "another-organization" },
 		"impersonation":          func(s *sessions.Session) { s.ImpersonatorEmail = "support@example.com" },
@@ -192,14 +197,12 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 			s.SupportExpiresAt = time.Now().Add(time.Hour)
 		},
 	} {
-		t.Run("handoff rejects "+name, func(t *testing.T) {
-			session := originalSession
-			mutate(&session)
-			require.NoError(t, ti.sessionManager.StoreSession(ctx, session))
-			t.Cleanup(func() { require.NoError(t, ti.sessionManager.StoreSession(ctx, originalSession)) })
-			_, err := confirm(http.MethodPost, handoff.URL, token, csrfMatch[1])
-			require.Error(t, err)
-		})
+		session := originalSession
+		mutate(&session)
+		require.NoError(t, ti.sessionManager.StoreSession(ctx, session), name)
+		_, err := confirm(http.MethodPost, handoff.URL, token, csrfMatch[1])
+		require.Error(t, err, "handoff rejects %s", name)
+		require.NoError(t, ti.sessionManager.StoreSession(ctx, originalSession), name)
 	}
 	completed, err := confirm(http.MethodPost, handoff.URL, token, csrfMatch[1])
 	require.NoError(t, err)
@@ -214,12 +217,10 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 		"expired local cookie":  "expired-dashboard-session",
 		"different user cookie": alternateToken,
 	} {
-		t.Run(name, func(t *testing.T) {
-			w, err := callWithCookie("agent_connections", localCookie, nil)
-			require.NoError(t, err)
-			require.Contains(t, w.Body.String(), owned.String())
-			require.NotContains(t, w.Body.String(), other.String())
-		})
+		w, err := callWithCookie("agent_connections", localCookie, nil)
+		require.NoError(t, err, name)
+		require.Contains(t, w.Body.String(), owned.String(), name)
+		require.NotContains(t, w.Body.String(), other.String(), name)
 	}
 
 	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
@@ -270,16 +271,14 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 			s.Browser = &mcp.ChallengeBrowserBinding{CookieID: "another-browser", OriginHash: "unmatched"}
 		},
 	} {
-		t.Run(name, func(t *testing.T) {
-			state := original
-			mutate(&state)
-			require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
-			t.Cleanup(func() { require.NoError(t, ti.authnChallengeCache.Store(ctx, original)) })
-			for _, action := range []string{"agent_connections", "agent_attach", "agent_detach"} {
-				_, err := call(action, false, url.Values{"remote_session_id": {owned.String()}, "binding_id": {uuid.NewString()}})
-				require.Error(t, err, action)
-			}
-		})
+		state := original
+		mutate(&state)
+		require.NoError(t, ti.authnChallengeCache.Store(ctx, state), name)
+		for _, action := range []string{"agent_connections", "agent_attach", "agent_detach"} {
+			_, err := call(action, false, url.Values{"remote_session_id": {owned.String()}, "binding_id": {uuid.NewString()}})
+			require.Error(t, err, "%s: %s", name, action)
+		}
+		require.NoError(t, ti.authnChallengeCache.Store(ctx, original), name)
 	}
 	for _, action := range []string{"agent_connections", "agent_attach", "agent_detach"} {
 		_, err := call(action, false, url.Values{"state": {uuid.NewString()}})

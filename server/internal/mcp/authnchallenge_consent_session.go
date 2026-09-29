@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -15,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
 // A handoff ticket is separate from OAuth state and never authenticates a user.
@@ -30,7 +33,35 @@ type consentSessionHandoff struct {
 func (h consentSessionHandoff) CacheKey() string   { return "consentSession:" + h.ID }
 func (h consentSessionHandoff) TTL() time.Duration { return 5 * time.Minute }
 
+// This browser security flow must not send users or handoff tickets over plain
+// HTTP. Preserve the existing literal-loopback exception for local development;
+// deployment configuration alone must not make a remote HTTP link acceptable.
+func validateConsentSessionURL(u *url.URL) error {
+	if u == nil || u.Opaque != "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return fmt.Errorf("consent URL must be absolute and omit userinfo, query and fragment")
+	}
+	if _, err := requestorigin.CanonicalHost(u.Host); err != nil {
+		return fmt.Errorf("invalid consent URL host: %w", err)
+	}
+	if u.Scheme != "https" && !cimd.IsLoopbackRedirectURI(u) {
+		return fmt.Errorf("consent URL requires HTTPS except on loopback")
+	}
+	return nil
+}
+
+func (s *Service) validateConsentSessionURLs() error {
+	for _, u := range []*url.URL{s.serverURL, s.siteURL} {
+		if err := validateConsentSessionURL(u); err != nil {
+			return oops.E(oops.CodeUnavailable, err, "account confirmation is unavailable")
+		}
+	}
+	return nil
+}
+
 func (s *Service) startConsentSessionHandoff(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) error {
+	if err := s.validateConsentSessionURLs(); err != nil {
+		return err
+	}
 	if enabled, _, _ := s.agentAuthorizationRollout(r.Context(), endpoint.LogWith(s.logger), endpoint); !enabled {
 		return oops.C(oops.CodeNotFound)
 	}
@@ -40,7 +71,7 @@ func (s *Service) startConsentSessionHandoff(w http.ResponseWriter, r *http.Requ
 	}
 	ticket := consentSessionHandoff{ID: uuid.NewString(), ChallengeID: state.ID, CSRFToken: secret, SessionToken: ""}
 	if err := s.consentSessionCache.Store(r.Context(), ticket); err != nil {
-		return err
+		return fmt.Errorf("store consent session handoff ticket: %w", err)
 	}
 	target := *s.serverURL
 	target.Path = "/oauth/agent-consent-session"
@@ -49,9 +80,12 @@ func (s *Service) startConsentSessionHandoff(w http.ResponseWriter, r *http.Requ
 	target.Fragment = ""
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(struct {
+	if err := json.NewEncoder(w).Encode(struct {
 		URL string `json:"url"`
-	}{URL: target.String()})
+	}{URL: target.String()}); err != nil {
+		return fmt.Errorf("encode consent session handoff URL: %w", err)
+	}
+	return nil
 }
 
 func consentSessionCSRF(ticket consentSessionHandoff, token string) string {
@@ -67,6 +101,9 @@ func (s *Service) HandleConsentSessionHandoff(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")
+	if err := s.validateConsentSessionURLs(); err != nil {
+		return err
+	}
 	if r.Host != s.serverURL.Host {
 		return oops.C(oops.CodeNotFound)
 	}
@@ -108,11 +145,14 @@ func (s *Service) HandleConsentSessionHandoff(w http.ResponseWriter, r *http.Req
 	ready := token != "" && authErr == nil && ok && auth != nil && contextvalues.HasValidatedGramSession(ctx) && auth.UserID == state.AuthorizerUserID && auth.ActiveOrganizationID == endpoint.OrganizationID && !contextvalues.IsSupportSession(ctx) && !contextvalues.IsLegacyImpersonatedSession(ctx)
 	if r.Method == http.MethodGet {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		return consentSessionTemplate.Execute(w, struct {
+		if err := consentSessionTemplate.Execute(w, struct {
 			Ready               bool
 			CSRF, SiteURL, Slug string
 			Styles              template.CSS
-		}{Ready: ready, CSRF: consentSessionCSRF(ticket, token), SiteURL: s.siteURL.String(), Slug: endpoint.Slug, Styles: consentPageStyles})
+		}{Ready: ready, CSRF: consentSessionCSRF(ticket, token), SiteURL: s.siteURL.String(), Slug: endpoint.Slug, Styles: consentPageStyles}); err != nil {
+			return fmt.Errorf("render consent session confirmation: %w", err)
+		}
+		return nil
 	}
 	if !ready {
 		return oops.C(oops.CodeForbidden)
@@ -129,7 +169,7 @@ func (s *Service) HandleConsentSessionHandoff(w http.ResponseWriter, r *http.Req
 		return oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.consentSessionCache.Store(r.Context(), consentSessionHandoff{ID: state.ID, ChallengeID: state.ID, CSRFToken: "", SessionToken: token}); err != nil {
-		return err
+		return fmt.Errorf("store confirmed consent session: %w", err)
 	}
 	target, err := endpoint.ConsentURL(state.mintOriginOr(s.serverURL.String()), state.ID)
 	if err != nil {
