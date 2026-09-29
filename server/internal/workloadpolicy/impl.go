@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -226,6 +227,49 @@ func requireTrustDomain(raw string, field string) error {
 	return nil
 }
 
+const (
+	maxTags                 = 40
+	maxTagRunes             = 64
+	maxIssuerDescriptionLen = 500
+)
+
+// normalizeTags trims, rejects blanks, and drops duplicates, keeping the order
+// the operator entered. Issuers and admissions share the limits, which match the
+// CHECK on each table's column, so a list this accepts is one the insert can
+// store.
+func normalizeTags(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return []string{}, nil
+	}
+
+	normalized := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, raw := range tags {
+		tag := strings.TrimSpace(raw)
+		if tag == "" {
+			return nil, oops.E(oops.CodeInvalid, nil, "tags must not be blank")
+		}
+		// Postgres text cannot hold a NUL byte, so the insert would fail.
+		if strings.ContainsRune(tag, 0) {
+			return nil, oops.E(oops.CodeInvalid, nil, "tags must not contain a NUL character")
+		}
+		if utf8.RuneCountInString(tag) > maxTagRunes {
+			return nil, oops.E(oops.CodeInvalid, nil, "tags must be at most %d characters", maxTagRunes)
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+
+	if len(normalized) > maxTags {
+		return nil, oops.E(oops.CodeInvalid, nil, "at most %d tags are allowed", maxTags)
+	}
+
+	return normalized, nil
+}
+
 func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
 	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
 	if err != nil {
@@ -258,9 +302,23 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		return nil, oops.E(oops.CodeInvalid, nil, "name must not be blank")
 	}
 
+	// Checked after trimming, as it is stored.
+	description := strings.TrimSpace(conv.PtrValOr(payload.Description, ""))
+	if utf8.RuneCountInString(description) > maxIssuerDescriptionLen {
+		return nil, oops.E(oops.CodeInvalid, nil, "description must be at most %d characters", maxIssuerDescriptionLen)
+	}
+	if strings.ContainsRune(description, 0) {
+		return nil, oops.E(oops.CodeInvalid, nil, "description must not contain a NUL character")
+	}
+
 	// Defaulted here rather than in the design: a Goa default on a bool makes the
 	// generated Go client send true for an explicit false.
 	allowWildcard := conv.PtrValOr(payload.AllowWildcardAdmission, true)
+
+	tags, err := normalizeTags(payload.Tags)
+	if err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -277,6 +335,8 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		OrganizationID:         t.organizationID,
 		ProjectID:              projectID,
 		Name:                   name,
+		Description:            conv.PtrToPGTextTrimmed(payload.Description),
+		Tags:                   tags,
 		Issuer:                 strings.TrimSpace(payload.Issuer),
 		JwksUri:                strings.TrimSpace(payload.JwksURI),
 		AllowWildcardAdmission: allowWildcard,
@@ -300,6 +360,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 			Name:                   row.Name,
 			Issuer:                 row.Issuer,
 			JwksURI:                row.JwksUri,
+			Description:            conv.FromPGTextOrEmpty[string](row.Description),
 			AllowWildcardAdmission: row.AllowWildcardAdmission,
 			Tier:                   tier(projectID),
 		},
@@ -438,6 +499,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 			Name:                   deleted.Name,
 			Issuer:                 deleted.Issuer,
 			JwksURI:                deleted.JwksUri,
+			Description:            conv.FromPGTextOrEmpty[string](deleted.Description),
 			AllowWildcardAdmission: deleted.AllowWildcardAdmission,
 			Tier:                   tier(deleted.ProjectID),
 		},
@@ -471,6 +533,11 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 	agentID, err := uuid.Parse(payload.AgentID)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "agent_id is not a valid uuid")
+	}
+
+	tags, err := normalizeTags(payload.Tags)
+	if err != nil {
+		return nil, err
 	}
 
 	matchKind, err := workloadidentity.ParseMatchKind(payload.MatchKind)
@@ -573,6 +640,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 		Subject:          payload.Subject,
 		MatchKind:        string(matchKind),
 		Name:             conv.PtrToPGTextEmpty(payload.Name),
+		Tags:             tags,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {

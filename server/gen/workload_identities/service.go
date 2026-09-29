@@ -83,6 +83,10 @@ type AdmitSubjectPayload struct {
 	MatchKind string
 	// Optional label, for platforms whose subjects are not self-describing.
 	Name *string
+	// Free-form labels for finding the admitted workload in a long list. Flat
+	// strings, not key/value pairs. Trimmed and de-duplicated on write, then
+	// limited to 40 tags of at most 64 characters each.
+	Tags []string
 	// The agent whose policy the admitted workload inherits.
 	AgentID string
 	// Admit the subject for the selected project alone rather than the whole
@@ -117,6 +121,13 @@ type RegisterIssuerPayload struct {
 	// every lookup, so clearing it makes wildcard rules already written inert
 	// immediately.
 	AllowWildcardAdmission *bool
+	// What the platform is and what runs on it, in the operator's words. Trimmed
+	// on write; blank is stored as none. At most 500 characters after trimming.
+	Description *string
+	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
+	// not key/value pairs. Trimmed and de-duplicated on write, then limited to 40
+	// tags of at most 64 characters each.
+	Tags []string
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
 	ProjectScoped bool

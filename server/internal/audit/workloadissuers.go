@@ -27,6 +27,7 @@ type WorkloadIssuerSnapshot struct {
 	Name                   string `json:"name"`
 	Issuer                 string `json:"issuer"`
 	JwksURI                string `json:"jwks_uri"`
+	Description            string `json:"description,omitempty"`
 	AllowWildcardAdmission bool   `json:"allow_wildcard_admission"`
 	// Tier is "organization" or "project". Recorded because the same issuer name
 	// can exist at both, and the tier decides who the issuer is trusted by.

@@ -69,26 +69,17 @@ export function subjectRuleWarning(
 // agent is selected yet", so a test driven through the UI stays green even if
 // the warning stops blocking the submit.
 export function canAdmit(input: {
-  issuer: string;
   subject: string;
   agentId: string;
   warning: string | null;
   /**
-   * Whether the selected issuer URL still resolves to a row in the list. A
-   * preselected single issuer, or one withdrawn in another tab between render
-   * and submit, can leave a URL selected that no longer exists.
-   */
-  issuerExists: boolean;
-  /**
-   * Whether the kind this subject states is permitted by the selected issuer.
+   * Whether the kind this subject states is permitted by the issuer.
    * An issuer can forbid wildcards (an older row, or one cleared during an
    * incident), so a rule stating one is refused here as well as by the server.
    */
   matchKindPermitted: boolean;
 }): boolean {
   return (
-    input.issuer.length > 0 &&
-    input.issuerExists &&
     input.matchKindPermitted &&
     input.subject.trim().length > 0 &&
     input.agentId.length > 0 &&
