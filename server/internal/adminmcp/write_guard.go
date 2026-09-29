@@ -140,6 +140,18 @@ func requireWriteAuthority(ctx context.Context, config WriteConfig, op WriteOper
 	if !config.OperationEnabled(op) {
 		return writeAuthority{}, ErrWriteDisabled
 	}
+	authority, err := requireWriteIdentity(ctx)
+	if err != nil {
+		return writeAuthority{}, err
+	}
+	authority.Operation = op
+	return authority, nil
+}
+
+// requireWriteIdentity checks admin:write and the live staff context without
+// naming an operation. The shared proposal tools use it to find the caller's
+// own proposal, then call requireWriteAuthority for the operation stored on it.
+func requireWriteIdentity(ctx context.Context) (writeAuthority, error) {
 	principal, ok := principalFromContext(ctx)
 	if !ok || principal.Subject == "" || principal.ClientID == "" || principal.ClientRowID == "" || principal.ConnectionID == "" || principal.Generation == "" {
 		return writeAuthority{}, ErrWriteIdentity
@@ -151,7 +163,7 @@ func requireWriteAuthority(ctx context.Context, config WriteConfig, op WriteOper
 	if !verified || staff == nil || principal.staff != staff || staff.SessionID == "" || staff.OIDCSubject == "" || staff.Email == "" || staff.Email != principal.Email {
 		return writeAuthority{}, ErrWriteIdentity
 	}
-	return writeAuthority{Principal: principal, Staff: staff, Operation: op}, nil
+	return writeAuthority{Principal: principal, Staff: staff, Operation: ""}, nil
 }
 
 // normalizeRequestedScopes turns an OAuth scope parameter into the stored

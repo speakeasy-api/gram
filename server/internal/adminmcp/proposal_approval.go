@@ -43,16 +43,67 @@ type StaffProposalApproval struct {
 	session *StaffOAuthAuthorization
 	cache   cache.TypedCacheObject[proposalApprovalChallenge]
 	writes  WriteConfig
-	// A write is not approvable until its operation supplies an exact-state
-	// validator. The production registry is populated alongside write tools.
-	revalidate map[WriteOperation]ProposalRevalidator
+	// A write is not approvable until its operation supplies exact-state
+	// revalidation and a readable preview. AttachWrites populates it.
+	operations map[WriteOperation]approvableOperation
 }
 
 func newStaffProposalApproval(store *proposalStore, session *StaffOAuthAuthorization, challengeCache cache.Cache, writes WriteConfig) *StaffProposalApproval {
-	return &StaffProposalApproval{store: store, session: session, cache: cache.NewTypedObjectCache[proposalApprovalChallenge](nil, challengeCache, cache.SuffixNone), writes: writes, revalidate: nil}
+	return &StaffProposalApproval{store: store, session: session, cache: cache.NewTypedObjectCache[proposalApprovalChallenge](nil, challengeCache, cache.SuffixNone), writes: writes, operations: nil}
 }
 
-var proposalApprovalPage = template.Must(template.New("admin-mcp-proposal").Parse(`<!doctype html><html><head><title>Review staff change</title></head><body><h1>Review staff change</h1><p>Operation: {{.Operation}}</p><p>Proposal expires: {{.Expiry}}</p><p>Exact proposed change:</p><pre>{{.Preview}}</pre><p>Only approve if the target and change are correct. This approval is separate from the admin:write connection consent.</p><form method="post" action="/admin-mcp/proposals/{{.ID}}"><input type="hidden" name="challenge" value="{{.Challenge}}"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><input type="hidden" name="digest" value="{{.Digest}}"><button type="submit" name="action" value="approve">Approve this change</button><button type="submit" name="action" value="reject">Reject</button></form></body></html>`))
+// proposalApprovalView is the data rendered on the proposal approval page.
+type proposalApprovalView struct {
+	// ID is the proposal being decided.
+	ID string
+	// Operation is the stored write operation name.
+	Operation string
+	// Expiry is when the proposal stops being approvable, in RFC 3339 UTC.
+	Expiry string
+	// Change is the readable form of the stored preview.
+	Change proposalView
+	// Preview is the exact stored preview JSON that the proposal digest covers.
+	Preview string
+	// Challenge, CSRF and Digest bind the form post to this page view.
+	Challenge string
+	CSRF      string
+	Digest    string
+}
+
+var proposalApprovalPage = template.Must(template.New("admin-mcp-proposal").Parse(`<!doctype html>
+<html>
+<head><title>Review staff change</title></head>
+<body>
+<h1>Review staff change</h1>
+<p><strong>{{.Change.Summary}}</strong></p>
+<dl>
+<dt>Organization</dt>
+<dd>{{.Change.OrganizationName}} ({{.Change.OrganizationSlug}})</dd>
+<dt>Organization ID</dt>
+<dd><code>{{.Change.OrganizationID}}</code></dd>
+<dt>Operation</dt>
+<dd><code>{{.Operation}}</code></dd>
+<dt>Proposal expires</dt>
+<dd>{{.Expiry}}</dd>
+</dl>
+<table>
+<thead><tr><th>Setting</th><th>Now</th><th>After approval</th></tr></thead>
+<tbody>
+{{range .Change.Changes}}<tr><td>{{.Setting}}</td><td>{{.Before}}</td><td>{{.After}}</td></tr>
+{{end}}</tbody>
+</table>
+{{if .Change.SideEffects}}<p>Side effects: {{.Change.SideEffects}}</p>{{end}}
+<details><summary>Exact stored proposal</summary><pre>{{.Preview}}</pre></details>
+<p>Only approve if the organization and change are correct. This approval is separate from the admin:write connection consent.</p>
+<form method="post" action="/admin-mcp/proposals/{{.ID}}">
+<input type="hidden" name="challenge" value="{{.Challenge}}">
+<input type="hidden" name="csrf_token" value="{{.CSRF}}">
+<input type="hidden" name="digest" value="{{.Digest}}">
+<button type="submit" name="action" value="approve">Approve this change</button>
+<button type="submit" name="action" value="reject">Reject</button>
+</form>
+</body>
+</html>`))
 
 func (s *StaffProposalApproval) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -134,12 +185,18 @@ func (s *StaffProposalApproval) show(w http.ResponseWriter, r *http.Request, id 
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := s.browser(r, p); err != nil || s.revalidate[p.Operation] == nil {
+	operation := s.operations[p.Operation]
+	if _, err := s.browser(r, p); err != nil || operation == nil {
 		http.Error(w, "write operation unavailable", http.StatusForbidden)
 		return
 	}
 	if err := s.checkConnection(r.Context(), s.store.db, p); err != nil {
 		http.Error(w, "staff connection unavailable", http.StatusForbidden)
+		return
+	}
+	change, err := operation.view(p)
+	if err != nil {
+		http.Error(w, "proposal preview unavailable", http.StatusConflict)
 		return
 	}
 	csrf, err := staffOpaqueToken()
@@ -153,9 +210,17 @@ func (s *StaffProposalApproval) show(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 	var page strings.Builder
-	if err := proposalApprovalPage.Execute(&page, struct{ ID, Operation, Expiry, Preview, Challenge, CSRF, Digest string }{
-		ID: id.String(), Operation: string(p.Operation), Expiry: p.ExpiresAt.UTC().Format(time.RFC3339), Preview: string(p.Preview), Challenge: challenge.ID, CSRF: csrf, Digest: p.ProposalDigest,
-	}); err != nil {
+	view := proposalApprovalView{
+		ID:        id.String(),
+		Operation: string(p.Operation),
+		Expiry:    p.ExpiresAt.UTC().Format(time.RFC3339),
+		Change:    change,
+		Preview:   string(p.Preview),
+		Challenge: challenge.ID,
+		CSRF:      csrf,
+		Digest:    p.ProposalDigest,
+	}
+	if err := proposalApprovalPage.Execute(&page, view); err != nil {
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -181,7 +246,8 @@ func (s *StaffProposalApproval) decide(w http.ResponseWriter, r *http.Request, i
 	}
 	subject := urn.NewUserSubject(staff.OIDCSubject).String()
 	p, err := s.store.GetForSubject(r.Context(), id, subject)
-	if err != nil || !digestsEqual(p.ProposalDigest, challenge.Digest) || !s.writes.OperationEnabled(p.Operation) || s.revalidate[p.Operation] == nil {
+	operation := s.operations[p.Operation]
+	if err != nil || !digestsEqual(p.ProposalDigest, challenge.Digest) || !s.writes.OperationEnabled(p.Operation) || operation == nil {
 		http.Error(w, "proposal unavailable", http.StatusForbidden)
 		return
 	}
@@ -190,7 +256,7 @@ func (s *StaffProposalApproval) decide(w http.ResponseWriter, r *http.Request, i
 			_, err = s.store.Reject(r.Context(), id, subject)
 		}
 	} else if r.PostForm.Get("action") == "approve" {
-		_, err = s.store.Approve(r.Context(), id, subject, challenge.Digest, time.Now(), s.verifyConnection(), s.revalidate[p.Operation])
+		_, err = s.store.Approve(r.Context(), id, subject, challenge.Digest, time.Now(), s.verifyConnection(), operation.revalidate)
 	} else {
 		http.Error(w, "invalid action", http.StatusBadRequest)
 		return
