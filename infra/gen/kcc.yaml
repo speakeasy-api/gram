@@ -1360,6 +1360,16 @@ pubsub:
       definition: |
         edition = "2024";
         message Reading {
+          message Actor {
+            string user_id = 1;
+            string external_user_id = 2;
+            string user_email = 3;
+          }
+          message Account {
+            string user_account_id = 1;
+            string account_type = 2;
+            string billing_mode = 3;
+          }
           enum MessageRole {
             MESSAGE_ROLE_UNSPECIFIED = 0;
             MESSAGE_ROLE_USER = 1;
@@ -1401,6 +1411,12 @@ pubsub:
           string configured_model = 13;
           repeated string models = 14;
           string compiler_version = 15;
+          Actor actor = 20;
+          string billing_user_id = 21;
+          string source = 22;
+          Account account = 23;
+          string assistant_id = 24;
+          bool replayed = 25;
           oneof result {
             MultiLabel multi_label = 16;
             Choice choice = 17;
