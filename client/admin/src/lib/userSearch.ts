@@ -109,8 +109,10 @@ export function serializeUserSearch(
         /"/.test(value) ||
         unsupported(value) ||
         (field === "any" && value.includes(":"));
+      // Unknown escapes stay literal; protect only quotes, paired slashes, and
+      // a terminal slash that would otherwise escape the closing quote.
       const encoded = quote
-        ? '"' + value.replace(/["\\]/g, "\\$&") + '"'
+        ? '"' + value.replace(/"|\\(?=["\\]|$)/g, "\\$&") + '"'
         : value;
       return (field === "any" ? "" : field + ":") + encoded;
     })

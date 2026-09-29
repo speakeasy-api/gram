@@ -40,10 +40,16 @@ describe("shared search conformance", () => {
         expect(parsed.ok).toBe(true);
         if (parsed.ok) {
           expect(withoutOffsets(parsed.terms)).toEqual(test.terms);
-          const roundTrip = parseUserSearch(serializeUserSearch(parsed.terms));
+          const serialized = serializeUserSearch(parsed.terms);
+          expect(
+            new TextEncoder().encode(serialized).length,
+          ).toBeLessThanOrEqual(new TextEncoder().encode(test.query).length);
+          const roundTrip = parseUserSearch(serialized);
           expect(roundTrip.ok).toBe(true);
-          if (roundTrip.ok)
+          if (roundTrip.ok) {
             expect(withoutOffsets(roundTrip.terms)).toEqual(test.terms);
+            expect(serializeUserSearch(roundTrip.terms)).toBe(serialized);
+          }
         }
       }
     });
@@ -77,5 +83,31 @@ it("serializes canonically without losing literal syntax", () => {
       { field: "any", value: "OR" },
       { field: "any", value: "-a" },
     ]),
-  ).toBe('"team:foo" name:Alex org:"Example Studio" "a\\"b\\\\c" "OR" "-a"');
+  ).toBe('"team:foo" name:Alex org:"Example Studio" "a\\"b\\c" "OR" "-a"');
 });
+
+it("keeps the measured backslash-heavy query at 1707 bytes", () => {
+  const query = Array(7)
+    .fill('"' + "\\a".repeat(120) + ' "')
+    .join(" ");
+  expect(new TextEncoder().encode(query).length).toBe(1707);
+  const parsed = parseUserSearch(query);
+  expect(parsed.ok).toBe(true);
+  if (parsed.ok) expect(serializeUserSearch(parsed.terms)).toBe(query);
+});
+
+it.each([1, 2, 3, 4])(
+  "minimally escapes a run of %i backslashes in quotes",
+  (count) => {
+    for (const suffix of ["a", '"', ""]) {
+      const value = "space " + "\\".repeat(count) + suffix;
+      const encodedRun = "\\".repeat(
+        suffix === "a" ? count * 2 - 1 : count * 2,
+      );
+      const encodedSuffix = suffix === '"' ? '\\"' : suffix;
+      expect(serializeUserSearch([{ field: "any", value }])).toBe(
+        '"space ' + encodedRun + encodedSuffix + '"',
+      );
+    }
+  },
+);
