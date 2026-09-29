@@ -98,4 +98,24 @@ describe("OktaConnectionTab", () => {
     ).toBeTruthy();
     expect(screen.queryByText(/JWKS/)).toBeNull();
   });
+
+  it("offers to replace the secret on secret-based OIN connections", () => {
+    renderTab(makeConnection({ listingMode: "oin", jwksUrl: undefined }));
+    expect(
+      screen.getByRole("button", { name: "Replace client secret" }),
+    ).toBeTruthy();
+  });
+
+  it.each([
+    ["legacy OIN with a key set", makeConnection({ listingMode: "oin" })],
+    ["custom app", makeConnection()],
+  ])("has no secret to replace on a %s connection", (_, connection) => {
+    renderTab(connection);
+    expect(
+      screen.queryByRole("button", { name: "Replace client secret" }),
+    ).toBeNull();
+    expect(
+      screen.getByText(/public keys from the public key URL \(JWKS\)/),
+    ).toBeTruthy();
+  });
 });
