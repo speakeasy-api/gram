@@ -105,6 +105,16 @@ function IssuerDetail(): JSX.Element {
     [agentsQuery.data],
   );
 
+  const allowUnavailableReason = agentsQuery.isPending
+    ? null
+    : agentsQuery.isError
+      ? "Agents are unavailable right now, so no machine can be allowed."
+      : (agentsQuery.data ?? []).length === 0
+        ? "Create an agent first: every machine acts under an agent's policy."
+        : agents.length === 0
+          ? "Every agent is suspended or revoked. Reactivate one to allow a machine."
+          : null;
+
   const admitSubject = useAdmitWorkloadSubjectMutation({
     onSuccess: async () => {
       await invalidateAllWorkloadIdentities(queryClient, {
@@ -145,13 +155,13 @@ function IssuerDetail(): JSX.Element {
         refetchType: "all",
       });
       setWithdrawing(null);
-      toast.success("Workload withdrawn");
+      toast.success("Machine withdrawn");
     },
     onError: (error) => {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to withdraw the workload",
+          : "Failed to withdraw the machine",
       );
     },
   });
@@ -176,6 +186,12 @@ function IssuerDetail(): JSX.Element {
           <Text className="font-mono text-xs break-all">
             {admission.subject}
           </Text>
+          {!admission.wildcardActive && (
+            <Text small destructive>
+              Inactive: this platform does not permit wildcard rules, so this
+              rule matches nothing.
+            </Text>
+          )}
           {admission.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {admission.tags.map((tag) => (
@@ -273,6 +289,11 @@ function IssuerDetail(): JSX.Element {
       title={issuer?.name ?? "Trusted platform"}
       description={issuer ? issuerSummary(issuer) : undefined}
     >
+      {allowUnavailableReason !== null && (
+        <Text muted small className="mb-4">
+          {allowUnavailableReason}
+        </Text>
+      )}
       {admissions.length === 0 && !isPending ? (
         <InlineEmptyState
           icon="cpu"

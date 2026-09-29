@@ -27,12 +27,13 @@ type RegisterIssuerRequestBody struct {
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Re-checked on every lookup rather than at write time, so
 	// clearing it makes wildcard rules already written inert immediately.
-	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
+	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
 	// What the platform is and what runs on it, in the operator's words. Trimmed
-	// on write; blank is stored as none. At most 500 characters.
+	// on write; blank is stored as none. At most 500 characters after trimming.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
-	// not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+	// not key/value pairs. Trimmed and de-duplicated on write, then limited to 40
+	// tags of at most 64 characters each.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
@@ -57,7 +58,8 @@ type AdmitSubjectRequestBody struct {
 	// Optional label, for platforms whose subjects are not self-describing.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Free-form labels for finding the admitted workload in a long list. Flat
-	// strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+	// strings, not key/value pairs. Trimmed and de-duplicated on write, then
+	// limited to 40 tags of at most 64 characters each.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The agent whose policy the admitted workload inherits.
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
@@ -1119,12 +1121,6 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 		AllowWildcardAdmission: p.AllowWildcardAdmission,
 		Description:            p.Description,
 		ProjectScoped:          p.ProjectScoped,
-	}
-	{
-		var zero bool
-		if body.AllowWildcardAdmission == zero {
-			body.AllowWildcardAdmission = true
-		}
 	}
 	if p.Tags != nil {
 		body.Tags = make([]string, len(p.Tags))

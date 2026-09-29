@@ -177,7 +177,7 @@ func TestAdmitSubject_RefusesTwoIssuersSharingAURLAtOneTier(t *testing.T) {
 			Issuer:                 anthropicIssuer,
 			JwksURI:                anthropicJWKS,
 			Description:            nil,
-			AllowWildcardAdmission: false,
+			AllowWildcardAdmission: new(false),
 			ProjectScoped:          true,
 		})
 		require.NoError(t, err)
@@ -247,6 +247,7 @@ func TestAdmitSubject_RendersNoTagsAsAnEmptyList(t *testing.T) {
 	policy, err := admitWithTags(t, ctx, ti, agentID, nil)
 	require.NoError(t, err)
 
+	require.Len(t, policy.Admissions, 1)
 	require.NotNil(t, policy.Admissions[0].Tags)
 	require.Empty(t, policy.Admissions[0].Tags)
 }

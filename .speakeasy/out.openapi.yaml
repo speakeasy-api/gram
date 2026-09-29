@@ -74859,9 +74859,7 @@ components:
           type: array
           items:
             type: string
-            maxLength: 64
-          description: Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
-          maxItems: 40
+          description: Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
       description: Form for admitting a workload subject and assigning its agent.
       required:
         - issuer
@@ -92089,11 +92087,9 @@ components:
         allow_wildcard_admission:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Re-checked on every lookup rather than at write time, so clearing it makes wildcard rules already written inert immediately.
-          default: true
         description:
           type: string
-          description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters.
-          maxLength: 500
+          description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.
         issuer:
           type: string
           description: The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
@@ -92115,9 +92111,7 @@ components:
           type: array
           items:
             type: string
-            maxLength: 64
-          description: Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
-          maxItems: 40
+          description: Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
       description: Form for trusting an external workload issuer.
       required:
         - name

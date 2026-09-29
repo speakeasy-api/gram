@@ -228,8 +228,9 @@ func requireTrustDomain(raw string, field string) error {
 }
 
 const (
-	maxTags     = 40
-	maxTagRunes = 64
+	maxTags                 = 40
+	maxTagRunes             = 64
+	maxIssuerDescriptionLen = 500
 )
 
 // normalizeTags trims, rejects blanks, and drops duplicates, keeping the order
@@ -247,6 +248,10 @@ func normalizeTags(tags []string) ([]string, error) {
 		tag := strings.TrimSpace(raw)
 		if tag == "" {
 			return nil, oops.E(oops.CodeInvalid, nil, "tags must not be blank")
+		}
+		// Postgres text cannot hold a NUL byte, so the insert would fail.
+		if strings.ContainsRune(tag, 0) {
+			return nil, oops.E(oops.CodeInvalid, nil, "tags must not contain a NUL character")
 		}
 		if utf8.RuneCountInString(tag) > maxTagRunes {
 			return nil, oops.E(oops.CodeInvalid, nil, "tags must be at most %d characters", maxTagRunes)
@@ -297,7 +302,18 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		return nil, oops.E(oops.CodeInvalid, nil, "name must not be blank")
 	}
 
-	allowWildcard := payload.AllowWildcardAdmission
+	// Checked after trimming, as it is stored.
+	description := strings.TrimSpace(conv.PtrValOr(payload.Description, ""))
+	if utf8.RuneCountInString(description) > maxIssuerDescriptionLen {
+		return nil, oops.E(oops.CodeInvalid, nil, "description must be at most %d characters", maxIssuerDescriptionLen)
+	}
+	if strings.ContainsRune(description, 0) {
+		return nil, oops.E(oops.CodeInvalid, nil, "description must not contain a NUL character")
+	}
+
+	// Defaulted here rather than in the design: a Goa default on a bool makes the
+	// generated Go client send true for an explicit false.
+	allowWildcard := conv.PtrValOr(payload.AllowWildcardAdmission, true)
 
 	tags, err := normalizeTags(payload.Tags)
 	if err != nil {

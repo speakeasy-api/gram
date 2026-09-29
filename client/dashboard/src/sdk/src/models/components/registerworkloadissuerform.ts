@@ -14,7 +14,7 @@ export type RegisterWorkloadIssuerForm = {
    */
   allowWildcardAdmission?: boolean | undefined;
   /**
-   * What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters.
+   * What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.
    */
   description?: string | undefined;
   /**
@@ -34,14 +34,14 @@ export type RegisterWorkloadIssuerForm = {
    */
   projectScoped?: boolean | undefined;
   /**
-   * Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+   * Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
    */
   tags?: Array<string> | undefined;
 };
 
 /** @internal */
 export type RegisterWorkloadIssuerForm$Outbound = {
-  allow_wildcard_admission: boolean;
+  allow_wildcard_admission?: boolean | undefined;
   description?: string | undefined;
   issuer: string;
   jwks_uri: string;
@@ -56,7 +56,7 @@ export const RegisterWorkloadIssuerForm$outboundSchema: z.ZodMiniType<
   RegisterWorkloadIssuerForm
 > = z.pipe(
   z.object({
-    allowWildcardAdmission: z._default(z.boolean(), true),
+    allowWildcardAdmission: z.optional(z.boolean()),
     description: z.optional(z.string()),
     issuer: z.string(),
     jwksUri: z.string(),

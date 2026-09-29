@@ -49,7 +49,7 @@ export type AdmitWorkloadSubjectForm = {
    */
   subject: string;
   /**
-   * Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+   * Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
    */
   tags?: Array<string> | undefined;
 };

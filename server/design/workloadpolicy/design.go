@@ -174,15 +174,9 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.", func() {
 		Format(FormatURI)
 	})
-	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Re-checked on every lookup rather than at write time, so clearing it makes wildcard rules already written inert immediately.", func() {
-		Default(true)
-	})
-	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters.", func() {
-		MaxLength(500)
-	})
-	Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.", func() {
-		MaxLength(40)
-	})
+	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Re-checked on every lookup rather than at write time, so clearing it makes wildcard rules already written inert immediately.")
+	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.")
+	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
 	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Defaults to false.", func() {
 		Default(false)
 	})
@@ -204,9 +198,7 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("name", String, "Optional label, for platforms whose subjects are not self-describing.", func() {
 		MinLength(1)
 	})
-	Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.", func() {
-		MaxLength(40)
-	})
+	Attribute("tags", ArrayOf(String), "Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits.", func() {
 		Format(FormatUUID)
 	})

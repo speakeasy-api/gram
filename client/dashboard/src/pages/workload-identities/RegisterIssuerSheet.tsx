@@ -254,6 +254,9 @@ export function RegisterIssuerSheet({
                 value={values.tags}
                 placeholder="production, ci"
                 error={tagProblem !== null}
+                ariaDescribedBy={
+                  tagProblem !== null ? "workload-issuer-tags-error" : undefined
+                }
                 onChange={(tags) => setValues({ ...values, tags })}
               />
               {tagProblem !== null ? (

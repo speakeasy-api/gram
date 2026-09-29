@@ -8,7 +8,8 @@ export function tagsProblem(tags: string[]): string | null {
   if (tags.length > MAX_TAGS) {
     return `At most ${MAX_TAGS} tags.`;
   }
-  if (tags.some((tag) => tag.length > MAX_TAG_LENGTH)) {
+  // Code points, as the server counts them, not UTF-16 units.
+  if (tags.some((tag) => Array.from(tag).length > MAX_TAG_LENGTH)) {
     return `Each tag is at most ${MAX_TAG_LENGTH} characters.`;
   }
   return null;

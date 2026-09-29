@@ -53,7 +53,7 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesRegisterIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_wildcard_admission\": false,\n      \"description\": \"aaa\",\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_wildcard_admission\": false,\n      \"description\": \"abc123\",\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
@@ -63,19 +63,6 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer", body.Issuer, goa.FormatURI))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_uri", body.JwksURI, goa.FormatURI))
-		if body.Description != nil {
-			if utf8.RuneCountInString(*body.Description) > 500 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("body.description", *body.Description, utf8.RuneCountInString(*body.Description), 500, false))
-			}
-		}
-		if len(body.Tags) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 40, false))
-		}
-		for _, e := range body.Tags {
-			if utf8.RuneCountInString(e) > 64 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags[*]", e, utf8.RuneCountInString(e), 64, false))
-			}
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -105,12 +92,6 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 		AllowWildcardAdmission: body.AllowWildcardAdmission,
 		Description:            body.Description,
 		ProjectScoped:          body.ProjectScoped,
-	}
-	{
-		var zero bool
-		if v.AllowWildcardAdmission == zero {
-			v.AllowWildcardAdmission = true
-		}
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))
@@ -178,7 +159,7 @@ func BuildAdmitSubjectPayload(workloadIdentitiesAdmitSubjectBody string, workloa
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesAdmitSubjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\",\n      \"tags\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer", body.Issuer, goa.FormatURI))
 		if !(body.MatchKind == "exact" || body.MatchKind == "wildcard") {
@@ -187,14 +168,6 @@ func BuildAdmitSubjectPayload(workloadIdentitiesAdmitSubjectBody string, workloa
 		if body.Name != nil {
 			if utf8.RuneCountInString(*body.Name) < 1 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
-			}
-		}
-		if len(body.Tags) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 40, false))
-		}
-		for _, e := range body.Tags {
-			if utf8.RuneCountInString(e) > 64 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags[*]", e, utf8.RuneCountInString(e), 64, false))
 			}
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
