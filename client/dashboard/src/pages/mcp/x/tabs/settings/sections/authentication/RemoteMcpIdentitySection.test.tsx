@@ -822,7 +822,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("restores the connected client on undo", () => {
+  it("restores the connected client on cancel", () => {
     mocks.clients.mockReturnValue({
       items: [
         {
@@ -858,7 +858,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     renderIdentity();
     fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByText("Connected")).toBeDefined();
     expect(screen.queryByRole("radio", { name: /Existing client/ })).toBeNull();

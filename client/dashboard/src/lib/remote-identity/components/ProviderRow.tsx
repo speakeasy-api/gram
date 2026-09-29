@@ -46,7 +46,6 @@ import {
   KeyRound,
   Loader2,
   Settings,
-  Undo2,
   X,
 } from "lucide-react";
 import type * as React from "react";
@@ -252,12 +251,9 @@ export function UserIdentityRow({
             variant="tertiary"
             size="sm"
             disabled={disabled}
-            onClick={draft.undoClear}
+            onClick={draft.cancelClear}
           >
-            <Button.LeftIcon>
-              <Undo2 aria-hidden="true" />
-            </Button.LeftIcon>
-            <Button.Text>Undo</Button.Text>
+            <Button.Text>Cancel</Button.Text>
           </Button>
         ) : null}
       </div>

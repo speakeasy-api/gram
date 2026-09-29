@@ -202,7 +202,8 @@ export type UserIdentityDraft = {
   /** The server had a client and the operator cleared it. Save replaces it. */
   cleared: boolean;
   clear: () => void;
-  undoClear: () => void;
+  /** Back out of clearing and keep the connected client. */
+  cancelClear: () => void;
 
   choice: RegistrationChoice;
   selectChoice: (choice: RegistrationChoice) => void;
@@ -668,7 +669,7 @@ export function useUserIdentityDraft({
       setCleared(true);
       resetChoice();
     },
-    undoClear: (): void => {
+    cancelClear: (): void => {
       setCleared(false);
       resetChoice();
     },
