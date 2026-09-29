@@ -66,7 +66,7 @@ func TestWriteToolsDispatchByStoredOperation(t *testing.T) {
 func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 	t.Parallel()
 	oauth := &StaffOAuth{Approval: &StaffProposalApproval{}}
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationExtendOrganizationTrial: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
+	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
 	err := AttachWrites(&Runtime{}, oauth, &productfeatures.Client{}, writes)
 	require.ErrorContains(t, err, "not implemented")
 	require.Nil(t, oauth.Approval.operations, "nothing becomes approvable after a configuration error")
@@ -74,6 +74,7 @@ func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 	require.NoError(t, AttachWrites(&Runtime{}, oauth, &productfeatures.Client{}, WriteConfig{}))
 	require.Contains(t, oauth.Approval.operations, OperationSetOrganizationFeature)
 	require.Contains(t, oauth.Approval.operations, OperationSetOrganizationOnboarding)
+	require.Contains(t, oauth.Approval.operations, OperationExtendOrganizationTrial)
 }
 
 func TestFeatureViewRequiresMatchingTarget(t *testing.T) {

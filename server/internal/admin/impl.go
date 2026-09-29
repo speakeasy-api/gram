@@ -1222,7 +1222,17 @@ type TrialExtension struct {
 // trial to extend.
 var ErrTrialNotRunning = errors.New("organization has no running enterprise trial to extend")
 
-func (s *Service) extendTrialTx(ctx context.Context, tx pgx.Tx, logger *slog.Logger, organizationID string, days int) (TrialExtension, error) {
+// TrialActor is who the trial extension audit entry names.
+type TrialActor struct {
+	Principal   urn.Principal
+	DisplayName *string
+}
+
+// ExtendTrialTx extends a running enterprise trial by days and records its
+// audit entry inside the caller's transaction; the caller commits. It returns
+// ErrTrialNotRunning when there is no running trial to extend. The admin API
+// passes the session operator, and the staff Admin MCP passes its own actor.
+func ExtendTrialTx(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, logger *slog.Logger, organizationID string, days int, actor TrialActor) (TrialExtension, error) {
 	// Checked on the wide value before narrowing; see ExtendTrial.
 	if days < constants.MinTrialExtensionDays || days > constants.MaxTrialExtensionDays {
 		return TrialExtension{}, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialExtensionDays, constants.MaxTrialExtensionDays)
@@ -1249,11 +1259,10 @@ func (s *Service) extendTrialTx(ctx context.Context, tx pgx.Tx, logger *slog.Log
 		return TrialExtension{}, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
 	}
 
-	actor, actorDisplayName, _ := adminActor(ctx)
-	if err := s.audit.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
+	if err := auditLogger.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
 		OrganizationID:      organizationID,
-		Actor:               actor,
-		ActorDisplayName:    actorDisplayName,
+		Actor:               actor.Principal,
+		ActorDisplayName:    actor.DisplayName,
 		ActorSlug:           nil,
 		OrganizationName:    organization.Name,
 		OrganizationSlug:    organization.Slug,
@@ -1289,7 +1298,8 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	_, err = s.extendTrialTx(ctx, tx, logger, payload.ID, payload.Days)
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
+	_, err = ExtendTrialTx(ctx, tx, s.audit, logger, payload.ID, payload.Days, TrialActor{Principal: actor, DisplayName: actorDisplayName})
 	switch {
 	case errors.Is(err, ErrTrialNotRunning):
 		// rejectTrialChange reads on the pool, so this connection goes back
@@ -1302,7 +1312,6 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 		return nil, err
 	}
 
-	_, _, operatorEmail := adminActor(ctx)
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit trial extension").LogError(ctx, logger)
 	}
