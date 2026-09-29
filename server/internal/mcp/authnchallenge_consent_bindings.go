@@ -3,13 +3,16 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -35,19 +38,50 @@ func (s *Service) SetConsentBindingService(bindings ConsentBindingService) {
 	s.consentBindings = bindings
 }
 
-// Runs after endpoint, challenge and CSRF checks. Management additionally
-// requires a real Gram session; an OIDC challenge is not a dashboard session.
+// Runs after endpoint, browser, challenge and CSRF checks. Management still
+// requires a freshly authenticated Gram session, including on custom origins.
 func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
-	cookie, err := r.Cookie(constants.SessionCookie)
-	if err != nil || cookie.Value == "" {
-		return oops.C(oops.CodeUnauthorized)
+	target := state.AgentAuthorizationTarget
+	if target == nil || !target.matches(endpoint) {
+		return oops.E(oops.CodeForbidden, nil, "agent authorization target does not match endpoint")
 	}
-	ctx, err = s.sessions.Authenticate(ctx, cookie.Value)
+	human, err := s.loadConsentHuman(ctx, state, *target)
+	if err != nil {
+		return oops.E(oops.CodeForbidden, err, "consent authorizer is not eligible")
+	}
+	if r.PostForm.Get("action") == "agent_session_handoff" {
+		return s.startConsentSessionHandoff(w, r, endpoint, state)
+	}
+	// Explicit confirmation selects the identity for this challenge. A stale
+	// or unrelated cookie on the MCP origin must not override that choice.
+	token := ""
+	handoff, err := s.consentSessionCache.Get(ctx, "consentSession:"+state.ID)
+	switch {
+	case err == nil:
+		if handoff.ChallengeID != state.ID || handoff.SessionToken == "" {
+			return oops.C(oops.CodeUnauthorized)
+		}
+		token = handoff.SessionToken
+	case errors.Is(err, redisCache.ErrCacheMiss):
+		if cookie, err := r.Cookie(constants.SessionCookie); err == nil {
+			token = cookie.Value
+		}
+		if token == "" {
+			return oops.C(oops.CodeUnauthorized)
+		}
+	default:
+		return oops.E(oops.CodeUnavailable, err, "error checking consent session")
+	}
+	// Authentication failure for a confirmed session must never fall back to
+	// an ambient cookie, even when that cookie is another valid Gram session.
+	ctx, err = s.sessions.Authenticate(ctx, token)
 	if err != nil {
 		return fmt.Errorf("manage consent connection: %w", err)
 	}
+	// Never borrow ambient grants from a different request identity.
+	ctx = authz.GrantsToContext(ctx, human.grants)
 	if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
 		return oops.C(oops.CodeNotFound)
 	}

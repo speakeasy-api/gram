@@ -150,8 +150,25 @@
             var login = document.createElement("p");
             login.setAttribute("data-agent-access-login", "");
             login.className = "text-muted-foreground text-xs";
-            login.textContent =
-              "Sign in to Gram as the authorizing user in this organization, then retry.";
+            var signIn = document.createElement("button");
+            signIn.type = "button";
+            signIn.textContent = "Confirm your Gram account";
+            signIn.addEventListener("click", async function () {
+              signIn.disabled = true;
+              try {
+                var handoff = await connectionRequest(
+                  "agent_session_handoff",
+                  agentId,
+                );
+                // The URL is server-generated, never a client redirect URI.
+                window.location.assign(handoff.url);
+              } catch (handoffError) {
+                signIn.disabled = false;
+                login.textContent =
+                  "Could not start account confirmation. Restart authorization.";
+              }
+            });
+            login.appendChild(signIn);
             access.appendChild(login);
           }
           var retry = document.createElement("button");

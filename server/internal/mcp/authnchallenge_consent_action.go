@@ -89,7 +89,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	subject := *challengeState.Subject
 
 	switch r.PostForm.Get("action") {
-	case "agent_connections", "agent_attach", "agent_detach":
+	case "agent_connections", "agent_attach", "agent_detach", "agent_session_handoff":
 		return s.serveConsentAgentConnections(w, r, endpoint, challengeState)
 	case "retry_delegation":
 		return s.retryFederatedDelegation(w, r, endpoint, challengeState)

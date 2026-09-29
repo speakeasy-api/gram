@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -22,6 +24,7 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -29,11 +32,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -44,6 +49,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -330,6 +337,34 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	// Consent runs on this tier in production. Compose the same attachment
+	// service and transactional owner authorizer as gram start, without mounting
+	// its dashboard RPC routes or introducing a Temporal client.
+	identityCommitter := remotesessions.NewIdentityCommitter(logger, db, enc, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
+	remoteSessionsRefresher := remotesessions.NewRefreshService(logger, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, cacheImpl,
+		remotesessions.WithRefreshIDTokenVerifier(remoteSessionDeps.Verifier),
+		remotesessions.WithRefreshIssuerMetadataRefresher(remoteSessionDeps.Refresher),
+		remotesessions.WithRefreshSessionEnricher(remoteSessionDeps.Enricher),
+		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner))
+	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures)
+	remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil {
+			return oops.C(oops.CodeNotFound)
+		}
+		for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
+			evaluation, err := feature.EvaluateFlag(ctx, featureFlags, flag, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+			if err != nil || evaluation != feature.EvaluationEnabled {
+				return oops.C(oops.CodeNotFound)
+			}
+		}
+		_, _, err := agentmanagement.NewAuthorizer(authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+		if err != nil {
+			return fmt.Errorf("authorize attachment owner: %w", err)
+		}
+		return nil
+	})
+	mcpService.SetConsentBindingService(remoteSessionsService)
 	mcpService.StartRemoteSessionRecheck(ctx)
 
 	// Private ingress expansion is never admitted here: the lifecycle

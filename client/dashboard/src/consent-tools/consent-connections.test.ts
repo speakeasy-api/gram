@@ -8,6 +8,7 @@ const script = readFileSync(
   "utf8",
 );
 const fetchMock = vi.fn();
+const assignLocation = vi.fn();
 function page(withProvider = true) {
   document.body.innerHTML = `
     <input type="radio" data-agent-select name="agent_id" value="" checked>
@@ -25,7 +26,10 @@ function page(withProvider = true) {
   if (!withProvider)
     document.querySelector("[data-service-connections]")!.remove();
   runInNewContext(script, {
-    window,
+    window: {
+      setTimeout: window.setTimeout.bind(window),
+      location: { assign: assignLocation },
+    },
     document,
     sessionStorage,
     URLSearchParams,
@@ -47,6 +51,7 @@ beforeEach(() => {
   sessionStorage.clear();
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
+  assignLocation.mockReset();
 });
 afterEach(() => {
   document.body.replaceChildren();
@@ -224,6 +229,36 @@ describe("consent agent connections", () => {
           .hidden,
       ).toBe(false),
     );
+    expect(button.disabled).toBe(true);
+  });
+});
+
+describe("consent account confirmation", () => {
+  it("starts a CSRF-protected handoff only after an explicit click", async () => {
+    fetchMock.mockResolvedValueOnce(reply({}, 401));
+    const button = page();
+    select("agent-a");
+    await waitFor(() =>
+      expect(
+        document.querySelector("[data-agent-access-login] button"),
+      ).not.toBeNull(),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(assignLocation).not.toHaveBeenCalled();
+    const target =
+      "https://app.example.com/oauth/agent-consent-session?ticket=opaque";
+    fetchMock.mockResolvedValueOnce(reply({ url: target }));
+    fireEvent.click(
+      document.querySelector("[data-agent-access-login] button")!,
+    );
+    await waitFor(() => expect(assignLocation).toHaveBeenCalledWith(target));
+    const options = fetchMock.mock.calls[1][1];
+    expect(options.method).toBe("POST");
+    expect(options.credentials).toBe("same-origin");
+    expect(options.body.get("action")).toBe("agent_session_handoff");
+    expect(options.body.get("state")).toBe("state-a");
+    expect(options.body.get("csrf_token")).toBe("csrf-a");
+    expect(options.body.get("agent_id")).toBe("agent-a");
     expect(button.disabled).toBe(true);
   });
 });

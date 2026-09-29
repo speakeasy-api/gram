@@ -27,6 +27,7 @@
 /* Tailwind cannot infer these: the markup lives outside the dashboard package,
    in Go template and plain-JS files. */
 @source "../../../../server/internal/mcp/consent_template.html";
+@source "../../../../server/internal/mcp/authnchallenge_consent_session.go";
 @source "../../../../server/internal/mcp/consent_logo.html";
 @source "../../../../server/internal/mcp/consent_script.js";
 
