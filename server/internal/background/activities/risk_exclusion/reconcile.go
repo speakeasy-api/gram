@@ -607,7 +607,8 @@ func (a *Reconcile) forEachRegexCandidate(
 				Path:           c.Path,
 				ToolCallID:     c.ToolCallID,
 				OrganizationID: run.organizationID,
-				RiskPolicyID:   "",
+				// Reconstruction never reads the policy; visibility is the reveal endpoint's concern.
+				RiskPolicyID: "",
 			}
 
 			anchorKey := c.ChatMessageID + "\x00" + c.ContentPartID

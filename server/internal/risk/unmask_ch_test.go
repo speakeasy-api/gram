@@ -916,6 +916,7 @@ func TestUnmaskRiskResult_ClickHouseDeletedPolicyNotFound(t *testing.T) {
 		startPos:      int32(start),
 		endPos:        int32(start + len(secret)),
 		matchLen:      uint32(len(secret)),
+		matchRedacted: "se**et",
 		surface:       "content",
 	}
 	disabled := base
