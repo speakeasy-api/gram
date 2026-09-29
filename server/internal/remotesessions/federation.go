@@ -467,6 +467,11 @@ func classifyFederatedExchangeError(err error) error {
 		if errors.Is(err, errTokenEndpointSigningUnavailable) {
 			return ErrFederatedUnavailable
 		}
+		// A missing, deleted, or unusable signing key fails every attempt the
+		// same way, so it is the administrator's to repair.
+		if clientAssertionUnconfigured(err) {
+			return ErrFederatedConfiguration
+		}
 		return ErrFederatedSigning
 	}
 	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
