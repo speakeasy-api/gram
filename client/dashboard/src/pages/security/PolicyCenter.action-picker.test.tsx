@@ -1,12 +1,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { PolicyAction } from "./policy-data";
 import { ActionPicker } from "./PolicyCenter";
 
 afterEach(cleanup);
 
 describe("ActionPicker", () => {
   it("limits MCP-scoped policies to flag and block", () => {
-    const setAction = vi.fn();
+    const setAction = vi.fn<(action: PolicyAction) => void>();
     render(
       <ActionPicker formAction="warn" setFormAction={setAction} mcpScoped />,
     );

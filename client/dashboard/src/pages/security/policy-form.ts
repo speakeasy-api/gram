@@ -361,13 +361,7 @@ export const SCOPE_EXEMPT_CEL_EXAMPLES: { label: string; expr: string }[] =
   celExamples.scope_exempt;
 
 export function mcpCompatibleAction(action: PolicyAction): PolicyAction {
-  switch (action) {
-    case "warn":
-    case "quarantine":
-      return "block";
-    default:
-      return action;
-  }
+  return action === "warn" || action === "quarantine" ? "block" : action;
 }
 
 export const ACTION_OPTIONS: {
