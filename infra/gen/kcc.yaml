@@ -1377,6 +1377,59 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-reading
+    spec:
+      definition: |
+        edition = "2024";
+        message Reading {
+          enum MessageRole {
+            MESSAGE_ROLE_UNSPECIFIED = 0;
+            MESSAGE_ROLE_USER = 1;
+            MESSAGE_ROLE_ASSISTANT = 2;
+          }
+          message Probability {
+            string signal_id = 1;
+            double probability = 2;
+          }
+          message MultiLabel {
+            repeated Probability signals = 1;
+          }
+          message Choice {
+            string selected_signal_id = 1;
+            repeated Probability distribution = 2;
+            double confidence = 3;
+          }
+          message Score {
+            double expected_index = 1;
+            repeated Probability distribution = 2;
+            double confidence = 3;
+          }
+          string id = 1;
+          string evaluation_attempt_id = 2;
+          string organization_id = 3;
+          string project_id = 4;
+          string conversation_id = 5;
+          string message_id = 6;
+          MessageRole message_role = 7;
+          string sensor_id = 8;
+          string message_created_at = 9;
+          string evaluated_at = 10;
+          reserved 11;
+          reserved input_hash;
+          string definition_hash = 12;
+          string configured_model = 13;
+          repeated string models = 14;
+          string compiler_version = 15;
+          oneof result {
+            MultiLabel multi_label = 16;
+            Choice choice = 17;
+            Score score = 18;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-log-record
     spec:
@@ -1927,6 +1980,20 @@ pubsub:
         name: gram-risk-v1-prompt-policy-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-evaluator
+      topic_proto_message: gram-conversation-v1-message
+    name: gram-sigint-v1-evaluator
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-conversation-v1-message
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-noop
       topic_proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-noop
@@ -2369,6 +2436,16 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-reading
+    spec:
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-sigint-v1-reading
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record
