@@ -176,7 +176,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
                   <InlineEmptyState
                     icon="search"
                     heading="No platforms match"
-                    description="Nothing registered here matches that search. Try part of a name, an issuer URL or a tag."
+                    description="Nothing registered here matches that search. Try part of a name, description, issuer URL or tag."
                   />
                 </Cards>
               ) : (
@@ -232,7 +232,7 @@ function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
           <Card.Title>{issuer.name}</Card.Title>
           <Card.Description
             className={
-              hasDescription ? "line-clamp-2 whitespace-normal" : "break-all"
+              hasDescription ? "line-clamp-2 !whitespace-normal" : "break-all"
             }
           >
             {hasDescription ? issuer.description : issuer.issuer}

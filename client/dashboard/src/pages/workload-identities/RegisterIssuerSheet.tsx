@@ -43,7 +43,8 @@ const EMPTY: RegisterIssuerValues = {
 const MAX_DESCRIPTION_LENGTH = 500;
 
 function descriptionProblem(description: string): string | null {
-  if (description.trim().length > MAX_DESCRIPTION_LENGTH) {
+  // Code points, as the server counts them, not UTF-16 units.
+  if (Array.from(description.trim()).length > MAX_DESCRIPTION_LENGTH) {
     return `At most ${MAX_DESCRIPTION_LENGTH} characters.`;
   }
   return null;
@@ -163,6 +164,12 @@ export function RegisterIssuerSheet({
                 value={values.description}
                 placeholder="Claude agents in our Slack workspace"
                 rows={2}
+                aria-invalid={descProblem !== null || undefined}
+                aria-describedby={
+                  descProblem !== null
+                    ? "workload-issuer-description-error"
+                    : undefined
+                }
                 onChange={(value) =>
                   setValues({ ...values, description: value })
                 }

@@ -253,6 +253,9 @@ export function AdmitSubjectSheet({
                 value={values.tags}
                 placeholder="support, production"
                 error={tagProblem !== null}
+                ariaDescribedBy={
+                  tagProblem !== null ? "admit-tags-error" : undefined
+                }
                 onChange={(tags) => setValues({ ...values, tags })}
               />
               {tagProblem !== null ? (
