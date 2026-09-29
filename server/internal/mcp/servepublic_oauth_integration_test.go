@@ -5,23 +5,32 @@
 package mcp_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const integrationRedirectURI = "http://localhost:8080/callback"
@@ -443,4 +452,132 @@ func TestServePublic_ExternalOAuth21_ExpiredUpstreamJWTStillForwarded(t *testing
 	require.NoError(t, err, "external/passthrough mode must NOT validate JWT claims; expired upstream JWT should be forwarded")
 	require.Empty(t, w.Header().Get("WWW-Authenticate"),
 		"WWW-Authenticate must NOT be set in passthrough mode regardless of bearer freshness")
+}
+
+// TestServePublic_ExternalOAuth_UpstreamUnauthorizedChallenges proves that
+// when the upstream API rejects a forwarded bearer, tools/call answers with an
+// invalid_token challenge instead of an HTTP 200 isError result, so the MCP
+// client refreshes or reauthorizes.
+func TestServePublic_ExternalOAuth_UpstreamUnauthorizedChallenges(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	var upstreamAuth atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamAuth.Store(r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"token expired"}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	result := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:     "ext-oauth-upstream-401",
+		IsPublic: true,
+	})
+	addAuthorizationCodeTool(t, ctx, ti, result.Toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, upstream.URL)
+
+	callBody, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "passthrough_tool", "arguments": map[string]any{}},
+	})
+	require.NoError(t, err)
+
+	slug := result.Toolset.McpSlug.String
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, callBody, "revoked-upstream-token", nil)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	got, _ := upstreamAuth.Load().(string)
+	require.Equal(t, "Bearer revoked-upstream-token", got, "the bearer must still be forwarded upstream")
+	challenge := w.Header().Get("WWW-Authenticate")
+	require.Contains(t, challenge, `resource_metadata="`)
+	require.Contains(t, challenge, "/.well-known/oauth-protected-resource/mcp/"+slug)
+	require.Contains(t, challenge, `error="invalid_token"`)
+}
+
+// addAuthorizationCodeTool attaches an HTTP tool secured by an oauth2
+// authorization_code scheme, served from serverURL, to the toolset.
+func addAuthorizationCodeTool(t *testing.T, ctx context.Context, ti *testInstance, toolsetID, projectID uuid.UUID, orgID, serverURL string) {
+	t.Helper()
+
+	deployments := deployments_repo.New(ti.conn)
+	deploymentID, err := deployments.InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.New().String(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, deployments.CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	}))
+
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "passthrough", uuid.New().String()[:8])
+	_, err = deployments.CreateOpenAPIv3ToolDefinition(ctx, deployments_repo.CreateOpenAPIv3ToolDefinitionParams{
+		ProjectID:           projectID,
+		DeploymentID:        deploymentID,
+		Openapiv3DocumentID: uuid.NullUUID{},
+		ToolUrn:             toolURN,
+		Name:                "passthrough_tool",
+		UntruncatedName:     pgtype.Text{},
+		Openapiv3Operation:  pgtype.Text{},
+		Summary:             "Passthrough tool",
+		Description:         "A tool authorized by the caller's upstream bearer",
+		Tags:                []string{},
+		Confirm:             pgtype.Text{},
+		ConfirmPrompt:       pgtype.Text{},
+		XGram:               pgtype.Bool{},
+		OriginalName:        pgtype.Text{},
+		OriginalSummary:     pgtype.Text{},
+		OriginalDescription: pgtype.Text{},
+		Security:            []byte(`[{"upstream_oauth": []}]`),
+		HttpMethod:          "GET",
+		Path:                "/items",
+		SchemaVersion:       "3.0.0",
+		Schema:              []byte(`{}`),
+		HeaderSettings:      []byte(`{}`),
+		QuerySettings:       []byte(`{}`),
+		PathSettings:        []byte(`{}`),
+		ServerEnvVar:        "PASSTHROUGH_SERVER_URL",
+		DefaultServerUrl:    pgtype.Text{String: serverURL, Valid: true},
+		RequestContentType:  pgtype.Text{},
+		ResponseFilter:      nil,
+		ReadOnlyHint:        pgtype.Bool{},
+		DestructiveHint:     pgtype.Bool{},
+		IdempotentHint:      pgtype.Bool{},
+		OpenWorldHint:       pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	_, err = deployments.CreateHTTPSecurity(ctx, deployments_repo.CreateHTTPSecurityParams{
+		Key:                 "upstream_oauth",
+		DeploymentID:        deploymentID,
+		ProjectID:           uuid.NullUUID{UUID: projectID, Valid: true},
+		Openapiv3DocumentID: uuid.NullUUID{},
+		Type:                pgtype.Text{String: "oauth2", Valid: true},
+		Name:                pgtype.Text{},
+		InPlacement:         pgtype.Text{},
+		Scheme:              pgtype.Text{},
+		BearerFormat:        pgtype.Text{},
+		EnvVariables:        []string{"UPSTREAM_OAUTH_ACCESS_TOKEN"},
+		OauthTypes:          []string{"authorization_code"},
+		OauthFlows:          nil,
+	})
+	require.NoError(t, err)
+
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     toolsetID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{toolURN},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
 }

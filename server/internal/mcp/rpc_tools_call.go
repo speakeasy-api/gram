@@ -77,6 +77,11 @@ func recordToolsCallIdentityCoverage(ctx context.Context, checkpoint *mcptoolexe
 	payload.identityCoverageRecorded = true
 }
 
+// errUpstreamUnauthorized reports that the upstream API rejected a bearer the
+// MCP client supplied, so the transport answers with an invalid_token
+// challenge the client can act on instead of an isError result.
+var errUpstreamUnauthorized = errors.New("upstream rejected the caller's access token")
+
 const (
 	listToolsToolName     = "list_tools"
 	describeToolsToolName = "describe_tools"
@@ -483,6 +488,10 @@ func handleToolsCall(
 	}
 
 	outputBytes = int64(rw.body.Len())
+
+	if rw.statusCode == http.StatusUnauthorized && slices.ContainsFunc(payload.oauthTokenInputs, func(t oauthTokenInputs) bool { return t.fromCaller }) {
+		return nil, errUpstreamUnauthorized
+	}
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
