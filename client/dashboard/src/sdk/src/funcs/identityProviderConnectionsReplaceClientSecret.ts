@@ -31,23 +31,23 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  SubmitIdentityProviderConnectionClientIdRequest,
-  SubmitIdentityProviderConnectionClientIdRequest$outboundSchema,
-  SubmitIdentityProviderConnectionClientIdSecurity,
-} from "../models/operations/submitidentityproviderconnectionclientid.js";
+  ReplaceIdentityProviderConnectionClientSecretRequest,
+  ReplaceIdentityProviderConnectionClientSecretRequest$outboundSchema,
+  ReplaceIdentityProviderConnectionClientSecretSecurity,
+} from "../models/operations/replaceidentityproviderconnectionclientsecret.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * submitClientId identityProviderConnections
+ * replaceClientSecret identityProviderConnections
  *
  * @remarks
- * Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
+ * Replace the client secret of a connection installed from the Okta Integration Network and re-verify it. The previous secret is kept if Okta rejects the new one. Requires org:admin.
  */
-export function identityProviderConnectionsSubmitClientId(
+export function identityProviderConnectionsReplaceClientSecret(
   client: GramCore,
-  request: SubmitIdentityProviderConnectionClientIdRequest,
-  security?: SubmitIdentityProviderConnectionClientIdSecurity | undefined,
+  request: ReplaceIdentityProviderConnectionClientSecretRequest,
+  security?: ReplaceIdentityProviderConnectionClientSecretSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function identityProviderConnectionsSubmitClientId(
 
 async function $do(
   client: GramCore,
-  request: SubmitIdentityProviderConnectionClientIdRequest,
-  security?: SubmitIdentityProviderConnectionClientIdSecurity | undefined,
+  request: ReplaceIdentityProviderConnectionClientSecretRequest,
+  security?: ReplaceIdentityProviderConnectionClientSecretSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -97,7 +97,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        SubmitIdentityProviderConnectionClientIdRequest$outboundSchema,
+        ReplaceIdentityProviderConnectionClientSecretRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -108,11 +108,13 @@ async function $do(
   const payload = parsed.value;
   const body = encodeJSON(
     "body",
-    payload.SubmitIdentityProviderConnectionClientIDRequestBody,
+    payload.ReplaceIdentityProviderConnectionClientSecretRequestBody,
     { explode: true },
   );
 
-  const path = pathToFunc("/rpc/identityProviderConnections.submitClientId")();
+  const path = pathToFunc(
+    "/rpc/identityProviderConnections.replaceClientSecret",
+  )();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -136,7 +138,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "submitIdentityProviderConnectionClientId",
+    operationID: "replaceIdentityProviderConnectionClientSecret",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

@@ -578,6 +578,286 @@ func DecodeSubmitClientIDResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildReplaceClientSecretRequest instantiates a HTTP request object with
+// method and path set to call the "identityProviderConnections" service
+// "replaceClientSecret" endpoint
+func (c *Client) BuildReplaceClientSecretRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ReplaceClientSecretIdentityProviderConnectionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identityProviderConnections", "replaceClientSecret", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeReplaceClientSecretRequest returns an encoder for requests sent to the
+// identityProviderConnections replaceClientSecret server.
+func EncodeReplaceClientSecretRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identityproviderconnections.ReplaceClientSecretPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identityProviderConnections", "replaceClientSecret", "*identityproviderconnections.ReplaceClientSecretPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewReplaceClientSecretRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identityProviderConnections", "replaceClientSecret", err)
+		}
+		return nil
+	}
+}
+
+// DecodeReplaceClientSecretResponse returns a decoder for responses returned
+// by the identityProviderConnections replaceClientSecret endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeReplaceClientSecretResponse may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeReplaceClientSecretResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ReplaceClientSecretResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			res := NewReplaceClientSecretOktaIdentityProviderConnectionOK(&body)
+			return res, nil
+		case http.StatusPreconditionFailed:
+			var (
+				body ReplaceClientSecretFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretFailedPrecondition(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body ReplaceClientSecretRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretRateLimitExceeded(&body)
+		case http.StatusUnauthorized:
+			var (
+				body ReplaceClientSecretUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ReplaceClientSecretForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ReplaceClientSecretBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ReplaceClientSecretNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ReplaceClientSecretConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ReplaceClientSecretUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ReplaceClientSecretInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ReplaceClientSecretInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+				}
+				err = ValidateReplaceClientSecretInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+				}
+				return nil, NewReplaceClientSecretInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ReplaceClientSecretUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+				}
+				err = ValidateReplaceClientSecretUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+				}
+				return nil, NewReplaceClientSecretUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "replaceClientSecret", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ReplaceClientSecretGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ReplaceClientSecretUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			err = ValidateReplaceClientSecretUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "replaceClientSecret", err)
+			}
+			return nil, NewReplaceClientSecretUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "replaceClientSecret", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildVerifyRequest instantiates a HTTP request object with method and path
 // set to call the "identityProviderConnections" service "verify" endpoint
 func (c *Client) BuildVerifyRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2217,7 +2497,7 @@ func unmarshalOktaIdentityProviderConnectionResponseBodyToIdentityproviderconnec
 		OrgURL:            *v.OrgURL,
 		IssuerURL:         *v.IssuerURL,
 		ListingMode:       *v.ListingMode,
-		JwksURL:           *v.JwksURL,
+		JwksURL:           v.JwksURL,
 		ClientID:          v.ClientID,
 		ClientIDSubmitted: *v.ClientIDSubmitted,
 		DpopRequired:      *v.DpopRequired,

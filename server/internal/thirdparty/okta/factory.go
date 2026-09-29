@@ -14,9 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
-// ClientFactory hands out one memoized Client per remote session client.
-// Callers must not cache instances themselves; call Client on every use so
-// Forget takes effect after a credential change.
+// ClientFactory hands out one memoized Client per remote session client,
+// rebuilt whenever its Config changes. Callers must not cache instances
+// themselves; call Client on every use so Forget and Config changes take effect.
 type ClientFactory interface {
 	Client(cfg Config) (Client, error)
 	Forget(id uuid.UUID)
@@ -26,9 +26,15 @@ type clientFactory struct {
 	logger     *slog.Logger
 	httpClient *guardian.HTTPClient
 	signer     remotesessions.TokenEndpointAssertionSigner
+	decrypter  SecretDecrypter
 
 	mu      sync.Mutex
-	clients map[uuid.UUID]Client
+	clients map[uuid.UUID]memoizedClient
+}
+
+type memoizedClient struct {
+	cfg    Config
+	client Client
 }
 
 var _ ClientFactory = (*clientFactory)(nil)
@@ -36,7 +42,7 @@ var _ ClientFactory = (*clientFactory)(nil)
 // NewClientFactory returns a factory backed by the real Okta Management API.
 // The pooled client is built without retries so the per-client no-redirect
 // policy NewClient installs is honored by the exchange itself.
-func NewClientFactory(logger *slog.Logger, guardianPolicy *guardian.Policy, signer remotesessions.TokenEndpointAssertionSigner) ClientFactory {
+func NewClientFactory(logger *slog.Logger, guardianPolicy *guardian.Policy, signer remotesessions.TokenEndpointAssertionSigner, decrypter SecretDecrypter) ClientFactory {
 	httpClient := guardianPolicy.PooledClient(
 		guardian.WithResilience("okta", guardian.ResilienceConfig{
 			Partition:       partitionByHashedHost(),
@@ -56,8 +62,9 @@ func NewClientFactory(logger *slog.Logger, guardianPolicy *guardian.Policy, sign
 		logger:     logger,
 		httpClient: httpClient,
 		signer:     signer,
+		decrypter:  decrypter,
 		mu:         sync.Mutex{},
-		clients:    map[uuid.UUID]Client{},
+		clients:    map[uuid.UUID]memoizedClient{},
 	}
 }
 
@@ -76,14 +83,15 @@ func partitionByHashedHost() guardian.PartitionStrategy {
 func (f *clientFactory) Client(cfg Config) (Client, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if c, ok := f.clients[cfg.RemoteSessionClientID]; ok {
-		return c, nil
+	if m, ok := f.clients[cfg.RemoteSessionClientID]; ok && m.cfg == cfg {
+		return m.client, nil
 	}
-	c, err := NewClient(f.logger, f.httpClient, f.signer, cfg)
+	c, err := NewClient(f.logger, f.httpClient, f.signer, f.decrypter, cfg)
 	if err != nil {
+		delete(f.clients, cfg.RemoteSessionClientID)
 		return nil, err
 	}
-	f.clients[cfg.RemoteSessionClientID] = c
+	f.clients[cfg.RemoteSessionClientID] = memoizedClient{cfg: cfg, client: c}
 	return c, nil
 }
 
@@ -117,6 +125,7 @@ func (f *FakeFactory) Client(cfg Config) (Client, error) {
 	if !ok {
 		return nil, fmt.Errorf("okta: no fake fixtures for org url %q", cfg.OrgURL)
 	}
+	fake.useConfig(cfg)
 	return fake, nil
 }
 

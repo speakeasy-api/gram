@@ -89,7 +89,7 @@ func TestManagedClient_RefusesOrganizationTierMutations(t *testing.T) {
 	require.NotNil(t, after.TokenEndpointAuthMethod)
 	require.Equal(t, "private_key_jwt", *after.TokenEndpointAuthMethod)
 	require.NotNil(t, after.JSONWebKeySetID)
-	require.Equal(t, fx.Client.JSONWebKeySetID.String(), *after.JSONWebKeySetID)
+	require.Equal(t, fx.Client.JSONWebKeySetID.UUID.String(), *after.JSONWebKeySetID)
 }
 
 func TestManagedKeySet_RefusesOrdinaryClientAttachment(t *testing.T) {
@@ -113,7 +113,7 @@ func TestManagedKeySet_RefusesOrdinaryClientAttachment(t *testing.T) {
 
 			before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachJsonWebKeySet)
 			require.NoError(t, err)
-			managedSetID := fx.Client.JSONWebKeySetID.String()
+			managedSetID := fx.Client.JSONWebKeySetID.UUID.String()
 			if surface == "organization" {
 				_, err = ti.service.AttachClientKeySet(ctx, &orgclientsgen.AttachClientKeySetPayload{ID: clientID, JSONWebKeySetID: managedSetID})
 			} else {
@@ -376,4 +376,32 @@ func listIssuerIDs(t *testing.T, ctx context.Context, ti *testInstance) []string
 		ids = append(ids, item.Issuer.ID)
 	}
 	return ids
+}
+
+// A managed client is never eligible as a trusted identity-provider login client.
+func TestManagedClient_IsNotATrustedLoginClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	organizationID := activeOrganizationID(t, ctx)
+
+	issuerID, fx := provisionManagedClient(t, ctx, ti, "managed-trusted-issuer")
+	_, err := repo.New(ti.conn).GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{
+		ClientID:       fx.Client.ClientRowID,
+		IssuerID:       uuid.MustParse(issuerID),
+		OrganizationID: organizationID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	other, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("managed-trusted-unrelated", nil))
+	require.NoError(t, err)
+	client, err := ti.service.CreateClient(ctx, newCreateClientPayload(other.ID, nil, nil))
+	require.NoError(t, err)
+	row, err := repo.New(ti.conn).GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{
+		ClientID:       uuid.MustParse(client.ID),
+		IssuerID:       uuid.MustParse(other.ID),
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, client.ID, row.RemoteSessionClient.ID.String())
 }

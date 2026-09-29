@@ -6,6 +6,7 @@ import { identityProviderConnectionsCreate } from "../funcs/identityProviderConn
 import { identityProviderConnectionsGet } from "../funcs/identityProviderConnectionsGet.js";
 import { identityProviderConnectionsListApplications } from "../funcs/identityProviderConnectionsListApplications.js";
 import { identityProviderConnectionsRecordAgent } from "../funcs/identityProviderConnectionsRecordAgent.js";
+import { identityProviderConnectionsReplaceClientSecret } from "../funcs/identityProviderConnectionsReplaceClientSecret.js";
 import { identityProviderConnectionsRevoke } from "../funcs/identityProviderConnectionsRevoke.js";
 import { identityProviderConnectionsSubmitClientId } from "../funcs/identityProviderConnectionsSubmitClientId.js";
 import { identityProviderConnectionsSyncApplications } from "../funcs/identityProviderConnectionsSyncApplications.js";
@@ -30,6 +31,10 @@ import {
   RecordIdentityProviderConnectionAgentRequest,
   RecordIdentityProviderConnectionAgentSecurity,
 } from "../models/operations/recordidentityproviderconnectionagent.js";
+import {
+  ReplaceIdentityProviderConnectionClientSecretRequest,
+  ReplaceIdentityProviderConnectionClientSecretSecurity,
+} from "../models/operations/replaceidentityproviderconnectionclientsecret.js";
 import {
   RevokeIdentityProviderConnectionRequest,
   RevokeIdentityProviderConnectionSecurity,
@@ -126,6 +131,27 @@ export class IdentityProviderConnections extends ClientSDK {
   }
 
   /**
+   * replaceClientSecret identityProviderConnections
+   *
+   * @remarks
+   * Replace the client secret of a connection installed from the Okta Integration Network and re-verify it. The previous secret is kept if Okta rejects the new one. Requires org:admin.
+   */
+  async replaceClientSecret(
+    request: ReplaceIdentityProviderConnectionClientSecretRequest,
+    security?:
+      | ReplaceIdentityProviderConnectionClientSecretSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<OktaIdentityProviderConnection> {
+    return unwrapAsync(identityProviderConnectionsReplaceClientSecret(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * revoke identityProviderConnections
    *
    * @remarks
@@ -148,7 +174,7 @@ export class IdentityProviderConnections extends ClientSDK {
    * submitClientId identityProviderConnections
    *
    * @remarks
-   * Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
+   * Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
    */
   async submitClientId(
     request: SubmitIdentityProviderConnectionClientIdRequest,

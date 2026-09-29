@@ -2,9 +2,11 @@ package identityproviderconnections
 
 import (
 	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
-// Listing modes select the console checklist template.
+// Listing modes select the client authentication a new connection provisions.
 const (
 	ListingModeCustomApp = "custom_app"
 	ListingModeOIN       = "oin"
@@ -130,7 +132,7 @@ func observe(signal ChecklistSignal) completions {
 	}
 	// Scope verification can complete without a token. Only report token
 	// protection and key authentication when token issuance is evidenced.
-	if signal.Checked && !slices.Contains(signal.Reasons, ReasonKeyNotFetched) {
+	if signal.Checked && !slices.Contains(signal.Reasons, ReasonKeyNotFetched) && !slices.Contains(signal.Reasons, ReasonSecretRejected) {
 		// A granted scope or a bound token proves credential acceptance.
 		if signal.DPoPBound || len(signal.MissingScopes) < len(RequiredOktaScopes) {
 			done.appCreated = new(true)
@@ -201,24 +203,14 @@ func activateDescription(app *AgentAppSignal) string {
 	}
 }
 
-// OktaChecklist renders the console steps for a listing mode; signal ticks
-// the steps a verification can observe.
-func OktaChecklist(listingMode string, signal ChecklistSignal) []ChecklistItem {
+// OktaChecklist renders the console steps for the connection's client
+// authentication; signal ticks the steps a verification can observe.
+func OktaChecklist(authMethod remotesessions.TokenEndpointAuthMethod, signal ChecklistSignal) []ChecklistItem {
 	done := observe(signal)
-	return slices.Concat(connectItems(listingMode, done), agentItems(signal.Agent.App, done))
+	return slices.Concat(connectItems(authMethod, done), agentItems(signal.Agent.App, done))
 }
 
-func appItem(listingMode string, completed *bool) ChecklistItem {
-	if listingMode == ListingModeOIN {
-		return ChecklistItem{
-			Key:         ChecklistKeyAddOINApp,
-			Group:       ChecklistGroupConnect,
-			Title:       "Add the Speakeasy app from the Okta Integration Network",
-			Description: "In the Admin Console go to Applications > Browse App Catalog, search for Speakeasy, and add it. This creates the API Services app for you; skip creating one by hand.",
-			Details:     []string{},
-			Completed:   completed,
-		}
-	}
+func appItem(completed *bool) ChecklistItem {
 	return ChecklistItem{
 		Key:         ChecklistKeyCreateAPIServicesApp,
 		Group:       ChecklistGroupConnect,
@@ -233,9 +225,12 @@ func appItem(listingMode string, completed *bool) ChecklistItem {
 
 // Verified against the live console 2026-09-28: Okta greys out Public key /
 // Private key under Client Credentials until a key URL is saved on Public keys.
-func connectItems(listingMode string, done completions) []ChecklistItem {
+func connectItems(authMethod remotesessions.TokenEndpointAuthMethod, done completions) []ChecklistItem {
+	if authMethod == remotesessions.TokenEndpointAuthMethodBasic {
+		return oinConnectItems(done)
+	}
 	return []ChecklistItem{
-		appItem(listingMode, done.appCreated),
+		appItem(done.appCreated),
 		{
 			Key:         ChecklistKeyPublicKeyAuth,
 			Group:       ChecklistGroupConnect,
@@ -277,6 +272,47 @@ func connectItems(listingMode string, done completions) []ChecklistItem {
 			Group:       ChecklistGroupConnect,
 			Title:       "Submit the app's client ID",
 			Description: "Copy the Client ID (it starts with 0oa) from the app's General tab and enter it here. Speakeasy will check the connection and whether it can read apps, users, and groups.",
+			Details:     []string{},
+			Completed:   done.clientID,
+		},
+	}
+}
+
+// oinConnectItems covers an install from the Okta Integration Network, which
+// authenticates with a client secret, so there is no key URL or DPoP step.
+func oinConnectItems(done completions) []ChecklistItem {
+	return []ChecklistItem{
+		{
+			Key:         ChecklistKeyAddOINApp,
+			Group:       ChecklistGroupConnect,
+			Title:       "Install Speakeasy from the Okta Integration Network",
+			Description: "In the Okta Admin Console go to Applications > API Service Integrations, choose Add Integration, select Speakeasy, review the read-only permissions, and choose Install & Authorize.",
+			Details: []string{
+				"Okta shows the client secret only once. Copy the client ID and client secret before leaving the page.",
+			},
+			Completed: done.appCreated,
+		},
+		{
+			Key:         ChecklistKeyGrantScopes,
+			Group:       ChecklistGroupConnect,
+			Title:       "Allow read-only permissions",
+			Description: "Okta asks you to approve these read-only permissions during installation. They let Speakeasy read apps, users, and groups without changing them.",
+			Details:     slices.Clone(RequiredOktaScopes),
+			Completed:   done.scopesGranted,
+		},
+		{
+			Key:         ChecklistKeyAssignAdminRoles,
+			Group:       ChecklistGroupConnect,
+			Title:       "Allow access to apps, users, and groups",
+			Description: accessDescription(done.apiAccess),
+			Details:     accessDetails(done.apiAccess),
+			Completed:   done.apiAccess,
+		},
+		{
+			Key:         ChecklistKeySubmitClientID,
+			Group:       ChecklistGroupConnect,
+			Title:       "Enter the integration's credentials",
+			Description: "Enter the client ID (it starts with 0oa) and client secret from the Speakeasy integration here. Speakeasy will check the connection and whether it can read apps, users, and groups.",
 			Details:     []string{},
 			Completed:   done.clientID,
 		},

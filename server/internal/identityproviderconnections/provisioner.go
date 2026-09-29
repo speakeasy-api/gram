@@ -67,6 +67,10 @@ var (
 	ErrClientIDAlreadySet          = errors.New("identityproviderconnections: client id was already submitted")
 	ErrClientIDInUse               = errors.New("identityproviderconnections: client id is already registered against this issuer")
 	ErrActiveKidUnknown            = errors.New("identityproviderconnections: active kid was never published into the managed set")
+	ErrAuthMethodMismatch          = errors.New("identityproviderconnections: connection was provisioned with a different client authentication method")
+	ErrNoKeySet                    = errors.New("identityproviderconnections: connection authenticates with a client secret and has no key set")
+	ErrClientSecretRequired        = errors.New("identityproviderconnections: client secret is required")
+	ErrClientSecretNotAccepted     = errors.New("identityproviderconnections: connection does not authenticate with a client secret")
 )
 
 // ManagedJWKSCacheTTL is the publish-before-sign window advertised by the JWKS endpoint.
@@ -144,6 +148,16 @@ type ProvisionClientParams struct {
 
 	// IssuerID is the organization-level remote_session_issuers row.
 	IssuerID uuid.UUID
+
+	// AuthMethod is how the client authenticates to the provider; empty means private_key_jwt.
+	AuthMethod remotesessions.TokenEndpointAuthMethod
+}
+
+func (p ProvisionClientParams) authMethod() remotesessions.TokenEndpointAuthMethod {
+	if p.AuthMethod == "" {
+		return remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
+	}
+	return p.AuthMethod
 }
 
 // RotateClientParams names the connection whose key rotates.
@@ -167,17 +181,26 @@ type ManagedClient struct {
 	// ClientID is a placeholder until the administrator submits the real one.
 	ClientID string
 
-	IssuerID        uuid.UUID
-	JSONWebKeySetID uuid.UUID
+	IssuerID uuid.UUID
+
+	// AuthMethod is private_key_jwt (a managed key set) or client_secret_basic (no set).
+	AuthMethod remotesessions.TokenEndpointAuthMethod
+
+	// ClientSecretEncrypted is the encrypted client secret; empty for private_key_jwt or before submission.
+	ClientSecretEncrypted string
+
+	// JSONWebKeySetID is null for client-secret clients.
+	JSONWebKeySetID uuid.NullUUID
 
 	// ExternalKeyID is the external key currently backing the set.
-	ExternalKeyID uuid.UUID
+	ExternalKeyID uuid.NullUUID
 
 	// ActiveKeyID, ActiveKid, and ActivatedAt are empty after revocation.
 	ActiveKeyID uuid.NullUUID
 	ActiveKid   string
 	ActivatedAt time.Time
 
+	// JSONWebKeySetURL is empty for client-secret clients.
 	JSONWebKeySetURL string
 }
 
@@ -200,11 +223,21 @@ func (p *Provisioner) ProvisionClient(ctx context.Context, params ProvisionClien
 		return nil, err
 	}
 	if existing != nil {
-		return existing, nil
+		return adoptExisting(existing, params)
 	}
 
 	if _, err := p.loadIssuer(ctx, q, params.OrganizationID, params.IssuerID); err != nil {
 		return nil, err
+	}
+
+	switch params.authMethod() {
+	case remotesessions.TokenEndpointAuthMethodPrivateKeyJWT:
+	case remotesessions.TokenEndpointAuthMethodBasic:
+		return p.provisionSecretClient(ctx, params)
+	case remotesessions.TokenEndpointAuthMethodPost, remotesessions.TokenEndpointAuthMethodNone:
+		return nil, fmt.Errorf("unsupported client authentication method %q", params.AuthMethod)
+	default:
+		return nil, fmt.Errorf("unsupported client authentication method %q", params.AuthMethod)
 	}
 
 	signer, err := p.resolveSigningCredential(ctx, logger, q)
@@ -228,12 +261,107 @@ func (p *Provisioner) ProvisionClient(ctx context.Context, params ProvisionClien
 		p.abandonKey(ctx, logger, kms, params.ConnectionID, created.key, signer, err)
 
 		if adopted, ok := errors.AsType[*adoptedError](err); ok {
-			return adopted.client, nil
+			return adoptExisting(adopted.client, params)
 		}
 		return nil, err
 	}
 
 	return client, nil
+}
+
+// adoptExisting returns an already provisioned client, refusing one minted for another method.
+func adoptExisting(existing *ManagedClient, params ProvisionClientParams) (*ManagedClient, error) {
+	if existing.AuthMethod != params.authMethod() {
+		return nil, ErrAuthMethodMismatch
+	}
+	return existing, nil
+}
+
+// provisionSecretClient creates a client-secret client with no key material;
+// the secret arrives with the administrator's client id.
+func (p *Provisioner) provisionSecretClient(ctx context.Context, params ProvisionClientParams) (*ManagedClient, error) {
+	dbtx, err := p.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin provisioning transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	tq := repo.New(dbtx)
+	if _, err := tq.LockIdentityProviderConnectionForProvisioning(ctx, repo.LockIdentityProviderConnectionForProvisioningParams{
+		ID:             params.ConnectionID,
+		OrganizationID: params.OrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrConnectionNotFound
+		}
+		return nil, fmt.Errorf("lock connection for provisioning: %w", err)
+	}
+
+	existing, err := p.lookupManagedClient(ctx, tq, params.OrganizationID, params.ConnectionID)
+	if err != nil && !errors.Is(err, ErrNotProvisioned) {
+		return nil, err
+	}
+	if existing != nil {
+		return adoptExisting(existing, params)
+	}
+
+	if err := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, params.IssuerID); err != nil {
+		return nil, fmt.Errorf("lock issuer for client binding: %w", err)
+	}
+	issuer, err := p.loadIssuer(ctx, tq, params.OrganizationID, params.IssuerID)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := remotesessionsrepo.New(dbtx).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                  conv.ToPGText(params.OrganizationID),
+		RemoteSessionIssuerID:           issuer.ID,
+		ClientID:                        PlaceholderClientID(params.Provider, params.ConnectionID),
+		ClientSecretEncrypted:           pgtype.Text{String: "", Valid: false},
+		ClientIDIssuedAt:                pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		TokenEndpointAuthMethod:         conv.ToPGText(string(remotesessions.TokenEndpointAuthMethodBasic)),
+		TokenEndpointAuthAudienceFormat: conv.ToPGText(string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint)),
+		Scope:                           nil,
+		Audience:                        pgtype.Text{String: "", Valid: false},
+		LegacyCallbackUrl:               false,
+		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		IdentityProviderConnectionID:    conv.ToNullUUID(params.ConnectionID),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create managed remote session client: %w", err)
+	}
+
+	if err := p.audit.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
+		OrganizationID:         params.OrganizationID,
+		ProjectID:              uuid.Nil,
+		Actor:                  systemActor(),
+		ActorDisplayName:       systemActorDisplayName(),
+		ActorSlug:              nil,
+		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
+		ClientID:               client.ClientID,
+	}); err != nil {
+		return nil, fmt.Errorf("record managed client creation: %w", err)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit provisioning transaction: %w", err)
+	}
+
+	return &ManagedClient{
+		ClientRowID:           client.ID,
+		ClientID:              client.ClientID,
+		IssuerID:              client.RemoteSessionIssuerID,
+		AuthMethod:            remotesessions.TokenEndpointAuthMethodBasic,
+		ClientSecretEncrypted: "",
+		JSONWebKeySetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExternalKeyID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActiveKeyID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActiveKid:             "",
+		ActivatedAt:           time.Time{},
+		JSONWebKeySetURL:      "",
+	}, nil
 }
 
 // provisionRows writes every managed row in one transaction.
@@ -359,15 +487,17 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 	}
 
 	return &ManagedClient{
-		ClientRowID:      client.ID,
-		ClientID:         client.ClientID,
-		IssuerID:         client.RemoteSessionIssuerID,
-		JSONWebKeySetID:  set.ID,
-		ExternalKeyID:    externalKey.ID,
-		ActiveKeyID:      conv.ToNullUUID(key.ID),
-		ActiveKid:        key.Kid,
-		ActivatedAt:      key.ActivatedAt.Time,
-		JSONWebKeySetURL: remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, client.ID),
+		ClientRowID:           client.ID,
+		ClientID:              client.ClientID,
+		IssuerID:              client.RemoteSessionIssuerID,
+		AuthMethod:            remotesessions.TokenEndpointAuthMethodPrivateKeyJWT,
+		ClientSecretEncrypted: "",
+		JSONWebKeySetID:       conv.ToNullUUID(set.ID),
+		ExternalKeyID:         conv.ToNullUUID(externalKey.ID),
+		ActiveKeyID:           conv.ToNullUUID(key.ID),
+		ActiveKid:             key.Kid,
+		ActivatedAt:           key.ActivatedAt.Time,
+		JSONWebKeySetURL:      remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, client.ID),
 	}, nil
 }
 
@@ -411,10 +541,13 @@ func (p *Provisioner) rotateRows(ctx context.Context, params RotateClientParams)
 	if err != nil {
 		return err
 	}
+	if !existing.JSONWebKeySetID.Valid {
+		return ErrNoKeySet
+	}
 
 	jq := jwksrepo.New(dbtx)
 	set, err := jq.LockJsonWebKeySetForKeyWrite(ctx, jwksrepo.LockJsonWebKeySetForKeyWriteParams{
-		ID:             existing.JSONWebKeySetID,
+		ID:             existing.JSONWebKeySetID.UUID,
 		OrganizationID: params.OrganizationID,
 	})
 	switch {
@@ -692,6 +825,9 @@ type SetClientIDParams struct {
 	Provider       string
 	ClientID       string
 
+	// ClientSecretEncrypted is required for client-secret clients and refused otherwise.
+	ClientSecretEncrypted string
+
 	// Actor is the administrator recorded on the client's audit entry.
 	Actor            urn.Principal
 	ActorDisplayName *string
@@ -720,6 +856,9 @@ func (p *Provisioner) SetClientID(ctx context.Context, dbtx pgx.Tx, params SetCl
 	if params.ClientID == placeholder {
 		return nil, fmt.Errorf("%w: placeholder", ErrClientIDRequired)
 	}
+	if err := requireSecretFor(existing.AuthMethod, params.ClientSecretEncrypted); err != nil {
+		return nil, err
+	}
 
 	// Serializes concurrent claims of one client id on the issuer; no index enforces it.
 	if err := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, existing.IssuerID); err != nil {
@@ -740,6 +879,7 @@ func (p *Provisioner) SetClientID(ctx context.Context, dbtx pgx.Tx, params SetCl
 
 	updated, err := q.SetManagedClientID(ctx, repo.SetManagedClientIDParams{
 		ClientID:                     params.ClientID,
+		ClientSecretEncrypted:        conv.ToPGTextEmpty(params.ClientSecretEncrypted),
 		ID:                           existing.ClientRowID,
 		OrganizationID:               conv.ToPGText(params.OrganizationID),
 		IdentityProviderConnectionID: conv.ToNullUUID(params.ConnectionID),
@@ -752,38 +892,114 @@ func (p *Provisioner) SetClientID(ctx context.Context, dbtx pgx.Tx, params SetCl
 		return nil, fmt.Errorf("set managed client id: %w", err)
 	}
 
-	beforeView, err := mv.BuildRemoteSessionClientView(remotesessionsrepo.RemoteSessionClient(row.RemoteSessionClient), nil)
-	if err != nil {
-		return nil, fmt.Errorf("build managed client snapshot: %w", err)
-	}
-	afterView, err := mv.BuildRemoteSessionClientView(remotesessionsrepo.RemoteSessionClient(updated), nil)
-	if err != nil {
-		return nil, fmt.Errorf("build managed client snapshot: %w", err)
-	}
-	if err := p.audit.LogRemoteSessionClientUpdate(ctx, dbtx, audit.LogRemoteSessionClientUpdateEvent{
-		OrganizationID:         params.OrganizationID,
-		ProjectID:              uuid.Nil,
-		Actor:                  params.Actor,
-		ActorDisplayName:       params.ActorDisplayName,
-		ActorSlug:              nil,
-		RemoteSessionClientURN: urn.NewRemoteSessionClient(updated.ID),
-		ClientID:               updated.ClientID,
-		SnapshotBefore:         beforeView,
-		SnapshotAfter:          afterView,
-	}); err != nil {
-		return nil, fmt.Errorf("record managed client id submission: %w", err)
+	if err := p.logClientUpdate(ctx, dbtx, params.OrganizationID, params.Actor, params.ActorDisplayName, row.RemoteSessionClient, updated); err != nil {
+		return nil, err
 	}
 
 	result := *existing
 	result.ClientID = updated.ClientID
+	result.ClientSecretEncrypted = updated.ClientSecretEncrypted.String
 	return &result, nil
+}
+
+// requireSecretFor enforces that exactly the client-secret method carries a secret.
+func requireSecretFor(method remotesessions.TokenEndpointAuthMethod, secretEncrypted string) error {
+	isSecret := method == remotesessions.TokenEndpointAuthMethodBasic
+	switch {
+	case isSecret && secretEncrypted == "":
+		return ErrClientSecretRequired
+	case !isSecret && secretEncrypted != "":
+		return ErrClientSecretNotAccepted
+	}
+	return nil
+}
+
+// ReplaceClientSecretParams names the client-secret client whose secret is replaced.
+type ReplaceClientSecretParams struct {
+	OrganizationID        string
+	ConnectionID          uuid.UUID
+	Provider              string
+	ClientSecretEncrypted string
+
+	// Actor is the administrator recorded on the client's audit entry.
+	Actor            urn.Principal
+	ActorDisplayName *string
+}
+
+// ReplaceClientSecret swaps a client-secret client's secret inside the caller's transaction.
+func (p *Provisioner) ReplaceClientSecret(ctx context.Context, dbtx pgx.Tx, params ReplaceClientSecretParams) (*ManagedClient, error) {
+	if err := validateProvider(params.Provider); err != nil {
+		return nil, err
+	}
+	if params.ClientSecretEncrypted == "" {
+		return nil, ErrClientSecretRequired
+	}
+	q := repo.New(dbtx)
+	if err := requireConnection(ctx, q, params.OrganizationID, params.ConnectionID, params.Provider); err != nil {
+		return nil, err
+	}
+	row, existing, err := p.lookupManagedClientRow(ctx, q, params.OrganizationID, params.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	if existing.AuthMethod != remotesessions.TokenEndpointAuthMethodBasic {
+		return nil, ErrClientSecretNotAccepted
+	}
+
+	updated, err := q.SetManagedClientSecret(ctx, repo.SetManagedClientSecretParams{
+		ClientSecretEncrypted:        conv.ToPGText(params.ClientSecretEncrypted),
+		ID:                           existing.ClientRowID,
+		OrganizationID:               conv.ToPGText(params.OrganizationID),
+		IdentityProviderConnectionID: conv.ToNullUUID(params.ConnectionID),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, ErrNotProvisioned
+	case err != nil:
+		return nil, fmt.Errorf("set managed client secret: %w", err)
+	}
+
+	if err := p.logClientUpdate(ctx, dbtx, params.OrganizationID, params.Actor, params.ActorDisplayName, row.RemoteSessionClient, updated); err != nil {
+		return nil, err
+	}
+
+	result := *existing
+	result.ClientSecretEncrypted = updated.ClientSecretEncrypted.String
+	return &result, nil
+}
+
+// logClientUpdate audits a managed client change; the snapshots carry no secret.
+func (p *Provisioner) logClientUpdate(ctx context.Context, dbtx pgx.Tx, organizationID string, actor urn.Principal, actorDisplayName *string, before, after repo.RemoteSessionClient) error {
+	beforeView, err := mv.BuildRemoteSessionClientView(remotesessionsrepo.RemoteSessionClient(before), nil)
+	if err != nil {
+		return fmt.Errorf("build managed client snapshot: %w", err)
+	}
+	afterView, err := mv.BuildRemoteSessionClientView(remotesessionsrepo.RemoteSessionClient(after), nil)
+	if err != nil {
+		return fmt.Errorf("build managed client snapshot: %w", err)
+	}
+	if err := p.audit.LogRemoteSessionClientUpdate(ctx, dbtx, audit.LogRemoteSessionClientUpdateEvent{
+		OrganizationID:         organizationID,
+		ProjectID:              uuid.Nil,
+		Actor:                  actor,
+		ActorDisplayName:       actorDisplayName,
+		ActorSlug:              nil,
+		RemoteSessionClientURN: urn.NewRemoteSessionClient(after.ID),
+		ClientID:               after.ClientID,
+		SnapshotBefore:         beforeView,
+		SnapshotAfter:          afterView,
+	}); err != nil {
+		return fmt.Errorf("record managed client update: %w", err)
+	}
+	return nil
 }
 
 // RevokeClient withdraws every key from the connection's managed set and
 // returns how many were revoked. The client and set stay live so the JWKS
 // document serves an empty set. Works on a soft-deleted connection too. Once
 // the rows are committed, each key's KMS version is disabled and the signer's
-// grant on it withdrawn, best-effort.
+// grant on it withdrawn, best-effort. A client-secret client has its secret
+// cleared instead and reports zero keys.
 func (p *Provisioner) RevokeClient(ctx context.Context, organizationID string, connectionID uuid.UUID) (int, error) {
 	logger := p.logger.With(attr.SlogOrganizationID(organizationID), attr.SlogIdentityProviderConnectionID(connectionID.String()))
 	q := repo.New(p.db)
@@ -804,14 +1020,26 @@ func (p *Provisioner) RevokeClient(ctx context.Context, organizationID string, c
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	existing, err := p.lookupManagedClient(ctx, repo.New(dbtx), organizationID, connectionID)
+	row, existing, err := p.lookupManagedClientRow(ctx, repo.New(dbtx), organizationID, connectionID)
 	if err != nil {
 		return 0, err
+	}
+	if existing.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic {
+		if err := p.clearClientSecret(ctx, dbtx, organizationID, connectionID, row.RemoteSessionClient); err != nil {
+			return 0, err
+		}
+		if err := dbtx.Commit(ctx); err != nil {
+			return 0, fmt.Errorf("commit revocation transaction: %w", err)
+		}
+		return 0, nil
+	}
+	if !existing.JSONWebKeySetID.Valid {
+		return 0, ErrNoKeySet
 	}
 
 	jq := jwksrepo.New(dbtx)
 	set, err := jq.LockJsonWebKeySetForKeyWrite(ctx, jwksrepo.LockJsonWebKeySetForKeyWriteParams{
-		ID:             existing.JSONWebKeySetID,
+		ID:             existing.JSONWebKeySetID.UUID,
 		OrganizationID: organizationID,
 	})
 	switch {
@@ -852,6 +1080,37 @@ func (p *Provisioner) RevokeClient(ctx context.Context, organizationID string, c
 	}
 
 	return len(live), nil
+}
+
+// ClearClientSecret withdraws a client-secret client's credential inside the
+// caller's transaction; a secret that is already cleared is left as is.
+func (p *Provisioner) ClearClientSecret(ctx context.Context, dbtx pgx.Tx, organizationID string, connectionID uuid.UUID) error {
+	row, existing, err := p.lookupManagedClientRow(ctx, repo.New(dbtx), organizationID, connectionID)
+	if err != nil {
+		return err
+	}
+	if existing.AuthMethod != remotesessions.TokenEndpointAuthMethodBasic {
+		return ErrClientSecretNotAccepted
+	}
+	return p.clearClientSecret(ctx, dbtx, organizationID, connectionID, row.RemoteSessionClient)
+}
+
+func (p *Provisioner) clearClientSecret(ctx context.Context, dbtx pgx.Tx, organizationID string, connectionID uuid.UUID, before repo.RemoteSessionClient) error {
+	if !before.ClientSecretEncrypted.Valid {
+		return nil
+	}
+	cleared, err := repo.New(dbtx).ClearManagedClientSecret(ctx, repo.ClearManagedClientSecretParams{
+		ID:                           before.ID,
+		OrganizationID:               conv.ToPGText(organizationID),
+		IdentityProviderConnectionID: conv.ToNullUUID(connectionID),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return ErrNotProvisioned
+	case err != nil:
+		return fmt.Errorf("clear managed client secret: %w", err)
+	}
+	return p.logClientUpdate(ctx, dbtx, organizationID, systemActor(), systemActorDisplayName(), before, cleared)
 }
 
 // retireKeyMaterial disables the KMS version behind each revoked key and
@@ -908,6 +1167,9 @@ func (p *Provisioner) ClientJSONWebKeySetURL(ctx context.Context, organizationID
 	client, err := p.lookupManagedClient(ctx, repo.New(p.db), organizationID, connectionID)
 	if err != nil {
 		return "", err
+	}
+	if !client.JSONWebKeySetID.Valid {
+		return "", ErrNoKeySet
 	}
 
 	return client.JSONWebKeySetURL, nil
@@ -999,16 +1261,23 @@ func (p *Provisioner) lookupManagedClientRow(ctx context.Context, q *repo.Querie
 		return row, nil, fmt.Errorf("load managed client: %w", err)
 	}
 
+	method := remotesessions.TokenEndpointAuthMethod(row.RemoteSessionClient.TokenEndpointAuthMethod.String)
+	jwksURL := ""
+	if row.JsonWebKeySetID.Valid {
+		jwksURL = remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, row.RemoteSessionClient.ID)
+	}
 	return row, &ManagedClient{
-		ClientRowID:      row.RemoteSessionClient.ID,
-		ClientID:         row.RemoteSessionClient.ClientID,
-		IssuerID:         row.RemoteSessionClient.RemoteSessionIssuerID,
-		JSONWebKeySetID:  row.JsonWebKeySetID,
-		ExternalKeyID:    row.ExternalKeyID,
-		ActiveKeyID:      row.JsonWebKeyID,
-		ActiveKid:        row.Kid.String,
-		ActivatedAt:      row.ActivatedAt.Time,
-		JSONWebKeySetURL: remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, row.RemoteSessionClient.ID),
+		ClientRowID:           row.RemoteSessionClient.ID,
+		ClientID:              row.RemoteSessionClient.ClientID,
+		IssuerID:              row.RemoteSessionClient.RemoteSessionIssuerID,
+		AuthMethod:            method,
+		ClientSecretEncrypted: row.RemoteSessionClient.ClientSecretEncrypted.String,
+		JSONWebKeySetID:       row.JsonWebKeySetID,
+		ExternalKeyID:         row.ExternalKeyID,
+		ActiveKeyID:           row.JsonWebKeyID,
+		ActiveKid:             row.Kid.String,
+		ActivatedAt:           row.ActivatedAt.Time,
+		JSONWebKeySetURL:      jwksURL,
 	}, nil
 }
 

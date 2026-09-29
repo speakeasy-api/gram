@@ -25,14 +25,15 @@ function adminConsoleLink(connection: LiveConnection): JSX.Element {
 export const STEP_AFFORDANCES: StepAffordances = {
   create_api_services_app: adminConsoleLink,
   add_oin_app: adminConsoleLink,
-  public_key_auth: (connection) => (
-    <span className="font-mono text-xs">
-      <CopyableValue
-        value={connection.jwksUrl}
-        tooltip="Copy public key URL (JWKS)"
-      />
-    </span>
-  ),
+  public_key_auth: (connection) =>
+    connection.jwksUrl ? (
+      <span className="font-mono text-xs">
+        <CopyableValue
+          value={connection.jwksUrl}
+          tooltip="Copy public key URL (JWKS)"
+        />
+      </span>
+    ) : null,
   submit_client_id: (connection) =>
     connectionStep(connection) === "submit_client_id" ? (
       <ClientIdForm key={connection.id} connection={connection} />
