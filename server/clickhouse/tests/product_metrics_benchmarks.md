@@ -14,10 +14,10 @@ two or twenty attributes per series, and repeated/unique series mixed. Container
 2 CPU, 2 GiB memory. Query settings: two threads, 8,192-row blocks. These are
 single-run local measurements, not Cloud latency guarantees.
 
-| Query | Tuples | JSON | Tuple memory | JSON memory |
-| --- | ---: | ---: | ---: | ---: |
-| 24h equality filter | 13 ms | 32 ms | 23.6 MB | 30.7 MB |
-| 30d equality filter | 117 ms | 514 ms | 25.1 MB | 31.0 MB |
+| Query               | Tuples |   JSON | Tuple memory | JSON memory |
+| ------------------- | -----: | -----: | -----------: | ----------: |
+| 24h equality filter |  13 ms |  32 ms |      23.6 MB |     30.7 MB |
+| 30d equality filter | 117 ms | 514 ms |      25.1 MB |     31.0 MB |
 
 24h scanned 57,344 rows / 32.1 MB for tuples and 49,152 / 21.6 MB for JSON.
 30d scanned 909,888 rows / 599.8 MB for tuples and 909,888 / 478.0 MB for JSON.
