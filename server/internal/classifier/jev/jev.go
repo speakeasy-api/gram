@@ -95,11 +95,11 @@ func (c *Classifier) classify(ctx context.Context, req *classifier.Request) (cla
 		return result, fmt.Errorf("jev: classify: %w", err)
 	}
 	if len(bytes.TrimSpace(c.key.Reveal())) == 0 {
-		return result, fmt.Errorf("jev: API key is required")
+		return result, fmt.Errorf("jev: API key is required: %w", classifier.ErrDisabled)
 	}
 	questions, err := compileRequest(req)
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("%w: %w", classifier.ErrInvalidRequest, err)
 	}
 	partial := c.execute(ctx, req.Input, questions)
 	result.Outcomes, result.Usage, result.Models = partial.Outcomes, partial.Usage, partial.Models
