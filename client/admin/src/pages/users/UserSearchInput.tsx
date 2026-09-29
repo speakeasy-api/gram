@@ -21,7 +21,7 @@ export type UserSearchInputProps = {
   error?: string;
 };
 
-type Piece = { text: string; term?: UserSearchTerm };
+type Piece = { text: string; term?: Pick<UserSearchTerm, "field" | "value"> };
 type Editor = { pieces: Piece[]; editing?: { index: number; original: Piece } };
 type Change = { before: Editor; after: Editor };
 const queryOf = (editor: Editor) =>
@@ -29,6 +29,16 @@ const queryOf = (editor: Editor) =>
     .map((piece) => piece.text)
     .filter(Boolean)
     .join(" ");
+
+function restoreEdit(editor: Editor): Editor {
+  const editing = editor.editing;
+  if (!editing) return editor;
+  return {
+    pieces: editor.pieces.map((piece, index) =>
+      index === editing.index ? editing.original : piece,
+    ),
+  };
+}
 
 // Source spans preserve order, including editable bare text between filters.
 // The parser alone decides whether a term is complete and supported.
@@ -48,7 +58,10 @@ function tokenize(query: string): Editor {
       pieces.push({ text: query.slice(bareStart, bareEnd) });
       bareStart = undefined;
     }
-    pieces.push({ text: query.slice(term.start, term.end), term });
+    pieces.push({
+      text: query.slice(term.start, term.end),
+      term: { field: term.field, value: term.value },
+    });
   }
   pieces.push({
     text: bareStart === undefined ? "" : query.slice(bareStart, bareEnd),
@@ -93,21 +106,33 @@ export function UserSearchInput({
     focus.current = null;
   }, [editor]);
 
-  function update(next: Editor, transformation = false, focusIndex?: number) {
-    if (transformation) {
-      let before = editor;
-      if (editor.editing && !next.editing) {
-        // Finishing an edit is one semantic operation: undo restores the old
-        // term, not a remounted text input whose native undo stack is gone.
-        const { index, original } = editor.editing;
-        before = {
-          pieces: editor.pieces.map((p, i) => (i === index ? original : p)),
-        };
-        if (undo.current.at(-1)?.after.editing?.index === index)
-          undo.current.pop();
-      }
-      if (JSON.stringify(before) !== JSON.stringify(next))
-        undo.current.push({ before, after: next });
+  function update(
+    next: Editor,
+    transformation = false,
+    focusIndex?: number,
+    settleEdit = false,
+  ) {
+    let before = editor;
+    if (settleEdit && editor.editing) {
+      const original = editor.editing.original;
+      const settle = (state: Editor) =>
+        state.editing?.original === original ? restoreEdit(state) : state;
+      // Keep intervening removals as separate operations while settling this
+      // edit. The edit opener becomes a no-op; removal snapshots retain their
+      // own before/after pieces with the original filter restored.
+      undo.current = undo.current
+        .map((change) => ({
+          before: settle(change.before),
+          after: settle(change.after),
+        }))
+        .filter(
+          (change) =>
+            JSON.stringify(change.before) !== JSON.stringify(change.after),
+        );
+      before = restoreEdit(editor);
+    }
+    if (transformation && JSON.stringify(before) !== JSON.stringify(next)) {
+      undo.current.push({ before, after: next });
     }
     redo.current = [];
     setEditor(next);
@@ -123,16 +148,37 @@ export function UserSearchInput({
   function remove(index: number) {
     const pieces = editor.pieces.filter((_, i) => i !== index);
     if (pieces.at(-1)?.term || pieces.length === 0) pieces.push({ text: "" });
-    update({ pieces }, true, pieces.length - 1);
+    const editing = editor.editing
+      ? {
+          ...editor.editing,
+          index: editor.editing.index - (index < editor.editing.index ? 1 : 0),
+        }
+      : undefined;
+    update(
+      { pieces, ...(editing ? { editing } : {}) },
+      true,
+      pieces.length - 1,
+    );
   }
 
-  function commit(next: Editor): boolean {
-    const parsed = parseUserSearch(queryOf(next));
-    if (!parsed.ok || !parsed.terms.some((term) => term.field !== "any"))
+  function commit(next: Editor, index: number): boolean {
+    const active = parseUserSearch(next.pieces[index]!.text);
+    if (
+      !active.ok ||
+      (!active.terms.some((term) => term.field !== "any") &&
+        next.editing?.index !== index)
+    )
       return false;
-    const tokenized = tokenize(queryOf(next));
+    // Starting a transformation elsewhere settles the prior edit by restoring
+    // it, just as activating another pill does. Existing pills alone never
+    // make a plain text delimiter into a token operation.
+    const source =
+      next.editing && next.editing.index !== index ? restoreEdit(next) : next;
+    const parsed = parseUserSearch(queryOf(source));
+    if (!parsed.ok) return false;
+    const tokenized = tokenize(queryOf(source));
     if (JSON.stringify(tokenized) === JSON.stringify(next)) return false;
-    update(tokenized, true, tokenized.pieces.length - 1);
+    update(tokenized, true, tokenized.pieces.length - 1, true);
     return true;
   }
 
@@ -223,7 +269,7 @@ export function UserSearchInput({
                   }
                 }}
                 onClick={() => {
-                  const pieces = editor.pieces.map((p, i) =>
+                  const pieces = restoreEdit(editor).pieces.map((p, i) =>
                     i === index
                       ? { text: serializeUserSearch([piece.term!]) }
                       : p,
@@ -232,6 +278,7 @@ export function UserSearchInput({
                     { pieces, editing: { index, original: piece } },
                     true,
                     index,
+                    true,
                   );
                 }}
               >
@@ -299,7 +346,7 @@ export function UserSearchInput({
                 if (
                   result.ok &&
                   result.terms.some((term) => term.field !== "any") &&
-                  commit(next)
+                  commit(next, index)
                 )
                   event.preventDefault();
               }}
@@ -321,6 +368,7 @@ export function UserSearchInput({
                     },
                     true,
                     editor.pieces.length - 1,
+                    true,
                   );
                 } else if (
                   (event.key === " " || event.key === "Enter") &&
@@ -332,7 +380,7 @@ export function UserSearchInput({
                   if (
                     event.currentTarget.selectionStart === piece.text.length &&
                     event.currentTarget.selectionEnd === piece.text.length &&
-                    commit(editor)
+                    commit(editor, index)
                   )
                     event.preventDefault();
                 } else if (event.key === "Backspace" && piece.text === "") {

@@ -264,4 +264,95 @@ describe("UserSearchInput", () => {
     expect(fireEvent.keyDown(input(), { key: "z", ctrlKey: true })).toBe(true);
     expect(changed).toHaveBeenCalledTimes(1);
   });
+  it("does not transform bare text when a later pill's absolute spans change", () => {
+    setup("first org:Studio last");
+    const first = screen.getByDisplayValue("first") as HTMLInputElement;
+    first.focus();
+    type("firstX", first);
+    first.setSelectionRange(6, 6);
+    expect(fireEvent.keyDown(first, { key: " " })).toBe(true);
+    expect(document.activeElement).toBe(first);
+    expect(first.selectionStart).toBe(6);
+    expect(fireEvent.keyDown(first, { key: "z", ctrlKey: true })).toBe(true);
+    type("firstX continued", first);
+    expect(document.activeElement).toBe(first);
+    expect(edit("org", "Studio")).toBeTruthy();
+  });
+  it.each(["org:Other", "org:"])(
+    "preserves Escape cancellation after removing another pill while editing %s",
+    (draft) => {
+      const changed = setup("org:Studio email:example.invalid");
+      fireEvent.click(edit("org", "Studio"));
+      type(draft, screen.getByDisplayValue("org:Studio"));
+      fireEvent.click(remove("email", "example.invalid"));
+      expect(screen.getByDisplayValue(draft)).toBeTruthy();
+      key("Escape", screen.getByDisplayValue(draft));
+      expect(edit("org", "Studio")).toBeTruthy();
+      expect(changed).toHaveBeenLastCalledWith("org:Studio");
+      key("z", input(), { ctrlKey: true });
+      expect(edit("org", "Studio")).toBeTruthy();
+      expect(edit("email", "example.invalid")).toBeTruthy();
+      key("z", input(), { ctrlKey: true, shiftKey: true });
+      expect(screen.queryByRole("button", { name: /Edit email/ })).toBeNull();
+      expect(edit("org", "Studio")).toBeTruthy();
+    },
+  );
+  it.each(["org:Other", "org:"])(
+    "adjusts the edited index for %s after removal before it and keeps removal undo distinct",
+    (draft) => {
+      setup("email:example.invalid org:Studio");
+      fireEvent.click(edit("org", "Studio"));
+      type(draft, screen.getByDisplayValue("org:Studio"));
+      fireEvent.click(remove("email", "example.invalid"));
+      key("z", input(), { ctrlKey: true });
+      expect(edit("email", "example.invalid")).toBeTruthy();
+      expect(screen.getByDisplayValue(draft)).toBeTruthy();
+      key("z", input(), { ctrlKey: true, shiftKey: true });
+      key("Escape", screen.getByDisplayValue(draft));
+      expect(edit("org", "Studio")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Edit email/ })).toBeNull();
+    },
+  );
+  it("undoes completed editing separately from an unrelated removal", () => {
+    setup("org:Studio email:example.invalid");
+    fireEvent.click(edit("org", "Studio"));
+    type("org:Other", screen.getByDisplayValue("org:Studio"));
+    fireEvent.click(remove("email", "example.invalid"));
+    key("Enter", screen.getByDisplayValue("org:Other"));
+    expect(edit("org", "Other")).toBeTruthy();
+    key("z", input(), { ctrlKey: true });
+    expect(edit("org", "Studio")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Edit email/ })).toBeNull();
+    key("z", input(), { ctrlKey: true });
+    expect(edit("email", "example.invalid")).toBeTruthy();
+    key("z", input(), { ctrlKey: true, shiftKey: true });
+    expect(screen.queryByRole("button", { name: /Edit email/ })).toBeNull();
+    expect(edit("org", "Studio")).toBeTruthy();
+    key("z", input(), { ctrlKey: true, shiftKey: true });
+    expect(edit("org", "Other")).toBeTruthy();
+  });
+  it.each(["org:Other", "org:"])(
+    "settles %s before switching pills and preserves distinct undo",
+    (draft) => {
+      setup("org:Studio email:example.invalid");
+      fireEvent.click(edit("org", "Studio"));
+      type(draft, screen.getByDisplayValue("org:Studio"));
+      fireEvent.click(edit("email", "example.invalid"));
+      expect(edit("org", "Studio")).toBeTruthy();
+      expect(screen.getByDisplayValue("email:example.invalid")).toBeTruthy();
+      key("z", screen.getByDisplayValue("email:example.invalid"), {
+        ctrlKey: true,
+      });
+      expect(edit("org", "Studio")).toBeTruthy();
+      expect(edit("email", "example.invalid")).toBeTruthy();
+      key("z", input(), { ctrlKey: true, shiftKey: true });
+      type(
+        "email:other.invalid",
+        screen.getByDisplayValue("email:example.invalid"),
+      );
+      key("Escape", screen.getByDisplayValue("email:other.invalid"));
+      expect(edit("org", "Studio")).toBeTruthy();
+      expect(edit("email", "example.invalid")).toBeTruthy();
+    },
+  );
 });
