@@ -1988,18 +1988,13 @@ func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput 
 // endpoint payload.
 func NewRegisterIssuerPayload(body *RegisterIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.RegisterIssuerPayload {
 	v := &workloadidentities.RegisterIssuerPayload{
-		Name:    *body.Name,
-		Issuer:  *body.Issuer,
-		JwksURI: *body.JwksURI,
-	}
-	if body.AllowWildcardAdmission != nil {
-		v.AllowWildcardAdmission = *body.AllowWildcardAdmission
+		Name:                   *body.Name,
+		Issuer:                 *body.Issuer,
+		JwksURI:                *body.JwksURI,
+		AllowWildcardAdmission: body.AllowWildcardAdmission,
 	}
 	if body.ProjectScoped != nil {
 		v.ProjectScoped = *body.ProjectScoped
-	}
-	if body.AllowWildcardAdmission == nil {
-		v.AllowWildcardAdmission = true
 	}
 	if body.ProjectScoped == nil {
 		v.ProjectScoped = false

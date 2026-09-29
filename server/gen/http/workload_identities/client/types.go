@@ -27,7 +27,7 @@ type RegisterIssuerRequestBody struct {
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Re-checked on every lookup rather than at write time, so
 	// clearing it makes wildcard rules already written inert immediately.
-	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
+	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
@@ -1100,12 +1100,6 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 		JwksURI:                p.JwksURI,
 		AllowWildcardAdmission: p.AllowWildcardAdmission,
 		ProjectScoped:          p.ProjectScoped,
-	}
-	{
-		var zero bool
-		if body.AllowWildcardAdmission == zero {
-			body.AllowWildcardAdmission = true
-		}
 	}
 	{
 		var zero bool

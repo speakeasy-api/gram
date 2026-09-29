@@ -33,7 +33,7 @@ export type RegisterWorkloadIssuerForm = {
 
 /** @internal */
 export type RegisterWorkloadIssuerForm$Outbound = {
-  allow_wildcard_admission: boolean;
+  allow_wildcard_admission?: boolean | undefined;
   issuer: string;
   jwks_uri: string;
   name: string;
@@ -46,7 +46,7 @@ export const RegisterWorkloadIssuerForm$outboundSchema: z.ZodMiniType<
   RegisterWorkloadIssuerForm
 > = z.pipe(
   z.object({
-    allowWildcardAdmission: z._default(z.boolean(), true),
+    allowWildcardAdmission: z.optional(z.boolean()),
     issuer: z.string(),
     jwksUri: z.string(),
     name: z.string(),

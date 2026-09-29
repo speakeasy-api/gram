@@ -175,7 +175,7 @@ func TestAdmitSubject_RefusesTwoIssuersSharingAURLAtOneTier(t *testing.T) {
 			Name:                   name,
 			Issuer:                 anthropicIssuer,
 			JwksURI:                anthropicJWKS,
-			AllowWildcardAdmission: false,
+			AllowWildcardAdmission: new(false),
 			ProjectScoped:          true,
 		})
 		require.NoError(t, err)

@@ -115,7 +115,7 @@ type RegisterIssuerPayload struct {
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Re-checked on every lookup rather than at write time, so
 	// clearing it makes wildcard rules already written inert immediately.
-	AllowWildcardAdmission bool
+	AllowWildcardAdmission *bool
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
 	ProjectScoped bool

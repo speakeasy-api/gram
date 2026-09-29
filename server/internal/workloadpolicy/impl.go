@@ -258,7 +258,9 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		return nil, oops.E(oops.CodeInvalid, nil, "name must not be blank")
 	}
 
-	allowWildcard := payload.AllowWildcardAdmission
+	// Defaulted here rather than in the design: a Goa default on a bool makes the
+	// generated Go client send true for an explicit false.
+	allowWildcard := conv.PtrValOr(payload.AllowWildcardAdmission, true)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {

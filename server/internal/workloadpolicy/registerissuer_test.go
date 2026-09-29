@@ -24,7 +24,7 @@ func registerAnthropic(t *testing.T, ctx context.Context, ti *testInstance, allo
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: allowWildcard,
+		AllowWildcardAdmission: new(allowWildcard),
 		ProjectScoped:          false,
 	})
 	require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestRegisterIssuer_Success(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-func TestRegisterIssuer_DefaultsToRefusingWildcards(t *testing.T) {
+func TestRegisterIssuer_DefaultsToAllowingWildcards(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
@@ -71,13 +71,20 @@ func TestRegisterIssuer_DefaultsToRefusingWildcards(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: false,
+		AllowWildcardAdmission: nil,
 		ProjectScoped:          false,
 	})
 	require.NoError(t, err)
 
-	// Default-off, and off is the resting state: a wildcard rule is a real
-	// widening, so it has to be asked for at the issuer as well as per rule.
+	require.True(t, policy.Issuers[0].AllowWildcardAdmission)
+}
+
+func TestRegisterIssuer_KeepsAnExplicitWildcardOptOut(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy := registerAnthropic(t, ctx, ti, false)
+
 	require.False(t, policy.Issuers[0].AllowWildcardAdmission)
 }
 
@@ -115,7 +122,7 @@ func TestRegisterIssuer_RefusesUnsafeURLs(t *testing.T) {
 				Name:                   "Claude Tag " + tc.name,
 				Issuer:                 tc.issuer,
 				JwksURI:                tc.jwksURI,
-				AllowWildcardAdmission: false,
+				AllowWildcardAdmission: new(false),
 				ProjectScoped:          false,
 			})
 			requireOopsCode(t, err, oops.CodeInvalid)
@@ -136,7 +143,7 @@ func TestRegisterIssuer_RefusesADuplicateNameAtTheSameTier(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 "https://identity.example.com",
 		JwksURI:                "https://identity.example.com/jwks",
-		AllowWildcardAdmission: false,
+		AllowWildcardAdmission: new(false),
 		ProjectScoped:          false,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
@@ -157,7 +164,7 @@ func TestRegisterIssuer_RequiresWorkloadWrite(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: false,
+		AllowWildcardAdmission: new(false),
 		ProjectScoped:          false,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -177,7 +184,7 @@ func TestRegisterIssuer_RefusesABlankName(t *testing.T) {
 		Name:                   strings.Repeat(" ", 4),
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: false,
+		AllowWildcardAdmission: new(false),
 		ProjectScoped:          false,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
