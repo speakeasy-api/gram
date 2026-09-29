@@ -3611,6 +3611,13 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"republishes every plugin that carries that server",
 		"a fresh idempotency key",
 		"`confirmed: true`",
+		// The version rule is the safety mechanism this whole workflow rests
+		// on, so it is pinned here rather than left to survive an edit by luck.
+		"the exposure version from the read it was based on",
+		"`tool_exposure.exposure_version`",
+		"the `exposure_version` from the step-4 read",
+		"Never reuse the old exposure version",
+		"refused to avoid overwriting somebody else's edit",
 		"Nothing is dropped silently.",
 		"Do not choose for them",
 		"Never retry a mutation automatically",

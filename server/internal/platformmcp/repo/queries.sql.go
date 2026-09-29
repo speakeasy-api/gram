@@ -3335,7 +3335,18 @@ SELECT
     t.name AS toolset_name,
     t.mcp_enabled,
     COALESCE(latest.version, 0)::bigint AS toolset_version,
-    COALESCE(latest.tool_urns, ARRAY[]::TEXT[])::TEXT[] AS tool_urns
+    COALESCE(latest.tool_urns, ARRAY[]::TEXT[])::TEXT[] AS tool_urns,
+    -- Every live server fronting this same toolset. The tool list lives on the
+    -- toolset, not on the server record, so these servers are aliases for one
+    -- list: a write authorized against only the named server would move all of
+    -- them. Nothing in the schema forbids the sharing, so the caller
+    -- authorizes each of these before applying the change.
+    (
+        SELECT COALESCE(array_agg(fronting.id ORDER BY fronting.id), ARRAY[]::uuid[])
+        FROM mcp_servers AS fronting
+        WHERE fronting.toolset_id = t.id
+          AND fronting.deleted IS FALSE
+    )::uuid[] AS fronting_server_ids
 FROM mcp_servers AS m
 JOIN projects AS p
   ON p.id = m.project_id
@@ -3366,14 +3377,15 @@ type GetPlatformMCPServerToolExposureParams struct {
 }
 
 type GetPlatformMCPServerToolExposureRow struct {
-	McpServerID    uuid.UUID
-	ProjectID      uuid.UUID
-	ToolsetID      uuid.UUID
-	ToolsetSlug    string
-	ToolsetName    string
-	McpEnabled     bool
-	ToolsetVersion int64
-	ToolUrns       []string
+	McpServerID       uuid.UUID
+	ProjectID         uuid.UUID
+	ToolsetID         uuid.UUID
+	ToolsetSlug       string
+	ToolsetName       string
+	McpEnabled        bool
+	ToolsetVersion    int64
+	ToolUrns          []string
+	FrontingServerIds []uuid.UUID
 }
 
 // The tool list one hosted MCP server exposes, read through its modern server
@@ -3392,6 +3404,7 @@ func (q *Queries) GetPlatformMCPServerToolExposure(ctx context.Context, arg GetP
 		&i.McpEnabled,
 		&i.ToolsetVersion,
 		&i.ToolUrns,
+		&i.FrontingServerIds,
 	)
 	return i, err
 }

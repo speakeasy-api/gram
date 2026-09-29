@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -352,6 +353,46 @@ func TestChangeMCPToolsRefusesAServerItDoesNotOwnTheToolsOf(t *testing.T) {
 		require.ErrorAs(t, err, &denied)
 		require.Equal(t, string(authz.ScopeMCPWrite), denied.RequiredScope)
 	}
+}
+
+// The tool list lives on the toolset, not on the server record, so every live
+// server fronting that toolset is an alias for the same list. Write access to
+// the named server alone must not move the others.
+func TestChangeMCPToolsAuthorizesEveryServerSharingTheToolList(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tools_shared_toolset")
+
+	alone, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+	require.Equal(t, 0, alone.SharedWithOther, "one server fronting the toolset is the normal case")
+
+	second := uuid.New()
+	_, err = mcpserversrepo.New(fixture.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: second, ProjectID: fixture.project.ID, Name: conv.ToPGText("Second front"), Slug: conv.ToPGText("second-front"),
+		ToolsetID: uuid.NullUUID{UUID: fixture.toolsetID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	shared, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err, "the read still works; it is the write that needs the wider permission")
+	require.Equal(t, 1, shared.SharedWithOther, "the caller is told the change reaches another server")
+
+	// Holding mcp:write on only the named server is no longer enough.
+	_, err = fixture.add(t, ctx, shared.ExposureVersion, fixture.tools[0])
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "forbidden", refusal.Code)
+	require.NotContains(t, refusal.Message, second.String(), "the other server is not named to a caller who cannot reach it")
+
+	_, err = toolsetsrepo.New(fixture.conn).GetLatestToolsetVersion(ctx, fixture.toolsetID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "nothing was written for either server")
+
+	// With write access to both, the same change goes through.
+	applied, err := fixture.add(t, fixture.grantMCP(ctx, second), shared.ExposureVersion, fixture.tools[0])
+	require.NoError(t, err)
+	require.Equal(t, "applied", applied.Outcome)
+	require.Equal(t, []string{fixture.tools[0]}, applied.Exposure.ToolURNs)
+	require.Equal(t, 1, applied.Exposure.SharedWithOther)
 }
 
 // Removal refuses a name it cannot act on for the same reason adding does: a

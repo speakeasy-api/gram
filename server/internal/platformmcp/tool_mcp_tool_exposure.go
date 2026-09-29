@@ -74,7 +74,7 @@ func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, 
 		Description: "Add named tools to one exact MCP server in an explicit project, without disturbing the tools it already exposes. " +
 			"Supply exact tool URNs from list_project_tools, the exposure_version from the latest get_mcp read of that server, an idempotency key, and confirmed: true only after the user confirms the exact server and tool list. " +
 			toolExposureBlastRadiusNote + " " +
-			"A tool this project does not produce is refused by name and nothing is changed. A tool the server already exposes is reported as unchanged rather than added. Only a server whose tools come from this project can be changed here.",
+			"A tool that is neither produced by this project nor already on this server is refused by name and nothing is changed. A tool the server already exposes is reported as unchanged rather than added. Only a server whose tools come from this project can be changed here, and when another server offers the same tool list the change moves both, so it is allowed only with permission to change every one of them.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
 	}, meta, addTools)
 	addTool(reg, &mcp.Tool{
@@ -83,7 +83,7 @@ func registerToolExposureTools(reg *Registrar, service *MCPToolExposureService, 
 		Description: "Remove named tools from one exact MCP server in an explicit project, leaving the rest of its tools in place. " +
 			"Supply exact tool URNs, the exposure_version from the latest get_mcp read of that server, an idempotency key, and confirmed: true only after the user confirms the exact server and tool list. " +
 			toolExposureBlastRadiusNote + " " +
-			"People using the server lose those tools as soon as the change reaches them. A tool the server does not expose is reported as unchanged rather than removed.",
+			"People using the server lose those tools as soon as the change reaches them. A tool that is neither produced by this project nor already on this server is refused by name and nothing is changed; a tool this project produces but the server does not expose is reported as unchanged rather than removed.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)},
 	}, meta, removeTools)
 }

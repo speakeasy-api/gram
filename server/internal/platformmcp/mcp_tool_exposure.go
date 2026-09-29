@@ -110,6 +110,13 @@ type MCPToolExposure struct {
 	ToolCount       int      `json:"tool_count"`
 	ToolURNs        []string `json:"tool_urns"`
 	Truncated       bool     `json:"truncated"`
+	// SharedWithOther counts the other MCP servers offering this same tool
+	// list. The list lives on the toolset behind the server, so those servers
+	// are aliases for it and a change moves all of them. It is a count rather
+	// than a list of servers: the number is what a caller needs in order to
+	// warn, and naming servers would report them to a caller admitted only on
+	// this one.
+	SharedWithOther int `json:"shared_with_other_servers"`
 
 	// toolsetVersion is the version-chain number behind ExposureVersion. It
 	// stays internal: a caller passes the opaque token back, and only the
@@ -284,6 +291,7 @@ func toolExposureFromRow(projectID, mcpID uuid.UUID, row platformrepo.GetPlatfor
 		ToolCount:       len(row.ToolUrns),
 		ToolURNs:        slices.Clone(urns),
 		Truncated:       truncated,
+		SharedWithOther: max(len(row.FrontingServerIds)-1, 0),
 		toolsetVersion:  row.ToolsetVersion,
 	}
 }
@@ -371,6 +379,12 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			locked := toolExposureFromRow(project.ID, mcpID, row)
 			if !hmac.Equal([]byte(locked.ExposureVersion), []byte(input.ExpectedVersion)) {
 				return toolExposureReceipt{}, toolExposureConflict()
+			}
+			// Under the same lock that performs the write, so the set of
+			// servers this change moves cannot grow between the check and the
+			// write.
+			if err := s.authorizeEveryAffectedServer(ctx, project.ID, mcpID, row.FrontingServerIds); err != nil {
+				return toolExposureReceipt{}, err
 			}
 			toolsetID = row.ToolsetID
 			// Both halves refuse a name they cannot act on rather than
@@ -514,12 +528,18 @@ func (s *MCPToolExposureService) resolveTarget(ctx context.Context, principal Pr
 		return ResolvedProject{}, toolExposureInvalid("The tool exposure request is missing its caller identity.")
 	}
 	if err := s.admin.RequireLiveOrgAdmin(ctx, principal); err != nil {
-		return ResolvedProject{}, toolExposureAuthorizationError(err, authz.ScopeOrgAdmin)
+		return ResolvedProject{}, toolExposureAdminAuthorizationError(err)
 	}
 	// Checked against the ids the caller named, before anything confirms they
 	// exist, so the answer is the same for a real and an invented target.
 	if err := s.engine.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpID.String(), projectID.String())); err != nil {
-		return ResolvedProject{}, toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
+		mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
+		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
+			// Same reasoning as the admin check: only a denial is safe to
+			// report verbatim, and anything else is an evaluation failure.
+			return ResolvedProject{}, toolExposureUnavailable(err)
+		}
+		return ResolvedProject{}, mapped
 	}
 	project, err := s.queries.ResolvePlatformMCPProjectByID(ctx, platformrepo.ResolvePlatformMCPProjectByIDParams{OrganizationID: principal.OrganizationID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -529,6 +549,45 @@ func (s *MCPToolExposureService) resolveTarget(ctx context.Context, principal Pr
 		return ResolvedProject{}, fmt.Errorf("resolve live tool exposure project: %w", err)
 	}
 	return ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}, nil
+}
+
+// maxFrontingServers bounds how many servers one change may move. A toolset
+// behind more servers than this is a shape the dashboard should resolve, not
+// one to authorize in a loop of unbounded length.
+const maxFrontingServers = 20
+
+// authorizeEveryAffectedServer closes the gap between what the caller named
+// and what the write actually moves. The tool list belongs to the toolset, so
+// every live server fronting that toolset is an alias for the same list;
+// checking only the named one would let write access to it change the tools of
+// servers the caller was never authorized for.
+func (s *MCPToolExposureService) authorizeEveryAffectedServer(ctx context.Context, projectID, named uuid.UUID, fronting []uuid.UUID) error {
+	if len(fronting) > maxFrontingServers {
+		return &MCPToolExposureError{
+			Code:    "conflict",
+			Message: "Too many MCP servers offer this same set of tools to change it from here. Edit it in the dashboard, where the shared set and the servers using it are shown together.",
+			Cause:   ErrMCPToolExposureConflict,
+		}
+	}
+	for _, id := range fronting {
+		if id == named {
+			continue
+		}
+		if err := s.engine.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), projectID.String())); err != nil {
+			mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
+			if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
+				return toolExposureUnavailable(err)
+			}
+			// The other servers are deliberately not named: the caller has not
+			// cleared their boundary, and the count is what it needs in order
+			// to understand the refusal.
+			return &MCPToolExposureError{
+				Code: "forbidden", Cause: err,
+				Message: "Another MCP server offers this same set of tools, and changing it here would change that one too. You do not have permission to change every server it reaches, so nothing was changed.",
+			}
+		}
+	}
+	return nil
 }
 
 // requireKnownTools refuses the whole batch and names every tool that is
@@ -591,6 +650,19 @@ func classifyToolExposureError(err error) error {
 		}
 	}
 	return fmt.Errorf("change MCP tool exposure: %w", err)
+}
+
+// toolExposureAdminAuthorizationError keeps a denial readable and turns
+// everything else into the generic unavailable refusal. RequireLiveOrgAdmin
+// wraps principal-resolution and grant-loading failures, which carry database
+// detail; returning those unchanged would put them in front of an external MCP
+// caller as the tool's error text.
+func toolExposureAdminAuthorizationError(err error) error {
+	mapped := toolExposureAuthorizationError(err, authz.ScopeOrgAdmin)
+	if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); ok {
+		return mapped
+	}
+	return toolExposureUnavailable(err)
 }
 
 func toolExposureAuthorizationError(err error, scope authz.Scope) error {
