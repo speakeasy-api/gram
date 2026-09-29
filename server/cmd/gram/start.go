@@ -1768,8 +1768,11 @@ func newStartCommand() *cli.Command {
 			}
 			var riskFindings platformmcp.RiskFindingsReader
 			var toolUsage platformmcp.ToolUsageBreakdownReader
+			var riskFindingList platformmcp.RiskFindingListReader
 			if chDB != nil {
-				riskFindings = riskchrepo.New(chDB)
+				riskQueries := riskchrepo.New(chDB)
+				riskFindings = riskQueries
+				riskFindingList = riskQueries
 				toolUsage = telemetryrepo.New(chDB)
 			}
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
@@ -1809,6 +1812,7 @@ func newStartCommand() *cli.Command {
 				RiskExclusionReconciler:  &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger},
 				RiskAnalysisDescriber:    riskAnalysisDescriber,
 				RiskFindings:             riskFindings,
+				RiskFindingList:          riskFindingList,
 				Telemetry:                telemetryrepo.New(chDB),
 				ToolUsage:                toolUsage,
 				TelemetryDrilldown:       telemetryrepo.New(chDB),

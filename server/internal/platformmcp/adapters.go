@@ -341,6 +341,7 @@ type PostgresReader struct {
 	riskReads                 *RiskReadService
 	riskAnalysisStatus        *RiskAnalysisStatusService
 	riskFindings              riskFindingsLister
+	riskFindingList           riskFindingListLister
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	recentToolCalls           *RecentToolCallReadService
@@ -367,6 +368,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskReads:                 nil,
 		riskAnalysisStatus:        nil,
 		riskFindings:              nil,
+		riskFindingList:           nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		recentToolCalls:           nil,
@@ -486,6 +488,16 @@ func (r *PostgresReader) WithRiskAnalysisStatus(service *RiskAnalysisStatusServi
 func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService, budget OperationBudget) *PostgresReader {
 	if r != nil && service.valid() {
 		r.riskFindings = &budgetedRiskFindings{service: service, budget: budget}
+	}
+	return r
+}
+
+// WithRiskFindingList attaches the per-finding reads behind the same required
+// row-level budget as the Watchdog alerts. A missing budget leaves the tools
+// served as stubs.
+func (r *PostgresReader) WithRiskFindingList(service *RiskFindingListService, budget OperationBudget) *PostgresReader {
+	if r != nil && service.valid() {
+		r.riskFindingList = &budgetedRiskFindingList{service: service, budget: budget}
 	}
 	return r
 }

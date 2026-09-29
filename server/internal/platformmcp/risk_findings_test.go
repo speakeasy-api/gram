@@ -105,7 +105,7 @@ func TestRiskFindingsDefaultsAndGroups(t *testing.T) {
 		require.Equal(t, p.rows[0].ProjectID.String(), params.ProjectID)
 		require.Equal(t, riskAnalysisTestNow.Add(-24*time.Hour), params.From)
 	}
-	require.NotEqual(t, s.userReference("other", "test-user"), s.userReference("<ORG_ID>", "test-user"))
+	require.NotEqual(t, riskUserReference(s.cursor.key, "other", "test-user"), riskUserReference(s.cursor.key, "<ORG_ID>", "test-user"))
 }
 
 func TestRiskFindingsSignalScores(t *testing.T) {
