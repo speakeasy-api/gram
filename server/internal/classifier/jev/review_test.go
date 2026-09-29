@@ -1,6 +1,7 @@
 package jev
 
 import (
+	"net/http"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -35,6 +36,12 @@ func TestOptionalConfidence(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestInvalidRequestIsPermanent(t *testing.T) {
+	t.Parallel()
+	c := testClient(t, func(_ http.ResponseWriter, _ *http.Request) { t.Error("invalid request reached provider") })
+	require.ErrorIs(t, c.Classify(t.Context(), nil).Err(), classifier.ErrInvalidRequest)
 }
 
 func TestAdmissionWaitUsesAdapterDeadline(t *testing.T) {

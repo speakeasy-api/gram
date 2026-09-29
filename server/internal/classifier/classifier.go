@@ -14,6 +14,10 @@ import (
 // alongside this error, including successes for other questions.
 var ErrRequestTooLarge = errors.New("classifier: input and a single question exceed provider request limits")
 
+// ErrInvalidRequest means the input or questions cannot be classified without
+// changing the request. Retrying the same request cannot succeed.
+var ErrInvalidRequest = errors.New("classifier: invalid request")
+
 // Classifier evaluates independent questions against a shared input.
 // The provider, model, limits, and concurrency are configured on implementations,
 // rather than selected by individual requests. Implementations must be safe for
@@ -31,7 +35,8 @@ type Classifier interface {
 	// also sets Result.Err() to match ErrRequestTooLarge. Callers may retry only those marked
 	// retryable; successful answers must not be discarded because another fails.
 	//
-	// Invalid request structure, including a nil request, sets Result.Err() before
+	// Invalid request structure, including a nil request, sets Result.Err() to match
+	// ErrInvalidRequest before
 	// any provider execution. Cancellation or an operation-wide failure may return
 	// partial outcomes and a non-nil Result.Err(). A partial result contains only known outcomes, in submission
 	// order; absence of an outcome does not prove a provider request was not sent.
