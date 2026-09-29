@@ -475,7 +475,7 @@ export function UserIdentityRow({
             </Text>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="secondary" size="sm" onClick={onSwitchToAgent}>
-                <Button.Text>Switch to Agent Identity</Button.Text>
+                <Button.Text>Switch to Service Account</Button.Text>
               </Button>
               <Button
                 variant="secondary"

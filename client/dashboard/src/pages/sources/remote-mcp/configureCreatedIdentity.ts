@@ -74,7 +74,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Add an Agent Identity credential in Settings > Identity.",
+        "Add a Service Account credential in Settings > Identity.",
       );
     }
     try {
@@ -95,7 +95,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Agent Identity could not be configured. Add the credential in Settings > Identity.",
+        "Service Account could not be configured. Add the credential in Settings > Identity.",
       );
     }
 
@@ -108,7 +108,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Agent Identity was configured, but the server could not be enabled. Enable it from Settings.",
+        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
       );
     }
   }
@@ -242,7 +242,8 @@ export async function configureCreatedRemoteMcpIdentity({
           clientMode: "auto",
           clientConfiguration: {
             scope: scopes.length > 0 ? scopes : undefined,
-            tokenEndpointAuthMethod: serverIdentityAuthMethod(issuerAuthMethods),
+            tokenEndpointAuthMethod:
+              serverIdentityAuthMethod(issuerAuthMethods),
           },
         },
       },

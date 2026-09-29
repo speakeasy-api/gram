@@ -269,7 +269,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
         "Each user signs in to Linear as themselves and keeps their own permissions.",
       ),
     ).toBeDefined();
-    expect(screen.getByRole("radio", { name: /Agent Identity/ })).toBeDefined();
+    expect(
+      screen.getByRole("radio", { name: /Service Account/ }),
+    ).toBeDefined();
     expect(screen.getByRole("radio", { name: /No Identity/ })).toBeDefined();
   });
 
@@ -524,7 +526,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     // visible for cleanup rather than forbidding the move.
     expect(
       screen
-        .getByRole("radio", { name: /Agent Identity/ })
+        .getByRole("radio", { name: /Service Account/ })
         .getAttribute("aria-checked"),
     ).toBe("true");
     expect(
@@ -736,7 +738,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("previews the Authorization header without revealing the credential", async () => {
     const { container } = renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
 
     const input = screen.getByLabelText("Token");
     fireEvent.change(input, { target: { value: "bearer-secret-value" } });
@@ -766,7 +768,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("labels Basic and Manual credential inputs without exposing their values", () => {
     const { container } = renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
     fireEvent.click(screen.getByRole("button", { name: "Basic" }));
 
     fireEvent.change(screen.getByLabelText("Username"), {
@@ -827,7 +829,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("keeps password managers out of the credential fields", () => {
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
     fireEvent.click(screen.getByRole("button", { name: "Basic" }));
 
     // A username next to a password is exactly the shape a manager treats as a
@@ -850,7 +852,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
   it("keeps Client Credentials visible but unselectable", () => {
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
 
     expect(screen.getByText("Coming soon")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: /Client credentials/ }));
@@ -858,7 +860,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.getByLabelText("Token")).toBeDefined();
   });
 
-  it("blocks Agent Identity and describes legacy pass-through Authorization honestly", () => {
+  it("blocks Service Account and describes legacy pass-through Authorization honestly", () => {
     mocks.headers.mockReturnValue({
       data: {
         headers: [
@@ -884,7 +886,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Agent Identity/,
+          name: /Service Account/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -920,11 +922,11 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Agent Identity/,
+          name: /Service Account/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
     expect(screen.queryByLabelText("Token")).toBeNull();
   });
 
@@ -947,13 +949,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /Agent Identity/,
+          name: /Service Account/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
   });
 
-  it("removes the Agent credential only once Save is confirmed", async () => {
+  it("removes the Service Account credential only once Save is confirmed", async () => {
     mocks.headers.mockReturnValue({
       data: { headers: [configuredHeader()] },
       isLoading: false,

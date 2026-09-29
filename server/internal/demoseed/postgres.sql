@@ -1352,7 +1352,7 @@ BEGIN
   -- Leave instructions NULL so Settings starts with the editable built-in
   -- instructions, matching the gateway's initialize and server/discover text.
   -- Remote MCP identity modes: Linear uses per-user OAuth through a
-  -- project-scoped CIMD client, Slack carries one inert shared Agent Identity
+  -- project-scoped CIMD client, Slack carries one inert shared Service Account
   -- credential, and GitHub intentionally has no upstream identity. The demo
   -- values are display fixtures only and cannot authenticate to any service.
   INSERT INTO remote_session_issuers
@@ -1405,7 +1405,7 @@ BEGIN
   VALUES
     (demo.det_uuid('gram-demo-agent-identity-header-slack'),
      demo.det_uuid('gram-demo-remotemcp-slack'), 'Authorization',
-     'Inert demo Agent Identity credential', TRUE, FALSE,
+     'Inert demo Service Account credential', TRUE, FALSE,
      'Bearer DEMO-NONFUNCTIONAL-TOKEN');
 
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
@@ -3246,7 +3246,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE remote.project_id = proj_a AND header.deleted IS FALSE
     AND lower(header.name) = 'authorization' AND header.value IS NOT NULL;
   IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP Agent Identity header, found %', stray;
+    RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP Service Account header, found %', stray;
   END IF;
 
   -- Managed-agent credentials are a separate surface from ordinary MCP

@@ -82,7 +82,7 @@ function remoteIdentityLabel(mode: IdentityMode): string {
     case "user":
       return "User";
     case "agent":
-      return "Agent";
+      return "Service Account";
     case "none":
       return "None";
   }
@@ -118,7 +118,7 @@ export function RemoteIdentitySummary({
       "A legacy pass-through Authorization header is still configured. Remove it under Custom Headers so this server's identity is the only thing sending a credential.";
   } else if (authenticationRequired) {
     problem =
-      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User or Agent Identity is set up.";
+      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User Identity or a Service Account is set up.";
   }
 
   let status: React.JSX.Element;
@@ -448,7 +448,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
   // A Remote MCP server's identity is derived, so the readiness item reads the
   // same answer the pill does. Judging it on a bound client alone reported
-  // every working Agent Identity as incomplete while the pill said Agent.
+  // every working Service Account as incomplete while the pill said Service Account.
   const remoteIdentitySettled =
     isRemoteBacked &&
     !identityUnavailable &&

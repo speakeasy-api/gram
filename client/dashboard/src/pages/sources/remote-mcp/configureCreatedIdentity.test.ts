@@ -82,7 +82,7 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
-  it("stores Agent Identity before enabling the server", async () => {
+  it("stores Service Account before enabling the server", async () => {
     const result = await configureCreatedRemoteMcpIdentity({
       client,
       remoteMcpServer: remoteServer(),
@@ -110,7 +110,7 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     );
   });
 
-  it("reports an Agent Identity enable failure without exposing the SDK error", async () => {
+  it("reports a Service Account enable failure without exposing the SDK error", async () => {
     mocks.updateServer.mockRejectedValue(new Error("sensitive backend detail"));
 
     const result = await configureCreatedRemoteMcpIdentity({
@@ -124,7 +124,7 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(result).toMatchObject({
       status: "setup-required",
       message:
-        "Agent Identity was configured, but the server could not be enabled. Enable it from Settings.",
+        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
     });
     expect(mocks.createHeader).toHaveBeenCalledOnce();
   });

@@ -19,7 +19,7 @@ export type AgentCredentialFormat =
   | "client-credentials";
 
 /**
- * The Agent Identity credential: one value every caller of a server shares,
+ * The Service Account credential: one value every caller of a server shares,
  * sent upstream as Authorization.
  *
  * Kept as the parts rather than the assembled string so the form can show a

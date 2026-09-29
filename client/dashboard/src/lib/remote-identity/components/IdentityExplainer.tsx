@@ -109,7 +109,7 @@ function IdentityExplainerContent(): JSX.Element {
         />
       </div>
       <div>
-        <div className="text-eyebrow">Agent Identity</div>
+        <div className="text-eyebrow">Service Account</div>
         <div className="mt-3">
           <Flow
             nodes={[
@@ -130,12 +130,12 @@ function IdentityExplainerContent(): JSX.Element {
           />
         </div>
         <Text muted variant="small" className="mt-3 block font-mono text-xs">
-          Permissions: the agent&apos;s, set in the control plane
+          Permissions: the service account&apos;s, set in the control plane
         </Text>
         <UseItWhen
           items={[
             "Limit what an agent with bad judgment can do wherever this server is deployed.",
-            "Actions should be attributed to the agent in the upstream service.",
+            "Actions should be attributed to the service account in the upstream service.",
             "The service does not support OAuth login.",
           ]}
         />
@@ -163,12 +163,11 @@ export function IdentityExplainerDialog({
       {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
       <Dialog.Content className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <Dialog.Header>
-          <Dialog.Title>User Identity or Agent Identity?</Dialog.Title>
+          <Dialog.Title>User Identity or Service Account?</Dialog.Title>
           <Dialog.Description>
             Users of this server must authenticate as themselves against the
             service&apos;s identity provider, or every caller can act as one
-            Agent Identity, a service account whose permissions you manage in
-            the control plane.
+            Service Account whose permissions you manage in the control plane.
           </Dialog.Description>
         </Dialog.Header>
         <IdentityExplainerContent />
@@ -200,9 +199,8 @@ export function IdentityExplainerCallout({
       <div className="space-y-3">
         <Text small>
           Users of this server must authenticate as themselves against the
-          service&apos;s identity provider, or every caller can act as one Agent
-          Identity, a service account whose permissions you manage in the
-          control plane.
+          service&apos;s identity provider, or every caller can act as one
+          Service Account whose permissions you manage in the control plane.
         </Text>
         <IdentityExplainerContent />
       </div>

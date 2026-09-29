@@ -244,13 +244,13 @@ export function useAgentCredentialDraft({
         return true;
       }
       clear();
-      toast.success("Agent Identity updated");
+      toast.success("Service Account updated");
       return true;
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to update Agent Identity",
+          : "Failed to update Service Account",
       );
       return false;
     }

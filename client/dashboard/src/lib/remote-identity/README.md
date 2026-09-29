@@ -5,7 +5,7 @@ complete, working configuration for signing into an upstream service** — not
 the two or three records we happen to store it in.
 
 It also owns the alternative to that: the static credential an administrator
-sets up when nobody is signing in as themselves (Agent Identity), and the
+sets up when nobody is signing in as themselves (Service Account), and the
 absence of both (No Identity). Those three are one choice, so they live
 together.
 
@@ -76,7 +76,7 @@ lib/remote-identity/
     useClientSessions.ts    has anyone actually signed in
 
   components/               the shared UI of the concept
-    IdentityModeCards.tsx   User / Agent / No Identity
+    IdentityModeCards.tsx   User Identity / Service Account / No Identity
     ProviderRow.tsx         the provider and registration choice
     CredentialFields.tsx    format, fields, live Authorization preview
     IdentityExplainer.tsx   content, dialog, and inline callout
@@ -103,7 +103,7 @@ components stay free of query wiring.
 
 ## The rule the module exists to enforce
 
-The identity choice **owns** the `Authorization` header: Agent Identity writes
+The identity choice **owns** the `Authorization` header: Service Account writes
 one, User Identity forbids one, No Identity rejects the name outright. That
 ownership flows one direction only.
 
