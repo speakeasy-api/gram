@@ -14,15 +14,17 @@ cannot happen silently again.
 
 ## What to alert on
 
-There are three distinct questions, and they need three different monitors:
+There are three distinct questions, and a ratio alone answers none of them:
 
-1. **Is risk analysis running at all?** Answered by a no-data monitor on
-   `risk.analysis.evaluations`.
-2. **Is a meaningful share of it failing?** Answered by a ratio of the
-   `degraded` outcome to all non-canceled evaluations.
-3. **Is it failing for a reason that never self-heals?** Answered by a
-   threshold on the specific `insufficient_credits`, `unauthorized` and
-   `key_disabled` reasons, which stay broken until a human acts.
+1. **Is risk analysis running at all?** A no-data monitor on
+   `risk.analysis.evaluations` (monitor 1). A ratio cannot see this: zero over
+   zero never fires.
+2. **Is a meaningful share of it failing?** A ratio of the `degraded` outcome
+   to all non-canceled evaluations (monitors 2 and 4).
+3. **Is it failing for a reason that never self-heals?** A flat threshold on
+   `insufficient_credits`, `unauthorized`, `key_disabled` and `not_configured`
+   (monitors 3, 5 and 6). These stay broken until a human acts, so they are
+   worth alerting on at volumes a ratio would dismiss as noise.
 
 ## Metric contract
 
@@ -95,17 +97,24 @@ metrics carry the detail:
   latency and outcome. See `judge-timeout-monitors.md`.
 - `risk.enforcement.pubsub_degraded` — Pub/Sub enforcement lanes, including
   whether the scan then failed open or closed.
-- `openrouter.credits.*` — the credit balance gauges collected by the
-  `collect-openrouter-credits-metrics` Temporal schedule. A credit monitor on
-  those gauges is a **leading** indicator; the one below is the confirmation
-  that scanning has already stopped.
+- `gram.openrouter.credits_remaining` / `gram.openrouter.credits_used_ratio` —
+  the per-org balance gauges collected every 5 minutes by the
+  `collect-openrouter-credits-metrics` Temporal schedule. A monitor on those
+  gauges is a **leading** indicator; monitor 3 below is the confirmation that
+  scanning has already stopped.
 
 ## Datadog monitors
 
-Monitors are managed in the Datadog UI, not in this repository. Scope every
-query to `service:gram-server` unless noted, and link the notification back to
-this runbook. Thresholds are starting points — tune against the production
-baseline before enabling paging.
+Monitors are managed in the Datadog UI, not in this repository. Thresholds are
+starting points — tune against the production baseline before enabling paging,
+and link each notification back to this runbook.
+
+**Scope every query to both services.** The counter is emitted from
+`gram-server` (the judges and per-policy evaluation) and from `gram-streams`
+(the `llm_analyzer` component, which runs in the `gram streams` process).
+Scoping to `gram-server` alone would silently drop the analyzer from every
+monitor below. The queries use `service IN (gram-server, gram-streams)` for
+that reason.
 
 ### 1. Risk analysis stopped reporting (no data)
 
@@ -115,7 +124,7 @@ dropped the instrumentation.
 
 ```text
 Monitor type: Metric (no data)
-Query:  sum(last_15m):sum:risk.analysis.evaluations{service:gram-server}.as_count()
+Query:  sum(last_15m):sum:risk.analysis.evaluations{service IN (gram-server, gram-streams)}.as_count()
 Notify: no data after 30m
 ```
 
@@ -131,8 +140,8 @@ does not move it.
 
 ```text
 Monitor type: Metric (ratio)
-Query:  sum(last_10m):sum:risk.analysis.evaluations{service:gram-server,gram.outcome:degraded}.as_count()
-      / sum:risk.analysis.evaluations{service:gram-server,NOT gram.outcome:canceled}.as_count() * 100
+Query:  sum(last_10m):sum:risk.analysis.evaluations{service IN (gram-server, gram-streams),gram.outcome:degraded}.as_count()
+      / sum:risk.analysis.evaluations{service IN (gram-server, gram-streams),NOT gram.outcome:canceled}.as_count() * 100
 Warn:  > 5     (% of evaluations)
 Alert: > 20
 ```
@@ -149,7 +158,7 @@ credit exhaustion.
 ```text
 Monitor type: Metric
 Query:  sum(last_15m):sum:risk.analysis.evaluations{
-          service:gram-server,
+          service IN (gram-server, gram-streams),
           gram.risk.degradation_reason IN (insufficient_credits, unauthorized, key_disabled, not_configured)
         }.as_count()
 Warn:  > 0
@@ -168,10 +177,10 @@ rather than act on billing or credentials.
 ```text
 Monitor type: Metric (ratio)
 Query:  sum(last_10m):sum:risk.analysis.evaluations{
-          service:gram-server,
+          service IN (gram-server, gram-streams),
           gram.risk.degradation_reason IN (upstream_unavailable, rate_limited, timeout)
         }.as_count()
-      / sum:risk.analysis.evaluations{service:gram-server,NOT gram.outcome:canceled}.as_count() * 100
+      / sum:risk.analysis.evaluations{service IN (gram-server, gram-streams),NOT gram.outcome:canceled}.as_count() * 100
 Warn:  > 10
 Alert: > 30
 ```
@@ -186,7 +195,7 @@ because an engine it depends on was down.
 ```text
 Monitor type: Metric (grouped)
 Query:  sum(last_30m):sum:risk.analysis.evaluations{
-          service:gram-server,
+          service IN (gram-server, gram-streams),
           gram.risk.degradation_reason IN (policy_error, dependency_unavailable)
         } by {gram.org.id}.as_count()
 Warn:  > 10
@@ -206,7 +215,7 @@ zero-tolerance monitor because it is a configuration mistake, not a failure.
 ```text
 Monitor type: Metric
 Query:  sum(last_15m):sum:risk.analysis.evaluations{
-          service:gram-server,
+          service IN (gram-server, gram-streams),
           gram.risk.component:prompt_policy_judge,
           gram.risk.degradation_reason:not_configured
         }.as_count()
@@ -217,7 +226,7 @@ Alert: > 0
 
 | Reason                                      | First action                                                                                 |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `insufficient_credits`                      | Top up the OpenRouter balance. Cross-check the `openrouter.credits.*` gauges for the trend.    |
+| `insufficient_credits`                      | Top up the OpenRouter balance. Cross-check `gram.openrouter.credits_remaining` for the trend.  |
 | `unauthorized`, `key_disabled`              | Check the provider key: revoked upstream, or disabled by Gram (see `disable_causes.go`).       |
 | `not_configured`                            | Check the deployment's model configuration (`GRAM_RISK_LLM_URL`, the OpenRouter client wiring). |
 | `rate_limited`                              | Check the provider quota; consider raising the per-org judge limit.                            |
