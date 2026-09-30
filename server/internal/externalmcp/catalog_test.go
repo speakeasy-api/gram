@@ -1,6 +1,10 @@
 package externalmcp
 
 import (
+	"context"
+	"errors"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"testing"
 
 	"github.com/google/uuid"
@@ -81,4 +85,102 @@ func TestCatalogSourceFromRowLimitsLegacyCompatibilityToPulse(t *testing.T) {
 		_, ok := catalogSourceFromRow(row)
 		require.False(t, ok)
 	}
+}
+
+type routingRepo struct{ rows []repo.ListMCPRegistriesRow }
+
+func (r routingRepo) ListMCPRegistries(context.Context) ([]repo.ListMCPRegistriesRow, error) {
+	return r.rows, nil
+}
+func (r routingRepo) GetMCPRegistryByID(_ context.Context, id uuid.UUID) (repo.GetMCPRegistryByIDRow, error) {
+	for _, row := range r.rows {
+		if row.ID == id {
+			return repo.GetMCPRegistryByIDRow(row), nil
+		}
+	}
+	return repo.GetMCPRegistryByIDRow{}, errors.New("missing")
+}
+
+type routingFlags struct {
+	feature.Provider
+	on  bool
+	err error
+}
+
+func (f routingFlags) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+	return f.on, f.err
+}
+func TestCatalogSelectsExactlyOneSource(t *testing.T) {
+	pulseID := uuid.New()
+	rows := []repo.ListMCPRegistriesRow{
+		{ID: pulseID, Url: "https://api.pulsemcp.com"},
+		{ID: NativeCatalogRegistryID, Url: NativeCatalogRegistryURL, SourceType: pgtype.Text{String: registrySourceTypeNative, Valid: true}, AuthProfile: pgtype.Text{String: registryAuthProfileNone, Valid: true}, Enabled: pgtype.Bool{Bool: true, Valid: true}, CertificationState: pgtype.Text{String: "certified", Valid: true}, SourceKey: pgtype.Text{String: "speakeasy", Valid: true}},
+	}
+	for _, tc := range []struct {
+		name string
+		on   bool
+		err  error
+		want uuid.UUID
+	}{
+		{name: "off", want: pulseID}, {name: "on", on: true, want: NativeCatalogRegistryID}, {name: "error", on: true, err: errors.New("flags down"), want: pulseID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewCatalogService(nil, &RegistryClient{}, &NativeRegistryReader{}, routingFlags{on: tc.on, err: tc.err})
+			s.repo = routingRepo{rows}
+			source, err := s.SelectedSource(t.Context(), "org-id", "org-slug")
+			require.NoError(t, err)
+			require.Equal(t, tc.want, source.Registry.ID)
+			wrong := pulseID
+			if wrong == tc.want {
+				wrong = NativeCatalogRegistryID
+			}
+			_, err = s.SelectSource(t.Context(), "org-id", "org-slug", wrong)
+			require.ErrorIs(t, err, ErrCatalogSourceNotFound)
+			_, err = s.IdentitySource(t.Context(), wrong)
+			require.NoError(t, err)
+		})
+	}
+	s := NewCatalogService(nil, &RegistryClient{}, &NativeRegistryReader{}, routingFlags{on: true})
+	s.repo = routingRepo{rows: rows[:1]}
+	_, err := s.SelectedSource(t.Context(), "org-id", "org-slug")
+	require.ErrorIs(t, err, ErrCatalogSourceNotFound)
+}
+
+func TestDashboardDetailsRetainEveryRemote(t *testing.T) {
+	result, err := decodeDashboardDetails([]byte(`{"server":{"name":"example/server","version":"1","description":"full","title":"Full title","icons":[{"src":"https://example.test/icon.png"}],"remotes":[{"type":"sse","url":"https://example.test/sse"},{"type":"streamable-http","url":"https://example.test/mcp","headers":[{"name":"X-Token","description":"token","isRequired":true}]}]},"_meta":{"com.pulsemcp/server-version":{"remotes[1]":{"tools":[{"name":"search","description":"find","inputSchema":{"type":"object"}}]}}}}`))
+	require.NoError(t, err)
+	require.Len(t, result.Remotes, 2)
+	require.Len(t, result.Remotes[1].Headers, 1)
+	require.Len(t, result.Tools, 1)
+	require.Equal(t, "Full title", *result.Title)
+	require.Equal(t, "https://example.test/icon.png", *result.IconURL)
+	require.Contains(t, result.Meta, "com.pulsemcp/server-version")
+}
+
+type failedCatalogReader struct{ calls int }
+
+func (r *failedCatalogReader) ListServers(context.Context, Registry, ListServersParams) (ListServersResult, error) {
+	r.calls++
+	return ListServersResult{}, errors.New("selected source failed")
+}
+func (r *failedCatalogReader) GetServerDetails(context.Context, Registry, string, []string) (*ServerDetails, error) {
+	r.calls++
+	return nil, errors.New("selected source failed")
+}
+func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
+	pulse, native := &failedCatalogReader{}, &failedCatalogReader{}
+	s := NewCatalogService(nil, pulse, native, routingFlags{on: true})
+	s.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{
+		{ID: uuid.New(), Url: "https://api.pulsemcp.com"},
+		{ID: NativeCatalogRegistryID, Url: NativeCatalogRegistryURL, SourceType: pgtype.Text{String: registrySourceTypeNative, Valid: true}, AuthProfile: pgtype.Text{String: registryAuthProfileNone, Valid: true}, Enabled: pgtype.Bool{Bool: true, Valid: true}, CertificationState: pgtype.Text{String: "certified", Valid: true}, SourceKey: pgtype.Text{String: "speakeasy", Valid: true}},
+	}}
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-id", OrganizationSlug: "org-slug"})
+	_, err := s.List(ctx, nil, nil)
+	require.ErrorContains(t, err, "selected source failed")
+	require.Equal(t, 1, native.calls)
+	require.Zero(t, pulse.calls)
+	_, err = s.IdentityDetails(t.Context(), NativeCatalogRegistryID, "example/server", nil)
+	require.ErrorContains(t, err, "selected source failed")
+	require.Equal(t, 2, native.calls)
+	require.Zero(t, pulse.calls)
 }

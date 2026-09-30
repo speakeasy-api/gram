@@ -236,6 +236,8 @@ interface UseRemoteMcpInstallWorkflowOptions {
    * headless callers, which have no UI to draft a policy in.
    */
   offerGuardrails?: boolean;
+  /** Fresh catalog admission before any create, never after acceptance. */
+  beforeInstall?: () => Promise<boolean>;
 }
 
 /** Key into [ServerConfig.headerValues] for one header of one remote. */
@@ -428,6 +430,7 @@ export function useRemoteMcpInstallWorkflow({
   autoSelectRemotes = false,
   serverNameSuffix = "",
   offerGuardrails = false,
+  beforeInstall,
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
   const detectorMode = useDetectorMode();
@@ -837,15 +840,33 @@ export function useRemoteMcpInstallWorkflow({
     [client, defaultOrganizationIssuerId, orgSlug],
   );
 
+  const admissionInFlight = useRef(false);
+  const admissionGeneration = useRef(0);
+  useEffect(
+    () => () => {
+      admissionGeneration.current += 1;
+    },
+    [],
+  );
   const startInstall = useCallback(
     async (options?: {
       guardrail?: ServerGuardrailState;
     }): Promise<string[]> => {
       if (
         !canInstall ||
+        admissionInFlight.current ||
         (phaseRef.current !== "configure" && phaseRef.current !== "guardrails")
       ) {
         return [];
+      }
+
+      const generation = admissionGeneration.current;
+      admissionInFlight.current = true;
+      try {
+        if (beforeInstall && !(await beforeInstall())) return [];
+        if (generation !== admissionGeneration.current) return [];
+      } finally {
+        admissionInFlight.current = false;
       }
 
       // Configs without a compatible endpoint can't be installed; report them as
@@ -1026,6 +1047,7 @@ export function useRemoteMcpInstallWorkflow({
       return installedServerIds;
     },
     [
+      beforeInstall,
       canInstall,
       client,
       detectorMode,
@@ -1057,6 +1079,7 @@ export function useRemoteMcpInstallWorkflow({
   }, []);
 
   const reset = useCallback(() => {
+    admissionGeneration.current += 1;
     setStatuses([]);
     setGuardrail(null);
     setConfigureSkipped(false);

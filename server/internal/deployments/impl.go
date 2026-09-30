@@ -48,21 +48,21 @@ import (
 type Service struct {
 	annotations.Service[gen.Service, gen.Auther]
 
-	logger         *slog.Logger
-	tracer         trace.Tracer
-	db             *pgxpool.Pool
-	repo           *repo.Queries
-	externalmcp    *externalmcpRepo.Queries
-	registryClient *externalmcp.RegistryClient
-	auth           *auth.Auth
-	authz          *authz.Engine
-	assets         *assetsRepo.Queries
-	packages       *packagesRepo.Queries
-	assetStorage   assets.BlobStore
-	temporalEnv    *temporal.Environment
-	posthog        *posthog.Posthog
-	siteURL        *url.URL
-	audit          *audit.Logger
+	logger       *slog.Logger
+	tracer       trace.Tracer
+	db           *pgxpool.Pool
+	repo         *repo.Queries
+	externalmcp  *externalmcpRepo.Queries
+	catalog      *externalmcp.CatalogService
+	auth         *auth.Auth
+	authz        *authz.Engine
+	assets       *assetsRepo.Queries
+	packages     *packagesRepo.Queries
+	assetStorage assets.BlobStore
+	temporalEnv  *temporal.Environment
+	posthog      *posthog.Posthog
+	siteURL      *url.URL
+	audit        *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -80,27 +80,33 @@ func NewService(
 	mcpRegistryClient *externalmcp.RegistryClient,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	catalogs ...*externalmcp.CatalogService,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
 
+	catalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
+	if len(catalogs) > 0 && catalogs[0] != nil {
+		catalog = catalogs[0]
+	}
+
 	return &Service{
-		logger:         logger,
-		tracer:         tracer,
-		db:             db,
-		repo:           repo.New(db),
-		externalmcp:    externalmcpRepo.New(db),
-		auth:           auth.New(logger, db, sessions, authzEngine),
-		authz:          authzEngine,
-		assets:         assetsRepo.New(db),
-		packages:       packagesRepo.New(db),
-		assetStorage:   assetStorage,
-		temporalEnv:    temporalEnv,
-		posthog:        posthog,
-		siteURL:        siteURL,
-		registryClient: mcpRegistryClient,
-		audit:          auditLogger,
-		Service:        annotations.Service[gen.Service, gen.Auther]{},
+		logger:       logger,
+		tracer:       tracer,
+		db:           db,
+		repo:         repo.New(db),
+		externalmcp:  externalmcpRepo.New(db),
+		auth:         auth.New(logger, db, sessions, authzEngine),
+		authz:        authzEngine,
+		assets:       assetsRepo.New(db),
+		packages:     packagesRepo.New(db),
+		assetStorage: assetStorage,
+		temporalEnv:  temporalEnv,
+		posthog:      posthog,
+		siteURL:      siteURL,
+		catalog:      catalog,
+		audit:        auditLogger,
+		Service:      annotations.Service[gen.Service, gen.Auther]{},
 	}
 }
 
@@ -483,6 +489,10 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		})
 	}
 
+	if err := s.admitExternalMCPSelections(ctx, organizationID, authCtx.OrganizationSlug, newExternalMCPs, nil, nil); err != nil {
+		return nil, err
+	}
+
 	if len(newPackages) == 0 && len(newOpenAPIAssets) == 0 && len(newFunctions) == 0 && len(newExternalMCPs) == 0 {
 		return nil, oops.E(oops.CodeInvalid, nil, "at least one openapi document, functions file, package, or external mcp is required").LogError(ctx, logger)
 	}
@@ -702,6 +712,9 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	switch {
 	// 1️⃣ Project has no deployments, we need to create an initial one instead of cloning
 	case errors.Is(err, pgx.ErrNoRows), latestDeploymentID == uuid.Nil:
+		if err := s.admitExternalMCPSelections(ctx, organizationID, authCtx.OrganizationSlug, externalMCPsToUpsert, nil, nil); err != nil {
+			return nil, err
+		}
 		newID, err := createDeployment(
 			ctx, s.tracer, logger, tx,
 			IdempotencyKey(nil),
@@ -741,6 +754,16 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		previousDeployment, err = mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(latestDeploymentID))
 		if err != nil {
 			return nil, err
+		}
+
+		if len(externalMCPsToUpsert) > 0 {
+			persisted, err := tx.ListDeploymentExternalMCPs(ctx, latestDeploymentID)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "error reading existing external mcp attachments")
+			}
+			if err := s.admitExternalMCPSelections(ctx, organizationID, authCtx.OrganizationSlug, externalMCPsToUpsert, persisted, externalMCPsToExclude); err != nil {
+				return nil, err
+			}
 		}
 
 		newID, err := cloneDeployment(

@@ -228,16 +228,15 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		// Preserve the dashboard's existing Pulse detail projection, which includes
 		// every remote and the Pulse-specific per-remote tool metadata.
 		details, err = s.fetchServerDetails(ctx, source.Registry, payload.ServerSpecifier)
-	} else {
-		// Source-specific adapters normalize their selected detail result through
-		// the shared catalogue boundary, keeping reader selection aligned with
-		// source admission as new certified sources are enabled.
-		registryDetails, detailErr := s.catalog.Details(ctx, registryID, payload.ServerSpecifier, nil)
-		if detailErr != nil {
-			err = detailErr
+	} else if native, ok := reader.(*NativeRegistryReader); ok {
+		entry, lookupErr := native.discoveryEntry(ctx, payload.ServerSpecifier)
+		if lookupErr != nil {
+			err = lookupErr
 		} else {
-			details = serverDetailsResultFromRegistryDetails(registryDetails)
+			details, err = decodeDashboardDetails(entry.Data)
 		}
+	} else {
+		err = ErrUnknownRegistrySource
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch server details from registry").LogError(ctx, s.logger)
@@ -251,9 +250,9 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		ToolsetID:         nil,
 		McpServerID:       nil,
 		RegistryID:        &registryIDStr,
-		Title:             nil,
-		IconURL:           nil,
-		Meta:              nil,
+		Title:             details.Title,
+		IconURL:           details.IconURL,
+		Meta:              details.Meta,
 		Tools:             details.Tools,
 		Remotes:           details.Remotes,
 	}, nil
@@ -286,6 +285,9 @@ func (s *Service) GetSetupDocs(ctx context.Context, payload *gen.GetSetupDocsPay
 
 // serverDetailsResult contains all details fetched from the registry for a server.
 type serverDetailsResult struct {
+	Title       *string
+	IconURL     *string
+	Meta        map[string]any
 	Name        string
 	Description string
 	Version     string
@@ -365,6 +367,27 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry Registry, ser
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	return decodeDashboardDetails(body)
+}
+
+func decodeDashboardDetails(body []byte) (*serverDetailsResult, error) {
+	var enrichment struct {
+		Server struct {
+			Title *string `json:"title"`
+			Icons []struct {
+				Src string `json:"src"`
+			} `json:"icons"`
+		} `json:"server"`
+		Meta map[string]any `json:"_meta"`
+	}
+	if err := json.Unmarshal(body, &enrichment); err != nil {
+		return nil, fmt.Errorf("decode detail enrichment: %w", err)
+	}
+	var icon *string
+	if len(enrichment.Server.Icons) > 0 {
+		icon = &enrichment.Server.Icons[0].Src
+	}
+
 	type remoteMeta struct {
 		Tools []struct {
 			Name        string          `json:"name"`
@@ -442,6 +465,7 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry Registry, ser
 	}
 
 	return &serverDetailsResult{
+		Title: enrichment.Server.Title, IconURL: icon, Meta: enrichment.Meta,
 		Name:        serverResp.Server.Name,
 		Description: serverResp.Server.Description,
 		Version:     serverResp.Server.Version,

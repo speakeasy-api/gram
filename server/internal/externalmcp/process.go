@@ -26,7 +26,7 @@ import (
 type ToolExtractor struct {
 	logger         *slog.Logger
 	db             *pgxpool.Pool
-	registryClient *RegistryClient
+	catalog        *CatalogService
 	repo           *repo.Queries
 	guardianPolicy *guardian.Policy
 }
@@ -35,12 +35,12 @@ func NewToolExtractor(
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
-	registryClient *RegistryClient,
+	catalog *CatalogService,
 ) *ToolExtractor {
 	return &ToolExtractor{
 		logger:         logger,
 		db:             db,
-		registryClient: registryClient,
+		catalog:        catalog,
 		repo:           repo.New(db),
 		guardianPolicy: guardianPolicy,
 	}
@@ -104,15 +104,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		return oops.E(oops.CodeBadRequest, nil, "[%s] external mcp server has no registry", task.MCP.Name).LogError(ctx, logger)
 	}
 
-	registry, err := te.repo.GetMCPRegistryByID(ctx, task.MCP.RegistryID.UUID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).LogError(ctx, logger)
-	}
-
-	serverDetails, err := te.registryClient.GetServerDetails(ctx, Registry{
-		ID:  registry.ID,
-		URL: registry.Url,
-	}, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
+	serverDetails, err := te.catalog.IdentityDetails(ctx, task.MCP.RegistryID.UUID, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).LogError(ctx, logger)
 	}

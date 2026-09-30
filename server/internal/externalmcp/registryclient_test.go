@@ -1123,3 +1123,37 @@ func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
 	require.Nil(t, bare.Repository)
 	require.Empty(t, bare.Packages)
 }
+
+func TestProjectServerDetailsRemoteSelection(t *testing.T) {
+	var record serverDetailsEntry
+	require.NoError(t, json.Unmarshal([]byte(`{"server":{"name":"io.example/server","version":"1","remotes":[{"type":"sse","url":"https://example.com/first"},{"type":"sse","url":"https://example.com/last","headers":[]},{"type":"streamable-http","url":"https://example.com/http-first","headers":[]},{"type":"streamable-http","url":"https://example.com/http-last"}]},"_meta":{"com.pulsemcp/server-version":{"remotes[1]":{"tools":[]},"remotes[2]":{"tools":[]}}}}`), &record))
+	for _, tc := range []struct {
+		name        string
+		allowed     []string
+		url         string
+		emptySlices bool
+	}{
+		{name: "first HTTP", url: "https://example.com/http-first", emptySlices: true},
+		{name: "empty allowlist", allowed: []string{}, url: "https://example.com/http-first", emptySlices: true},
+		{name: "last SSE", allowed: []string{"https://example.com/first", "https://example.com/last"}, url: "https://example.com/last", emptySlices: true},
+		{name: "nil slices", allowed: []string{"https://example.com/first"}, url: "https://example.com/first"},
+		{name: "exact URL", allowed: []string{"https://example.com/http-first/"}},
+		{name: "no match", allowed: []string{"https://example.com/unknown"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			details := projectServerDetails(record, tc.allowed)
+			require.Equal(t, "io.example/server", details.Name)
+			require.Equal(t, "1", details.Version)
+			require.Equal(t, tc.url, details.RemoteURL)
+			if tc.emptySlices {
+				require.NotNil(t, details.Tools)
+				require.Empty(t, details.Tools)
+				require.NotNil(t, details.Headers)
+				require.Empty(t, details.Headers)
+			} else {
+				require.Nil(t, details.Tools)
+				require.Nil(t, details.Headers)
+			}
+		})
+	}
+}
