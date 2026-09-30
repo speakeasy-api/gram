@@ -62,7 +62,7 @@ func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String())})
 
-	_, err := ti.service.ListCatalog(ctx, &gen.ListCatalogPayload{
+	result, err := ti.service.ListCatalog(ctx, &gen.ListCatalogPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -71,6 +71,8 @@ func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 		Cursor:           nil,
 	})
 	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Empty(t, result.Servers)
 }
 
 func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
@@ -84,7 +86,7 @@ func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
 
-	_, err := ti.service.ListCatalog(ctx, &gen.ListCatalogPayload{
+	result, err := ti.service.ListCatalog(ctx, &gen.ListCatalogPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -93,6 +95,8 @@ func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 		Cursor:           nil,
 	})
 	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Empty(t, result.Servers)
 }
 
 func TestExternalMCP_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
