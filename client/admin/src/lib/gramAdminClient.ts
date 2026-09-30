@@ -29,6 +29,7 @@ import type { AdminSpendBreakdownResponse } from "@gram/admin-client/models/comp
 import { buildAdminGetSpendBreakdownQuery } from "@gram/admin-client/react-query/adminGetSpendBreakdown.core";
 import type { AdminGetSpendBreakdownRequest } from "@gram/admin-client/models/operations/admingetspendbreakdown";
 import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react-query/adminDescribeMcpServerHealth.core";
+import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-query/adminGetMcpServerToolCalls.core";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import {
@@ -248,6 +249,50 @@ function createMcpServerHealthQuery(
   );
   return queryOptions({
     queryKey: mcpServerHealthKey(
+      organizationIdOrSlug,
+      request.projectId,
+      request.mcpServerId,
+      request.windowDays,
+    ),
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: 30_000,
+  });
+}
+
+// Tool call telemetry for the same server, keyed the same way so the two
+// queries for one page share every part of their key but the name.
+export function mcpServerToolCallsKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+  mcpServerId: string,
+  windowDays: 14 | 30 | 90 = 14,
+): readonly [string, string, string, string, number] {
+  return [
+    "gram-admin-mcp-server-tool-calls",
+    organizationIdOrSlug,
+    projectId,
+    mcpServerId,
+    windowDays,
+  ] as const;
+}
+
+export function mcpServerToolCallsQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+): ReturnType<typeof createMcpServerToolCallsQuery> {
+  return createMcpServerToolCallsQuery(organizationIdOrSlug, request);
+}
+
+function createMcpServerToolCallsQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+) {
+  const generated = buildAdminGetMcpServerToolCallsQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    queryKey: mcpServerToolCallsKey(
       organizationIdOrSlug,
       request.projectId,
       request.mcpServerId,

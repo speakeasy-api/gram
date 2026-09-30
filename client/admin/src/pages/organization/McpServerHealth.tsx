@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 import type { AdminMcpServerHealth } from "@gram/admin-client/models/components/adminmcpserverhealth";
 import type { AdminMcpServerHealthRemoteSessionClient } from "@gram/admin-client/models/components/adminmcpserverhealthremotesessionclient";
-import type { AdminMcpServerHealthSeriesPoint } from "@gram/admin-client/models/components/adminmcpserverhealthseriespoint";
-import type { AdminMcpServerHealthToolCalls } from "@gram/admin-client/models/components/adminmcpserverhealthtoolcalls";
+import type { AdminMcpServerToolCallBucket } from "@gram/admin-client/models/components/adminmcpservertoolcallbucket";
+import type { AdminMcpServerToolCalls } from "@gram/admin-client/models/components/adminmcpservertoolcalls";
 import type { AdminMcpServerHealthUserSessionIssuer } from "@gram/admin-client/models/components/adminmcpserverhealthusersessionissuer";
 
 import { CopyValue } from "@/components/CopyValue";
@@ -37,7 +37,10 @@ import {
 } from "@/lib/adminQueries";
 import { badgeTone } from "@/lib/badgeTone";
 import { errorMessage, type AdminOrganization } from "@/lib/gramAdminApi";
-import { mcpServerHealthQuery } from "@/lib/gramAdminClient";
+import {
+  mcpServerHealthQuery,
+  mcpServerToolCallsQuery,
+} from "@/lib/gramAdminClient";
 import { LEAVES_THE_APP } from "@/lib/impersonation";
 import { cn } from "@/lib/utils";
 
@@ -99,16 +102,24 @@ export function McpServerHealth({
   const { project, window = 14 } = useSearch({ from: ROUTE });
   const navigate = useNavigate({ from: ROUTE });
   const projects = useQuery(organizationProjectsQuery(org.id));
+  const request = {
+    organizationId: org.id,
+    projectId: project ?? "",
+    mcpServerId: serverId,
+    windowDays: window,
+  };
+  // Two reads, so telemetry that fails or runs slow never holds back the
+  // configuration. Both take the window: the configuration counts the people
+  // who signed in inside it. A new window keeps the last answers on screen
+  // until it lands, rather than blanking the page between picks.
   const health = useQuery({
-    ...mcpServerHealthQuery(idOrSlug, {
-      organizationId: org.id,
-      projectId: project ?? "",
-      mcpServerId: serverId,
-      windowDays: window,
-    }),
+    ...mcpServerHealthQuery(idOrSlug, request),
     enabled: !!project,
-    // A new window keeps the last one on screen until it lands, rather than
-    // blanking the page between picks.
+    placeholderData: keepPreviousData,
+  });
+  const toolCalls = useQuery({
+    ...mcpServerToolCallsQuery(idOrSlug, request),
+    enabled: !!project,
     placeholderData: keepPreviousData,
   });
 
@@ -137,9 +148,20 @@ export function McpServerHealth({
   const projectName =
     projects.data?.projects.find((p) => p.id === project)?.name ?? project;
 
+  let toolCallsState: ToolCallsState = { status: "loading" };
+  if (toolCalls.data) {
+    toolCallsState = { status: "ready", toolCalls: toolCalls.data };
+  } else if (toolCalls.isError) {
+    toolCallsState = {
+      status: "error",
+      message: errorMessage(toolCalls.error),
+    };
+  }
+
   return (
     <HealthReport
       health={health.data}
+      toolCalls={toolCallsState}
       idOrSlug={idOrSlug}
       project={project}
       projectName={projectName}
@@ -157,8 +179,14 @@ export function McpServerHealth({
   );
 }
 
+type ToolCallsState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; toolCalls: AdminMcpServerToolCalls };
+
 function HealthReport({
   health,
+  toolCalls,
   idOrSlug,
   project,
   projectName,
@@ -167,6 +195,7 @@ function HealthReport({
   onWindowChange,
 }: {
   health: AdminMcpServerHealth;
+  toolCalls: ToolCallsState;
   idOrSlug: string;
   project: string;
   projectName: string;
@@ -174,7 +203,10 @@ function HealthReport({
   asOf: Date;
   onWindowChange: (window: HealthWindow) => void;
 }): JSX.Element {
-  const { server, userSessionIssuer: issuer, toolCalls } = health;
+  const { server, userSessionIssuer: issuer } = health;
+  const loggingOff =
+    toolCalls.status === "ready" &&
+    toolCalls.toolCalls.type === "logging:disabled";
   const range = windowRange(window, asOf);
   const clients = issuer?.remoteSessionClients ?? [];
 
@@ -215,9 +247,12 @@ function HealthReport({
         <ToolCallsCard toolCalls={toolCalls} />
       </div>
 
-      {toolCalls.type === "logging:enabled" ? (
+      {loggingOff ? (
+        <LoggingOff idOrSlug={idOrSlug} />
+      ) : (
         <ToolCallsChart
-          toolCalls={toolCalls}
+          state={toolCalls}
+          window={window}
           range={range}
           prompt={{
             serverName: server.name,
@@ -225,8 +260,6 @@ function HealthReport({
             projectName,
           }}
         />
-      ) : (
-        <LoggingOff idOrSlug={idOrSlug} />
       )}
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
@@ -438,10 +471,24 @@ function UpstreamCard({
 }
 
 function ToolCallsCard({
-  toolCalls,
+  toolCalls: state,
 }: {
-  toolCalls: AdminMcpServerHealthToolCalls;
+  toolCalls: ToolCallsState;
 }): JSX.Element {
+  if (state.status === "loading") {
+    return <StatCard label="Tool calls" value="—" muted detail="Loading..." />;
+  }
+  if (state.status === "error") {
+    return (
+      <StatCard
+        label="Tool calls"
+        value="Unavailable"
+        muted
+        detail="Tool call telemetry did not load"
+      />
+    );
+  }
+  const { toolCalls } = state;
   if (toolCalls.type === "logging:disabled" || !toolCalls.outcomes) {
     return (
       <StatCard
@@ -482,17 +529,31 @@ function rangeLabel({ from, to }: { from: Date; to: Date }): string {
   return `${fmtBucketDay(from)} – ${fmtDate(to)}`;
 }
 
+// A stand-in column, never shown, that gives an empty plot the height of a
+// full one.
+const SPACER_POINT: AdminMcpServerToolCallBucket = {
+  bucketStart: new Date(0),
+  total: 0,
+  failed: 0,
+};
+
 function ToolCallsChart({
-  toolCalls,
+  state,
+  window,
   range,
   prompt,
 }: {
-  toolCalls: AdminMcpServerHealthToolCalls;
+  state: ToolCallsState;
+  window: HealthWindow;
   range: { from: Date; to: Date };
   prompt: { serverName: string; serverId: string; projectName: string };
 }): JSX.Element {
-  const points = toolCalls.daily ?? [];
-  const weekly = (toolCalls.bucketSeconds ?? 86_400) >= 7 * 86_400;
+  const toolCalls = state.status === "ready" ? state.toolCalls : undefined;
+  const points = toolCalls?.daily ?? [];
+  // Before the answer lands, the window says which bucket it will use.
+  const weekly = toolCalls
+    ? (toolCalls.bucketSeconds ?? 86_400) >= 7 * 86_400
+    : window === 90;
   const perSquare = callsPerSquare(points);
   const total = points.reduce((sum, p) => sum + p.total, 0);
   const failed = points.reduce((sum, p) => sum + p.failed, 0);
@@ -502,9 +563,19 @@ function ToolCallsChart({
   const labelEvery = points.length > 15 ? 2 : 1;
   const unit = weekly ? "week" : "day";
 
-  const summary = worst
+  let summary = worst
     ? `${failed} of ${total} calls failed; the worst ${unit} was ${bucketName(worst, weekly)} with ${worst.failed} of ${worst.total}.`
     : `${total} calls, none failed.`;
+  let message: string | undefined;
+  if (state.status === "loading") {
+    summary = "Loading.";
+    message = "Loading tool calls...";
+  } else if (state.status === "error") {
+    summary = "Tool call telemetry did not load.";
+    message = `Tool call telemetry did not load: ${state.message}`;
+  } else if (total === 0) {
+    message = "No calls reached the server directly in this window.";
+  }
 
   return (
     <section className={CARD} aria-labelledby="tool-calls-chart">
@@ -514,7 +585,7 @@ function ToolCallsChart({
         </h2>
         <span className={cn(MUTED, "text-xs")}>
           {rangeLabel(range)}
-          {toolCalls.watermark &&
+          {toolCalls?.watermark &&
             ` · data as of ${fmtDateTime(toolCalls.watermark)}`}
         </span>
       </div>
@@ -530,16 +601,16 @@ function ToolCallsChart({
             <Square ok />
             OK{" "}
             <span className="text-foreground tabular-nums">
-              {total - failed}
+              {toolCalls ? total - failed : "—"}
             </span>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <Square />
             Failed{" "}
             <span className="text-foreground tabular-nums">
-              {failed}
-            </span> ·{" "}
-            {fmtShare(share)}
+              {toolCalls ? failed : "—"}
+            </span>
+            {toolCalls && ` · ${fmtShare(share)}`}
           </span>
           <span>
             Each square is {perSquare === 1 ? "1 call" : `${perSquare} calls`}
@@ -566,16 +637,25 @@ function ToolCallsChart({
               spike={point === worst}
             />
           ))}
-          {total === 0 && (
+          {points.length === 0 && (
+            <div aria-hidden="true" className="invisible">
+              <BucketColumn
+                point={SPACER_POINT}
+                perSquare={1}
+                label
+                weekly={false}
+                spike={false}
+              />
+            </div>
+          )}
+          {message && (
             <p
               className={cn(
                 MUTED,
                 "absolute inset-0 flex items-center justify-center text-sm",
               )}
             >
-              <span className="bg-card rounded-md px-2 py-1">
-                No calls reached the server directly in this window.
-              </span>
+              <span className="bg-card rounded-md px-2 py-1">{message}</span>
             </p>
           )}
         </div>
@@ -613,7 +693,7 @@ function Square({ ok = false }: { ok?: boolean }): JSX.Element {
 // Weekly buckets are aligned to the epoch, so they start on a Thursday, not a
 // Monday: the start date is named rather than implied.
 function bucketName(
-  point: AdminMcpServerHealthSeriesPoint,
+  point: AdminMcpServerToolCallBucket,
   weekly: boolean,
 ): string {
   const day = fmtBucketDay(point.bucketStart);
@@ -627,7 +707,7 @@ function BucketColumn({
   weekly,
   spike,
 }: {
-  point: AdminMcpServerHealthSeriesPoint;
+  point: AdminMcpServerToolCallBucket;
   perSquare: number;
   label: boolean;
   weekly: boolean;

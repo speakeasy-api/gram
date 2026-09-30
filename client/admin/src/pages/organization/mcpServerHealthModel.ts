@@ -1,6 +1,6 @@
-import type { AdminMcpServerHealthOutcomes } from "@gram/admin-client/models/components/adminmcpserverhealthoutcomes";
+import type { AdminMcpServerToolCallOutcomes } from "@gram/admin-client/models/components/adminmcpservertoolcalloutcomes";
 import type { AdminMcpServerHealthRemoteSessionClient } from "@gram/admin-client/models/components/adminmcpserverhealthremotesessionclient";
-import type { AdminMcpServerHealthSeriesPoint } from "@gram/admin-client/models/components/adminmcpserverhealthseriespoint";
+import type { AdminMcpServerToolCallBucket } from "@gram/admin-client/models/components/adminmcpservertoolcallbucket";
 
 // The Datadog organization is on US1. One constant, so a move is one line.
 export const DATADOG_ORIGIN = "https://app.datadoghq.com";
@@ -16,7 +16,7 @@ export type ToolCallTotals = {
 };
 
 export function toolCallTotals(
-  o: AdminMcpServerHealthOutcomes,
+  o: AdminMcpServerToolCallOutcomes,
 ): ToolCallTotals {
   const failed =
     o.unauthorized + o.clientError + o.serverError + o.blocked + o.failed;
@@ -40,9 +40,7 @@ const STEPS = [1, 2, 5];
 
 // Calls per square: the smallest 1, 2 or 5 times a power of ten that keeps the
 // busiest bucket at or under MAX_SQUARES, so the legend reads as a round number.
-export function callsPerSquare(
-  points: AdminMcpServerHealthSeriesPoint[],
-): number {
+export function callsPerSquare(points: AdminMcpServerToolCallBucket[]): number {
   const busiest = Math.max(0, ...points.map((p) => p.total));
   for (let magnitude = 1; ; magnitude *= 10) {
     for (const step of STEPS) {
@@ -57,7 +55,7 @@ export type BucketSquares = { failed: number; ok: number };
 // A single failed call still fills a red square, so a bad day never rounds
 // away. The red squares come out of the column, not on top of it.
 export function bucketSquares(
-  point: AdminMcpServerHealthSeriesPoint,
+  point: AdminMcpServerToolCallBucket,
   perSquare: number,
 ): BucketSquares {
   const failed = Math.ceil(point.failed / perSquare);
@@ -67,9 +65,9 @@ export function bucketSquares(
 
 // The bucket with the most failed calls, or undefined when none failed.
 export function worstBucket(
-  points: AdminMcpServerHealthSeriesPoint[],
-): AdminMcpServerHealthSeriesPoint | undefined {
-  let worst: AdminMcpServerHealthSeriesPoint | undefined;
+  points: AdminMcpServerToolCallBucket[],
+): AdminMcpServerToolCallBucket | undefined {
+  let worst: AdminMcpServerToolCallBucket | undefined;
   for (const point of points) {
     if (point.failed > 0 && (!worst || point.failed > worst.failed)) {
       worst = point;

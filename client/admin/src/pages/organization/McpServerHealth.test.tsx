@@ -140,6 +140,18 @@ function requestUrl(input: RequestInfo | URL): URL {
   return new URL(String(input), window.location.origin);
 }
 
+const TOOL_CALLS_PATH = "/admin/project.mcpServerToolCalls";
+
+// Set by a test to hold or fail the telemetry read on its own.
+let toolCallsResponse: Promise<Response> | undefined;
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 const writeText = vi.fn(() => Promise.resolve());
 
 beforeEach(() => {
@@ -148,17 +160,20 @@ beforeEach(() => {
   mocks.getOrganization.mockResolvedValue(ORG);
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [PROJECT] });
   respond = withIssuer;
+  toolCallsResponse = undefined;
+  // A fixture is written whole, the way a reader thinks of the server; the
+  // two endpoints each answer with their half of it.
   mocks.healthFetch.mockImplementation((input: RequestInfo | URL) => {
     const url = requestUrl(input);
-    if (url.pathname !== "/admin/project.mcpServerHealth") {
-      return Promise.resolve(new Response("not found", { status: 404 }));
-    }
     const windowDays = Number(url.searchParams.get("window_days"));
-    return Promise.resolve(
-      new Response(JSON.stringify(respond(windowDays)), {
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    const { tool_calls: toolCalls, ...config } = respond(windowDays);
+    if (url.pathname === "/admin/project.mcpServerHealth") {
+      return Promise.resolve(json(config));
+    }
+    if (url.pathname === TOOL_CALLS_PATH) {
+      return toolCallsResponse ?? Promise.resolve(json(toolCalls));
+    }
+    return Promise.resolve(new Response("not found", { status: 404 }));
   });
   vi.stubGlobal("fetch", mocks.healthFetch);
   writeText.mockClear();
@@ -180,10 +195,14 @@ function open(search = `project=${PROJECT.id}`) {
   });
 }
 
-function healthRequests(): URL[] {
+function requestsTo(pathname: string): URL[] {
   return mocks.healthFetch.mock.calls
     .map(([input]) => requestUrl(input))
-    .filter((url) => url.pathname === "/admin/project.mcpServerHealth");
+    .filter((url) => url.pathname === pathname);
+}
+
+function healthRequests(): URL[] {
+  return requestsTo("/admin/project.mcpServerHealth");
 }
 
 function card(name: string): HTMLElement {
@@ -386,6 +405,34 @@ describe("McpServerHealth", () => {
     ).toBeTruthy();
   });
 
+  it("draws the configuration while telemetry is still loading", async () => {
+    toolCallsResponse = new Promise(() => {});
+    await open();
+    await screen.findByRole("heading", { name: "crm" });
+
+    expect(card("People signed in").textContent).toContain("12 ever");
+    expect(card("Tool calls").textContent).toContain("Loading...");
+    expect(screen.getByText("Loading tool calls...")).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Remote session clients" }),
+    ).toBeTruthy();
+  });
+
+  it("keeps the configuration when telemetry fails", async () => {
+    toolCallsResponse = Promise.resolve(
+      json({ name: "unexpected", message: "boom" }, 500),
+    );
+    await open();
+    await screen.findByText(/Tool call telemetry did not load:/);
+
+    expect(card("Tool calls").textContent).toContain("Unavailable");
+    expect(card("User session issuer").textContent).toContain("Configured");
+    expect(
+      screen.getByRole("region", { name: "User session issuer" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Tool call tail/ })).toBeTruthy();
+  });
+
   it("names a legacy auth mode when there is no issuer", async () => {
     respond = (windowDays) => ({
       server: { ...SERVER, source: "toolset_only", visibility: "public" },
@@ -450,7 +497,11 @@ describe("McpServerHealth", () => {
       project: PROJECT.id,
       window: 90,
     });
+    // Both reads take the window: the configuration counts people in it.
     expect(healthRequests().at(-1)!.searchParams.get("window_days")).toBe("90");
+    expect(
+      requestsTo(TOOL_CALLS_PATH).at(-1)!.searchParams.get("window_days"),
+    ).toBe("90");
   });
 
   it("keeps the project on the MCP Servers crumb and leaves the others bare", async () => {
@@ -482,5 +533,6 @@ describe("McpServerHealth", () => {
       ),
     );
     expect(healthRequests()).toEqual([]);
+    expect(requestsTo(TOOL_CALLS_PATH)).toEqual([]);
   });
 });
