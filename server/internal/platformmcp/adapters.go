@@ -110,7 +110,7 @@ func jwtAuthenticationStoreError(err error) error {
 }
 
 func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgAdminAuthorizer {
-	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil}
+	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil, serverURL: nil}
 }
 
 func (a *LiveOrgAdminAuthorizer) WithDashboardURL(dashboardURL *url.URL) *LiveOrgAdminAuthorizer {
