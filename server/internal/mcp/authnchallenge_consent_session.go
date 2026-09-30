@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,6 +47,66 @@ func validateConsentSessionURL(u *url.URL) error {
 	}
 	if u.Scheme != "https" && !cimd.IsLoopbackRedirectURI(u) {
 		return fmt.Errorf("consent URL requires HTTPS except on loopback")
+	}
+	return nil
+}
+
+// CanonicalHost validates and case-folds the hostname but discards the port.
+// Keep the effective port here: only the scheme's default is interchangeable
+// with omission. Never consult forwarded headers for this security boundary.
+func consentSessionAuthority(rawHost, scheme string) (string, error) {
+	host, err := requestorigin.CanonicalHost(rawHost)
+	if err != nil {
+		return "", fmt.Errorf("invalid consent authority: %w", err)
+	}
+	u := &url.URL{Host: rawHost}
+	port := u.Port()
+	if port == "" {
+		switch scheme {
+		case "https":
+			port = "443"
+		case "http":
+			port = "80"
+		default:
+			return "", fmt.Errorf("invalid consent authority scheme")
+		}
+	} else {
+		// CanonicalHost has already checked the numeric port and its range.
+		value, err := strconv.ParseUint(port, 10, 16)
+		if err != nil {
+			return "", fmt.Errorf("invalid consent authority port: %w", err)
+		}
+		port = strconv.FormatUint(value, 10)
+	}
+	return net.JoinHostPort(host, port), nil
+}
+
+func checkConsentSessionOrigin(r *http.Request, scheme string) error {
+	host, err := consentSessionAuthority(r.Host, scheme)
+	if err != nil {
+		return err
+	}
+	// The standard library compares Host strings literally in its Origin
+	// fallback. Normalize a clone so default ports and DNS case agree, without
+	// mutating the actual request or bypassing Sec-Fetch-Site checks.
+	checked := r.Clone(r.Context())
+	checked.Host = host
+	if origin := r.Header.Get("Origin"); origin != "" {
+		u, err := url.Parse(origin)
+		if err != nil || u.Scheme != scheme || u.Path != "" {
+			return fmt.Errorf("invalid consent request origin")
+		}
+		if err := validateConsentSessionURL(u); err != nil {
+			return err
+		}
+		authority, err := consentSessionAuthority(u.Host, u.Scheme)
+		if err != nil || authority != host {
+			return fmt.Errorf("consent request origin does not match host")
+		}
+		checked.Header.Set("Origin", u.Scheme+"://"+authority)
+	}
+	if err := http.NewCrossOriginProtection().Check(checked); err != nil {
+		return fmt.Errorf("check consent request origin: %w", err)
 	}
 	return nil
 }
@@ -125,7 +187,9 @@ func (s *Service) HandleConsentSessionHandoff(w http.ResponseWriter, r *http.Req
 	if err := s.validateConsentSessionURLs(); err != nil {
 		return err
 	}
-	if r.Host != s.serverURL.Host {
+	requestAuthority, requestErr := consentSessionAuthority(r.Host, s.serverURL.Scheme)
+	serverAuthority, serverErr := consentSessionAuthority(s.serverURL.Host, s.serverURL.Scheme)
+	if requestErr != nil || serverErr != nil || requestAuthority != serverAuthority {
 		return oops.C(oops.CodeNotFound)
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
@@ -183,7 +247,7 @@ func (s *Service) HandleConsentSessionHandoff(w http.ResponseWriter, r *http.Req
 	if !ready {
 		return oops.C(oops.CodeForbidden)
 	}
-	if err := http.NewCrossOriginProtection().Check(r); err != nil {
+	if err := checkConsentSessionOrigin(r, s.serverURL.Scheme); err != nil {
 		return oops.C(oops.CodeForbidden)
 	}
 	if !hmac.Equal([]byte(r.PostForm.Get("csrf_token")), []byte(consentSessionCSRF(ticket, token))) {

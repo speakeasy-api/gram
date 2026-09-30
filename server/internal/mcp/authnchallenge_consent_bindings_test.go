@@ -218,6 +218,8 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	require.Error(t, err, "confirmation is single use")
 	// Expiring/evicting the shorter confirmation record must not silently
 	// restore ambient-cookie authentication for this still-live challenge.
+	// TypedCacheObject.fullKey appends ":" even for SuffixNone; this is the
+	// physical adapter key, unlike the logical key passed to the typed cache.
 	require.NoError(t, ti.cacheAdapter.Delete(ctx, "consentSession:"+fx.stateID+":"))
 	_, err = call("agent_connections", true, nil)
 	require.Error(t, err, "missing confirmation cannot fall back to a valid local cookie")
