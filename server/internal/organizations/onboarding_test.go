@@ -2,6 +2,7 @@ package organizations_test
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -70,7 +71,7 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 	require.True(t, ok)
 	queries := orgrepo.New(ti.conn)
 	for _, row := range []orgrepo.UpsertOrganizationSetupTaskParams{
-		{OrganizationID: ac.ActiveOrganizationID, TaskKey: "identity-provider", Status: "in_progress", AssigneeUserID: conv.ToPGText(ac.UserID)},
+		{OrganizationID: ac.ActiveOrganizationID, TaskKey: "connect-idp", Status: "in_progress", AssigneeUserID: conv.ToPGText(ac.UserID)},
 		{OrganizationID: ac.ActiveOrganizationID, TaskKey: "anthropic-observability", Status: "todo", HiddenAt: conv.ToPGTimestamptz(time.Now())},
 		{OrganizationID: ac.ActiveOrganizationID, TaskKey: "platform-mcp", Status: "awaiting_support"},
 	} {
@@ -89,8 +90,8 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 		}
 	}
 	require.ElementsMatch(t, []string{
-		"identity-provider", "enable-logging", "instrument-agents", "additional-agent-config",
-		"confirm-traffic", "create-marketplace", "distribute-servers", "platform-mcp",
+		"identity-provider", "enable-logging", "agent-observability", "instrument-agents", "confirm-traffic",
+		"additional-agent-config", "mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp",
 		"anthropic-admin-controls", "configure-policies",
 	}, visible)
 	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
@@ -109,9 +110,17 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 		require.NoError(t, err)
 		var keys []string
 		for _, task := range listed.Tasks {
-			keys = append(keys, task.Key)
+			if !task.Group {
+				keys = append(keys, task.Key)
+			}
 		}
 		require.ElementsMatch(t, preset.VisibleTaskKeys, keys)
+		observe := setupTask(listed.Tasks, "agent-observability")
+		if slices.Contains(preset.VisibleTaskKeys, "instrument-agents") || slices.Contains(preset.VisibleTaskKeys, "confirm-traffic") {
+			require.True(t, observe.Group, "the agent observability group appears with its cards")
+		} else {
+			require.Nil(t, observe, "a group without visible cards stays off the board")
+		}
 		if preset.Key == "security" {
 			require.Empty(t, setupTask(listed.Tasks, "identity-provider").BlockedBy)
 		}
@@ -228,7 +237,7 @@ func TestOnboardingAuditsFactCompletionAndResolvedAssignee(t *testing.T) {
 	require.NotEmpty(t, task.Assignee.Email)
 	keys := make([]string, 0, len(listed.Tasks))
 	for _, current := range listed.Tasks {
-		if current.Key != task.Key {
+		if current.Key != task.Key && !current.Group {
 			keys = append(keys, current.Key)
 		}
 	}
@@ -338,4 +347,40 @@ func TestOnboardingStorageIsOrganizationScoped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, selection, 1)
 	require.False(t, selection[0].OnboardingPreset.Valid)
+}
+
+func TestOnboardingAuditsCardsNotGroups(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestOrganizationsService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	before, err := organizations.LoadOnboardingConfiguration(ctx, ti.conn, ac.ActiveOrganizationID)
+	require.NoError(t, err)
+	cards := make([]string, 0, len(before.Tasks))
+	groups := 0
+	for _, task := range before.Tasks {
+		if task.Hidden {
+			continue
+		}
+		if task.Group {
+			groups++
+			continue
+		}
+		cards = append(cards, task.Key)
+	}
+	require.Positive(t, groups, "a group is visible while one of its cards is")
+	// Hiding every card flips the groups too; only the cards are audited.
+	_, err = organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, []string{}, nil, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
+	require.NoError(t, err)
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationSetupTaskUpdated)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(cards)), count)
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationOnboardingUpdated)
+	require.NoError(t, err)
+	var snapshotBefore, snapshotAfter audit.OrganizationOnboardingSnapshot
+	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &snapshotBefore))
+	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &snapshotAfter))
+	require.ElementsMatch(t, cards, snapshotBefore.VisibleTaskKeys)
+	require.NotContains(t, snapshotBefore.VisibleTaskKeys, "agent-observability")
+	require.Empty(t, snapshotAfter.VisibleTaskKeys)
 }

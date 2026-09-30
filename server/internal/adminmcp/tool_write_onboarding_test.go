@@ -24,11 +24,11 @@ import (
 
 // The catalogue's default board for an organisation with no saved selection:
 // every task except LiteLLM.
-var defaultVisibleTasks = []string{"identity-provider", "enable-logging", "anthropic-observability", "instrument-agents", "additional-agent-config", "confirm-traffic", "create-marketplace", "distribute-servers", "platform-mcp", "anthropic-admin-controls", "configure-policies"}
+var defaultVisibleTasks = []string{"identity-provider", "enable-logging", "anthropic-observability", "instrument-agents", "confirm-traffic", "additional-agent-config", "create-marketplace", "distribute-servers", "platform-mcp", "anthropic-admin-controls", "configure-policies"}
 
 // Every default task hidden by a {identity-provider, litellm} selection, in
 // catalogue order.
-var hiddenByLiteLLMSelection = []string{"enable-logging", "anthropic-observability", "instrument-agents", "additional-agent-config", "confirm-traffic", "create-marketplace", "distribute-servers", "platform-mcp", "anthropic-admin-controls", "configure-policies"}
+var hiddenByLiteLLMSelection = []string{"enable-logging", "anthropic-observability", "instrument-agents", "confirm-traffic", "additional-agent-config", "create-marketplace", "distribute-servers", "platform-mcp", "anthropic-admin-controls", "configure-policies"}
 
 func newOnboardingWriter(f proposalFixture) (*onboardingWriter, *writeTools) {
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationOnboarding: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
@@ -43,7 +43,7 @@ func visibleTasks(t *testing.T, f proposalFixture, organizationID string) []stri
 	require.NoError(t, err)
 	visible := []string{}
 	for _, task := range config.Tasks {
-		if !task.Hidden {
+		if !task.Group && !task.Hidden {
 			visible = append(visible, task.Key)
 		}
 	}

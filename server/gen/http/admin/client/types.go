@@ -413,6 +413,18 @@ type SetRegistryEntryPublishedRequestBody struct {
 	Published bool   `form:"published" json:"published" xml:"published"`
 }
 
+// SetOrganizationOnboardingStackRequestBody is the type of the "admin" service
+// "setOrganizationOnboardingStack" endpoint HTTP request body.
+type SetOrganizationOnboardingStackRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Complete explicit list; an empty array records no vendors.
+	Vendors []*AdminOnboardingStackVendorRequestBody `form:"vendors" json:"vendors" xml:"vendors"`
+	// jamf, intune, iru, other or none.
+	MdmVendor string `form:"mdm_vendor" json:"mdm_vendor" xml:"mdm_vendor"`
+	// Required when mdm_vendor is other, ignored otherwise.
+	MdmVendorName *string `form:"mdm_vendor_name,omitempty" json:"mdm_vendor_name,omitempty" xml:"mdm_vendor_name,omitempty"`
+}
+
 // SetStripeSubscriptionRequestBody is the type of the "admin" service
 // "setStripeSubscription" endpoint HTTP request body.
 type SetStripeSubscriptionRequestBody struct {
@@ -1780,6 +1792,46 @@ type SetRegistryEntryPublishedResponseBody struct {
 	// Opaque write precondition; echo unchanged
 	UpdatedAt *string                           `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	Issues    []*AdminRegistryIssueResponseBody `form:"issues,omitempty" json:"issues,omitempty" xml:"issues,omitempty"`
+}
+
+// ListOnboardingStepsResponseBody is the type of the "admin" service
+// "listOnboardingSteps" endpoint HTTP response body.
+type ListOnboardingStepsResponseBody struct {
+	// Every step in wizard order; a group precedes its cards.
+	Steps []*AdminOnboardingStepResponseBody `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
+}
+
+// GetOnboardingStackOptionsResponseBody is the type of the "admin" service
+// "getOnboardingStackOptions" endpoint HTTP response body.
+type GetOnboardingStackOptionsResponseBody struct {
+	// From the support matrix catalog, in catalog order.
+	Vendors []*AdminOnboardingVendorOptionResponseBody `form:"vendors,omitempty" json:"vendors,omitempty" xml:"vendors,omitempty"`
+	// Device management software the form offers, ending with other.
+	MdmVendors []*AdminMdmVendorOptionResponseBody `form:"mdm_vendors,omitempty" json:"mdm_vendors,omitempty" xml:"mdm_vendors,omitempty"`
+}
+
+// GetOrganizationOnboardingStackResponseBody is the type of the "admin"
+// service "getOrganizationOnboardingStack" endpoint HTTP response body.
+type GetOrganizationOnboardingStackResponseBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The vendors the organization uses. Empty until staff record the stack.
+	Vendors []*AdminOnboardingStackVendorResponseBody `form:"vendors,omitempty" json:"vendors,omitempty" xml:"vendors,omitempty"`
+	// jamf, intune, iru, other or none. Absent until staff record the stack.
+	MdmVendor *string `form:"mdm_vendor,omitempty" json:"mdm_vendor,omitempty" xml:"mdm_vendor,omitempty"`
+	// The software's name when mdm_vendor is other.
+	MdmVendorName *string `form:"mdm_vendor_name,omitempty" json:"mdm_vendor_name,omitempty" xml:"mdm_vendor_name,omitempty"`
+}
+
+// SetOrganizationOnboardingStackResponseBody is the type of the "admin"
+// service "setOrganizationOnboardingStack" endpoint HTTP response body.
+type SetOrganizationOnboardingStackResponseBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The vendors the organization uses. Empty until staff record the stack.
+	Vendors []*AdminOnboardingStackVendorResponseBody `form:"vendors,omitempty" json:"vendors,omitempty" xml:"vendors,omitempty"`
+	// jamf, intune, iru, other or none. Absent until staff record the stack.
+	MdmVendor *string `form:"mdm_vendor,omitempty" json:"mdm_vendor,omitempty" xml:"mdm_vendor,omitempty"`
+	// The software's name when mdm_vendor is other.
+	MdmVendorName *string `form:"mdm_vendor_name,omitempty" json:"mdm_vendor_name,omitempty" xml:"mdm_vendor_name,omitempty"`
 }
 
 // GetStripeSubscriptionCandidateResponseBody is the type of the "admin"
@@ -14110,6 +14162,761 @@ type SetRegistryEntryPublishedGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListOnboardingStepsUnauthorizedResponseBody is the type of the "admin"
+// service "listOnboardingSteps" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListOnboardingStepsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOnboardingStepsForbiddenResponseBody is the type of the "admin" service
+// "listOnboardingSteps" endpoint HTTP response body for the "forbidden" error.
+type ListOnboardingStepsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOnboardingStepsBadRequestResponseBody is the type of the "admin" service
+// "listOnboardingSteps" endpoint HTTP response body for the "bad_request"
+// error.
+type ListOnboardingStepsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOnboardingStepsNotFoundResponseBody is the type of the "admin" service
+// "listOnboardingSteps" endpoint HTTP response body for the "not_found" error.
+type ListOnboardingStepsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOnboardingStepsConflictResponseBody is the type of the "admin" service
+// "listOnboardingSteps" endpoint HTTP response body for the "conflict" error.
+type ListOnboardingStepsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOnboardingStepsUnsupportedMediaResponseBody is the type of the "admin"
+// service "listOnboardingSteps" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListOnboardingStepsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOnboardingStepsInvalidResponseBody is the type of the "admin" service
+// "listOnboardingSteps" endpoint HTTP response body for the "invalid" error.
+type ListOnboardingStepsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOnboardingStepsInvariantViolationResponseBody is the type of the "admin"
+// service "listOnboardingSteps" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListOnboardingStepsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOnboardingStepsUnexpectedResponseBody is the type of the "admin" service
+// "listOnboardingSteps" endpoint HTTP response body for the "unexpected" error.
+type ListOnboardingStepsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOnboardingStepsGatewayErrorResponseBody is the type of the "admin"
+// service "listOnboardingSteps" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListOnboardingStepsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOnboardingStackOptionsUnauthorizedResponseBody is the type of the "admin"
+// service "getOnboardingStackOptions" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetOnboardingStackOptionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOnboardingStackOptionsForbiddenResponseBody is the type of the "admin"
+// service "getOnboardingStackOptions" endpoint HTTP response body for the
+// "forbidden" error.
+type GetOnboardingStackOptionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOnboardingStackOptionsBadRequestResponseBody is the type of the "admin"
+// service "getOnboardingStackOptions" endpoint HTTP response body for the
+// "bad_request" error.
+type GetOnboardingStackOptionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOnboardingStackOptionsNotFoundResponseBody is the type of the "admin"
+// service "getOnboardingStackOptions" endpoint HTTP response body for the
+// "not_found" error.
+type GetOnboardingStackOptionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOnboardingStackOptionsConflictResponseBody is the type of the "admin"
+// service "getOnboardingStackOptions" endpoint HTTP response body for the
+// "conflict" error.
+type GetOnboardingStackOptionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOnboardingStackOptionsUnsupportedMediaResponseBody is the type of the
+// "admin" service "getOnboardingStackOptions" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetOnboardingStackOptionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOnboardingStackOptionsInvalidResponseBody is the type of the "admin"
+// service "getOnboardingStackOptions" endpoint HTTP response body for the
+// "invalid" error.
+type GetOnboardingStackOptionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOnboardingStackOptionsInvariantViolationResponseBody is the type of the
+// "admin" service "getOnboardingStackOptions" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetOnboardingStackOptionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOnboardingStackOptionsUnexpectedResponseBody is the type of the "admin"
+// service "getOnboardingStackOptions" endpoint HTTP response body for the
+// "unexpected" error.
+type GetOnboardingStackOptionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOnboardingStackOptionsGatewayErrorResponseBody is the type of the "admin"
+// service "getOnboardingStackOptions" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetOnboardingStackOptionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationOnboardingStackUnauthorizedResponseBody is the type of the
+// "admin" service "getOrganizationOnboardingStack" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetOrganizationOnboardingStackUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationOnboardingStackForbiddenResponseBody is the type of the
+// "admin" service "getOrganizationOnboardingStack" endpoint HTTP response body
+// for the "forbidden" error.
+type GetOrganizationOnboardingStackForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationOnboardingStackBadRequestResponseBody is the type of the
+// "admin" service "getOrganizationOnboardingStack" endpoint HTTP response body
+// for the "bad_request" error.
+type GetOrganizationOnboardingStackBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationOnboardingStackNotFoundResponseBody is the type of the
+// "admin" service "getOrganizationOnboardingStack" endpoint HTTP response body
+// for the "not_found" error.
+type GetOrganizationOnboardingStackNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationOnboardingStackConflictResponseBody is the type of the
+// "admin" service "getOrganizationOnboardingStack" endpoint HTTP response body
+// for the "conflict" error.
+type GetOrganizationOnboardingStackConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationOnboardingStackUnsupportedMediaResponseBody is the type of
+// the "admin" service "getOrganizationOnboardingStack" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetOrganizationOnboardingStackUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationOnboardingStackInvalidResponseBody is the type of the "admin"
+// service "getOrganizationOnboardingStack" endpoint HTTP response body for the
+// "invalid" error.
+type GetOrganizationOnboardingStackInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationOnboardingStackInvariantViolationResponseBody is the type of
+// the "admin" service "getOrganizationOnboardingStack" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetOrganizationOnboardingStackInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationOnboardingStackUnexpectedResponseBody is the type of the
+// "admin" service "getOrganizationOnboardingStack" endpoint HTTP response body
+// for the "unexpected" error.
+type GetOrganizationOnboardingStackUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrganizationOnboardingStackGatewayErrorResponseBody is the type of the
+// "admin" service "getOrganizationOnboardingStack" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetOrganizationOnboardingStackGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationOnboardingStackUnauthorizedResponseBody is the type of the
+// "admin" service "setOrganizationOnboardingStack" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetOrganizationOnboardingStackUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationOnboardingStackForbiddenResponseBody is the type of the
+// "admin" service "setOrganizationOnboardingStack" endpoint HTTP response body
+// for the "forbidden" error.
+type SetOrganizationOnboardingStackForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationOnboardingStackBadRequestResponseBody is the type of the
+// "admin" service "setOrganizationOnboardingStack" endpoint HTTP response body
+// for the "bad_request" error.
+type SetOrganizationOnboardingStackBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationOnboardingStackNotFoundResponseBody is the type of the
+// "admin" service "setOrganizationOnboardingStack" endpoint HTTP response body
+// for the "not_found" error.
+type SetOrganizationOnboardingStackNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationOnboardingStackConflictResponseBody is the type of the
+// "admin" service "setOrganizationOnboardingStack" endpoint HTTP response body
+// for the "conflict" error.
+type SetOrganizationOnboardingStackConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationOnboardingStackUnsupportedMediaResponseBody is the type of
+// the "admin" service "setOrganizationOnboardingStack" endpoint HTTP response
+// body for the "unsupported_media" error.
+type SetOrganizationOnboardingStackUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationOnboardingStackInvalidResponseBody is the type of the "admin"
+// service "setOrganizationOnboardingStack" endpoint HTTP response body for the
+// "invalid" error.
+type SetOrganizationOnboardingStackInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationOnboardingStackInvariantViolationResponseBody is the type of
+// the "admin" service "setOrganizationOnboardingStack" endpoint HTTP response
+// body for the "invariant_violation" error.
+type SetOrganizationOnboardingStackInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationOnboardingStackUnexpectedResponseBody is the type of the
+// "admin" service "setOrganizationOnboardingStack" endpoint HTTP response body
+// for the "unexpected" error.
+type SetOrganizationOnboardingStackUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationOnboardingStackGatewayErrorResponseBody is the type of the
+// "admin" service "setOrganizationOnboardingStack" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetOrganizationOnboardingStackGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetStripeSubscriptionCandidateUnavailableResponseBody is the type of the
 // "admin" service "getStripeSubscriptionCandidate" endpoint HTTP response body
 // for the "unavailable" error.
@@ -14697,6 +15504,12 @@ type AdminOnboardingTaskResponseBody struct {
 	Title       *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	Hidden      *bool   `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string `form:"parent_key,omitempty" json:"parent_key,omitempty" xml:"parent_key,omitempty"`
+	// True for a group that nests cards. Groups are not selectable: their
+	// visibility follows their cards.
+	Group *bool `form:"group,omitempty" json:"group,omitempty" xml:"group,omitempty"`
 }
 
 // AdminOnboardingPresetResponseBody is used to define fields on response body
@@ -15072,6 +15885,77 @@ type AdminRegistrySummaryResponseBody struct {
 type AdminRegistryIssueResponseBody struct {
 	Path    *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
+// AdminOnboardingStepResponseBody is used to define fields on response body
+// types.
+type AdminOnboardingStepResponseBody struct {
+	Slug        *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	Title       *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The group this card sits under. Absent for a top-level step.
+	ParentSlug *string `form:"parent_slug,omitempty" json:"parent_slug,omitempty" xml:"parent_slug,omitempty"`
+	// How the step completes: manual, fact, or children for a group.
+	Completion *string `form:"completion,omitempty" json:"completion,omitempty" xml:"completion,omitempty"`
+	// Whether an organization that never saved a selection sees the step.
+	HiddenByDefault *bool `form:"hidden_by_default,omitempty" json:"hidden_by_default,omitempty" xml:"hidden_by_default,omitempty"`
+	// Support matrix integration methods the step configures. Empty means the step
+	// applies to every stack.
+	MethodSlugs []string `form:"method_slugs,omitempty" json:"method_slugs,omitempty" xml:"method_slugs,omitempty"`
+	// Slugs of the steps that must be done before this one.
+	Requires []string `form:"requires,omitempty" json:"requires,omitempty" xml:"requires,omitempty"`
+}
+
+// AdminOnboardingVendorOptionResponseBody is used to define fields on response
+// body types.
+type AdminOnboardingVendorOptionResponseBody struct {
+	// Vendor name as the support matrix spells it.
+	Vendor *string `form:"vendor,omitempty" json:"vendor,omitempty" xml:"vendor,omitempty"`
+	// Plans the vendor sells. Empty for a vendor with no plans.
+	Plans []*AdminOnboardingPlanResponseBody `form:"plans,omitempty" json:"plans,omitempty" xml:"plans,omitempty"`
+	// The vendor's products, all implied when the vendor is selected.
+	Platforms []*AdminOnboardingPlatformResponseBody `form:"platforms,omitempty" json:"platforms,omitempty" xml:"platforms,omitempty"`
+}
+
+// AdminOnboardingPlanResponseBody is used to define fields on response body
+// types.
+type AdminOnboardingPlanResponseBody struct {
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
+// AdminOnboardingPlatformResponseBody is used to define fields on response
+// body types.
+type AdminOnboardingPlatformResponseBody struct {
+	Slug    *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	Name    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Family  *string `form:"family,omitempty" json:"family,omitempty" xml:"family,omitempty"`
+	Surface *string `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
+}
+
+// AdminMdmVendorOptionResponseBody is used to define fields on response body
+// types.
+type AdminMdmVendorOptionResponseBody struct {
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
+// AdminOnboardingStackVendorResponseBody is used to define fields on response
+// body types.
+type AdminOnboardingStackVendorResponseBody struct {
+	Vendor *string `form:"vendor,omitempty" json:"vendor,omitempty" xml:"vendor,omitempty"`
+	// The plan the organization is on with this vendor. Absent for a vendor with
+	// no plans.
+	PlanSlug *string `form:"plan_slug,omitempty" json:"plan_slug,omitempty" xml:"plan_slug,omitempty"`
+}
+
+// AdminOnboardingStackVendorRequestBody is used to define fields on request
+// body types.
+type AdminOnboardingStackVendorRequestBody struct {
+	Vendor string `form:"vendor" json:"vendor" xml:"vendor"`
+	// The plan the organization is on with this vendor. Absent for a vendor with
+	// no plans.
+	PlanSlug *string `form:"plan_slug,omitempty" json:"plan_slug,omitempty" xml:"plan_slug,omitempty"`
 }
 
 // NewSetOrganizationFeatureRequestBody builds the HTTP request body from the
@@ -15524,6 +16408,30 @@ func NewSetRegistryEntryPublishedRequestBody(p *admin.SetRegistryEntryPublishedP
 		ID:        p.ID,
 		UpdatedAt: p.UpdatedAt,
 		Published: p.Published,
+	}
+	return body
+}
+
+// NewSetOrganizationOnboardingStackRequestBody builds the HTTP request body
+// from the payload of the "setOrganizationOnboardingStack" endpoint of the
+// "admin" service.
+func NewSetOrganizationOnboardingStackRequestBody(p *admin.SetOrganizationOnboardingStackPayload) *SetOrganizationOnboardingStackRequestBody {
+	body := &SetOrganizationOnboardingStackRequestBody{
+		OrganizationID: p.OrganizationID,
+		MdmVendor:      p.MdmVendor,
+		MdmVendorName:  p.MdmVendorName,
+	}
+	if p.Vendors != nil {
+		body.Vendors = make([]*AdminOnboardingStackVendorRequestBody, len(p.Vendors))
+		for i, val := range p.Vendors {
+			if val == nil {
+				body.Vendors[i] = nil
+				continue
+			}
+			body.Vendors[i] = marshalAdminAdminOnboardingStackVendorToAdminOnboardingStackVendorRequestBody(val)
+		}
+	} else {
+		body.Vendors = []*AdminOnboardingStackVendorRequestBody{}
 	}
 	return body
 }
@@ -26948,6 +27856,689 @@ func NewSetRegistryEntryPublishedGatewayError(body *SetRegistryEntryPublishedGat
 	return v
 }
 
+// NewListOnboardingStepsAdminOnboardingStepListOK builds a "admin" service
+// "listOnboardingSteps" endpoint result from a HTTP "OK" response.
+func NewListOnboardingStepsAdminOnboardingStepListOK(body *ListOnboardingStepsResponseBody) *admin.AdminOnboardingStepList {
+	v := &admin.AdminOnboardingStepList{}
+	v.Steps = make([]*admin.AdminOnboardingStep, len(body.Steps))
+	for i, val := range body.Steps {
+		if val == nil {
+			v.Steps[i] = nil
+			continue
+		}
+		v.Steps[i] = unmarshalAdminOnboardingStepResponseBodyToAdminAdminOnboardingStep(val)
+	}
+
+	return v
+}
+
+// NewListOnboardingStepsUnauthorized builds a admin service
+// listOnboardingSteps endpoint unauthorized error.
+func NewListOnboardingStepsUnauthorized(body *ListOnboardingStepsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOnboardingStepsForbidden builds a admin service listOnboardingSteps
+// endpoint forbidden error.
+func NewListOnboardingStepsForbidden(body *ListOnboardingStepsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOnboardingStepsBadRequest builds a admin service listOnboardingSteps
+// endpoint bad_request error.
+func NewListOnboardingStepsBadRequest(body *ListOnboardingStepsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOnboardingStepsNotFound builds a admin service listOnboardingSteps
+// endpoint not_found error.
+func NewListOnboardingStepsNotFound(body *ListOnboardingStepsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOnboardingStepsConflict builds a admin service listOnboardingSteps
+// endpoint conflict error.
+func NewListOnboardingStepsConflict(body *ListOnboardingStepsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOnboardingStepsUnsupportedMedia builds a admin service
+// listOnboardingSteps endpoint unsupported_media error.
+func NewListOnboardingStepsUnsupportedMedia(body *ListOnboardingStepsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOnboardingStepsInvalid builds a admin service listOnboardingSteps
+// endpoint invalid error.
+func NewListOnboardingStepsInvalid(body *ListOnboardingStepsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOnboardingStepsInvariantViolation builds a admin service
+// listOnboardingSteps endpoint invariant_violation error.
+func NewListOnboardingStepsInvariantViolation(body *ListOnboardingStepsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOnboardingStepsUnexpected builds a admin service listOnboardingSteps
+// endpoint unexpected error.
+func NewListOnboardingStepsUnexpected(body *ListOnboardingStepsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOnboardingStepsGatewayError builds a admin service
+// listOnboardingSteps endpoint gateway_error error.
+func NewListOnboardingStepsGatewayError(body *ListOnboardingStepsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsAdminOnboardingStackOptionsOK builds a "admin"
+// service "getOnboardingStackOptions" endpoint result from a HTTP "OK"
+// response.
+func NewGetOnboardingStackOptionsAdminOnboardingStackOptionsOK(body *GetOnboardingStackOptionsResponseBody) *admin.AdminOnboardingStackOptions {
+	v := &admin.AdminOnboardingStackOptions{}
+	v.Vendors = make([]*admin.AdminOnboardingVendorOption, len(body.Vendors))
+	for i, val := range body.Vendors {
+		if val == nil {
+			v.Vendors[i] = nil
+			continue
+		}
+		v.Vendors[i] = unmarshalAdminOnboardingVendorOptionResponseBodyToAdminAdminOnboardingVendorOption(val)
+	}
+	v.MdmVendors = make([]*admin.AdminMdmVendorOption, len(body.MdmVendors))
+	for i, val := range body.MdmVendors {
+		if val == nil {
+			v.MdmVendors[i] = nil
+			continue
+		}
+		v.MdmVendors[i] = unmarshalAdminMdmVendorOptionResponseBodyToAdminAdminMdmVendorOption(val)
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsUnauthorized builds a admin service
+// getOnboardingStackOptions endpoint unauthorized error.
+func NewGetOnboardingStackOptionsUnauthorized(body *GetOnboardingStackOptionsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsForbidden builds a admin service
+// getOnboardingStackOptions endpoint forbidden error.
+func NewGetOnboardingStackOptionsForbidden(body *GetOnboardingStackOptionsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsBadRequest builds a admin service
+// getOnboardingStackOptions endpoint bad_request error.
+func NewGetOnboardingStackOptionsBadRequest(body *GetOnboardingStackOptionsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsNotFound builds a admin service
+// getOnboardingStackOptions endpoint not_found error.
+func NewGetOnboardingStackOptionsNotFound(body *GetOnboardingStackOptionsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsConflict builds a admin service
+// getOnboardingStackOptions endpoint conflict error.
+func NewGetOnboardingStackOptionsConflict(body *GetOnboardingStackOptionsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsUnsupportedMedia builds a admin service
+// getOnboardingStackOptions endpoint unsupported_media error.
+func NewGetOnboardingStackOptionsUnsupportedMedia(body *GetOnboardingStackOptionsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsInvalid builds a admin service
+// getOnboardingStackOptions endpoint invalid error.
+func NewGetOnboardingStackOptionsInvalid(body *GetOnboardingStackOptionsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsInvariantViolation builds a admin service
+// getOnboardingStackOptions endpoint invariant_violation error.
+func NewGetOnboardingStackOptionsInvariantViolation(body *GetOnboardingStackOptionsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsUnexpected builds a admin service
+// getOnboardingStackOptions endpoint unexpected error.
+func NewGetOnboardingStackOptionsUnexpected(body *GetOnboardingStackOptionsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOnboardingStackOptionsGatewayError builds a admin service
+// getOnboardingStackOptions endpoint gateway_error error.
+func NewGetOnboardingStackOptionsGatewayError(body *GetOnboardingStackOptionsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackAdminOnboardingStackOK builds a "admin"
+// service "getOrganizationOnboardingStack" endpoint result from a HTTP "OK"
+// response.
+func NewGetOrganizationOnboardingStackAdminOnboardingStackOK(body *GetOrganizationOnboardingStackResponseBody) *admin.AdminOnboardingStack {
+	v := &admin.AdminOnboardingStack{
+		OrganizationID: *body.OrganizationID,
+		MdmVendor:      body.MdmVendor,
+		MdmVendorName:  body.MdmVendorName,
+	}
+	v.Vendors = make([]*admin.AdminOnboardingStackVendor, len(body.Vendors))
+	for i, val := range body.Vendors {
+		if val == nil {
+			v.Vendors[i] = nil
+			continue
+		}
+		v.Vendors[i] = unmarshalAdminOnboardingStackVendorResponseBodyToAdminAdminOnboardingStackVendor(val)
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackUnauthorized builds a admin service
+// getOrganizationOnboardingStack endpoint unauthorized error.
+func NewGetOrganizationOnboardingStackUnauthorized(body *GetOrganizationOnboardingStackUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackForbidden builds a admin service
+// getOrganizationOnboardingStack endpoint forbidden error.
+func NewGetOrganizationOnboardingStackForbidden(body *GetOrganizationOnboardingStackForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackBadRequest builds a admin service
+// getOrganizationOnboardingStack endpoint bad_request error.
+func NewGetOrganizationOnboardingStackBadRequest(body *GetOrganizationOnboardingStackBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackNotFound builds a admin service
+// getOrganizationOnboardingStack endpoint not_found error.
+func NewGetOrganizationOnboardingStackNotFound(body *GetOrganizationOnboardingStackNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackConflict builds a admin service
+// getOrganizationOnboardingStack endpoint conflict error.
+func NewGetOrganizationOnboardingStackConflict(body *GetOrganizationOnboardingStackConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackUnsupportedMedia builds a admin service
+// getOrganizationOnboardingStack endpoint unsupported_media error.
+func NewGetOrganizationOnboardingStackUnsupportedMedia(body *GetOrganizationOnboardingStackUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackInvalid builds a admin service
+// getOrganizationOnboardingStack endpoint invalid error.
+func NewGetOrganizationOnboardingStackInvalid(body *GetOrganizationOnboardingStackInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackInvariantViolation builds a admin service
+// getOrganizationOnboardingStack endpoint invariant_violation error.
+func NewGetOrganizationOnboardingStackInvariantViolation(body *GetOrganizationOnboardingStackInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackUnexpected builds a admin service
+// getOrganizationOnboardingStack endpoint unexpected error.
+func NewGetOrganizationOnboardingStackUnexpected(body *GetOrganizationOnboardingStackUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrganizationOnboardingStackGatewayError builds a admin service
+// getOrganizationOnboardingStack endpoint gateway_error error.
+func NewGetOrganizationOnboardingStackGatewayError(body *GetOrganizationOnboardingStackGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackAdminOnboardingStackOK builds a "admin"
+// service "setOrganizationOnboardingStack" endpoint result from a HTTP "OK"
+// response.
+func NewSetOrganizationOnboardingStackAdminOnboardingStackOK(body *SetOrganizationOnboardingStackResponseBody) *admin.AdminOnboardingStack {
+	v := &admin.AdminOnboardingStack{
+		OrganizationID: *body.OrganizationID,
+		MdmVendor:      body.MdmVendor,
+		MdmVendorName:  body.MdmVendorName,
+	}
+	v.Vendors = make([]*admin.AdminOnboardingStackVendor, len(body.Vendors))
+	for i, val := range body.Vendors {
+		if val == nil {
+			v.Vendors[i] = nil
+			continue
+		}
+		v.Vendors[i] = unmarshalAdminOnboardingStackVendorResponseBodyToAdminAdminOnboardingStackVendor(val)
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackUnauthorized builds a admin service
+// setOrganizationOnboardingStack endpoint unauthorized error.
+func NewSetOrganizationOnboardingStackUnauthorized(body *SetOrganizationOnboardingStackUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackForbidden builds a admin service
+// setOrganizationOnboardingStack endpoint forbidden error.
+func NewSetOrganizationOnboardingStackForbidden(body *SetOrganizationOnboardingStackForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackBadRequest builds a admin service
+// setOrganizationOnboardingStack endpoint bad_request error.
+func NewSetOrganizationOnboardingStackBadRequest(body *SetOrganizationOnboardingStackBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackNotFound builds a admin service
+// setOrganizationOnboardingStack endpoint not_found error.
+func NewSetOrganizationOnboardingStackNotFound(body *SetOrganizationOnboardingStackNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackConflict builds a admin service
+// setOrganizationOnboardingStack endpoint conflict error.
+func NewSetOrganizationOnboardingStackConflict(body *SetOrganizationOnboardingStackConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackUnsupportedMedia builds a admin service
+// setOrganizationOnboardingStack endpoint unsupported_media error.
+func NewSetOrganizationOnboardingStackUnsupportedMedia(body *SetOrganizationOnboardingStackUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackInvalid builds a admin service
+// setOrganizationOnboardingStack endpoint invalid error.
+func NewSetOrganizationOnboardingStackInvalid(body *SetOrganizationOnboardingStackInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackInvariantViolation builds a admin service
+// setOrganizationOnboardingStack endpoint invariant_violation error.
+func NewSetOrganizationOnboardingStackInvariantViolation(body *SetOrganizationOnboardingStackInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackUnexpected builds a admin service
+// setOrganizationOnboardingStack endpoint unexpected error.
+func NewSetOrganizationOnboardingStackUnexpected(body *SetOrganizationOnboardingStackUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationOnboardingStackGatewayError builds a admin service
+// setOrganizationOnboardingStack endpoint gateway_error error.
+func NewSetOrganizationOnboardingStackGatewayError(body *SetOrganizationOnboardingStackGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetStripeSubscriptionCandidateAdminStripeSubscriptionCandidateOK builds a
 // "admin" service "getStripeSubscriptionCandidate" endpoint result from a HTTP
 // "OK" response.
@@ -29129,6 +30720,86 @@ func ValidateSetRegistryEntryPublishedResponseBody(body *SetRegistryEntryPublish
 	for _, e := range body.Issues {
 		if e != nil {
 			if err2 := ValidateAdminRegistryIssueResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListOnboardingStepsResponseBody runs the validations defined on
+// ListOnboardingStepsResponseBody
+func ValidateListOnboardingStepsResponseBody(body *ListOnboardingStepsResponseBody) (err error) {
+	if body.Steps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("steps", "body"))
+	}
+	for _, e := range body.Steps {
+		if e != nil {
+			if err2 := ValidateAdminOnboardingStepResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsResponseBody runs the validations defined
+// on GetOnboardingStackOptionsResponseBody
+func ValidateGetOnboardingStackOptionsResponseBody(body *GetOnboardingStackOptionsResponseBody) (err error) {
+	if body.Vendors == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendors", "body"))
+	}
+	if body.MdmVendors == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mdm_vendors", "body"))
+	}
+	for _, e := range body.Vendors {
+		if e != nil {
+			if err2 := ValidateAdminOnboardingVendorOptionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.MdmVendors {
+		if e != nil {
+			if err2 := ValidateAdminMdmVendorOptionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackResponseBody runs the validations
+// defined on GetOrganizationOnboardingStackResponseBody
+func ValidateGetOrganizationOnboardingStackResponseBody(body *GetOrganizationOnboardingStackResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Vendors == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendors", "body"))
+	}
+	for _, e := range body.Vendors {
+		if e != nil {
+			if err2 := ValidateAdminOnboardingStackVendorResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackResponseBody runs the validations
+// defined on SetOrganizationOnboardingStackResponseBody
+func ValidateSetOrganizationOnboardingStackResponseBody(body *SetOrganizationOnboardingStackResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Vendors == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendors", "body"))
+	}
+	for _, e := range body.Vendors {
+		if e != nil {
+			if err2 := ValidateAdminOnboardingStackVendorResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -45172,6 +46843,980 @@ func ValidateSetRegistryEntryPublishedGatewayErrorResponseBody(body *SetRegistry
 	return
 }
 
+// ValidateListOnboardingStepsUnauthorizedResponseBody runs the validations
+// defined on listOnboardingSteps_unauthorized_response_body
+func ValidateListOnboardingStepsUnauthorizedResponseBody(body *ListOnboardingStepsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOnboardingStepsForbiddenResponseBody runs the validations
+// defined on listOnboardingSteps_forbidden_response_body
+func ValidateListOnboardingStepsForbiddenResponseBody(body *ListOnboardingStepsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOnboardingStepsBadRequestResponseBody runs the validations
+// defined on listOnboardingSteps_bad_request_response_body
+func ValidateListOnboardingStepsBadRequestResponseBody(body *ListOnboardingStepsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOnboardingStepsNotFoundResponseBody runs the validations defined
+// on listOnboardingSteps_not_found_response_body
+func ValidateListOnboardingStepsNotFoundResponseBody(body *ListOnboardingStepsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOnboardingStepsConflictResponseBody runs the validations defined
+// on listOnboardingSteps_conflict_response_body
+func ValidateListOnboardingStepsConflictResponseBody(body *ListOnboardingStepsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOnboardingStepsUnsupportedMediaResponseBody runs the validations
+// defined on listOnboardingSteps_unsupported_media_response_body
+func ValidateListOnboardingStepsUnsupportedMediaResponseBody(body *ListOnboardingStepsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOnboardingStepsInvalidResponseBody runs the validations defined
+// on listOnboardingSteps_invalid_response_body
+func ValidateListOnboardingStepsInvalidResponseBody(body *ListOnboardingStepsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOnboardingStepsInvariantViolationResponseBody runs the
+// validations defined on listOnboardingSteps_invariant_violation_response_body
+func ValidateListOnboardingStepsInvariantViolationResponseBody(body *ListOnboardingStepsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOnboardingStepsUnexpectedResponseBody runs the validations
+// defined on listOnboardingSteps_unexpected_response_body
+func ValidateListOnboardingStepsUnexpectedResponseBody(body *ListOnboardingStepsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOnboardingStepsGatewayErrorResponseBody runs the validations
+// defined on listOnboardingSteps_gateway_error_response_body
+func ValidateListOnboardingStepsGatewayErrorResponseBody(body *ListOnboardingStepsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsUnauthorizedResponseBody runs the
+// validations defined on getOnboardingStackOptions_unauthorized_response_body
+func ValidateGetOnboardingStackOptionsUnauthorizedResponseBody(body *GetOnboardingStackOptionsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsForbiddenResponseBody runs the validations
+// defined on getOnboardingStackOptions_forbidden_response_body
+func ValidateGetOnboardingStackOptionsForbiddenResponseBody(body *GetOnboardingStackOptionsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsBadRequestResponseBody runs the validations
+// defined on getOnboardingStackOptions_bad_request_response_body
+func ValidateGetOnboardingStackOptionsBadRequestResponseBody(body *GetOnboardingStackOptionsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsNotFoundResponseBody runs the validations
+// defined on getOnboardingStackOptions_not_found_response_body
+func ValidateGetOnboardingStackOptionsNotFoundResponseBody(body *GetOnboardingStackOptionsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsConflictResponseBody runs the validations
+// defined on getOnboardingStackOptions_conflict_response_body
+func ValidateGetOnboardingStackOptionsConflictResponseBody(body *GetOnboardingStackOptionsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsUnsupportedMediaResponseBody runs the
+// validations defined on
+// getOnboardingStackOptions_unsupported_media_response_body
+func ValidateGetOnboardingStackOptionsUnsupportedMediaResponseBody(body *GetOnboardingStackOptionsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsInvalidResponseBody runs the validations
+// defined on getOnboardingStackOptions_invalid_response_body
+func ValidateGetOnboardingStackOptionsInvalidResponseBody(body *GetOnboardingStackOptionsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsInvariantViolationResponseBody runs the
+// validations defined on
+// getOnboardingStackOptions_invariant_violation_response_body
+func ValidateGetOnboardingStackOptionsInvariantViolationResponseBody(body *GetOnboardingStackOptionsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsUnexpectedResponseBody runs the validations
+// defined on getOnboardingStackOptions_unexpected_response_body
+func ValidateGetOnboardingStackOptionsUnexpectedResponseBody(body *GetOnboardingStackOptionsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOnboardingStackOptionsGatewayErrorResponseBody runs the
+// validations defined on getOnboardingStackOptions_gateway_error_response_body
+func ValidateGetOnboardingStackOptionsGatewayErrorResponseBody(body *GetOnboardingStackOptionsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackUnauthorizedResponseBody runs the
+// validations defined on
+// getOrganizationOnboardingStack_unauthorized_response_body
+func ValidateGetOrganizationOnboardingStackUnauthorizedResponseBody(body *GetOrganizationOnboardingStackUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackForbiddenResponseBody runs the
+// validations defined on getOrganizationOnboardingStack_forbidden_response_body
+func ValidateGetOrganizationOnboardingStackForbiddenResponseBody(body *GetOrganizationOnboardingStackForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackBadRequestResponseBody runs the
+// validations defined on
+// getOrganizationOnboardingStack_bad_request_response_body
+func ValidateGetOrganizationOnboardingStackBadRequestResponseBody(body *GetOrganizationOnboardingStackBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackNotFoundResponseBody runs the
+// validations defined on getOrganizationOnboardingStack_not_found_response_body
+func ValidateGetOrganizationOnboardingStackNotFoundResponseBody(body *GetOrganizationOnboardingStackNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackConflictResponseBody runs the
+// validations defined on getOrganizationOnboardingStack_conflict_response_body
+func ValidateGetOrganizationOnboardingStackConflictResponseBody(body *GetOrganizationOnboardingStackConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackUnsupportedMediaResponseBody runs the
+// validations defined on
+// getOrganizationOnboardingStack_unsupported_media_response_body
+func ValidateGetOrganizationOnboardingStackUnsupportedMediaResponseBody(body *GetOrganizationOnboardingStackUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackInvalidResponseBody runs the
+// validations defined on getOrganizationOnboardingStack_invalid_response_body
+func ValidateGetOrganizationOnboardingStackInvalidResponseBody(body *GetOrganizationOnboardingStackInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackInvariantViolationResponseBody runs
+// the validations defined on
+// getOrganizationOnboardingStack_invariant_violation_response_body
+func ValidateGetOrganizationOnboardingStackInvariantViolationResponseBody(body *GetOrganizationOnboardingStackInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackUnexpectedResponseBody runs the
+// validations defined on
+// getOrganizationOnboardingStack_unexpected_response_body
+func ValidateGetOrganizationOnboardingStackUnexpectedResponseBody(body *GetOrganizationOnboardingStackUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrganizationOnboardingStackGatewayErrorResponseBody runs the
+// validations defined on
+// getOrganizationOnboardingStack_gateway_error_response_body
+func ValidateGetOrganizationOnboardingStackGatewayErrorResponseBody(body *GetOrganizationOnboardingStackGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackUnauthorizedResponseBody runs the
+// validations defined on
+// setOrganizationOnboardingStack_unauthorized_response_body
+func ValidateSetOrganizationOnboardingStackUnauthorizedResponseBody(body *SetOrganizationOnboardingStackUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackForbiddenResponseBody runs the
+// validations defined on setOrganizationOnboardingStack_forbidden_response_body
+func ValidateSetOrganizationOnboardingStackForbiddenResponseBody(body *SetOrganizationOnboardingStackForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackBadRequestResponseBody runs the
+// validations defined on
+// setOrganizationOnboardingStack_bad_request_response_body
+func ValidateSetOrganizationOnboardingStackBadRequestResponseBody(body *SetOrganizationOnboardingStackBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackNotFoundResponseBody runs the
+// validations defined on setOrganizationOnboardingStack_not_found_response_body
+func ValidateSetOrganizationOnboardingStackNotFoundResponseBody(body *SetOrganizationOnboardingStackNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackConflictResponseBody runs the
+// validations defined on setOrganizationOnboardingStack_conflict_response_body
+func ValidateSetOrganizationOnboardingStackConflictResponseBody(body *SetOrganizationOnboardingStackConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackUnsupportedMediaResponseBody runs the
+// validations defined on
+// setOrganizationOnboardingStack_unsupported_media_response_body
+func ValidateSetOrganizationOnboardingStackUnsupportedMediaResponseBody(body *SetOrganizationOnboardingStackUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackInvalidResponseBody runs the
+// validations defined on setOrganizationOnboardingStack_invalid_response_body
+func ValidateSetOrganizationOnboardingStackInvalidResponseBody(body *SetOrganizationOnboardingStackInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackInvariantViolationResponseBody runs
+// the validations defined on
+// setOrganizationOnboardingStack_invariant_violation_response_body
+func ValidateSetOrganizationOnboardingStackInvariantViolationResponseBody(body *SetOrganizationOnboardingStackInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackUnexpectedResponseBody runs the
+// validations defined on
+// setOrganizationOnboardingStack_unexpected_response_body
+func ValidateSetOrganizationOnboardingStackUnexpectedResponseBody(body *SetOrganizationOnboardingStackUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationOnboardingStackGatewayErrorResponseBody runs the
+// validations defined on
+// setOrganizationOnboardingStack_gateway_error_response_body
+func ValidateSetOrganizationOnboardingStackGatewayErrorResponseBody(body *SetOrganizationOnboardingStackGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetStripeSubscriptionCandidateUnavailableResponseBody runs the
 // validations defined on
 // getStripeSubscriptionCandidate_unavailable_response_body
@@ -45997,6 +48642,9 @@ func ValidateAdminOnboardingTaskResponseBody(body *AdminOnboardingTaskResponseBo
 	if body.Hidden == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hidden", "body"))
 	}
+	if body.Group == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group", "body"))
+	}
 	return
 }
 
@@ -46624,6 +49272,113 @@ func ValidateAdminRegistryIssueResponseBody(body *AdminRegistryIssueResponseBody
 	}
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return
+}
+
+// ValidateAdminOnboardingStepResponseBody runs the validations defined on
+// AdminOnboardingStepResponseBody
+func ValidateAdminOnboardingStepResponseBody(body *AdminOnboardingStepResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Completion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("completion", "body"))
+	}
+	if body.HiddenByDefault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hidden_by_default", "body"))
+	}
+	if body.MethodSlugs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("method_slugs", "body"))
+	}
+	if body.Requires == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requires", "body"))
+	}
+	return
+}
+
+// ValidateAdminOnboardingVendorOptionResponseBody runs the validations defined
+// on AdminOnboardingVendorOptionResponseBody
+func ValidateAdminOnboardingVendorOptionResponseBody(body *AdminOnboardingVendorOptionResponseBody) (err error) {
+	if body.Vendor == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendor", "body"))
+	}
+	if body.Plans == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("plans", "body"))
+	}
+	if body.Platforms == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platforms", "body"))
+	}
+	for _, e := range body.Plans {
+		if e != nil {
+			if err2 := ValidateAdminOnboardingPlanResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Platforms {
+		if e != nil {
+			if err2 := ValidateAdminOnboardingPlatformResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminOnboardingPlanResponseBody runs the validations defined on
+// AdminOnboardingPlanResponseBody
+func ValidateAdminOnboardingPlanResponseBody(body *AdminOnboardingPlanResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateAdminOnboardingPlatformResponseBody runs the validations defined on
+// AdminOnboardingPlatformResponseBody
+func ValidateAdminOnboardingPlatformResponseBody(body *AdminOnboardingPlatformResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Family == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("family", "body"))
+	}
+	if body.Surface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
+	}
+	return
+}
+
+// ValidateAdminMdmVendorOptionResponseBody runs the validations defined on
+// AdminMdmVendorOptionResponseBody
+func ValidateAdminMdmVendorOptionResponseBody(body *AdminMdmVendorOptionResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateAdminOnboardingStackVendorResponseBody runs the validations defined
+// on AdminOnboardingStackVendorResponseBody
+func ValidateAdminOnboardingStackVendorResponseBody(body *AdminOnboardingStackVendorResponseBody) (err error) {
+	if body.Vendor == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendor", "body"))
 	}
 	return
 }

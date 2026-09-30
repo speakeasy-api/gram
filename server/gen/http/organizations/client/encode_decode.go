@@ -4089,6 +4089,8 @@ func unmarshalSetupTaskResponseBodyToOrganizationsSetupTask(v *SetupTaskResponse
 		Status:          *v.Status,
 		CompletedByFact: *v.CompletedByFact,
 		Hidden:          *v.Hidden,
+		ParentKey:       v.ParentKey,
+		Group:           *v.Group,
 	}
 	if v.Assignee != nil {
 		res.Assignee = unmarshalSetupTaskAssigneeResponseBodyToOrganizationsSetupTaskAssignee(v.Assignee)

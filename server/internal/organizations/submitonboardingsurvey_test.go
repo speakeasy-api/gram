@@ -22,7 +22,7 @@ func TestService_SubmitOnboardingSurveyAppliesUseCaseDefaultPlaybook(t *testing.
 	for _, task := range result.Tasks {
 		keys = append(keys, task.Key)
 	}
-	require.Equal(t, []string{"create-marketplace", "distribute-servers"}, keys)
+	require.Equal(t, []string{"mcp-distribution", "create-marketplace", "distribute-servers"}, keys, "the group precedes its cards")
 
 	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
