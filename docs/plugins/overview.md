@@ -45,10 +45,10 @@ Assignments control who sees the plugin in their marketplace; RBAC (`mcp:connect
 
 **GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the platform-neutral Agent Plugins 1.0 package (`agent-plugins/<plugin-slug>/`), which Copilot loads in the CLI, VS Code and the Copilot app. Hooks ship through the Copilot observability package and run in **Copilot CLI only** — VS Code and the Copilot app load the plugin but never fire its hooks. See [Package format](./package-format.md#copilot-observability).
 
-**Scoped API keys.** At publish time, Gram mints two API keys and embeds them in the generated configs:
+**Scoped API keys.** At publish time, Gram mints two API keys:
 
-- A `consumer`-scoped key for MCP access
-- A `hooks`-scoped key embedded in the hook script
+- A `consumer`-scoped key for MCP access. It is embedded only for a private server that is not OAuth. A server with a user session issuer, including a private tunneled server, is published with no `Authorization` header so each person signs in through that issuer. The tunnel can then attest them with `X-Speakeasy-Identity`. See the [tunnel identity guide](../tunnel-identity.md).
+- A `hooks`-scoped key embedded in the hook script. It authenticates hook delivery, not MCP calls.
 
 These keys are per-project and rotated on each publish.
 

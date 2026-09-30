@@ -35,8 +35,8 @@ Or with collaborators:
 1. **Resolve plugin data.** Query all non-deleted plugins for the project, with their servers and toolset metadata (MCP URLs, public/private status, env configs).
 
 2. **Mint API keys.** Two project-scoped keys are created (or the existing pair is rotated):
-   - `consumer`-scoped key for MCP access — embedded in server configs
-   - `hooks`-scoped key for observability — embedded in the hook script
+   - `consumer`-scoped key for MCP access — embedded for private servers that are not OAuth. A server with a user session issuer, including a private tunneled server, is published without that header so each user signs in through the issuer.
+   - `hooks`-scoped key for observability — embedded in the hook script. It does not authenticate MCP calls.
 
 3. **Generate files.** `GeneratePluginPackages()` builds a `map[string][]byte` with all platform configs, marketplace manifests, README, and hook scripts. See [Package Format](./package-format.md) for the exact file tree.
 

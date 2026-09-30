@@ -64,12 +64,23 @@ routing, for example `/mcp?tenant=example` to `/mcp/?tenant=example`. Reconnect
 upstream OAuth credentials for the new resource; credentials qualified to the
 old resource are not forwarded. Existing saved settings are unchanged by deployment.
 
+The resource identifier cannot be locked. Saving or clearing it requires
+`mcp:write` on the project. `project:read`, `project:write`, and `mcp:connect`
+do not. Each change is audited as `tunneled-mcp:update` with before and after
+snapshots of the server, including the identifier. When a verifier checks one
+exact `aud`, leave the field at that value. A blank field keeps the audience at
+`tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>`. Editing it changes `aud` on the
+next assertion, so a verifier still expecting the previous value rejects the
+caller until it is updated.
+
 Supported subjects are `user:<USER_ID>`, `api_key:<API_KEY_ID>` and
 `agent:<AGENT_ID>`. These are Gram identifiers, not email
 addresses or upstream account IDs. API keys and agents are never identified as
 their human creator or owner. Human assertions also carry `email`; use the
 stable `sub` as the identity key because an email can change. The assertion does
-not make an `email_verified` claim.
+not make an `email_verified` claim. Require the `user:` prefix when the server
+accepts only people. An `api_key:` or `agent:` subject is a different principal,
+and a missing assertion is not a person either.
 
 During OAuth consent, Gram can include the authenticated human's identity with
 `allowed_methods=["server/discover", "initialize", "notifications/initialized", "ping", "tools/list"]`.
@@ -96,8 +107,53 @@ without an assertion. Interactive consent validation includes the authenticated
 human's discovery assertion when available.
 
 Gram rejects a request before forwarding if the caller's authenticated
-organization or bound project differs from the destination. Use an API key
-scoped to the destination project.
+organization or bound project differs from the destination. An API-key caller
+has to be scoped to that project. On a private tunneled server the install
+path does not use that key; see Installation below.
+
+## Installation
+
+A private tunneled server always has a user session issuer. That issuer is the
+SSO connection each person signs in with, such as Okta. The install surfaces
+for that server identify the caller through that login. They do not embed a
+shared Gram API key. Any secret the hosted service itself requires stays on
+that service.
+
+On the install page, every client option installs only the MCP URL: Claude
+Code, Claude Desktop, Cursor, VS Code, Codex, OpenCode, and Antigravity. None
+of those snippets ask for a Gram key. Clients that support OAuth then sign the
+person in through the user session issuer. The private install page also
+requires a Gram login before it renders. A public tunneled server is the
+exception: its install page skips that OAuth step, and public destinations do
+not receive a caller assertion.
+
+A Claude plugin, and the same publish for Cursor, Codex, and the other
+platform packages, omits the `Authorization` header when the server has a user
+session issuer. A private tunneled server always has one, so each installer
+signs in as themselves through that issuer. The shared consumer API key is
+embedded only for a private server that is not OAuth. A public tunneled server
+also omits that key; its runtime does not challenge for the issuer. The hooks
+key in the observability plugin authenticates hook delivery, not MCP calls.
+
+There is no setting that disables API-key access. A shared Gram API key cannot
+pass the issuer gate on a private tunneled server, so the install options never
+offer one. Two other credentials can still reach the tunnel and receive an
+assertion:
+
+- An agent key, with `sub` `agent:<AGENT_ID>`.
+- A Gram session whose subject is an API key, with `sub` `api_key:<API_KEY_ID>`.
+
+Require `sub` to start with `user:` and reject a missing or invalid assertion.
+That refuses agents, API-key subjects, and every caller this version does not
+attest.
+
+## Connecting
+
+Opening a connection to a private server requires `mcp:connect` on that MCP
+server. `project:read` and `project:write` are not required, including for a
+private tunnel. `mcp:read` and `mcp:write` also satisfy the check, because they
+expand to `mcp:connect`. Those scopes are for viewing and changing the server.
+Changing the resource identifier is an `mcp:write` change, described above.
 
 ## Verification
 

@@ -177,7 +177,7 @@ Directory: `<plugin-slug>/`
 }
 ```
 
-The `userConfig` array is populated only for public servers that require user-supplied env vars. Private servers with a Gram API key have no `userConfig` (the key is embedded directly in the MCP config headers).
+The `userConfig` array is populated only for public servers that require user-supplied env vars. Private servers with a Gram API key have no `userConfig` (the key is embedded directly in the MCP config headers). A server with a user session issuer, including a private tunneled server, omits `headers` entirely: the installer signs in through that issuer, and no shared Gram API key is written into the plugin.
 
 ### `.mcp.json`
 
@@ -280,7 +280,7 @@ the long description retains line breaks and is capped at 4,000 characters.
 }
 ```
 
-Codex always uses `bearer_token_env_var` (a reference to an env var) rather than embedding the key directly.
+A private server that is not OAuth uses `bearer_token_env_var` when no consumer key is available, and embeds `Authorization: Bearer <consumer key>` when publish minted one. A server with a user session issuer, including a private tunneled server, sets neither: the installer signs in through that issuer.
 
 ## Observability plugin
 
