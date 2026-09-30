@@ -518,7 +518,7 @@ function ToolCallsChart({
             ` · data as of ${fmtDateTime(toolCalls.watermark)}`}
         </span>
       </div>
-      <div className="flex flex-col gap-3 px-5 pt-4 pb-3.5">
+      <div className="flex flex-col gap-5 px-5 pt-4 pb-7">
         <div
           className={cn(
             MUTED,
@@ -553,7 +553,7 @@ function ToolCallsChart({
           aria-label={`Tool calls per ${unit}, ${rangeLabel(range)}. ${summary}`}
           className={cn(
             PLOT,
-            "relative flex items-end justify-between gap-1 overflow-x-auto px-4 pt-6 pb-3",
+            "relative flex items-end justify-between gap-1 mx-6 overflow-x-auto px-6 pt-8 pb-4",
           )}
         >
           {points.map((point, index) => (
