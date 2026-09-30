@@ -29,7 +29,7 @@ vi.mock("@/components/page-templates", () => ({
   ),
 }));
 vi.mock("@/routes", () => ({
-  useRoutes: () => ({
+  useOrgRoutes: () => ({
     workloadIssuers: {
       issuerDetail: { href: (id: string) => `/access-hub/${id}` },
     },

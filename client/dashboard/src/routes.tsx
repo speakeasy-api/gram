@@ -112,7 +112,7 @@ import {
   WorkloadIssuersRoot,
 } from "./pages/workload-identities/WorkloadIssuers";
 import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
-import WorkloadIdentitiesRedirect from "./pages/workload-identities/WorkloadIdentitiesRedirect";
+import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -707,29 +707,19 @@ const ROUTE_STRUCTURE = {
     },
   },
 
-  // Legacy URL: the Workload Identities page became the Access Hub, so old
-  // bookmarks and links redirect there.
+  // Legacy URLs: the Access Hub moved to the organization level, and the
+  // Workload Identities page before it. Old bookmarks and links redirect there.
   legacyWorkloadIdentities: {
     title: "Workload Identities",
     url: "workload-identities",
     legacyRedirect: true,
-    component: WorkloadIdentitiesRedirect,
+    component: AccessHubRedirect,
   },
-
-  workloadIssuers: {
+  legacyAccessHub: {
     title: "Access Hub",
-    url: "access-hub",
-    icon: "cpu",
-    stage: "preview",
-    component: WorkloadIssuersRoot,
-    indexComponent: WorkloadIssuersPage,
-    subPages: {
-      issuerDetail: {
-        title: "Trusted Platform",
-        url: ":issuerId",
-        component: WorkloadIssuerDetailPage,
-      },
-    },
+    url: "access-hub/*",
+    legacyRedirect: true,
+    component: AccessHubRedirect,
   },
 
   agents: {
@@ -1449,6 +1439,23 @@ const ORG_ROUTE_STRUCTURE = {
           keys: { title: "Keys", url: "keys" },
           settings: { title: "Settings", url: "settings" },
         },
+      },
+    },
+  },
+  // The trust policy is configured for the organization as a whole, so the
+  // Access Hub names no project.
+  workloadIssuers: {
+    title: "Access Hub",
+    url: "access-hub",
+    icon: "cpu",
+    stage: "preview",
+    component: WorkloadIssuersRoot,
+    indexComponent: WorkloadIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Trusted Platform",
+        url: ":issuerId",
+        component: WorkloadIssuerDetailPage,
       },
     },
   },

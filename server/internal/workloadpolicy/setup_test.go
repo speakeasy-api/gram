@@ -121,6 +121,22 @@ func withScopes(t *testing.T, ctx context.Context, ti *testInstance, scopes ...a
 	return authztest.WithExactGrants(t, ctx, grants...)
 }
 
+// withoutProject returns ctx with the caller's project cleared, as a dashboard
+// session arrives: the service is organization-wide, so a session names no
+// project and only an API key selects one.
+func withoutProject(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	orgOnly := *authCtx
+	orgOnly.ProjectID = nil
+	orgOnly.ProjectSlug = nil
+
+	return contextvalues.SetAuthContext(ctx, &orgOnly)
+}
+
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	t.Helper()
 	var shareErr *oops.ShareableError

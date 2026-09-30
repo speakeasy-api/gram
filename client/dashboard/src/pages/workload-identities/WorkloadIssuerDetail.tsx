@@ -13,7 +13,7 @@ import { Column, Table } from "@/components/ui/Table";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { usePagedRows } from "@/components/ui/TablePagination/usePagedRows";
 import { Text } from "@/components/ui/Text";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes } from "@/routes";
 import { admissionMatches } from "./search";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
@@ -112,7 +112,7 @@ export function WorkloadIssuerDetailPage(): JSX.Element {
 
 function IssuerDetail(): JSX.Element {
   const { issuerId = "" } = useParams<{ issuerId: string }>();
-  const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [admitOpen, setAdmitOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
@@ -308,7 +308,7 @@ function IssuerDetail(): JSX.Element {
   // Withdrawn elsewhere, or a stale link. Send them back to the list rather than
   // rendering a page about a row that is gone.
   if (!isPending && issuer === undefined) {
-    return <Navigate to={routes.workloadIssuers.href()} replace />;
+    return <Navigate to={orgRoutes.workloadIssuers.href()} replace />;
   }
 
   const columns: Column<WorkloadAdmission>[] = [
@@ -535,9 +535,6 @@ function IssuerDetail(): JSX.Element {
           name: label.length > 0 ? label : undefined,
           tags: values.tags,
           agentId: values.agentId,
-          // The admission is written at the platform's own tier, which the
-          // server requires to match the issuer it names.
-          projectScoped: issuer !== undefined && issuer.projectId !== "",
         },
       },
     });
