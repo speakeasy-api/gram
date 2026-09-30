@@ -302,8 +302,10 @@ func TestFederationEndpoints_DomainRootMatchesTheServedDiscoveryDocuments(t *tes
 	require.NoError(t, err)
 	require.Len(t, endpoints, 2)
 
-	root := endpoints[1]
-	require.Equal(t, "https://"+domain.Domain+"/mcp/"+rootSlug, root.ResourceURL)
+	rootURL := "https://" + domain.Domain + "/mcp/" + rootSlug
+	i := slices.IndexFunc(endpoints, func(e mcp.FederationEndpoint) bool { return e.ResourceURL == rootURL })
+	require.NotEqual(t, -1, i, "no endpoint for the domain root %s", rootURL)
+	root := endpoints[i]
 	require.Equal(t, mcp.FederationReady, root.NotReady)
 	requireMatchesServedDocuments(t, customDomainRequestContext(ctx, f.orgID, domain), f.ti, rootSlug, root)
 }

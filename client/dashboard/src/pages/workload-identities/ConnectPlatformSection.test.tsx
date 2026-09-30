@@ -154,6 +154,23 @@ it("shows the picked server's connection values", async () => {
   expect(screen.queryByText("Not ready: exchanges will fail")).toBeNull();
 });
 
+it("hides a picked server's values once the viewer can no longer read it", async () => {
+  mocks.grants = [readGrant(SERVER_ID), readGrant(OTHER_SERVER_ID)];
+  const page = () => (
+    <TooltipProvider>
+      <ConnectPlatformSection />
+    </TooltipProvider>
+  );
+  const { rerender } = render(page());
+  await pickServer("Payments");
+  expect(valueOf("Token endpoint")).toBe(readyEndpoint.tokenEndpoint);
+
+  mocks.grants = [readGrant(OTHER_SERVER_ID)];
+  rerender(page());
+
+  expect(screen.queryByText("Token endpoint")).toBeNull();
+});
+
 it("warns when the workload grant is not advertised", async () => {
   mocks.details.data = {
     mcpServerId: SERVER_ID,

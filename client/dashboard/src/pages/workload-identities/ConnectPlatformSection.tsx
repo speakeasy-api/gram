@@ -228,6 +228,14 @@ export function ConnectPlatformSection(): JSX.Element {
     return [...byProject.values()];
   }, [grants, organization.projects, servers.data]);
 
+  // A selection only counts while the server is still in the readable list, so
+  // losing access to it hides its values rather than leaving them on screen.
+  const current = groups.some((group) =>
+    group.servers.some((server) => server.id === selected),
+  )
+    ? selected
+    : "";
+
   let body: ReactNode;
   if (servers.isPending || grantsLoading) {
     body = <SkeletonTable />;
@@ -269,7 +277,7 @@ export function ConnectPlatformSection(): JSX.Element {
       <Stack gap={6}>
         <Stack gap={2} className="max-w-md">
           <Label htmlFor="connect-mcp-server">MCP server</Label>
-          <Select value={selected} onValueChange={setSelected}>
+          <Select value={current} onValueChange={setSelected}>
             <SelectTrigger id="connect-mcp-server" className="w-full">
               <SelectValue placeholder="Select an MCP server" />
             </SelectTrigger>
@@ -287,7 +295,7 @@ export function ConnectPlatformSection(): JSX.Element {
             </SelectContent>
           </Select>
         </Stack>
-        {selected !== "" && <ConnectionDetails mcpServerId={selected} />}
+        {current !== "" && <ConnectionDetails mcpServerId={current} />}
       </Stack>
     );
   }
