@@ -173,6 +173,9 @@ func (p *Publisher) Publish(ctx context.Context, c Contribution) gcp.PublishResu
 	if p.registry == nil || !p.registry.contains(c.Definition) {
 		return gcp.NewErrPublishResult(fmt.Errorf("metric definition is not registered"))
 	}
+	if err := p.registry.ValidateDimensions(c); err != nil {
+		return gcp.NewErrPublishResult(err)
+	}
 	m, err := Encode(c)
 	if err != nil {
 		return gcp.NewErrPublishResult(err)

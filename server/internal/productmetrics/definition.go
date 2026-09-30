@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"sync"
 	"unicode/utf8"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Instrument identifies the supported measurement operation.
@@ -54,17 +56,115 @@ type definitionKey struct {
 type Registry struct {
 	mu          sync.RWMutex
 	definitions map[definitionKey]Definition
+	contracts   map[definitionKey][]AttributeRule
 }
 
 // NewRegistry creates a registry and rejects incompatible duplicate definitions.
 func NewRegistry(definitions ...Definition) (*Registry, error) {
-	r := &Registry{mu: sync.RWMutex{}, definitions: make(map[definitionKey]Definition)}
+	r := &Registry{mu: sync.RWMutex{}, definitions: make(map[definitionKey]Definition), contracts: make(map[definitionKey][]AttributeRule)}
 	for _, d := range definitions {
 		if err := r.Register(d); err != nil {
 			return nil, err
 		}
 	}
 	return r, nil
+}
+
+// AttributeRule declares one producer-owned dimension. An empty Values list
+// permits arbitrary values of the declared type; producers still own cardinality.
+type AttributeRule struct {
+	// Namespace is resource, scope, or point.
+	Namespace string
+
+	// Key is the exact attribute name.
+	Key string
+
+	// Type preserves the OTel scalar or array representation.
+	Type attribute.Type
+
+	// Values optionally restrict the dimension to canonical typed values.
+	Values []attribute.Value
+}
+
+// RegisterDimensions installs an explicit dimension contract for a registered
+// descriptor. An empty contract permits no producer attributes. Contracts are
+// code-owned and never accepted from broker messages. Configure before publishing.
+func (r *Registry) RegisterDimensions(d Definition, rules ...AttributeRule) error {
+	if !r.contains(d) {
+		return fmt.Errorf("metric definition is not registered")
+	}
+	seen := make(map[string]bool)
+	copyRules := make([]AttributeRule, len(rules))
+	for i, rule := range rules {
+		if rule.Namespace != "resource" && rule.Namespace != "scope" && rule.Namespace != "point" {
+			return fmt.Errorf("invalid dimension namespace")
+		}
+		key := rule.Namespace + ":" + rule.Key
+		if rule.Key == "" || !utf8.ValidString(rule.Key) || seen[key] || rule.Type == attribute.INVALID {
+			return fmt.Errorf("invalid or duplicate dimension rule")
+		}
+		if rule.Namespace == "resource" && (rule.Key == OrganizationResourceKey || rule.Key == ProjectResourceKey) {
+			return fmt.Errorf("reserved dimension rule")
+		}
+		seen[key] = true
+		for _, v := range rule.Values {
+			if v.Type() != rule.Type {
+				return fmt.Errorf("dimension value has incompatible type")
+			}
+			if _, err := CanonicalAttributes([]attribute.KeyValue{{Key: attribute.Key(rule.Key), Value: v}}); err != nil {
+				return err
+			}
+		}
+		copyRules[i] = rule
+		copyRules[i].Values = append([]attribute.Value(nil), rule.Values...)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.contracts[definitionKey{scope: d.ScopeName, version: d.ScopeVersion, name: d.Name}] = copyRules
+	return nil
+}
+
+// ValidateDimensions rejects undeclared keys, types and values when a producer
+// installed a contract. Definitions without a contract retain generic semantics.
+func (r *Registry) ValidateDimensions(c Contribution) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	rules, exists := r.contracts[definitionKey{scope: c.Definition.ScopeName, version: c.Definition.ScopeVersion, name: c.Definition.Name}]
+	if !exists {
+		return nil
+	}
+	for namespace, attrs := range map[string][]attribute.KeyValue{"resource": c.ResourceAttributes, "scope": c.ScopeAttributes, "point": c.PointAttributes} {
+		for _, a := range attrs {
+			allowed := false
+			for _, rule := range rules {
+				if rule.Namespace != namespace || rule.Key != string(a.Key) || rule.Type != a.Value.Type() {
+					continue
+				}
+				if len(rule.Values) == 0 {
+					allowed = true
+					break
+				}
+				actual, err := CanonicalAttributes([]attribute.KeyValue{a})
+				if err != nil {
+					return err
+				}
+				for _, v := range rule.Values {
+					expected, err := CanonicalAttributes([]attribute.KeyValue{{Key: a.Key, Value: v}})
+					if err != nil {
+						return err
+					}
+					if actual == expected {
+						allowed = true
+						break
+					}
+				}
+			}
+			if !allowed {
+				return fmt.Errorf("attribute violates producer dimension contract")
+			}
+		}
+	}
+	return nil
 }
 
 // Register permits description changes but rejects incompatible descriptors.
