@@ -10,6 +10,7 @@ import (
 	pmv1 "github.com/speakeasy-api/gram/infra/gen/gram/productmetrics/v1"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type captureInserter struct {
@@ -52,6 +53,31 @@ func TestWriterMixedBatchRetry(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, indexes)
 	require.Len(t, inserter.rows, 4)
+}
+
+func TestWriterEnforcesCodeOwnedDimensions(t *testing.T) {
+	t.Parallel()
+	c := synthetic(Counter)
+	c.PointAttributes = []attribute.KeyValue{attribute.String("request_id", "unique")}
+	r, err := NewRegistry(c.Definition)
+	require.NoError(t, err)
+	require.NoError(t, r.RegisterDimensions(c.Definition))
+	inserter := &captureInserter{}
+	w, err := NewWriter(testenv.NewLogger(t), testenv.NewMeterProvider(t), r, inserter, func() time.Time { return c.ObservedAt })
+	require.NoError(t, err)
+	m, err := Encode(c)
+	require.NoError(t, err)
+	_, err = w.process(t.Context(), []*pmv1.Contribution{m})
+	require.NoError(t, err)
+	require.Empty(t, inserter.rows)
+	c.ResourceAttributes = nil
+	c.ScopeAttributes = nil
+	c.PointAttributes = nil
+	m, err = Encode(c)
+	require.NoError(t, err)
+	_, err = w.process(t.Context(), []*pmv1.Contribution{m})
+	require.NoError(t, err)
+	require.Len(t, inserter.rows, 1)
 }
 
 func TestWriterRetentionAndRegistry(t *testing.T) {

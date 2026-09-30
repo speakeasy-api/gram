@@ -27,8 +27,13 @@ a Counter delta increment or a single Histogram observation.
   explicit scalar/array type tags preserve identity, including missing vs empty,
   int64 vs float64, and empty arrays. Duplicate keys and nonfinite values fail.
   Descriptor description is metadata. Integer values never pass through float64.
-- Producers own dimensions and cardinality. There is no central dimension allowlist,
-  identity enrichment, series catalogue or hard series cap. Do not automatically
+- Producers own dimensions and cardinality. `Registry.RegisterDimensions` installs
+  a per-descriptor contract of namespace/key/type and optional allowed typed values.
+  Publisher and consumer both enforce installed contracts; an empty contract permits
+  no producer attributes. Unconfigured definitions retain generic semantics for
+  internal/synthetic use. Production adapters should explicitly install contracts
+  in both composition roots. There is no global dimension allowlist, identity
+  enrichment or hard ingestion series cap. Do not automatically
   add user IDs, delivery IDs or observation IDs as dimensions.
 - Contribution IDs identify **observations**, not series. Allocate distinct IDs
   for distinct measurements, even if values and timestamps coincide. Retry with
@@ -58,7 +63,7 @@ Demo seed: no dashboard data consumer, so use deterministic synthetic fixtures.
    messages are not retained and there is no DLQ.
 2. Apply the ClickHouse migration with the existing infrastructure-owned database
    and application credentials. The writer needs INSERT on the source and MV
-   targets; the repository needs SELECT on the targets. No marts grants change.
+   targets and catalogue; the repository needs SELECT on those tables. No marts grants change.
    Keep writers paused throughout the raw engine-swap migration or rollback;
    it copies retained rows and reattaches the incremental views without replaying
    their increments. Keep consumption disabled during initial rollout.
@@ -92,13 +97,46 @@ and multiple materialized views are **not** an atomic transaction. Neither raw
 retention nor best-effort batch suppression provides exactly-once processing or a
 guarantee that every target equals every source row after ambiguous failures.
 
+## Series catalogue and tier selection
+
+Raw contributions retain full typed attributes. A materialized SHA-256 fingerprint
+identifies tenant/project, descriptor, numeric kind and canonical resource/scope/point
+attributes; it excludes description, observation IDs and timestamps. Serving tables
+store that fingerprint instead of repeating attributes. The catalogue's merge key
+also retains full canonical identity, so a digest collision does not discard either
+identity. Reads reject conflicting catalogue entries before filtering.
+
+Counter and Histogram each have one-minute, hourly and UTC daily targets, populated
+directly by independent raw-insert MVs. Catalogue min/max updates are idempotent;
+numeric rollups remain duplicate-inclusive. There is no transaction spanning these
+targets. Queries discover active IDs from the exact selected rollup ranges and
+verify catalogue coverage before applying filters. Missing metadata fails the read
+with a repair error rather than silently omitting measurements. A missing rollup
+write still requires operator comparison/repair from raw evidence.
+
+The planner chooses the coarsest tier that divides the requested epoch-aligned
+interval exactly. It uses finer tiers for partial edges. A 90-day daily chart can
+use daily interiors, hourly edges and minute tails; a seven-minute interval uses
+minute rows. Requests never silently change resolution. UTC days are the contract;
+these tiers do not represent arbitrary local-time calendar days.
+
+Every read has a ten-second end-to-end deadline, including waiting for one of four
+process-wide read slots and all discovery/catalogue phases. Discovery is bounded
+at 250,000 active series per descriptor/range, then filtering at 50,000 matched
+series. Matched series multiplied by requested output buckets must not exceed
+10 million. These conservative budgets supplement the scan/memory/result limits;
+they are not an exact cost formula. ID sets use native external tables with bounded
+set/join memory. Attributes are evaluated in the catalogue, and only the selected
+group labels join narrow numeric history. Concurrent ingestion is not a snapshot:
+new series arriving after discovery appear on a subsequent read.
+
 ## Windows and read guarantees
 
-- Rollups represent UTC half-open minute windows `[start, start+1m)`. Event time
+- Rollups represent UTC half-open minute/hour/day windows. Event time
   selects the bucket; observed time and ingestion time do not alter series identity.
 - Counter rows hold monotonic delta sums; Histogram rows hold count/sum/min/max.
-  Merge keys contain tenant/project, descriptor, numeric representation and all
-  resource/scope/point attributes. Explicit `sum`/`min`/`max` regrouping is correct
+  Merge keys contain tenant/project, descriptor, series fingerprint and numeric
+  representation. Explicit `sum`/`min`/`max` regrouping is correct
   before and after background merges. No serving query uses `FINAL`, source-event
   winners, deduplication, or raw contribution scans.
 - Integers are summed in Int128 and returned as `big.Int`; float series stay
@@ -113,6 +151,9 @@ guarantee that every target equals every source row after ambiguous failures.
   of asynchronous TTL deletion. Producers may deliver late data into retained
   buckets; these are not finalized windows. Future events are accepted only within
   five minutes of clock skew, and queries never extend beyond the current minute.
+  Hourly/daily storage and catalogue metadata have a 91-day physical TTL guard so
+  they cannot expire while overlapping the 90-day supported range; that guard day
+  is never exposed through queries. Minute/raw TTLs remain 90 days.
 - Arbitrary retained keys support typed equality, missing-key filtering and dynamic
   grouping in each namespace. Missing groups are distinct from empty-string or
   empty-array groups. Grouping reduces unselected dimensions explicitly within the
@@ -122,7 +163,7 @@ guarantee that every target equals every source row after ambiguous failures.
   data, or ten seconds. Up to 32 filter/group expressions bound query complexity,
   not producer dimensions or stored series. These are defensive execution budgets,
   not promised latency/scale acceptance criteria.
-- Raw contributions and rollups are retained for 90 days from event-minute start.
+- Raw contributions are retained for 90 days from event-minute start.
   Raw storage uses `ReplacingMergeTree(ingested_at)`, monthly UTC event-time
   partitions, and the organization/project/scope-name/scope-version/contribution-ID
   replacement key. Event-time partitioning keeps retries in the same partition.
@@ -148,16 +189,23 @@ reliably repaired by picking a delivery copy.
    metrics: replacing a monthly partition with a tenant-only rebuild loses data.
    Finish before the source evidence reaches its TTL boundary; expired evidence
    requires producer-owned facts.
+   Restore catalogue metadata from canonical raw identities into an isolated
+   catalogue target, validating one canonical identity per fingerprint. A true
+   fingerprint collision needs a coordinated identity-format migration, not an
+   arbitrary winner. Rebuild minute, hourly and daily targets consistently from
+   the same deduplicated source snapshot. The finest repaired aggregates may also
+   be regrouped into coarse targets without replaying the live source.
 3. Compare counts, sums, extrema and tenant/series coverage. Replace each affected
    rollup partition from the isolated target, rather than appending repaired totals.
    Handle partitions with no retained source rows explicitly. Never replay raw rows
    into the live source, which adds increments again.
-4. Verify both rollup targets before resuming writers. Later deliveries, including
+4. Verify the catalogue and all six rollup targets before resuming writers. Later deliveries, including
    retries of repaired observations, remain duplicate-inclusive and may require
    another repair. Keep recovery copies until validation completes.
 
 `server/clickhouse/tests/product_metrics_rollups.sql` demonstrates deduplicated
-counter/histogram rebuilding and partition replacement in a disposable database.
+counter/histogram rebuilding, all-tier partition replacement and catalogue recovery
+in a disposable database.
 It is a validation fixture, not a production repair command.
 
 ## Operational and analytical diagnostics
@@ -173,26 +221,42 @@ within the selected retained lookback, not lifetime novelty; late arrivals and
 approximation can change it. These are analytical results, not telemetry labels.
 Query buckets expose delivery count for contributions-per-bucket diagnostics.
 
-Operators can inspect global physical storage and scanned work without a series
-catalogue or high-cardinality service metrics:
+Operators can inspect physical storage and scanned work without high-cardinality
+service telemetry labels:
 
 ```sql
 SELECT table, count() AS parts, sum(rows) AS rows, sum(bytes_on_disk) AS bytes
 FROM system.parts
 WHERE active AND database = currentDatabase()
-  AND table IN ('product_metric_contributions', 'product_metric_sums_1m',
-                'product_metric_histograms_1m')
+   AND startsWith(table, 'product_metric_')
 GROUP BY table;
 
 SELECT query_id, query_duration_ms, read_rows, read_bytes, memory_usage
 FROM system.query_log
 WHERE type = 'QueryFinish' AND event_time >= now() - INTERVAL 1 HOUR
-  AND hasAny(tables, [concat(currentDatabase(), '.product_metric_sums_1m'),
-                     concat(currentDatabase(), '.product_metric_histograms_1m')])
+  AND arrayExists(t -> startsWith(t, concat(currentDatabase(), '.product_metric_')), tables)
 ORDER BY event_time DESC LIMIT 100;
 ```
 
 ## Synthetic capacity evidence
+
+The opt-in `TestSeededSeriesQueries` exercises the complete Go read path against
+an explicitly selected synthetic database:
+
+```sh
+PRODUCT_METRICS_BENCH_DSN='<CLICKHOUSE_DSN>' GOTESTSUM_FORMAT=standard-verbose mise run test:server -tags=productmetrics_bench -run '^TestSeededSeriesQueries$' -v ./internal/productmetrics/
+```
+
+It uses `gram.synthetic.requests` / `gram.synthetic.duration` for `synthetic-large`
+in the placeholder project `00000000-0000-4000-8000-000000000001`, scope
+`gram.synthetic` version `1`. `PRODUCT_METRICS_BENCH_SUFFIX` selects another seeded
+profile. It reports 24h/five-minute, 30d/hourly and 90d/daily results with model and
+environment filters, optional region grouping, one/four readers, and per-request
+scan totals across all four phases. Rejected workloads are reported explicitly.
+The SQL seed fixture documents the reproducible bounded/high-cardinality profiles.
+
+The measurements below are historical evidence for the original wide minute-only
+layout, not acceptance results for the catalogue/tier implementation.
 
 Run the opt-in capacity experiment with:
 

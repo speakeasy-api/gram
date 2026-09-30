@@ -72,7 +72,7 @@ func (r *Repository) Diagnostics(ctx context.Context, q Query, recentSince time.
 	}
 	metadata, metadataArgs, err := squirrel.Select("series_id", "any(number_kind) AS number_kind", "any(resource_attributes) AS resource_attributes", "any(scope_attributes) AS scope_attributes", "any(point_attributes) AS point_attributes").From("product_metric_series").Where(descriptorScope(q)).Where(squirrel.Eq{"instrument": string(q.Definition.Instrument)}).Where("series_id IN (SELECT series_id FROM metric_series_ids)").GroupBy("series_id").ToSql()
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("build diagnostic catalogue join: %w", err)
 	}
 	base := squirrel.Select().Prefix("WITH points AS (SELECT series_id, min(bucket) AS bucket, sum(contributions) AS contributions FROM ("+source+") GROUP BY series_id)", sourceArgs...).From("points").JoinClause("INNER JOIN ("+metadata+") AS metadata USING (series_id)", metadataArgs...)
 	identity := "tuple(number_kind, resource_attributes, scope_attributes, point_attributes)"

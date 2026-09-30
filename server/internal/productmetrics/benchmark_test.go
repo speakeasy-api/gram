@@ -3,6 +3,7 @@
 package productmetrics
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strconv"
@@ -10,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -72,7 +72,7 @@ func TestSyntheticLoad(t *testing.T) {
 			for range 4 {
 				wg.Go(func() {
 					for range 5 {
-						ctx := clickhouse.Context(t.Context(), clickhouse.WithQueryID(prefix+"-"+uuid.NewString()))
+						ctx := context.WithValue(t.Context(), queryRequestKey{}, prefix+"-"+uuid.NewString())
 						began := time.Now()
 						_, err := r.Query(ctx, q)
 						elapsed := time.Since(began)
@@ -93,7 +93,7 @@ func TestSyntheticLoad(t *testing.T) {
 			slices.Sort(durations)
 			require.NoError(t, conn.Exec(t.Context(), "SYSTEM FLUSH LOGS"))
 			var rows, bytes, memory uint64
-			require.NoError(t, conn.QueryRow(t.Context(), "SELECT max(read_rows), max(read_bytes), max(memory_usage) FROM system.query_log WHERE type = 'QueryFinish' AND startsWith(query_id, ?)", prefix).Scan(&rows, &bytes, &memory))
+			require.NoError(t, conn.QueryRow(t.Context(), "SELECT max(scanned), max(bytes), max(memory) FROM (SELECT log_comment, sum(read_rows) scanned, sum(read_bytes) bytes, max(memory_usage) memory FROM system.query_log WHERE type = 'QueryFinish' AND startsWith(log_comment, ?) GROUP BY log_comment)", prefix).Scan(&rows, &bytes, &memory))
 			t.Logf("%s %dd reads concurrency=4 samples=20 p50=%s p95=%s max_scan_rows=%d max_scan_bytes=%d peak_memory=%d", repetition, days, durations[9], durations[18], rows, bytes, memory)
 		}
 		var parts, rows, bytes uint64

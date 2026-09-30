@@ -1,6 +1,7 @@
 package productmetrics
 
 import (
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -8,6 +9,31 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 )
+
+func TestSeriesPointBudget(t *testing.T) {
+	t.Parallel()
+	conn := newTestClickhouse(t)
+	now := time.Now().UTC()
+	r := NewRepository(conn, func() time.Time { return now })
+	c := synthetic(Counter)
+	c.EventTime = now.Truncate(time.Minute).Add(-time.Minute)
+	rows := make([]Contribution, 0, 100)
+	for i := range 100 {
+		row := c
+		row.ID = fmt.Sprint(i)
+		row.PointAttributes = []attribute.KeyValue{attribute.Int64("series", int64(i))}
+		rows = append(rows, row)
+	}
+	require.NoError(t, r.Insert(t.Context(), rows))
+	q := Query{Tenant: c.Tenant, Definition: c.Definition, Start: EarliestBucket(now), End: now.Truncate(time.Minute), Interval: time.Minute}
+	_, err := r.Query(t.Context(), q)
+	require.ErrorContains(t, err, "series-point budget exceeded")
+	q.Interval = 24 * time.Hour
+	points, err := r.Query(t.Context(), q)
+	require.NoError(t, err)
+	require.Len(t, points, 1)
+	require.Equal(t, uint64(100), points[0].Count)
+}
 
 func TestTierPlan(t *testing.T) {
 	t.Parallel()

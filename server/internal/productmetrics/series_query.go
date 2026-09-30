@@ -19,6 +19,8 @@ const (
 	QueryMaxActiveSeries = 250000
 	// QueryMaxSeriesPoints bounds the conservative matched-series/output-bucket product.
 	QueryMaxSeriesPoints = 10000000
+	// QueryMaxIdentityBytes bounds individual ID sets, joins and distinct discovery.
+	QueryMaxIdentityBytes = 32 << 20 // 32 MiB
 )
 
 type querySegment struct {
@@ -81,7 +83,7 @@ func rollupSource(q Query, columns string, ids []string) (string, []any, error) 
 		}
 		sql, values, err := b.ToSql()
 		if err != nil {
-			return "", nil, err
+			return "", nil, fmt.Errorf("build metric tier source: %w", err)
 		}
 		parts = append(parts, sql)
 		args = append(args, values...)
@@ -103,11 +105,10 @@ func withSeriesIDs(ctx context.Context, ids []string) (context.Context, error) {
 }
 
 func seriesQueryContext(ctx context.Context, limit int) context.Context {
-	return clickhouse.Context(boundedQueryContext(ctx), clickhouse.WithSettings(clickhouse.Settings{
-		"max_result_rows": limit, "max_rows_to_group_by": limit,
-		"max_rows_in_set": QueryMaxActiveSeries, "max_bytes_in_set": 32 << 20, "set_overflow_mode": "throw",
-		"max_rows_in_join": QueryMaxSeries, "max_bytes_in_join": 32 << 20, "join_overflow_mode": "throw",
-	}))
+	settings := boundedQuerySettings(ctx)
+	settings["max_result_rows"] = limit
+	settings["max_rows_to_group_by"] = limit
+	return clickhouse.Context(ctx, clickhouse.WithQueryID(""), clickhouse.WithSettings(settings))
 }
 
 func (r *Repository) resolveSeries(ctx context.Context, q Query) ([]string, error) {
@@ -124,7 +125,7 @@ func (r *Repository) resolveSeries(ctx context.Context, q Query) ([]string, erro
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			o11y.NoLogDefer(rows.Close)
-			return nil, err
+			return nil, fmt.Errorf("scan active metric series: %w", err)
 		}
 		active = append(active, id)
 		if len(active) > QueryMaxActiveSeries {
@@ -135,7 +136,7 @@ func (r *Repository) resolveSeries(ctx context.Context, q Query) ([]string, erro
 	err = rows.Err()
 	o11y.NoLogDefer(rows.Close)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read active metric series: %w", err)
 	}
 	if len(active) == 0 {
 		return []string{}, nil
@@ -149,7 +150,7 @@ func (r *Repository) resolveSeries(ctx context.Context, q Query) ([]string, erro
 	// must fail closed, not hide observations from an attribute-filtered query.
 	check, values, err := base.Columns("series_id", "uniqExact(tuple(number_kind, resource_attributes, scope_attributes, point_attributes)) AS identities").GroupBy("series_id").ToSql()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build catalogue integrity check: %w", err)
 	}
 	var count, variants uint64
 	if err := r.conn.QueryRow(seriesQueryContext(ctx, QueryMaxActiveSeries), "SELECT count(), max(identities) FROM ("+check+")", values...).Scan(&count, &variants); err != nil {
@@ -164,7 +165,7 @@ func (r *Repository) resolveSeries(ctx context.Context, q Query) ([]string, erro
 	}
 	sql, values, err := b.ToSql()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build metric dimension filter: %w", err)
 	}
 	rows, err = r.conn.Query(seriesQueryContext(ctx, QueryMaxSeries), sql, values...)
 	if err != nil {
@@ -175,7 +176,7 @@ func (r *Repository) resolveSeries(ctx context.Context, q Query) ([]string, erro
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan matched metric series: %w", err)
 		}
 		matched = append(matched, id)
 		if len(matched) > QueryMaxSeries {
@@ -183,7 +184,7 @@ func (r *Repository) resolveSeries(ctx context.Context, q Query) ([]string, erro
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read matched metric series: %w", err)
 	}
 	seconds := int64(q.Interval / time.Second)
 	buckets := (q.End.Unix()-1)/seconds - q.Start.Unix()/seconds + 1

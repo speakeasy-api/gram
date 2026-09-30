@@ -207,7 +207,7 @@ func buildResolvedQuery(q Query, now time.Time, ids []string) (string, []any, er
 	}
 	metadataSQL, metadataArgs, err := metadata.ToSql()
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("build metric catalogue join: %w", err)
 	}
 	b := squirrel.Select().Column("toDateTime(intDiv(toUInt64(bucket), ?) * ?, 'UTC') AS window_start", int64(q.Interval/time.Second), int64(q.Interval/time.Second)).
 		Columns("number_kind", "sum(contributions) AS total_count", "toString(sum(integer_sum)) AS total_integer", "sum(floating_sum) AS total_floating").
@@ -251,20 +251,36 @@ func applyAttributeFilters(b squirrel.SelectBuilder, filters []Filter) (squirrel
 	return b, nil
 }
 
-func boundedQueryContext(ctx context.Context) context.Context {
-	return clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+type queryRequestKey struct{}
+
+func boundedQuerySettings(ctx context.Context) clickhouse.Settings {
+	settings := clickhouse.Settings{
 		"max_result_rows": QueryMaxRows, "max_result_bytes": 16 << 20, "result_overflow_mode": "throw",
 		"max_rows_to_read": QueryMaxReadRows, "max_bytes_to_read": QueryMaxReadBytes, "read_overflow_mode": "throw",
 		"max_memory_usage": QueryMaxMemory, "max_execution_time": QueryMaxSeconds, "timeout_overflow_mode": "throw",
 		"max_rows_to_group_by": QueryMaxSeries, "group_by_overflow_mode": "throw", "max_threads": 2,
-		"max_rows_in_set": QueryMaxActiveSeries, "max_bytes_in_set": 32 << 20, "set_overflow_mode": "throw",
-		"max_rows_in_join": QueryMaxSeries, "max_bytes_in_join": 32 << 20, "join_overflow_mode": "throw",
-	}))
+		"max_rows_in_set": QueryMaxActiveSeries, "max_bytes_in_set": QueryMaxIdentityBytes, "set_overflow_mode": "throw",
+		"max_rows_in_join": QueryMaxSeries, "max_bytes_in_join": QueryMaxIdentityBytes, "join_overflow_mode": "throw",
+		"max_rows_in_distinct": QueryMaxActiveSeries, "max_bytes_in_distinct": QueryMaxIdentityBytes, "distinct_overflow_mode": "throw",
+	}
+	if id, ok := ctx.Value(queryRequestKey{}).(string); ok {
+		settings["log_comment"] = id
+	}
+	return settings
+}
+
+func boundedQueryContext(ctx context.Context) context.Context {
+	// Every phase needs a fresh server query ID. Reusing a caller's ID can race
+	// server-side cleanup of the preceding phase even after its rows are closed.
+	return clickhouse.Context(ctx, clickhouse.WithQueryID(""), clickhouse.WithSettings(boundedQuerySettings(ctx)))
 }
 
 // Query reads compact rollups without FINAL or per-event winners. Missing data
 // yields no result rows, not automatic zeros. Exceeding a bound fails the read.
 func (r *Repository) Query(ctx context.Context, q Query) ([]Aggregate, error) {
+	if ctx.Value(queryRequestKey{}) == nil {
+		ctx = context.WithValue(ctx, queryRequestKey{}, uuid.NewString())
+	}
 	ctx, cancel := context.WithTimeout(ctx, QueryMaxSeconds*time.Second)
 	defer cancel()
 	if err := querySlots.Acquire(ctx, 1); err != nil {
@@ -272,7 +288,7 @@ func (r *Repository) Query(ctx context.Context, q Query) ([]Aggregate, error) {
 	}
 	defer querySlots.Release(1)
 	now := r.now().UTC()
-	sql, args, err := buildQuery(q, now)
+	_, _, err := buildQuery(q, now)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +303,7 @@ func (r *Repository) Query(ctx context.Context, q Query) ([]Aggregate, error) {
 	if err != nil {
 		return nil, err
 	}
-	sql, args, err = buildResolvedQuery(q, now, ids)
+	sql, args, err := buildResolvedQuery(q, now, ids)
 	if err != nil {
 		return nil, err
 	}
