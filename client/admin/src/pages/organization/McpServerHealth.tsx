@@ -526,22 +526,28 @@ function ToolCallsChart({
             Each square is {perSquare === 1 ? "1 call" : `${perSquare} calls`}
           </span>
         </div>
-        <div
-          role="img"
-          aria-label={`Tool calls per ${unit}, ${rangeLabel(range)}. ${summary}`}
-          className="bg-muted/30 flex items-end justify-between gap-1 overflow-x-auto rounded-md px-4 pt-6 pb-3"
-        >
-          {points.map((point, index) => (
-            <BucketColumn
-              key={point.bucketStart.toISOString()}
-              point={point}
-              perSquare={perSquare}
-              label={index % labelEvery === 0}
-              weekly={weekly}
-              spike={point === worst}
-            />
-          ))}
-        </div>
+        {total === 0 ? (
+          <p className={cn(MUTED, "bg-muted/30 rounded-md px-4 py-6 text-sm")}>
+            No calls reached the server directly in this window.
+          </p>
+        ) : (
+          <div
+            role="img"
+            aria-label={`Tool calls per ${unit}, ${rangeLabel(range)}. ${summary}`}
+            className="bg-muted/30 flex items-end justify-between gap-1 overflow-x-auto rounded-md px-4 pt-6 pb-3"
+          >
+            {points.map((point, index) => (
+              <BucketColumn
+                key={point.bucketStart.toISOString()}
+                point={point}
+                perSquare={perSquare}
+                label={index % labelEvery === 0}
+                weekly={weekly}
+                spike={point === worst}
+              />
+            ))}
+          </div>
+        )}
       </div>
       <p className={cn(MUTED, "border-t px-5 pt-2.5 pb-3.5 text-xs")}>
         The chart counts calls that reach the server directly. The Tool calls
@@ -603,7 +609,9 @@ function BucketColumn({
   return (
     <div
       title={`${name}: ${point.total - point.failed} OK, ${point.failed} failed (${fmtShare(share)})`}
-      className="relative flex shrink-0 flex-col items-center gap-1.5"
+      // As wide as its squares: the label overhangs both sides, so a month of
+      // columns fits and only the spacing between them changes.
+      className="relative flex w-5 shrink-0 flex-col items-center gap-1.5"
     >
       {spike && (
         <span
@@ -624,14 +632,16 @@ function BucketColumn({
           <Square key={`o${k}`} ok />
         ))}
       </div>
-      <span
-        className={cn(
-          MUTED,
-          "text-[0.6875rem] whitespace-nowrap tabular-nums",
-          !label && "invisible",
-        )}
-      >
-        {day}
+      <span className="flex w-5 justify-center">
+        <span
+          className={cn(
+            MUTED,
+            "text-[0.6875rem] whitespace-nowrap tabular-nums",
+            !label && "invisible",
+          )}
+        >
+          {day}
+        </span>
       </span>
     </div>
   );
@@ -1060,7 +1070,11 @@ function RemoteClient({
             )}
           </KeyValue>
           <KeyValue label="Metadata fetched">
-            {fmtDateTime(issuer.metadataFetchedAt)}
+            {issuer.metadataFetchedAt ? (
+              fmtDateTime(issuer.metadataFetchedAt)
+            ) : (
+              <None>Never</None>
+            )}
           </KeyValue>
           <KeyValue label="Metadata error">
             <ErrorAt at={issuer.metadataLastErrorAt} />

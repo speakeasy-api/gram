@@ -334,6 +334,25 @@ describe("McpServerHealth", () => {
     );
   });
 
+  it("says so rather than drawing an empty grid when no calls reached the server", async () => {
+    respond = (windowDays) => {
+      const body = withIssuer(windowDays);
+      const toolCalls = enabled(windowDays);
+      return {
+        ...body,
+        tool_calls: {
+          ...toolCalls,
+          daily: toolCalls.daily.map((d) => ({ ...d, total: 0, failed: 0 })),
+        },
+      };
+    };
+    await open();
+    await screen.findByText(
+      "No calls reached the server directly in this window.",
+    );
+    expect(screen.queryByRole("img", { name: /Tool calls per/ })).toBe(null);
+  });
+
   it("names a legacy auth mode when there is no issuer", async () => {
     respond = (windowDays) => ({
       server: { ...SERVER, source: "toolset_only", visibility: "public" },
