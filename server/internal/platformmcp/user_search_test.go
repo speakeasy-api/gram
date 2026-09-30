@@ -361,6 +361,8 @@ func TestSearchUsers_CursorResumesOnlyTheQueryThatMintedIt(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reader.searchParams, 2)
 	require.Equal(t, "pat.b@example.com", reader.searchParams[1].Cursor)
+	require.Equal(t, rows[1].LastSeenUnixNano, reader.searchParams[1].CursorLastSeenUnixNano,
+		"the boundary the page displayed travels inside the cursor, so the repository never re-derives it from rows this search excludes")
 
 	// The same position replayed against a different query, window, or user
 	// type is a different page of a different question.
@@ -377,6 +379,37 @@ func TestSearchUsers_CursorResumesOnlyTheQueryThatMintedIt(t *testing.T) {
 	// Case is folded into the scope because the match ignores it.
 	_, err = service.SearchUsers(t.Context(), principal, SearchUsersInput{ProjectID: userSearchTestProject, Query: "PAT", UserType: "", Window: "24h", Limit: 2, Cursor: first.NextCursor})
 	require.NoError(t, err)
+}
+
+// TestSearchUsers_RefusesACursorWithoutASealedBoundary pins that a cursor
+// carrying only a group key — the shape minted before the observed last_seen
+// was sealed in — is refused rather than resumed. Resuming it would leave the
+// repository to re-derive the boundary from a lookup that ignores this search's
+// window and its excluded hook sources, which is what could repeat a person.
+func TestSearchUsers_RefusesACursorWithoutASealedBoundary(t *testing.T) {
+	t.Parallel()
+
+	reader := &recordingUserSearchReader{rows: []telemetryrepo.UserSummary{userSummaryRow("pat.a@example.com", "pat.a@example.com", 1, 0)}}
+	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
+	principal := testPrincipal()
+	search, err := normalizeUserSearch(SearchUsersInput{ProjectID: userSearchTestProject, Query: "pat", UserType: "", Window: "24h", Limit: 2, Cursor: ""})
+	require.NoError(t, err)
+	search.window, err = resolveWindow("24h", userSearchTestNow, userSearchWindowSpec)
+	require.NoError(t, err)
+
+	for name, value := range map[string]string{
+		"key only":       "u:1:pat.a@example.com",
+		"zero boundary":  "u2:1:0:pat.a@example.com",
+		"no boundary":    "u2:1:pat.a@example.com",
+		"unparseable":    "u2:1:soon:pat.a@example.com",
+		"unknown prefix": "u3:1:5:pat.a@example.com",
+	} {
+		stale, err := service.references.EncodeScoped(principal, subjectKindCursor, search.cursorScope(), value, userSearchTestNow)
+		require.NoError(t, err, name)
+		_, err = service.SearchUsers(t.Context(), principal, SearchUsersInput{ProjectID: userSearchTestProject, Query: "pat", UserType: "", Window: "24h", Limit: 2, Cursor: stale})
+		require.ErrorIs(t, err, ErrSubjectReferenceNotFound, name)
+	}
+	require.Empty(t, reader.searchParams, "a refused cursor reads nothing")
 }
 
 func TestSearchUsers_TraversalCapWithholdsTheCursor(t *testing.T) {
@@ -570,7 +603,7 @@ func TestGetUserMetricsSummary_RefusesForeignAndMalformedReferences(t *testing.T
 	_, err = service.GetUserMetricsSummary(t.Context(), reauthorized, GetUserMetricsSummaryInput{ProjectID: userSearchTestProject, UserReference: own, Window: "", MCPID: ""})
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 
-	cursor, err := service.references.EncodeScoped(principal, subjectKindCursor, projectUserScope(userSearchTestProject), formatUserSearchCursor("pat.rivera@example.com", 1), userSearchTestNow)
+	cursor, err := service.references.EncodeScoped(principal, subjectKindCursor, projectUserScope(userSearchTestProject), formatUserSearchCursor("pat.rivera@example.com", userSearchTestNow.UnixNano(), 1), userSearchTestNow)
 	require.NoError(t, err)
 	_, err = service.GetUserMetricsSummary(t.Context(), principal, GetUserMetricsSummaryInput{ProjectID: userSearchTestProject, UserReference: cursor, Window: "", MCPID: ""})
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)

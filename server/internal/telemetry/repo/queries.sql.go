@@ -3394,7 +3394,16 @@ type SearchUsersParams struct {
 	IdentityContains string
 	SortOrder        string // "asc" or "desc"
 	Cursor           string // user identifier to paginate from
-	Limit            int
+	// CursorLastSeenUnixNano is the last_seen_unix_nano the cursor's person was
+	// observed at on the page that minted the cursor. Supplied alongside Cursor,
+	// the page boundary is compared against it directly. Left zero, the boundary
+	// timestamp is looked up again from telemetry_logs by group key alone — a
+	// lookup that applies neither this query's time window nor its row filters,
+	// so a row this query excludes can hand back a later timestamp and return
+	// the cursor's person on the next page too. Any caller that can seal the
+	// timestamp it displayed into its cursor should set this.
+	CursorLastSeenUnixNano int64
+	Limit                  int
 	// MetricsDetail selects how many aggregates to compute: one of the
 	// MetricsDetail* constants. MetricsDetailBasic projects only identity,
 	// first/last activity, input/output token sums, and raw_user_ids — skipping
@@ -3579,8 +3588,15 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		}
 	}
 
-	// Cursor pagination using last_seen + group column for stable ordering
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)", joinClause, joinArgs)
+	// Cursor pagination using last_seen + group column for stable ordering.
+	// A caller that sealed the last_seen it was shown into its cursor gets that
+	// exact boundary; one that did not falls back to re-deriving it, which is
+	// only sound while no row filter or window can hide the deriving row.
+	if arg.CursorLastSeenUnixNano != 0 {
+		sb = withHavingTupleValuePagination(sb, arg.Cursor, arg.CursorLastSeenUnixNano, arg.SortOrder, groupExpr, "max(time_unix_nano)")
+	} else {
+		sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, groupExpr, "max(time_unix_nano)", joinClause, joinArgs)
+	}
 
 	// Order by last_seen with group column as tie-breaker
 	sb = withOrdering(sb, arg.SortOrder, "last_seen_unix_nano", "user_id")

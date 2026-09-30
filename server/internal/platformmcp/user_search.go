@@ -136,7 +136,7 @@ func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principa
 	// The cursor resolves only against the query that minted it, so a position
 	// cannot be replayed with a different query, user type, or window.
 	scope := search.cursorScope()
-	cursorKey, traversed, err := s.decodeUserSearchCursor(input.Cursor, principal, scope, search.now)
+	cursorKey, cursorLastSeen, traversed, err := s.decodeUserSearchCursor(input.Cursor, principal, scope, search.now)
 	if err != nil {
 		return SearchUsersOutput{}, err
 	}
@@ -174,6 +174,12 @@ func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principa
 		IdentityContains:    search.query,
 		SortOrder:           "desc",
 		Cursor:              cursorKey,
+		// The boundary the previous page actually showed. Without it the
+		// repository re-derives this person's last_seen from a lookup that
+		// applies neither the window nor the Gram-hosted exclusion above, and a
+		// person whose excluded rows run later than their qualifying ones is
+		// handed back on every following page.
+		CursorLastSeenUnixNano: cursorLastSeen,
 		// One extra row decides whether another page exists without a second
 		// round trip, and is dropped before anything is projected.
 		Limit:                search.limit + 1,
@@ -230,7 +236,7 @@ func (s *DiagnosticsService) SearchUsers(ctx context.Context, principal Principa
 	traversed += len(rows)
 	if more && len(rows) > 0 && traversed < maxUserSearchTraversal {
 		last := rows[len(rows)-1]
-		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatUserSearchCursor(last.UserID, traversed), search.now)
+		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatUserSearchCursor(last.UserID, last.LastSeenUnixNano, traversed), search.now)
 		if err != nil {
 			return SearchUsersOutput{}, fmt.Errorf("mint user search cursor: %w", err)
 		}
@@ -340,44 +346,71 @@ func (s *DiagnosticsService) userSearchEnvelope(ctx context.Context, projectID s
 	return newDataEnvelope(now, watermarkTime(watermark), window, observed), nil
 }
 
-// A search cursor carries the group key the repository resumes after and how
-// far the traversal has already reached, minted through the same bound,
-// expiring reference codec as everything else a caller holds between calls.
-// The key is frequently an email address, which is the reason the cursor is
-// encrypted rather than merely signed.
-func formatUserSearchCursor(key string, traversed int) string {
-	return "u:" + strconv.Itoa(traversed) + ":" + key
+// A search cursor carries the whole position the repository resumes after — the
+// group key, the last_seen the person was actually observed at on the page that
+// minted it, and how far the traversal has already reached — minted through the
+// same bound, expiring reference codec as everything else a caller holds
+// between calls. The key is frequently an email address, which is the reason
+// the cursor is encrypted rather than merely signed.
+//
+// The timestamp is sealed in rather than looked up again because this search
+// excludes Gram-hosted hook sources and applies a window, while the
+// repository's cursor-lookup subquery applies neither: a person whose excluded
+// rows run later than their qualifying ones would be re-derived at that later
+// timestamp and returned again on every following page. search_tool_calls
+// seals its own position for the same reason.
+//
+// The "u2:" prefix is the version of this payload. A "u:" cursor from before
+// the timestamp was sealed carries no boundary to compare against, so it is
+// refused as a stale reference rather than resumed on a position that would
+// repeat a person. The tools are unreleased and references live 10 minutes, so
+// nothing a caller can still be holding is worth a second parse path.
+func formatUserSearchCursor(key string, lastSeenUnixNano int64, traversed int) string {
+	return "u2:" + strconv.Itoa(traversed) + ":" + strconv.FormatInt(lastSeenUnixNano, 10) + ":" + key
 }
 
-func parseUserSearchCursor(value string) (string, int, error) {
-	rest, ok := strings.CutPrefix(value, "u:")
+// parseUserSearchCursor recovers the traversal count, the observed last_seen,
+// and the group key. The key is taken as the whole remainder, so an identifier
+// containing a colon survives the round trip.
+func parseUserSearchCursor(value string) (string, int64, int, error) {
+	rest, ok := strings.CutPrefix(value, "u2:")
 	if !ok {
-		return "", 0, ErrSubjectReferenceNotFound
+		return "", 0, 0, ErrSubjectReferenceNotFound
 	}
-	count, key, ok := strings.Cut(rest, ":")
+	count, rest, ok := strings.Cut(rest, ":")
+	if !ok {
+		return "", 0, 0, ErrSubjectReferenceNotFound
+	}
+	stamp, key, ok := strings.Cut(rest, ":")
 	if !ok || key == "" {
-		return "", 0, ErrSubjectReferenceNotFound
+		return "", 0, 0, ErrSubjectReferenceNotFound
 	}
 	traversed, err := strconv.Atoi(count)
 	if err != nil || traversed < 0 || traversed > maxUserSearchTraversal {
-		return "", 0, ErrSubjectReferenceNotFound
+		return "", 0, 0, ErrSubjectReferenceNotFound
 	}
-	return key, traversed, nil
+	// A zero last_seen would fall back to re-deriving the boundary, which is
+	// the behaviour this cursor exists to avoid, so it is not a valid position.
+	lastSeen, err := strconv.ParseInt(stamp, 10, 64)
+	if err != nil || lastSeen <= 0 {
+		return "", 0, 0, ErrSubjectReferenceNotFound
+	}
+	return key, lastSeen, traversed, nil
 }
 
-func (s *DiagnosticsService) decodeUserSearchCursor(cursor string, principal Principal, scope string, now time.Time) (string, int, error) {
+func (s *DiagnosticsService) decodeUserSearchCursor(cursor string, principal Principal, scope string, now time.Time) (string, int64, int, error) {
 	if cursor == "" {
-		return "", 0, nil
+		return "", 0, 0, nil
 	}
 	value, err := s.references.DecodeScoped(cursor, principal, subjectKindCursor, scope, now)
 	if err != nil {
-		return "", 0, ErrSubjectReferenceNotFound
+		return "", 0, 0, ErrSubjectReferenceNotFound
 	}
-	key, traversed, err := parseUserSearchCursor(value)
+	key, lastSeen, traversed, err := parseUserSearchCursor(value)
 	if err != nil {
-		return "", 0, ErrSubjectReferenceNotFound
+		return "", 0, 0, ErrSubjectReferenceNotFound
 	}
-	return key, traversed, nil
+	return key, lastSeen, traversed, nil
 }
 
 // GetUserMetricsSummaryInput names one person by a reference a summary tool
@@ -585,23 +618,24 @@ func (s *DiagnosticsService) resolveUserIdentity(ctx context.Context, principal 
 		return telemetryrepo.UserIdentity{}, ErrSubjectReferenceNotFound
 	}
 	rows, err := s.userSearch.SearchUsers(ctx, telemetryrepo.SearchUsersParams{
-		ExcludedHookSources:  billing.GramHostedHookSourceNames(),
-		GramProjectID:        projectID,
-		TimeStart:            window.start.UnixNano(),
-		TimeEnd:              window.end.UnixNano(),
-		GramDeploymentID:     "",
-		EventSource:          "",
-		HookSource:           "",
-		AccountType:          "",
-		ExternalOrgID:        "",
-		GroupBy:              "user_id",
-		UserIDs:              []string{identifier},
-		IdentityContains:     "",
-		SortOrder:            "desc",
-		Cursor:               "",
-		Limit:                1,
-		MetricsDetail:        telemetryrepo.MetricsDetailBasic,
-		CanonicalIdentityOrg: s.canonicalIdentityOrg(ctx, principal.OrganizationID),
+		ExcludedHookSources:    billing.GramHostedHookSourceNames(),
+		GramProjectID:          projectID,
+		TimeStart:              window.start.UnixNano(),
+		TimeEnd:                window.end.UnixNano(),
+		GramDeploymentID:       "",
+		EventSource:            "",
+		HookSource:             "",
+		AccountType:            "",
+		ExternalOrgID:          "",
+		GroupBy:                "user_id",
+		UserIDs:                []string{identifier},
+		IdentityContains:       "",
+		SortOrder:              "desc",
+		Cursor:                 "",
+		CursorLastSeenUnixNano: 0,
+		Limit:                  1,
+		MetricsDetail:          telemetryrepo.MetricsDetailBasic,
+		CanonicalIdentityOrg:   s.canonicalIdentityOrg(ctx, principal.OrganizationID),
 	})
 	if err != nil {
 		return telemetryrepo.UserIdentity{}, fmt.Errorf("resolve user identity: %w", err)
