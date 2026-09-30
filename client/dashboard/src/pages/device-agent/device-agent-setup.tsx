@@ -1,6 +1,7 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
 import { Link as ExternalLink } from "@/components/ui/Link";
 import {
@@ -653,6 +654,50 @@ function ConfigurationProfileNote() {
   );
 }
 
+// RotateTokenDialog confirms rotating the org's agent token, which expires the
+// token already deployed to managed devices.
+function RotateTokenDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>Rotate device agent token?</Dialog.Title>
+          <Dialog.Description>
+            This expires the token currently deployed in your MDM settings.
+          </Dialog.Description>
+        </Dialog.Header>
+        <Alert variant="error">
+          <AlertTitle>
+            Your current MDM integration will stop working
+          </AlertTitle>
+          <AlertDescription>
+            You must replace the existing <code>org_token</code> with the new
+            token and propagate the updated configuration to every managed
+            device. Until then, policy syncing to end-user devices will not
+            work.
+          </AlertDescription>
+        </Alert>
+        <Dialog.Footer>
+          <Button variant="tertiary" onClick={() => onOpenChange(false)}>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button variant="destructive-primary" onClick={onConfirm}>
+            <Button.Text>Rotate token</Button.Text>
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
 // ManagedProfileExample is the managed.json template plus the inline
 // mint/rotate action for its org_token. Shared by the setup sheet's identity
 // step and onboarding's MDM rollout breakdown, so the file an admin copies is
@@ -789,38 +834,11 @@ export function ManagedProfileExample(): React.JSX.Element {
         )}
       </div>
 
-      <Dialog open={rotateConfirmOpen} onOpenChange={setRotateConfirmOpen}>
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>Rotate device agent token?</Dialog.Title>
-            <Dialog.Description>
-              This expires the token currently deployed in your MDM settings.
-            </Dialog.Description>
-          </Dialog.Header>
-          <Alert variant="error">
-            <AlertTitle>
-              Your current MDM integration will stop working
-            </AlertTitle>
-            <AlertDescription>
-              You must replace the existing <code>org_token</code> with the new
-              token and propagate the updated configuration to every managed
-              device. Until then, policy syncing to end-user devices will not
-              work.
-            </AlertDescription>
-          </Alert>
-          <Dialog.Footer>
-            <Button
-              variant="tertiary"
-              onClick={() => setRotateConfirmOpen(false)}
-            >
-              <Button.Text>Cancel</Button.Text>
-            </Button>
-            <Button variant="destructive-primary" onClick={confirmRotation}>
-              <Button.Text>Rotate token</Button.Text>
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
+      <RotateTokenDialog
+        open={rotateConfirmOpen}
+        onOpenChange={setRotateConfirmOpen}
+        onConfirm={confirmRotation}
+      />
     </>
   );
 }
@@ -1474,6 +1492,111 @@ function PlatformTile({
   );
 }
 
+// OrgValues surfaces the two per-org values every MDM profile needs, org_slug
+// and org_token, so an admin can copy them without opening a platform
+// walkthrough. The token is minted (or rotated) here the same way the
+// walkthrough's managed.json example does it, and is shown only once.
+function OrgValues() {
+  const { slug: orgSlug } = useOrganization();
+  const apiKeysHref = useOrgRoutes().apiKeys.href();
+  const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
+  const {
+    generatedToken,
+    autoCopied,
+    isPending,
+    isError,
+    canGenerate,
+    hasExistingAgentKey,
+    generate,
+  } = useAgentToken({ buildCopyText: (token) => token });
+
+  const handleGenerateOrRotate = () => {
+    if (hasExistingAgentKey) {
+      setRotateConfirmOpen(true);
+      return;
+    }
+    generate();
+  };
+
+  return (
+    <div className="border-border bg-card border p-4">
+      <p className="text-eyebrow mb-2">Organization values</p>
+      <Text small muted className="mb-3">
+        Every MDM profile needs these two values. Copy them here, or find them
+        pre-filled in each platform&apos;s walkthrough.
+      </Text>
+      <dl className="grid grid-cols-[max-content_1fr] items-center gap-x-4 gap-y-2">
+        <dt className="font-mono text-xs">org_slug</dt>
+        <dd className="flex min-w-0 items-center gap-2">
+          <code className="truncate text-xs">{orgSlug}</code>
+          <CopyButton text={orgSlug} size="xs" tooltip="Copy org_slug" />
+        </dd>
+        <dt className="font-mono text-xs">org_token</dt>
+        <dd className="flex min-w-0 items-center gap-2">
+          {generatedToken ? (
+            <>
+              <code className="truncate text-xs">{generatedToken}</code>
+              <CopyButton
+                text={generatedToken}
+                size="xs"
+                tooltip="Copy org_token"
+              />
+            </>
+          ) : (
+            <GenerateInlineButton
+              onClick={handleGenerateOrRotate}
+              pending={isPending}
+              disabled={!canGenerate}
+              existing={hasExistingAgentKey}
+            />
+          )}
+        </dd>
+      </dl>
+
+      {generatedToken && (
+        <Alert variant="warning" className="mt-3">
+          <AlertTitle>
+            {autoCopied
+              ? "org_token copied to your clipboard"
+              : "Copy your org_token now"}
+          </AlertTitle>
+          <AlertDescription>
+            The <code>org_token</code> is shown only once and can't be retrieved
+            again. Manage or revoke agent tokens anytime under Settings →{" "}
+            <Link to={apiKeysHref} className={LINK_CLASS}>
+              API Keys
+            </Link>
+            .
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {isError && (
+        <Alert variant="error" className="mt-3">
+          <AlertTitle>Couldn't generate a token</AlertTitle>
+          <AlertDescription>
+            Something went wrong creating the agent token. Try again, or create
+            one under Settings →{" "}
+            <Link to={apiKeysHref} className={LINK_CLASS}>
+              API Keys
+            </Link>{" "}
+            with the Agent scope.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <RotateTokenDialog
+        open={rotateConfirmOpen}
+        onOpenChange={setRotateConfirmOpen}
+        onConfirm={() => {
+          setRotateConfirmOpen(false);
+          generate();
+        }}
+      />
+    </div>
+  );
+}
+
 // DeviceAgentSetup is the shared device-agent setup UI: pick a local OS or
 // Remote sessions from the tile grid, then walk its steps in a sheet. Rendered
 // both on the standalone Device Agent page and inside onboarding.
@@ -1506,6 +1629,7 @@ export function DeviceAgentSetup(): React.JSX.Element {
               path in each local platform&apos;s walkthrough covers it.
             </Text>
           </div>
+          <OrgValues />
           <Text small muted>
             Pick the platform you're installing on to walk through setup.
           </Text>
