@@ -108,9 +108,11 @@ import {
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
 import {
-  WorkloadIdentitiesPage,
-  WorkloadIdentitiesRoot,
-} from "./pages/workload-identities/WorkloadIdentities";
+  WorkloadIssuersPage,
+  WorkloadIssuersRoot,
+} from "./pages/workload-identities/WorkloadIssuers";
+import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
+import WorkloadIdentitiesRedirect from "./pages/workload-identities/WorkloadIdentitiesRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -544,6 +546,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Team Access",
             url: "team-access",
           },
+          guardrails: {
+            title: "MCP Server Guardrails",
+            url: "guardrails",
+          },
           sessions: {
             title: "MCP Server Clients and Sessions",
             url: "sessions",
@@ -701,19 +707,36 @@ const ROUTE_STRUCTURE = {
     },
   },
 
-  workloadIdentities: {
+  // Legacy URL: the Workload Identities page became the Access Hub, so old
+  // bookmarks and links redirect there.
+  legacyWorkloadIdentities: {
     title: "Workload Identities",
     url: "workload-identities",
+    legacyRedirect: true,
+    component: WorkloadIdentitiesRedirect,
+  },
+
+  workloadIssuers: {
+    title: "Access Hub",
+    url: "access-hub",
     icon: "cpu",
     stage: "preview",
-    component: WorkloadIdentitiesRoot,
-    indexComponent: WorkloadIdentitiesPage,
+    component: WorkloadIssuersRoot,
+    indexComponent: WorkloadIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Trusted Platform",
+        url: ":issuerId",
+        component: WorkloadIssuerDetailPage,
+      },
+    },
   },
 
   agents: {
     title: "Agent Identity",
     url: "agent-management",
     icon: "bot",
+    stage: "preview",
     component: AgentsPage,
   },
   // One page per person, reached from every surface that renders a human. The

@@ -186,7 +186,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	}
 
 	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
-	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL)
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL).WithServerURL(config.ServerURL)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
@@ -210,7 +210,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP OAuth service: %w", err)
 	}
-	authenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(config.JWTSigningKey), config.DB, config.Encryption, oauth.Issuer(), oauth.Audience())
+	authenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(config.JWTSigningKey), config.DB, config.Encryption, config.ServerURL)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP authenticator: %w", err)
 	}
@@ -225,7 +225,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		}
 		return append(browserSources, platformmcp.RegistryCatalogSource{Client: fixtureRegistry, Descriptors: []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()}}), nil
 	})
-	store, err := platformmcp.NewRegistrationStore(config.DB, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := platformmcp.NewRegistrationStore(config.DB)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP registration store: %w", err)
 	}
@@ -671,7 +671,7 @@ func loadBrowserPlatformMCPCatalogDescriptors(ctx context.Context, catalog *exte
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
 	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
-	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL)
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL).WithServerURL(config.ServerURL)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
@@ -695,7 +695,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create platform mcp oauth service: %w", err)
 	}
-	authenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(config.JWTSigningKey), config.DB, config.Encryption, oauth.Issuer(), oauth.Audience())
+	authenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(config.JWTSigningKey), config.DB, config.Encryption, config.ServerURL)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create platform mcp authenticator: %w", err)
 	}
@@ -703,7 +703,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	catalog := platformmcp.NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]platformmcp.RegistryCatalogSource, error) {
 		return loadBrowserPlatformMCPCatalogDescriptors(ctx, config.Catalog)
 	})
-	store, err := platformmcp.NewRegistrationStore(config.DB, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := platformmcp.NewRegistrationStore(config.DB)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create Platform MCP registration store: %w", err)
 	}

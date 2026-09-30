@@ -352,27 +352,6 @@ func (q *Queries) ConsumePlatformMCPSetupHandoff(ctx context.Context, arg Consum
 	return i, err
 }
 
-const countActiveRegisteredPlatformMCPCatalogRegistrations = `-- name: CountActiveRegisteredPlatformMCPCatalogRegistrations :one
-SELECT COUNT(*)
-FROM platform_mcp_catalog_registrations
-WHERE organization_id = $1
-  AND project_id = $2
-  AND status = 'registered'
-  AND deleted IS FALSE
-`
-
-type CountActiveRegisteredPlatformMCPCatalogRegistrationsParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-}
-
-func (q *Queries) CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx context.Context, arg CountActiveRegisteredPlatformMCPCatalogRegistrationsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countActiveRegisteredPlatformMCPCatalogRegistrations, arg.OrganizationID, arg.ProjectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countRecentPlatformMCPFeedbackByConnection = `-- name: CountRecentPlatformMCPFeedbackByConnection :one
 SELECT COUNT(*)::bigint
 FROM platform_mcp_feedback
@@ -4368,13 +4347,16 @@ JOIN plugins AS plugin
 WHERE registration.organization_id = $1
   AND registration.project_id = $2
   AND registration.catalog_provider = 'direct-remote-url-v1'
+  AND ($3::uuid IS NULL OR server.id > $3::uuid)
 ORDER BY server.id
-LIMIT 101
+LIMIT $4
 `
 
 type ListDirectRemoteAdmissionTargetCandidatesParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	AfterMcpServerID uuid.NullUUID
+	PageLimit        int32
 }
 
 type ListDirectRemoteAdmissionTargetCandidatesRow struct {
@@ -4386,10 +4368,14 @@ type ListDirectRemoteAdmissionTargetCandidatesRow struct {
 // exact canonical matching in Go. Registration lifecycle changes do not erase
 // durable provenance while the MCP and attachment remain live. Dashboard URL
 // edits can preserve noncanonical spelling that SQL must not reinterpret.
-// Normal projects are capped at five registrations; 101 is a fail-closed
-// corruption guard rather than an application pagination boundary.
+// Callers page by the last mcp_server_id they read.
 func (q *Queries) ListDirectRemoteAdmissionTargetCandidates(ctx context.Context, arg ListDirectRemoteAdmissionTargetCandidatesParams) ([]ListDirectRemoteAdmissionTargetCandidatesRow, error) {
-	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionTargetCandidates, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionTargetCandidates,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AfterMcpServerID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -6616,28 +6602,6 @@ func (q *Queries) LockPlatformMCPOperationReceipt(ctx context.Context, arg LockP
 	return err
 }
 
-const lockPlatformMCPProjectRegistrationQuota = `-- name: LockPlatformMCPProjectRegistrationQuota :exec
-SELECT pg_advisory_xact_lock(
-    hashtextextended(
-        jsonb_build_array('platform-mcp-registration-quota', $1::text, $2::text)::text,
-        0
-    )
-)
-`
-
-type LockPlatformMCPProjectRegistrationQuotaParams struct {
-	OrganizationID string
-	ProjectID      string
-}
-
-// Serialize active-registration counting and desired-state creation for one
-// project. Callers acquire the receipt lock first, then this quota lock, then
-// the candidate-specific desired-state lock.
-func (q *Queries) LockPlatformMCPProjectRegistrationQuota(ctx context.Context, arg LockPlatformMCPProjectRegistrationQuotaParams) error {
-	_, err := q.db.Exec(ctx, lockPlatformMCPProjectRegistrationQuota, arg.OrganizationID, arg.ProjectID)
-	return err
-}
-
 const lockPlatformMCPRemoteIssuerAttachment = `-- name: LockPlatformMCPRemoteIssuerAttachment :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
@@ -7795,30 +7759,6 @@ func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg Search
 		return nil, err
 	}
 	return items, nil
-}
-
-const softDeletePendingPlatformMCPCatalogRegistration = `-- name: SoftDeletePendingPlatformMCPCatalogRegistration :exec
-UPDATE platform_mcp_catalog_registrations
-SET deleted_at = clock_timestamp()
-WHERE id = $1
-  AND organization_id = $2
-  AND project_id = $3
-  AND status = 'pending'
-  AND remote_mcp_server_id IS NULL
-  AND user_session_issuer_id IS NULL
-  AND mcp_server_id IS NULL
-  AND mcp_endpoint_id IS NULL
-`
-
-type SoftDeletePendingPlatformMCPCatalogRegistrationParams struct {
-	RegistrationID uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-}
-
-func (q *Queries) SoftDeletePendingPlatformMCPCatalogRegistration(ctx context.Context, arg SoftDeletePendingPlatformMCPCatalogRegistrationParams) error {
-	_, err := q.db.Exec(ctx, softDeletePendingPlatformMCPCatalogRegistration, arg.RegistrationID, arg.OrganizationID, arg.ProjectID)
-	return err
 }
 
 const updatePlatformMCPCatalogRegistrationComponents = `-- name: UpdatePlatformMCPCatalogRegistrationComponents :one

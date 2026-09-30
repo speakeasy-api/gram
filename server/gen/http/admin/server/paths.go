@@ -107,6 +107,16 @@ func ListOrganizationActivityAdminPath() string {
 	return "/admin/organization.activity"
 }
 
+// ListUsersAdminPath returns the URL path to the admin service listUsers HTTP endpoint.
+func ListUsersAdminPath() string {
+	return "/admin/users.list"
+}
+
+// ListUserOrganizationsAdminPath returns the URL path to the admin service listUserOrganizations HTTP endpoint.
+func ListUserOrganizationsAdminPath() string {
+	return "/admin/users.organizations.list"
+}
+
 // ListOrganizationsAdminPath returns the URL path to the admin service listOrganizations HTTP endpoint.
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"
@@ -315,4 +325,14 @@ func SaveRegistryEntryAdminPath() string {
 // SetRegistryEntryPublishedAdminPath returns the URL path to the admin service setRegistryEntryPublished HTTP endpoint.
 func SetRegistryEntryPublishedAdminPath() string {
 	return "/admin/registry.setPublished"
+}
+
+// GetStripeSubscriptionCandidateAdminPath returns the URL path to the admin service getStripeSubscriptionCandidate HTTP endpoint.
+func GetStripeSubscriptionCandidateAdminPath() string {
+	return "/admin/organization.stripeSubscriptionCandidate"
+}
+
+// SetStripeSubscriptionAdminPath returns the URL path to the admin service setStripeSubscription HTTP endpoint.
+func SetStripeSubscriptionAdminPath() string {
+	return "/admin/organization.setStripeSubscription"
 }

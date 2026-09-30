@@ -12,6 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminAcquireStripeSubscriptionLock = `-- name: AdminAcquireStripeSubscriptionLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Serializes assignments of the same Stripe subscription across organizations.
+func (q *Queries) AdminAcquireStripeSubscriptionLock(ctx context.Context, stripeSubscriptionID string) error {
+	_, err := q.db.Exec(ctx, adminAcquireStripeSubscriptionLock, stripeSubscriptionID)
+	return err
+}
+
 const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
 UPDATE organization_metadata
 SET
@@ -140,6 +150,58 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const adminCountUserOrganizations = `-- name: AdminCountUserOrganizations :one
+SELECT (SELECT count(*) FROM organization_user_relationships m WHERE m.user_id = u.id AND m.deleted IS FALSE) AS total
+FROM users u WHERE u.id = $1::text AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+`
+
+func (q *Queries) AdminCountUserOrganizations(ctx context.Context, userID string) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountUserOrganizations, userID)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
+}
+
+const adminCountUsers = `-- name: AdminCountUsers :one
+SELECT count(*)
+FROM users u
+WHERE u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) p(pattern) WHERE NOT (u.display_name ILIKE p.pattern))
+AND NOT EXISTS (SELECT 1 FROM unnest($2::text[]) p(pattern) WHERE NOT (u.email ILIKE p.pattern))
+AND (cardinality($3::text[]) = 0 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM unnest($3::text[]) p(pattern) WHERE NOT (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern))
+))
+AND NOT EXISTS (
+    SELECT 1 FROM unnest($4::text[]) p(pattern)
+    WHERE NOT (u.display_name ILIKE p.pattern OR u.email ILIKE p.pattern OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE AND (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern)
+ ))
+)
+`
+
+type AdminCountUsersParams struct {
+	NamePatterns  []string
+	EmailPatterns []string
+	OrgPatterns   []string
+	AnyPatterns   []string
+}
+
+// Keep eligibility and search predicates identical to AdminListUsers.
+func (q *Queries) AdminCountUsers(ctx context.Context, arg AdminCountUsersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountUsers,
+		arg.NamePatterns,
+		arg.EmailPatterns,
+		arg.OrgPatterns,
+		arg.AnyPatterns,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const adminDisableOrganization = `-- name: AdminDisableOrganization :execrows
@@ -969,6 +1031,168 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 	return items, nil
 }
 
+const adminListUserOrganizations = `-- name: AdminListUserOrganizations :many
+SELECT o.id, o.name, o.slug, o.disabled_at
+FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+WHERE m.user_id = $1::text AND m.deleted IS FALSE
+ORDER BY lower(o.name), o.slug, o.id LIMIT $3::int OFFSET $2::int
+`
+
+type AdminListUserOrganizationsParams struct {
+	UserID     string
+	PageOffset int32
+	PageLimit  int32
+}
+
+type AdminListUserOrganizationsRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListUserOrganizations(ctx context.Context, arg AdminListUserOrganizationsParams) ([]AdminListUserOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListUserOrganizations, arg.UserID, arg.PageOffset, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUserOrganizationsRow
+	for rows.Next() {
+		var i AdminListUserOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.DisabledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUsers = `-- name: AdminListUsers :many
+SELECT u.id, u.email, u.display_name, u.last_login
+FROM users u
+WHERE u.deleted_at IS NULL AND u.workos_deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM unnest($1::text[]) p(pattern) WHERE NOT (u.display_name ILIKE p.pattern))
+AND NOT EXISTS (SELECT 1 FROM unnest($2::text[]) p(pattern) WHERE NOT (u.email ILIKE p.pattern))
+AND (cardinality($3::text[]) = 0 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE
+    AND NOT EXISTS (SELECT 1 FROM unnest($3::text[]) p(pattern) WHERE NOT (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern))
+))
+AND NOT EXISTS (
+    SELECT 1 FROM unnest($4::text[]) p(pattern)
+    WHERE NOT (u.display_name ILIKE p.pattern OR u.email ILIKE p.pattern OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = u.id AND m.deleted IS FALSE AND (o.name ILIKE p.pattern OR o.slug ILIKE p.pattern)
+ ))
+)
+ORDER BY lower(u.email), u.id LIMIT $6::int OFFSET $5::int
+`
+
+type AdminListUsersParams struct {
+	NamePatterns  []string
+	EmailPatterns []string
+	OrgPatterns   []string
+	AnyPatterns   []string
+	PageOffset    int32
+	PageLimit     int32
+}
+
+type AdminListUsersRow struct {
+	ID          string
+	Email       string
+	DisplayName string
+	LastLogin   pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListUsers(ctx context.Context, arg AdminListUsersParams) ([]AdminListUsersRow, error) {
+	rows, err := q.db.Query(ctx, adminListUsers,
+		arg.NamePatterns,
+		arg.EmailPatterns,
+		arg.OrgPatterns,
+		arg.AnyPatterns,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUsersRow
+	for rows.Next() {
+		var i AdminListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.LastLogin,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListUsersOrganizationPreviews = `-- name: AdminListUsersOrganizationPreviews :many
+WITH ranked AS (
+    SELECT m.user_id, o.id, o.name, o.slug, o.disabled_at,
+    count(*) OVER (PARTITION BY m.user_id) AS organization_count,
+    row_number() OVER (PARTITION BY m.user_id ORDER BY lower(o.name), o.slug, o.id) AS position
+    FROM organization_user_relationships m JOIN organization_metadata o ON o.id = m.organization_id
+    WHERE m.user_id = ANY($1::text[]) AND m.deleted IS FALSE
+)
+SELECT user_id, id, name, slug, disabled_at, organization_count FROM ranked WHERE position <= 3
+ORDER BY user_id, position
+`
+
+type AdminListUsersOrganizationPreviewsRow struct {
+	UserID            pgtype.Text
+	ID                string
+	Name              string
+	Slug              string
+	DisabledAt        pgtype.Timestamptz
+	OrganizationCount int64
+}
+
+func (q *Queries) AdminListUsersOrganizationPreviews(ctx context.Context, userIds []string) ([]AdminListUsersOrganizationPreviewsRow, error) {
+	rows, err := q.db.Query(ctx, adminListUsersOrganizationPreviews, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUsersOrganizationPreviewsRow
+	for rows.Next() {
+		var i AdminListUsersOrganizationPreviewsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.DisabledAt,
+			&i.OrganizationCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminProjectBelongsToOrganization = `-- name: AdminProjectBelongsToOrganization :one
 SELECT EXISTS (
     SELECT 1 FROM projects
@@ -1078,6 +1302,49 @@ type AdminSetStripeCustomerParams struct {
 
 func (q *Queries) AdminSetStripeCustomer(ctx context.Context, arg AdminSetStripeCustomerParams) (string, error) {
 	row := q.db.QueryRow(ctx, adminSetStripeCustomer, arg.OrganizationID, arg.StripeCustomerID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
+}
+
+const adminSetStripeSubscription = `-- name: AdminSetStripeSubscription :one
+UPDATE billing_metadata
+SET
+    stripe_subscription_id = $1::text,
+    stripe_billing_cycle_anchor = $2::timestamptz,
+    billing_cycle_anchor_day = $3::integer,
+    updated_at = clock_timestamp()
+FROM organization_metadata
+WHERE billing_metadata.organization_id = organization_metadata.id
+  AND billing_metadata.organization_id = $4::text
+  AND billing_metadata.stripe_customer_id = $5::text
+  AND billing_metadata.stripe_subscription_id IS NULL
+  AND organization_metadata.gram_account_type = 'payg'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM billing_metadata AS other
+    WHERE other.stripe_subscription_id = $1::text
+      AND other.organization_id <> billing_metadata.organization_id
+  )
+RETURNING billing_metadata.organization_id
+`
+
+type AdminSetStripeSubscriptionParams struct {
+	StripeSubscriptionID     string
+	StripeBillingCycleAnchor pgtype.Timestamptz
+	BillingCycleAnchorDay    int32
+	OrganizationID           string
+	StripeCustomerID         string
+}
+
+func (q *Queries) AdminSetStripeSubscription(ctx context.Context, arg AdminSetStripeSubscriptionParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminSetStripeSubscription,
+		arg.StripeSubscriptionID,
+		arg.StripeBillingCycleAnchor,
+		arg.BillingCycleAnchorDay,
+		arg.OrganizationID,
+		arg.StripeCustomerID,
+	)
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err

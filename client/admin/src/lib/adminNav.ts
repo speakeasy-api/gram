@@ -10,6 +10,7 @@
 
 import {
   BuildingIcon,
+  UsersIcon,
   CalculatorIcon,
   FolderIcon,
   Grid2X2Icon,
@@ -23,6 +24,12 @@ export const ADMIN_NAV_GROUPS = [
   {
     label: "Account Management",
     items: [
+      {
+        to: "/users",
+        label: "Users",
+        keywords: "people email members directory",
+        icon: UsersIcon,
+      },
       {
         to: "/organizations",
         label: "Organizations",

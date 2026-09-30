@@ -169,7 +169,7 @@ func UsageCommands() []string {
 		"platform-killswitches (list-definitions|activate-prescription|change-prescription|deactivate-prescription|get-prescription|list-prescriptions)",
 		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
 		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
-		"plugins (list-distribution-plugins|get-distribution-plugin|list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
+		"plugins (list-distribution-plugins|get-distribution-plugin|list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|rotate-observability-credential|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
@@ -195,7 +195,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|get-stripe-subscription-candidate|set-stripe-subscription)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -2305,6 +2305,11 @@ func ParseEndpoint(
 		pluginsDownloadPluginPackageSessionTokenFlag     = pluginsDownloadPluginPackageFlags.String("session-token", "", "")
 		pluginsDownloadPluginPackageProjectSlugInputFlag = pluginsDownloadPluginPackageFlags.String("project-slug-input", "", "")
 
+		pluginsRotateObservabilityCredentialFlags                = flag.NewFlagSet("rotate-observability-credential", flag.ExitOnError)
+		pluginsRotateObservabilityCredentialBodyFlag             = pluginsRotateObservabilityCredentialFlags.String("body", "REQUIRED", "")
+		pluginsRotateObservabilityCredentialSessionTokenFlag     = pluginsRotateObservabilityCredentialFlags.String("session-token", "", "")
+		pluginsRotateObservabilityCredentialProjectSlugInputFlag = pluginsRotateObservabilityCredentialFlags.String("project-slug-input", "", "")
+
 		pluginsDownloadObservabilityPluginFlags                = flag.NewFlagSet("download-observability-plugin", flag.ExitOnError)
 		pluginsDownloadObservabilityPluginPlatformFlag         = pluginsDownloadObservabilityPluginFlags.String("platform", "REQUIRED", "")
 		pluginsDownloadObservabilityPluginSessionTokenFlag     = pluginsDownloadObservabilityPluginFlags.String("session-token", "", "")
@@ -2641,6 +2646,7 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersListIssuersFlags            = flag.NewFlagSet("list-issuers", flag.ExitOnError)
 		organizationRemoteSessionIssuersListIssuersCursorFlag       = organizationRemoteSessionIssuersListIssuersFlags.String("cursor", "", "")
 		organizationRemoteSessionIssuersListIssuersLimitFlag        = organizationRemoteSessionIssuersListIssuersFlags.String("limit", "", "")
+		organizationRemoteSessionIssuersListIssuersTierFlag         = organizationRemoteSessionIssuersListIssuersFlags.String("tier", "", "")
 		organizationRemoteSessionIssuersListIssuersSessionTokenFlag = organizationRemoteSessionIssuersListIssuersFlags.String("session-token", "", "")
 		organizationRemoteSessionIssuersListIssuersApikeyTokenFlag  = organizationRemoteSessionIssuersListIssuersFlags.String("apikey-token", "", "")
 
@@ -2724,6 +2730,9 @@ func ParseEndpoint(
 		remoteSessionIssuersListRemoteSessionIssuersFlags                = flag.NewFlagSet("list-remote-session-issuers", flag.ExitOnError)
 		remoteSessionIssuersListRemoteSessionIssuersCursorFlag           = remoteSessionIssuersListRemoteSessionIssuersFlags.String("cursor", "", "")
 		remoteSessionIssuersListRemoteSessionIssuersLimitFlag            = remoteSessionIssuersListRemoteSessionIssuersFlags.String("limit", "", "")
+		remoteSessionIssuersListRemoteSessionIssuersSearchFlag           = remoteSessionIssuersListRemoteSessionIssuersFlags.String("search", "", "")
+		remoteSessionIssuersListRemoteSessionIssuersUpstreamHostFlag     = remoteSessionIssuersListRemoteSessionIssuersFlags.String("upstream-host", "", "")
+		remoteSessionIssuersListRemoteSessionIssuersTierFlag             = remoteSessionIssuersListRemoteSessionIssuersFlags.String("tier", "", "")
 		remoteSessionIssuersListRemoteSessionIssuersSessionTokenFlag     = remoteSessionIssuersListRemoteSessionIssuersFlags.String("session-token", "", "")
 		remoteSessionIssuersListRemoteSessionIssuersApikeyTokenFlag      = remoteSessionIssuersListRemoteSessionIssuersFlags.String("apikey-token", "", "")
 		remoteSessionIssuersListRemoteSessionIssuersProjectSlugInputFlag = remoteSessionIssuersListRemoteSessionIssuersFlags.String("project-slug-input", "", "")
@@ -4161,6 +4170,18 @@ func ParseEndpoint(
 		adminListOrganizationActivityCursorFlag            = adminListOrganizationActivityFlags.String("cursor", "", "")
 		adminListOrganizationActivityAdminSessionTokenFlag = adminListOrganizationActivityFlags.String("admin-session-token", "", "")
 
+		adminListUsersFlags                 = flag.NewFlagSet("list-users", flag.ExitOnError)
+		adminListUsersQFlag                 = adminListUsersFlags.String("q", "", "")
+		adminListUsersPageFlag              = adminListUsersFlags.String("page", "", "")
+		adminListUsersLimitFlag             = adminListUsersFlags.String("limit", "", "")
+		adminListUsersAdminSessionTokenFlag = adminListUsersFlags.String("admin-session-token", "", "")
+
+		adminListUserOrganizationsFlags                 = flag.NewFlagSet("list-user-organizations", flag.ExitOnError)
+		adminListUserOrganizationsUserIDFlag            = adminListUserOrganizationsFlags.String("user-id", "REQUIRED", "")
+		adminListUserOrganizationsPageFlag              = adminListUserOrganizationsFlags.String("page", "", "")
+		adminListUserOrganizationsLimitFlag             = adminListUserOrganizationsFlags.String("limit", "", "")
+		adminListUserOrganizationsAdminSessionTokenFlag = adminListUserOrganizationsFlags.String("admin-session-token", "", "")
+
 		adminListOrganizationsFlags                 = flag.NewFlagSet("list-organizations", flag.ExitOnError)
 		adminListOrganizationsQFlag                 = adminListOrganizationsFlags.String("q", "", "")
 		adminListOrganizationsAccountTypeFlag       = adminListOrganizationsFlags.String("account-type", "", "")
@@ -4353,6 +4374,15 @@ func ParseEndpoint(
 		adminSetRegistryEntryPublishedFlags                 = flag.NewFlagSet("set-registry-entry-published", flag.ExitOnError)
 		adminSetRegistryEntryPublishedBodyFlag              = adminSetRegistryEntryPublishedFlags.String("body", "REQUIRED", "")
 		adminSetRegistryEntryPublishedAdminSessionTokenFlag = adminSetRegistryEntryPublishedFlags.String("admin-session-token", "", "")
+
+		adminGetStripeSubscriptionCandidateFlags                    = flag.NewFlagSet("get-stripe-subscription-candidate", flag.ExitOnError)
+		adminGetStripeSubscriptionCandidateOrganizationIDFlag       = adminGetStripeSubscriptionCandidateFlags.String("organization-id", "REQUIRED", "")
+		adminGetStripeSubscriptionCandidateStripeSubscriptionIDFlag = adminGetStripeSubscriptionCandidateFlags.String("stripe-subscription-id", "REQUIRED", "")
+		adminGetStripeSubscriptionCandidateAdminSessionTokenFlag    = adminGetStripeSubscriptionCandidateFlags.String("admin-session-token", "", "")
+
+		adminSetStripeSubscriptionFlags                 = flag.NewFlagSet("set-stripe-subscription", flag.ExitOnError)
+		adminSetStripeSubscriptionBodyFlag              = adminSetStripeSubscriptionFlags.String("body", "REQUIRED", "")
+		adminSetStripeSubscriptionAdminSessionTokenFlag = adminSetStripeSubscriptionFlags.String("admin-session-token", "", "")
 
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
 
@@ -5127,6 +5157,7 @@ func ParseEndpoint(
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
 	pluginsListAudiencesFlags.Usage = pluginsListAudiencesUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
+	pluginsRotateObservabilityCredentialFlags.Usage = pluginsRotateObservabilityCredentialUsage
 	pluginsDownloadObservabilityPluginFlags.Usage = pluginsDownloadObservabilityPluginUsage
 	pluginsDownloadCodexInstallScriptFlags.Usage = pluginsDownloadCodexInstallScriptUsage
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
@@ -5501,6 +5532,8 @@ func ParseEndpoint(
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
 	adminListProjectMcpServersFlags.Usage = adminListProjectMcpServersUsage
 	adminListOrganizationActivityFlags.Usage = adminListOrganizationActivityUsage
+	adminListUsersFlags.Usage = adminListUsersUsage
+	adminListUserOrganizationsFlags.Usage = adminListUserOrganizationsUsage
 	adminListOrganizationsFlags.Usage = adminListOrganizationsUsage
 	adminExtendTrialFlags.Usage = adminExtendTrialUsage
 	adminCreateOrganizationFlags.Usage = adminCreateOrganizationUsage
@@ -5543,6 +5576,8 @@ func ParseEndpoint(
 	adminCreateRegistryEntryFlags.Usage = adminCreateRegistryEntryUsage
 	adminSaveRegistryEntryFlags.Usage = adminSaveRegistryEntryUsage
 	adminSetRegistryEntryPublishedFlags.Usage = adminSetRegistryEntryPublishedUsage
+	adminGetStripeSubscriptionCandidateFlags.Usage = adminGetStripeSubscriptionCandidateUsage
+	adminSetStripeSubscriptionFlags.Usage = adminSetStripeSubscriptionUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
@@ -7221,6 +7256,9 @@ func ParseEndpoint(
 			case "download-plugin-package":
 				epf = pluginsDownloadPluginPackageFlags
 
+			case "rotate-observability-credential":
+				epf = pluginsRotateObservabilityCredentialFlags
+
 			case "download-observability-plugin":
 				epf = pluginsDownloadObservabilityPluginFlags
 
@@ -8291,6 +8329,12 @@ func ParseEndpoint(
 			case "list-organization-activity":
 				epf = adminListOrganizationActivityFlags
 
+			case "list-users":
+				epf = adminListUsersFlags
+
+			case "list-user-organizations":
+				epf = adminListUserOrganizationsFlags
+
 			case "list-organizations":
 				epf = adminListOrganizationsFlags
 
@@ -8416,6 +8460,12 @@ func ParseEndpoint(
 
 			case "set-registry-entry-published":
 				epf = adminSetRegistryEntryPublishedFlags
+
+			case "get-stripe-subscription-candidate":
+				epf = adminGetStripeSubscriptionCandidateFlags
+
+			case "set-stripe-subscription":
+				epf = adminSetStripeSubscriptionFlags
 
 			}
 
@@ -10038,6 +10088,9 @@ func ParseEndpoint(
 			case "download-plugin-package":
 				endpoint = c.DownloadPluginPackage()
 				data, err = pluginsc.BuildDownloadPluginPackagePayload(*pluginsDownloadPluginPackagePluginIDFlag, *pluginsDownloadPluginPackagePlatformFlag, *pluginsDownloadPluginPackageSessionTokenFlag, *pluginsDownloadPluginPackageProjectSlugInputFlag)
+			case "rotate-observability-credential":
+				endpoint = c.RotateObservabilityCredential()
+				data, err = pluginsc.BuildRotateObservabilityCredentialPayload(*pluginsRotateObservabilityCredentialBodyFlag, *pluginsRotateObservabilityCredentialSessionTokenFlag, *pluginsRotateObservabilityCredentialProjectSlugInputFlag)
 			case "download-observability-plugin":
 				endpoint = c.DownloadObservabilityPlugin()
 				data, err = pluginsc.BuildDownloadObservabilityPluginPayload(*pluginsDownloadObservabilityPluginPlatformFlag, *pluginsDownloadObservabilityPluginSessionTokenFlag, *pluginsDownloadObservabilityPluginProjectSlugInputFlag)
@@ -10241,7 +10294,7 @@ func ParseEndpoint(
 				data, err = organizationremotesessionissuersc.BuildCreateIssuerPayload(*organizationRemoteSessionIssuersCreateIssuerBodyFlag, *organizationRemoteSessionIssuersCreateIssuerSessionTokenFlag, *organizationRemoteSessionIssuersCreateIssuerApikeyTokenFlag)
 			case "list-issuers":
 				endpoint = c.ListIssuers()
-				data, err = organizationremotesessionissuersc.BuildListIssuersPayload(*organizationRemoteSessionIssuersListIssuersCursorFlag, *organizationRemoteSessionIssuersListIssuersLimitFlag, *organizationRemoteSessionIssuersListIssuersSessionTokenFlag, *organizationRemoteSessionIssuersListIssuersApikeyTokenFlag)
+				data, err = organizationremotesessionissuersc.BuildListIssuersPayload(*organizationRemoteSessionIssuersListIssuersCursorFlag, *organizationRemoteSessionIssuersListIssuersLimitFlag, *organizationRemoteSessionIssuersListIssuersTierFlag, *organizationRemoteSessionIssuersListIssuersSessionTokenFlag, *organizationRemoteSessionIssuersListIssuersApikeyTokenFlag)
 			case "get-issuer":
 				endpoint = c.GetIssuer()
 				data, err = organizationremotesessionissuersc.BuildGetIssuerPayload(*organizationRemoteSessionIssuersGetIssuerIDFlag, *organizationRemoteSessionIssuersGetIssuerSessionTokenFlag, *organizationRemoteSessionIssuersGetIssuerApikeyTokenFlag)
@@ -10290,7 +10343,7 @@ func ParseEndpoint(
 				data, err = remotesessionissuersc.BuildUpdateRemoteSessionIssuerPayload(*remoteSessionIssuersUpdateRemoteSessionIssuerBodyFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerProjectSlugInputFlag)
 			case "list-remote-session-issuers":
 				endpoint = c.ListRemoteSessionIssuers()
-				data, err = remotesessionissuersc.BuildListRemoteSessionIssuersPayload(*remoteSessionIssuersListRemoteSessionIssuersCursorFlag, *remoteSessionIssuersListRemoteSessionIssuersLimitFlag, *remoteSessionIssuersListRemoteSessionIssuersSessionTokenFlag, *remoteSessionIssuersListRemoteSessionIssuersApikeyTokenFlag, *remoteSessionIssuersListRemoteSessionIssuersProjectSlugInputFlag)
+				data, err = remotesessionissuersc.BuildListRemoteSessionIssuersPayload(*remoteSessionIssuersListRemoteSessionIssuersCursorFlag, *remoteSessionIssuersListRemoteSessionIssuersLimitFlag, *remoteSessionIssuersListRemoteSessionIssuersSearchFlag, *remoteSessionIssuersListRemoteSessionIssuersUpstreamHostFlag, *remoteSessionIssuersListRemoteSessionIssuersTierFlag, *remoteSessionIssuersListRemoteSessionIssuersSessionTokenFlag, *remoteSessionIssuersListRemoteSessionIssuersApikeyTokenFlag, *remoteSessionIssuersListRemoteSessionIssuersProjectSlugInputFlag)
 			case "get-remote-session-issuer":
 				endpoint = c.GetRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildGetRemoteSessionIssuerPayload(*remoteSessionIssuersGetRemoteSessionIssuerIDFlag, *remoteSessionIssuersGetRemoteSessionIssuerSlugFlag, *remoteSessionIssuersGetRemoteSessionIssuerIssuerFlag, *remoteSessionIssuersGetRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInputFlag)
@@ -11107,6 +11160,12 @@ func ParseEndpoint(
 			case "list-organization-activity":
 				endpoint = c.ListOrganizationActivity()
 				data, err = adminc.BuildListOrganizationActivityPayload(*adminListOrganizationActivityOrganizationIDFlag, *adminListOrganizationActivityCursorFlag, *adminListOrganizationActivityAdminSessionTokenFlag)
+			case "list-users":
+				endpoint = c.ListUsers()
+				data, err = adminc.BuildListUsersPayload(*adminListUsersQFlag, *adminListUsersPageFlag, *adminListUsersLimitFlag, *adminListUsersAdminSessionTokenFlag)
+			case "list-user-organizations":
+				endpoint = c.ListUserOrganizations()
+				data, err = adminc.BuildListUserOrganizationsPayload(*adminListUserOrganizationsUserIDFlag, *adminListUserOrganizationsPageFlag, *adminListUserOrganizationsLimitFlag, *adminListUserOrganizationsAdminSessionTokenFlag)
 			case "list-organizations":
 				endpoint = c.ListOrganizations()
 				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsAccountTypesFlag, *adminListOrganizationsTrialStatesFlag, *adminListOrganizationsDisabledStatusFlag, *adminListOrganizationsMinMembersFlag, *adminListOrganizationsMaxMembersFlag, *adminListOrganizationsCreatedFromFlag, *adminListOrganizationsCreatedToFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsSortFlag, *adminListOrganizationsDirectionFlag, *adminListOrganizationsPageFlag, *adminListOrganizationsAdminSessionTokenFlag)
@@ -11236,6 +11295,12 @@ func ParseEndpoint(
 			case "set-registry-entry-published":
 				endpoint = c.SetRegistryEntryPublished()
 				data, err = adminc.BuildSetRegistryEntryPublishedPayload(*adminSetRegistryEntryPublishedBodyFlag, *adminSetRegistryEntryPublishedAdminSessionTokenFlag)
+			case "get-stripe-subscription-candidate":
+				endpoint = c.GetStripeSubscriptionCandidate()
+				data, err = adminc.BuildGetStripeSubscriptionCandidatePayload(*adminGetStripeSubscriptionCandidateOrganizationIDFlag, *adminGetStripeSubscriptionCandidateStripeSubscriptionIDFlag, *adminGetStripeSubscriptionCandidateAdminSessionTokenFlag)
+			case "set-stripe-subscription":
+				endpoint = c.SetStripeSubscription()
+				data, err = adminc.BuildSetStripeSubscriptionPayload(*adminSetStripeSubscriptionBodyFlag, *adminSetStripeSubscriptionAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -20705,6 +20770,7 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
 	fmt.Fprintln(os.Stderr, `    list-audiences: List the audiences that can be assigned to plugins.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
+	fmt.Fprintln(os.Stderr, `    rotate-observability-credential: Rotate the observability plugin's hooks-scoped ingest credential. Mints a replacement key, republishes the marketplace when possible so installs pick it up, and either revokes previous plugin hooks keys immediately or keeps them valid for a grace window.`)
 	fmt.Fprintln(os.Stderr, `    download-observability-plugin: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.`)
 	fmt.Fprintln(os.Stderr, `    download-codex-install-script: Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.`)
 	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
@@ -21001,6 +21067,28 @@ func pluginsDownloadPluginPackageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-plugin-package --plugin-id \"550e8400-e29b-41d4-a716-446655440000\" --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsRotateObservabilityCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins rotate-observability-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Rotate the observability plugin's hooks-scoped ingest credential. Mints a replacement key, republishes the marketplace when possible so installs pick it up, and either revokes previous plugin hooks keys immediately or keeps them valid for a grace window.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins rotate-observability-credential --body '{\n      \"previous_key_fate\": \"grace\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsDownloadObservabilityPluginUsage() {
@@ -21981,7 +22069,7 @@ func organizationRemoteSessionClientsUpdateClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients update-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients update-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsAttachClientKeySetUsage() {
@@ -22258,7 +22346,7 @@ func remoteSessionClientsUpdateRemoteSessionClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients update-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsAttachUserSessionIssuerUsage() {
@@ -22488,6 +22576,7 @@ func organizationRemoteSessionIssuersListIssuersUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers list-issuers", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -tier STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprintln(os.Stderr)
@@ -22499,12 +22588,13 @@ func organizationRemoteSessionIssuersListIssuersUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -tier STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers list-issuers --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers list-issuers --cursor \"abc123\" --limit 1 --tier \"project\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersGetIssuerUsage() {
@@ -22743,7 +22833,7 @@ func remoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    refresh-remote-session-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.`)
 	fmt.Fprintln(os.Stderr, `    create-remote-session-issuer: Create a new remote_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-issuer: Update fields on an existing remote_session_issuer.`)
-	fmt.Fprintln(os.Stderr, `    list-remote-session-issuers: List remote_session_issuers in the caller's project.`)
+	fmt.Fprintln(os.Stderr, `    list-remote-session-issuers: List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.`)
 	fmt.Fprintln(os.Stderr, `    get-remote-session-issuer: Get a remote_session_issuer by id, by slug, or by upstream issuer URL. Provide exactly one.
 	
 	Looking up by issuer is how an automatic setup flow decides whether an upstream authorization server already has an identity provider before creating one: a 404 means nothing describes that URL yet, so create it. Unlike id and slug, which address at most one record, several issuers may legitimately describe the same URL — a project may keep its own alongside one inherited from its organization or from the platform catalog. This returns the one this project would use, preferring project over organization over platform and, within a tier, the oldest.
@@ -22860,6 +22950,9 @@ func remoteSessionIssuersListRemoteSessionIssuersUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers list-remote-session-issuers", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -upstream-host STRING")
+	fmt.Fprint(os.Stderr, " -tier STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -22867,18 +22960,21 @@ func remoteSessionIssuersListRemoteSessionIssuersUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List remote_session_issuers in the caller's project.`)
+	fmt.Fprintln(os.Stderr, `List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -upstream-host STRING: `)
+	fmt.Fprintln(os.Stderr, `    -tier STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers list-remote-session-issuers --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers list-remote-session-issuers --cursor \"abc123\" --limit 1 --search \"aaa\" --upstream-host \"aaa\" --tier \"organization\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersGetRemoteSessionIssuerUsage() {
@@ -28666,6 +28762,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-project-mcp-servers: Lists the MCP servers in a project (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organization-activity: Lists activity belonging to an organization for admin operators.`)
+	fmt.Fprintln(os.Stderr, `    list-users: Staff-only active user discovery.`)
+	fmt.Fprintln(os.Stderr, `    list-user-organizations: Staff-only active user discovery.`)
 	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.`)
 	fmt.Fprintln(os.Stderr, `    extend-trial: Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.`)
 	fmt.Fprintln(os.Stderr, `    create-organization: Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
@@ -28712,6 +28810,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    create-registry-entry: Staff-only registry administration.`)
 	fmt.Fprintln(os.Stderr, `    save-registry-entry: Staff-only registry administration.`)
 	fmt.Fprintln(os.Stderr, `    set-registry-entry-published: Staff-only registry administration.`)
+	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.`)
+	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -29122,6 +29222,54 @@ func adminListOrganizationActivityUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organization-activity --organization-id \"abc123\" --cursor \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminListUsersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-users", os.Args[0])
+	fmt.Fprint(os.Stderr, " -q STRING")
+	fmt.Fprint(os.Stderr, " -page INT")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only active user discovery.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -q STRING: `)
+	fmt.Fprintln(os.Stderr, `    -page INT: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-users --q \"abc123\" --page 2 --limit 2 --admin-session-token \"abc123\"")
+}
+
+func adminListUserOrganizationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-user-organizations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -page INT")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Staff-only active user discovery.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -page INT: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-user-organizations --user-id \"abc123\" --page 2 --limit 2 --admin-session-token \"abc123\"")
 }
 
 func adminListOrganizationsUsage() {
@@ -30016,6 +30164,48 @@ func adminSetRegistryEntryPublishedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-registry-entry-published --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"published\": false,\n      \"updated_at\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetStripeSubscriptionCandidateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-stripe-subscription-candidate", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -stripe-subscription-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stripe-subscription-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-stripe-subscription-candidate --organization-id \"abc123\" --stripe-subscription-id \"aaa\" --admin-session-token \"abc123\"")
+}
+
+func adminSetStripeSubscriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-stripe-subscription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-stripe-subscription --body '{\n      \"organization_id\": \"abc123\",\n      \"stripe_subscription_id\": \"aaa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // userSessionClientsUsage displays the usage of the user-session-clients
@@ -30968,7 +31158,7 @@ func workloadIdentitiesRegisterIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities register-issuer --body '{\n      \"allow_wildcard_admission\": false,\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities register-issuer --body '{\n      \"allow_wildcard_admission\": false,\n      \"description\": \"abc123\",\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesWithdrawIssuerUsage() {
@@ -31016,7 +31206,7 @@ func workloadIdentitiesAdmitSubjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities admit-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities admit-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesWithdrawSubjectUsage() {

@@ -32,7 +32,7 @@ mise set --file mise.local.toml "TEMPORAL_NAMESPACE=${compose_project}"
 # every worktree connects to one shared emulator.
 mise set --file mise.local.toml "GRAM_GCP_PROJECT_ID=${compose_project}"
 
-# Pub/Sub and LGTM are shared across every worktree
+# Pub/Sub and the OTLP sink are shared across every worktree
 # (compose.shared.yml). The namespace and project ID above isolate state; this
 # label keeps traces and metrics separate too. The OTel SDK reads it directly,
 # so nothing in the Go code has to know.

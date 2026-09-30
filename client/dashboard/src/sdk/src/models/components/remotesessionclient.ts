@@ -74,6 +74,10 @@ export type RemoteSessionClient = {
    */
   jsonWebKeySetId?: string | undefined;
   /**
+   * Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.
+   */
+  legacyCallbackUrl: boolean;
+  /**
    * The owning organization id. Empty for legacy rows not yet backfilled and global clients.
    */
   organizationId: string;
@@ -143,6 +147,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
     grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
     json_web_key_set_id: z.optional(z.string()),
+    legacy_callback_url: z.boolean(),
     organization_id: z.string(),
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
@@ -171,6 +176,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "grant_types": "grantTypes",
       "json_web_key_set_id": "jsonWebKeySetId",
+      "legacy_callback_url": "legacyCallbackUrl",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "remote_session_issuer_id": "remoteSessionIssuerId",

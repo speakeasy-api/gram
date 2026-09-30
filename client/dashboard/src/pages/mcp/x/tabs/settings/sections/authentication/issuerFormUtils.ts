@@ -1,4 +1,5 @@
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { getServerURL } from "@/lib/utils";
 
 // Snapshot of the issuer + RFC 8414 metadata for a given Issuer URL. Created
 // fresh on every successful discovery and seeded from saved records in the
@@ -209,4 +210,28 @@ export function clientTypeHelp(
       return help;
     }
   }
+}
+
+// remoteLoginCallbackURL is the single stable redirect_uri Gram uses for
+// every upstream OAuth provider, regardless of MCP server or slug (see
+// canonicalCallbackRouteBase in server/internal/remotesessions/challenge.go).
+// Manual clients need it registered on the upstream's app out-of-band; DCR
+// and CIMD clients send/publish it automatically, so this only surfaces
+// where the operator has to do that registration by hand.
+export function remoteLoginCallbackURL(): string {
+  return `${callbackBaseURL()}/mcp/remote_login_callback`;
+}
+
+// legacyCallbackURL is the callback clients registered before
+// /mcp/remote_login_callback existed. The server still mounts it and forwards
+// into the current callback, for clients in legacy callback compatibility mode.
+export function legacyCallbackURL(): string {
+  return `${callbackBaseURL()}/oauth/callback`;
+}
+
+// The server trims a trailing slash from its public URL before building
+// redirect URIs, so the URLs shown here must too or they will not match what
+// is registered.
+function callbackBaseURL(): string {
+  return getServerURL().replace(/\/+$/, "");
 }

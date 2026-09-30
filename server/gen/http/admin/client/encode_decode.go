@@ -4755,6 +4755,487 @@ func DecodeListOrganizationActivityResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildListUsersRequest instantiates a HTTP request object with method and
+// path set to call the "admin" service "listUsers" endpoint
+func (c *Client) BuildListUsersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListUsersAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listUsers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListUsersRequest returns an encoder for requests sent to the admin
+// listUsers server.
+func EncodeListUsersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListUsersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listUsers", "*admin.ListUsersPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		if p.Q != nil {
+			values.Add("q", *p.Q)
+		}
+		if p.Page != nil {
+			values.Add("page", fmt.Sprintf("%v", *p.Page))
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListUsersResponse returns a decoder for responses returned by the
+// admin listUsers endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListUsersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListUsersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListUsersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+			}
+			err = ValidateListUsersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+			}
+			res := NewListUsersAdminListUsersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListUsersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+			}
+			err = ValidateListUsersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+			}
+			return nil, NewListUsersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListUsersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+			}
+			err = ValidateListUsersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+			}
+			return nil, NewListUsersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListUsersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+			}
+			err = ValidateListUsersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+			}
+			return nil, NewListUsersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListUsersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+			}
+			err = ValidateListUsersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+			}
+			return nil, NewListUsersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListUsersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+			}
+			err = ValidateListUsersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+			}
+			return nil, NewListUsersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListUsersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+			}
+			err = ValidateListUsersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+			}
+			return nil, NewListUsersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListUsersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+			}
+			err = ValidateListUsersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+			}
+			return nil, NewListUsersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListUsersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+				}
+				err = ValidateListUsersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+				}
+				return nil, NewListUsersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListUsersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+				}
+				err = ValidateListUsersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+				}
+				return nil, NewListUsersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listUsers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListUsersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUsers", err)
+			}
+			err = ValidateListUsersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUsers", err)
+			}
+			return nil, NewListUsersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listUsers", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListUserOrganizationsRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "listUserOrganizations"
+// endpoint
+func (c *Client) BuildListUserOrganizationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListUserOrganizationsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listUserOrganizations", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListUserOrganizationsRequest returns an encoder for requests sent to
+// the admin listUserOrganizations server.
+func EncodeListUserOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListUserOrganizationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listUserOrganizations", "*admin.ListUserOrganizationsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("user_id", p.UserID)
+		if p.Page != nil {
+			values.Add("page", fmt.Sprintf("%v", *p.Page))
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListUserOrganizationsResponse returns a decoder for responses returned
+// by the admin listUserOrganizations endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListUserOrganizationsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListUserOrganizationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListUserOrganizationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+			}
+			err = ValidateListUserOrganizationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+			}
+			res := NewListUserOrganizationsAdminListUserOrganizationsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListUserOrganizationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+			}
+			err = ValidateListUserOrganizationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+			}
+			return nil, NewListUserOrganizationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListUserOrganizationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+			}
+			err = ValidateListUserOrganizationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+			}
+			return nil, NewListUserOrganizationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListUserOrganizationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+			}
+			err = ValidateListUserOrganizationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+			}
+			return nil, NewListUserOrganizationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListUserOrganizationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+			}
+			err = ValidateListUserOrganizationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+			}
+			return nil, NewListUserOrganizationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListUserOrganizationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+			}
+			err = ValidateListUserOrganizationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+			}
+			return nil, NewListUserOrganizationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListUserOrganizationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+			}
+			err = ValidateListUserOrganizationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+			}
+			return nil, NewListUserOrganizationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListUserOrganizationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+			}
+			err = ValidateListUserOrganizationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+			}
+			return nil, NewListUserOrganizationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListUserOrganizationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+				}
+				err = ValidateListUserOrganizationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+				}
+				return nil, NewListUserOrganizationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListUserOrganizationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+				}
+				err = ValidateListUserOrganizationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+				}
+				return nil, NewListUserOrganizationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listUserOrganizations", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListUserOrganizationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listUserOrganizations", err)
+			}
+			err = ValidateListUserOrganizationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listUserOrganizations", err)
+			}
+			return nil, NewListUserOrganizationsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listUserOrganizations", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListOrganizationsRequest instantiates a HTTP request object with method
 // and path set to call the "admin" service "listOrganizations" endpoint
 func (c *Client) BuildListOrganizationsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -15023,6 +15504,506 @@ func DecodeSetRegistryEntryPublishedResponse(decoder func(*http.Response) goahtt
 	}
 }
 
+// BuildGetStripeSubscriptionCandidateRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "getStripeSubscriptionCandidate" endpoint
+func (c *Client) BuildGetStripeSubscriptionCandidateRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetStripeSubscriptionCandidateAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getStripeSubscriptionCandidate", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetStripeSubscriptionCandidateRequest returns an encoder for requests
+// sent to the admin getStripeSubscriptionCandidate server.
+func EncodeGetStripeSubscriptionCandidateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetStripeSubscriptionCandidatePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getStripeSubscriptionCandidate", "*admin.GetStripeSubscriptionCandidatePayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("stripe_subscription_id", p.StripeSubscriptionID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetStripeSubscriptionCandidateResponse returns a decoder for responses
+// returned by the admin getStripeSubscriptionCandidate endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetStripeSubscriptionCandidateResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetStripeSubscriptionCandidateResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetStripeSubscriptionCandidateResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			err = ValidateGetStripeSubscriptionCandidateResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			res := NewGetStripeSubscriptionCandidateAdminStripeSubscriptionCandidateOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetStripeSubscriptionCandidateUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			err = ValidateGetStripeSubscriptionCandidateUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			return nil, NewGetStripeSubscriptionCandidateUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body GetStripeSubscriptionCandidateUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			err = ValidateGetStripeSubscriptionCandidateUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			return nil, NewGetStripeSubscriptionCandidateUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetStripeSubscriptionCandidateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			err = ValidateGetStripeSubscriptionCandidateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			return nil, NewGetStripeSubscriptionCandidateForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetStripeSubscriptionCandidateBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			err = ValidateGetStripeSubscriptionCandidateBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			return nil, NewGetStripeSubscriptionCandidateBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetStripeSubscriptionCandidateNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			err = ValidateGetStripeSubscriptionCandidateNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			return nil, NewGetStripeSubscriptionCandidateNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetStripeSubscriptionCandidateConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			err = ValidateGetStripeSubscriptionCandidateConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			return nil, NewGetStripeSubscriptionCandidateConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetStripeSubscriptionCandidateUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			err = ValidateGetStripeSubscriptionCandidateUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			return nil, NewGetStripeSubscriptionCandidateUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetStripeSubscriptionCandidateInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			err = ValidateGetStripeSubscriptionCandidateInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			return nil, NewGetStripeSubscriptionCandidateInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetStripeSubscriptionCandidateInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+				}
+				err = ValidateGetStripeSubscriptionCandidateInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+				}
+				return nil, NewGetStripeSubscriptionCandidateInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetStripeSubscriptionCandidateUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+				}
+				err = ValidateGetStripeSubscriptionCandidateUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+				}
+				return nil, NewGetStripeSubscriptionCandidateUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getStripeSubscriptionCandidate", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetStripeSubscriptionCandidateGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			err = ValidateGetStripeSubscriptionCandidateGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getStripeSubscriptionCandidate", err)
+			}
+			return nil, NewGetStripeSubscriptionCandidateGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getStripeSubscriptionCandidate", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetStripeSubscriptionRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "setStripeSubscription"
+// endpoint
+func (c *Client) BuildSetStripeSubscriptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetStripeSubscriptionAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setStripeSubscription", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetStripeSubscriptionRequest returns an encoder for requests sent to
+// the admin setStripeSubscription server.
+func EncodeSetStripeSubscriptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetStripeSubscriptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setStripeSubscription", "*admin.SetStripeSubscriptionPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetStripeSubscriptionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setStripeSubscription", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetStripeSubscriptionResponse returns a decoder for responses returned
+// by the admin setStripeSubscription endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeSetStripeSubscriptionResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetStripeSubscriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetStripeSubscriptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+			}
+			err = ValidateSetStripeSubscriptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+			}
+			res := NewSetStripeSubscriptionAdminOrganizationOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body SetStripeSubscriptionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+			}
+			err = ValidateSetStripeSubscriptionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+			}
+			return nil, NewSetStripeSubscriptionUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body SetStripeSubscriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+			}
+			err = ValidateSetStripeSubscriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+			}
+			return nil, NewSetStripeSubscriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetStripeSubscriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+			}
+			err = ValidateSetStripeSubscriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+			}
+			return nil, NewSetStripeSubscriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetStripeSubscriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+			}
+			err = ValidateSetStripeSubscriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+			}
+			return nil, NewSetStripeSubscriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetStripeSubscriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+			}
+			err = ValidateSetStripeSubscriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+			}
+			return nil, NewSetStripeSubscriptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetStripeSubscriptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+			}
+			err = ValidateSetStripeSubscriptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+			}
+			return nil, NewSetStripeSubscriptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetStripeSubscriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+			}
+			err = ValidateSetStripeSubscriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+			}
+			return nil, NewSetStripeSubscriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetStripeSubscriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+			}
+			err = ValidateSetStripeSubscriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+			}
+			return nil, NewSetStripeSubscriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetStripeSubscriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+				}
+				err = ValidateSetStripeSubscriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+				}
+				return nil, NewSetStripeSubscriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetStripeSubscriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+				}
+				err = ValidateSetStripeSubscriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+				}
+				return nil, NewSetStripeSubscriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setStripeSubscription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetStripeSubscriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setStripeSubscription", err)
+			}
+			err = ValidateSetStripeSubscriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setStripeSubscription", err)
+			}
+			return nil, NewSetStripeSubscriptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setStripeSubscription", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -15098,6 +16079,42 @@ func unmarshalAuditLogResponseBodyToAdminAuditLog(v *AuditLogResponseBody) *admi
 			tv := val
 			res.Metadata[tk] = tv
 		}
+	}
+
+	return res
+}
+
+// unmarshalAdminUserResponseBodyToAdminAdminUser builds a value of type
+// *admin.AdminUser from a value of type *AdminUserResponseBody.
+func unmarshalAdminUserResponseBodyToAdminAdminUser(v *AdminUserResponseBody) *admin.AdminUser {
+	res := &admin.AdminUser{
+		ID:                *v.ID,
+		DisplayName:       *v.DisplayName,
+		Email:             *v.Email,
+		LastLogin:         v.LastLogin,
+		OrganizationCount: *v.OrganizationCount,
+	}
+	res.Organizations = make([]*admin.AdminUserOrganization, len(v.Organizations))
+	for i, val := range v.Organizations {
+		if val == nil {
+			res.Organizations[i] = nil
+			continue
+		}
+		res.Organizations[i] = unmarshalAdminUserOrganizationResponseBodyToAdminAdminUserOrganization(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminUserOrganizationResponseBodyToAdminAdminUserOrganization
+// builds a value of type *admin.AdminUserOrganization from a value of type
+// *AdminUserOrganizationResponseBody.
+func unmarshalAdminUserOrganizationResponseBodyToAdminAdminUserOrganization(v *AdminUserOrganizationResponseBody) *admin.AdminUserOrganization {
+	res := &admin.AdminUserOrganization{
+		ID:         *v.ID,
+		Name:       *v.Name,
+		Slug:       *v.Slug,
+		DisabledAt: v.DisabledAt,
 	}
 
 	return res

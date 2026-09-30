@@ -455,6 +455,10 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
+	if payload.LegacyCallbackURL != nil && !authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "changing a client's legacy callback mode requires a platform admin").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -521,6 +525,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:               conv.PtrToPGBool(payload.LegacyCallbackURL),
 		ID:                              clientID,
 		ProjectID:                       conv.ToNullUUID(*authCtx.ProjectID),
 	})

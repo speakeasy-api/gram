@@ -731,12 +731,21 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
+	hosts, err := upstreamHostCandidates(conv.PtrValOr(payload.UpstreamHost, ""))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid upstream_host")
+	}
+	// Goa validates the enum; empty means every tier.
+	tier := conv.PtrValOr(payload.Tier, "")
 
 	rows, err := repo.New(s.db).ListRemoteSessionIssuersByProjectID(ctx, repo.ListRemoteSessionIssuersByProjectIDParams{
 		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-		IncludeOrganizational: true,
-		IncludeGlobal:         true,
+		IncludeProject:        tier == "" || tier == "project",
+		IncludeOrganizational: tier == "" || tier == "organization",
+		IncludeGlobal:         tier == "" || tier == "platform",
+		Search:                containsPattern(conv.PtrValOr(payload.Search, "")),
+		Hosts:                 hosts,
 		Cursor:                cursor,
 		LimitValue:            limit,
 	})
@@ -1814,6 +1823,61 @@ func pageLimit(in *int) int32 {
 		limit = constants.MaxPageLimit
 	}
 	return int32(limit)
+}
+
+// containsPattern turns free text into a LIKE pattern matching it anywhere,
+// with LIKE's own wildcards escaped so "50%" or "my_idp" match literally. Blank
+// text is NULL: no filter.
+func containsPattern(text string) pgtype.Text {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	escaped := strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(text)
+	return pgtype.Text{String: "%" + escaped + "%", Valid: true}
+}
+
+// upstreamHostCandidates expands an upstream host into the issuer hosts that
+// may sign users in to it: the host itself and each parent domain of at least
+// two labels, so mcp.linear.app yields mcp.linear.app and linear.app but never
+// the bare "app". A port other than 443 or 80 is kept on every candidate; those
+// two are dropped, matching the listing query's normalization of stored issuer
+// URLs. IP addresses have no parent domains. Blank input yields no candidates,
+// which the query reads as no filter.
+func upstreamHostCandidates(raw string) ([]string, error) {
+	host := strings.ToLower(strings.TrimSpace(raw))
+	if host == "" {
+		return []string{}, nil
+	}
+	if strings.ContainsAny(host, "/?#@ ") {
+		return nil, fmt.Errorf("upstream host %q must be a bare host, without scheme, path or credentials", raw)
+	}
+
+	port := ""
+	if h, p, err := net.SplitHostPort(host); err == nil {
+		host = h
+		if p != "443" && p != "80" {
+			port = ":" + p
+		}
+	}
+	host = strings.TrimSuffix(host, ".")
+	if host == "" {
+		return nil, fmt.Errorf("upstream host %q has no host name", raw)
+	}
+
+	if net.ParseIP(host) != nil {
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+		return []string{host + port}, nil
+	}
+
+	labels := strings.Split(host, ".")
+	candidates := []string{host + port}
+	for i := 1; i < len(labels)-1; i++ {
+		candidates = append(candidates, strings.Join(labels[i:], ".")+port)
+	}
+	return candidates, nil
 }
 
 // parseCursor decodes a list cursor. Cursors are the id of the last row

@@ -32,6 +32,18 @@ type SessionClaims struct {
 // client IDs are resolved as OAuth Client ID Metadata Documents.
 const FirstPartyClientID = "client:first-party"
 
+// FirstPartyClientName is the connections label for a session the dashboard
+// minted for itself (Inspect, the playground). Those rows have no OAuth
+// client registration, so the session list supplies this name when
+// DashboardMintRefreshTokenHashPrefix marks the row.
+const FirstPartyClientName = "Dashboard"
+
+// DashboardMintRefreshTokenHashPrefix marks user_sessions rows minted by the
+// dashboard instead of a registered OAuth client. The session list reads it
+// to apply FirstPartyClientName. It is not a hash: real refresh-token hashes
+// are base64url and cannot contain ':', so the prefix cannot collide with one.
+const DashboardMintRefreshTokenHashPrefix = "dashboard-mint"
+
 // Signer mints HS256-signed session JWTs. It is safe to share across goroutines.
 type Signer struct {
 	key []byte

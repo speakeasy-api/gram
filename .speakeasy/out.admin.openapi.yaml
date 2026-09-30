@@ -2177,6 +2177,87 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: setStripeCustomer
+  /admin/organization.setStripeSubscription:
+    post:
+      tags:
+        - admin
+      summary: setStripeSubscription admin
+      description: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.
+      operationId: adminSetStripeSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetStripeSubscriptionRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganization'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: setStripeSubscription
   /admin/organization.spendBreakdown:
     get:
       description: Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.
@@ -2449,6 +2530,96 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getStripeSubscription
+  /admin/organization.stripeSubscriptionCandidate:
+    get:
+      tags:
+        - admin
+      summary: getStripeSubscriptionCandidate admin
+      description: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.
+      operationId: adminGetStripeSubscriptionCandidate
+      parameters:
+        - name: organization_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+        - name: stripe_subscription_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            pattern: ^sub_[A-Za-z0-9_]+$
+            maxLength: 255
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStripeSubscriptionCandidate'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getStripeSubscriptionCandidate
   /admin/organization.update:
     post:
       tags:
@@ -5181,6 +5352,187 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: startTrial
+  /admin/users.list:
+    get:
+      tags:
+        - admin
+      summary: listUsers admin
+      description: Staff-only active user discovery.
+      operationId: adminListUsers
+      parameters:
+        - name: q
+          in: query
+          allowEmptyValue: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          allowEmptyValue: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: limit
+          in: query
+          allowEmptyValue: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminListUsersResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listUsers
+  /admin/users.organizations.list:
+    get:
+      tags:
+        - admin
+      summary: listUserOrganizations admin
+      description: Staff-only active user discovery.
+      operationId: adminListUserOrganizations
+      parameters:
+        - name: user_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          allowEmptyValue: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: limit
+          in: query
+          allowEmptyValue: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminListUserOrganizationsResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listUserOrganizations
 components:
   schemas:
     AdminBulkUpdateAccountTypeResult:
@@ -5350,6 +5702,48 @@ components:
           description: The project's MCP servers, oldest first.
       required:
         - mcp_servers
+    AdminListUserOrganizationsResult:
+      type: object
+      properties:
+        limit:
+          type: integer
+          format: int64
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUserOrganization'
+        page:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+      required:
+        - organizations
+        - total
+        - page
+        - limit
+    AdminListUsersResult:
+      type: object
+      properties:
+        limit:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+      required:
+        - users
+        - total
+        - page
+        - limit
     AdminMcpServer:
       type: object
       properties:
@@ -5957,6 +6351,64 @@ components:
         - current_period_end
         - cancel_at_period_end
         - payment_failed
+    AdminStripeSubscriptionCandidate:
+      type: object
+      properties:
+        customer_id:
+          type: string
+          description: Stripe customer that owns the subscription.
+        id:
+          type: string
+          description: Stripe subscription ID returned by Stripe.
+        status:
+          type: string
+          description: Stripe subscription status.
+      description: Live Stripe subscription details shown before recording the subscription on a PAYG organization.
+      required:
+        - id
+        - customer_id
+        - status
+    AdminUser:
+      type: object
+      properties:
+        display_name:
+          type: string
+        email:
+          type: string
+        id:
+          type: string
+        last_login:
+          type: string
+          format: date-time
+        organization_count:
+          type: integer
+          format: int64
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUserOrganization'
+      required:
+        - id
+        - display_name
+        - email
+        - organizations
+        - organization_count
+    AdminUserOrganization:
+      type: object
+      properties:
+        disabled_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+        - id
+        - name
+        - slug
     Asset:
       type: object
       properties:
@@ -7128,6 +7580,18 @@ components:
       required:
         - organization_id
         - stripe_customer_id
+    SetStripeSubscriptionRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+        stripe_subscription_id:
+          type: string
+          pattern: ^sub_[A-Za-z0-9_]+$
+          maxLength: 255
+      required:
+        - organization_id
+        - stripe_subscription_id
     SpendBucket:
       type: object
       properties:

@@ -74,6 +74,7 @@ import {
   ExclusionEditor,
   type ExclusionSheetState,
 } from "@/pages/security/exclusion-sheet";
+import { TRANSCRIPT_DENIED_REASON } from "@/pages/security/unmask";
 import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
@@ -1639,8 +1640,9 @@ function ChatDetailPanel({
     return chatLoadForbidden ? (
       <div className="p-8">
         <SheetTitle>Permission denied</SheetTitle>
-        <SheetDescription>
-          You don&apos;t have access to view this chat session.
+        <SheetDescription className="text-warning mt-2 flex items-start gap-2">
+          <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <span>{TRANSCRIPT_DENIED_REASON}</span>
         </SheetDescription>
       </div>
     ) : (

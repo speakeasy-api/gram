@@ -223,6 +223,68 @@ func TestRiskPolicyMCPScopeRejectsAccountIdentity(t *testing.T) {
 	})
 	require.ErrorContains(t, err, `source "account_identity" cannot be used by an MCP-scoped policy`)
 }
+func TestRiskPolicyMCPScopeAllowsOnlyFlagAndBlockActions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	scope := &types.RiskMCPScope{
+		AllServers: true,
+		Servers:    []*types.RiskMCPServerScope{},
+	}
+
+	for _, action := range []string{"warn", "quarantine"} {
+		name := "Scoped " + action
+		_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+			Name:     &name,
+			Sources:  []string{"gitleaks"},
+			Action:   action,
+			McpScope: scope,
+		})
+		require.ErrorContains(t, err, `action "`+action+`" cannot be used by an MCP-scoped policy`)
+	}
+
+	for _, action := range []string{"flag", "block"} {
+		name := "Scoped " + action
+		_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+			Name:     &name,
+			Sources:  []string{"gitleaks"},
+			Action:   action,
+			McpScope: scope,
+		})
+		require.NoError(t, err)
+	}
+
+	name := "Unscoped warn"
+	unscopedWarn, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    &name,
+		Sources: []string{"gitleaks"},
+		Action:  "warn",
+	})
+	require.NoError(t, err)
+
+	name = "Scoped action update"
+	scopedFlag, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:     &name,
+		Sources:  []string{"gitleaks"},
+		Action:   "flag",
+		McpScope: scope,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:     scopedFlag.ID,
+		Name:   scopedFlag.Name,
+		Action: new("warn"),
+	})
+	require.ErrorContains(t, err, `action "warn" cannot be used by an MCP-scoped policy`)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:       unscopedWarn.ID,
+		Name:     unscopedWarn.Name,
+		McpScope: scope,
+	})
+	require.ErrorContains(t, err, `action "warn" cannot be used by an MCP-scoped policy`)
+}
 
 func createMCPScopedPolicy(
 	t *testing.T,

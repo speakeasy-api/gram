@@ -1229,7 +1229,9 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
-		ID:                              clientID,
+		// Global clients were never registered under the legacy callback URL.
+		LegacyCallbackUrl: pgtype.Bool{Bool: false, Valid: false},
+		ID:                clientID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -1228,40 +1228,50 @@ BEGIN
   -- NOT permit one. The agent platform mints an opaque identity per resource
   -- that the caller cannot influence, which is the case the feature exists for.
   INSERT INTO workload_issuers
-    (id, organization_id, project_id, name, issuer, jwks_uri,
+    (id, organization_id, project_id, name, description, tags, issuer, jwks_uri,
      allow_wildcard_admission)
   VALUES
     -- Organization tier. Two of the admissions below are organization-tier and
     -- name this issuer, and an organization-tier admission may only bind an
     -- organization-tier issuer, so a project row here would be a policy shape
     -- the management API refuses to write.
+    --
+    -- Tags overlap deliberately, so a tag search in the Access Hub matches more
+    -- than one platform.
     (demo.det_uuid('gram-demo-workload-issuer-1'), demo_org, NULL,
-     'Acme CI', 'https://ci-identity.example.com',
+     'Acme CI',
+     'Build and deploy pipelines for Acme services, signing in as the repository and branch they run for.',
+     ARRAY['ci', 'build'], 'https://ci-identity.example.com',
      'https://ci-identity.example.com/.well-known/jwks.json', FALSE),
     (demo.det_uuid('gram-demo-workload-issuer-2'), demo_org, NULL,
-     'Acme Agent Platform', 'https://agents.example.com',
+     'Acme Agent Platform',
+     'Autonomous support and operations agents, one identity per agent deployment.',
+     ARRAY['agents', 'build'], 'https://agents.example.com',
      'https://agents.example.com/.well-known/jwks.json', TRUE);
 
   INSERT INTO workload_identity_admissions
     (id, organization_id, project_id, workload_issuer_id, subject, match_kind,
-     name)
+     name, tags)
   VALUES
     (demo.det_uuid('gram-demo-workload-admission-1'), demo_org, proj_a,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/payments-api:ref:refs/heads/main', 'exact', 'Payments deploy'),
+     'repo:acme/payments-api:ref:refs/heads/main', 'exact', 'Payments deploy',
+     ARRAY['payments', 'deploy']),
     (demo.det_uuid('gram-demo-workload-admission-2'), demo_org, NULL,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/docs-site:environment:production', 'exact', 'Docs publish'),
+     'repo:acme/docs-site:environment:production', 'exact', 'Docs publish',
+     ARRAY['docs']),
     (demo.det_uuid('gram-demo-workload-admission-3'), demo_org, NULL,
      demo.det_uuid('gram-demo-workload-issuer-1'),
      'repo:acme/payments-api:ref:refs/heads/main', 'exact',
-     'Payments deploy (all projects)'),
+     'Payments deploy (all projects)', ARRAY['payments', 'deploy']),
     -- One rule standing for a whole fleet, which is what the trailing '*' is
     -- for: this platform's agent id is minted per resource and is not known in
     -- advance, so admitting each one exactly is not an onboarding flow.
     (demo.det_uuid('gram-demo-workload-admission-4'), demo_org, NULL,
      demo.det_uuid('gram-demo-workload-issuer-2'),
-     'wimse://agents.example.com/org/acme/agent/*', 'wildcard', 'Agent fleet');
+     'wimse://agents.example.com/org/acme/agent/*', 'wildcard', 'Agent fleet',
+     ARRAY['support', 'slack']);
 
   -- Keyed on (issuer, match_kind, subject) exactly as the admission is, because
   -- that is the tuple the lookup resolves: an assignment whose match_kind
@@ -1369,7 +1379,7 @@ BEGIN
      token_endpoint, jwks_uri, scopes_supported, grant_types_supported,
      response_types_supported, token_endpoint_auth_methods_supported,
      code_challenge_methods_supported, client_id_metadata_document_supported,
-     name)
+     name, scope_override)
   VALUES
     (demo.det_uuid('gram-demo-remote-identity-provider-linear'), proj_a, demo_org,
      'example-workspace-identity', 'https://identity.example.com',
@@ -1378,7 +1388,9 @@ BEGIN
      'https://identity.example.com/.well-known/jwks.json',
      ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
      ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
-     'Example Workspace Identity');
+     -- A pinned scope request, so the provider's page shows its override and
+     -- its clients' scope fields show the ignored-scopes warning.
+     'Example Workspace Identity', ARRAY['read']);
 
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -1535,10 +1547,11 @@ BEGIN
   -- prevent this display fixture from becoming a usable upstream credential.
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,
-     token_endpoint_auth_method)
+     token_endpoint_auth_method, scope, legacy_callback_url)
   VALUES (demo.det_uuid('gram-demo-attachment-client'), proj_a, demo_org,
           demo.det_uuid('gram-demo-remote-identity-provider-linear'),
-          demo.det_uuid('gram-demo-attachment-client')::text, 'none');
+          demo.det_uuid('gram-demo-attachment-client')::text, 'none',
+          ARRAY['read', 'write'], TRUE);
 
   INSERT INTO remote_session_client_user_session_issuers
     (remote_session_client_id, user_session_issuer_id)

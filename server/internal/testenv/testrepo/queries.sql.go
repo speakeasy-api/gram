@@ -4372,6 +4372,24 @@ func (q *Queries) SeedUserAccountFixture(ctx context.Context, arg SeedUserAccoun
 	return id, err
 }
 
+const setAPIKeyExpiresAtFixture = `-- name: SetAPIKeyExpiresAtFixture :exec
+UPDATE api_keys
+SET expires_at = $1
+WHERE key_hash = $2
+`
+
+type SetAPIKeyExpiresAtFixtureParams struct {
+	ExpiresAt pgtype.Timestamptz
+	KeyHash   string
+}
+
+// Fast-forwards or rewinds an API key's expiry so tests can observe the
+// authentication boundary a credential rotation's grace window creates.
+func (q *Queries) SetAPIKeyExpiresAtFixture(ctx context.Context, arg SetAPIKeyExpiresAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAPIKeyExpiresAtFixture, arg.ExpiresAt, arg.KeyHash)
+	return err
+}
+
 const setAgentInvalidLifecycleFixture = `-- name: SetAgentInvalidLifecycleFixture :exec
 UPDATE agents
 SET suspended_at = clock_timestamp(), revoked_at = clock_timestamp()
@@ -5044,6 +5062,34 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 		arg.CreatedAt,
 		arg.ID,
 		arg.ProjectID,
+	)
+	return err
+}
+
+const setUserLifecycleFixture = `-- name: SetUserLifecycleFixture :exec
+UPDATE users
+SET deleted_at = $1::timestamptz,
+    workos_deleted_at = $2::timestamptz,
+    last_login = $3::timestamptz
+WHERE id = $4
+`
+
+type SetUserLifecycleFixtureParams struct {
+	DeletedAt       pgtype.Timestamptz
+	WorkosDeletedAt pgtype.Timestamptz
+	LastLogin       pgtype.Timestamptz
+	ID              string
+}
+
+// Test-only fixture: independently controls local/provider deletion and login
+// timestamps, including restoring local state without clearing provider deletion.
+// Users are global identities and have no project_id.
+func (q *Queries) SetUserLifecycleFixture(ctx context.Context, arg SetUserLifecycleFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserLifecycleFixture,
+		arg.DeletedAt,
+		arg.WorkosDeletedAt,
+		arg.LastLogin,
+		arg.ID,
 	)
 	return err
 }
