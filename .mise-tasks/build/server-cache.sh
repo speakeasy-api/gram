@@ -21,7 +21,10 @@ set -e
 #
 # The build flags MUST match the start tasks: they feed the compilation and
 # link cache keys, so any drift silently reintroduces cold builds.
-# By default only warm the cache; local command wrappers can request a binary.
-go build \
-    -o "${usage_out:-/dev/null}" \
-    ./main.go
+# go run omits debug information differently from go build. Use its build mode
+# and replace execution with true (warm only) or cp (export for local wrappers).
+if [ "${usage_out:-/dev/null}" = /dev/null ]; then
+    go run -exec true main.go
+else
+    go run -exec cp main.go "$usage_out"
+fi
