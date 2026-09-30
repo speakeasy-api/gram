@@ -337,16 +337,13 @@ const changeTrialEndDateMutation =
   buildAdminChangeTrialEndDateMutation(redirectingClient);
 
 // Preview is a one-shot confirmation read of live Stripe state, not a
-// typed-as-you-go query. cache: "no-store" keeps the browser from serving a
-// stale candidate after the operator retries the same ID.
+// typed-as-you-go query.
 export function getStripeSubscriptionCandidate(
   request: AdminGetStripeSubscriptionCandidateRequest,
 ): Promise<AdminStripeSubscriptionCandidate> {
   return redirecting(
     unwrapAsync(
-      adminGetStripeSubscriptionCandidate(redirectingClient, request, {
-        cache: "no-store",
-      }),
+      adminGetStripeSubscriptionCandidate(redirectingClient, request),
     ),
   );
 }
