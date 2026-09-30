@@ -2791,6 +2791,16 @@ type RiskExclusion struct {
 	Deleted        bool
 }
 
+type RiskFindingEvidence struct {
+	FindingID      uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	MatchEncrypted string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
