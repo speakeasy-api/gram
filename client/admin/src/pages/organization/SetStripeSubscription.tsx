@@ -1,3 +1,5 @@
+import type { AdminStripeSubscriptionCandidate } from "@gram/admin-client/models/components/adminstripesubscriptioncandidate";
+import type { SetStripeSubscriptionRequestBody } from "@gram/admin-client/models/components/setstripesubscriptionrequestbody";
 import { useId, useRef, useState, type JSX, type RefObject } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -23,16 +25,23 @@ import {
   invalidateOrganizations,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
+import { errorMessage, type AdminOrganization } from "@/lib/gramAdminApi";
 import {
-  errorMessage,
   getStripeSubscriptionCandidate,
-  GramAdminError,
   setStripeSubscription,
-  type AdminOrganization,
-  type AdminStripeSubscriptionCandidate,
-  type SetStripeSubscriptionRequest,
-} from "@/lib/gramAdminApi";
+} from "@/lib/gramAdminClient";
 import { useWriteReport } from "@/pages/organizations/writeReport";
+
+function httpStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  if ("statusCode" in error && typeof error.statusCode === "number") {
+    return error.statusCode;
+  }
+  if ("status" in error && typeof error.status === "number") {
+    return error.status;
+  }
+  return undefined;
+}
 
 const STRIPE_SUBSCRIPTION_ID = /^sub_[A-Za-z0-9_]+$/;
 const MAX_STRIPE_SUBSCRIPTION_ID_LENGTH = 255;
@@ -105,11 +114,12 @@ export function SetStripeSubscription({
     },
     onError: (error) => {
       invalidateOrganizationStats(qc);
+      const status = httpStatus(error);
       if (
-        !(error instanceof GramAdminError) ||
-        error.status === 404 ||
-        error.status === 409 ||
-        error.status >= 500
+        status === undefined ||
+        status === 404 ||
+        status === 409 ||
+        status >= 500
       ) {
         void invalidateOrganizations(qc);
       }
@@ -119,23 +129,20 @@ export function SetStripeSubscription({
   const form = useForm({
     defaultValues: { subscriptionID: "" },
     onSubmit: async ({ value }) => {
-      const request: SetStripeSubscriptionRequest = {
-        organization_id: org.id,
-        stripe_subscription_id: value.subscriptionID.trim(),
+      const request: SetStripeSubscriptionRequestBody = {
+        organizationId: org.id,
+        stripeSubscriptionId: value.subscriptionID.trim(),
       };
       const reviewedOrganization = { id: org.id, name: org.name };
       showFailure(null);
       let preview: AdminStripeSubscriptionCandidate;
       try {
-        preview = await getStripeSubscriptionCandidate(
-          request.organization_id,
-          request.stripe_subscription_id,
-        );
+        preview = await getStripeSubscriptionCandidate(request);
         if (!mounted.current) return;
       } catch (error) {
         if (!mounted.current) return;
         const message = errorMessage(error);
-        if (error instanceof GramAdminError && error.status === 409) {
+        if (httpStatus(error) === 409) {
           void invalidateOrganizations(qc);
         }
         const text = `Could not verify Stripe subscription ID for ${reviewedOrganization.name}: ${message}`;
@@ -157,12 +164,12 @@ export function SetStripeSubscription({
             />
             <ConfirmationDetail
               label="Requested ID"
-              value={request.stripe_subscription_id}
+              value={request.stripeSubscriptionId}
             />
             <ConfirmationDetail label="Stripe returned ID" value={preview.id} />
             <ConfirmationDetail
               label="Stripe customer"
-              value={preview.customer_id}
+              value={preview.customerId}
             />
             <ConfirmationDetail label="Status" value={preview.status} />
           </dl>
@@ -175,7 +182,7 @@ export function SetStripeSubscription({
       try {
         const updated = await mutation.mutateAsync(request);
         if (!mounted.current) return;
-        const text = `Set Stripe subscription ID ${updated.stripe_subscription_id ?? request.stripe_subscription_id} for ${updated.name}.`;
+        const text = `Set Stripe subscription ID ${updated.stripe_subscription_id ?? request.stripeSubscriptionId} for ${updated.name}.`;
         announce(text);
         showFailure(null);
         setOpen(false);

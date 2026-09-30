@@ -10,7 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { organizationQuery } from "@/lib/adminQueries";
-import { GramAdminError, type AdminOrganization } from "@/lib/gramAdminApi";
+import { type AdminOrganization } from "@/lib/gramAdminApi";
 import { WriteReportContext } from "@/pages/organizations/writeReport";
 import { anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   setStripeSubscription: vi.fn(),
 }));
 
-vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
@@ -41,7 +41,7 @@ const ORG = anOrganization({
 
 const CANDIDATE = {
   id: "sub_placeholder_1",
-  customer_id: "cus_placeholder_1",
+  customerId: "cus_placeholder_1",
   status: "active",
 };
 
@@ -103,8 +103,8 @@ beforeEach(() => {
   mocks.getStripeSubscriptionCandidate.mockReset();
   mocks.setStripeSubscription.mockReset();
   mocks.getStripeSubscriptionCandidate.mockImplementation(
-    (_organizationID: string, stripeSubscriptionID: string) =>
-      Promise.resolve({ ...CANDIDATE, id: stripeSubscriptionID }),
+    ({ stripeSubscriptionId }: { stripeSubscriptionId: string }) =>
+      Promise.resolve({ ...CANDIDATE, id: stripeSubscriptionId }),
   );
 });
 
@@ -178,10 +178,10 @@ describe("SetStripeSubscription", () => {
     );
     expect(confirmationValue(dialog, "Status")).toBe("active");
     expect(mocks.setStripeSubscription).not.toHaveBeenCalled();
-    expect(mocks.getStripeSubscriptionCandidate).toHaveBeenCalledWith(
-      ORG.id,
-      "sub_placeholder_1",
-    );
+    expect(mocks.getStripeSubscriptionCandidate).toHaveBeenCalledWith({
+      organizationId: ORG.id,
+      stripeSubscriptionId: "sub_placeholder_1",
+    });
 
     mocks.setStripeSubscription.mockResolvedValue({
       ...ORG,
@@ -192,8 +192,8 @@ describe("SetStripeSubscription", () => {
     );
     await waitFor(() => {
       expect(mocks.setStripeSubscription.mock.calls[0]?.[0]).toEqual({
-        organization_id: ORG.id,
-        stripe_subscription_id: "sub_placeholder_1",
+        organizationId: ORG.id,
+        stripeSubscriptionId: "sub_placeholder_1",
       });
     });
     await waitFor(() => {
@@ -205,13 +205,11 @@ describe("SetStripeSubscription", () => {
 
   it("reports a verification failure without saving", async () => {
     mocks.getStripeSubscriptionCandidate.mockRejectedValue(
-      new GramAdminError(
-        409,
-        {
-          message:
-            "Stripe subscription does not belong to the organization's Stripe customer",
-        },
-        "gram admin 409 Conflict",
+      Object.assign(
+        new Error(
+          "Stripe subscription does not belong to the organization's Stripe customer",
+        ),
+        { statusCode: 409 },
       ),
     );
     const { announce } = await renderEditor();
