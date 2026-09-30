@@ -1,5 +1,5 @@
 {
-  "$comment": "Recommended external agent skills. Installed on opt-in by `mise run skills:recommended` (offered by ./zero); contents land in .agents/skills/<name>/ and are kept out of git via .git/info/exclude. Pin `ref` to a commit SHA.",
+  "$comment": "Recommended external agent skills. Installed on demand by `mise run skills:recommended`; contents land in .agents/skills/<name>/ and are kept out of git via .git/info/exclude. Pin `ref` to a commit SHA.",
   "skills": {
     "speakeasy-brand": {
       "repo": "https://github.com/speakeasy-api/marketing-content-generation",

@@ -3,7 +3,7 @@
 #MISE description="Install/update the recommended external agent skills from .agents/recommended-skills.json (SHA-pinned, gitignored)"
 #MISE dir="{{ config_root }}"
 
-#USAGE flag "-y --yes" help="Install without prompting (does not persist the USE_RECOMMENDED_SKILLS choice)"
+#USAGE flag "-y --yes" help="Install without prompting"
 
 set -euo pipefail
 
@@ -33,9 +33,6 @@ if [ "${usage_yes:-false}" != "true" ]; then
     read -r answer
     [ "$(echo "$answer" | tr '[:upper:]' '[:lower:]')" = "y" ] || exit 0
   fi
-  # A manual, consented run also persists the choice so skills:sync keeps
-  # the set up to date from now on.
-  mise set --file mise.local.toml USE_RECOMMENDED_SKILLS=true
 fi
 
 # Keep installed skills and their harness symlinks out of git status without

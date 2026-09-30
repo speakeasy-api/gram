@@ -34,7 +34,7 @@ Vary rounds between do-the-task and adversarial trap questions; live environment
 
 ## External (recommended) skills
 
-Third-party skills are not committed. Declare them in `.agents/recommended-skills.json` — `repo` + `ref` (absolute commit SHA) + `path` (subdirectory to extract) — and let the tooling own the rest: `./zero` asks once and persists `USE_RECOMMENDED_SKILLS` to `mise.local.toml`; when true, `mise run skills:sync` installs/updates the set into `.agents/skills/<name>/` and keeps every installed path out of git via `.git/info/exclude`. To add one: manifest entry, then `mise run skills:recommended` (`--yes` skips the prompt) for the initial install; thereafter `mise run skills:sync` keeps the set updated. To bump: change the SHA, re-run sync.
+Third-party skills are not committed. Declare them in `.agents/recommended-skills.json` — `repo` + `ref` (absolute commit SHA) + `path` (subdirectory to extract). `mise run skills:recommended` (`--yes` skips the prompt) installs or updates the set into `.agents/skills/<name>/` and keeps every installed path out of git via `.git/info/exclude`; then run `mise run skills:sync` to link it into each harness. Neither runs automatically. To bump: change the SHA and re-run both.
 
 ## Common mistakes
 
