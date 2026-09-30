@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	remotesessionissuers "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	goa "goa.design/goa/v3/pkg"
@@ -380,12 +381,24 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 	{
 		if remoteSessionIssuersListRemoteSessionIssuersSearch != "" {
 			search = &remoteSessionIssuersListRemoteSessionIssuersSearch
+			if utf8.RuneCountInString(*search) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 256, false))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var upstreamHost *string
 	{
 		if remoteSessionIssuersListRemoteSessionIssuersUpstreamHost != "" {
 			upstreamHost = &remoteSessionIssuersListRemoteSessionIssuersUpstreamHost
+			if utf8.RuneCountInString(*upstreamHost) > 260 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("upstream_host", *upstreamHost, utf8.RuneCountInString(*upstreamHost), 260, false))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var sessionToken *string

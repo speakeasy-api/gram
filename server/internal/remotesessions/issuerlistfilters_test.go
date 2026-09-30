@@ -52,10 +52,15 @@ func TestListRemoteSessionIssuers_SearchMatchesNameSlugAndIssuer(t *testing.T) {
 	byIssuer := seedRemoteIssuerWithURL(t, ctx, ti.conn, project, noOrg, "second-idp", "https://login.zephyr.test")
 	platform := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, noOrg, "platform-zephyr", "https://platform.example.test")
 	other := seedRemoteIssuerWithURL(t, ctx, ti.conn, project, noOrg, "unrelated-idp", "https://two.example.test")
+	named := newIssuerPayloadForURL("named-idp", "https://three.example.test")
+	named.Name = new("The Zephyr Directory")
+	byName, err := ti.service.CreateRemoteSessionIssuer(ctx, named)
+	require.NoError(t, err)
 
 	ids := listProjectIssuerIDs(t, ctx, ti, new("ZEPHYR"), nil)
 	require.True(t, ids[bySlug.String()], "slug match")
 	require.True(t, ids[byIssuer.String()], "issuer URL match")
+	require.True(t, ids[byName.ID], "name match")
 	require.True(t, ids[platform.String()], "search spans inherited tiers")
 	require.False(t, ids[other.String()], "non-matching issuer is filtered out")
 }

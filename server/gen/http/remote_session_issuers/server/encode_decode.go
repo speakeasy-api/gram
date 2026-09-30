@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	remotesessionissuers "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	types "github.com/speakeasy-api/gram/server/gen/types"
@@ -1021,9 +1022,19 @@ func DecodeListRemoteSessionIssuersRequest(mux goahttp.Muxer, decoder func(*http
 		if searchRaw != "" {
 			search = &searchRaw
 		}
+		if search != nil {
+			if utf8.RuneCountInString(*search) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 256, false))
+			}
+		}
 		upstreamHostRaw := qp.Get("upstream_host")
 		if upstreamHostRaw != "" {
 			upstreamHost = &upstreamHostRaw
+		}
+		if upstreamHost != nil {
+			if utf8.RuneCountInString(*upstreamHost) > 260 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("upstream_host", *upstreamHost, utf8.RuneCountInString(*upstreamHost), 260, false))
+			}
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {

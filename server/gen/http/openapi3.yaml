@@ -53384,6 +53384,7 @@ paths:
                   name: search
                   schema:
                     description: Only issuers whose name, slug or issuer URL contains this text, ignoring case.
+                    maxLength: 256
                     type: string
                 - allowEmptyValue: true
                   description: 'Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.'
@@ -53391,6 +53392,7 @@ paths:
                   name: upstream_host
                   schema:
                     description: 'Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.'
+                    maxLength: 260
                     type: string
                 - allowEmptyValue: true
                   description: Session header

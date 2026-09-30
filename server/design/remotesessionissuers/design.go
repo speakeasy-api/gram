@@ -125,8 +125,12 @@ var _ = Service("remoteSessionIssuers", func() {
 		Payload(func() {
 			Attribute("cursor", String, "Pagination cursor.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
-			Attribute("search", String, "Only issuers whose name, slug or issuer URL contains this text, ignoring case.")
-			Attribute("upstream_host", String, "Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.")
+			Attribute("search", String, "Only issuers whose name, slug or issuer URL contains this text, ignoring case.", func() {
+				MaxLength(256)
+			})
+			Attribute("upstream_host", String, "Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.", func() {
+				MaxLength(260)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
