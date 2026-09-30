@@ -292,6 +292,11 @@ func GetSupportCoverageAdminPath() string {
 	return "/admin/supportCoverage.get"
 }
 
+// DescribeMcpServerHealthAdminPath returns the URL path to the admin service describeMcpServerHealth HTTP endpoint.
+func DescribeMcpServerHealthAdminPath() string {
+	return "/admin/project.mcpServerHealth"
+}
+
 // GetRegistryOktaCandidatesAdminPath returns the URL path to the admin service getRegistryOktaCandidates HTTP endpoint.
 func GetRegistryOktaCandidatesAdminPath() string {
 	return "/admin/registry.oktaCandidates"

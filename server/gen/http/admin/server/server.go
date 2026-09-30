@@ -78,6 +78,7 @@ type Server struct {
 	GetSupportMatrix                      http.Handler
 	UpdateSupportMatrix                   http.Handler
 	GetSupportCoverage                    http.Handler
+	DescribeMcpServerHealth               http.Handler
 	GetRegistryOktaCandidates             http.Handler
 	ListRegistryOktaUnmapped              http.Handler
 	ListRegistryEntries                   http.Handler
@@ -188,6 +189,7 @@ func New(
 			{"GetSupportMatrix", "GET", "/admin/supportMatrix.get"},
 			{"UpdateSupportMatrix", "POST", "/admin/supportMatrix.update"},
 			{"GetSupportCoverage", "GET", "/admin/supportCoverage.get"},
+			{"DescribeMcpServerHealth", "GET", "/admin/project.mcpServerHealth"},
 			{"GetRegistryOktaCandidates", "GET", "/admin/registry.oktaCandidates"},
 			{"ListRegistryOktaUnmapped", "GET", "/admin/registry.oktaUnmapped"},
 			{"ListRegistryEntries", "GET", "/admin/registry.list"},
@@ -270,6 +272,7 @@ func New(
 		GetSupportMatrix:                      NewGetSupportMatrixHandler(e.GetSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 		GetSupportCoverage:                    NewGetSupportCoverageHandler(e.GetSupportCoverage, mux, decoder, encoder, errhandler, formatter),
+		DescribeMcpServerHealth:               NewDescribeMcpServerHealthHandler(e.DescribeMcpServerHealth, mux, decoder, encoder, errhandler, formatter),
 		GetRegistryOktaCandidates:             NewGetRegistryOktaCandidatesHandler(e.GetRegistryOktaCandidates, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryOktaUnmapped:              NewListRegistryOktaUnmappedHandler(e.ListRegistryOktaUnmapped, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryEntries:                   NewListRegistryEntriesHandler(e.ListRegistryEntries, mux, decoder, encoder, errhandler, formatter),
@@ -359,6 +362,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSupportMatrix = m(s.GetSupportMatrix)
 	s.UpdateSupportMatrix = m(s.UpdateSupportMatrix)
 	s.GetSupportCoverage = m(s.GetSupportCoverage)
+	s.DescribeMcpServerHealth = m(s.DescribeMcpServerHealth)
 	s.GetRegistryOktaCandidates = m(s.GetRegistryOktaCandidates)
 	s.ListRegistryOktaUnmapped = m(s.ListRegistryOktaUnmapped)
 	s.ListRegistryEntries = m(s.ListRegistryEntries)
@@ -447,6 +451,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSupportMatrixHandler(mux, h.GetSupportMatrix)
 	MountUpdateSupportMatrixHandler(mux, h.UpdateSupportMatrix)
 	MountGetSupportCoverageHandler(mux, h.GetSupportCoverage)
+	MountDescribeMcpServerHealthHandler(mux, h.DescribeMcpServerHealth)
 	MountGetRegistryOktaCandidatesHandler(mux, h.GetRegistryOktaCandidates)
 	MountListRegistryOktaUnmappedHandler(mux, h.ListRegistryOktaUnmapped)
 	MountListRegistryEntriesHandler(mux, h.ListRegistryEntries)
@@ -3530,6 +3535,60 @@ func NewGetSupportCoverageHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getSupportCoverage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDescribeMcpServerHealthHandler configures the mux to serve the "admin"
+// service "describeMcpServerHealth" endpoint.
+func MountDescribeMcpServerHealthHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/project.mcpServerHealth", f)
+}
+
+// NewDescribeMcpServerHealthHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "describeMcpServerHealth"
+// endpoint.
+func NewDescribeMcpServerHealthHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDescribeMcpServerHealthRequest(mux, decoder)
+		encodeResponse = EncodeDescribeMcpServerHealthResponse(encoder)
+		encodeError    = EncodeDescribeMcpServerHealthError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "describeMcpServerHealth")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

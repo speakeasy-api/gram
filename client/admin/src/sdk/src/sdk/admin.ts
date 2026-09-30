@@ -15,6 +15,7 @@ import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPlaybook.js";
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
+import { adminDescribeMcpServerHealth } from "../funcs/adminDescribeMcpServerHealth.js";
 import { adminDisableOrganization } from "../funcs/adminDisableOrganization.js";
 import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
@@ -92,6 +93,7 @@ import { AdminListOrganizationProjectsResult } from "../models/components/adminl
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
 import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
 import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
+import { AdminMcpServerHealth } from "../models/components/adminmcpserverhealth.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingPlaybook } from "../models/components/adminonboardingplaybook.js";
 import { AdminOnboardingPlaybookList } from "../models/components/adminonboardingplaybooklist.js";
@@ -163,6 +165,7 @@ import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremote
 import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
 import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
+import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admindescribemcpserverhealth.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
@@ -998,6 +1001,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminProjectDetail> {
     return unwrapAsync(adminGetProject(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * describeMcpServerHealth admin
+   *
+   * @remarks
+   * Describes one MCP server's health: authentication configuration, session counts and tool call outcomes over a window (admin view, no auth scoping).
+   */
+  async describeMcpServerHealth(
+    request: AdminDescribeMcpServerHealthRequest,
+    options?: RequestOptions,
+  ): Promise<AdminMcpServerHealth> {
+    return unwrapAsync(adminDescribeMcpServerHealth(
       this,
       request,
       options,

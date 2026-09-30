@@ -244,6 +244,10 @@ type Client struct {
 	// getSupportCoverage endpoint.
 	GetSupportCoverageDoer goahttp.Doer
 
+	// DescribeMcpServerHealth Doer is the HTTP client used to make requests to the
+	// describeMcpServerHealth endpoint.
+	DescribeMcpServerHealthDoer goahttp.Doer
+
 	// GetRegistryOktaCandidates Doer is the HTTP client used to make requests to
 	// the getRegistryOktaCandidates endpoint.
 	GetRegistryOktaCandidatesDoer goahttp.Doer
@@ -417,6 +421,7 @@ func NewClient(
 		GetSupportMatrixDoer:                      doer,
 		UpdateSupportMatrixDoer:                   doer,
 		GetSupportCoverageDoer:                    doer,
+		DescribeMcpServerHealthDoer:               doer,
 		GetRegistryOktaCandidatesDoer:             doer,
 		ListRegistryOktaUnmappedDoer:              doer,
 		ListRegistryEntriesDoer:                   doer,
@@ -1817,6 +1822,30 @@ func (c *Client) GetSupportCoverage() goa.Endpoint {
 		resp, err := c.GetSupportCoverageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getSupportCoverage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DescribeMcpServerHealth returns an endpoint that makes HTTP requests to the
+// admin service describeMcpServerHealth server.
+func (c *Client) DescribeMcpServerHealth() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDescribeMcpServerHealthRequest(c.encoder)
+		decodeResponse = DecodeDescribeMcpServerHealthResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDescribeMcpServerHealthRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DescribeMcpServerHealthDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "describeMcpServerHealth", err)
 		}
 		return decodeResponse(resp)
 	}

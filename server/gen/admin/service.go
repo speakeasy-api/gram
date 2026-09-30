@@ -215,6 +215,9 @@ type Service interface {
 	// session activity, policy enforcement, identity attribution, token usage and
 	// shadow MCP exposure.
 	GetSupportCoverage(context.Context, *GetSupportCoveragePayload) (res *SupportCoverageResult, err error)
+	// Describes one MCP server's health: authentication configuration, session
+	// counts and tool call outcomes over a window (admin view, no auth scoping).
+	DescribeMcpServerHealth(context.Context, *DescribeMcpServerHealthPayload) (res *AdminMcpServerHealth, err error)
 	// Staff-only registry administration: Okta application names observed across
 	// synced tenants that plausibly belong to the entry, for confirmation in the
 	// editor.
@@ -306,7 +309,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [81]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
+var MethodNames = [82]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -445,6 +448,211 @@ type AdminMcpServer struct {
 	// What backs the server. toolset_only is a toolset with no mcp_servers row.
 	Source    string
 	CreatedAt string
+}
+
+// AdminMcpServerHealth is the result type of the admin service
+// describeMcpServerHealth method.
+type AdminMcpServerHealth struct {
+	Server      *AdminMcpServerHealthServer
+	Correlation *AdminMcpServerHealthCorrelation
+	// Legacy authentication in force. Set only when the server has no user session
+	// issuer.
+	LegacyAuth        *string
+	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuer
+	ToolCalls         *AdminMcpServerHealthToolCalls
+}
+
+// The identities telemetry is matched on for this server.
+type AdminMcpServerHealthCorrelation struct {
+	// The slug in the server's /mcp/<slug> URL, matched against hook-observed
+	// calls.
+	URLSlug string
+	// The mcp_servers row ID stamped on proxied calls. Absent for toolset-only
+	// servers.
+	McpServerID *string
+	// The toolset slug stamped on hosted calls. Absent when the server has no
+	// toolset or several live servers share it.
+	ToolsetSlug *string
+}
+
+// Tool calls inside the window by outcome class. In-band tool errors (isError
+// inside HTTP 200) count as success.
+type AdminMcpServerHealthOutcomes struct {
+	Success      int64
+	Unauthorized int64
+	ClientError  int64
+	ServerError  int64
+	Blocked      int64
+	Failed       int64
+	Unknown      int64
+}
+
+// A remote session client attached to the issuer, with its upstream issuer and
+// session counts. Never carries secrets.
+type AdminMcpServerHealthRemoteSessionClient struct {
+	// The remote session client ID.
+	ID string
+	// How the client was registered upstream.
+	Registration string
+	// The client's token endpoint auth method.
+	TokenEndpointAuthMethod *string
+	// Scopes recorded for the client.
+	Scope []string
+	// Grant types recorded for the client.
+	GrantTypes []string
+	// Whether the client is backed by an identity provider connection.
+	HasIdentityProviderConnection bool
+	// global, organization:<id> or project:<id>.
+	AttachmentScope string
+	// When the upstream last rejected the client's credentials.
+	UpstreamRejectedAt *string
+	Issuer             *AdminMcpServerHealthRemoteSessionIssuer
+	Sessions           *AdminMcpServerHealthRemoteSessions
+}
+
+// The upstream authorization server a remote session client is registered
+// with. Error columns are exposed as timestamps only.
+type AdminMcpServerHealthRemoteSessionIssuer struct {
+	// The remote session issuer ID.
+	ID string
+	// The issuer slug.
+	Slug string
+	// Display name of the issuer.
+	Name *string
+	// The upstream issuer URL.
+	Issuer string
+	// global, organization:<id> or project:<id>.
+	AttachmentScope string
+	// Whether Gram reaches the issuer over the public internet or a tunnel.
+	Networking string
+	// Whether the issuer is treated as an OpenID Connect provider.
+	Oidc bool
+	// Whether upstream tokens are passed through to the server.
+	Passthrough bool
+	// PKCE support classified from the issuer's advertised code challenge methods.
+	Pkce string
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id.
+	CimdSupported bool
+	// Operator-pinned scopes sent in place of the discovered set. Absent when
+	// unset.
+	ScopeOverride []string
+	// Last successful metadata discovery.
+	MetadataFetchedAt *string
+	// Last failed metadata discovery.
+	MetadataLastErrorAt *string
+	// Last failed JWK Set fetch.
+	JwksLastErrorAt *string
+}
+
+// Upstream sessions brokered through one remote session client for this issuer.
+type AdminMcpServerHealthRemoteSessions struct {
+	// Distinct users holding a live upstream session.
+	LinkedSubjects int64
+	// Fresh authorizations beyond each session's first.
+	Reauthorizations int64
+	// When the first upstream session was linked.
+	FirstLinkedAt *string
+	// Live sessions per last validation status: valid, rejected_by_member,
+	// inactive or unknown. Sessions never validated are left out.
+	ValidationStatusCounts map[string]int64
+}
+
+// Tool calls in one bucket of the series.
+type AdminMcpServerHealthSeriesPoint struct {
+	BucketStart string
+	// Tool calls in the bucket.
+	Total int64
+	// Failed tool calls in the bucket.
+	Failed int64
+}
+
+// The server the health report describes, as listProjectMcpServers lists it.
+type AdminMcpServerHealthServer struct {
+	// The mcp_servers row ID, or the toolset ID for a toolset-only server.
+	ID string
+	// Display name of the server.
+	Name string
+	// What backs the server. toolset_only is a toolset with no mcp_servers row.
+	Source string
+	// The visibility of the server.
+	Visibility string
+	CreatedAt  string
+}
+
+// Another server in the project that shares the issuer.
+type AdminMcpServerHealthServerRef struct {
+	// The mcp_servers row ID, or the toolset ID for a toolset-only server.
+	ID string
+	// Display name of the server.
+	Name string
+}
+
+// Tool call telemetry, discriminated on type. logging:disabled carries nothing
+// else: the organization's logs are off, so calls were never recorded.
+// logging:enabled carries every other field.
+type AdminMcpServerHealthToolCalls struct {
+	Type string
+	// Length of the window in days.
+	WindowDays *int
+	// Telemetry is complete up to this time.
+	Watermark *string
+	Outcomes  *AdminMcpServerHealthOutcomes
+	// Width of each series bucket.
+	BucketSeconds *int64
+	// Tool calls per bucket, oldest first.
+	Daily []*AdminMcpServerHealthSeriesPoint
+}
+
+// The external authorization server whose assertions the issuer trusts.
+type AdminMcpServerHealthTrustedRemoteSession struct {
+	// The trusted remote session issuer ID.
+	IssuerID string
+	// The remote session client ID Gram uses with the trusted issuer.
+	ClientID string
+}
+
+// The user session issuer that authenticates the server's users.
+type AdminMcpServerHealthUserSessionIssuer struct {
+	// The user session issuer ID.
+	ID string
+	// The issuer slug.
+	Slug string
+	// custom, or project_default_idp for the auto-provisioned issuer of private
+	// servers.
+	Classification string
+	// chain | interactive.
+	AuthnChallengeMode string
+	// How long a user session lasts, in whole hours.
+	SessionDurationHours int64
+	// global, organization:<id> or project:<id>.
+	AttachmentScope string
+	// The stored CIMD admission mode. Absent when unset.
+	ClientIDMetadataAdmissionMode *string
+	// Whether the issuer announces the authentication host as its origin.
+	UseAuthenticationHost bool
+	// Set when the issuer trusts an external authorization server's assertions.
+	TrustedRemoteSession *AdminMcpServerHealthTrustedRemoteSession
+	// Other live servers in the project that share this issuer.
+	OtherServersUsingIssuer []*AdminMcpServerHealthServerRef
+	CreatedAt               string
+	Sessions                *AdminMcpServerHealthUserSessions
+	// Remote session clients attached to the issuer.
+	RemoteSessionClients []*AdminMcpServerHealthRemoteSessionClient
+}
+
+// User sessions the issuer has minted. A refresh replaces a session row, so
+// last_issued_at includes refreshes.
+type AdminMcpServerHealthUserSessions struct {
+	// Distinct users that ever received a session from the issuer.
+	DistinctSubjectsEver int64
+	// Distinct users that received a session inside the window.
+	DistinctSubjectsInWindow int64
+	// When the first session was issued.
+	FirstIssuedAt *string
+	// When the latest session was issued or refreshed.
+	LastIssuedAt *string
+	// Sessions whose refresh deadline has not passed.
+	Live int64
 }
 
 type AdminMdmVendorOption struct {
@@ -1194,6 +1402,22 @@ type DeleteOnboardingPlaybookPayload struct {
 type DeleteOnboardingUseCasePayload struct {
 	AdminSessionToken *string
 	UseCaseID         string
+}
+
+// DescribeMcpServerHealthPayload is the payload type of the admin service
+// describeMcpServerHealth method.
+type DescribeMcpServerHealthPayload struct {
+	AdminSessionToken *string
+	// Organization the project must belong to. A project outside it is reported as
+	// not found.
+	OrganizationID string
+	// Project ID.
+	ProjectID string
+	// The server id from listProjectMcpServers; the toolset ID for toolset-only
+	// servers.
+	McpServerID string
+	// Window in days.
+	WindowDays int
 }
 
 // DisableOrganizationPayload is the payload type of the admin service

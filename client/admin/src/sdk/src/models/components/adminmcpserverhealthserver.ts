@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * What backs the server. toolset_only is a toolset with no mcp_servers row.
  */
-export const AdminMcpServerSource = {
+export const Source = {
   Toolset: "toolset",
   Remote: "remote",
   Tunneled: "tunneled",
@@ -22,12 +22,12 @@ export const AdminMcpServerSource = {
 /**
  * What backs the server. toolset_only is a toolset with no mcp_servers row.
  */
-export type AdminMcpServerSource = ClosedEnum<typeof AdminMcpServerSource>;
+export type Source = ClosedEnum<typeof Source>;
 
 /**
  * The visibility of the server.
  */
-export const AdminMcpServerVisibility = {
+export const Visibility = {
   Disabled: "disabled",
   Private: "private",
   Public: "public",
@@ -35,14 +35,12 @@ export const AdminMcpServerVisibility = {
 /**
  * The visibility of the server.
  */
-export type AdminMcpServerVisibility = ClosedEnum<
-  typeof AdminMcpServerVisibility
->;
+export type Visibility = ClosedEnum<typeof Visibility>;
 
 /**
- * MCP server surfaced to admin operators. Covers both server models: mcp_servers rows and mcp_enabled toolsets that no mcp_servers row points at.
+ * The server the health report describes, as listProjectMcpServers lists it.
  */
-export type AdminMcpServer = {
+export type AdminMcpServerHealthServer = {
   createdAt: Date;
   /**
    * The mcp_servers row ID, or the toolset ID for a toolset-only server.
@@ -55,30 +53,25 @@ export type AdminMcpServer = {
   /**
    * What backs the server. toolset_only is a toolset with no mcp_servers row.
    */
-  source: AdminMcpServerSource;
-  /**
-   * The URL clients connect to. Omitted when the server has no routable address.
-   */
-  url?: string | undefined;
+  source: Source;
   /**
    * The visibility of the server.
    */
-  visibility: AdminMcpServerVisibility;
+  visibility: Visibility;
 };
 
 /** @internal */
-export const AdminMcpServerSource$inboundSchema: z.ZodMiniEnum<
-  typeof AdminMcpServerSource
-> = z.enum(AdminMcpServerSource);
+export const Source$inboundSchema: z.ZodMiniEnum<typeof Source> = z.enum(
+  Source,
+);
 
 /** @internal */
-export const AdminMcpServerVisibility$inboundSchema: z.ZodMiniEnum<
-  typeof AdminMcpServerVisibility
-> = z.enum(AdminMcpServerVisibility);
+export const Visibility$inboundSchema: z.ZodMiniEnum<typeof Visibility> = z
+  .enum(Visibility);
 
 /** @internal */
-export const AdminMcpServer$inboundSchema: z.ZodMiniType<
-  AdminMcpServer,
+export const AdminMcpServerHealthServer$inboundSchema: z.ZodMiniType<
+  AdminMcpServerHealthServer,
   unknown
 > = z.pipe(
   z.object({
@@ -88,9 +81,8 @@ export const AdminMcpServer$inboundSchema: z.ZodMiniType<
     ),
     id: z.string(),
     name: z.string(),
-    source: AdminMcpServerSource$inboundSchema,
-    url: z.optional(z.string()),
-    visibility: AdminMcpServerVisibility$inboundSchema,
+    source: Source$inboundSchema,
+    visibility: Visibility$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -99,12 +91,12 @@ export const AdminMcpServer$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function adminMcpServerFromJSON(
+export function adminMcpServerHealthServerFromJSON(
   jsonString: string,
-): SafeParseResult<AdminMcpServer, SDKValidationError> {
+): SafeParseResult<AdminMcpServerHealthServer, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AdminMcpServer$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AdminMcpServer' from JSON`,
+    (x) => AdminMcpServerHealthServer$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AdminMcpServerHealthServer' from JSON`,
   );
 }

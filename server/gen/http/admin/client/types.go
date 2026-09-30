@@ -1778,6 +1778,18 @@ type GetSupportCoverageResponseBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
+// DescribeMcpServerHealthResponseBody is the type of the "admin" service
+// "describeMcpServerHealth" endpoint HTTP response body.
+type DescribeMcpServerHealthResponseBody struct {
+	Server      *AdminMcpServerHealthServerResponseBody      `form:"server,omitempty" json:"server,omitempty" xml:"server,omitempty"`
+	Correlation *AdminMcpServerHealthCorrelationResponseBody `form:"correlation,omitempty" json:"correlation,omitempty" xml:"correlation,omitempty"`
+	// Legacy authentication in force. Set only when the server has no user session
+	// issuer.
+	LegacyAuth        *string                                            `form:"legacy_auth,omitempty" json:"legacy_auth,omitempty" xml:"legacy_auth,omitempty"`
+	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuerResponseBody `form:"user_session_issuer,omitempty" json:"user_session_issuer,omitempty" xml:"user_session_issuer,omitempty"`
+	ToolCalls         *AdminMcpServerHealthToolCallsResponseBody         `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+}
+
 // GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
 // "getRegistryOktaCandidates" endpoint HTTP response body.
 type GetRegistryOktaCandidatesResponseBody struct {
@@ -13045,6 +13057,196 @@ type GetSupportCoverageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DescribeMcpServerHealthUnauthorizedResponseBody is the type of the "admin"
+// service "describeMcpServerHealth" endpoint HTTP response body for the
+// "unauthorized" error.
+type DescribeMcpServerHealthUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DescribeMcpServerHealthForbiddenResponseBody is the type of the "admin"
+// service "describeMcpServerHealth" endpoint HTTP response body for the
+// "forbidden" error.
+type DescribeMcpServerHealthForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DescribeMcpServerHealthBadRequestResponseBody is the type of the "admin"
+// service "describeMcpServerHealth" endpoint HTTP response body for the
+// "bad_request" error.
+type DescribeMcpServerHealthBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DescribeMcpServerHealthNotFoundResponseBody is the type of the "admin"
+// service "describeMcpServerHealth" endpoint HTTP response body for the
+// "not_found" error.
+type DescribeMcpServerHealthNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DescribeMcpServerHealthConflictResponseBody is the type of the "admin"
+// service "describeMcpServerHealth" endpoint HTTP response body for the
+// "conflict" error.
+type DescribeMcpServerHealthConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DescribeMcpServerHealthUnsupportedMediaResponseBody is the type of the
+// "admin" service "describeMcpServerHealth" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DescribeMcpServerHealthUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DescribeMcpServerHealthInvalidResponseBody is the type of the "admin"
+// service "describeMcpServerHealth" endpoint HTTP response body for the
+// "invalid" error.
+type DescribeMcpServerHealthInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DescribeMcpServerHealthInvariantViolationResponseBody is the type of the
+// "admin" service "describeMcpServerHealth" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DescribeMcpServerHealthInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DescribeMcpServerHealthUnexpectedResponseBody is the type of the "admin"
+// service "describeMcpServerHealth" endpoint HTTP response body for the
+// "unexpected" error.
+type DescribeMcpServerHealthUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DescribeMcpServerHealthGatewayErrorResponseBody is the type of the "admin"
+// service "describeMcpServerHealth" endpoint HTTP response body for the
+// "gateway_error" error.
+type DescribeMcpServerHealthGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetRegistryOktaCandidatesUnauthorizedResponseBody is the type of the "admin"
 // service "getRegistryOktaCandidates" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -18122,6 +18324,205 @@ type SupportCoverageUnmappedResponseBody struct {
 	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
 	// Sessions observed under it inside the window.
 	Sessions *int64 `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+}
+
+// AdminMcpServerHealthServerResponseBody is used to define fields on response
+// body types.
+type AdminMcpServerHealthServerResponseBody struct {
+	// The mcp_servers row ID, or the toolset ID for a toolset-only server.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Display name of the server.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What backs the server. toolset_only is a toolset with no mcp_servers row.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// The visibility of the server.
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	CreatedAt  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
+// AdminMcpServerHealthCorrelationResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthCorrelationResponseBody struct {
+	// The slug in the server's /mcp/<slug> URL, matched against hook-observed
+	// calls.
+	URLSlug *string `form:"url_slug,omitempty" json:"url_slug,omitempty" xml:"url_slug,omitempty"`
+	// The mcp_servers row ID stamped on proxied calls. Absent for toolset-only
+	// servers.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The toolset slug stamped on hosted calls. Absent when the server has no
+	// toolset or several live servers share it.
+	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
+}
+
+// AdminMcpServerHealthUserSessionIssuerResponseBody is used to define fields
+// on response body types.
+type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
+	// The user session issuer ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The issuer slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// custom, or project_default_idp for the auto-provisioned issuer of private
+	// servers.
+	Classification *string `form:"classification,omitempty" json:"classification,omitempty" xml:"classification,omitempty"`
+	// chain | interactive.
+	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
+	// How long a user session lasts, in whole hours.
+	SessionDurationHours *int64 `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// global, organization:<id> or project:<id>.
+	AttachmentScope *string `form:"attachment_scope,omitempty" json:"attachment_scope,omitempty" xml:"attachment_scope,omitempty"`
+	// The stored CIMD admission mode. Absent when unset.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
+	// Whether the issuer announces the authentication host as its origin.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Set when the issuer trusts an external authorization server's assertions.
+	TrustedRemoteSession *AdminMcpServerHealthTrustedRemoteSessionResponseBody `form:"trusted_remote_session,omitempty" json:"trusted_remote_session,omitempty" xml:"trusted_remote_session,omitempty"`
+	// Other live servers in the project that share this issuer.
+	OtherServersUsingIssuer []*AdminMcpServerHealthServerRefResponseBody  `form:"other_servers_using_issuer,omitempty" json:"other_servers_using_issuer,omitempty" xml:"other_servers_using_issuer,omitempty"`
+	CreatedAt               *string                                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	Sessions                *AdminMcpServerHealthUserSessionsResponseBody `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+	// Remote session clients attached to the issuer.
+	RemoteSessionClients []*AdminMcpServerHealthRemoteSessionClientResponseBody `form:"remote_session_clients,omitempty" json:"remote_session_clients,omitempty" xml:"remote_session_clients,omitempty"`
+}
+
+// AdminMcpServerHealthTrustedRemoteSessionResponseBody is used to define
+// fields on response body types.
+type AdminMcpServerHealthTrustedRemoteSessionResponseBody struct {
+	// The trusted remote session issuer ID.
+	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
+	// The remote session client ID Gram uses with the trusted issuer.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+}
+
+// AdminMcpServerHealthServerRefResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthServerRefResponseBody struct {
+	// The mcp_servers row ID, or the toolset ID for a toolset-only server.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Display name of the server.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
+// AdminMcpServerHealthUserSessionsResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthUserSessionsResponseBody struct {
+	// Distinct users that ever received a session from the issuer.
+	DistinctSubjectsEver *int64 `form:"distinct_subjects_ever,omitempty" json:"distinct_subjects_ever,omitempty" xml:"distinct_subjects_ever,omitempty"`
+	// Distinct users that received a session inside the window.
+	DistinctSubjectsInWindow *int64 `form:"distinct_subjects_in_window,omitempty" json:"distinct_subjects_in_window,omitempty" xml:"distinct_subjects_in_window,omitempty"`
+	// When the first session was issued.
+	FirstIssuedAt *string `form:"first_issued_at,omitempty" json:"first_issued_at,omitempty" xml:"first_issued_at,omitempty"`
+	// When the latest session was issued or refreshed.
+	LastIssuedAt *string `form:"last_issued_at,omitempty" json:"last_issued_at,omitempty" xml:"last_issued_at,omitempty"`
+	// Sessions whose refresh deadline has not passed.
+	Live *int64 `form:"live,omitempty" json:"live,omitempty" xml:"live,omitempty"`
+}
+
+// AdminMcpServerHealthRemoteSessionClientResponseBody is used to define fields
+// on response body types.
+type AdminMcpServerHealthRemoteSessionClientResponseBody struct {
+	// The remote session client ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// How the client was registered upstream.
+	Registration *string `form:"registration,omitempty" json:"registration,omitempty" xml:"registration,omitempty"`
+	// The client's token endpoint auth method.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Scopes recorded for the client.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Grant types recorded for the client.
+	GrantTypes []string `form:"grant_types,omitempty" json:"grant_types,omitempty" xml:"grant_types,omitempty"`
+	// Whether the client is backed by an identity provider connection.
+	HasIdentityProviderConnection *bool `form:"has_identity_provider_connection,omitempty" json:"has_identity_provider_connection,omitempty" xml:"has_identity_provider_connection,omitempty"`
+	// global, organization:<id> or project:<id>.
+	AttachmentScope *string `form:"attachment_scope,omitempty" json:"attachment_scope,omitempty" xml:"attachment_scope,omitempty"`
+	// When the upstream last rejected the client's credentials.
+	UpstreamRejectedAt *string                                              `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
+	Issuer             *AdminMcpServerHealthRemoteSessionIssuerResponseBody `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	Sessions           *AdminMcpServerHealthRemoteSessionsResponseBody      `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
+}
+
+// AdminMcpServerHealthRemoteSessionIssuerResponseBody is used to define fields
+// on response body types.
+type AdminMcpServerHealthRemoteSessionIssuerResponseBody struct {
+	// The remote session issuer ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The issuer slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Display name of the issuer.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The upstream issuer URL.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// global, organization:<id> or project:<id>.
+	AttachmentScope *string `form:"attachment_scope,omitempty" json:"attachment_scope,omitempty" xml:"attachment_scope,omitempty"`
+	// Whether Gram reaches the issuer over the public internet or a tunnel.
+	Networking *string `form:"networking,omitempty" json:"networking,omitempty" xml:"networking,omitempty"`
+	// Whether the issuer is treated as an OpenID Connect provider.
+	Oidc *bool `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
+	// Whether upstream tokens are passed through to the server.
+	Passthrough *bool `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
+	// PKCE support classified from the issuer's advertised code challenge methods.
+	Pkce *string `form:"pkce,omitempty" json:"pkce,omitempty" xml:"pkce,omitempty"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id.
+	CimdSupported *bool `form:"cimd_supported,omitempty" json:"cimd_supported,omitempty" xml:"cimd_supported,omitempty"`
+	// Operator-pinned scopes sent in place of the discovered set. Absent when
+	// unset.
+	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// Last successful metadata discovery.
+	MetadataFetchedAt *string `form:"metadata_fetched_at,omitempty" json:"metadata_fetched_at,omitempty" xml:"metadata_fetched_at,omitempty"`
+	// Last failed metadata discovery.
+	MetadataLastErrorAt *string `form:"metadata_last_error_at,omitempty" json:"metadata_last_error_at,omitempty" xml:"metadata_last_error_at,omitempty"`
+	// Last failed JWK Set fetch.
+	JwksLastErrorAt *string `form:"jwks_last_error_at,omitempty" json:"jwks_last_error_at,omitempty" xml:"jwks_last_error_at,omitempty"`
+}
+
+// AdminMcpServerHealthRemoteSessionsResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthRemoteSessionsResponseBody struct {
+	// Distinct users holding a live upstream session.
+	LinkedSubjects *int64 `form:"linked_subjects,omitempty" json:"linked_subjects,omitempty" xml:"linked_subjects,omitempty"`
+	// Fresh authorizations beyond each session's first.
+	Reauthorizations *int64 `form:"reauthorizations,omitempty" json:"reauthorizations,omitempty" xml:"reauthorizations,omitempty"`
+	// When the first upstream session was linked.
+	FirstLinkedAt *string `form:"first_linked_at,omitempty" json:"first_linked_at,omitempty" xml:"first_linked_at,omitempty"`
+	// Live sessions per last validation status: valid, rejected_by_member,
+	// inactive or unknown. Sessions never validated are left out.
+	ValidationStatusCounts map[string]int64 `form:"validation_status_counts,omitempty" json:"validation_status_counts,omitempty" xml:"validation_status_counts,omitempty"`
+}
+
+// AdminMcpServerHealthToolCallsResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthToolCallsResponseBody struct {
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Length of the window in days.
+	WindowDays *int `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
+	// Telemetry is complete up to this time.
+	Watermark *string                                   `form:"watermark,omitempty" json:"watermark,omitempty" xml:"watermark,omitempty"`
+	Outcomes  *AdminMcpServerHealthOutcomesResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
+	// Width of each series bucket.
+	BucketSeconds *int64 `form:"bucket_seconds,omitempty" json:"bucket_seconds,omitempty" xml:"bucket_seconds,omitempty"`
+	// Tool calls per bucket, oldest first.
+	Daily []*AdminMcpServerHealthSeriesPointResponseBody `form:"daily,omitempty" json:"daily,omitempty" xml:"daily,omitempty"`
+}
+
+// AdminMcpServerHealthOutcomesResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthOutcomesResponseBody struct {
+	Success      *int64 `form:"success,omitempty" json:"success,omitempty" xml:"success,omitempty"`
+	Unauthorized *int64 `form:"unauthorized,omitempty" json:"unauthorized,omitempty" xml:"unauthorized,omitempty"`
+	ClientError  *int64 `form:"client_error,omitempty" json:"client_error,omitempty" xml:"client_error,omitempty"`
+	ServerError  *int64 `form:"server_error,omitempty" json:"server_error,omitempty" xml:"server_error,omitempty"`
+	Blocked      *int64 `form:"blocked,omitempty" json:"blocked,omitempty" xml:"blocked,omitempty"`
+	Failed       *int64 `form:"failed,omitempty" json:"failed,omitempty" xml:"failed,omitempty"`
+	Unknown      *int64 `form:"unknown,omitempty" json:"unknown,omitempty" xml:"unknown,omitempty"`
+}
+
+// AdminMcpServerHealthSeriesPointResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerHealthSeriesPointResponseBody struct {
+	BucketStart *string `form:"bucket_start,omitempty" json:"bucket_start,omitempty" xml:"bucket_start,omitempty"`
+	// Tool calls in the bucket.
+	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+	// Failed tool calls in the bucket.
+	Failed *int64 `form:"failed,omitempty" json:"failed,omitempty" xml:"failed,omitempty"`
 }
 
 // AdminRegistryOktaCandidateResponseBody is used to define fields on response
@@ -29070,6 +29471,172 @@ func NewGetSupportCoverageGatewayError(body *GetSupportCoverageGatewayErrorRespo
 	return v
 }
 
+// NewDescribeMcpServerHealthAdminMcpServerHealthOK builds a "admin" service
+// "describeMcpServerHealth" endpoint result from a HTTP "OK" response.
+func NewDescribeMcpServerHealthAdminMcpServerHealthOK(body *DescribeMcpServerHealthResponseBody) *admin.AdminMcpServerHealth {
+	v := &admin.AdminMcpServerHealth{
+		LegacyAuth: body.LegacyAuth,
+	}
+	v.Server = unmarshalAdminMcpServerHealthServerResponseBodyToAdminAdminMcpServerHealthServer(body.Server)
+	v.Correlation = unmarshalAdminMcpServerHealthCorrelationResponseBodyToAdminAdminMcpServerHealthCorrelation(body.Correlation)
+	if body.UserSessionIssuer != nil {
+		v.UserSessionIssuer = unmarshalAdminMcpServerHealthUserSessionIssuerResponseBodyToAdminAdminMcpServerHealthUserSessionIssuer(body.UserSessionIssuer)
+	}
+	v.ToolCalls = unmarshalAdminMcpServerHealthToolCallsResponseBodyToAdminAdminMcpServerHealthToolCalls(body.ToolCalls)
+
+	return v
+}
+
+// NewDescribeMcpServerHealthUnauthorized builds a admin service
+// describeMcpServerHealth endpoint unauthorized error.
+func NewDescribeMcpServerHealthUnauthorized(body *DescribeMcpServerHealthUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDescribeMcpServerHealthForbidden builds a admin service
+// describeMcpServerHealth endpoint forbidden error.
+func NewDescribeMcpServerHealthForbidden(body *DescribeMcpServerHealthForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDescribeMcpServerHealthBadRequest builds a admin service
+// describeMcpServerHealth endpoint bad_request error.
+func NewDescribeMcpServerHealthBadRequest(body *DescribeMcpServerHealthBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDescribeMcpServerHealthNotFound builds a admin service
+// describeMcpServerHealth endpoint not_found error.
+func NewDescribeMcpServerHealthNotFound(body *DescribeMcpServerHealthNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDescribeMcpServerHealthConflict builds a admin service
+// describeMcpServerHealth endpoint conflict error.
+func NewDescribeMcpServerHealthConflict(body *DescribeMcpServerHealthConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDescribeMcpServerHealthUnsupportedMedia builds a admin service
+// describeMcpServerHealth endpoint unsupported_media error.
+func NewDescribeMcpServerHealthUnsupportedMedia(body *DescribeMcpServerHealthUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDescribeMcpServerHealthInvalid builds a admin service
+// describeMcpServerHealth endpoint invalid error.
+func NewDescribeMcpServerHealthInvalid(body *DescribeMcpServerHealthInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDescribeMcpServerHealthInvariantViolation builds a admin service
+// describeMcpServerHealth endpoint invariant_violation error.
+func NewDescribeMcpServerHealthInvariantViolation(body *DescribeMcpServerHealthInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDescribeMcpServerHealthUnexpected builds a admin service
+// describeMcpServerHealth endpoint unexpected error.
+func NewDescribeMcpServerHealthUnexpected(body *DescribeMcpServerHealthUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDescribeMcpServerHealthGatewayError builds a admin service
+// describeMcpServerHealth endpoint gateway_error error.
+func NewDescribeMcpServerHealthGatewayError(body *DescribeMcpServerHealthGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetRegistryOktaCandidatesAdminRegistryOktaCandidatesOK builds a "admin"
 // service "getRegistryOktaCandidates" endpoint result from a HTTP "OK"
 // response.
@@ -34794,6 +35361,46 @@ func ValidateGetSupportCoverageResponseBody(body *GetSupportCoverageResponseBody
 	}
 	if body.To != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateDescribeMcpServerHealthResponseBody runs the validations defined on
+// DescribeMcpServerHealthResponseBody
+func ValidateDescribeMcpServerHealthResponseBody(body *DescribeMcpServerHealthResponseBody) (err error) {
+	if body.Server == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server", "body"))
+	}
+	if body.Correlation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("correlation", "body"))
+	}
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	if body.Server != nil {
+		if err2 := ValidateAdminMcpServerHealthServerResponseBody(body.Server); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Correlation != nil {
+		if err2 := ValidateAdminMcpServerHealthCorrelationResponseBody(body.Correlation); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.LegacyAuth != nil {
+		if !(*body.LegacyAuth == "external_oauth" || *body.LegacyAuth == "oauth_proxy" || *body.LegacyAuth == "gram_private") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.legacy_auth", *body.LegacyAuth, []any{"external_oauth", "oauth_proxy", "gram_private"}))
+		}
+	}
+	if body.UserSessionIssuer != nil {
+		if err2 := ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body.UserSessionIssuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ToolCalls != nil {
+		if err2 := ValidateAdminMcpServerHealthToolCallsResponseBody(body.ToolCalls); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -49632,6 +50239,248 @@ func ValidateGetSupportCoverageGatewayErrorResponseBody(body *GetSupportCoverage
 	return
 }
 
+// ValidateDescribeMcpServerHealthUnauthorizedResponseBody runs the validations
+// defined on describeMcpServerHealth_unauthorized_response_body
+func ValidateDescribeMcpServerHealthUnauthorizedResponseBody(body *DescribeMcpServerHealthUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDescribeMcpServerHealthForbiddenResponseBody runs the validations
+// defined on describeMcpServerHealth_forbidden_response_body
+func ValidateDescribeMcpServerHealthForbiddenResponseBody(body *DescribeMcpServerHealthForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDescribeMcpServerHealthBadRequestResponseBody runs the validations
+// defined on describeMcpServerHealth_bad_request_response_body
+func ValidateDescribeMcpServerHealthBadRequestResponseBody(body *DescribeMcpServerHealthBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDescribeMcpServerHealthNotFoundResponseBody runs the validations
+// defined on describeMcpServerHealth_not_found_response_body
+func ValidateDescribeMcpServerHealthNotFoundResponseBody(body *DescribeMcpServerHealthNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDescribeMcpServerHealthConflictResponseBody runs the validations
+// defined on describeMcpServerHealth_conflict_response_body
+func ValidateDescribeMcpServerHealthConflictResponseBody(body *DescribeMcpServerHealthConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDescribeMcpServerHealthUnsupportedMediaResponseBody runs the
+// validations defined on
+// describeMcpServerHealth_unsupported_media_response_body
+func ValidateDescribeMcpServerHealthUnsupportedMediaResponseBody(body *DescribeMcpServerHealthUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDescribeMcpServerHealthInvalidResponseBody runs the validations
+// defined on describeMcpServerHealth_invalid_response_body
+func ValidateDescribeMcpServerHealthInvalidResponseBody(body *DescribeMcpServerHealthInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDescribeMcpServerHealthInvariantViolationResponseBody runs the
+// validations defined on
+// describeMcpServerHealth_invariant_violation_response_body
+func ValidateDescribeMcpServerHealthInvariantViolationResponseBody(body *DescribeMcpServerHealthInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDescribeMcpServerHealthUnexpectedResponseBody runs the validations
+// defined on describeMcpServerHealth_unexpected_response_body
+func ValidateDescribeMcpServerHealthUnexpectedResponseBody(body *DescribeMcpServerHealthUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDescribeMcpServerHealthGatewayErrorResponseBody runs the validations
+// defined on describeMcpServerHealth_gateway_error_response_body
+func ValidateDescribeMcpServerHealthGatewayErrorResponseBody(body *DescribeMcpServerHealthGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody runs the
 // validations defined on getRegistryOktaCandidates_unauthorized_response_body
 func ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody(body *GetRegistryOktaCandidatesUnauthorizedResponseBody) (err error) {
@@ -56348,6 +57197,357 @@ func ValidateSupportCoverageUnmappedResponseBody(body *SupportCoverageUnmappedRe
 	}
 	if body.Sessions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthServerResponseBody runs the validations defined
+// on AdminMcpServerHealthServerResponseBody
+func ValidateAdminMcpServerHealthServerResponseBody(body *AdminMcpServerHealthServerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.Visibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.Source != nil {
+		if !(*body.Source == "toolset" || *body.Source == "remote" || *body.Source == "tunneled" || *body.Source == "unproxied" || *body.Source == "toolset_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"toolset", "remote", "tunneled", "unproxied", "toolset_only"}))
+		}
+	}
+	if body.Visibility != nil {
+		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthCorrelationResponseBody runs the validations
+// defined on AdminMcpServerHealthCorrelationResponseBody
+func ValidateAdminMcpServerHealthCorrelationResponseBody(body *AdminMcpServerHealthCorrelationResponseBody) (err error) {
+	if body.URLSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url_slug", "body"))
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthUserSessionIssuerResponseBody runs the
+// validations defined on AdminMcpServerHealthUserSessionIssuerResponseBody
+func ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body *AdminMcpServerHealthUserSessionIssuerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Classification == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("classification", "body"))
+	}
+	if body.AuthnChallengeMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authn_challenge_mode", "body"))
+	}
+	if body.SessionDurationHours == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
+	}
+	if body.AttachmentScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attachment_scope", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.OtherServersUsingIssuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("other_servers_using_issuer", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.Sessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	if body.RemoteSessionClients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_clients", "body"))
+	}
+	if body.Classification != nil {
+		if !(*body.Classification == "custom" || *body.Classification == "project_default_idp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.classification", *body.Classification, []any{"custom", "project_default_idp"}))
+		}
+	}
+	if body.TrustedRemoteSession != nil {
+		if err2 := ValidateAdminMcpServerHealthTrustedRemoteSessionResponseBody(body.TrustedRemoteSession); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.OtherServersUsingIssuer {
+		if e != nil {
+			if err2 := ValidateAdminMcpServerHealthServerRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.Sessions != nil {
+		if err2 := ValidateAdminMcpServerHealthUserSessionsResponseBody(body.Sessions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.RemoteSessionClients {
+		if e != nil {
+			if err2 := ValidateAdminMcpServerHealthRemoteSessionClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthTrustedRemoteSessionResponseBody runs the
+// validations defined on AdminMcpServerHealthTrustedRemoteSessionResponseBody
+func ValidateAdminMcpServerHealthTrustedRemoteSessionResponseBody(body *AdminMcpServerHealthTrustedRemoteSessionResponseBody) (err error) {
+	if body.IssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_id", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthServerRefResponseBody runs the validations
+// defined on AdminMcpServerHealthServerRefResponseBody
+func ValidateAdminMcpServerHealthServerRefResponseBody(body *AdminMcpServerHealthServerRefResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthUserSessionsResponseBody runs the validations
+// defined on AdminMcpServerHealthUserSessionsResponseBody
+func ValidateAdminMcpServerHealthUserSessionsResponseBody(body *AdminMcpServerHealthUserSessionsResponseBody) (err error) {
+	if body.DistinctSubjectsEver == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("distinct_subjects_ever", "body"))
+	}
+	if body.DistinctSubjectsInWindow == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("distinct_subjects_in_window", "body"))
+	}
+	if body.Live == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("live", "body"))
+	}
+	if body.FirstIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_issued_at", *body.FirstIssuedAt, goa.FormatDateTime))
+	}
+	if body.LastIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_issued_at", *body.LastIssuedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthRemoteSessionClientResponseBody runs the
+// validations defined on AdminMcpServerHealthRemoteSessionClientResponseBody
+func ValidateAdminMcpServerHealthRemoteSessionClientResponseBody(body *AdminMcpServerHealthRemoteSessionClientResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Registration == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registration", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.GrantTypes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("grant_types", "body"))
+	}
+	if body.HasIdentityProviderConnection == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_identity_provider_connection", "body"))
+	}
+	if body.AttachmentScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attachment_scope", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.Sessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
+	}
+	if body.Registration != nil {
+		if !(*body.Registration == "cimd" || *body.Registration == "dcr" || *body.Registration == "static") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registration", *body.Registration, []any{"cimd", "dcr", "static"}))
+		}
+	}
+	if body.UpstreamRejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
+	}
+	if body.Issuer != nil {
+		if err2 := ValidateAdminMcpServerHealthRemoteSessionIssuerResponseBody(body.Issuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Sessions != nil {
+		if err2 := ValidateAdminMcpServerHealthRemoteSessionsResponseBody(body.Sessions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthRemoteSessionIssuerResponseBody runs the
+// validations defined on AdminMcpServerHealthRemoteSessionIssuerResponseBody
+func ValidateAdminMcpServerHealthRemoteSessionIssuerResponseBody(body *AdminMcpServerHealthRemoteSessionIssuerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.AttachmentScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attachment_scope", "body"))
+	}
+	if body.Networking == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("networking", "body"))
+	}
+	if body.Oidc == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oidc", "body"))
+	}
+	if body.Passthrough == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("passthrough", "body"))
+	}
+	if body.Pkce == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pkce", "body"))
+	}
+	if body.CimdSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cimd_supported", "body"))
+	}
+	if body.Networking != nil {
+		if !(*body.Networking == "public" || *body.Networking == "tunneled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.networking", *body.Networking, []any{"public", "tunneled"}))
+		}
+	}
+	if body.Pkce != nil {
+		if !(*body.Pkce == "supported" || *body.Pkce == "unsupported" || *body.Pkce == "none" || *body.Pkce == "uncaptured") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.pkce", *body.Pkce, []any{"supported", "unsupported", "none", "uncaptured"}))
+		}
+	}
+	if body.MetadataFetchedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.metadata_fetched_at", *body.MetadataFetchedAt, goa.FormatDateTime))
+	}
+	if body.MetadataLastErrorAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.metadata_last_error_at", *body.MetadataLastErrorAt, goa.FormatDateTime))
+	}
+	if body.JwksLastErrorAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_last_error_at", *body.JwksLastErrorAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthRemoteSessionsResponseBody runs the validations
+// defined on AdminMcpServerHealthRemoteSessionsResponseBody
+func ValidateAdminMcpServerHealthRemoteSessionsResponseBody(body *AdminMcpServerHealthRemoteSessionsResponseBody) (err error) {
+	if body.LinkedSubjects == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("linked_subjects", "body"))
+	}
+	if body.Reauthorizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reauthorizations", "body"))
+	}
+	if body.ValidationStatusCounts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("validation_status_counts", "body"))
+	}
+	if body.FirstLinkedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_linked_at", *body.FirstLinkedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthToolCallsResponseBody runs the validations
+// defined on AdminMcpServerHealthToolCallsResponseBody
+func ValidateAdminMcpServerHealthToolCallsResponseBody(body *AdminMcpServerHealthToolCallsResponseBody) (err error) {
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Type != nil {
+		if !(*body.Type == "logging:disabled" || *body.Type == "logging:enabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"logging:disabled", "logging:enabled"}))
+		}
+	}
+	if body.Watermark != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.watermark", *body.Watermark, goa.FormatDateTime))
+	}
+	if body.Outcomes != nil {
+		if err2 := ValidateAdminMcpServerHealthOutcomesResponseBody(body.Outcomes); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Daily {
+		if e != nil {
+			if err2 := ValidateAdminMcpServerHealthSeriesPointResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthOutcomesResponseBody runs the validations
+// defined on AdminMcpServerHealthOutcomesResponseBody
+func ValidateAdminMcpServerHealthOutcomesResponseBody(body *AdminMcpServerHealthOutcomesResponseBody) (err error) {
+	if body.Success == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("success", "body"))
+	}
+	if body.Unauthorized == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unauthorized", "body"))
+	}
+	if body.ClientError == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_error", "body"))
+	}
+	if body.ServerError == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_error", "body"))
+	}
+	if body.Blocked == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blocked", "body"))
+	}
+	if body.Failed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failed", "body"))
+	}
+	if body.Unknown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unknown", "body"))
+	}
+	return
+}
+
+// ValidateAdminMcpServerHealthSeriesPointResponseBody runs the validations
+// defined on AdminMcpServerHealthSeriesPointResponseBody
+func ValidateAdminMcpServerHealthSeriesPointResponseBody(body *AdminMcpServerHealthSeriesPointResponseBody) (err error) {
+	if body.BucketStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_start", "body"))
+	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	if body.Failed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failed", "body"))
+	}
+	if body.BucketStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.bucket_start", *body.BucketStart, goa.FormatDateTime))
 	}
 	return
 }
