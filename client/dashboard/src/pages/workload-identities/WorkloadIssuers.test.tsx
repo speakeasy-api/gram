@@ -18,11 +18,14 @@ vi.mock("@/components/page-templates", () => ({
   ResourceListPage: ({
     children,
     primaryAction,
+    stage,
   }: {
     children: ReactNode;
     primaryAction: ReactNode;
+    stage?: string;
   }) => (
     <>
+      {stage && <span data-testid="stage">{stage}</span>}
       {primaryAction}
       {children}
     </>
@@ -112,6 +115,12 @@ async function search(query: string, expected: string[]) {
   );
   await waitFor(() => expect(visiblePlatforms()).toEqual(expected));
 }
+
+it("marks the Access Hub as a preview", () => {
+  renderPage();
+
+  expect(screen.getByTestId("stage").textContent).toBe("preview");
+});
 
 it("finds platforms by free-text search, with no per-tag filter controls", () => {
   renderPage();

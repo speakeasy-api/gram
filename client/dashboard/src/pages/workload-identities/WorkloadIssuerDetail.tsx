@@ -244,7 +244,7 @@ function IssuerDetail(): JSX.Element {
   // behind the list.
   if (isError) {
     return (
-      <ResourceListPage title="Trusted platform">
+      <ResourceListPage title="Trusted platform" stage="preview">
         <InlineEmptyState
           icon="triangle-alert"
           heading="Couldn't load this platform"
@@ -487,6 +487,7 @@ function IssuerDetail(): JSX.Element {
         </Stack>
       }
       title={issuer?.name ?? "Trusted platform"}
+      stage="preview"
       description={issuer?.description.trim() || undefined}
       belowHeader={issuer && <IssuerIdentifiers issuer={issuer} />}
     >
