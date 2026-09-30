@@ -54,6 +54,13 @@ func ForLog(record *otelv1.InboundLogRecord) LogDialect {
 		return NilLog{}
 	}
 
+	// A hook event is read by HookLog alone: its attributes are Gram's own,
+	// and pairing it with SemconvLog would count hook-reported usage as the
+	// model's record of the request.
+	if (HookLog{}).AppliesTo(record) {
+		return HookLog{}
+	}
+
 	for _, candidate := range logDialects {
 		if candidate.AppliesTo(record) {
 			return LogFallback{Candidates: []LogDialect{candidate, SemconvLog{}}}
