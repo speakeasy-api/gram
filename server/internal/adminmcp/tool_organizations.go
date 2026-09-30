@@ -27,7 +27,7 @@ type FindOrganizationsInput struct {
 	TrialStates []string `json:"trial_states,omitempty" jsonschema:"Trial states to match: running, ending_soon, expired, demoted, converted or none"`
 
 	// DisabledStatus selects organisation access state.
-	DisabledStatus string `json:"disabled_status,omitempty" jsonschema:"Access state: all, active or disabled"`
+	DisabledStatus *string `json:"disabled_status,omitempty" jsonschema:"Access state: all, active or disabled; omit instead of supplying an empty value"`
 
 	// MinMembers is decimal text to preserve int64 precision in MCP clients.
 	MinMembers *string `json:"min_members,omitempty" jsonschema:"Inclusive minimum member count as a nonnegative decimal integer string"`

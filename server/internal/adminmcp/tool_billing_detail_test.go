@@ -40,14 +40,14 @@ func (r *recordingBillingDetail) GetSpendBreakdown(_ context.Context, input *gen
 func TestBillingStatusUsesStoredAssociationAndRedactsProviderData(t *testing.T) {
 	t.Parallel()
 	start, end := "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z"
-	privateID, paymentContact := "cus_private_fixture", "private-contact-fixture"
+	privateID := "cus_private_fixture"
 	reads := &recordingBillingDetail{
 		recordingOrganizationReader: recordingOrganizationReader{org: &gen.AdminOrganization{ID: "org-fixture", StripeCustomerID: &privateID, StripeSubscriptionID: &privateID}},
 		subscription:                &gen.AdminStripeSubscription{Status: "past_due", CurrentPeriodStart: start, CurrentPeriodEnd: end, PaymentFailed: true},
 	}
 	body, data := issuerToolCall(t, reads, "get_organization_billing_status", `{"organization_id":"org-fixture"}`, true)
 	require.NotContains(t, body, privateID)
-	require.NotContains(t, body, paymentContact)
+
 	require.Equal(t, "org-fixture", reads.subscriptionInput.OrganizationID)
 	require.Nil(t, reads.subscriptionInput.AdminSessionToken)
 	var status BillingStatusDetail

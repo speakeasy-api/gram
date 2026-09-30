@@ -139,10 +139,14 @@ func registerRegistryTools(server *mcp.Server, reader RegistryReader) {
 			}
 			return nil, out, errRegistryUnavailable
 		}
-		if entry == nil || entry.ID != input.ID || !validRegistryUUID(entry.ID) || len(entry.DataJSON) > maxRegistryDataJSON || len(entry.CreatedAt) > 64 || len(entry.UpdatedAt) > 64 || len(entry.Issues) > maxRegistryIssues {
+		if entry == nil || entry.ID != input.ID || !validRegistryUUID(entry.ID) || len(entry.CreatedAt) > 64 || len(entry.UpdatedAt) > 64 || len(entry.Issues) > maxRegistryIssues {
 			return nil, out, errRegistryUnavailable
 		}
-		projection, ok := projectRegistryRecord([]byte(entry.DataJSON))
+		projection := registryProjection{}
+		ok := false
+		if len(entry.DataJSON) <= maxRegistryDataJSON {
+			projection, ok = projectRegistryRecord([]byte(entry.DataJSON))
+		}
 		out.Found = true
 		out.ProjectionAvailable = ok
 		out.ID = entry.ID
@@ -222,7 +226,7 @@ func projectRegistryRecord(raw []byte) (registryProjection, bool) {
 		} `json:"server"`
 		Meta map[string]json.RawMessage `json:"_meta"`
 	}
-	if !json.Valid(raw) || json.Unmarshal(raw, &record) != nil || len(record.Server.Packages) > maxRegistryPage || len(record.Server.Remotes) > maxRegistryPage {
+	if !json.Valid(raw) || json.Unmarshal(raw, &record) != nil || strings.TrimSpace(record.Server.Name) == "" || strings.TrimSpace(record.Server.Description) == "" || strings.TrimSpace(record.Server.Version) == "" || len(record.Server.Packages) > maxRegistryPage || len(record.Server.Remotes) > maxRegistryPage {
 		return registryProjection{}, false
 	}
 	counts := map[string]int{}

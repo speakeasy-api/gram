@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -24,10 +25,11 @@ var organizationSortColumns = []string{"name", "slug", "account_type", "member_c
 
 func organizationSearchPayload(input FindOrganizationsInput) (*gen.ListOrganizationsPayload, error) {
 	query := strings.TrimSpace(input.Query)
-	if (query != "" && len(query) < 3) || len(query) > 128 || len(input.Cursor) > 128 || input.Limit < 0 || input.Limit > maxOrganizationSearchLimit {
+	queryLength := utf8.RuneCountInString(query)
+	if (query != "" && queryLength < 3) || queryLength > 128 || len(input.Cursor) > 128 || input.Limit < 0 || input.Limit > maxOrganizationSearchLimit {
 		return nil, errors.New("provide a search query of 3 to 128 characters, a cursor up to 128 characters, and a limit of 1 to 20")
 	}
-	if query == "" && len(input.AccountTypes) == 0 && len(input.TrialStates) == 0 && input.DisabledStatus == "" && input.MinMembers == nil && input.MaxMembers == nil && input.CreatedFrom == "" && input.CreatedTo == "" {
+	if query == "" && len(input.AccountTypes) == 0 && len(input.TrialStates) == 0 && input.DisabledStatus == nil && input.MinMembers == nil && input.MaxMembers == nil && input.CreatedFrom == "" && input.CreatedTo == "" {
 		return nil, errors.New("provide a search query or an explicit organization filter")
 	}
 	if len(input.AccountTypes) > len(constants.AccountTypes) || len(input.TrialStates) > len(organizationTrialStates) {
@@ -43,7 +45,7 @@ func organizationSearchPayload(input FindOrganizationsInput) (*gen.ListOrganizat
 			return nil, errors.New("trial_states must contain supported trial states")
 		}
 	}
-	if input.DisabledStatus != "" && !slices.Contains([]string{"all", "active", "disabled"}, input.DisabledStatus) {
+	if input.DisabledStatus != nil && !slices.Contains([]string{"all", "active", "disabled"}, *input.DisabledStatus) {
 		return nil, errors.New("disabled_status must be all, active or disabled")
 	}
 	if input.Sort != "" && !slices.Contains(organizationSortColumns, input.Sort) {
@@ -90,9 +92,7 @@ func organizationSearchPayload(input FindOrganizationsInput) (*gen.ListOrganizat
 	if input.Cursor != "" {
 		payload.Cursor = &input.Cursor
 	}
-	if input.DisabledStatus != "" {
-		payload.DisabledStatus = &input.DisabledStatus
-	}
+	payload.DisabledStatus = input.DisabledStatus
 	if input.CreatedFrom != "" {
 		payload.CreatedFrom = &input.CreatedFrom
 	}

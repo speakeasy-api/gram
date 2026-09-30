@@ -23,14 +23,17 @@ type MemberPage struct {
 	// OrganizationID is the exact organisation that supplied every member.
 	OrganizationID string
 
-	// Members contains only active organisation relationships.
+	// Members contains active organisation relationships for users who are not soft-deleted.
 	Members []*gen.AdminOrganizationMember
 
 	// NextUserID is the last returned user when another page exists.
 	NextUserID *string
 }
 
-// ListOrganizationMembersPage returns a bounded exact-organisation page without changing the dashboard's roster contract.
+// ListOrganizationMembersPage returns a bounded exact-organisation page for staff MCP lookups.
+// It deliberately excludes soft-deleted users to avoid exposing retired accounts in
+// active-member lookups. The dashboard roster and member count retain their existing
+// relationship-based definition. Stable user IDs keep pagination independent of email changes.
 func (s *Service) ListOrganizationMembersPage(ctx context.Context, organizationID, afterUserID string, limit int) (*MemberPage, error) {
 	if _, ok := contextvalues.GetAdminAuthContext(ctx); !ok {
 		return nil, oops.C(oops.CodeUnauthorized)

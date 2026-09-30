@@ -2,6 +2,7 @@ package adminmcp
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,6 +43,20 @@ func TestOrganizationSearchSortDefaultsToFirstPage(t *testing.T) {
 	require.Nil(t, payload.Direction)
 }
 
+func TestOrganizationSearchForwardsUnicodeQueries(t *testing.T) {
+	t.Parallel()
+	for _, query := range []string{"你好界", strings.Repeat("界", 128)} {
+		t.Run(query, func(t *testing.T) {
+			t.Parallel()
+			reads := &recordingOrganizationReader{list: &gen.AdminListOrganizationsResult{}}
+			_, body, _ := callStaffReadTool(t, reads, "find_organizations", `{"query":"`+query+`"}`)
+			require.NotContains(t, body, `"isError":true`)
+			require.Equal(t, query, *reads.listInput.Q)
+			require.Nil(t, reads.listInput.DisabledStatus)
+		})
+	}
+}
+
 func TestOrganizationSearchRejectsInvalidFilters(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -50,6 +65,11 @@ func TestOrganizationSearchRejectsInvalidFilters(t *testing.T) {
 	}{
 		{"no search or filter", `{}`},
 		{"short search", `{"query":"ab"}`},
+		{"single multibyte character", `{"query":"界"}`},
+		{"two multibyte characters", `{"query":"你好"}`},
+		{"oversized multibyte search", `{"query":"` + strings.Repeat("界", 129) + `"}`},
+		{"empty access state", `{"query":"example","disabled_status":""}`},
+		{"empty access state with filter", `{"account_types":["payg"],"disabled_status":""}`},
 		{"account type", `{"account_types":["unknown"]}`},
 		{"trial state", `{"trial_states":["unknown"]}`},
 		{"access state", `{"disabled_status":"unknown"}`},

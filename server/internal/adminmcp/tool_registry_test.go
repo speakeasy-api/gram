@@ -119,12 +119,12 @@ func TestRegistryDetailProjectsReviewedFieldsAndSafeIssues(t *testing.T) {
 	reader := &recordingRegistryReader{entry: &gen.AdminRegistryEntry{
 		ID: testRegistryID, Published: true, CreatedAt: "2026-01-01T00:00:00Z", UpdatedAt: "2026-01-03T00:00:00Z",
 		DataJSON: `{"server":{"name":"example/server","description":"` + description + `","version":"1.2.3","packages":[{"registryType":"npm","identifier":"` + secret + `","transport":{"type":"stdio"},"runtimeArguments":[{"value":"` + secret + `"}],"environmentVariables":[{"name":"TOKEN","value":"` + secret + `"}]}],"remotes":[{"type":"streamable-http","url":"https://` + secret + `"}]},"_meta":{"io.modelcontextprotocol.registry/official":{"publishedAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-02T00:00:00Z"},"com.speakeasy.ai/registry":{"publishedAt":"2026-01-02T00:00:00Z"},"example/extra":"arbitrary vendor value"},"extension":"` + secret + `"}`,
-		Issues:   []*gen.AdminRegistryIssue{{Path: "/server/` + secret + `", Message: "value ` + secret + ` rejected"}},
+		Issues:   []*gen.AdminRegistryIssue{{Path: "/server/" + secret, Message: "value " + secret + " rejected"}},
 	}}
 	body, data := registryToolCall(t, reader, "get_registry_entry", `{"id":"`+testRegistryID+`"}`, true)
 	require.NotContains(t, body, `"isError":true`)
 	require.NotContains(t, body, secret)
-	require.NotContains(t, body, "opaque-write-token")
+
 	require.NotContains(t, body, "https://")
 	require.Equal(t, testRegistryID, reader.getInput.ID)
 	var detail RegistryEntryDetail
@@ -165,8 +165,14 @@ func TestRegistryDetailExactUUIDAndNotFoundSemantics(t *testing.T) {
 func TestRegistryDetailRetainsSafeSummaryForInvalidStoredRecords(t *testing.T) {
 	t.Parallel()
 	for _, record := range []string{
-		`{"server":{"name":"example/server","packages":[{"transport":{}}]}}`,
-		`{"server":{"name":"example/server","remotes":[{"type":"unsupported"}]}}`,
+		`{}`,
+		`{"server":null}`,
+		`{"server":{"description":"synthetic record","version":"1"}}`,
+		`{"server":{"name":"example/server","version":"1"}}`,
+		`{"server":{"name":"example/server","description":"synthetic record"}}`,
+		`{"server":{"name":" ","description":"synthetic record","version":"1"}}`,
+		`{"server":{"name":"example/server","description":"synthetic record","version":"1","packages":[{"transport":{}}]}}`,
+		`{"server":{"name":"example/server","description":"synthetic record","version":"1","remotes":[{"type":"unsupported"}]}}`,
 		`{"server":{"name":42}}`,
 	} {
 		reader := &recordingRegistryReader{entry: &gen.AdminRegistryEntry{
@@ -185,6 +191,30 @@ func TestRegistryDetailRetainsSafeSummaryForInvalidStoredRecords(t *testing.T) {
 		require.Equal(t, []RegistryValidationIssue{{Path: "server.name", Category: "schema_constraint"}}, detail.Issues)
 		require.Empty(t, detail.Transports)
 	}
+}
+
+func TestRegistryDetailRetainsSafeSummaryForOversizedStoredRecords(t *testing.T) {
+	t.Parallel()
+	reader := &recordingRegistryReader{entry: &gen.AdminRegistryEntry{
+		ID: testRegistryID, Published: false, CreatedAt: "2026-01-01T00:00:00Z", UpdatedAt: "2026-01-03T00:00:00Z",
+		DataJSON: `{"server":{"name":"example/server","description":"synthetic record","version":"1"},"extension":"` + strings.Repeat("x", maxRegistryDataJSON) + `"}`,
+		Issues:   []*gen.AdminRegistryIssue{{Message: "record exceeds byte limit"}},
+	}}
+	body, data := registryToolCall(t, reader, "get_registry_entry", `{"id":"`+testRegistryID+`"}`, true)
+	require.NotContains(t, body, `"isError":true`)
+	var detail RegistryEntryDetail
+	require.NoError(t, json.Unmarshal(data, &detail))
+	require.True(t, detail.Found)
+	require.False(t, detail.ProjectionAvailable)
+	require.Equal(t, testRegistryID, detail.ID)
+	require.Equal(t, "2026-01-01T00:00:00Z", detail.CreatedAt)
+	require.Equal(t, "2026-01-03T00:00:00Z", detail.UpdatedAt)
+	require.Equal(t, []RegistryValidationIssue{{Path: "record", Category: "record_too_large"}}, detail.Issues)
+	require.Empty(t, detail.Name)
+	require.Empty(t, detail.Description)
+	require.Empty(t, detail.Version)
+	require.Empty(t, detail.Transports)
+	require.Less(t, len(body), MaxBodyBytes)
 }
 
 func TestRegistryProjectionBoundsAndSafeCategories(t *testing.T) {
