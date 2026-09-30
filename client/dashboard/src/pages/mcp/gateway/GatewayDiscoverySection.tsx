@@ -50,6 +50,8 @@ export function GatewayDiscoverySection({
         <SettingsSection.Description>
           Progressive discovers tools as needed. Direct lists every available
           tool and works with clients that cannot discover tools progressively.
+          Code Mode exposes one execute tool for discovering and calling tools
+          in Python.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -64,7 +66,11 @@ export function GatewayDiscoverySection({
             <Select
               value={mode}
               onValueChange={(value) => {
-                if (value === "direct" || value === "progressive")
+                if (
+                  value === "direct" ||
+                  value === "progressive" ||
+                  value === "code_mode"
+                )
                   setMode(value);
               }}
               disabled={!canWrite || update.isPending}
@@ -75,6 +81,15 @@ export function GatewayDiscoverySection({
               <SelectContent>
                 <SelectItem value="progressive">Progressive</SelectItem>
                 <SelectItem value="direct">Direct</SelectItem>
+                {(metaMcpServer.codeModeEnabled ||
+                  metaMcpServer.discoveryMode === "code_mode") && (
+                  <SelectItem
+                    value="code_mode"
+                    disabled={!metaMcpServer.codeModeEnabled}
+                  >
+                    Code Mode
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
             {update.isError && <FieldError>{update.error.message}</FieldError>}
@@ -96,7 +111,8 @@ export function GatewayDiscoverySection({
                 disabled={
                   !canWrite ||
                   mode === metaMcpServer.discoveryMode ||
-                  update.isPending
+                  update.isPending ||
+                  (mode === "code_mode" && !metaMcpServer.codeModeEnabled)
                 }
                 onClick={() =>
                   update.mutate({

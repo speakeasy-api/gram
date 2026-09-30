@@ -31,6 +31,9 @@ func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMc
 	if state.FirstParty || selectedAgentID != "" || !mode.Valid() || !s.gatewayDiscoveryOptionsEnabled(ctx, endpoint) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "discovery mode is not available for this connection")
 	}
+	if mode == metamcp.DiscoveryModeCode && !s.CodeModeAvailable(ctx, endpoint.OrganizationID, endpoint.ProjectID) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "gateway code mode is not available")
+	}
 	policy := &toolfilter.SessionPolicy{
 		Resource:  endpointToolSelectionResource(endpoint),
 		Selection: selection,

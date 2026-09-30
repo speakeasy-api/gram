@@ -88112,6 +88112,9 @@ components:
     MetaMcpServer:
       type: object
       properties:
+        code_mode_enabled:
+          type: boolean
+          description: 'Whether this project can select Code Mode: discovery settings, rollout, and runtime must be available. Existing connections retain their mode when rollout is disabled.'
         created_at:
           type: string
           description: When the meta MCP server was created
@@ -88122,6 +88125,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         discovery_modes_enabled:
           type: boolean
           description: Whether the organization allows new discovery choices. Read through the gateway without requiring organization feature-management access.
@@ -88450,6 +88454,7 @@ components:
           enum:
             - direct
             - progressive
+            - code_mode
         frozen_toolset:
           $ref: '#/components/schemas/FrozenGatewayReview'
         meta_mcp_server_id:
@@ -88486,6 +88491,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         mcp_server_id:
           type: string
           description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -101624,6 +101630,7 @@ components:
           enum:
             - progressive
             - direct
+            - code_mode
         id:
           type: string
           description: The ID of the meta MCP server to update

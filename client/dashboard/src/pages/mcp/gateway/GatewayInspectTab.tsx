@@ -1,3 +1,4 @@
+import { GatewayCodeExecution } from "./GatewayCodeExecution";
 import {
   GatewayFrozenToolset,
   type FrozenGatewayConnection,
@@ -74,9 +75,11 @@ function GatewayInspectConnection({
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedMode = searchParams.get("discovery_mode");
   const [modeDraft, setModeDraft] = useState<
-    "default" | "direct" | "progressive"
+    "default" | "direct" | "progressive" | "code_mode"
   >(
-    requestedMode === "direct" || requestedMode === "progressive"
+    requestedMode === "direct" ||
+      requestedMode === "progressive" ||
+      requestedMode === "code_mode"
       ? requestedMode
       : "default",
   );
@@ -87,7 +90,7 @@ function GatewayInspectConnection({
     mode: modeDraft,
     version: crypto.randomUUID(),
   }));
-  function applyMode(mode: "default" | "direct" | "progressive") {
+  function applyMode(mode: "default" | "direct" | "progressive" | "code_mode") {
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -147,6 +150,14 @@ function GatewayInspectConnection({
         (!metaMcpServer.userSessionIssuerId || !!accessToken),
       configurationKey,
     });
+  // Preserve source and execution across token refresh or failed inspection reads.
+  // Explicit reconnects, including frozen reviews, reset the editor.
+  const [codeConnection, setCodeConnection] = useState<string>();
+  useEffect(() => {
+    if (data?.discoveryMode === "code_mode" && !isError && !mintError) {
+      setCodeConnection(configurationKey);
+    }
+  }, [data, isError, mintError, configurationKey]);
   // Configured membership, to explain a shortfall against what the endpoint
   // actually serves this connection.
   const { rows } = useGatewayMemberRows(metaMcpServer.id);
@@ -178,6 +189,7 @@ function GatewayInspectConnection({
             enabled={metaMcpServer.frozenToolsetsEnabled === true}
             approved={approvedFrozen}
             hasUnappliedFreeze={!!frozen && frozen !== approvedFrozen}
+            reconnectFailed={!!mintError || isError}
             pending={isMintingToken}
             onApply={(value) => {
               setFrozen(value);
@@ -197,7 +209,8 @@ function GatewayInspectConnection({
                     if (
                       value === "default" ||
                       value === "direct" ||
-                      value === "progressive"
+                      value === "progressive" ||
+                      value === "code_mode"
                     )
                       setModeDraft(value);
                   }}
@@ -209,6 +222,15 @@ function GatewayInspectConnection({
                     <SelectItem value="default">Use gateway default</SelectItem>
                     <SelectItem value="progressive">Progressive</SelectItem>
                     <SelectItem value="direct">Direct</SelectItem>
+                    {(metaMcpServer.codeModeEnabled ||
+                      modeDraft === "code_mode") && (
+                      <SelectItem
+                        value="code_mode"
+                        disabled={!metaMcpServer.codeModeEnabled}
+                      >
+                        Code Mode
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 <ReleaseStageBadge stage="preview" />
@@ -216,7 +238,11 @@ function GatewayInspectConnection({
               <Page.Toolbar.Actions>
                 <Button
                   variant="secondary"
-                  disabled={isMintingToken}
+                  disabled={
+                    isMintingToken ||
+                    (modeDraft === "code_mode" &&
+                      !metaMcpServer.codeModeEnabled)
+                  }
                   onClick={() => {
                     applyMode(modeDraft);
                   }}
@@ -226,7 +252,9 @@ function GatewayInspectConnection({
               </Page.Toolbar.Actions>
             </Page.Toolbar>
           )}
-        {!metaMcpServer.discoveryModesEnabled &&
+        {(!metaMcpServer.discoveryModesEnabled ||
+          (connection.mode === "code_mode" &&
+            !metaMcpServer.codeModeEnabled)) &&
           connection.mode !== "default" && (
             <Button
               variant="secondary"
@@ -237,6 +265,7 @@ function GatewayInspectConnection({
             </Button>
           )}
         <InspectBody
+          key={configurationKey}
           data={data}
           isLoading={isLoading || loading || isMintingToken}
           isError={isError || !!mintError}
@@ -250,6 +279,22 @@ function GatewayInspectConnection({
           onRetry={mintError ? retryMint : refetch}
           settingsHref={gatewayTabHref(routes, metaMcpServer.id, "settings")}
         />
+        {codeConnection === configurationKey && connectUrl && (
+          <GatewayCodeExecution
+            key={`${configurationKey}:${connectUrl}`}
+            connectUrl={connectUrl}
+            headers={headers}
+            disabled={
+              isLoading ||
+              loading ||
+              isMintingToken ||
+              isError ||
+              !!mintError ||
+              needsAuth ||
+              data?.discoveryMode !== "code_mode"
+            }
+          />
+        )}
       </Page.Section.Body>
     </Page.Section>
   );
@@ -362,6 +407,13 @@ function InspectBody({
 
       {/* Right column: what the agent is told, and the state it can see. */}
       <div className="flex flex-col gap-6">
+        {data.discoveryMode === "code_mode" && (
+          <InspectCard title="execute description">
+            <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
+              {data.tools[0]?.description}
+            </pre>
+          </InspectCard>
+        )}
         <InspectCard
           title="server instructions"
           action={

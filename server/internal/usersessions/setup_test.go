@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -63,6 +64,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	codeModeEnabled     *atomic.Bool
 	productFeatures     *productfeatures.Client
 	gatewayInventory    *testGatewayInventory
 	service             *usersessions.Service
@@ -117,6 +119,8 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 
 	productFeatures := productfeaturestest.NewClient(t, logger, tracerProvider, conn)
 	inventory := &testGatewayInventory{snapshot: nil}
+	codeModeEnabled := &atomic.Bool{}
+	codeModeSelection := func(_ context.Context, _ string, _ uuid.UUID) bool { return codeModeEnabled.Load() }
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
@@ -134,9 +138,11 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		ratelimit.NewRedisStore(redisClient),
 		productFeatures,
 		inventory,
+		codeModeSelection,
 	)
 
 	return ctx, &testInstance{
+		codeModeEnabled:     codeModeEnabled,
 		productFeatures:     productFeatures,
 		gatewayInventory:    inventory,
 		service:             svc,

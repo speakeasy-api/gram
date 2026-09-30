@@ -2,8 +2,8 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"sync"
 	"time"
@@ -64,19 +64,37 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 
 // Shutdown stops admitting automatic verifications and the keepalive
 // re-check, then drains the probes in flight. Run it after the HTTP servers
-// have drained and before the database and cache close: the probes detach
+// have drained and before the database and cache close. Code runtimes are
+// released here too. The probes detach
 // from their requests and still write verdicts and close upstream sessions.
 func (s *Service) Shutdown(ctx context.Context) error {
 	// Close both admission gates before waiting for either group to drain.
 	s.autoVerifications.closeAdmission()
-	var errs []error
-	if err := s.remoteSessionRecheck.shutdown(ctx); err != nil {
-		errs = append(errs, fmt.Errorf("drain remote session re-checks: %w", err))
+	var group errgroup.Group
+	if runtime, ok := s.codeExecutor.(interface{ Shutdown(context.Context) error }); ok {
+		group.Go(func() error {
+			if err := runtime.Shutdown(ctx); err != nil {
+				return fmt.Errorf("shutdown code runtime: %w", err)
+			}
+			return nil
+		})
 	}
-	if err := s.autoVerifications.shutdown(ctx); err != nil {
-		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
+	group.Go(func() error {
+		if err := s.remoteSessionRecheck.shutdown(ctx); err != nil {
+			return fmt.Errorf("drain remote session re-checks: %w", err)
+		}
+		return nil
+	})
+	group.Go(func() error {
+		if err := s.autoVerifications.shutdown(ctx); err != nil {
+			return fmt.Errorf("drain automatic verifications: %w", err)
+		}
+		return nil
+	})
+	if err := group.Wait(); err != nil {
+		return fmt.Errorf("shutdown MCP dependencies: %w", err)
 	}
-	return errors.Join(errs...)
+	return nil
 }
 
 // verifyRemoteGrant probes a grant the remote login callback just committed, so

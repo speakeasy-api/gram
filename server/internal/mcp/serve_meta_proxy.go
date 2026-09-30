@@ -380,6 +380,9 @@ func (sess *memberSession) call(ctx context.Context, method string, params any) 
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal upstream %s request: %w", method, err)
 	}
+	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && method == "tools/call" {
+		invocation.dispatched = true
+	}
 	rec, err := sess.svc.upstreamExchange(ctx, sess.dial.build, sess.member.slug, body, sess.sessionID)
 	if err != nil {
 		return nil, nil, err
@@ -642,7 +645,7 @@ func (s *Service) executeProxiedMemberTool(
 			return nil, err
 		}
 		if _, ok := catalog.byName[toolName]; !ok {
-			return nil, oops.E(oops.CodeForbidden, nil, "tool is not in the approved frozen toolset or has changed; review this connection")
+			return nil, frozenToolChangedError(ctx, "tool is not in the approved frozen toolset or has changed; review this connection")
 		}
 	}
 

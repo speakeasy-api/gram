@@ -85,6 +85,7 @@ const server = {
   id: "gateway-test",
   projectId: "project-test",
   name: "Gateway",
+  discoveryMode: "progressive",
   instructions: "Original",
 } as MetaMcpServer;
 const renderSection = (instructions = server.instructions) =>
@@ -355,4 +356,18 @@ describe("Gateway instructions", () => {
     expect(textarea().value).toBe("Other");
     expect(save().disabled).toBe(true);
   });
+});
+
+it("uses Python instructions when editing a Code gateway", () => {
+  render(
+    <GatewayInstructionsSection
+      metaMcpServer={{
+        ...server,
+        instructions: undefined,
+        discoveryMode: "code_mode",
+      }}
+    />,
+  );
+  expect(textarea().value).toContain("one execute tool for Python");
+  expect(textarea().value).not.toContain("list_servers");
 });

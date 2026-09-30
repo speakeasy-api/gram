@@ -1,0 +1,55 @@
+name: Code runner
+on:
+  pull_request:
+    paths:
+      - "agents/code-runner/**"
+      - "server/internal/codemode/**"
+      - "server/internal/sandbox/**"
+      - "server/cmd/gram/code_runtime.go"
+      - "server/internal/mcp/serve_meta*.go"
+      - "server/internal/mcp/toolselection.go"
+      - "server/internal/testenv/code_runner.go"
+      - ".mise-tasks/test/code-mode.sh"
+      - ".mise-tasks/**/code-runner*.sh"
+      - ".mise-tasks/build/monty.sh"
+      - ".github/workflows/code-runner.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "agents/code-runner/**"
+      - "server/internal/codemode/**"
+      - "server/internal/sandbox/**"
+      - "server/cmd/gram/code_runtime.go"
+      - "server/internal/mcp/serve_meta*.go"
+      - "server/internal/mcp/toolselection.go"
+      - "server/internal/testenv/code_runner.go"
+      - ".mise-tasks/test/code-mode.sh"
+      - ".mise-tasks/**/code-runner*.sh"
+      - ".mise-tasks/build/monty.sh"
+      - ".github/workflows/code-runner.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          env: false
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          rust-src-dir: agents/code-runner
+          rustflags: ""
+      - run: mise run build:monty
+      - run: mise run build:code-runner
+      - run: mise run test:code-runner
+      - run: mise run lint:code-runner
+      - run: mise run test:code-runner-image
+      - run: mise run test:code-mode

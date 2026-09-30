@@ -17,13 +17,21 @@ import (
 // cluster's RBAC).
 const gkeAuthScope = "https://www.googleapis.com/auth/cloud-platform"
 
+// RemoteClientOptions bounds a dedicated client's API request rate.
+type RemoteClientOptions struct {
+	// QPS caps sustained requests per second across the client.
+	QPS float32
+	// Burst allows bounded simultaneous admissions after an idle period.
+	Burst int
+}
+
 // NewRemoteDynamicClient builds a dynamic client for a remote GKE cluster (the
 // assistant runtime cluster) authenticated with the caller's Google credentials:
 // workload identity when running in a cluster, Application Default Credentials
 // locally. Unlike InitializeK8sClient it does not require running inside the
 // target cluster, so the gram server reaches a separate assistant cluster the
 // same way it reaches Fly — by endpoint and credentials, not in-cluster config.
-func NewRemoteDynamicClient(ctx context.Context, endpoint string, caCert []byte) (dynamic.Interface, error) {
+func NewRemoteDynamicClient(ctx context.Context, endpoint string, caCert []byte, options ...RemoteClientOptions) (dynamic.Interface, error) {
 	if endpoint == "" {
 		return nil, fmt.Errorf("remote cluster endpoint is required")
 	}
@@ -47,6 +55,15 @@ func NewRemoteDynamicClient(ctx context.Context, endpoint string, caCert []byte)
 	config := &rest.Config{
 		Host:            host,
 		TLSClientConfig: rest.TLSClientConfig{CAData: caCert},
+	}
+	if len(options) > 1 {
+		return nil, fmt.Errorf("at most one remote client option set is accepted")
+	}
+	if len(options) == 1 {
+		if options[0].QPS <= 0 || options[0].Burst <= 0 {
+			return nil, fmt.Errorf("remote client QPS and burst must be positive")
+		}
+		config.QPS, config.Burst = options[0].QPS, options[0].Burst
 	}
 	config.Wrap(func(rt http.RoundTripper) http.RoundTripper {
 		return &oauth2.Transport{Source: tokenSource, Base: rt}

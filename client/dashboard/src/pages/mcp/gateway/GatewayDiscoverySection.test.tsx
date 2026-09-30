@@ -12,6 +12,7 @@ import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
 
 const state = vi.hoisted(() => ({
   enabled: true,
+  codeEnabled: false,
   canWrite: true,
   pending: false,
   mutate: vi.fn(),
@@ -62,7 +63,11 @@ const show = () =>
   render(
     <TooltipProvider>
       <GatewayDiscoverySection
-        metaMcpServer={{ ...gateway, discoveryModesEnabled: state.enabled }}
+        metaMcpServer={{
+          ...gateway,
+          discoveryModesEnabled: state.enabled,
+          codeModeEnabled: state.codeEnabled,
+        }}
       />
     </TooltipProvider>,
   );
@@ -70,6 +75,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   state.enabled = true;
+  state.codeEnabled = false;
   state.canWrite = true;
   state.pending = false;
 });
@@ -141,5 +147,26 @@ describe("Gateway discovery settings", () => {
       (screen.getByRole("button", { name: /sav/i }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+});
+
+it("only offers Python when code mode is available", async () => {
+  const view = show();
+  fireEvent.click(screen.getByRole("combobox"));
+  expect(screen.queryByRole("option", { name: "Code Mode" })).toBeNull();
+  view.unmount();
+  state.codeEnabled = true;
+  show();
+  fireEvent.click(screen.getByRole("combobox"));
+  fireEvent.click(await screen.findByRole("option", { name: "Code Mode" }));
+  fireEvent.click(screen.getByRole("button", { name: /save/i }));
+  expect(state.mutate).toHaveBeenCalledWith({
+    request: {
+      updateMetaMcpServerForm: {
+        id: gateway.id,
+        name: gateway.name,
+        discoveryMode: "code_mode",
+      },
+    },
   });
 });

@@ -29,7 +29,7 @@ export interface GatewayServerDescription {
 }
 
 export interface GatewayInspection {
-  discoveryMode: "direct" | "progressive";
+  discoveryMode: "direct" | "progressive" | "code_mode";
   /** Sent to every client on connect; the runtime generates it. */
   instructions: string | undefined;
   protocolVersion: string | undefined;
@@ -60,26 +60,39 @@ class UnauthorizedError extends Error {}
 
 // The endpoint speaks streamable HTTP and answers stateless requests, so one
 // fetch per JSON-RPC call is enough — no session to establish or carry.
-async function rpc(
+export async function gatewayRPC(
   url: string,
   headers: Record<string, string> | undefined,
   method: string,
   params: unknown,
+  signal?: AbortSignal,
+  requestId: string = crypto.randomUUID(),
 ): Promise<unknown> {
   const response = await fetch(url, {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
       ...headers,
     },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: requestId,
+      method,
+      params,
+    }),
   });
 
   if (response.status === 401 || response.status === 403) {
     throw new UnauthorizedError("unauthorized");
   }
   if (!response.ok) {
+    const failure: unknown = await response.json().catch(() => undefined);
+    const message = z
+      .object({ error: z.object({ message: z.string() }) })
+      .safeParse(failure);
+    if (message.success) throw new Error(message.data.error.message);
     throw new Error(`${method} failed: ${response.status}`);
   }
 
@@ -144,7 +157,7 @@ export function useGatewayInspection(
     queryFn: async () => {
       if (!mcpUrl) throw new Error("No gateway URL configured");
 
-      const initResult = await rpc(mcpUrl, headers, "initialize", {
+      const initResult = await gatewayRPC(mcpUrl, headers, "initialize", {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: {},
         clientInfo: { name: "gram-dashboard-gateway-inspect", version: "1" },
@@ -161,7 +174,7 @@ export function useGatewayInspection(
       const seenCursors = new Set<string>();
       let cursor: string | undefined;
       do {
-        const toolsResult = await rpc(mcpUrl, headers, "tools/list", {
+        const toolsResult = await gatewayRPC(mcpUrl, headers, "tools/list", {
           cursor,
         });
         const listing = z
@@ -180,16 +193,18 @@ export function useGatewayInspection(
           seenCursors.add(cursor);
         }
       } while (cursor);
-      const discoveryMode = tools.some((tool) => tool.name === "list_servers")
-        ? "progressive"
-        : "direct";
+      let discoveryMode: GatewayInspection["discoveryMode"] = "direct";
+      if (tools.some((tool) => tool.name === "list_servers"))
+        discoveryMode = "progressive";
+      if (tools.length === 1 && tools[0]?.name === "execute")
+        discoveryMode = "code_mode";
 
       // Bundle state is a best-effort extra: a member outage must not blank
       // out the tool surface above, which is the tab's primary content.
       let servers: GatewayListedServer[] | undefined;
       if (discoveryMode === "progressive") {
         try {
-          const callResult = await rpc(mcpUrl, headers, "tools/call", {
+          const callResult = await gatewayRPC(mcpUrl, headers, "tools/call", {
             name: "list_servers",
             arguments: {},
           });
@@ -253,7 +268,7 @@ export function useGatewayDescribeServer(
     queryFn: async () => {
       if (!mcpUrl || !serverSlug) throw new Error("No member selected");
       try {
-        const described = await rpc(mcpUrl, headers, "tools/call", {
+        const described = await gatewayRPC(mcpUrl, headers, "tools/call", {
           name: "describe_server",
           arguments: { server: serverSlug },
         });

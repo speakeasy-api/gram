@@ -50,3 +50,31 @@ func TestMintGatewayDiscoveryOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, row.ToolSelection, "the gateway default must remain live, not copied into a session")
 }
+
+func TestMintGatewayCodeModeOverrideGate(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	gateway, issuerID := createIssuerGatedMintMetaServer(t, ctx, ti, "mint-python")
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPConnect, gateway.ID.String()))
+	payload := &sessionsgen.MintUserSessionPayload{MetaMcpServerID: conv.PtrEmpty(gateway.ID.String()), DiscoveryMode: conv.PtrEmpty("code_mode")}
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayDiscoveryModes, true))
+	_, err := ti.service.MintUserSession(ctx, payload)
+	require.ErrorContains(t, err, "not available")
+	ti.codeModeEnabled.Store(true)
+	got, err := ti.service.MintUserSession(ctx, payload)
+	require.NoError(t, err)
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(got.AccessToken, urn.NewUserSessionIssuer(issuerID).String())
+	require.NoError(t, err)
+	ti.codeModeEnabled.Store(false)
+	row, err := repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{UserSessionIssuerID: issuerID, Jti: claims.ID})
+	require.NoError(t, err)
+	policy, err := toolfilter.ParseSessionPolicy(row.ToolSelection)
+	require.NoError(t, err)
+	require.Equal(t, metamcp.DiscoveryModeCode, *policy.Gateway.DiscoveryMode, "issued policy survives rollout removal")
+	_, err = ti.service.MintUserSession(ctx, payload)
+	require.ErrorContains(t, err, "not available", "new overrides remain gated")
+	payload.DiscoveryMode = nil
+	_, err = ti.service.MintUserSession(ctx, payload)
+	require.NoError(t, err, "following the stored default remains available")
+}

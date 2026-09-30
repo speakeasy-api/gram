@@ -959,3 +959,26 @@ func TestConsentTemplateAgentAccessUsesExistingProviderCard(t *testing.T) {
 	require.NotContains(t, html, "data-agent-connection-list")
 	require.Contains(t, html, `value="disconnect"`)
 }
+
+func TestConsentTemplateCodeChoiceAndStoredDefault(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                     string
+		discovery, code, offered bool
+	}{
+		{name: "available", discovery: true, code: true, offered: true},
+		{name: "rollout off", discovery: true, code: false, offered: false},
+		{name: "entitlement off", discovery: false, code: false, offered: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var page bytes.Buffer
+			require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
+				ConsentEnabled: true, ShowDiscoveryMode: tc.discovery, ShowCodeMode: tc.code, GatewayDefaultMode: "Code Mode",
+			}))
+			html := normalizeWhitespace(page.String())
+			require.Contains(t, html, "Gateway default: Code Mode")
+			require.Equal(t, tc.offered, strings.Contains(html, `<option value="code_mode">Code Mode</option>`))
+		})
+	}
+}

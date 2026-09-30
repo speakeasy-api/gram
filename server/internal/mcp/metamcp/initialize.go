@@ -41,5 +41,8 @@ func ResolveDiscoveryInstructions(custom *string, mode DiscoveryMode) string {
 	if mode == DiscoveryModeDirect {
 		return "This gateway exposes the tools from its MCP servers directly. Use tools/list to discover tool definitions, then call each tool by its qualified server--tool name."
 	}
+	if mode == DiscoveryModeCode {
+		return "Code Mode exposes one execute tool for Python. Inside execute, tools is prebound and top-level await works. Discover with tools.search, inspect tools.describe, call tools.call; await each. Use described input schemas and exact server--tool paths. Fresh state per run. Limits, results and retry rules are in the execute description."
+	}
 	return Instructions
 }

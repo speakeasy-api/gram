@@ -137,10 +137,10 @@ func TestGatewayConnectionSettingsReportsStoredDiscoveryMode(t *testing.T) {
 	got, err := service.Get(ctx, principal, input)
 	require.NoError(t, err)
 	require.Equal(t, "progressive", got.DiscoveryMode)
-	_, err = q.UpdateMetaMCPServer(ctx, metarepo.UpdateMetaMCPServerParams{ID: gateway.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: gateway.Name, UserSessionIssuerID: gateway.UserSessionIssuerID, Instructions: gateway.Instructions, DiscoveryMode: conv.ToPGText("direct")})
+	_, err = q.UpdateMetaMCPServer(ctx, metarepo.UpdateMetaMCPServerParams{ID: gateway.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: gateway.Name, UserSessionIssuerID: gateway.UserSessionIssuerID, Instructions: gateway.Instructions, DiscoveryMode: conv.ToPGText("code_mode")})
 	require.NoError(t, err)
 	updated, err := service.Get(ctx, principal, input)
 	require.NoError(t, err)
-	require.Equal(t, "direct", updated.DiscoveryMode)
+	require.Equal(t, "code_mode", updated.DiscoveryMode)
 	require.Equal(t, got.Version, updated.Version, "discovery mode does not alter the address/network mutation version")
 }

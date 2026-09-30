@@ -17,6 +17,7 @@ import {
 export const MintFrozenGatewaySessionRequestBodyDiscoveryMode = {
   Direct: "direct",
   Progressive: "progressive",
+  CodeMode: "code_mode",
 } as const;
 /**
  * Optional explicit discovery mode.

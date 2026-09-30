@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -82,7 +83,7 @@ func validateFrozenHostedTool(ctx context.Context, tool *types.Tool, plan *gatew
 	}
 	base, err := conv.ToBaseTool(tool)
 	if err != nil || plan == nil || plan.Descriptor == nil || base.ID != plan.Descriptor.ID {
-		return oops.E(oops.CodeForbidden, nil, "tool execution changed during validation; review this connection")
+		return frozenToolChangedError(ctx, "tool execution changed during validation; review this connection")
 	}
 	entry := toolToListEntry(tool)
 	if entry != nil {
@@ -94,7 +95,14 @@ func validateFrozenHostedTool(ctx context.Context, tool *types.Tool, plan *gatew
 			return nil
 		}
 	}
-	return oops.E(oops.CodeForbidden, nil, "tool is not in the approved frozen toolset or has changed; review this connection")
+	return frozenToolChangedError(ctx, "tool is not in the approved frozen toolset or has changed; review this connection")
+}
+
+func frozenToolChangedError(ctx context.Context, message string) error {
+	if _, codeMode := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); codeMode {
+		return &codemode.DispatchError{BeforeInvoke: true, Code: "tool_changed"}
+	}
+	return oops.E(oops.CodeForbidden, nil, "%s", message)
 }
 
 func frozenMemberTool(member metaMember, routing string, entry *toolListEntry) (toolfilter.FrozenTool, error) {
@@ -158,7 +166,8 @@ func (s *Service) filterFrozenMemberCatalog(ctx context.Context, gate *metaGateC
 	for _, entry := range catalog.entries {
 		current, err := frozenMemberTool(member, catalog.routingIdentity, entry)
 		if err != nil {
-			return nil, err
+			filtered.incomplete = true
+			continue
 		}
 		if gate.frozen.Allows(current) {
 			filtered.entries = append(filtered.entries, entry)

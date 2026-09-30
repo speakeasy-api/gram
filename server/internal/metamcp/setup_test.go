@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -62,6 +63,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	codeModeEnabled *atomic.Bool
 	productFeatures *productfeatures.Client
 	service         *metamcp.Service
 	conn            *pgxpool.Pool
@@ -89,9 +91,12 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 
 	productFeatures := productfeaturestest.NewClient(t, logger, tracerProvider, conn)
-	svc := metamcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, networkaccess.DenyAllChecker{}, productFeatures)
+	codeModeEnabled := &atomic.Bool{}
+	codeModeSelection := func(_ context.Context, _ string, _ uuid.UUID) bool { return codeModeEnabled.Load() }
+	svc := metamcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, networkaccess.DenyAllChecker{}, productFeatures, codeModeSelection)
 
 	return ctx, &testInstance{
+		codeModeEnabled: codeModeEnabled,
 		productFeatures: productFeatures,
 		service:         svc,
 		conn:            conn,

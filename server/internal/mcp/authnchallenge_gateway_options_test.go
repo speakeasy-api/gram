@@ -30,6 +30,8 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "direct", nil)
 	require.Error(t, err)
 	enabled = true
+	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode", nil)
+	require.ErrorContains(t, err, "code mode is not available", "missing runtime fails closed")
 	policy, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "direct", nil)
 	require.NoError(t, err)
 	require.Nil(t, policy.Selection)

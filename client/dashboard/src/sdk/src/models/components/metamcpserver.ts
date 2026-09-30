@@ -15,6 +15,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const DiscoveryMode = {
   Progressive: "progressive",
   Direct: "direct",
+  CodeMode: "code_mode",
 } as const;
 /**
  * The effective default discovery mode. Unconfigured connections follow this value.
@@ -54,6 +55,10 @@ export type MetaMcpServerVisibility = ClosedEnum<
  * A meta MCP server: an aggregate server fronting an explicitly managed set of MCP servers. URL addressability lives on its MCP endpoints.
  */
 export type MetaMcpServer = {
+  /**
+   * Whether this project can select Code Mode: discovery settings, rollout, and runtime must be available. Existing connections retain their mode when rollout is disabled.
+   */
+  codeModeEnabled?: boolean | undefined;
   /**
    * When the meta MCP server was created
    */
@@ -132,6 +137,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    code_mode_enabled: z.optional(z.boolean()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -155,6 +161,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "code_mode_enabled": "codeModeEnabled",
       "created_at": "createdAt",
       "discovery_mode": "discoveryMode",
       "discovery_modes_enabled": "discoveryModesEnabled",
