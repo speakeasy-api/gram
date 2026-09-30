@@ -15,6 +15,11 @@ const (
 	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
 	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
 	RegistryIssuePathsKey            = attribute.Key("gram.registry.entry.issue_paths")
+	RegistryEntryNameKey             = attribute.Key("gram.registry.entry.name")
+	RegistrySeedOutcomeKey           = attribute.Key("gram.registry.seed.outcome")
+	RegistrySeedCreatedKey           = attribute.Key("gram.registry.seed.created")
+	RegistrySeedUpdatedKey           = attribute.Key("gram.registry.seed.updated")
+	RegistrySeedUnchangedKey         = attribute.Key("gram.registry.seed.unchanged")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -3202,3 +3207,10 @@ func SlogRegistryUpdatedAt(v string) slog.Attr { return slog.String(string(Regis
 func SlogRegistryIssuePaths(v []string) slog.Attr {
 	return slog.Any(string(RegistryIssuePathsKey), v)
 }
+func SlogRegistryEntryName(v string) slog.Attr { return slog.String(string(RegistryEntryNameKey), v) }
+func SlogRegistrySeedOutcome(v string) slog.Attr {
+	return slog.String(string(RegistrySeedOutcomeKey), v)
+}
+func SlogRegistrySeedCreated(v int) slog.Attr   { return slog.Int(string(RegistrySeedCreatedKey), v) }
+func SlogRegistrySeedUpdated(v int) slog.Attr   { return slog.Int(string(RegistrySeedUpdatedKey), v) }
+func SlogRegistrySeedUnchanged(v int) slog.Attr { return slog.Int(string(RegistrySeedUnchangedKey), v) }

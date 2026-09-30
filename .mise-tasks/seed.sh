@@ -17,4 +17,7 @@ set -euo pipefail
 # just run it. Everything it used to write back into mise.local.toml
 # (GRAM_API_KEY) is now a fixed value checked into mise.toml.
 cd server
-exec go run . demo-seed --local "$@"
+go run . demo-seed --local "$@"
+# The Gram-owned catalog is global; seed the Okta-mapped vendors so server
+# suggestions have something to match locally.
+exec go run . registry-okta-seed

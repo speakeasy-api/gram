@@ -50,6 +50,7 @@ func newApp() *cli.App {
 			newRenderPlatformMCPCommand(),
 			newStreamsCommand(),
 			newDemoSeedCommand(),
+			newRegistryOktaSeedCommand(),
 			newReplaySessionObservationsCommand(),
 			newAdminSeedCommand(),
 			newAccountStateCommand(),
