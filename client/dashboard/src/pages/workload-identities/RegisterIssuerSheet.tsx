@@ -14,6 +14,7 @@ import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
 import { TextArea } from "@/components/ui/Textarea";
 import { useEffect, useState } from "react";
+import { httpsUrlProblem } from "./issuerUrl";
 import { tagsProblem } from "./tagLimits";
 
 export interface RegisterIssuerValues {
@@ -57,43 +58,6 @@ function descriptionProblem(description: string): string | null {
   if (Array.from(description.trim()).length > MAX_DESCRIPTION_LENGTH) {
     return `At most ${MAX_DESCRIPTION_LENGTH} characters.`;
   }
-  return null;
-}
-
-// Mirrors what the server refuses on the write path, so the reason appears next
-// to the field instead of arriving as a toast after submit. Deliberately not a
-// full URL validator: the server stays the authority, this is the early warning.
-function httpsUrlProblem(raw: string, isIssuer: boolean): string | null {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return "Enter a complete URL, including https://.";
-  }
-
-  if (parsed.protocol !== "https:") {
-    return "Must use https. Gram fetches the signing keys over this URL, so http would put key retrieval in the clear.";
-  }
-  const host = parsed.hostname.replace(/\.$/, "");
-  if (!host.includes(".") || /^[\d.]+$/.test(host)) {
-    return "Must name a fully qualified domain, not an IP address or a single-label host.";
-  }
-  // The server refuses these for both URLs. The raw string is checked rather
-  // than the parsed fields, which report nothing for a bare "?" or "#".
-  if (parsed.username !== "" || parsed.password !== "") {
-    return "Must not carry a username or password.";
-  }
-  if (trimmed.includes("?") || trimmed.includes("#")) {
-    return isIssuer
-      ? "An issuer identifier carries no query string or fragment."
-      : "Must not carry a query string or fragment.";
-  }
-
   return null;
 }
 
