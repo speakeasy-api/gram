@@ -36,6 +36,7 @@ export const CopyButton = ({
 
   return (
     <Button
+      type="button"
       variant={absolute ? "secondary" : "tertiary"}
       size={size ?? "md"}
       onClick={handleCopy}

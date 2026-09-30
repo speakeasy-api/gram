@@ -114,6 +114,23 @@ function renderPicker() {
   );
 }
 
+// The register sheet mounts the picker inside its form, so none of its
+// buttons may submit that form.
+function renderPickerInForm(onSubmit: () => void) {
+  render(
+    <TooltipProvider>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        <TokenEndpointPicker />
+      </form>
+    </TooltipProvider>,
+  );
+}
+
 async function pickServer(name: string) {
   const user = userEvent.setup();
   await user.click(screen.getByRole("combobox", { name: "MCP server" }));
@@ -214,6 +231,30 @@ it("offers a retry when the token endpoint fails to load", async () => {
     .setup()
     .click(screen.getByRole("button", { name: "Try again" }));
   expect(mocks.details.refetch).toHaveBeenCalled();
+});
+
+it("copies without submitting the form it sits in", async () => {
+  const onSubmit = vi.fn<() => void>();
+  renderPickerInForm(onSubmit);
+  await pickServer("Payments");
+
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: "Copy token endpoint" }));
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+it("retries without submitting the form it sits in", async () => {
+  mocks.details = { ...mocks.details, data: undefined, isError: true };
+  const onSubmit = vi.fn<() => void>();
+  renderPickerInForm(onSubmit);
+  await pickServer("Payments");
+
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: "Try again" }));
+  expect(mocks.details.refetch).toHaveBeenCalled();
+  expect(onSubmit).not.toHaveBeenCalled();
 });
 
 it("says so when the organization has no MCP servers", () => {

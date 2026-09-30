@@ -47,7 +47,7 @@ function Note({
 
 function Retry({ onClick }: { onClick: () => void }): JSX.Element {
   return (
-    <Button size="xs" variant="tertiary" onClick={onClick}>
+    <Button type="button" size="xs" variant="tertiary" onClick={onClick}>
       <Button.Text>Try again</Button.Text>
     </Button>
   );
