@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 #MISE description="Start up databases, caches and so on"
 # Warn when a cached image's architecture differs from the Docker host's.
 # `compose up` never re-pulls a tag that already exists locally, so an image
