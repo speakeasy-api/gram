@@ -21,5 +21,3 @@ export PATH="$HOME/.local/bin:$PATH"
 cd /workspace
 mise trust
 mise install
-mise run install
-mise run build:server-cache
