@@ -1,4 +1,5 @@
 import { AssetImage } from "@/components/asset-image";
+import { FieldError } from "@/components/ui/Field";
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
 import { remoteSessionScopeTier } from "@/lib/sources";
@@ -13,6 +14,7 @@ import { AuthRow, ExplainerDialog } from "./AuthRow";
 export function RemoteIdentityProvidersField({
   associatedIssuers,
   isLoading,
+  isError = false,
   allowAdditionalProviders,
   projectId,
   onAdd,
@@ -22,6 +24,9 @@ export function RemoteIdentityProvidersField({
 }: {
   associatedIssuers: RemoteSessionIssuer[];
   isLoading: boolean;
+  /** An attached provider failed to load. Rendered as an error rather than
+   * the empty state, which would tell the user nothing is connected. */
+  isError?: boolean;
   /** Gateways bind a provider per member; remote/tunneled servers have one
    * upstream, so only their empty state may offer an attach. */
   allowAdditionalProviders: boolean;
@@ -49,6 +54,12 @@ export function RemoteIdentityProvidersField({
       <Text muted small>
         Loading…
       </Text>
+    );
+  } else if (isError) {
+    providerControls = (
+      <FieldError>
+        Failed to load the connected services. Refresh the page to try again.
+      </FieldError>
     );
   } else if (associatedIssuers.length === 0) {
     // The button is the empty state: "None yet." beside it says nothing the
