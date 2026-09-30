@@ -23,9 +23,22 @@ export type UseAgentToken = {
   isError: boolean;
   /** Whether the caller may mint keys (requires the org:admin scope). */
   canGenerate: boolean;
-  /** Whether an agent key already exists — so the action rotates, not creates. */
+  /**
+   * Whether the key list has loaded successfully. Until it has,
+   * hasExistingAgentKey is unknown (reads false), so callers must not offer
+   * generate: minting would silently rotate a deployed key without confirmation.
+   * Always false when canGenerate is false (the list is not fetched).
+   */
+  keyListReady: boolean;
+  /**
+   * Whether an agent key already exists — so the action rotates, not creates.
+   * Only meaningful once keyListReady is true.
+   */
   hasExistingAgentKey: boolean;
-  /** Mint a fresh agent key (rotating: revokes prior agent keys on success). */
+  /**
+   * Mint a fresh agent key (rotating: revokes prior agent keys on success).
+   * A no-op until keyListReady is true.
+   */
   generate: () => void;
 };
 
@@ -52,9 +65,13 @@ export function useAgentToken(opts: {
   const canGenerate = hasAnyScope(["org:admin"]);
 
   // Listing keys needs org:admin, so only fetch when the user can act on it.
-  const { data: keysData } = useListAPIKeys(undefined, undefined, {
-    enabled: canGenerate,
-  });
+  const { data: keysData, isSuccess: keyListReady } = useListAPIKeys(
+    undefined,
+    undefined,
+    {
+      enabled: canGenerate,
+    },
+  );
   const hasExistingAgentKey = (keysData?.keys ?? []).some((k) =>
     k.scopes.includes(AGENT_SCOPE),
   );
@@ -110,6 +127,9 @@ export function useAgentToken(opts: {
   });
 
   const generate = () => {
+    // Refuse until the key list is known: otherwise an existing key reads as
+    // absent and the caller skips its rotation confirmation.
+    if (!keyListReady) return;
     createKeyMutation.mutate({
       security: { sessionHeaderGramSession: "" },
       request: {
@@ -133,6 +153,7 @@ export function useAgentToken(opts: {
     isPending: createKeyMutation.isPending,
     isError: createKeyMutation.isError,
     canGenerate,
+    keyListReady,
     hasExistingAgentKey,
     generate,
   };

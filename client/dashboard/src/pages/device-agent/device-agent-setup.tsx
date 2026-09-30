@@ -579,15 +579,19 @@ const ORG_TOKEN_SENTINEL = "__SLOT_orgToken__";
 
 // GenerateInlineButton is a compact button sized to sit inline in the code, in
 // place of the org_token value.
+// It stays disabled until the key list has loaded: before then an existing key
+// is unknown, and minting would rotate it without the confirmation dialog.
 function GenerateInlineButton({
   onClick,
   pending,
-  disabled,
+  canGenerate,
+  keyListReady,
   existing,
 }: {
   onClick: () => void;
   pending: boolean;
-  disabled?: boolean;
+  canGenerate: boolean;
+  keyListReady: boolean;
   existing: boolean;
 }) {
   const label = existing ? "Rotate token" : "Generate token";
@@ -597,13 +601,15 @@ function GenerateInlineButton({
       variant="secondary"
       size="sm"
       onClick={onClick}
-      disabled={pending || disabled}
+      disabled={pending || !canGenerate || !keyListReady}
       title={
-        disabled
+        !canGenerate
           ? "Generating an agent token requires the org:admin role."
-          : existing
-            ? "An agent token already exists — this rotates your existing tokens and adds the new token into managed.json."
-            : undefined
+          : !keyListReady
+            ? "Checking for existing agent tokens. Reload the page if this persists."
+            : existing
+              ? "An agent token already exists — this rotates your existing tokens and adds the new token into managed.json."
+              : undefined
       }
       className="-my-1 inline-flex h-6 items-center px-2 py-0 align-middle text-xs"
     >
@@ -734,6 +740,7 @@ export function ManagedProfileExample(): React.JSX.Element {
     isPending,
     isError,
     canGenerate,
+    keyListReady,
     hasExistingAgentKey,
     generate,
   } = useAgentToken({ buildCopyText: buildManagedJson });
@@ -770,7 +777,8 @@ export function ManagedProfileExample(): React.JSX.Element {
             <GenerateInlineButton
               onClick={handleGenerateOrRotate}
               pending={isPending}
-              disabled={!canGenerate}
+              canGenerate={canGenerate}
+              keyListReady={keyListReady}
               existing={hasExistingAgentKey}
             />
           ),
@@ -1506,6 +1514,7 @@ function OrgValues() {
     isPending,
     isError,
     canGenerate,
+    keyListReady,
     hasExistingAgentKey,
     generate,
   } = useAgentToken({ buildCopyText: (token) => token });
@@ -1522,8 +1531,10 @@ function OrgValues() {
     <div className="border-border bg-card border p-4">
       <p className="text-eyebrow mb-2">Organization values</p>
       <Text small muted className="mb-3">
-        Every MDM profile needs these two values. Copy them here, or find them
-        pre-filled in each platform&apos;s walkthrough.
+        Every MDM profile needs these two values. Each platform&apos;s
+        walkthrough pre-fills <code>org_slug</code>. The <code>org_token</code>{" "}
+        is displayed once when generated; generating another one anywhere
+        rotates it.
       </Text>
       <dl className="grid grid-cols-[max-content_1fr] items-center gap-x-4 gap-y-2">
         <dt className="font-mono text-xs">org_slug</dt>
@@ -1546,7 +1557,8 @@ function OrgValues() {
             <GenerateInlineButton
               onClick={handleGenerateOrRotate}
               pending={isPending}
-              disabled={!canGenerate}
+              canGenerate={canGenerate}
+              keyListReady={keyListReady}
               existing={hasExistingAgentKey}
             />
           )}
@@ -1554,7 +1566,7 @@ function OrgValues() {
       </dl>
 
       {generatedToken && (
-        <Alert variant="warning" className="mt-3">
+        <Alert variant="warning" alignTop className="mt-3">
           <AlertTitle>
             {autoCopied
               ? "org_token copied to your clipboard"
@@ -1572,7 +1584,7 @@ function OrgValues() {
       )}
 
       {isError && (
-        <Alert variant="error" className="mt-3">
+        <Alert variant="error" alignTop className="mt-3">
           <AlertTitle>Couldn't generate a token</AlertTitle>
           <AlertDescription>
             Something went wrong creating the agent token. Try again, or create

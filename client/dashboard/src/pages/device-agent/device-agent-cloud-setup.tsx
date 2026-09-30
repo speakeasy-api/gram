@@ -154,6 +154,7 @@ function CloudSetupScript({
     isPending,
     isError,
     canGenerate,
+    keyListReady,
     hasExistingAgentKey,
     generate,
   } = useAgentToken({ buildCopyText: buildScript });
@@ -179,11 +180,13 @@ function CloudSetupScript({
             <GenerateInlineButton
               onClick={handleGenerateOrRotate}
               pending={isPending}
-              disabled={!canGenerate || !hasIdentityEmail}
+              disabled={!canGenerate || !keyListReady || !hasIdentityEmail}
               disabledReason={
-                hasIdentityEmail
-                  ? "Generating an agent token requires the org:admin role."
-                  : "Enter the reporting email before generating a token."
+                !hasIdentityEmail
+                  ? "Enter the reporting email before generating a token."
+                  : !canGenerate
+                    ? "Generating an agent token requires the org:admin role."
+                    : "Checking for existing agent tokens. Reload the page if this persists."
               }
               existing={hasExistingAgentKey}
             />
