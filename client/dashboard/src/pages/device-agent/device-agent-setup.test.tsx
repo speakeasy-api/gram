@@ -1,13 +1,7 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { UseAgentToken } from "@/hooks/useAgentToken";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeviceAgentSetup } from "./device-agent-setup";
@@ -31,7 +25,6 @@ function renderSetup(token: Partial<UseAgentToken>) {
     isPending: false,
     isError: false,
     canGenerate: true,
-    keyListReady: true,
     hasExistingAgentKey: false,
     generate: vi.fn<() => void>(),
     ...token,
@@ -66,16 +59,12 @@ describe("DeviceAgentSetup organization values", () => {
     expect(token.generate).toHaveBeenCalledOnce();
   });
 
-  it("confirms before rotating an existing token", () => {
+  it("re-generates without a confirmation when a token already exists", () => {
     const token = renderSetup({ hasExistingAgentKey: true });
 
-    fireEvent.click(screen.getByRole("button", { name: /Rotate token/ }));
-    expect(token.generate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Re-generate token/ }));
 
-    const dialog = screen.getByRole("dialog");
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: "Rotate token" }),
-    );
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(token.generate).toHaveBeenCalledOnce();
   });
 
@@ -87,20 +76,8 @@ describe("DeviceAgentSetup organization values", () => {
     expect(screen.getByText(/shown only once/)).toBeTruthy();
   });
 
-  it("disables minting until the key list has loaded", () => {
-    const token = renderSetup({ keyListReady: false });
-
-    const button = screen.getByRole("button", { name: /Generate token/ });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button.title).toBe(
-      "Checking for existing agent tokens. Reload the page if this persists.",
-    );
-    fireEvent.click(button);
-    expect(token.generate).not.toHaveBeenCalled();
-  });
-
   it("disables minting without org:admin", () => {
-    renderSetup({ canGenerate: false, keyListReady: false });
+    renderSetup({ canGenerate: false });
 
     const button = screen.getByRole("button", { name: /Generate token/ });
     expect((button as HTMLButtonElement).disabled).toBe(true);
