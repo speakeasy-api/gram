@@ -7542,9 +7542,23 @@ WHERE (
     OR ($4::boolean AND project_id IS NULL AND organization_id IS NULL)
   )
   AND deleted IS FALSE
-  AND ($5::uuid IS NULL OR id < $5::uuid)
+  AND (
+    $5::text IS NULL
+    OR name ILIKE $5::text
+    OR slug ILIKE $5::text
+    OR issuer ILIKE $5::text
+  )
+  AND (
+    COALESCE(cardinality($6::text[]), 0) = 0
+    OR regexp_replace(
+      lower(substring(issuer FROM '^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]+)')),
+      ':(443|80)$',
+      ''
+    ) = ANY($6::text[])
+  )
+  AND ($7::uuid IS NULL OR id < $7::uuid)
 ORDER BY id DESC
-LIMIT $6
+LIMIT $8
 `
 
 type ListRemoteSessionIssuersByProjectIDParams struct {
@@ -7552,6 +7566,8 @@ type ListRemoteSessionIssuersByProjectIDParams struct {
 	IncludeOrganizational bool
 	OrganizationID        pgtype.Text
 	IncludeGlobal         bool
+	Search                pgtype.Text
+	Hosts                 []string
 	Cursor                uuid.NullUUID
 	LimitValue            int32
 }
@@ -7569,12 +7585,24 @@ type ListRemoteSessionIssuersByProjectIDParams struct {
 // issuer by slug must apply it explicitly rather than relying on row order,
 // which is by descending uuidv7 (creation time) and therefore says nothing
 // about tier.
+//
+// Two optional filters narrow the listing without touching the keyset cursor,
+// which stays on id alone:
+//   - search: a LIKE pattern the caller has already escaped and wrapped in
+//     wildcards, matched case-insensitively against name, slug and issuer.
+//   - hosts: issuers whose URL host is one of these. The caller expands an
+//     upstream host into itself plus its parent domains, so this is how an
+//     upstream at mcp.example.com finds the issuer at example.com. The host is
+//     lowercased and a trailing :443 or :80 dropped, matching how a browser
+//     reports URL.host. An empty or NULL set applies no filter.
 func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg ListRemoteSessionIssuersByProjectIDParams) ([]RemoteSessionIssuer, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionIssuersByProjectID,
 		arg.ProjectID,
 		arg.IncludeOrganizational,
 		arg.OrganizationID,
 		arg.IncludeGlobal,
+		arg.Search,
+		arg.Hosts,
 		arg.Cursor,
 		arg.LimitValue,
 	)

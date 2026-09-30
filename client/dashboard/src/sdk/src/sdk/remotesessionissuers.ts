@@ -159,7 +159,7 @@ export class RemoteSessionIssuers extends ClientSDK {
    * listRemoteSessionIssuers remoteSessionIssuers
    *
    * @remarks
-   * List remote_session_issuers in the caller's project.
+   * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.
    */
   async list(
     request?: ListRemoteSessionIssuersRequest | undefined,

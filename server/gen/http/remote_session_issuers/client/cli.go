@@ -356,7 +356,7 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 
 // BuildListRemoteSessionIssuersPayload builds the payload for the
 // remoteSessionIssuers listRemoteSessionIssuers endpoint from CLI flags.
-func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionIssuersCursor string, remoteSessionIssuersListRemoteSessionIssuersLimit string, remoteSessionIssuersListRemoteSessionIssuersSessionToken string, remoteSessionIssuersListRemoteSessionIssuersApikeyToken string, remoteSessionIssuersListRemoteSessionIssuersProjectSlugInput string) (*remotesessionissuers.ListRemoteSessionIssuersPayload, error) {
+func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionIssuersCursor string, remoteSessionIssuersListRemoteSessionIssuersLimit string, remoteSessionIssuersListRemoteSessionIssuersSearch string, remoteSessionIssuersListRemoteSessionIssuersUpstreamHost string, remoteSessionIssuersListRemoteSessionIssuersSessionToken string, remoteSessionIssuersListRemoteSessionIssuersApikeyToken string, remoteSessionIssuersListRemoteSessionIssuersProjectSlugInput string) (*remotesessionissuers.ListRemoteSessionIssuersPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -374,6 +374,18 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for limit, must be INT")
 			}
+		}
+	}
+	var search *string
+	{
+		if remoteSessionIssuersListRemoteSessionIssuersSearch != "" {
+			search = &remoteSessionIssuersListRemoteSessionIssuersSearch
+		}
+	}
+	var upstreamHost *string
+	{
+		if remoteSessionIssuersListRemoteSessionIssuersUpstreamHost != "" {
+			upstreamHost = &remoteSessionIssuersListRemoteSessionIssuersUpstreamHost
 		}
 	}
 	var sessionToken *string
@@ -397,6 +409,8 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 	v := &remotesessionissuers.ListRemoteSessionIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Search = search
+	v.UpstreamHost = upstreamHost
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

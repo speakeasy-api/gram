@@ -2724,6 +2724,8 @@ func ParseEndpoint(
 		remoteSessionIssuersListRemoteSessionIssuersFlags                = flag.NewFlagSet("list-remote-session-issuers", flag.ExitOnError)
 		remoteSessionIssuersListRemoteSessionIssuersCursorFlag           = remoteSessionIssuersListRemoteSessionIssuersFlags.String("cursor", "", "")
 		remoteSessionIssuersListRemoteSessionIssuersLimitFlag            = remoteSessionIssuersListRemoteSessionIssuersFlags.String("limit", "", "")
+		remoteSessionIssuersListRemoteSessionIssuersSearchFlag           = remoteSessionIssuersListRemoteSessionIssuersFlags.String("search", "", "")
+		remoteSessionIssuersListRemoteSessionIssuersUpstreamHostFlag     = remoteSessionIssuersListRemoteSessionIssuersFlags.String("upstream-host", "", "")
 		remoteSessionIssuersListRemoteSessionIssuersSessionTokenFlag     = remoteSessionIssuersListRemoteSessionIssuersFlags.String("session-token", "", "")
 		remoteSessionIssuersListRemoteSessionIssuersApikeyTokenFlag      = remoteSessionIssuersListRemoteSessionIssuersFlags.String("apikey-token", "", "")
 		remoteSessionIssuersListRemoteSessionIssuersProjectSlugInputFlag = remoteSessionIssuersListRemoteSessionIssuersFlags.String("project-slug-input", "", "")
@@ -10290,7 +10292,7 @@ func ParseEndpoint(
 				data, err = remotesessionissuersc.BuildUpdateRemoteSessionIssuerPayload(*remoteSessionIssuersUpdateRemoteSessionIssuerBodyFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersUpdateRemoteSessionIssuerProjectSlugInputFlag)
 			case "list-remote-session-issuers":
 				endpoint = c.ListRemoteSessionIssuers()
-				data, err = remotesessionissuersc.BuildListRemoteSessionIssuersPayload(*remoteSessionIssuersListRemoteSessionIssuersCursorFlag, *remoteSessionIssuersListRemoteSessionIssuersLimitFlag, *remoteSessionIssuersListRemoteSessionIssuersSessionTokenFlag, *remoteSessionIssuersListRemoteSessionIssuersApikeyTokenFlag, *remoteSessionIssuersListRemoteSessionIssuersProjectSlugInputFlag)
+				data, err = remotesessionissuersc.BuildListRemoteSessionIssuersPayload(*remoteSessionIssuersListRemoteSessionIssuersCursorFlag, *remoteSessionIssuersListRemoteSessionIssuersLimitFlag, *remoteSessionIssuersListRemoteSessionIssuersSearchFlag, *remoteSessionIssuersListRemoteSessionIssuersUpstreamHostFlag, *remoteSessionIssuersListRemoteSessionIssuersSessionTokenFlag, *remoteSessionIssuersListRemoteSessionIssuersApikeyTokenFlag, *remoteSessionIssuersListRemoteSessionIssuersProjectSlugInputFlag)
 			case "get-remote-session-issuer":
 				endpoint = c.GetRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildGetRemoteSessionIssuerPayload(*remoteSessionIssuersGetRemoteSessionIssuerIDFlag, *remoteSessionIssuersGetRemoteSessionIssuerSlugFlag, *remoteSessionIssuersGetRemoteSessionIssuerIssuerFlag, *remoteSessionIssuersGetRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInputFlag)
@@ -22743,7 +22745,7 @@ func remoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    refresh-remote-session-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.`)
 	fmt.Fprintln(os.Stderr, `    create-remote-session-issuer: Create a new remote_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-issuer: Update fields on an existing remote_session_issuer.`)
-	fmt.Fprintln(os.Stderr, `    list-remote-session-issuers: List remote_session_issuers in the caller's project.`)
+	fmt.Fprintln(os.Stderr, `    list-remote-session-issuers: List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.`)
 	fmt.Fprintln(os.Stderr, `    get-remote-session-issuer: Get a remote_session_issuer by id, by slug, or by upstream issuer URL. Provide exactly one.
 	
 	Looking up by issuer is how an automatic setup flow decides whether an upstream authorization server already has an identity provider before creating one: a 404 means nothing describes that URL yet, so create it. Unlike id and slug, which address at most one record, several issuers may legitimately describe the same URL — a project may keep its own alongside one inherited from its organization or from the platform catalog. This returns the one this project would use, preferring project over organization over platform and, within a tier, the oldest.
@@ -22860,6 +22862,8 @@ func remoteSessionIssuersListRemoteSessionIssuersUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers list-remote-session-issuers", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -upstream-host STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -22867,18 +22871,20 @@ func remoteSessionIssuersListRemoteSessionIssuersUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List remote_session_issuers in the caller's project.`)
+	fmt.Fprintln(os.Stderr, `List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -upstream-host STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers list-remote-session-issuers --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers list-remote-session-issuers --cursor \"abc123\" --limit 1 --search \"abc123\" --upstream-host \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersGetRemoteSessionIssuerUsage() {
