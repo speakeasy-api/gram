@@ -84,7 +84,7 @@ var AdminMcpServerHealthRemoteSessionIssuer = Type("AdminMcpServerHealthRemoteSe
 })
 
 var AdminMcpServerHealthRemoteSessions = Type("AdminMcpServerHealthRemoteSessions", func() {
-	Description("Upstream sessions brokered through one remote session client for this issuer.")
+	Description("Upstream sessions brokered through one remote session client, whichever issuer first linked them.")
 	Required("linked_subjects", "reauthorizations", "validation_status_counts")
 
 	Attribute("linked_subjects", Int64, "Distinct users holding a live upstream session.")

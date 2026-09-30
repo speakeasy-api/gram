@@ -544,7 +544,8 @@ type AdminMcpServerHealthRemoteSessionIssuer struct {
 	JwksLastErrorAt *string
 }
 
-// Upstream sessions brokered through one remote session client for this issuer.
+// Upstream sessions brokered through one remote session client, whichever
+// issuer first linked them.
 type AdminMcpServerHealthRemoteSessions struct {
 	// Distinct users holding a live upstream session.
 	LinkedSubjects int64

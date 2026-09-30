@@ -1799,14 +1799,8 @@ SELECT
     min(created_at)::timestamptz AS first_linked_at
 FROM remote_sessions
 WHERE remote_session_client_id = ANY($1::uuid[])
-  AND user_session_issuer_id = $2
 GROUP BY remote_session_client_id
 `
-
-type AdminRemoteSessionStatsParams struct {
-	RemoteSessionClientIds []uuid.UUID
-	UserSessionIssuerID    uuid.UUID
-}
 
 type AdminRemoteSessionStatsRow struct {
 	RemoteSessionClientID uuid.UUID
@@ -1816,9 +1810,11 @@ type AdminRemoteSessionStatsRow struct {
 }
 
 // Per client: distinct users with a live upstream session, fresh
-// authorizations beyond each session's first, and the first link.
-func (q *Queries) AdminRemoteSessionStats(ctx context.Context, arg AdminRemoteSessionStatsParams) ([]AdminRemoteSessionStatsRow, error) {
-	rows, err := q.db.Query(ctx, adminRemoteSessionStats, arg.RemoteSessionClientIds, arg.UserSessionIssuerID)
+// authorizations beyond each session's first, and the first link. Keyed on
+// the client alone: a session is one per (subject, client), and its
+// user_session_issuer_id records only which issuer first linked it.
+func (q *Queries) AdminRemoteSessionStats(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]AdminRemoteSessionStatsRow, error) {
+	rows, err := q.db.Query(ctx, adminRemoteSessionStats, remoteSessionClientIds)
 	if err != nil {
 		return nil, err
 	}
@@ -1849,16 +1845,10 @@ SELECT
     count(*)::bigint AS sessions
 FROM remote_sessions
 WHERE remote_session_client_id = ANY($1::uuid[])
-  AND user_session_issuer_id = $2
   AND deleted IS FALSE
   AND validation_status IS NOT NULL
 GROUP BY remote_session_client_id, validation_status
 `
-
-type AdminRemoteSessionValidationCountsParams struct {
-	RemoteSessionClientIds []uuid.UUID
-	UserSessionIssuerID    uuid.UUID
-}
 
 type AdminRemoteSessionValidationCountsRow struct {
 	RemoteSessionClientID uuid.UUID
@@ -1867,9 +1857,10 @@ type AdminRemoteSessionValidationCountsRow struct {
 }
 
 // Live sessions per client and last validation status. Sessions never
-// validated have a NULL status and are left out.
-func (q *Queries) AdminRemoteSessionValidationCounts(ctx context.Context, arg AdminRemoteSessionValidationCountsParams) ([]AdminRemoteSessionValidationCountsRow, error) {
-	rows, err := q.db.Query(ctx, adminRemoteSessionValidationCounts, arg.RemoteSessionClientIds, arg.UserSessionIssuerID)
+// validated have a NULL status and are left out. Keyed on the client alone,
+// as AdminRemoteSessionStats is.
+func (q *Queries) AdminRemoteSessionValidationCounts(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]AdminRemoteSessionValidationCountsRow, error) {
+	rows, err := q.db.Query(ctx, adminRemoteSessionValidationCounts, remoteSessionClientIds)
 	if err != nil {
 		return nil, err
 	}

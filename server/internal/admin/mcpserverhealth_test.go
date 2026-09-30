@@ -653,3 +653,33 @@ func TestDescribeMcpServerHealth_IssuerOutsideProjectIsIgnored(t *testing.T) {
 	require.Nil(t, got.UserSessionIssuer)
 	require.Equal(t, "gram_private", *got.LegacyAuth)
 }
+
+// A remote session belongs to its subject and client; the issuer that first
+// linked it is provenance. A client shared by two issuers reports the same
+// sessions under both.
+func TestDescribeMcpServerHealth_SharedClientCountsSessionsFromEitherIssuer(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "sharing", false)
+	issuerA := f.seedUserSessionIssuer(t, "issuer-a")
+	issuerB := f.seedUserSessionIssuer(t, "issuer-b")
+	serverID := f.seedServerWithIssuer(t, toolsetID, issuerA, "sharing")
+
+	remoteIssuerID := f.seedGlobalRemoteSessionIssuer(t, "shared-"+uuid.NewString()[:8])
+	clientID := f.seedRemoteSessionClient(t, remoteIssuerID, issuerA, "shared-client", true)
+	require.NoError(t, remotesessionsrepo.New(f.conn).AttachRemoteSessionClientToUserSessionIssuer(t.Context(), remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   issuerB,
+	}))
+	session := f.seedRemoteSession(t, issuerB, clientID, "erin", 2)
+	f.validateRemoteSession(t, session, "valid")
+
+	got, err := f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.Len(t, got.UserSessionIssuer.RemoteSessionClients, 1)
+	sessions := got.UserSessionIssuer.RemoteSessionClients[0].Sessions
+	require.Equal(t, int64(1), sessions.LinkedSubjects)
+	require.Equal(t, int64(1), sessions.Reauthorizations)
+	require.Equal(t, map[string]int64{"valid": 1}, sessions.ValidationStatusCounts)
+}

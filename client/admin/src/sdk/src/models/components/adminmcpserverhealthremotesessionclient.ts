@@ -94,7 +94,7 @@ export type AdminMcpServerHealthRemoteSessionClient = {
    */
   scope: Array<string>;
   /**
-   * Upstream sessions brokered through one remote session client for this issuer.
+   * Upstream sessions brokered through one remote session client, whichever issuer first linked them.
    */
   sessions: AdminMcpServerHealthRemoteSessions;
   /**

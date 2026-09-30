@@ -337,17 +337,11 @@ func (s *Service) readRemoteSessionClients(ctx context.Context, queries *repo.Qu
 	for _, row := range rows {
 		clientIDs = append(clientIDs, row.ID)
 	}
-	stats, err := queries.AdminRemoteSessionStats(ctx, repo.AdminRemoteSessionStatsParams{
-		RemoteSessionClientIds: clientIDs,
-		UserSessionIssuerID:    issuerID,
-	})
+	stats, err := queries.AdminRemoteSessionStats(ctx, clientIDs)
 	if err != nil {
 		return nil, fmt.Errorf("read remote session stats: %w", err)
 	}
-	counts, err := queries.AdminRemoteSessionValidationCounts(ctx, repo.AdminRemoteSessionValidationCountsParams{
-		RemoteSessionClientIds: clientIDs,
-		UserSessionIssuerID:    issuerID,
-	})
+	counts, err := queries.AdminRemoteSessionValidationCounts(ctx, clientIDs)
 	if err != nil {
 		return nil, fmt.Errorf("read remote session validation counts: %w", err)
 	}

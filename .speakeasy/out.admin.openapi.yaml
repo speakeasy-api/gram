@@ -7246,7 +7246,7 @@ components:
           additionalProperties:
             type: integer
             format: int64
-      description: Upstream sessions brokered through one remote session client for this issuer.
+      description: Upstream sessions brokered through one remote session client, whichever issuer first linked them.
       required:
         - linked_subjects
         - reauthorizations

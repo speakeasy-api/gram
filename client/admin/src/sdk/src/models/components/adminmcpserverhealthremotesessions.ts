@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Upstream sessions brokered through one remote session client for this issuer.
+ * Upstream sessions brokered through one remote session client, whichever issuer first linked them.
  */
 export type AdminMcpServerHealthRemoteSessions = {
   /**

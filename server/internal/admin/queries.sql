@@ -1084,7 +1084,9 @@ ORDER BY c.created_at, c.id;
 
 -- name: AdminRemoteSessionStats :many
 -- Per client: distinct users with a live upstream session, fresh
--- authorizations beyond each session's first, and the first link.
+-- authorizations beyond each session's first, and the first link. Keyed on
+-- the client alone: a session is one per (subject, client), and its
+-- user_session_issuer_id records only which issuer first linked it.
 SELECT
     remote_session_client_id,
     count(DISTINCT subject_urn) FILTER (WHERE deleted IS FALSE)::bigint AS linked_subjects,
@@ -1092,19 +1094,18 @@ SELECT
     min(created_at)::timestamptz AS first_linked_at
 FROM remote_sessions
 WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
-  AND user_session_issuer_id = @user_session_issuer_id
 GROUP BY remote_session_client_id;
 
 -- name: AdminRemoteSessionValidationCounts :many
 -- Live sessions per client and last validation status. Sessions never
--- validated have a NULL status and are left out.
+-- validated have a NULL status and are left out. Keyed on the client alone,
+-- as AdminRemoteSessionStats is.
 SELECT
     remote_session_client_id,
     validation_status::text AS validation_status,
     count(*)::bigint AS sessions
 FROM remote_sessions
 WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
-  AND user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
   AND validation_status IS NOT NULL
 GROUP BY remote_session_client_id, validation_status;
