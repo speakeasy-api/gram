@@ -22,8 +22,10 @@ set -euo pipefail
 # Attribution is the whole trick. Every harness reports the identity of the
 # account signed in at the keyboard and offers no override, so all six users
 # would otherwise land as one. Both honour OTEL_RESOURCE_ATTRIBUTES, so each
-# run is marked with gram.demo.user_email. Logs go straight to this
-# worktree's Gram hooks ingest — there is no shared rewrite hop.
+# run is marked with gram.demo.user_email. A process this task starts copies
+# that resource value onto the log attribute user.email and forwards only
+# those records to this worktree's hooks ingest. Hooks do not read the
+# resource key, and the server must not trust it: any API key could set it.
 #
 # Every prompt below is read-only work, and both harnesses are held to that --
 # Codex by its read-only sandbox, Claude Code by an allowlist of the tools the
@@ -36,7 +38,9 @@ minutes="${usage_minutes}"
 claude_model="${usage_claude_model}"
 codex_model="${usage_codex_model}"
 
-collector_logs_endpoint="${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs"
+# Filled in once the local rewrite hop is listening. Harnesses post here;
+# the hop forwards to this worktree's hooks ingest.
+collector_logs_endpoint=""
 
 # One turn's share of the budget is capped here as well as by the deadline, so
 # a single session that wedges cannot swallow the whole run before the loop
@@ -57,6 +61,8 @@ org_id=""
 codex_profile_owned=false
 current_turn_pid=""
 current_watchdog_pid=""
+rewrite_pid=""
+rewrite_ready=""
 codex_dropped=false
 codex_consecutive_failures=0
 
@@ -83,6 +89,29 @@ kill_tree() {
   kill "$pid" 2>/dev/null || true
 }
 
+# Codex bakes the logs URL into a profile, so this has to finish before
+# write_codex_profile. The hop copies gram.demo.user_email onto user.email
+# and forwards to this worktree only.
+start_log_rewrite() {
+  rewrite_ready="$(mktemp)"
+  mise exec -- go run ./.mise-tasks/demo/rewritelogs \
+    -upstream "${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs" \
+    -ready-file "$rewrite_ready" &
+  rewrite_pid=$!
+  local deadline=$((SECONDS + 60))
+  while [ ! -s "$rewrite_ready" ]; do
+    if ! kill -0 "$rewrite_pid" 2>/dev/null; then
+      fail "the demo log rewrite exited before it was ready"
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      kill_tree "$rewrite_pid"
+      fail "the demo log rewrite was not ready after 60s"
+    fi
+    sleep 0.2
+  done
+  collector_logs_endpoint="$(tr -d '\n' < "$rewrite_ready")"
+}
+
 # The key is minted for this run and must not outlive it. Revoking at the top
 # of the next run is no help on a machine where this run was the last one, and
 # no help at all if the developer interrupts this one.
@@ -96,6 +125,15 @@ cleanup() {
   fi
   if [ -n "$current_watchdog_pid" ]; then
     kill_tree "$current_watchdog_pid"
+  fi
+  # go run is a parent of the rewrite binary; killing only the parent leaves
+  # the listener behind on the port.
+  if [ -n "$rewrite_pid" ]; then
+    kill_tree "$rewrite_pid"
+    wait "$rewrite_pid" 2>/dev/null || true
+  fi
+  if [ -n "$rewrite_ready" ]; then
+    rm -f "$rewrite_ready" "$rewrite_ready.tmp"
   fi
   # Spelled out rather than `[ ... ] && ...`: a false test there returns
   # non-zero, and under `set -e` that would leave the trap before it got to
@@ -468,6 +506,9 @@ if $uses_claude; then
   (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)
 fi
 
+echo "Starting the demo log rewrite…"
+start_log_rewrite
+
 if $uses_codex; then
   write_codex_profile
 fi
@@ -498,7 +539,7 @@ done
 
 echo ""
 echo "Driving ${#users[@]} seeded users × ${prompts_per_user} prompts (${total} sessions): ${deal}."
-echo "Posting OTEL logs to ${collector_logs_endpoint}, stopping after ${minutes}m."
+echo "Posting OTEL logs through ${collector_logs_endpoint} to ${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs, stopping after ${minutes}m."
 echo ""
 
 # Round index outermost so every user makes progress before anyone finishes:
