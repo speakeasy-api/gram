@@ -141,12 +141,14 @@ it("narrows the platforms to the ones matching a tag", async () => {
   await search("production", ["build"]);
 });
 
-it("matches the name, description and issuer URL, ignoring case", async () => {
+it.each([
+  ["a name, ignoring case", "LEG", ["legacy"]],
+  ["a description", "pull request", ["staging"]],
+  ["an issuer URL", "build.example.com", ["build"]],
+])("matches %s", async (_, query, expected) => {
   renderPage();
 
-  await search("LEG", ["legacy"]);
-  await search("pull request", ["staging"]);
-  await search("build.example.com", ["build"]);
+  await search(query, expected);
 });
 
 it("restores every platform when the search is cleared", async () => {
