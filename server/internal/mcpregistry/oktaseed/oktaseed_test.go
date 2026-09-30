@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"strings"
+	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
@@ -51,11 +51,23 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	logger := testenv.NewLogger(t)
 
 	// A dry run reports the creates and writes nothing.
+	require.NotEmpty(t, oktaseed.Vendors)
 	result, err := oktaseed.Apply(ctx, logger, svc, true)
 	require.NoError(t, err)
 	require.Equal(t, oktaseed.Result{Created: len(oktaseed.Vendors), Updated: 0, Unchanged: 0}, result)
 	_, err = svc.GetByName(ctx, oktaseed.Vendors[0].Name)
 	require.ErrorIs(t, err, mcpregistry.ErrNotFound)
+
+	// A dry run reports the conflict a real create would hit.
+	claim := `{"server":{"name":"example.test/squatter","description":"Squatter","version":"1","remotes":[{"type":"streamable-http","url":"https://mcp.example.test/mcp"}]},"_meta":{"com.speakeasy.ai/okta":{"oinNames":[` + strconv.Quote(oktaseed.Vendors[0].Mapping.OINNames[0]) + `]}}}`
+	squatter, err := svc.Create(ctx, json.RawMessage(claim))
+	require.NoError(t, err)
+	_, err = oktaseed.Apply(ctx, logger, svc, true)
+	var invalid *mcpregistry.InvalidError
+	require.ErrorAs(t, err, &invalid)
+	require.Contains(t, invalid.Issues[0].Message, "example.test/squatter")
+	_, err = svc.Save(ctx, squatter.ID, mcpregistry.Token(squatter), json.RawMessage(`{"server":{"name":"example.test/squatter","description":"Squatter","version":"1","remotes":[{"type":"streamable-http","url":"https://mcp.example.test/mcp"}]}}`))
+	require.NoError(t, err)
 
 	result, err = oktaseed.Apply(ctx, logger, svc, false)
 	require.NoError(t, err)
@@ -116,12 +128,16 @@ func TestApplyRepairsNullMetadata(t *testing.T) {
 	// A legacy row that predates validation may hold "_meta": null; the seed
 	// repairs it instead of panicking on a nil map.
 	first := oktaseed.Vendors[0]
-	remotes := make([]string, 0, len(first.Remotes))
+	remotes := make([]map[string]string, 0, len(first.Remotes))
 	for _, r := range first.Remotes {
-		remotes = append(remotes, `{"type":"`+r.Type+`","url":"`+r.URL+`"}`)
+		remotes = append(remotes, map[string]string{"type": r.Type, "url": r.URL})
 	}
-	legacy := `{"server":{"name":"` + first.Name + `","description":"Legacy","version":"1","remotes":[` + strings.Join(remotes, ",") + `]},"_meta":null}`
-	require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: json.RawMessage(legacy), Published: true}))
+	legacy, err := json.Marshal(map[string]any{
+		"server": map[string]any{"name": first.Name, "description": "Legacy", "version": "1", "remotes": remotes},
+		"_meta":  nil,
+	})
+	require.NoError(t, err)
+	require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: legacy, Published: true}))
 
 	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc, false)
 	require.NoError(t, err)

@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 )
@@ -234,10 +236,7 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor, dryRun bool)
 			return "", err
 		}
 		if dryRun {
-			if issues := svc.Validate(data); len(issues) > 0 {
-				return "", &mcpregistry.InvalidError{Issues: issues}
-			}
-			return "created", nil
+			return "created", preview(ctx, svc, uuid.Nil, data)
 		}
 		if _, err := svc.Create(ctx, data); err != nil {
 			return "", fmt.Errorf("create: %w", err)
@@ -248,6 +247,11 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor, dryRun bool)
 	}
 	current, err := mcpregistry.ParseOktaMapping(existing.Data)
 	if err == nil && equalMapping(current, v.Mapping) {
+		// Nothing to write, but a stored record that no longer meets the
+		// contract is reported rather than silently left alone.
+		if issues := svc.ValidateStored(existing.Data); len(issues) > 0 {
+			return "", &mcpregistry.InvalidError{Issues: issues}
+		}
 		return "unchanged", nil
 	}
 	data, err := withMapping(existing.Data, v.Mapping)
@@ -255,15 +259,24 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor, dryRun bool)
 		return "", err
 	}
 	if dryRun {
-		if issues := svc.Validate(data); len(issues) > 0 {
-			return "", &mcpregistry.InvalidError{Issues: issues}
-		}
-		return "updated", nil
+		return "updated", preview(ctx, svc, existing.ID, data)
 	}
 	if _, err := svc.Save(ctx, existing.ID, mcpregistry.Token(existing), data); err != nil {
 		return "", fmt.Errorf("save: %w", err)
 	}
 	return "updated", nil
+}
+
+// preview runs the checks a write would run, without writing: the record
+// contract and the catalog-wide OIN name uniqueness.
+func preview(ctx context.Context, svc *mcpregistry.Service, id uuid.UUID, data json.RawMessage) error {
+	if issues := svc.Validate(data); len(issues) > 0 {
+		return &mcpregistry.InvalidError{Issues: issues}
+	}
+	if err := svc.CheckOktaMappingConflicts(ctx, id, data); err != nil {
+		return fmt.Errorf("conflicts: %w", err)
+	}
+	return nil
 }
 
 // record builds a fresh catalog record in the registry's ServerResponse shape.

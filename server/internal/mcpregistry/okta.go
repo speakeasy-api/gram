@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oktaissuer"
 )
 
@@ -117,4 +118,16 @@ func checkOktaMappingConflicts(ctx context.Context, q *repo.Queries, id uuid.UUI
 		}
 	}
 	return &InvalidError{Issues: issues}
+}
+
+// CheckOktaMappingConflicts reports the conflicts a Create (id uuid.Nil) or
+// Save of data would hit, without writing. Callers that then write still get
+// the authoritative check under the advisory lock.
+func (s *Service) CheckOktaMappingConflicts(ctx context.Context, id uuid.UUID, data json.RawMessage) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin registry okta mapping check: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	return checkOktaMappingConflicts(ctx, repo.New(tx), id, data)
 }

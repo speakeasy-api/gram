@@ -30,4 +30,4 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-exec go run . registry-okta-seed "${catalog_args[@]}"
+exec go run . registry-okta-seed ${catalog_args[@]+"${catalog_args[@]}"}
