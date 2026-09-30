@@ -9,6 +9,10 @@ import { useCallback, useState } from "react";
 export const REVEAL_SCOPE: Scope = "chat:read";
 export const REVEAL_DENIED_REASON =
   "You need the chat:read scope to reveal flagged values.";
+// Shown wherever a finding's session transcript would open but the same scope
+// is missing, so the missing link or the sheet's 403 doesn't pass silently.
+export const TRANSCRIPT_DENIED_REASON =
+  "You don't have access to view session transcripts. Contact your admin to request the chat:read scope.";
 
 // The server redacts an absent match to this exact sentinel (no sha segment,
 // unlike a real fingerprint). A prompt-based policy finding records the judge's
