@@ -2,24 +2,23 @@ package evaluation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
-	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
 // Leave headroom below Pub/Sub's 10 MiB limit for attributes and wire overhead.
@@ -30,13 +29,12 @@ type Features interface {
 	IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error)
 }
 
-// Handler evaluates messages without durable progress state. Redelivery repeats
+// Evaluator evaluates source events without durable progress state. Redelivery repeats
 // inference and publication under stable reading IDs, with new attempt IDs.
-type Handler struct {
+type Evaluator struct {
 	logger     *slog.Logger
 	source     Source
 	features   Features
-	blobs      BlobReader
 	publisher  gcp.Publisher[*sigintv1.Reading]
 	classifier classifier.Classifier
 	failures   metric.Int64Counter
@@ -44,84 +42,58 @@ type Handler struct {
 	slots      chan struct{}
 }
 
-// NewHandler injects a classifier configured with the platform's credentials.
-// Runtime concurrency is bounded across batch calls.
-func NewHandler(logger *slog.Logger, meters metric.MeterProvider, source Source, features Features, blobs BlobReader, publisher gcp.Publisher[*sigintv1.Reading], c classifier.Classifier) (*Handler, error) {
+// NewEvaluator injects a classifier configured with the platform's credentials.
+// Runtime concurrency is bounded across all adapters sharing this instance.
+func NewEvaluator(logger *slog.Logger, meters metric.MeterProvider, source Source, features Features, publisher gcp.Publisher[*sigintv1.Reading], c classifier.Classifier) (*Evaluator, error) {
 	meter := meters.Meter("github.com/speakeasy-api/gram/server/internal/sigint/evaluation")
-	failures, err := meter.Int64Counter("gram.sigint.evaluation.failures", metric.WithDescription("Terminal sensor or message evaluations acknowledged without a reading"))
+	failures, err := meter.Int64Counter("gram.sigint.evaluation.failures", metric.WithDescription("Terminal sensor or event evaluations acknowledged without a reading"))
 	if err != nil {
 		return nil, fmt.Errorf("create sensor failure counter: %w", err)
 	}
-	skipped, err := meter.Int64Counter("gram.sigint.evaluation.skipped", metric.WithDescription("Intentionally skipped sensor configurations and messages"))
+	skipped, err := meter.Int64Counter("gram.sigint.evaluation.skipped", metric.WithDescription("Intentionally skipped sensor configurations and events"))
 	if err != nil {
 		return nil, fmt.Errorf("create sensor skip counter: %w", err)
 	}
-	return &Handler{logger: logger, source: source, features: features, blobs: blobs, publisher: publisher, classifier: c, failures: failures, skipped: skipped, slots: make(chan struct{}, 4)}, nil
+	return &Evaluator{logger: logger, source: source, features: features, publisher: publisher, classifier: c, failures: failures, skipped: skipped, slots: make(chan struct{}, 4)}, nil
 }
 
-// HandleBatchWithResult nacks only transiently failed messages in the batch.
-func (h *Handler) HandleBatchWithResult(ctx context.Context, messages []streams.BatchMessage[*conversationv1.Message]) error {
-	var group errgroup.Group
-	group.SetLimit(4)
-	for _, message := range messages {
-		group.Go(func() error {
-			if err := h.Handle(ctx, message.Message, message.Metadata); err != nil {
-				message.Fail(err)
-			}
-			return nil
-		})
-	}
-	if err := group.Wait(); err != nil {
-		return fmt.Errorf("evaluate message batch: %w", err)
-	}
-	return nil
-}
-
-func (h *Handler) terminal(ctx context.Context, m *conversationv1.Message, reason string) {
+func (h *Evaluator) terminal(ctx context.Context, event Event, reason string) {
 	h.failures.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", reason)))
-	h.logger.ErrorContext(ctx, "sensor evaluation permanently failed", attr.SlogMessageID(m.GetId()), attr.SlogError(permanent(reason)))
+	h.logger.ErrorContext(ctx, "sensor evaluation permanently failed", attr.SlogSigintEventID(event.Subject.GetId()), attr.SlogSigintEventKind(event.Subject.GetKind()), attr.SlogProjectID(event.ProjectID), attr.SlogError(permanent(reason)))
 }
 
-// Handle evaluates only user/assistant roles, including historical replays.
+// Evaluate applies the source's eligible sensors to one normalized event.
 // Nil means all successful readings reached Pub/Sub and remaining work is terminal.
-func (h *Handler) Handle(ctx context.Context, m *conversationv1.Message, _ gcp.MessageMetadata) error {
+func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	select {
 	case h.slots <- struct{}{}:
 		defer func() { <-h.slots }()
 	case <-ctx.Done():
 		return fmt.Errorf("wait for sensor capacity: %w", ctx.Err())
 	}
-	if m == nil {
-		h.terminal(ctx, m, "invalid_message")
+	var event Event
+	if in == nil {
+		h.terminal(ctx, event, "invalid_event")
 		return nil
 	}
-	if m.GetRole() != conversationv1.Message_ROLE_USER && m.GetRole() != conversationv1.Message_ROLE_ASSISTANT {
+	event = in.Event()
+	project, err := uuid.Parse(event.ProjectID)
+	if err != nil || project == uuid.Nil || strings.TrimSpace(event.OrganizationID) == "" || strings.TrimSpace(event.Subject.GetId()) == "" || strings.TrimSpace(event.Subject.GetKind()) == "" {
+		h.terminal(ctx, event, "invalid_identity")
 		return nil
 	}
-	project, err := uuid.Parse(m.GetProjectId())
-	if err != nil || project == uuid.Nil || m.GetOrganizationId() == "" {
-		h.terminal(ctx, m, "invalid_identity")
+	if _, err := time.Parse(time.RFC3339Nano, event.Subject.GetOccurredAt()); err != nil {
+		h.terminal(ctx, event, "invalid_timestamp")
 		return nil
 	}
-	for _, id := range []string{m.GetId(), m.GetConversationId()} {
-		parsed, err := uuid.Parse(id)
-		if err != nil || parsed == uuid.Nil {
-			h.terminal(ctx, m, "invalid_identity")
-			return nil
-		}
-	}
-	if _, err := time.Parse(time.RFC3339Nano, m.GetCreatedAt()); err != nil {
-		h.terminal(ctx, m, "invalid_timestamp")
-		return nil
-	}
-	enabled, err := h.features.IsFeatureEnabled(ctx, m.GetOrganizationId(), productfeatures.FeatureSignalsIntelligence)
+	enabled, err := h.features.IsFeatureEnabled(ctx, event.OrganizationID, productfeatures.FeatureSignalsIntelligence)
 	if err != nil {
 		return fmt.Errorf("check evaluation entitlement: %w", err)
 	}
 	if !enabled {
 		return nil
 	}
-	sensors, err := h.source.Load(ctx, m.GetOrganizationId(), project)
+	sensors, err := h.source.Load(ctx, event.OrganizationID, project, event.Subject.GetKind())
 	if err != nil {
 		return fmt.Errorf("load sensor definitions: %w", err)
 	}
@@ -137,13 +109,26 @@ func (h *Handler) Handle(ctx context.Context, m *conversationv1.Message, _ gcp.M
 	if len(compiled) == 0 {
 		return nil
 	}
-	state, err := input(ctx, h.blobs, m)
+	state, err := in.Resolve(ctx)
 	if err != nil {
 		if terminal, ok := errors.AsType[*permanentError](err); ok {
-			h.terminal(ctx, m, terminal.reason)
+			h.terminal(ctx, event, terminal.reason)
+			return nil
+		}
+		if errors.Is(err, ErrInvalidInput) {
+			h.terminal(ctx, event, "invalid_content")
 			return nil
 		}
 		return fmt.Errorf("resolve evaluation input: %w", err)
+	}
+	data, err := json.Marshal(state)
+	if err != nil || string(data) == "null" {
+		h.terminal(ctx, event, "invalid_content")
+		return nil
+	}
+	if len(data) > maxContentBytes {
+		h.terminal(ctx, event, "content_too_large")
+		return nil
 	}
 	req := classifier.NewRequest(state)
 	for _, sensor := range compiled {
@@ -183,17 +168,17 @@ func (h *Handler) Handle(ctx context.Context, m *conversationv1.Message, _ gcp.M
 			if transient {
 				retry = errors.Join(retry, fmt.Errorf("retry incomplete sensor evaluation"))
 			} else {
-				h.terminal(ctx, m, "classifier_rejected")
+				h.terminal(ctx, event, "classifier_rejected")
 			}
 			continue
 		}
-		r, err := reading(m, sensor, outcomes, attempt, at, result)
+		r, err := reading(event, sensor, outcomes, attempt, at, result)
 		if err != nil {
-			h.terminal(ctx, m, "invalid_answer")
+			h.terminal(ctx, event, "invalid_answer")
 			continue
 		}
 		if proto.Size(r) > maxReadingBytes {
-			h.terminal(ctx, m, "reading_too_large")
+			h.terminal(ctx, event, "reading_too_large")
 			continue
 		}
 		pending = append(pending, h.publisher.Publish(ctx, r))

@@ -1,4 +1,4 @@
-// Package evaluation consumes conversation snapshots and publishes sensor readings.
+// Package evaluation classifies source events and publishes sensor readings.
 package evaluation
 
 import (
@@ -33,9 +33,10 @@ type Sensor struct {
 	SignalSlugs map[classifier.OptionKey]string
 }
 
-// Source loads tenant-scoped definitions in a consistent snapshot.
+// Source loads tenant-scoped definitions eligible for an event kind in a
+// consistent snapshot. Adapters must not broaden the selected sensor set.
 type Source interface {
-	Load(context.Context, string, uuid.UUID) ([]Sensor, error)
+	Load(context.Context, string, uuid.UUID, string) ([]Sensor, error)
 }
 
 // Repository loads configuration from the primary database.
@@ -47,7 +48,12 @@ func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 // Load pins ownership to the organization and project in the same SQL statement.
 // Empty sensors are retained for draft accounting; deleted/mismatched projects
 // yield no definitions.
-func (r *Repository) Load(ctx context.Context, org string, project uuid.UUID) ([]Sensor, error) {
+func (r *Repository) Load(ctx context.Context, org string, project uuid.UUID, kind string) ([]Sensor, error) {
+	// Existing configuration is conversation-only. New receivers must explicitly
+	// introduce sensor applicability before evaluating this configuration.
+	if kind != ConversationMessageKind {
+		return nil, nil
+	}
 	rows, err := repo.New(r.db).LoadEvaluationSensors(ctx, repo.LoadEvaluationSensorsParams{ProjectID: project, OrganizationID: org})
 	if err != nil {
 		return nil, fmt.Errorf("load evaluation sensors: %w", err)

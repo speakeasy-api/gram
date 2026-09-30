@@ -1395,10 +1395,28 @@ pubsub:
             string account_type = 2;
             string billing_mode = 3;
           }
-          enum MessageRole {
-            MESSAGE_ROLE_UNSPECIFIED = 0;
-            MESSAGE_ROLE_USER = 1;
-            MESSAGE_ROLE_ASSISTANT = 2;
+          message Event {
+            string kind = 1;
+            string id = 2;
+            string occurred_at = 3;
+            oneof context {
+              ConversationMessage conversation_message = 4;
+              ToolCall tool_call = 5;
+            }
+          }
+          message ConversationMessage {
+            enum Role {
+              ROLE_UNSPECIFIED = 0;
+              ROLE_USER = 1;
+              ROLE_ASSISTANT = 2;
+            }
+            string conversation_id = 1;
+            Role role = 2;
+          }
+          message ToolCall {
+            string tool_name = 1;
+            string tool_call_id = 2;
+            string mcp_server_id = 3;
           }
           message Probability {
             string signal_id = 1;
@@ -1423,27 +1441,24 @@ pubsub:
           string evaluation_attempt_id = 2;
           string organization_id = 3;
           string project_id = 4;
-          string conversation_id = 5;
-          string message_id = 6;
-          MessageRole message_role = 7;
-          string sensor_id = 8;
-          string sensor_slug = 9;
-          string message_created_at = 10;
-          string evaluated_at = 11;
-          string definition_hash = 12;
-          string configured_model = 13;
-          repeated string models = 14;
-          string compiler_version = 15;
-          Actor actor = 16;
-          string billing_user_id = 17;
-          string source = 18;
-          Account account = 19;
-          string assistant_id = 20;
-          bool replayed = 21;
+          Event event = 5;
+          string sensor_id = 6;
+          string sensor_slug = 7;
+          string evaluated_at = 8;
+          string definition_hash = 9;
+          string configured_model = 10;
+          repeated string models = 11;
+          string compiler_version = 12;
+          Actor actor = 13;
+          string billing_user_id = 14;
+          string source = 15;
+          Account account = 16;
+          string assistant_id = 17;
+          bool replayed = 18;
           oneof result {
-            MultiLabel multi_label = 22;
-            Choice choice = 23;
-            Score score = 24;
+            MultiLabel multi_label = 19;
+            Choice choice = 20;
+            Score score = 21;
           }
         }
       type: PROTOCOL_BUFFER

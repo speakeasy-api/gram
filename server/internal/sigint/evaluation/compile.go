@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
 
-	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 )
@@ -74,7 +74,7 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	return compiled, true
 }
 
-func reading(m *conversationv1.Message, sensor compiledSensor, answers map[classifier.QuestionKey]classifier.QuestionOutcome, attempt, at string, result classifier.Result) (*sigintv1.Reading, error) {
+func reading(event Event, sensor compiledSensor, answers map[classifier.QuestionKey]classifier.QuestionOutcome, attempt, at string, result classifier.Result) (*sigintv1.Reading, error) {
 	if sensor.slug == "" {
 		return nil, fmt.Errorf("missing sensor slug")
 	}
@@ -84,64 +84,36 @@ func reading(m *conversationv1.Message, sensor compiledSensor, answers map[class
 			return nil, fmt.Errorf("incomplete sensor evaluation")
 		}
 	}
-	r := sigintv1.Reading_builder{MessageId: new(m.GetId())}.Build()
-	identity, _ := json.Marshal([]string{"sigint-reading-v1", m.GetOrganizationId(), m.GetProjectId(), m.GetId(), sensor.id})
+	r := sigintv1.Reading_builder{Event: proto.CloneOf(event.Subject)}.Build()
+	identity, _ := json.Marshal([]string{"sigint-reading-v1", event.OrganizationID, event.ProjectID, event.Subject.GetKind(), event.Subject.GetId(), sensor.id})
 	r.SetId(uuid.NewSHA1(readingNamespace, identity).String())
 	r.SetEvaluationAttemptId(attempt)
-	r.SetOrganizationId(m.GetOrganizationId())
-	r.SetProjectId(m.GetProjectId())
-	r.SetConversationId(m.GetConversationId())
-	r.SetMessageRole(sigintv1.Reading_MESSAGE_ROLE_USER)
-	if m.GetRole() == conversationv1.Message_ROLE_ASSISTANT {
-		r.SetMessageRole(sigintv1.Reading_MESSAGE_ROLE_ASSISTANT)
-	}
+	r.SetOrganizationId(event.OrganizationID)
+	r.SetProjectId(event.ProjectID)
 	r.SetSensorId(sensor.id)
 	r.SetSensorSlug(sensor.slug)
-	r.SetMessageCreatedAt(m.GetCreatedAt())
 	r.SetEvaluatedAt(at)
 	r.SetDefinitionHash(sensor.hash)
 	r.SetConfiguredModel(result.Metadata.Model)
 	r.SetModels(result.Models)
 	r.SetCompilerVersion("sigint-v1/" + result.Metadata.CompilerVersion)
-	if provenance := m.GetProvenance(); provenance != nil {
-		actor := &sigintv1.Reading_Actor{}
-		if provenance.HasUserId() {
-			actor.SetUserId(provenance.GetUserId())
-		}
-		if provenance.HasExternalUserId() {
-			actor.SetExternalUserId(provenance.GetExternalUserId())
-		}
-		if provenance.HasUserEmail() {
-			actor.SetUserEmail(provenance.GetUserEmail())
-		}
-		if actor.HasUserId() || actor.HasExternalUserId() || actor.HasUserEmail() {
-			r.SetActor(actor)
-		}
-		if provenance.HasBillingUserId() {
-			r.SetBillingUserId(provenance.GetBillingUserId())
-		}
-		if provenance.HasSource() {
-			r.SetSource(provenance.GetSource())
-		}
-		if provenance.HasAssistantId() {
-			r.SetAssistantId(provenance.GetAssistantId())
-		}
-		if provenance.HasReplayed() {
-			r.SetReplayed(provenance.GetReplayed())
-		}
-		if source := provenance.GetAccount(); source != nil {
-			account := &sigintv1.Reading_Account{}
-			if source.HasUserAccountId() {
-				account.SetUserAccountId(source.GetUserAccountId())
-			}
-			if source.HasAccountType() {
-				account.SetAccountType(source.GetAccountType())
-			}
-			if source.HasBillingMode() {
-				account.SetBillingMode(source.GetBillingMode())
-			}
-			r.SetAccount(account)
-		}
+	if event.Actor != nil {
+		r.SetActor(proto.CloneOf(event.Actor))
+	}
+	if event.BillingUserID != nil {
+		r.SetBillingUserId(*event.BillingUserID)
+	}
+	if event.Source != nil {
+		r.SetSource(*event.Source)
+	}
+	if event.AssistantID != nil {
+		r.SetAssistantId(*event.AssistantID)
+	}
+	if event.Replayed != nil {
+		r.SetReplayed(*event.Replayed)
+	}
+	if event.Account != nil {
+		r.SetAccount(proto.CloneOf(event.Account))
 	}
 	switch sensor.mode {
 	case "multi_label":

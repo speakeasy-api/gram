@@ -271,7 +271,7 @@ flowchart LR
   s_gram_risk_v1_prompt_injection_analyzer --> c54
   c55[\"📥<br/>server/cmd/gram/streams.go<br/>promptPolicyHandler"\]:::go
   s_gram_risk_v1_prompt_policy_analyzer --> c55
-  c56[\"📥<br/>server/cmd/gram/streams.go<br/>sensorEvaluator<br/>(batch)"\]:::go
+  c56[\"📥<br/>server/cmd/gram/streams.go<br/>evaluation.NewConversationHandler<br/>(batch)"\]:::go
   s_gram_sigint_v1_evaluator --> c56
   c57[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
   s_gram_telemetry_v1_noop --> c57

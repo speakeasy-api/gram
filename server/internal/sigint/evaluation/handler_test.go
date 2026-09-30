@@ -31,8 +31,8 @@ import (
 
 type dependencies struct{ mock.Mock }
 
-func (d *dependencies) Load(ctx context.Context, org string, project uuid.UUID) ([]Sensor, error) {
-	args := d.Called(ctx, org, project)
+func (d *dependencies) Load(ctx context.Context, org string, project uuid.UUID, kind string) ([]Sensor, error) {
+	args := d.Called(ctx, org, project, kind)
 	value, ok := args.Get(0).([]Sensor)
 	if !ok {
 		panic("expected []Sensor")
@@ -99,17 +99,17 @@ func TestCompileSensorRequiresAllSlugs(t *testing.T) {
 	}
 }
 
-func handler(t *testing.T, m *conversationv1.Message, definitions []Sensor, c classifier.Classifier, meters metric.MeterProvider) (*Handler, *capturePublisher) {
+func handler(t *testing.T, m *conversationv1.Message, definitions []Sensor, c classifier.Classifier, meters metric.MeterProvider) (*ConversationHandler, *capturePublisher) {
 	t.Helper()
 	var deps dependencies
 	deps.Test(t)
 	t.Cleanup(func() { deps.AssertExpectations(t) })
 	deps.On("IsFeatureEnabled", mock.Anything, m.GetOrganizationId(), productfeatures.FeatureSignalsIntelligence).Return(true, nil)
-	deps.On("Load", mock.Anything, m.GetOrganizationId(), uuid.MustParse(m.GetProjectId())).Return(definitions, nil)
+	deps.On("Load", mock.Anything, m.GetOrganizationId(), uuid.MustParse(m.GetProjectId()), ConversationMessageKind).Return(definitions, nil)
 	var pub capturePublisher
-	h, err := NewHandler(testenv.NewLogger(t), meters, &deps, &deps, nil, &pub, c)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), meters, &deps, &deps, &pub, c)
 	require.NoError(t, err)
-	return h, &pub
+	return NewConversationHandler(evaluator, nil), &pub
 }
 
 func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
@@ -171,9 +171,9 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 		a, b := pub.readings[i], pub.readings[i+3]
 		require.Equal(t, a.GetId(), b.GetId())
 		require.NotEqual(t, a.GetEvaluationAttemptId(), b.GetEvaluationAttemptId())
-		require.Equal(t, sigintv1.Reading_MESSAGE_ROLE_ASSISTANT, a.GetMessageRole())
+		require.Equal(t, sigintv1.Reading_ConversationMessage_ROLE_ASSISTANT, a.GetEvent().GetConversationMessage().GetRole())
 		require.Equal(t, []string{"test-model"}, a.GetModels())
-		require.Equal(t, m.GetCreatedAt(), a.GetMessageCreatedAt())
+		require.Equal(t, m.GetCreatedAt(), a.GetEvent().GetOccurredAt())
 		require.Equal(t, "message-user", a.GetActor().GetUserId())
 		require.Equal(t, "external-user", a.GetActor().GetExternalUserId())
 		require.Equal(t, "actor@example.test", a.GetActor().GetUserEmail())
@@ -379,8 +379,9 @@ func TestHandlerSkipsDisabledAndOtherRoles(t *testing.T) {
 	t.Cleanup(func() { deps.AssertExpectations(t) })
 	m := message()
 	deps.On("IsFeatureEnabled", mock.Anything, m.GetOrganizationId(), productfeatures.FeatureSignalsIntelligence).Return(false, nil).Once()
-	h, err := NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil, nil)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
 	require.NoError(t, err)
+	h := NewConversationHandler(evaluator, nil)
 	var meta gcp.MessageMetadata
 	require.NoError(t, h.Handle(t.Context(), m, meta))
 	m.SetRole(conversationv1.Message_ROLE_TOOL)
@@ -393,8 +394,9 @@ func TestHandlerEntitlementFailureNacks(t *testing.T) {
 	deps.Test(t)
 	t.Cleanup(func() { deps.AssertExpectations(t) })
 	deps.On("IsFeatureEnabled", mock.Anything, mock.Anything, mock.Anything).Return(false, fmt.Errorf("lookup unavailable")).Once()
-	h, err := NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil, nil)
+	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
 	require.NoError(t, err)
+	h := NewConversationHandler(evaluator, nil)
 	var meta gcp.MessageMetadata
 	require.ErrorContains(t, h.Handle(t.Context(), message(), meta), "check evaluation entitlement")
 }
