@@ -155,9 +155,11 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 			// cannot be rolled back into it. Failing the request here would hide
 			// the one-time plaintext of a credential that is already live and
 			// published — strictly worse than reporting the rotation as
-			// incomplete. The cutoff was read before minting, so a retry sweeps
-			// the same previous keys without touching this replacement.
-			previous, err = s.retirePreviousHooksKeys(ctx, s.db, ac, candidate, retireBefore, payload.PreviousKeyFate, expiresAt)
+			// incomplete. Retirement gets its own transaction so that "not
+			// retired" means exactly that; the cutoff was read before minting,
+			// so a retry sweeps the same previous keys without touching this
+			// replacement.
+			previous, err = s.retirePreviousHooksKeysAtomically(ctx, ac, candidate, retireBefore, payload.PreviousKeyFate, expiresAt)
 			if err != nil {
 				s.logger.ErrorContext(ctx, "observability credential rotation published a replacement but could not retire the previous keys", attr.SlogError(err))
 				previous = nil
@@ -262,6 +264,38 @@ func (s *Service) rotateCredentialAtomically(
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit credential rotation").LogError(ctx, s.logger)
+	}
+
+	return previous, nil
+}
+
+// retirePreviousHooksKeysAtomically applies the previous keys' fate in its own
+// transaction. The replacement is already committed and published on this path,
+// so retirement cannot be folded back into minting — but the set-based UPDATE
+// and the api_key:revoke rows it audits still have to land together. Without
+// that, a failing audit insert leaves the keys retired with a partial trail
+// while the response reports that nothing was retired.
+func (s *Service) retirePreviousHooksKeysAtomically(
+	ctx context.Context,
+	ac *contextvalues.AuthContext,
+	candidate pluginAPIKeyCandidate,
+	retireBefore pgtype.Timestamptz,
+	fate string,
+	expiresAt *time.Time,
+) ([]*gen.RotatedObservabilityKey, error) {
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin previous key retirement").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	previous, err := s.retirePreviousHooksKeys(ctx, dbtx, ac, candidate, retireBefore, fate, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit previous key retirement").LogError(ctx, s.logger)
 	}
 
 	return previous, nil

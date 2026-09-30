@@ -269,6 +269,11 @@ describe("RotateObservabilityCredentialDialog", () => {
     expect(
       await screen.findByText(/previous keys were left untouched/),
     ).toBeDefined();
+    // The server reports no previous keys when it retired none, so the ordinary
+    // fate alert would claim none were in use — the opposite of the warning.
+    expect(
+      screen.queryByText(/No previous observability keys were in use/),
+    ).toBe(null);
   });
 
   it("turns a rotation failure into the next step, without server wording", () => {

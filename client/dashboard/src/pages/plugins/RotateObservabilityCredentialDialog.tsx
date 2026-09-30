@@ -174,22 +174,29 @@ export function RotateObservabilityCredentialDialog({
                   {result.key}
                 </CodeBlock>
               </Stack>
-              {!result.previousKeysRetired && (
+              {/*
+                A partial rotation reports no previous keys, because none were
+                retired — so the fate alert would read "no previous keys were in
+                use", contradicting the warning. The warning is the whole story
+                on that path.
+              */}
+              {result.previousKeysRetired ? (
+                <Alert
+                  variant={
+                    result.previousKeyFate === "revoke_immediately" &&
+                    result.previousKeys.length > 0
+                      ? "warning"
+                      : "info"
+                  }
+                >
+                  {previousKeyFateCopy(result)}
+                </Alert>
+              ) : (
                 <Alert variant="warning">
                   The new key works, but the previous keys were left untouched —
                   they can still send data. Rotate again to retire them.
                 </Alert>
               )}
-              <Alert
-                variant={
-                  result.previousKeyFate === "revoke_immediately" &&
-                  result.previousKeys.length > 0
-                    ? "warning"
-                    : "info"
-                }
-              >
-                {previousKeyFateCopy(result)}
-              </Alert>
               <Alert
                 variant={result.marketplaceUpdateDeferred ? "warning" : "info"}
               >
