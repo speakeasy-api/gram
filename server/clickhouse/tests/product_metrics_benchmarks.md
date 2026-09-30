@@ -20,6 +20,11 @@ rather than silently dropping or combining measurements. No serving query uses
 Six narrow serving tables hold Counter and Histogram aggregates at one-minute,
 one-hour and UTC one-day resolutions. All six MVs consume raw insert blocks
 directly. Source replacement does not retract any tier's duplicate increments.
+Serving sort keys place the complete scoped descriptor first, then bucket time,
+then series ID. The catalogue resolves attributes separately. Time-first ordering
+supports broad-series range pruning and minute/hour boundary reads. The tested
+series-first alternative scanned much of a month for a small edge range; this
+query path does not depend on per-series in-order aggregation.
 The catalogue has a seventh idempotent min/max MV. MV writes are not atomic;
 ambiguous failures need retry and, if necessary, operator repair.
 
@@ -33,6 +38,14 @@ from them, and reconstructs catalogue entries before discarding repeated attribu
 from serving rows. Pause writers throughout. Local rollback restores attributes
 from checked catalogue identities and preserves minute totals. Repair fixtures
 exercise all six target tables and catalogue recovery from retained raw data.
+
+`product_metrics_series_seed.sql` seeds repeatable 10,000-row batches. Use 3 million
+rows per instrument, a fixed end timestamp and 90 event-time days. The high-churn
+profile has 1,000 values for its `series` dimension; the bounded profile has eight.
+Other dimensions remain four models, eight regions, two environments and two
+statuses. Both carry 20 point attributes and have 90% tenant skew. Compact targets
+and catalogue before steady-state reads; these are not simultaneous ingest/read
+or cold-cache measurements.
 
 ## Method
 

@@ -47,7 +47,7 @@ CREATE TABLE product_metric_sums_1m (
     contributions SimpleAggregateFunction(sum, UInt64)
 ) ENGINE = AggregatingMergeTree
 PARTITION BY toYYYYMM(bucket)
-ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, series_id, bucket, number_kind)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
 TTL bucket + INTERVAL 90 DAY
 COMMENT 'Monotonic delta sums over half-open UTC minute windows. Explicit sum reads are correct before merges. Late arrivals update retained buckets and current windows are partial';
 
@@ -70,7 +70,7 @@ CREATE TABLE product_metric_histograms_1m (
     floating_max SimpleAggregateFunction(max, Float64)
 ) ENGINE = AggregatingMergeTree
 PARTITION BY toYYYYMM(bucket)
-ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, series_id, bucket, number_kind)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
 TTL bucket + INTERVAL 90 DAY
 COMMENT 'Delivery-weighted histogram observations without buckets or quantiles. Mean is total sum divided by total count. No automatic zeros for missing minutes';
 
@@ -127,22 +127,22 @@ GROUP BY organization_id, project_id, metric_name, scope_name, scope_version, un
 
 CREATE TABLE product_metric_sums_1h AS product_metric_sums_1m
 ENGINE = AggregatingMergeTree PARTITION BY toYYYYMM(bucket)
-ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, series_id, bucket, number_kind)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
 TTL bucket + INTERVAL 91 DAY;
 
 CREATE TABLE product_metric_sums_1d AS product_metric_sums_1m
 ENGINE = AggregatingMergeTree PARTITION BY toYYYYMM(bucket)
-ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, series_id, bucket, number_kind)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
 TTL bucket + INTERVAL 91 DAY;
 
 CREATE TABLE product_metric_histograms_1h AS product_metric_histograms_1m
 ENGINE = AggregatingMergeTree PARTITION BY toYYYYMM(bucket)
-ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, series_id, bucket, number_kind)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
 TTL bucket + INTERVAL 91 DAY;
 
 CREATE TABLE product_metric_histograms_1d AS product_metric_histograms_1m
 ENGINE = AggregatingMergeTree PARTITION BY toYYYYMM(bucket)
-ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, series_id, bucket, number_kind)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
 TTL bucket + INTERVAL 91 DAY;
 
 CREATE MATERIALIZED VIEW product_metric_sums_1h_mv TO product_metric_sums_1h AS
