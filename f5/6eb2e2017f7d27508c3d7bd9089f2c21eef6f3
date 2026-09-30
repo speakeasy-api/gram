@@ -1,0 +1,32 @@
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 102-106
+server/internal/networkingress/reconcile_test.go
+  h_9630b74bdac540 214-223
+server/internal/networkingress/queries.sql
+  h_9630b74bdac540 280
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 357
+server/internal/networkingress/repo/queries.sql.go
+  s_a12bf127de190f::t_897e605f1949d0 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f56eb2e2017f7d27508c3d7bd9089f2c21eef6f3",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_a12bf127de190f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0efe0-f274-7671-ae96-52081f44de50",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
