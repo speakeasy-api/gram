@@ -6,26 +6,26 @@ import "gcp/pubsub/v1/options.proto";
 
 option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1";
 
-// Reading is one successful sensor evaluation of one conversation message.
+// Reading is one successful sensor evaluation of one source event.
 // Delivery and evaluation are at-least-once: the same id can carry different
 // answers from different attempts. Storage consumers choose the winning attempt.
 message Reading {
-  // Message-user attribution copied from the consumed conversation snapshot.
+  // Actor attribution copied from the consumed source event.
   // Independent of billing_user_id and account; missing fields remain unknown.
   message Actor {
-    // Gram user ID attached to the persisted message. Identifies the person the
-    // message is attributed to, not necessarily its author: assistant responses
-    // can carry the requesting user's ID. Does not allocate billing usage.
+    // Gram user ID attributed to the source event, not necessarily its author:
+    // assistant responses can carry the requesting user's ID. Does not allocate
+    // billing usage.
     string user_id = 1;
     // Opaque user ID reported by the source system, not a Gram user/account ID.
     // Interpret within organization_id and source. Can exist without user_id
     // when ingestion has not resolved the external identity to a Gram user.
     string external_user_id = 2;
-    // Message actor email explicitly observed by ingestion. Not a current Gram
+    // Actor email explicitly observed by ingestion. Not a current Gram
     // directory lookup, a billing-user email, or an inferred provider-account email.
     string user_email = 3;
   }
-  // The external AI account/credentials used for the source session, as resolved
+  // The external AI account/credentials used for the source workload, as resolved
   // by ingestion. Not the Gram user allocated usage or the organization's Gram
   // billing plan. Classification may be known without a persisted account ID.
   message Account {
@@ -45,11 +45,42 @@ message Reading {
     // pricing or select a billing user.
     string billing_mode = 3;
   }
-  // Role of the evaluated message, independent of its human attribution.
-  enum MessageRole {
-    MESSAGE_ROLE_UNSPECIFIED = 0;
-    MESSAGE_ROLE_USER = 1;
-    MESSAGE_ROLE_ASSISTANT = 2;
+  // Stable reference to the evaluated source event. Source-specific context is
+  // optional; new event kinds need not manufacture conversation identifiers.
+  message Event {
+    // Stable source namespace, e.g. "conversation.message" or "mcp.tool_call".
+    // Distinct from Reading.source, which namespaces external actor identities.
+    string kind = 1;
+    // Producer-assigned immutable logical event identity, unique within tenant
+    // and kind. Opaque: it need not be a UUID. Not a Pub/Sub delivery ID.
+    string id = 2;
+    // UTC RFC3339Nano event time, independent of evaluation completion time.
+    string occurred_at = 3;
+    oneof context {
+      ConversationMessage conversation_message = 4;
+      ToolCall tool_call = 5;
+    }
+  }
+  // Context supplied by the conversation adapter. Event.id is the message UUID.
+  message ConversationMessage {
+    enum Role {
+      ROLE_UNSPECIFIED = 0;
+      ROLE_USER = 1;
+      ROLE_ASSISTANT = 2;
+    }
+    // Gram conversation UUID, not the source system's session identifier.
+    string conversation_id = 1;
+    // Independent of human attribution; only user/assistant messages are evaluated.
+    Role role = 2;
+  }
+  // Optional execution context for a tool-call source adapter. Event.id is the
+  // producer's stable execution identity, not necessarily the protocol call ID.
+  message ToolCall {
+    string tool_name = 1;
+    // Protocol call ID, scoped to its originating session/connection.
+    string tool_call_id = 2;
+    // Gram MCP server UUID when the execution belongs to an MCP server.
+    string mcp_server_id = 3;
   }
   // One signal's classification probability. In MultiLabel it is independent
   // of other signals; in Choice/Score it is an entry in the option distribution.
@@ -90,62 +121,56 @@ message Reading {
     double confidence = 3;
   }
 
-  // UUIDv5 identity of tenant, immutable logical message ID, and sensor ID.
+  // UUIDv5 identity of tenant, event kind, immutable event ID, and sensor ID.
   // Configuration changes between attempts do not change this identity.
   string id = 1;
-  // Fresh UUID for a logical message evaluation, shared by its sensor readings.
+  // Fresh UUID for a logical event evaluation, shared by its sensor readings.
   // A retry gets a new attempt ID even when the logical reading ID is unchanged.
   string evaluation_attempt_id = 2;
-  // Gram organization owning the source message and evaluation.
+  // Gram organization owning the source event and evaluation.
   string organization_id = 3;
-  // Gram project UUID owning the source message and sensor configuration.
+  // Gram project UUID owning the source event and sensor configuration.
   string project_id = 4;
-  // Gram conversation UUID, not the source system's session identifier.
-  string conversation_id = 5;
-  // Persisted Gram message UUID; multiple provenance snapshots can share this ID.
-  string message_id = 6;
-  // Only user and assistant messages produce readings.
-  MessageRole message_role = 7;
+  Event event = 5;
   // Gram sensor UUID; stable across display-name, slug and definition edits.
-  string sensor_id = 8;
+  string sensor_id = 6;
   // Always populated with the sensor slug observed during evaluation.
-  string sensor_slug = 9;
-  string message_created_at = 10; // UTC RFC3339Nano source time.
-  string evaluated_at = 11; // UTC RFC3339Nano completion time.
+  string sensor_slug = 7;
+  string evaluated_at = 8; // UTC RFC3339Nano completion time.
   // Hash of mode, instructions and ordered signal IDs/criteria. Excludes display
   // names, slugs and actor/account attribution. Traceability metadata, not an
   // immutable configuration revision or part of reading identity.
-  string definition_hash = 12;
-  // Model requested for classification, not the model that authored the message.
-  string configured_model = 13;
+  string definition_hash = 9;
+  // Model requested for classification, not the model that produced the source event.
+  string configured_model = 10;
   // A logical evaluation may span multiple provider requests/model versions.
-  // Reported models for the whole logical message evaluation, not per-sensor
+  // Reported models for the whole logical event evaluation, not per-sensor
   // attribution when questions were split across provider requests.
-  repeated string models = 14;
+  repeated string models = 11;
   // Version of the sigint and classifier compilation logic used for this attempt.
-  string compiler_version = 15;
-  // Identity associated with the source message, preserved as observed at ingestion.
-  Actor actor = 16;
-  // Gram user ID to which the ingestion producer explicitly allocates usage,
-  // using the same attribution as agent-session storage metering. May differ
+  string compiler_version = 12;
+  // Identity associated with the source event, preserved as observed at ingestion.
+  Actor actor = 13;
+  // Gram user ID to which the source producer explicitly allocates usage. For
+  // conversations this matches agent-session storage metering. May differ
   // from actor.user_id or exist without an actor (e.g. generated compaction
   // messages allocated to the chat owner). Interpret with organization_id.
   // This is usage attribution, not proof that a charge occurred. Absence means
   // unassigned; consumers must not fall back to actor or an account owner.
-  string billing_user_id = 17;
+  string billing_user_id = 14;
   // Canonical ingestion source; namespaces the external actor identity.
-  string source = 18;
+  string source = 15;
   // Source-session AI account context, preserved from the ingestion snapshot.
-  Account account = 19;
+  Account account = 16;
   // Gram assistant UUID associated with the workload, supplied by the producer.
   // Identifies an assistant resource, not a human user or provider account.
-  string assistant_id = 20;
+  string assistant_id = 17;
   // Historical ingestion marker, not Pub/Sub redelivery.
-  bool replayed = 21;
+  bool replayed = 18;
   oneof result {
-    MultiLabel multi_label = 22;
-    Choice choice = 23;
-    Score score = 24;
+    MultiLabel multi_label = 19;
+    Choice choice = 20;
+    Score score = 21;
   }
 
   option (gcp.pubsub.v1.topic) = {

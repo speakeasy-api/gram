@@ -500,7 +500,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create sensor readings publisher: %w", err)
 			}
-			sensorEvaluator, err := evaluation.NewHandler(logger, meterProvider, evaluation.NewRepository(db), productFeatures, assetStorage, readingsPub, jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key")))))
+			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key")))))
 			if err != nil {
 				return fmt.Errorf("create sensor evaluator: %w", err)
 			}
@@ -747,7 +747,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
 				if c.String("sigint-openrouter-api-key") != "" {
-					mustReceiveBatchWithResult(rg, &conversationv1.Message{}, &sigintv1.Evaluator{}, sensorEvaluator, gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+					mustReceiveBatchWithResult(rg, &conversationv1.Message{}, &sigintv1.Evaluator{}, evaluation.NewConversationHandler(sensorEvaluator, assetStorage), gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
 				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
