@@ -7100,7 +7100,11 @@ components:
       properties:
         attachment_scope:
           type: string
-          description: global, organization:<id> or project:<id>.
+          description: Where the row is attached. global is platform-wide.
+          enum:
+            - project
+            - organization
+            - global
         grant_types:
           type: array
           items:
@@ -7130,7 +7134,12 @@ components:
           $ref: '#/components/schemas/AdminMcpServerHealthRemoteSessions'
         token_endpoint_auth_method:
           type: string
-          description: The client's token endpoint auth method.
+          description: The client's token endpoint auth method. Absent when unset.
+          enum:
+            - client_secret_basic
+            - client_secret_post
+            - none
+            - private_key_jwt
         upstream_rejected_at:
           type: string
           description: When the upstream last rejected the client's credentials.
@@ -7150,7 +7159,11 @@ components:
       properties:
         attachment_scope:
           type: string
-          description: global, organization:<id> or project:<id>.
+          description: Where the row is attached. global is platform-wide.
+          enum:
+            - project
+            - organization
+            - global
         cimd_supported:
           type: boolean
           description: Whether the issuer accepts a Client ID Metadata Document URL as client_id.
@@ -7355,10 +7368,17 @@ components:
       properties:
         attachment_scope:
           type: string
-          description: global, organization:<id> or project:<id>.
+          description: Where the row is attached. global is platform-wide.
+          enum:
+            - project
+            - organization
+            - global
         authn_challenge_mode:
           type: string
-          description: chain | interactive.
+          description: How multi-remote authn challenges are presented.
+          enum:
+            - chain
+            - interactive
         classification:
           type: string
           description: custom, or project_default_idp for the auto-provisioned issuer of private servers.
@@ -7367,7 +7387,12 @@ components:
             - project_default_idp
         client_id_metadata_admission_mode:
           type: string
-          description: The stored CIMD admission mode. Absent when unset.
+          description: The stored CIMD admission mode. Absent when unset, which admits as open.
+          enum:
+            - disabled
+            - presets
+            - reporting
+            - open
         created_at:
           type: string
           format: date-time

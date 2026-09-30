@@ -494,7 +494,7 @@ type AdminMcpServerHealthRemoteSessionClient struct {
 	ID string
 	// How the client was registered upstream.
 	Registration string
-	// The client's token endpoint auth method.
+	// The client's token endpoint auth method. Absent when unset.
 	TokenEndpointAuthMethod *string
 	// Scopes recorded for the client.
 	Scope []string
@@ -502,7 +502,7 @@ type AdminMcpServerHealthRemoteSessionClient struct {
 	GrantTypes []string
 	// Whether the client is backed by an identity provider connection.
 	HasIdentityProviderConnection bool
-	// global, organization:<id> or project:<id>.
+	// Where the row is attached. global is platform-wide.
 	AttachmentScope string
 	// When the upstream last rejected the client's credentials.
 	UpstreamRejectedAt *string
@@ -521,7 +521,7 @@ type AdminMcpServerHealthRemoteSessionIssuer struct {
 	Name *string
 	// The upstream issuer URL.
 	Issuer string
-	// global, organization:<id> or project:<id>.
+	// Where the row is attached. global is platform-wide.
 	AttachmentScope string
 	// Whether Gram reaches the issuer over the public internet or a tunnel.
 	Networking string
@@ -620,13 +620,13 @@ type AdminMcpServerHealthUserSessionIssuer struct {
 	// custom, or project_default_idp for the auto-provisioned issuer of private
 	// servers.
 	Classification string
-	// chain | interactive.
+	// How multi-remote authn challenges are presented.
 	AuthnChallengeMode string
 	// How long a user session lasts, in whole hours.
 	SessionDurationHours int64
-	// global, organization:<id> or project:<id>.
+	// Where the row is attached. global is platform-wide.
 	AttachmentScope string
-	// The stored CIMD admission mode. Absent when unset.
+	// The stored CIMD admission mode. Absent when unset, which admits as open.
 	ClientIDMetadataAdmissionMode *string
 	// Whether the issuer announces the authentication host as its origin.
 	UseAuthenticationHost bool

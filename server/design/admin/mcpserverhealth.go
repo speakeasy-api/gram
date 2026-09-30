@@ -6,6 +6,10 @@ import (
 	"github.com/speakeasy-api/gram/server/design/security"
 )
 
+func attachmentScopeEnum() {
+	Enum("project", "organization", "global")
+}
+
 var AdminMcpServerHealthServer = Type("AdminMcpServerHealthServer", func() {
 	Description("The server the health report describes, as listProjectMcpServers lists it.")
 	Required("id", "name", "source", "visibility", "created_at")
@@ -65,7 +69,7 @@ var AdminMcpServerHealthRemoteSessionIssuer = Type("AdminMcpServerHealthRemoteSe
 	Attribute("slug", String, "The issuer slug.")
 	Attribute("name", String, "Display name of the issuer.")
 	Attribute("issuer", String, "The upstream issuer URL.")
-	Attribute("attachment_scope", String, "global, organization:<id> or project:<id>.")
+	Attribute("attachment_scope", String, "Where the row is attached. global is platform-wide.", attachmentScopeEnum)
 	Attribute("networking", String, "Whether Gram reaches the issuer over the public internet or a tunnel.", func() {
 		Enum("public", "tunneled")
 	})
@@ -99,11 +103,13 @@ var AdminMcpServerHealthRemoteSessionClient = Type("AdminMcpServerHealthRemoteSe
 	Attribute("registration", String, "How the client was registered upstream.", func() {
 		Enum("cimd", "dcr", "static")
 	})
-	Attribute("token_endpoint_auth_method", String, "The client's token endpoint auth method.")
+	Attribute("token_endpoint_auth_method", String, "The client's token endpoint auth method. Absent when unset.", func() {
+		Enum("client_secret_basic", "client_secret_post", "none", "private_key_jwt")
+	})
 	Attribute("scope", ArrayOf(String), "Scopes recorded for the client.")
 	Attribute("grant_types", ArrayOf(String), "Grant types recorded for the client.")
 	Attribute("has_identity_provider_connection", Boolean, "Whether the client is backed by an identity provider connection.")
-	Attribute("attachment_scope", String, "global, organization:<id> or project:<id>.")
+	Attribute("attachment_scope", String, "Where the row is attached. global is platform-wide.", attachmentScopeEnum)
 	Attribute("upstream_rejected_at", String, "When the upstream last rejected the client's credentials.", func() { Format(FormatDateTime) })
 	Attribute("issuer", AdminMcpServerHealthRemoteSessionIssuer)
 	Attribute("sessions", AdminMcpServerHealthRemoteSessions)
@@ -118,10 +124,14 @@ var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessio
 	Attribute("classification", String, "custom, or project_default_idp for the auto-provisioned issuer of private servers.", func() {
 		Enum("custom", "project_default_idp")
 	})
-	Attribute("authn_challenge_mode", String, "chain | interactive.")
+	Attribute("authn_challenge_mode", String, "How multi-remote authn challenges are presented.", func() {
+		Enum("chain", "interactive")
+	})
 	Attribute("session_duration_hours", Int64, "How long a user session lasts, in whole hours.")
-	Attribute("attachment_scope", String, "global, organization:<id> or project:<id>.")
-	Attribute("client_id_metadata_admission_mode", String, "The stored CIMD admission mode. Absent when unset.")
+	Attribute("attachment_scope", String, "Where the row is attached. global is platform-wide.", attachmentScopeEnum)
+	Attribute("client_id_metadata_admission_mode", String, "The stored CIMD admission mode. Absent when unset, which admits as open.", func() {
+		Enum("disabled", "presets", "reporting", "open")
+	})
 	Attribute("use_authentication_host", Boolean, "Whether the issuer announces the authentication host as its origin.")
 	Attribute("trusted_remote_session", AdminMcpServerHealthTrustedRemoteSession, "Set when the issuer trusts an external authorization server's assertions.")
 	Attribute("other_servers_using_issuer", ArrayOf(AdminMcpServerHealthServerRef), "Other live servers in the project that share this issuer.")

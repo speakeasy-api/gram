@@ -18364,13 +18364,13 @@ type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
 	// custom, or project_default_idp for the auto-provisioned issuer of private
 	// servers.
 	Classification *string `form:"classification,omitempty" json:"classification,omitempty" xml:"classification,omitempty"`
-	// chain | interactive.
+	// How multi-remote authn challenges are presented.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// How long a user session lasts, in whole hours.
 	SessionDurationHours *int64 `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	// global, organization:<id> or project:<id>.
+	// Where the row is attached. global is platform-wide.
 	AttachmentScope *string `form:"attachment_scope,omitempty" json:"attachment_scope,omitempty" xml:"attachment_scope,omitempty"`
-	// The stored CIMD admission mode. Absent when unset.
+	// The stored CIMD admission mode. Absent when unset, which admits as open.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	// Whether the issuer announces the authentication host as its origin.
 	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
@@ -18424,7 +18424,7 @@ type AdminMcpServerHealthRemoteSessionClientResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// How the client was registered upstream.
 	Registration *string `form:"registration,omitempty" json:"registration,omitempty" xml:"registration,omitempty"`
-	// The client's token endpoint auth method.
+	// The client's token endpoint auth method. Absent when unset.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 	// Scopes recorded for the client.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -18432,7 +18432,7 @@ type AdminMcpServerHealthRemoteSessionClientResponseBody struct {
 	GrantTypes []string `form:"grant_types,omitempty" json:"grant_types,omitempty" xml:"grant_types,omitempty"`
 	// Whether the client is backed by an identity provider connection.
 	HasIdentityProviderConnection *bool `form:"has_identity_provider_connection,omitempty" json:"has_identity_provider_connection,omitempty" xml:"has_identity_provider_connection,omitempty"`
-	// global, organization:<id> or project:<id>.
+	// Where the row is attached. global is platform-wide.
 	AttachmentScope *string `form:"attachment_scope,omitempty" json:"attachment_scope,omitempty" xml:"attachment_scope,omitempty"`
 	// When the upstream last rejected the client's credentials.
 	UpstreamRejectedAt *string                                              `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
@@ -18451,7 +18451,7 @@ type AdminMcpServerHealthRemoteSessionIssuerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The upstream issuer URL.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
-	// global, organization:<id> or project:<id>.
+	// Where the row is attached. global is platform-wide.
 	AttachmentScope *string `form:"attachment_scope,omitempty" json:"attachment_scope,omitempty" xml:"attachment_scope,omitempty"`
 	// Whether Gram reaches the issuer over the public internet or a tunnel.
 	Networking *string `form:"networking,omitempty" json:"networking,omitempty" xml:"networking,omitempty"`
@@ -57285,6 +57285,21 @@ func ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body *AdminMcpSer
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.classification", *body.Classification, []any{"custom", "project_default_idp"}))
 		}
 	}
+	if body.AuthnChallengeMode != nil {
+		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+		}
+	}
+	if body.AttachmentScope != nil {
+		if !(*body.AttachmentScope == "project" || *body.AttachmentScope == "organization" || *body.AttachmentScope == "global") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attachment_scope", *body.AttachmentScope, []any{"project", "organization", "global"}))
+		}
+	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
+	}
 	if body.TrustedRemoteSession != nil {
 		if err2 := ValidateAdminMcpServerHealthTrustedRemoteSessionResponseBody(body.TrustedRemoteSession); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -57392,6 +57407,16 @@ func ValidateAdminMcpServerHealthRemoteSessionClientResponseBody(body *AdminMcpS
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registration", *body.Registration, []any{"cimd", "dcr", "static"}))
 		}
 	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.AttachmentScope != nil {
+		if !(*body.AttachmentScope == "project" || *body.AttachmentScope == "organization" || *body.AttachmentScope == "global") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attachment_scope", *body.AttachmentScope, []any{"project", "organization", "global"}))
+		}
+	}
 	if body.UpstreamRejectedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
 	}
@@ -57437,6 +57462,11 @@ func ValidateAdminMcpServerHealthRemoteSessionIssuerResponseBody(body *AdminMcpS
 	}
 	if body.CimdSupported == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("cimd_supported", "body"))
+	}
+	if body.AttachmentScope != nil {
+		if !(*body.AttachmentScope == "project" || *body.AttachmentScope == "organization" || *body.AttachmentScope == "global") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attachment_scope", *body.AttachmentScope, []any{"project", "organization", "global"}))
+		}
 	}
 	if body.Networking != nil {
 		if !(*body.Networking == "public" || *body.Networking == "tunneled") {

@@ -18,6 +18,21 @@ import {
 } from "./adminmcpserverhealthremotesessions.js";
 
 /**
+ * Where the row is attached. global is platform-wide.
+ */
+export const AdminMcpServerHealthRemoteSessionClientAttachmentScope = {
+  Project: "project",
+  Organization: "organization",
+  Global: "global",
+} as const;
+/**
+ * Where the row is attached. global is platform-wide.
+ */
+export type AdminMcpServerHealthRemoteSessionClientAttachmentScope = ClosedEnum<
+  typeof AdminMcpServerHealthRemoteSessionClientAttachmentScope
+>;
+
+/**
  * How the client was registered upstream.
  */
 export const Registration = {
@@ -31,13 +46,29 @@ export const Registration = {
 export type Registration = ClosedEnum<typeof Registration>;
 
 /**
+ * The client's token endpoint auth method. Absent when unset.
+ */
+export const TokenEndpointAuthMethod = {
+  ClientSecretBasic: "client_secret_basic",
+  ClientSecretPost: "client_secret_post",
+  None: "none",
+  PrivateKeyJwt: "private_key_jwt",
+} as const;
+/**
+ * The client's token endpoint auth method. Absent when unset.
+ */
+export type TokenEndpointAuthMethod = ClosedEnum<
+  typeof TokenEndpointAuthMethod
+>;
+
+/**
  * A remote session client attached to the issuer, with its upstream issuer and session counts. Never carries secrets.
  */
 export type AdminMcpServerHealthRemoteSessionClient = {
   /**
-   * global, organization:<id> or project:<id>.
+   * Where the row is attached. global is platform-wide.
    */
-  attachmentScope: string;
+  attachmentScope: AdminMcpServerHealthRemoteSessionClientAttachmentScope;
   /**
    * Grant types recorded for the client.
    */
@@ -67,9 +98,9 @@ export type AdminMcpServerHealthRemoteSessionClient = {
    */
   sessions: AdminMcpServerHealthRemoteSessions;
   /**
-   * The client's token endpoint auth method.
+   * The client's token endpoint auth method. Absent when unset.
    */
-  tokenEndpointAuthMethod?: string | undefined;
+  tokenEndpointAuthMethod?: TokenEndpointAuthMethod | undefined;
   /**
    * When the upstream last rejected the client's credentials.
    */
@@ -77,14 +108,25 @@ export type AdminMcpServerHealthRemoteSessionClient = {
 };
 
 /** @internal */
+export const AdminMcpServerHealthRemoteSessionClientAttachmentScope$inboundSchema:
+  z.ZodMiniEnum<typeof AdminMcpServerHealthRemoteSessionClientAttachmentScope> =
+    z.enum(AdminMcpServerHealthRemoteSessionClientAttachmentScope);
+
+/** @internal */
 export const Registration$inboundSchema: z.ZodMiniEnum<typeof Registration> = z
   .enum(Registration);
+
+/** @internal */
+export const TokenEndpointAuthMethod$inboundSchema: z.ZodMiniEnum<
+  typeof TokenEndpointAuthMethod
+> = z.enum(TokenEndpointAuthMethod);
 
 /** @internal */
 export const AdminMcpServerHealthRemoteSessionClient$inboundSchema:
   z.ZodMiniType<AdminMcpServerHealthRemoteSessionClient, unknown> = z.pipe(
     z.object({
-      attachment_scope: z.string(),
+      attachment_scope:
+        AdminMcpServerHealthRemoteSessionClientAttachmentScope$inboundSchema,
       grant_types: z.array(z.string()),
       has_identity_provider_connection: z.boolean(),
       id: z.string(),
@@ -92,7 +134,9 @@ export const AdminMcpServerHealthRemoteSessionClient$inboundSchema:
       registration: Registration$inboundSchema,
       scope: z.array(z.string()),
       sessions: AdminMcpServerHealthRemoteSessions$inboundSchema,
-      token_endpoint_auth_method: z.optional(z.string()),
+      token_endpoint_auth_method: z.optional(
+        TokenEndpointAuthMethod$inboundSchema,
+      ),
       upstream_rejected_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),

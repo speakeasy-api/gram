@@ -18352,13 +18352,13 @@ type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
 	// custom, or project_default_idp for the auto-provisioned issuer of private
 	// servers.
 	Classification string `form:"classification" json:"classification" xml:"classification"`
-	// chain | interactive.
+	// How multi-remote authn challenges are presented.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
 	// How long a user session lasts, in whole hours.
 	SessionDurationHours int64 `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
-	// global, organization:<id> or project:<id>.
+	// Where the row is attached. global is platform-wide.
 	AttachmentScope string `form:"attachment_scope" json:"attachment_scope" xml:"attachment_scope"`
-	// The stored CIMD admission mode. Absent when unset.
+	// The stored CIMD admission mode. Absent when unset, which admits as open.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	// Whether the issuer announces the authentication host as its origin.
 	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
@@ -18412,7 +18412,7 @@ type AdminMcpServerHealthRemoteSessionClientResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// How the client was registered upstream.
 	Registration string `form:"registration" json:"registration" xml:"registration"`
-	// The client's token endpoint auth method.
+	// The client's token endpoint auth method. Absent when unset.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 	// Scopes recorded for the client.
 	Scope []string `form:"scope" json:"scope" xml:"scope"`
@@ -18420,7 +18420,7 @@ type AdminMcpServerHealthRemoteSessionClientResponseBody struct {
 	GrantTypes []string `form:"grant_types" json:"grant_types" xml:"grant_types"`
 	// Whether the client is backed by an identity provider connection.
 	HasIdentityProviderConnection bool `form:"has_identity_provider_connection" json:"has_identity_provider_connection" xml:"has_identity_provider_connection"`
-	// global, organization:<id> or project:<id>.
+	// Where the row is attached. global is platform-wide.
 	AttachmentScope string `form:"attachment_scope" json:"attachment_scope" xml:"attachment_scope"`
 	// When the upstream last rejected the client's credentials.
 	UpstreamRejectedAt *string                                              `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
@@ -18439,7 +18439,7 @@ type AdminMcpServerHealthRemoteSessionIssuerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The upstream issuer URL.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
-	// global, organization:<id> or project:<id>.
+	// Where the row is attached. global is platform-wide.
 	AttachmentScope string `form:"attachment_scope" json:"attachment_scope" xml:"attachment_scope"`
 	// Whether Gram reaches the issuer over the public internet or a tunnel.
 	Networking string `form:"networking" json:"networking" xml:"networking"`

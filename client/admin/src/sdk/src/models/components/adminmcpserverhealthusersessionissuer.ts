@@ -26,6 +26,31 @@ import {
 } from "./adminmcpserverhealthusersessions.js";
 
 /**
+ * Where the row is attached. global is platform-wide.
+ */
+export const AttachmentScope = {
+  Project: "project",
+  Organization: "organization",
+  Global: "global",
+} as const;
+/**
+ * Where the row is attached. global is platform-wide.
+ */
+export type AttachmentScope = ClosedEnum<typeof AttachmentScope>;
+
+/**
+ * How multi-remote authn challenges are presented.
+ */
+export const AuthnChallengeMode = {
+  Chain: "chain",
+  Interactive: "interactive",
+} as const;
+/**
+ * How multi-remote authn challenges are presented.
+ */
+export type AuthnChallengeMode = ClosedEnum<typeof AuthnChallengeMode>;
+
+/**
  * custom, or project_default_idp for the auto-provisioned issuer of private servers.
  */
 export const Classification = {
@@ -38,25 +63,41 @@ export const Classification = {
 export type Classification = ClosedEnum<typeof Classification>;
 
 /**
+ * The stored CIMD admission mode. Absent when unset, which admits as open.
+ */
+export const ClientIdMetadataAdmissionMode = {
+  Disabled: "disabled",
+  Presets: "presets",
+  Reporting: "reporting",
+  Open: "open",
+} as const;
+/**
+ * The stored CIMD admission mode. Absent when unset, which admits as open.
+ */
+export type ClientIdMetadataAdmissionMode = ClosedEnum<
+  typeof ClientIdMetadataAdmissionMode
+>;
+
+/**
  * The user session issuer that authenticates the server's users.
  */
 export type AdminMcpServerHealthUserSessionIssuer = {
   /**
-   * global, organization:<id> or project:<id>.
+   * Where the row is attached. global is platform-wide.
    */
-  attachmentScope: string;
+  attachmentScope: AttachmentScope;
   /**
-   * chain | interactive.
+   * How multi-remote authn challenges are presented.
    */
-  authnChallengeMode: string;
+  authnChallengeMode: AuthnChallengeMode;
   /**
    * custom, or project_default_idp for the auto-provisioned issuer of private servers.
    */
   classification: Classification;
   /**
-   * The stored CIMD admission mode. Absent when unset.
+   * The stored CIMD admission mode. Absent when unset, which admits as open.
    */
-  clientIdMetadataAdmissionMode?: string | undefined;
+  clientIdMetadataAdmissionMode?: ClientIdMetadataAdmissionMode | undefined;
   createdAt: Date;
   /**
    * The user session issuer ID.
@@ -93,9 +134,24 @@ export type AdminMcpServerHealthUserSessionIssuer = {
 };
 
 /** @internal */
+export const AttachmentScope$inboundSchema: z.ZodMiniEnum<
+  typeof AttachmentScope
+> = z.enum(AttachmentScope);
+
+/** @internal */
+export const AuthnChallengeMode$inboundSchema: z.ZodMiniEnum<
+  typeof AuthnChallengeMode
+> = z.enum(AuthnChallengeMode);
+
+/** @internal */
 export const Classification$inboundSchema: z.ZodMiniEnum<
   typeof Classification
 > = z.enum(Classification);
+
+/** @internal */
+export const ClientIdMetadataAdmissionMode$inboundSchema: z.ZodMiniEnum<
+  typeof ClientIdMetadataAdmissionMode
+> = z.enum(ClientIdMetadataAdmissionMode);
 
 /** @internal */
 export const AdminMcpServerHealthUserSessionIssuer$inboundSchema: z.ZodMiniType<
@@ -103,10 +159,12 @@ export const AdminMcpServerHealthUserSessionIssuer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    attachment_scope: z.string(),
-    authn_challenge_mode: z.string(),
+    attachment_scope: AttachmentScope$inboundSchema,
+    authn_challenge_mode: AuthnChallengeMode$inboundSchema,
     classification: Classification$inboundSchema,
-    client_id_metadata_admission_mode: z.optional(z.string()),
+    client_id_metadata_admission_mode: z.optional(
+      ClientIdMetadataAdmissionMode$inboundSchema,
+    ),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

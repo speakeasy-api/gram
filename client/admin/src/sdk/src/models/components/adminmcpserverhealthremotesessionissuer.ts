@@ -10,6 +10,21 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * Where the row is attached. global is platform-wide.
+ */
+export const AdminMcpServerHealthRemoteSessionIssuerAttachmentScope = {
+  Project: "project",
+  Organization: "organization",
+  Global: "global",
+} as const;
+/**
+ * Where the row is attached. global is platform-wide.
+ */
+export type AdminMcpServerHealthRemoteSessionIssuerAttachmentScope = ClosedEnum<
+  typeof AdminMcpServerHealthRemoteSessionIssuerAttachmentScope
+>;
+
+/**
  * Whether Gram reaches the issuer over the public internet or a tunnel.
  */
 export const Networking = {
@@ -40,9 +55,9 @@ export type Pkce = ClosedEnum<typeof Pkce>;
  */
 export type AdminMcpServerHealthRemoteSessionIssuer = {
   /**
-   * global, organization:<id> or project:<id>.
+   * Where the row is attached. global is platform-wide.
    */
-  attachmentScope: string;
+  attachmentScope: AdminMcpServerHealthRemoteSessionIssuerAttachmentScope;
   /**
    * Whether the issuer accepts a Client ID Metadata Document URL as client_id.
    */
@@ -98,6 +113,11 @@ export type AdminMcpServerHealthRemoteSessionIssuer = {
 };
 
 /** @internal */
+export const AdminMcpServerHealthRemoteSessionIssuerAttachmentScope$inboundSchema:
+  z.ZodMiniEnum<typeof AdminMcpServerHealthRemoteSessionIssuerAttachmentScope> =
+    z.enum(AdminMcpServerHealthRemoteSessionIssuerAttachmentScope);
+
+/** @internal */
 export const Networking$inboundSchema: z.ZodMiniEnum<typeof Networking> = z
   .enum(Networking);
 
@@ -108,7 +128,8 @@ export const Pkce$inboundSchema: z.ZodMiniEnum<typeof Pkce> = z.enum(Pkce);
 export const AdminMcpServerHealthRemoteSessionIssuer$inboundSchema:
   z.ZodMiniType<AdminMcpServerHealthRemoteSessionIssuer, unknown> = z.pipe(
     z.object({
-      attachment_scope: z.string(),
+      attachment_scope:
+        AdminMcpServerHealthRemoteSessionIssuerAttachmentScope$inboundSchema,
       cimd_supported: z.boolean(),
       id: z.string(),
       issuer: z.string(),
