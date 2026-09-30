@@ -48598,7 +48598,7 @@ paths:
         name: RemoteSessionIssuerDuplicatePreflight
   /rpc/remoteSessionIssuers.list:
     get:
-      description: 'List the remote_session_issuers the caller''s project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.'
+      description: 'List the remote_session_issuers the caller''s project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.'
       operationId: listRemoteSessionIssuers
       parameters:
         - allowEmptyValue: true
@@ -48631,6 +48631,17 @@ paths:
           schema:
             description: 'Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.'
             maxLength: 260
+            type: string
+        - allowEmptyValue: true
+          description: 'Only issuers from one tier: the project''s own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.'
+          in: query
+          name: tier
+          schema:
+            description: 'Only issuers from one tier: the project''s own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.'
+            enum:
+              - project
+              - organization
+              - platform
             type: string
         - allowEmptyValue: true
           description: Session header

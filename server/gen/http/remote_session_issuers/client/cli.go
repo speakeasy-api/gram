@@ -357,7 +357,7 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 
 // BuildListRemoteSessionIssuersPayload builds the payload for the
 // remoteSessionIssuers listRemoteSessionIssuers endpoint from CLI flags.
-func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionIssuersCursor string, remoteSessionIssuersListRemoteSessionIssuersLimit string, remoteSessionIssuersListRemoteSessionIssuersSearch string, remoteSessionIssuersListRemoteSessionIssuersUpstreamHost string, remoteSessionIssuersListRemoteSessionIssuersSessionToken string, remoteSessionIssuersListRemoteSessionIssuersApikeyToken string, remoteSessionIssuersListRemoteSessionIssuersProjectSlugInput string) (*remotesessionissuers.ListRemoteSessionIssuersPayload, error) {
+func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionIssuersCursor string, remoteSessionIssuersListRemoteSessionIssuersLimit string, remoteSessionIssuersListRemoteSessionIssuersSearch string, remoteSessionIssuersListRemoteSessionIssuersUpstreamHost string, remoteSessionIssuersListRemoteSessionIssuersTier string, remoteSessionIssuersListRemoteSessionIssuersSessionToken string, remoteSessionIssuersListRemoteSessionIssuersApikeyToken string, remoteSessionIssuersListRemoteSessionIssuersProjectSlugInput string) (*remotesessionissuers.ListRemoteSessionIssuersPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -401,6 +401,18 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 			}
 		}
 	}
+	var tier *string
+	{
+		if remoteSessionIssuersListRemoteSessionIssuersTier != "" {
+			tier = &remoteSessionIssuersListRemoteSessionIssuersTier
+			if !(*tier == "project" || *tier == "organization" || *tier == "platform") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tier", *tier, []any{"project", "organization", "platform"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if remoteSessionIssuersListRemoteSessionIssuersSessionToken != "" {
@@ -424,6 +436,7 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 	v.Limit = limit
 	v.Search = search
 	v.UpstreamHost = upstreamHost
+	v.Tier = tier
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

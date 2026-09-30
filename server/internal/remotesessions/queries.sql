@@ -283,10 +283,13 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListRemoteSessionIssuersByProjectID :many
 -- Lists the project's own issuers plus each inherited tier the caller opts in
--- to, gated by its own boolean: include_organizational for organization-level
--- issuers inherited from the project's org, include_global for platform issuers
--- from the shared catalog. Both default off; organization_id is always passed
--- (the arm is off when include_organizational is false regardless of its value).
+-- to, each arm gated by its own boolean: include_project for the project's own
+-- issuers, include_organizational for organization-level issuers inherited from
+-- the project's org, include_global for platform issuers from the shared
+-- catalog. A caller listing one tier turns the other two off, which is how a
+-- tier's page stays its own however large another tier grows. organization_id
+-- is always passed (the arm is off when include_organizational is false
+-- regardless of its value).
 --
 -- Slugs are unique per (project_id, slug) and, separately, across the global
 -- partition; the organization tier has no slug uniqueness constraint at all. So
@@ -308,7 +311,7 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 SELECT *
 FROM remote_session_issuers
 WHERE (
-    project_id = @project_id
+    (@include_project::boolean AND project_id = @project_id)
     OR (@include_organizational::boolean AND project_id IS NULL AND organization_id = @organization_id)
     OR (@include_global::boolean AND project_id IS NULL AND organization_id IS NULL)
   )

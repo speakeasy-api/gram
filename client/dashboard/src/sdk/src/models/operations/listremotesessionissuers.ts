@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
   ListRemoteSessionIssuersResult,
@@ -27,6 +28,19 @@ export type ListRemoteSessionIssuersSecurity = {
   option2?: ListRemoteSessionIssuersSecurityOption2 | undefined;
 };
 
+/**
+ * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
+ */
+export const Tier = {
+  Project: "project",
+  Organization: "organization",
+  Platform: "platform",
+} as const;
+/**
+ * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
+ */
+export type Tier = ClosedEnum<typeof Tier>;
+
 export type ListRemoteSessionIssuersRequest = {
   /**
    * Pagination cursor.
@@ -44,6 +58,10 @@ export type ListRemoteSessionIssuersRequest = {
    * Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.
    */
   upstreamHost?: string | undefined;
+  /**
+   * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
+   */
+  tier?: Tier | undefined;
   /**
    * Session header
    */
@@ -170,11 +188,15 @@ export function listRemoteSessionIssuersSecurityToJSON(
 }
 
 /** @internal */
+export const Tier$outboundSchema: z.ZodMiniEnum<typeof Tier> = z.enum(Tier);
+
+/** @internal */
 export type ListRemoteSessionIssuersRequest$Outbound = {
   cursor?: string | undefined;
   limit?: number | undefined;
   search?: string | undefined;
   upstream_host?: string | undefined;
+  tier?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -190,6 +212,7 @@ export const ListRemoteSessionIssuersRequest$outboundSchema: z.ZodMiniType<
     limit: z.optional(z.int()),
     search: z.optional(z.string()),
     upstreamHost: z.optional(z.string()),
+    tier: z.optional(Tier$outboundSchema),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
