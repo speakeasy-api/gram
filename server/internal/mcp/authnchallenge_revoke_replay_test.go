@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,39 +22,55 @@ import (
 
 func TestHandleRevoke_ConsumedRefreshReplay(t *testing.T) {
 	t.Parallel()
-	for _, rotations := range []int{1, 3} {
-		t.Run(fmt.Sprintf("rotations_%d", rotations), func(t *testing.T) {
-			t.Parallel()
-			ctx, ti := newTestMCPService(t)
-			toolset, _, client, original := seedRefreshReplaySession(t, ctx, ti)
-			tokens := []string{original}
-			var response tokenResponseFixture
-			for range rotations {
-				result := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, tokens[len(tokens)-1])
-				require.NoError(t, result.err)
-				require.Equal(t, http.StatusOK, result.code, result.body)
-				require.NoError(t, json.Unmarshal([]byte(result.body), &response))
-				tokens = append(tokens, response.RefreshToken)
-			}
+	ctx, ti := newTestMCPService(t)
+	toolset, _, client, original := seedRefreshReplaySession(t, ctx, ti)
+	result := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, original)
+	require.NoError(t, result.err)
+	require.Equal(t, http.StatusOK, result.code, result.body)
+	var response tokenResponseFixture
+	require.NoError(t, json.Unmarshal([]byte(result.body), &response))
 
-			performRevokeReplayRequest(t, ctx, ti, toolset.McpSlug.String, client.ClientID, original)
-			// Revoking the lost-response token also invalidates intermediate
-			// replay capabilities and the live successor refresh/access pair.
-			jti, err := sessiontokens.NewSigner("test-jwt-secret").VerifiedJTI(response.AccessToken)
-			require.NoError(t, err)
-			revoked, err := ti.chatSessionsManager.IsTokenRevoked(ctx, jti)
-			require.NoError(t, err)
-			require.True(t, revoked)
-			for _, token := range tokens {
-				result := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, token)
-				require.NoError(t, result.err)
-				require.Equal(t, http.StatusBadRequest, result.code, result.body)
-				require.Contains(t, result.body, "invalid_grant")
-			}
-			// Already revoked remains a silent success.
-			performRevokeReplayRequest(t, ctx, ti, toolset.McpSlug.String, client.ClientID, original)
-		})
+	performRevokeReplayRequest(t, ctx, ti, toolset.McpSlug.String, client.ClientID, original)
+	// Revoking the lost-response token drops its replay and revokes the live
+	// successor refresh/access pair it would have served.
+	jti, err := sessiontokens.NewSigner("test-jwt-secret").VerifiedJTI(response.AccessToken)
+	require.NoError(t, err)
+	revoked, err := ti.chatSessionsManager.IsTokenRevoked(ctx, jti)
+	require.NoError(t, err)
+	require.True(t, revoked)
+	for _, token := range []string{original, response.RefreshToken} {
+		result := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, token)
+		require.NoError(t, result.err)
+		require.Equal(t, http.StatusBadRequest, result.code, result.body)
+		require.Contains(t, result.body, "invalid_grant")
 	}
+	// Already revoked remains a silent success.
+	performRevokeReplayRequest(t, ctx, ti, toolset.McpSlug.String, client.ClientID, original)
+}
+
+func TestHandleRevoke_ConsumedRefreshReplayDoesNotFollowLaterRotations(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	toolset, _, client, original := seedRefreshReplaySession(t, ctx, ti)
+	tokens := []string{original}
+	for range 3 {
+		result := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, tokens[len(tokens)-1])
+		require.NoError(t, result.err)
+		require.Equal(t, http.StatusOK, result.code, result.body)
+		var response tokenResponseFixture
+		require.NoError(t, json.Unmarshal([]byte(result.body), &response))
+		tokens = append(tokens, response.RefreshToken)
+	}
+
+	// The original's replay is dropped, but its successor was already rotated,
+	// so the live head two rotations later is untouched.
+	performRevokeReplayRequest(t, ctx, ti, toolset.McpSlug.String, client.ClientID, original)
+	stale := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, original)
+	require.NoError(t, stale.err)
+	require.Equal(t, http.StatusBadRequest, stale.code, stale.body)
+	live := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, tokens[len(tokens)-1])
+	require.NoError(t, live.err)
+	require.Equal(t, http.StatusOK, live.code, live.body)
 }
 
 func TestHandleRevoke_ConsumedRefreshReplayClientBinding(t *testing.T) {

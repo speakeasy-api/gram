@@ -188,11 +188,18 @@ func (s *Service) tryRevokeAccessToken(ctx context.Context, logger *slog.Logger,
 // regardless approach would let a malicious client wipe another client's
 // refresh token by presenting it to /revoke.)
 func (s *Service) tryRevokeRefreshToken(ctx context.Context, logger *slog.Logger, issuerID, clientID uuid.UUID, token string) bool {
-	return s.tryRevokeRefreshTokenHop(ctx, logger, issuerID, clientID, token, 0)
+	hash := sha256Hex(token)
+	revoked, consumed := s.revokeLiveRefreshToken(ctx, logger, issuerID, clientID, hash)
+	if revoked || !consumed {
+		return revoked
+	}
+	return s.revokeConsumedRefreshToken(ctx, logger, issuerID, clientID, hash)
 }
 
-func (s *Service) tryRevokeRefreshTokenHop(ctx context.Context, logger *slog.Logger, issuerID, clientID uuid.UUID, token string, hops int) bool {
-	hash := sha256Hex(token)
+// revokeLiveRefreshToken soft-deletes the session row behind a refresh token
+// hash. consumed reports that no live row exists, which after a rotation means
+// the token may still be redeemable through its replay entry.
+func (s *Service) revokeLiveRefreshToken(ctx context.Context, logger *slog.Logger, issuerID, clientID uuid.UUID, hash string) (revoked, consumed bool) {
 	row, err := usersessions_repo.New(s.db).GetUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetUserSessionByRefreshTokenHashParams{
 		UserSessionIssuerID: issuerID,
 		RefreshTokenHash:    hash,
@@ -200,12 +207,12 @@ func (s *Service) tryRevokeRefreshTokenHop(ctx context.Context, logger *slog.Log
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			logger.ErrorContext(ctx, "failed to look up user session by refresh token", attr.SlogError(err))
-			return false
+			return false, false
 		}
-		return s.tryRevokeRefreshReplay(ctx, logger, issuerID, clientID, hash, hops)
+		return false, true
 	}
 	if !row.UserSessionClientID.Valid || row.UserSessionClientID.UUID != clientID {
-		return false
+		return false, false
 	}
 	deleted, err := usersessions_repo.New(s.db).RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
 		UserSessionIssuerID: issuerID,
@@ -214,10 +221,10 @@ func (s *Service) tryRevokeRefreshTokenHop(ctx context.Context, logger *slog.Log
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			logger.ErrorContext(ctx, "failed to soft-delete user session by refresh token", attr.SlogError(err))
-			return false
+			return false, false
 		}
-		// A concurrent rotation may have consumed the row after the peek.
-		return s.tryRevokeRefreshReplay(ctx, logger, issuerID, clientID, hash, hops)
+		// A concurrent rotation consumed the row after the peek.
+		return false, true
 	}
 	if err := s.chatSessionsManager.RevokeToken(ctx, deleted.Jti); err != nil {
 		logger.ErrorContext(ctx, "failed to push jti into revocation cache", attr.SlogError(err))
@@ -225,13 +232,15 @@ func (s *Service) tryRevokeRefreshTokenHop(ctx context.Context, logger *slog.Log
 	if err := s.userSessionRefreshReplayCache.DeleteByKey(ctx, refreshTokenReplayKey(issuerID, hash)); err != nil {
 		logger.WarnContext(ctx, "failed to drop refresh token replay on revoke", attr.SlogError(err))
 	}
-	return true
+	return true, false
 }
 
-// A consumed token remains a credential while its replay entry exists. Verify
-// the encrypted key and client binding before deleting it or following its
-// successor; a cache entry alone must not let another client revoke a session.
-func (s *Service) tryRevokeRefreshReplay(ctx context.Context, logger *slog.Logger, issuerID, clientID uuid.UUID, hash string, hops int) bool {
+// revokeConsumedRefreshToken drops the replay entry that keeps a consumed
+// token redeemable and revokes the successor it would have served. The
+// encrypted key and client binding are verified first so a cache entry alone
+// cannot let another client revoke a session. The successor is revoked only
+// while it is live; a successor that was itself rotated is not followed.
+func (s *Service) revokeConsumedRefreshToken(ctx context.Context, logger *slog.Logger, issuerID, clientID uuid.UUID, hash string) bool {
 	key := refreshTokenReplayKey(issuerID, hash)
 	replay, err := s.userSessionRefreshReplayCache.Get(ctx, key)
 	if err != nil {
@@ -253,16 +262,11 @@ func (s *Service) tryRevokeRefreshReplay(ctx context.Context, logger *slog.Logge
 	if subtle.ConstantTimeCompare([]byte(payload.ReplayKey), []byte(key)) != 1 || payload.ClientID != clientID || payload.ErrorDescription != "" {
 		return false
 	}
-	// Cut off this replay capability first, even if the successor has expired,
-	// its cache entry is missing, or the bounded traversal cannot reach it.
 	if err := s.userSessionRefreshReplayCache.DeleteByKey(ctx, key); err != nil {
 		logger.ErrorContext(ctx, "failed to drop consumed refresh token replay on revoke", attr.SlogError(err))
 	}
-	if payload.Response.RefreshToken != "" && hops <= refreshTokenReplayMaxHops {
-		// Each hop independently verifies ownership. The database claim races
-		// safely with rotation, but a committed rotation whose replay has not
-		// yet been published cannot be followed here (Redis is best effort).
-		s.tryRevokeRefreshTokenHop(ctx, logger, issuerID, clientID, payload.Response.RefreshToken, hops+1)
+	if payload.Response.RefreshToken != "" {
+		s.revokeLiveRefreshToken(ctx, logger, issuerID, clientID, sha256Hex(payload.Response.RefreshToken))
 	}
 	return true
 }

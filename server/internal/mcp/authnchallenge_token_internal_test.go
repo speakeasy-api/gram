@@ -3,7 +3,6 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -246,16 +245,6 @@ func newRefreshTokenReplayRedis(t *testing.T, service *Service) *miniredis.Minir
 	return mr
 }
 
-// encodeRefreshTokenReplay encrypts payload into a served replay entry.
-func encodeRefreshTokenReplay(t *testing.T, service *Service, payload userSessionRefreshReplayPayload) userSessionRefreshReplay {
-	t.Helper()
-	plaintext, err := json.Marshal(payload)
-	require.NoError(t, err)
-	ciphertext, err := service.enc.Encrypt(plaintext)
-	require.NoError(t, err)
-	return userSessionRefreshReplay{Key: payload.ReplayKey, Ciphertext: ciphertext, ExpiresAt: payload.AccessExpiresAt}
-}
-
 func decodeRefreshTokenReplay(t *testing.T, service *Service, replay userSessionRefreshReplay) userSessionRefreshReplayPayload {
 	t.Helper()
 	plaintext, err := service.enc.Decrypt(replay.Ciphertext)
@@ -263,36 +252,6 @@ func decodeRefreshTokenReplay(t *testing.T, service *Service, replay userSession
 	var payload userSessionRefreshReplayPayload
 	require.NoError(t, json.Unmarshal([]byte(plaintext), &payload))
 	return payload
-}
-
-func TestWriteRefreshTokenReplayFollowsLaterRotation(t *testing.T) {
-	t.Parallel()
-
-	service, endpoint, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
-	first := decodeRefreshTokenReplay(t, service, replay)
-
-	// The successor was rotated again: its jti is revoked and its own replay
-	// sits under its refresh token.
-	second := first
-	second.JTI = strings.Repeat("b", 43)
-	second.ReplayKey = refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(first.Response.RefreshToken))
-	second.Response.RefreshToken = "refresh-token-2"
-	second.Response.AccessToken = "access-token-2"
-	require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), encodeRefreshTokenReplay(t, service, second)))
-	require.NoError(t, service.chatSessionsManager.RevokeToken(t.Context(), first.JTI))
-
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
-	err := service.writeRefreshTokenReplay(
-		t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none",
-		replay.Key, replay, testenv.NewLogger(t),
-	)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	var response tokenResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-	require.Equal(t, "refresh-token-2", response.RefreshToken)
-	require.Equal(t, "access-token-2", response.AccessToken)
 }
 
 func TestWriteRefreshTokenReplayRejectsRevokedSuccessor(t *testing.T) {
@@ -352,80 +311,4 @@ func TestStoreRefreshTokenReplayKeepsSuccessorUntilAccessExpiry(t *testing.T) {
 	require.Len(t, keys, 1)
 	require.Greater(t, mr.TTL(keys[0]), refreshTokenReplayGracePeriod)
 	require.LessOrEqual(t, mr.TTL(keys[0]), time.Hour)
-}
-
-func TestWriteRefreshTokenReplayFollowsPublishedRotationAfterRevocationFailure(t *testing.T) {
-	t.Parallel()
-	service, endpoint, clientRow, replay, mr := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
-	first := decodeRefreshTokenReplay(t, service, replay)
-	second := first
-	second.JTI = strings.Repeat("b", 43)
-	second.ReplayKey = refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(first.Response.RefreshToken))
-	second.Response.RefreshToken = "refresh-token-2"
-	second.Response.AccessToken = "access-token-2"
-	require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), encodeRefreshTokenReplay(t, service, second)))
-	mr.SetError("ERR injected revocation failure")
-	require.Error(t, service.chatSessionsManager.RevokeToken(t.Context(), first.JTI))
-	mr.SetError("")
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
-	require.NoError(t, service.writeRefreshTokenReplay(t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none", replay.Key, replay, testenv.NewLogger(t)))
-	require.Equal(t, http.StatusOK, w.Code)
-	var response tokenResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-	require.Equal(t, second.Response.RefreshToken, response.RefreshToken)
-	require.Equal(t, second.Response.AccessToken, response.AccessToken)
-}
-
-func TestWriteRefreshTokenReplayNextLookupFailureIsRetryable(t *testing.T) {
-	t.Parallel()
-	service, endpoint, clientRow, replay, mr := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
-	first := decodeRefreshTokenReplay(t, service, replay)
-	second := first
-	second.JTI = strings.Repeat("b", 43)
-	second.ReplayKey = refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(first.Response.RefreshToken))
-	second.Response.RefreshToken = "refresh-token-2"
-	require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), encodeRefreshTokenReplay(t, service, second)))
-	require.NoError(t, service.chatSessionsManager.RevokeToken(t.Context(), first.JTI))
-	mr.SetError("ERR injected lookup failure")
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
-	err := service.writeRefreshTokenReplay(t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none", replay.Key, replay, testenv.NewLogger(t))
-	require.ErrorContains(t, err, "read chained refresh token replay")
-	require.Empty(t, w.Body.String(), "must not write a terminal invalid_grant")
-	mr.SetError("")
-	require.NoError(t, service.writeRefreshTokenReplay(t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none", replay.Key, replay, testenv.NewLogger(t)))
-	require.Equal(t, http.StatusOK, w.Code)
-	var response tokenResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-	require.Equal(t, second.Response.RefreshToken, response.RefreshToken)
-}
-
-func TestWriteRefreshTokenReplayHopBound(t *testing.T) {
-	t.Parallel()
-	for _, follows := range []int{refreshTokenReplayMaxHops, refreshTokenReplayMaxHops + 1} {
-		t.Run(fmt.Sprintf("follows_%d", follows), func(t *testing.T) {
-			t.Parallel()
-			service, endpoint, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
-			payload := decodeRefreshTokenReplay(t, service, replay)
-			for i := range follows {
-				payload.ReplayKey = refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(payload.Response.RefreshToken))
-				payload.JTI = fmt.Sprintf("jti-%d", i)
-				payload.Response.RefreshToken = fmt.Sprintf("refresh-%d", i)
-				require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), encodeRefreshTokenReplay(t, service, payload)))
-			}
-			w := httptest.NewRecorder()
-			r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
-			require.NoError(t, service.writeRefreshTokenReplay(t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none", replay.Key, replay, testenv.NewLogger(t)))
-			if follows > refreshTokenReplayMaxHops {
-				require.Equal(t, http.StatusBadRequest, w.Code)
-				require.Contains(t, w.Body.String(), "refresh token replay chain is too long")
-			} else {
-				require.Equal(t, http.StatusOK, w.Code)
-				var response tokenResponse
-				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-				require.Equal(t, payload.Response.RefreshToken, response.RefreshToken)
-			}
-		})
-	}
 }

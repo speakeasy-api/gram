@@ -74,9 +74,6 @@ const (
 	refreshTokenReplayWait            = 5 * time.Second
 	refreshTokenReplayInitialPollWait = 20 * time.Millisecond
 	refreshTokenReplayMaxPollWait     = 1 * time.Second
-	// refreshTokenReplayMaxHops bounds how many later rotations a replay may
-	// follow before giving up on a stale token.
-	refreshTokenReplayMaxHops = 4
 )
 
 // userSessionRefreshReplay is the encrypted result of a recent refresh-token
@@ -1296,22 +1293,6 @@ func (s *Service) writeRefreshTokenReplay(
 	replay userSessionRefreshReplay,
 	logger *slog.Logger,
 ) error {
-	return s.writeRefreshTokenReplayHop(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, 0, logger)
-}
-
-func (s *Service) writeRefreshTokenReplayHop(
-	ctx context.Context,
-	w http.ResponseWriter,
-	r *http.Request,
-	endpoint *ResolvedMcpEndpoint,
-	clientRow *usersessions_repo.UserSessionClient,
-	baseURL string,
-	presentedAuthMethod string,
-	replayKey string,
-	replay userSessionRefreshReplay,
-	hops int,
-	logger *slog.Logger,
-) error {
 	plaintext, err := s.enc.Decrypt(replay.Ciphertext)
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_decrypt_error")
@@ -1343,21 +1324,10 @@ func (s *Service) writeRefreshTokenReplayHop(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_payload_invalid")
 		return oops.E(oops.CodeUnexpected, nil, "refresh token replay response is missing subject").LogError(ctx, logger)
 	}
-	// Publication precedes the best-effort JTI revocation write. Follow an
-	// already-published rotation even if that write is delayed or failed.
-	// A missing next replay is distinct from an unavailable replay cache.
-	nextKey := refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(payload.Response.RefreshToken))
-	next, nextErr := s.userSessionRefreshReplayCache.Get(ctx, nextKey)
-	if nextErr == nil {
-		if hops >= refreshTokenReplayMaxHops {
-			return s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token replay rejected", "refresh_token_replay_hop_limit", "refresh token replay chain is too long; reauthorize", logger)
-		}
-		return s.writeRefreshTokenReplayHop(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, nextKey, next, hops+1, logger)
-	}
-	if !errors.Is(nextErr, redisCache.ErrCacheMiss) {
-		return oops.E(oops.CodeUnexpected, nextErr, "read chained refresh token replay").LogError(ctx, logger)
-	}
-	// Only a terminal successor can be served, and it must not be revoked.
+	// Rotation and every revocation path push the successor's jti here, so a
+	// replay never serves a pair the runtime would refuse. A successor that was
+	// itself rotated is deliberately not followed: one replay per rotation
+	// bounds how long a consumed token stays useful.
 	revoked, err := s.chatSessionsManager.IsTokenRevoked(ctx, payload.JTI)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check refreshed session revocation").LogError(ctx, logger)

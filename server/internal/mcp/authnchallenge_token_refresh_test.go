@@ -513,13 +513,14 @@ func TestHandleToken_RefreshReplayExpiresBackToInvalidGrant(t *testing.T) {
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, expired.body)
 }
 
-func TestHandleToken_StaleWindowFollowsLaterRotations(t *testing.T) {
+func TestHandleToken_StaleWindowBeyondOneRotationIsRejected(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	toolset, _, client, refreshToken := seedRefreshReplaySession(t, ctx, ti)
 
-	// Window A rotates R1 and then R2; window B still holds R1.
+	// Window A rotates R1 and then R2; window B still holds R1. One replay
+	// per rotation is the bound, so B is sent back through authorization.
 	first := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, first.err)
 	require.Equal(t, http.StatusOK, first.code, first.body)
@@ -534,8 +535,8 @@ func TestHandleToken_StaleWindowFollowsLaterRotations(t *testing.T) {
 
 	stale := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, stale.err)
-	require.Equal(t, http.StatusOK, stale.code, stale.body)
-	assertSameTokenPair(t, second.body, stale.body)
+	require.Equal(t, http.StatusBadRequest, stale.code, stale.body)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refreshed session is no longer active"}`, stale.body)
 }
 
 func TestHandleToken_RevokedSuccessorIsNotReplayed(t *testing.T) {
