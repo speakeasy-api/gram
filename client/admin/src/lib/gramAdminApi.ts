@@ -314,6 +314,44 @@ export function setStripeCustomer(
   );
 }
 
+export type AdminStripeSubscriptionCandidate = {
+  id: string;
+  customer_id: string;
+  status: string;
+};
+
+export function getStripeSubscriptionCandidate(
+  organizationID: string,
+  stripeSubscriptionID: string,
+): Promise<AdminStripeSubscriptionCandidate> {
+  const query = toSearchParams({
+    organization_id: organizationID,
+    stripe_subscription_id: stripeSubscriptionID,
+  });
+  return gramAdminFetch<AdminStripeSubscriptionCandidate>(
+    `/admin/organization.stripeSubscriptionCandidate?${query}`,
+    { cache: "no-store" },
+  );
+}
+
+export type SetStripeSubscriptionRequest = {
+  organization_id: string;
+  stripe_subscription_id: string;
+};
+
+export function setStripeSubscription(
+  body: SetStripeSubscriptionRequest,
+): Promise<AdminOrganization> {
+  return gramAdminMutation<AdminOrganization>(
+    "/admin/organization.setStripeSubscription",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
 export type ListOrganizationsResult = {
   total: number;
   organizations: AdminOrganization[];

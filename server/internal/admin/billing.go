@@ -16,11 +16,13 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -281,6 +283,8 @@ func (s *Service) GetSpendBreakdown(ctx context.Context, payload *gen.GetSpendBr
 
 var stripeCustomerIDPattern = regexp.MustCompile(`^cus_[A-Za-z0-9_]+$`)
 
+var stripeSubscriptionIDPattern = regexp.MustCompile(`^sub_[A-Za-z0-9_]+$`)
+
 func (s *Service) GetStripeCustomer(ctx context.Context, payload *gen.GetStripeCustomerPayload) (*gen.AdminStripeCustomer, error) {
 	if err := validateStripeCustomerID(payload.StripeCustomerID); err != nil {
 		return nil, err
@@ -360,6 +364,102 @@ func (s *Service) SetStripeCustomer(ctx context.Context, payload *gen.SetStripeC
 	return s.adminOrganizationFromGetRow(organization), nil
 }
 
+func (s *Service) GetStripeSubscriptionCandidate(ctx context.Context, payload *gen.GetStripeSubscriptionCandidatePayload) (*gen.AdminStripeSubscriptionCandidate, error) {
+	_, state, err := s.verifiedStripeSubscription(ctx, payload.OrganizationID, payload.StripeSubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	return &gen.AdminStripeSubscriptionCandidate{
+		ID:         state.ID,
+		CustomerID: state.CustomerID,
+		Status:     state.Status,
+	}, nil
+}
+
+func (s *Service) SetStripeSubscription(ctx context.Context, payload *gen.SetStripeSubscriptionPayload) (*gen.AdminOrganization, error) {
+	organization, state, err := s.verifiedStripeSubscription(ctx, payload.OrganizationID, payload.StripeSubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin Stripe subscription transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := repo.New(tx)
+	if err := queries.AdminAcquireStripeSubscriptionLock(ctx, state.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock Stripe subscription").LogError(ctx, s.logger)
+	}
+	_, err = queries.AdminSetStripeSubscription(ctx, repo.AdminSetStripeSubscriptionParams{
+		StripeSubscriptionID:     state.ID,
+		StripeBillingCycleAnchor: conv.ToPGTimestamptz(state.BillingCycleAnchor.UTC()),
+		BillingCycleAnchorDay:    conv.SafeInt32(state.BillingCycleAnchor.UTC().Day()),
+		OrganizationID:           organization.ID,
+		StripeCustomerID:         organization.StripeCustomerID.String,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeConflict, nil, "organization cannot accept this Stripe subscription")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "set Stripe subscription").LogError(ctx, s.logger)
+	}
+
+	updated, err := queries.AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organization.ID,
+		AllowSlug: false,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read organization after setting Stripe subscription").LogError(ctx, s.logger)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit Stripe subscription transaction").LogError(ctx, s.logger)
+	}
+	return s.adminOrganizationFromGetRow(updated), nil
+}
+
+func (s *Service) verifiedStripeSubscription(ctx context.Context, organizationID, subscriptionID string) (repo.AdminGetOrganizationRow, *stripeclient.SubscriptionState, error) {
+	if err := validateStripeSubscriptionID(subscriptionID); err != nil {
+		return repo.AdminGetOrganizationRow{}, nil, err
+	}
+	organization, err := s.paygSubscriptionAssignmentOrganization(ctx, organizationID)
+	if err != nil {
+		return repo.AdminGetOrganizationRow{}, nil, err
+	}
+	state, err := s.billing.GetStripeSubscriptionByID(ctx, subscriptionID)
+	if err != nil {
+		return repo.AdminGetOrganizationRow{}, nil, fmt.Errorf("get Stripe subscription: %w", err)
+	}
+	if state.CustomerID != organization.StripeCustomerID.String || state.ID != subscriptionID {
+		return repo.AdminGetOrganizationRow{}, nil, oops.E(oops.CodeConflict, nil, "Stripe subscription does not belong to the organization's Stripe customer")
+	}
+	if state.BillingCycleAnchor.IsZero() {
+		return repo.AdminGetOrganizationRow{}, nil, oops.E(oops.CodeConflict, nil, "Stripe subscription is missing a billing cycle anchor")
+	}
+	return organization, state, nil
+}
+
+func (s *Service) paygSubscriptionAssignmentOrganization(ctx context.Context, organizationID string) (repo.AdminGetOrganizationRow, error) {
+	organization, err := s.canonicalBillingOrganization(ctx, organizationID)
+	if err != nil {
+		return repo.AdminGetOrganizationRow{}, err
+	}
+	if organization.AccountType != string(billing.TierPayg) {
+		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeConflict, nil, "subscription ID can only be set for a PAYG organization")
+	}
+	if !organization.StripeCustomerID.Valid || organization.StripeCustomerID.String == "" {
+		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeConflict, nil, "set a Stripe customer ID before setting a subscription ID")
+	}
+	if organization.StripeSubscriptionID.Valid && organization.StripeSubscriptionID.String != "" {
+		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeConflict, nil, "organization already has a Stripe subscription")
+	}
+	return organization, nil
+}
+
 func (s *Service) GetStripeSubscription(ctx context.Context, payload *gen.GetStripeSubscriptionPayload) (*gen.AdminStripeSubscription, error) {
 	organizationID, err := s.canonicalBillingOrganizationID(ctx, payload.OrganizationID)
 	if err != nil {
@@ -398,6 +498,13 @@ func (s *Service) setStripeSubscriptionCancelAtPeriodEnd(ctx context.Context, re
 func validateStripeCustomerID(customerID string) error {
 	if len(customerID) > 255 || !stripeCustomerIDPattern.MatchString(customerID) {
 		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe customer ID")
+	}
+	return nil
+}
+
+func validateStripeSubscriptionID(subscriptionID string) error {
+	if len(subscriptionID) > 255 || !stripeSubscriptionIDPattern.MatchString(subscriptionID) {
+		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe subscription ID")
 	}
 	return nil
 }

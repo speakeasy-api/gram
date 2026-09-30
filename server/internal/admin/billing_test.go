@@ -71,14 +71,18 @@ func (f *fakeOpenRouterUsage) GetCreditsUsed(_ context.Context, _ string, keyTyp
 }
 
 type fakeBillingOperations struct {
-	mu              sync.Mutex
-	organizationID  string
-	cancel          *bool
-	actor           usage.BillingActor
-	subscription    *usage.StripeSubscription
-	customer        *stripeclient.CustomerDetails
-	customerErr     error
-	customerLookups []string
+	mu                     sync.Mutex
+	organizationID         string
+	cancel                 *bool
+	actor                  usage.BillingActor
+	subscription           *usage.StripeSubscription
+	customer               *stripeclient.CustomerDetails
+	customerErr            error
+	customerLookups        []string
+	subscriptionByID       *stripeclient.SubscriptionState
+	subscriptionCustomerID string
+	subscriptionErr        error
+	subscriptionLookups    []string
 }
 
 func (f *fakeBillingOperations) GetPaygBillingSummaryForOrganization(_ context.Context, organizationID string) (*usage.PaygBillingSummary, error) {
@@ -154,6 +158,34 @@ func (f *fakeBillingOperations) customerLookupCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.customerLookups)
+}
+
+func (f *fakeBillingOperations) GetStripeSubscriptionByID(_ context.Context, subscriptionID string) (*stripeclient.SubscriptionState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.subscriptionLookups = append(f.subscriptionLookups, subscriptionID)
+	if f.subscriptionErr != nil {
+		return nil, f.subscriptionErr
+	}
+	if f.subscriptionByID != nil {
+		return f.subscriptionByID, nil
+	}
+	customerID := f.subscriptionCustomerID
+	if customerID == "" {
+		customerID = "cus_default"
+	}
+	return &stripeclient.SubscriptionState{
+		ID:                 subscriptionID,
+		CustomerID:         customerID,
+		Status:             "active",
+		BillingCycleAnchor: time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC),
+	}, nil
+}
+
+func (f *fakeBillingOperations) subscriptionLookupCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.subscriptionLookups)
 }
 
 func (f *fakeBillingOperations) GetStripeSubscriptionForOrganization(_ context.Context, organizationID string) (*usage.StripeSubscription, error) {

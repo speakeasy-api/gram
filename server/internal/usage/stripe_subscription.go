@@ -179,6 +179,24 @@ func canManageStripeSubscriptionLifecycle(status string) bool {
 	}
 }
 
+// GetStripeSubscriptionByID loads a live Stripe subscription for an independently
+// authorized admin assignment. The caller checks that the customer matches the organization.
+func (s *Service) GetStripeSubscriptionByID(ctx context.Context, subscriptionID string) (*stripeclient.SubscriptionState, error) {
+	if s.stripeClient == nil {
+		return nil, oops.E(oops.CodeUnavailable, nil, "Stripe subscription lookup is not configured")
+	}
+	state, err := s.stripeClient.GetSubscription(ctx, subscriptionID)
+	switch {
+	case errors.Is(err, stripeclient.ErrSubscriptionNotFound):
+		return nil, oops.E(oops.CodeNotFound, err, "Stripe subscription not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeGatewayError, err, "could not retrieve Stripe subscription").LogWarn(ctx, s.logger)
+	case state == nil || state.ID != subscriptionID || state.CustomerID == "":
+		return nil, oops.E(oops.CodeGatewayError, nil, "Stripe returned an unexpected subscription identity").LogWarn(ctx, s.logger)
+	}
+	return state, nil
+}
+
 func (s *Service) getStripeBillingState(ctx context.Context, organizationID string) (repo.BillingMetadatum, *stripeclient.SubscriptionState, error) {
 	metadata, err := repo.New(s.db).GetBillingMetadata(ctx, organizationID)
 	switch {

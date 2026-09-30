@@ -19,6 +19,7 @@ import {
   createOrganization,
   errorMessage,
   getStripeCustomer,
+  getStripeSubscriptionCandidate,
   getInferenceKeys,
   getInferenceSpendHistory,
   getPaygBillingSummary,
@@ -37,6 +38,7 @@ import {
   resumeStripeSubscription,
   setInferenceKeyMonthlyLimit,
   setStripeCustomer,
+  setStripeSubscription,
   toSearchParams,
   omitUnset,
   type AdminOrganization,
@@ -432,6 +434,31 @@ describe("organization billing endpoints", () => {
         body: JSON.stringify({
           organization_id: "org_1",
           stripe_customer_id: "cus_placeholder_1",
+        }),
+      }),
+    );
+  });
+
+  it("loads a Stripe subscription candidate and posts the initial subscription ID", async () => {
+    const fetch = stubFetch();
+
+    await getStripeSubscriptionCandidate("org one", "sub_placeholder_1");
+    await setStripeSubscription({
+      organization_id: "org_1",
+      stripe_subscription_id: "sub_placeholder_1",
+    });
+
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "/admin/organization.stripeSubscriptionCandidate?organization_id=org+one&stripe_subscription_id=sub_placeholder_1",
+    );
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ cache: "no-store" });
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setStripeSubscription",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: "org_1",
+          stripe_subscription_id: "sub_placeholder_1",
         }),
       }),
     );
