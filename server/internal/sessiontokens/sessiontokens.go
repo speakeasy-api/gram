@@ -41,7 +41,7 @@ const FirstPartyClientName = "Dashboard"
 // DashboardMintRefreshTokenHashPrefix marks user_sessions rows minted by the
 // dashboard instead of a registered OAuth client. The session list reads it
 // to apply FirstPartyClientName. It is not a hash: real refresh-token hashes
-// are hex, so the prefix cannot collide with one.
+// are base64url and cannot contain ':', so the prefix cannot collide with one.
 const DashboardMintRefreshTokenHashPrefix = "dashboard-mint"
 
 // Signer mints HS256-signed session JWTs. It is safe to share across goroutines.
