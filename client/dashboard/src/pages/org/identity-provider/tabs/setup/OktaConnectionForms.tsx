@@ -140,7 +140,7 @@ export function CreateConnectionForm(): JSX.Element {
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
             You’ll need Okta admin access to create the app and grant the
-            required permissions (called scopes in Okta).
+            required scopes in Okta.
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <Button

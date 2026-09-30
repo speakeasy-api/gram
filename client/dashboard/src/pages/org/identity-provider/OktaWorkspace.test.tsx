@@ -115,7 +115,7 @@ describe("Okta workspace", () => {
     "shows creation without workspace navigation for unconnected %s links",
     (view) => {
       show(view);
-      expect(screen.getByRole("heading", { name: "Okta" })).toBeTruthy();
+      expect(screen.queryByRole("heading", { name: "Okta" })).toBeNull();
       expect(
         screen.getByRole("link", { name: "All identity providers" }),
       ).toBeTruthy();
@@ -150,7 +150,7 @@ describe("Okta workspace", () => {
   it("hides workspace navigation while the connection loads", () => {
     mocks.query.isPending = true;
     show("applications");
-    expect(screen.getByRole("heading", { name: "Okta" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Okta" })).toBeNull();
     expect(
       screen.getByRole("link", { name: "All identity providers" }),
     ).toBeTruthy();

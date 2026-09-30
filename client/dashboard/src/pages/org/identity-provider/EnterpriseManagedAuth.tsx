@@ -34,7 +34,7 @@ function ProviderContent(): JSX.Element {
           Use your identity providers to manage how AI agents access company
           applications. Each provider has its own setup and supported features.
         </Text>
-        <Text muted small>
+        <Text muted>
           This is separate from employee sign-in and directory sync on the
           Single sign-on tab.
         </Text>
