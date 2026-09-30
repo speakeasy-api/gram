@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #MISE description="Start up databases, caches and so on"
-
 # Warn when a cached image's architecture differs from the Docker host's.
 # `compose up` never re-pulls a tag that already exists locally, so an image
 # pulled while DOCKER_DEFAULT_PLATFORM=linux/amd64 was exported keeps running
@@ -100,13 +99,18 @@ docker ps -a --filter "label=com.docker.compose.service=pubsub-emulator" --filte
 # Temporal belongs to this worktree; leave legacy shared Temporal available
 # for branches that have not migrated yet (no shared --remove-orphans).
 docker compose up -d --wait --wait-timeout 30 gram-temporal || exit 1
-docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 \
-  pubsub-emulator || exit 1
 
-# LGTM is shared too, but not a synchronous startup dependency. A transient
-# image pull must not take down this worktree's databases, so warn and continue.
-docker compose -f compose.shared.yml -p gram-shared up -d lgtm \
-  || echo "⚠️  Optional shared LGTM service failed to start; continuing without local observability." >&2
+# One-time migration: the shared stack used to run grafana/otel-lgtm bound to
+# 4317/4318. That service is gone, but a leftover container still holds the
+# ports, and `restart: unless-stopped` brings it back after a stop. Remove it
+# before the sink binds them. Shared `--remove-orphans` would also drop the
+# legacy shared Temporal this comment leaves running.
+docker ps -a --filter "label=com.docker.compose.project=gram-shared" \
+  --filter "label=com.docker.compose.service=lgtm" -q 2>/dev/null \
+  | xargs -r docker rm -f > /dev/null 2>&1 || true
+
+docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 \
+  pubsub-emulator otlp-sink || exit 1
 
 # Maximum time (seconds) to wait for a service to accept queries before giving
 # up. Bounded so headless callers (e.g. `./zero --agent`) fail fast instead of

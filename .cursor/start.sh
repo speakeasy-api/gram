@@ -40,20 +40,3 @@ if [ -z "${ATLAS_TOKEN:-}" ]; then
 fi
 atlas login --token "${ATLAS_TOKEN}"
 atlas whoami >/dev/null
-
-if [ ! -f mise.local.toml ] || ! grep -q 'USE_RECOMMENDED_SKILLS' mise.local.toml; then
-  mise set --file mise.local.toml USE_RECOMMENDED_SKILLS=false
-fi
-
-set +e
-setsid env INFRA_READINESS_TIMEOUT=300 ./zero --agent >/tmp/zero-agent.log 2>&1
-zero_exit=$?
-set -e
-if [ "$zero_exit" -ne 0 ]; then
-  echo "./zero --agent failed with exit ${zero_exit}" >&2
-  tail -n 80 /tmp/zero-agent.log >&2 || true
-  exit "$zero_exit"
-fi
-
-eval "$(mise activate bash)"
-pitchfork list --json --project --status failed --status errored | jq -e 'length == 0'

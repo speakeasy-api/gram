@@ -87,28 +87,15 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
-      # `./zero --agent` opts a fresh checkout into the SHA-pinned recommended
-      # skill set, which clones a private repo the runner has no credentials
-      # for -- `fatal: could not read Username for 'https://github.com'` -- and
-      # takes the whole boot down with it. zero only writes this key when it is
-      # absent, so setting it first is enough. Agent skills have no bearing on
-      # what this job tests.
-      # Two things `./zero --agent` would otherwise decide by asking, on a
-      # runner with nobody to ask:
-      #
-      # - the recommended agent skill set, which it opts a fresh checkout into
-      #   and which clones a private repo the runner cannot authenticate to
-      #   (`fatal: could not read Username for 'https://github.com'`);
-      # - the ClickHouse migration engine, where it prompts for an Atlas Pro
-      #   login and only skips the question when the engine is already chosen.
-      #
-      # zero writes neither key when one is already present, so seeding the
-      # file settles both. Neither has any bearing on what this job tests.
+      # `./zero --agent` would otherwise pick the ClickHouse migration engine
+      # by prompting for an Atlas Pro login, on a runner with nobody to ask.
+      # It only skips the question when the engine is already chosen, so
+      # seeding the file settles it. The engine has no bearing on what this
+      # job tests.
       - name: Answer zero's questions before it asks them
         run: |
           cat > mise.local.toml <<'TOML'
           [env]
-          USE_RECOMMENDED_SKILLS = "false"
           CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
           TOML
 

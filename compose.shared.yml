@@ -5,21 +5,22 @@
 # so one emulator can safely host identical topic and subscription IDs for all
 # trees.
 #
-# LGTM separates intermixed telemetry with
-# OTEL_RESOURCE_ATTRIBUTES=worktree=$COMPOSE_PROJECT_NAME.
-# `git:workinit` writes all worktree dimensions; `mise.toml` holds the main tree
-# defaults.
+# The OTLP sink is a ~35MB collector that ACKs and drops traces/metrics/logs
+# so local exporters have a listener on 4317/4318. `git:workinit` writes
+# OTEL_RESOURCE_ATTRIBUTES=worktree=$COMPOSE_PROJECT_NAME; `mise.toml` holds
+# the main tree defaults.
 #
 # Always manage this file under its fixed project:
 #
 #   docker compose -f compose.shared.yml -p gram-shared up -d
 #   docker compose -f compose.shared.yml -p gram-shared down
 #
+# Pub/Sub and the OTLP sink are the default shared services.
+#
 # Host ports are hardcoded literals, not interpolated per-worktree variables.
 # This prevents a worktree carrying stale remapped ports from republishing a
 # shared container elsewhere and fragmenting the stack. Keep the literals in
-# sync with mise.toml: Pub/Sub 8088, LGTM 13000/13200/13100/9099, and OTLP
-# 4317/4318.
+# sync with mise.toml: Pub/Sub 8088 and OTLP 4317/4318.
 #
 # Every port is bound to 127.0.0.1. These unauthenticated local development
 # services are consumed only by host processes and must not be externally
@@ -53,56 +54,19 @@ services:
       retries: 15
       start_period: 2s
 
-  # Tempo only makes a trace searchable once it has idled the trace out and cut
-  # a block — seconds to a minute. Lookup by trace ID is immediate.
-  lgtm:
-    image: grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492
+  # Local services (and Docker's own CLI, which honours
+  # OTEL_EXPORTER_OTLP_ENDPOINT) export here continuously; without a listener
+  # they retry and fill logs with connection errors. Nothing stores the
+  # signals — use pitchfork logs for application output.
+  otlp-sink:
+    image: otel/opentelemetry-collector:0.161.0@sha256:b6d2b9a85b1029d05b5ad913150c1f014eed4ae99be81a1813ca5ade4a191913
     restart: unless-stopped
-    # Bound to 127.0.0.1 like Pub/Sub: every one of these
-    # APIs is unauthenticated, and this container now holds every worktree's
-    # traces and metrics. All consumers are local host processes
-    # (OTEL_EXPORTER_OTLP_ENDPOINT points at localhost), so nothing needs it on
-    # the host's external interfaces.
-    ports:
-      - "127.0.0.1:13000:3000" # Grafana UI
-      - "127.0.0.1:13200:3200" # Tempo HTTP API
-      - "127.0.0.1:13100:3100" # Loki HTTP API
-      - "127.0.0.1:9099:9090" # Prometheus UI/API
-      - "127.0.0.1:4317:4317" # OTLP gRPC receiver
-      - "127.0.0.1:4318:4318" # OTLP HTTP receiver
     environment:
-      # Adds the demo-activity forwarding pipeline beside the image's own
-      # config rather than replacing it; see the file for what it does.
-      OTELCOL_EXTRA_ARGS: "--config=/etc/gram/otelcol-demo-forward.yaml"
-      # Where that pipeline posts. Defaults to the main worktree's server, so
-      # the container still starts when nothing set it; a worktree whose
-      # server port was remapped passes its own (mise.toml derives it).
-      GRAM_DEMO_OTLP_LOGS_ENDPOINT: "${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-https://host.docker.internal:8080/rpc/hooks.otel/v1/logs}"
-    # Docker Desktop resolves host.docker.internal on its own; Docker Engine on
-    # Linux does not, and without this the pipeline above accepts demo logs and
-    # then cannot deliver them.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      GOMEMLIMIT: 64MiB
+      GOMAXPROCS: 2
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
     volumes:
-      # Runs as root, so wipe this from inside the container rather than sudo:
-      # docker compose -f compose.shared.yml -p gram-shared exec lgtm \
-      #   sh -c 'rm -rf /data/*'
-      #
-      # A named volume, not ./local/lgtm: this stack is started by whichever
-      # worktree happens to run infra:start first, so a relative bind mount
-      # would put the data wherever that tree is — letting which worktree
-      # booted the machine silently decide where everyone's telemetry lives.
-      - lgtm_data:/data
-      # This one is a bind mount on purpose: unlike the data above, the file
-      # is checked in and identical in every worktree, so it does not matter
-      # which tree started the stack.
-      - ./local/otel/gram-demo-forward.yaml:/etc/gram/otelcol-demo-forward.yaml:ro
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-
-volumes:
-  lgtm_data:
-    driver: local
+      - ./local/otel/otlp-sink.yaml:/etc/otelcol/config.yaml:ro
+    command: ["--config=/etc/otelcol/config.yaml"]
