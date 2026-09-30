@@ -134,6 +134,9 @@ func (s *Service) mintUserSession(ctx context.Context, payload *gen.MintUserSess
 		if flagErr != nil || !enabled {
 			return nil, oops.E(oops.CodeForbidden, flagErr, "gateway discovery settings are not available")
 		}
+		if mode == metamcp.DiscoveryModeCode && !s.codeModeSelection.Allows(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID) {
+			return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
+		}
 		options = &toolfilter.GatewayOptions{DiscoveryMode: &mode, Frozen: nil}
 	}
 	if frozenReview != nil {

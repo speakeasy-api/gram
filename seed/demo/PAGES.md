@@ -246,3 +246,13 @@ The seeded gateway uses Progressive discovery. With the seeded gateway discovery
 Open **Frozen Toolset Demo → Inspect** with the frozen-toolset product feature enabled. Its hosted members provide a complete review without external accounts. Review the definitions, select tools, and choose **Freeze tools and reconnect**. Both discovery modes show only that connection's approved definitions. **Review changes** compares the current definitions with the approved ones; **Use live tools and reconnect** starts a live connection.
 
 Browser verification: `[x]` (local, 2026-09-25). Direct shows 13 member tools in the shared demo, or 14 locally (including the local MCP app's `show_dashboard`); Progressive shows four wrappers. Freezing one tool narrows Direct to one, and returning to live restores the full catalog. See check 25 in `verify.md`.
+
+### Python code mode
+
+**Python Code Gateway** has a stored `code_mode` default and two hosted members.
+Inspect exposes one native `execute`, its generated description and prefixes,
+and a Python editor with results, printed output and nested calls. New explicit
+Code selections require rollout/runtime availability. The stored default remains
+visible if rollout is off; without a configured runtime Inspect reports that
+execution is unavailable. Shared demo definitions are inert; use local fixtures
+for actual calls. Local verification is recorded in `seed/demo/verify.md`.

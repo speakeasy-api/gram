@@ -496,3 +496,18 @@ Open Amara Okafor's identity and select Accounts & devices. Work identities shou
 Repeat in the seeded local organization. An employee can read their own mapped accounts and sees contact-admin guidance, without a link to the members table. Another employee's profile must not request these accounts. Verify the empty state for a person without mappings and retry after a failed read. Following Open in Slack members must not create a mapping or change its revision. Seed data demonstrates navigation and retained mappings; live OAuth requires the configured Slack app.
 
 In shared Explore Demo, verify the mapping dialog shows its read-only notice and disables Personnel selection and Confirm. Verify Sync members is disabled. In the retargeted local organization, personnel changes remain available.
+
+27. **Python Code Gateway** (requires the local code runner and `gateway-code-mode` flag)
+    - Open Inspect: confirm exactly one execute tool, Python helper documentation,
+      and the two permitted member prefixes. Execute `await tools.search("ticket")`.
+    - Describe a returned path, then call a local read-only fixture tool and inspect
+      its return value and completed nested-call outcome. Print a value and confirm
+      the submitted source remains visible after editing the next snippet.
+    - Select Progressive/Direct overrides and reconnect; return to the gateway
+      default and confirm execute returns. Freeze a reviewed underlying toolset,
+      then repeat with a Code override and confirm only approved paths are usable.
+    - In Settings select Code, save, and verify a new default connection. A missing
+      runtime/rollout must prevent new Code selections with a visible error or
+      unavailable option; stored policies never silently become Progressive.
+    - Run the seed twice and the demoseed safety test: the third gateway, its two
+      members and endpoint must survive, with no rows changed in other tenants.

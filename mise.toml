@@ -53,6 +53,8 @@ pkl = "0.32.1"
 "github:gotestyourself/gotestsum" = "1.13.0"
 buf = "1.72.0"
 ruff = "0.16.1"
+# Keep aligned with agents/code-runner/rust-toolchain.toml.
+rust = { version = "1.96.1", profile = "minimal", components = ["clippy", "rustfmt"] }
 "github:ast-grep/ast-grep" = "0.45.0"
 pitchfork = "2.22.0"
 "npm:@playwright/cli" = "0.1.17"
@@ -172,6 +174,9 @@ TUNNEL_GATEWAY_PUBLIC_PORT = "8090"
 TUNNEL_GATEWAY_PUBLIC_ADDR = ":{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
 TUNNEL_GATEWAY_FORWARD_PORT = "8091"
 TUNNEL_GATEWAY_FORWARD_ADDR = ":{{env.TUNNEL_GATEWAY_FORWARD_PORT}}"
+## Remapped per worktree; provider and token are written by zero:code-mode.
+GRAM_CODE_RUNNER_PORT = "18081"
+GRAM_CODE_RUNTIME_URL = "http://127.0.0.1:{{env.GRAM_CODE_RUNNER_PORT}}"
 OPENROUTER_DEV_KEY = "unset"
 ## The dev-idp is a top-level project (dev-idp/) backed by SQLite.
 ## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.

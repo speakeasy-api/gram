@@ -5,7 +5,7 @@
 # Lifecycle operations and the parked page are explicitly started, never part
 # of application startup. Bulk stop still includes them for worktree removal.
 [groups.application]
-daemons = ["dev-idp", "dev-idp-dashboard", "admin", "admin-dashboard", "mock-oidc", "server", "worker", "streams", "pystreams-multi", "dashboard", "assistant-runtime", "tunnel-gateway"]
+daemons = ["dev-idp", "dev-idp-dashboard", "admin", "admin-dashboard", "mock-oidc", "server", "worker", "streams", "pystreams-multi", "dashboard", "assistant-runtime", "tunnel-gateway", "code-runtime"]
 
 [groups.default]
 daemons = ["dev-idp", "dev-idp-dashboard", "admin", "admin-dashboard", "mock-oidc", "server", "worker", "streams", "pystreams-multi", "dashboard", "assistant-runtime", "tunnel-gateway", "idle-pause"]
@@ -89,6 +89,12 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 [daemons.tunnel-gateway]
 run = "mise run start:tunnel-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
+
+# Started by start only when the local code provider is configured.
+[daemons.code-runtime]
+run = "exec mise run start:code-runtime"
+ready_output = "gram-code-runner protocol 1 listening on"
+retry = 0
 
 # Not a service: a cron that checks, every five minutes, whether this
 # worktree's stack has gone unused, and pauses it if so (see

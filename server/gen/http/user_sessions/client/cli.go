@@ -188,8 +188,8 @@ func BuildMintFrozenGatewaySessionPayload(userSessionsMintFrozenGatewaySessionBo
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
 		if body.DiscoveryMode != nil {
-			if !(*body.DiscoveryMode == "direct" || *body.DiscoveryMode == "progressive") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"direct", "progressive"}))
+			if !(*body.DiscoveryMode == "direct" || *body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "code_mode") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"direct", "progressive", "code_mode"}))
 			}
 		}
 		if body.FrozenToolset != nil {

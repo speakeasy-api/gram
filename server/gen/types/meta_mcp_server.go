@@ -32,6 +32,10 @@ type MetaMcpServer struct {
 	// Whether the organization allows new discovery choices. Read through the
 	// gateway without requiring organization feature-management access.
 	DiscoveryModesEnabled *bool
+	// Whether this project can select Code Mode: discovery settings, rollout, and
+	// runtime must be available. Existing connections retain their mode when
+	// rollout is disabled.
+	CodeModeEnabled *bool
 	// Whether the organization allows new frozen toolsets. Read through the
 	// gateway without requiring organization feature-management access.
 	FrozenToolsetsEnabled *bool

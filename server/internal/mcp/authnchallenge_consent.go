@@ -92,7 +92,11 @@ var remoteSetHashEmpty = func() string {
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
 	// ShowDiscoveryMode exposes optional gateway connection settings.
-	ShowDiscoveryMode  bool
+	ShowDiscoveryMode bool
+	// GatewayDefaultMode labels the inherited mode, even when new selections are gated.
+	GatewayDefaultMode string
+	// ShowCodeMode exposes the Python choice only when rollout and runtime allow new selections.
+	ShowCodeMode       bool
 	GatewayReview      *gatewayConsentReview
 	ClientName         string
 	MCPSlug            string
@@ -653,7 +657,27 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if err != nil {
 		return err
 	}
+	gatewayDefaultMode := ""
+	if endpoint.MetaMcpServerID.Valid {
+		gateway, readErr := metamcprepo.New(s.db).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
+			ID: endpoint.MetaMcpServerID.UUID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
+		})
+		if readErr != nil {
+			return oops.E(oops.CodeUnexpected, readErr, "read gateway discovery mode").LogError(ctx, logger)
+		}
+		switch gateway.DiscoveryMode.String {
+		case "code_mode":
+			gatewayDefaultMode = "Code Mode"
+		case "direct":
+			gatewayDefaultMode = "Direct"
+		case "", "progressive":
+			gatewayDefaultMode = "Progressive"
+		default:
+			gatewayDefaultMode = "Unavailable"
+		}
+	}
 	data := consentTemplateData{
+		GatewayDefaultMode:      gatewayDefaultMode,
 		GatewayReview:           gatewayReview,
 		ClientName:              clientName,
 		MCPSlug:                 endpoint.Slug,
@@ -675,6 +699,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
 		ShowToolsIsland:         showToolsIsland,
 		ShowDiscoveryMode:       !challengeState.FirstParty && s.gatewayDiscoveryOptionsEnabled(ctx, endpoint),
+		ShowCodeMode:            !challengeState.FirstParty && s.gatewayDiscoveryOptionsEnabled(ctx, endpoint) && s.CodeModeAvailable(ctx, endpoint.OrganizationID, endpoint.ProjectID),
 		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,

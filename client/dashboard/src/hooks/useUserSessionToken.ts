@@ -20,7 +20,7 @@ export type UserSessionTokenTarget =
   | {
       kind: "metaMcpServer";
       id: string | undefined;
-      discoveryMode?: "direct" | "progressive";
+      discoveryMode?: "direct" | "progressive" | "code_mode";
       connectionVersion?: string;
       frozenToolset?: FrozenGatewayReview;
     };

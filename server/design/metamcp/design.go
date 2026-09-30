@@ -291,7 +291,7 @@ var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
 	Attribute("instructions", String, "Custom server instructions replace Gram's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.")
 
-	Attribute("discovery_mode", String, "The default discovery mode for connections without an explicit override. Omit to preserve the stored default.", func() { Enum("progressive", "direct") })
+	Attribute("discovery_mode", String, "The default discovery mode for connections without an explicit override. Omit to preserve the stored default.", func() { Enum("progressive", "direct", "code_mode") })
 
 	Required("id", "name")
 })
@@ -316,8 +316,9 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
 	Attribute("instructions", String, "Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.")
 	Attribute("discovery_modes_enabled", Boolean, "Whether the organization allows new discovery choices. Read through the gateway without requiring organization feature-management access.")
+	Attribute("code_mode_enabled", Boolean, "Whether this project can select Code Mode: discovery settings, rollout, and runtime must be available. Existing connections retain their mode when rollout is disabled.")
 	Attribute("frozen_toolsets_enabled", Boolean, "Whether the organization allows new frozen toolsets. Read through the gateway without requiring organization feature-management access.")
-	Attribute("discovery_mode", String, "The effective default discovery mode. Unconfigured connections follow this value.", func() { Enum("progressive", "direct") })
+	Attribute("discovery_mode", String, "The effective default discovery mode. Unconfigured connections follow this value.", func() { Enum("progressive", "direct", "code_mode") })
 
 	Attribute("created_at", String, func() {
 		Description("When the meta MCP server was created")

@@ -17,6 +17,7 @@ export function GatewayFrozenToolset({
   enabled,
   approved,
   hasUnappliedFreeze = false,
+  reconnectFailed = false,
   pending,
   onApply,
 }: {
@@ -24,6 +25,7 @@ export function GatewayFrozenToolset({
   enabled: boolean;
   approved: FrozenGatewayConnection | undefined;
   hasUnappliedFreeze?: boolean;
+  reconnectFailed?: boolean;
   pending: boolean;
   onApply: (value: FrozenGatewayConnection | undefined) => void;
 }): JSX.Element | null {
@@ -67,6 +69,14 @@ export function GatewayFrozenToolset({
         (name) => !review.tools.some((tool) => tool.name === name),
       )
     : [];
+  const unchanged =
+    !!approved &&
+    !!review &&
+    !hasUnappliedFreeze &&
+    !reconnectFailed &&
+    review.fingerprint === approved.review.fingerprint &&
+    selected.size === approved.names.length &&
+    approved.names.every((name) => selected.has(name));
   return (
     <section className="space-y-4 border p-4" aria-label="Frozen toolset">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -93,7 +103,7 @@ export function GatewayFrozenToolset({
               {preview.isPending
                 ? "Loading tools…"
                 : approved
-                  ? "Review changes"
+                  ? "Review toolset"
                   : "Review and freeze"}
             </Button.Text>
           </Button>
@@ -120,6 +130,11 @@ export function GatewayFrozenToolset({
       )}
       {review && (
         <div className="space-y-3">
+          {unchanged && (
+            <Text muted className="text-sm" role="status">
+              No changes to the frozen toolset.
+            </Text>
+          )}
           {removed.length > 0 && (
             <Text className="text-sm">
               No longer available: {removed.join(", ")}
@@ -199,7 +214,7 @@ export function GatewayFrozenToolset({
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button
-              disabled={!enabled || pending || preview.isPending}
+              disabled={!enabled || pending || preview.isPending || unchanged}
               onClick={() => onApply({ review, names: [...selected] })}
             >
               <Button.Text>

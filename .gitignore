@@ -51,6 +51,7 @@ scratch/
 /local/functions
 /local/devidp
 /agents/runner/target
+/agents/code-runner/target
 /agents/runtime-artifacts
 .speakeasy/temp
 /app_getgram_ai.env

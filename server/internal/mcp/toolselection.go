@@ -91,6 +91,9 @@ func endpointAcceptsToolSelectionResource(endpoint *ResolvedMcpEndpoint, resourc
 	return endpoint.McpServerID.Valid && endpoint.ToolsetID.Valid && resource == "toolset:"+endpoint.ToolsetID.UUID.String()
 }
 
+// liveSessionPolicyKey bypasses the short-lived HTTP policy cache during code callbacks.
+type liveSessionPolicyKey struct{}
+
 // loadSessionToolSelection resolves the tool policy for a validated session
 // jti. Returns nil for an all-tools session. Any error means the request
 // must be rejected: missing row (a live jti always has one — refresh
@@ -100,9 +103,15 @@ func (s *Service) loadSessionToolSelection(ctx context.Context, endpoint *Resolv
 	issuerID := endpoint.UserSessionIssuerID.String()
 
 	var raw []byte
-	if cached, err := s.toolSelectionCache.Get(ctx, sessionToolSelectionCacheKey(issuerID, jti)); err == nil {
-		raw = cached.Selection
-	} else {
+	live, _ := ctx.Value(liveSessionPolicyKey{}).(bool)
+	cachedPolicy := false
+	if !live {
+		if cached, err := s.toolSelectionCache.Get(ctx, sessionToolSelectionCacheKey(issuerID, jti)); err == nil {
+			raw = cached.Selection
+			cachedPolicy = true
+		}
+	}
+	if !cachedPolicy {
 		row, derr := usersessions_repo.New(s.db).GetUserSessionToolSelectionByJTI(ctx, usersessions_repo.GetUserSessionToolSelectionByJTIParams{
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
 			Jti:                 jti,
@@ -114,12 +123,14 @@ func (s *Service) loadSessionToolSelection(ctx context.Context, endpoint *Resolv
 			return nil, fmt.Errorf("load session tool selection: %w", derr)
 		}
 		raw = row.ToolSelection
-		if cerr := s.toolSelectionCache.Store(ctx, sessionToolSelectionEntry{
-			IssuerID:  issuerID,
-			JTI:       jti,
-			Selection: raw,
-		}); cerr != nil {
-			s.logger.WarnContext(ctx, "cache session tool selection", attr.SlogError(cerr))
+		if !live {
+			if cerr := s.toolSelectionCache.Store(ctx, sessionToolSelectionEntry{
+				IssuerID:  issuerID,
+				JTI:       jti,
+				Selection: raw,
+			}); cerr != nil {
+				s.logger.WarnContext(ctx, "cache session tool selection", attr.SlogError(cerr))
+			}
 		}
 	}
 

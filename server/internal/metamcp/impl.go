@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -51,6 +52,7 @@ import (
 )
 
 type Service struct {
+	codeModeSelection        codemode.SelectionGate
 	productFeatures          *productfeatures.Client
 	tracer                   trace.Tracer
 	logger                   *slog.Logger
@@ -78,10 +80,12 @@ func NewService(
 	temporalEnv *tenv.Environment,
 	networkAccessEligibility networkaccess.EligibilityChecker,
 	productFeatures *productfeatures.Client,
+	codeModeSelection codemode.SelectionGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
 	return &Service{
+		codeModeSelection:        codeModeSelection,
 		productFeatures:          productFeatures,
 		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
 		logger:                   logger,
@@ -286,6 +290,7 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 		for _, view := range views[1:] {
 			view.DiscoveryModesEnabled = views[0].DiscoveryModesEnabled
 			view.FrozenToolsetsEnabled = views[0].FrozenToolsetsEnabled
+			view.CodeModeEnabled = views[0].CodeModeEnabled
 		}
 	}
 	return &gen.ListMetaMcpServersResult{MetaMcpServers: views}, nil
@@ -304,10 +309,6 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	if payload.DiscoveryMode != nil {
 		if !gatewaymcp.DiscoveryMode(*payload.DiscoveryMode).Valid() {
 			return nil, oops.E(oops.CodeBadRequest, nil, "unsupported discovery mode")
-		}
-		enabled, err := s.productFeatures.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayDiscoveryModes)
-		if err != nil || !enabled {
-			return nil, oops.E(oops.CodeForbidden, err, "gateway discovery settings are not available")
 		}
 	}
 
@@ -339,6 +340,18 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
 	}
+	preflightDiscovery := gatewaymcp.ResolveDiscoveryMode(unlocked.DiscoveryMode.String)
+	// Evaluate external gates before taking project/row locks or a transaction connection.
+	if payload.DiscoveryMode != nil && *payload.DiscoveryMode != string(preflightDiscovery) {
+		if *payload.DiscoveryMode == string(gatewaymcp.DiscoveryModeCode) && !s.codeModeSelection.Allows(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID) {
+			return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
+		}
+		enabled, err := s.productFeatures.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayDiscoveryModes)
+		if err != nil || !enabled {
+			return nil, oops.E(oops.CodeForbidden, err, "gateway discovery settings are not available")
+		}
+	}
+
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
 	if err != nil {
 		if payload.NetworkAccessMode == nil {
@@ -374,6 +387,11 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 			return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, logger)
+	}
+
+	// Reject a changed baseline instead of using a gate evaluated for another mode.
+	if payload.DiscoveryMode != nil && gatewaymcp.ResolveDiscoveryMode(existing.DiscoveryMode.String) != preflightDiscovery {
+		return nil, oops.E(oops.CodeConflict, nil, "gateway discovery mode changed concurrently; retry the update")
 	}
 
 	// Defensive issuer wiring, mirroring create: an omitted issuer preserves

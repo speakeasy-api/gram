@@ -1,4 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import type { GatewayInspection } from "./useGatewayInspection";
 import { afterEach, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
@@ -10,7 +12,29 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
   mcpConnectionUrl: (value: string) => value,
 }));
 
-const state = vi.hoisted(() => ({ mint: vi.fn() }));
+vi.mock("@/components/ui/CodeSnippet", () => ({
+  CodeSnippet: ({ code }: { code: string }) => <pre>{code}</pre>,
+}));
+
+const state = vi.hoisted(() => ({
+  mint: vi.fn(),
+  frozen: vi.fn(),
+  data: undefined as GatewayInspection | undefined,
+  loading: false,
+}));
+vi.mock("./GatewayCodeExecution", () => ({
+  GatewayCodeExecution: ({ disabled }: { disabled: boolean }) => {
+    const [source, setSource] = useState("initial");
+    return (
+      <input
+        aria-label="Persistent source"
+        value={source}
+        disabled={disabled}
+        onChange={(event) => setSource(event.target.value)}
+      />
+    );
+  },
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-test" }),
   useSession: () => ({ user: { id: "user-test" } }),
@@ -38,7 +62,12 @@ vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
 vi.mock("./GatewayDetailsRouting", () => ({
   gatewayTabHref: () => "/settings",
 }));
-vi.mock("./GatewayFrozenToolset", () => ({ GatewayFrozenToolset: () => null }));
+vi.mock("./GatewayFrozenToolset", () => ({
+  GatewayFrozenToolset: (props: unknown) => {
+    state.frozen(props);
+    return null;
+  },
+}));
 vi.mock("./GatewaySettingsTab", () => ({
   GATEWAY_INSTRUCTIONS_SECTION_ID: "instructions",
 }));
@@ -47,8 +76,8 @@ vi.mock("./useGatewayMemberRows", () => ({
 }));
 vi.mock("./useGatewayInspection", () => ({
   useGatewayInspection: () => ({
-    data: undefined,
-    isLoading: false,
+    data: state.data,
+    isLoading: state.loading,
     isError: false,
     needsAuth: false,
     error: null,
@@ -75,7 +104,11 @@ vi.mock("@/components/page-layout", () => {
 function Location() {
   return <output aria-label="location">{useLocation().search}</output>;
 }
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  state.data = undefined;
+  state.loading = false;
+});
 it("lets a saved mode fall back to the gateway default when its product feature is disabled", () => {
   state.mint.mockClear();
   const gateway = {
@@ -101,6 +134,9 @@ it("lets a saved mode fall back to the gateway default when its product feature 
     }),
   );
   expect(screen.queryByRole("combobox")).toBeNull();
+  expect(state.frozen).toHaveBeenLastCalledWith(
+    expect.objectContaining({ reconnectFailed: true }),
+  );
   fireEvent.click(
     screen.getByRole("button", { name: "Use gateway default and reconnect" }),
   );
@@ -110,6 +146,9 @@ it("lets a saved mode fall back to the gateway default when its product feature 
     }),
   );
   expect(screen.getByLabelText("location").textContent).toBe("?keep=value");
+  expect(state.frozen).toHaveBeenLastCalledWith(
+    expect.objectContaining({ reconnectFailed: false }),
+  );
   expect(
     screen.queryByText("Gateway discovery settings are not available"),
   ).toBeNull();
@@ -160,4 +199,48 @@ it("applies enabled discovery choices to the URL and the minted connection", asy
     }),
   );
   expect(screen.getByLabelText("location").textContent).toBe("?keep=value");
+});
+
+it("preserves Python source while inspection reloads for a refreshed credential", () => {
+  const data: GatewayInspection = {
+    discoveryMode: "code_mode",
+    tools: [{ name: "execute", description: "Run Python" }],
+    instructions: "Python",
+    protocolVersion: undefined,
+    serverName: undefined,
+    servers: undefined,
+  };
+  state.data = data;
+  const gateway = {
+    id: "gateway-test",
+    discoveryMode: "code_mode",
+  } as MetaMcpServer;
+  const view = () => (
+    <MemoryRouter>
+      <GatewayInspectTab
+        metaMcpServer={gateway}
+        endpoints={[]}
+        isLoadingEndpoints={false}
+      />
+    </MemoryRouter>
+  );
+  const { rerender } = render(view());
+  fireEvent.change(screen.getByLabelText("Persistent source"), {
+    target: { value: "my Python" },
+  });
+  state.data = undefined;
+  state.loading = true;
+  rerender(view());
+  expect(
+    (screen.getByLabelText("Persistent source") as HTMLInputElement).value,
+  ).toBe("my Python");
+  expect(
+    (screen.getByLabelText("Persistent source") as HTMLInputElement).disabled,
+  ).toBe(true);
+  state.data = data;
+  state.loading = false;
+  rerender(view());
+  expect(
+    (screen.getByLabelText("Persistent source") as HTMLInputElement).value,
+  ).toBe("my Python");
 });

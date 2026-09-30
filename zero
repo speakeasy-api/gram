@@ -200,6 +200,11 @@ mise infra:start
 echo -e "\n⏳ Configuring local assistant runtime"
 mise run zero:assistants
 
+echo -e "\n⏳ Configuring local Code Mode runtime"
+if ! mise run zero:code-mode; then
+    echo "⚠️ Code Mode runtime setup failed; run mise run zero:code-mode to retry. Continuing stack setup."
+fi
+
 echo -e "\n⏳ Running migrations"
 mise run zero:migrations
 mise db:migrate

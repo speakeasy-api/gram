@@ -107,7 +107,7 @@ var _ = Service("userSessions", func() {
 		Security(security.Session, security.ProjectSlug)
 		Payload(func() {
 			Attribute("meta_mcp_server_id", String, "Gateway to connect.", func() { Format(FormatUUID) })
-			Attribute("discovery_mode", String, "Optional explicit discovery mode.", func() { Enum("direct", "progressive") })
+			Attribute("discovery_mode", String, "Optional explicit discovery mode.", func() { Enum("direct", "progressive", "code_mode") })
 			Attribute("frozen_toolset", FrozenGatewayReview, "The reviewed inventory and exact approved tools.")
 			Required("meta_mcp_server_id", "frozen_toolset")
 			security.SessionPayload()
@@ -144,7 +144,7 @@ var _ = Service("userSessions", func() {
 			Attribute("meta_mcp_server_id", String, "Bind the JWT to this meta MCP server's user_session_issuer audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("discovery_mode", String, "An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.", func() { Enum("progressive", "direct") })
+			Attribute("discovery_mode", String, "An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.", func() { Enum("progressive", "direct", "code_mode") })
 
 			security.SessionPayload()
 			security.ProjectPayload()

@@ -96,6 +96,17 @@ Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashbo
 
 Use `pull-request-demo` when a user-visible change needs a shareable PR screenshot, GIF recording, or PR comment. It builds on the same `mise run playwright` workflow and adds the capture and publishing steps. Do not use `npm`, `npx`, or `yarn` for either workflow.
 
+### Testing Code Mode locally
+
+Gateway Code Mode runs as a native Pitchfork daemon. `./zero` includes
+`mise run zero:code-mode`, which writes missing local provider/token settings
+and builds the pinned OSS runtime. Start or restart it with
+`mise exec -- pitchfork start code-runtime` or `restart code-runtime`.
+Normal stack start/wake includes it when `GRAM_CODE_RUNTIME_PROVIDER=local`,
+and pause stops it. No runner Docker image is needed. Runtime logs are available
+through `pitchfork logs code-runtime`. Use `mise run test:code-mode -race` for
+the actual interpreter/gateway integration tests.
+
 ### Testing assistants locally
 
 `./zero` (and `mise run zero:assistants`) writes `GRAM_ASSISTANT_RUNTIME_PROVIDER` and `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE` into `mise.local.toml` when those keys are missing there — persisting a value already in the environment, or `local` / `gram-assistant-runtime` if unset — and builds `gram-assistant-runtime:dev` if that image is missing.

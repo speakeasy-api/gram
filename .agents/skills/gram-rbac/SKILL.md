@@ -251,6 +251,8 @@ Dashboard code should never hand-roll scope checks — use the shared primitives
 
 - **In the dashboard**: `const { grants } = useRBAC();` returns the raw `RoleGrant[]`. Prefer `hasScope` for gating; reach for `grants` only when you need to render them (the access page itself, diagnostics, dev overlays).
 - **In Go handlers**: `authz.GrantsFromContext(ctx)` returns the grants on the request context after the engine's `PrepareContext` middleware has run.
+- **Within long-lived requests**: use `Engine.RefreshContext` before a later operation that must observe grant revocation. It clears resolved grant/policy snapshots and repeats admission while retaining the original credential constraints. Continue with the returned context and fail closed on error.
+- **Admitted jobs**: capture the originally prepared policies with `CaptureAdmissionBoundary`, then `Apply` that boundary to callback contexts when a job must never gain newly granted authority. The boundary retains no request context, survives later refreshes, and every policy must allow the operation.
 - **Over the API**: `GET /rpc/access.listUserGrants` returns the caller's effective grants.
 
 ## Role hierarchy at a glance

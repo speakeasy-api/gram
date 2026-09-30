@@ -100,6 +100,10 @@ type CreateMetaMcpServerResponseBody struct {
 	// Whether the organization allows new discovery choices. Read through the
 	// gateway without requiring organization feature-management access.
 	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
+	// Whether this project can select Code Mode: discovery settings, rollout, and
+	// runtime must be available. Existing connections retain their mode when
+	// rollout is disabled.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// Whether the organization allows new frozen toolsets. Read through the
 	// gateway without requiring organization feature-management access.
 	FrozenToolsetsEnabled *bool `form:"frozen_toolsets_enabled,omitempty" json:"frozen_toolsets_enabled,omitempty" xml:"frozen_toolsets_enabled,omitempty"`
@@ -139,6 +143,10 @@ type GetMetaMcpServerResponseBody struct {
 	// Whether the organization allows new discovery choices. Read through the
 	// gateway without requiring organization feature-management access.
 	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
+	// Whether this project can select Code Mode: discovery settings, rollout, and
+	// runtime must be available. Existing connections retain their mode when
+	// rollout is disabled.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// Whether the organization allows new frozen toolsets. Read through the
 	// gateway without requiring organization feature-management access.
 	FrozenToolsetsEnabled *bool `form:"frozen_toolsets_enabled,omitempty" json:"frozen_toolsets_enabled,omitempty" xml:"frozen_toolsets_enabled,omitempty"`
@@ -184,6 +192,10 @@ type UpdateMetaMcpServerResponseBody struct {
 	// Whether the organization allows new discovery choices. Read through the
 	// gateway without requiring organization feature-management access.
 	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
+	// Whether this project can select Code Mode: discovery settings, rollout, and
+	// runtime must be available. Existing connections retain their mode when
+	// rollout is disabled.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// Whether the organization allows new frozen toolsets. Read through the
 	// gateway without requiring organization feature-management access.
 	FrozenToolsetsEnabled *bool `form:"frozen_toolsets_enabled,omitempty" json:"frozen_toolsets_enabled,omitempty" xml:"frozen_toolsets_enabled,omitempty"`
@@ -1933,6 +1945,10 @@ type MetaMcpServerResponseBody struct {
 	// Whether the organization allows new discovery choices. Read through the
 	// gateway without requiring organization feature-management access.
 	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
+	// Whether this project can select Code Mode: discovery settings, rollout, and
+	// runtime must be available. Existing connections retain their mode when
+	// rollout is disabled.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// Whether the organization allows new frozen toolsets. Read through the
 	// gateway without requiring organization feature-management access.
 	FrozenToolsetsEnabled *bool `form:"frozen_toolsets_enabled,omitempty" json:"frozen_toolsets_enabled,omitempty" xml:"frozen_toolsets_enabled,omitempty"`
@@ -1974,6 +1990,7 @@ func NewCreateMetaMcpServerResponseBody(res *types.MetaMcpServer) *CreateMetaMcp
 		NetworkAccessMode:     string(res.NetworkAccessMode),
 		Instructions:          res.Instructions,
 		DiscoveryModesEnabled: res.DiscoveryModesEnabled,
+		CodeModeEnabled:       res.CodeModeEnabled,
 		FrozenToolsetsEnabled: res.FrozenToolsetsEnabled,
 		DiscoveryMode:         res.DiscoveryMode,
 		CreatedAt:             res.CreatedAt,
@@ -1996,6 +2013,7 @@ func NewGetMetaMcpServerResponseBody(res *types.MetaMcpServer) *GetMetaMcpServer
 		NetworkAccessMode:     string(res.NetworkAccessMode),
 		Instructions:          res.Instructions,
 		DiscoveryModesEnabled: res.DiscoveryModesEnabled,
+		CodeModeEnabled:       res.CodeModeEnabled,
 		FrozenToolsetsEnabled: res.FrozenToolsetsEnabled,
 		DiscoveryMode:         res.DiscoveryMode,
 		CreatedAt:             res.CreatedAt,
@@ -2037,6 +2055,7 @@ func NewUpdateMetaMcpServerResponseBody(res *types.MetaMcpServer) *UpdateMetaMcp
 		NetworkAccessMode:     string(res.NetworkAccessMode),
 		Instructions:          res.Instructions,
 		DiscoveryModesEnabled: res.DiscoveryModesEnabled,
+		CodeModeEnabled:       res.CodeModeEnabled,
 		FrozenToolsetsEnabled: res.FrozenToolsetsEnabled,
 		DiscoveryMode:         res.DiscoveryMode,
 		CreatedAt:             res.CreatedAt,
@@ -3617,8 +3636,8 @@ func ValidateUpdateMetaMcpServerRequestBody(body *UpdateMetaMcpServerRequestBody
 		}
 	}
 	if body.DiscoveryMode != nil {
-		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
 		}
 	}
 	return

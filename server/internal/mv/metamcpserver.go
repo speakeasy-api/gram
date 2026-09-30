@@ -21,6 +21,7 @@ func BuildMetaMcpServerView(server repo.MetaMcpServer) *types.MetaMcpServer {
 		Visibility:            types.MetaMcpServerVisibility(server.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
 		Instructions:          conv.FromPGText[string](server.Instructions),
+		CodeModeEnabled:       nil,
 		DiscoveryModesEnabled: nil,
 		FrozenToolsetsEnabled: nil,
 		DiscoveryMode:         string(metamcp.ResolveDiscoveryMode(server.DiscoveryMode.String)),

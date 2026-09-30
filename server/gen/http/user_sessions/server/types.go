@@ -2470,8 +2470,8 @@ func ValidateMintFrozenGatewaySessionRequestBody(body *MintFrozenGatewaySessionR
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 	}
 	if body.DiscoveryMode != nil {
-		if !(*body.DiscoveryMode == "direct" || *body.DiscoveryMode == "progressive") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"direct", "progressive"}))
+		if !(*body.DiscoveryMode == "direct" || *body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"direct", "progressive", "code_mode"}))
 		}
 	}
 	if body.FrozenToolset != nil {
@@ -2495,8 +2495,8 @@ func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err e
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 	}
 	if body.DiscoveryMode != nil {
-		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
 		}
 	}
 	return
