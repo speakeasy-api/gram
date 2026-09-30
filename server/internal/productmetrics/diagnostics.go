@@ -43,17 +43,38 @@ func (r *Repository) Diagnostics(ctx context.Context, q Query, recentSince time.
 	ctx, cancel := context.WithTimeout(ctx, QueryMaxSeconds*time.Second)
 	defer cancel()
 	var result Diagnostics
+	if err := querySlots.Acquire(ctx, 1); err != nil {
+		return result, fmt.Errorf("metric query capacity: %w", err)
+	}
+	defer querySlots.Release(1)
 	if _, _, err := buildQuery(q, r.now()); err != nil {
 		return result, err
 	}
 	if len(q.Filters) != 0 || len(q.GroupBy) != 0 || recentSince.Before(q.Start) || !recentSince.Before(q.End) || !recentSince.Equal(recentSince.Truncate(time.Minute)) {
 		return result, fmt.Errorf("diagnostics require an unfiltered lookback and a whole-minute recent boundary within it")
 	}
-	table := "product_metric_sums_1m"
-	if q.Definition.Instrument == Histogram {
-		table = "product_metric_histograms_1m"
+	ids, err := r.resolveSeries(ctx, q)
+	if err != nil {
+		return result, err
 	}
-	base := squirrel.Select().From(table).Where(squirrel.Eq{"organization_id": q.Tenant.OrganizationID, "project_id": q.Tenant.ProjectID, "metric_name": q.Definition.Name, "scope_name": q.Definition.ScopeName, "scope_version": q.Definition.ScopeVersion, "unit": q.Definition.Unit}).Where("bucket >= ? AND bucket < ?", q.Start.UTC(), q.End.UTC())
+	if len(ids) == 0 {
+		return result, nil
+	}
+	ctx, err = withSeriesIDs(ctx, ids)
+	if err != nil {
+		return result, err
+	}
+	minute := q
+	minute.Interval = time.Minute
+	source, sourceArgs, err := rollupSource(minute, "series_id, bucket, contributions", ids)
+	if err != nil {
+		return result, err
+	}
+	metadata, metadataArgs, err := squirrel.Select("series_id", "any(number_kind) AS number_kind", "any(resource_attributes) AS resource_attributes", "any(scope_attributes) AS scope_attributes", "any(point_attributes) AS point_attributes").From("product_metric_series").Where(descriptorScope(q)).Where(squirrel.Eq{"instrument": string(q.Definition.Instrument)}).Where("series_id IN (SELECT series_id FROM metric_series_ids)").GroupBy("series_id").ToSql()
+	if err != nil {
+		return result, err
+	}
+	base := squirrel.Select().Prefix("WITH points AS (SELECT series_id, min(bucket) AS bucket, sum(contributions) AS contributions FROM ("+source+") GROUP BY series_id)", sourceArgs...).From("points").JoinClause("INNER JOIN ("+metadata+") AS metadata USING (series_id)", metadataArgs...)
 	identity := "tuple(number_kind, resource_attributes, scope_attributes, point_attributes)"
 	sql, args, err := base.Columns("uniqCombined64("+identity+") AS active_series", "sum(contributions) AS total_contributions").Column("uniqCombined64If("+identity+", bucket < ?) AS older_series", recentSince.UTC()).ToSql()
 	if err != nil {

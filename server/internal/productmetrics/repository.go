@@ -9,10 +9,17 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/semaphore"
 )
 
 // InsertTimeout bounds an in-flight batch below the subscription ack deadline.
 const InsertTimeout = 30 * time.Second
+
+// QueryMaxConcurrent limits whole read requests per process, including catalogue
+// resolution. The request deadline includes waiting for a slot.
+const QueryMaxConcurrent = 4
+
+var querySlots = semaphore.NewWeighted(QueryMaxConcurrent)
 
 // Repository provides synchronous inserts and bounded tenant-scoped rollup reads.
 type Repository struct {

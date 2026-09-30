@@ -106,6 +106,8 @@ func (w *Writer) process(ctx context.Context, messages []*pmv1.Contribution) ([]
 			reason = "invalid"
 		case w.registry == nil || !w.registry.contains(c.Definition):
 			reason = "unregistered"
+		case w.registry.ValidateDimensions(c) != nil:
+			reason = "invalid"
 		case c.EventTime.Before(EarliestBucket(now)):
 			reason = "expired"
 		case c.EventTime.After(now.Add(MaxFutureSkew)):

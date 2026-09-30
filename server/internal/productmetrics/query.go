@@ -167,6 +167,10 @@ func (a Aggregate) Mean() *big.Rat {
 }
 
 func buildQuery(q Query, now time.Time) (string, []any, error) {
+	return buildResolvedQuery(q, now, nil)
+}
+
+func buildResolvedQuery(q Query, now time.Time, ids []string) (string, []any, error) {
 	if q.Tenant.OrganizationID == "" || q.Tenant.ProjectID == uuid.Nil {
 		return "", nil, fmt.Errorf("tenant and project are required")
 	}
@@ -182,43 +186,40 @@ func buildQuery(q Query, now time.Time) (string, []any, error) {
 	if len(q.Filters)+len(q.GroupBy) > QueryMaxDimensions {
 		return "", nil, fmt.Errorf("query exceeds dimension expression bound")
 	}
-	table := "product_metric_sums_1m"
-	if q.Definition.Instrument == Histogram {
-		table = "product_metric_histograms_1m"
+	source, sourceArgs, err := rollupSource(q, "*", ids)
+	if err != nil {
+		return "", nil, err
 	}
-	b := squirrel.Select().Column("toDateTime(intDiv(toUInt64(bucket), ?) * ?, 'UTC') AS window_start", int64(q.Interval/time.Second), int64(q.Interval/time.Second)).
-		Columns("number_kind", "sum(contributions) AS total_count", "toString(sum(integer_sum)) AS total_integer", "sum(floating_sum) AS total_floating").
-		From(table).Where(squirrel.Eq{"organization_id": q.Tenant.OrganizationID, "project_id": q.Tenant.ProjectID, "metric_name": q.Definition.Name, "scope_name": q.Definition.ScopeName, "scope_version": q.Definition.ScopeVersion, "unit": q.Definition.Unit}).
-		Where("bucket >= ? AND bucket < ?", q.Start.UTC(), q.End.UTC()).GroupBy("window_start", "number_kind").OrderBy("window_start", "number_kind")
-	if q.Definition.Instrument == Histogram {
-		b = b.Columns("min(integer_min)", "max(integer_max)", "min(floating_min)", "max(floating_max)")
+	metadata := squirrel.Select("series_id").From("product_metric_series").Where(descriptorScope(q)).Where(squirrel.Eq{"instrument": string(q.Definition.Instrument)}).GroupBy("series_id")
+	if ids != nil {
+		metadata = metadata.Where("series_id IN (SELECT series_id FROM metric_series_ids)")
 	}
-	for _, f := range q.Filters {
-		col, err := f.Dimension.column()
-		if err != nil {
-			return "", nil, err
-		}
-		if f.Missing {
-			b = b.Where("NOT arrayExists(a -> a.key = ?, "+col+")", f.Dimension.Key)
-			continue
-		}
-		canonical, err := CanonicalAttributes([]attribute.KeyValue{{Key: attribute.Key(f.Dimension.Key), Value: f.Value}})
-		if err != nil {
-			return "", nil, err
-		}
-		var attrs []EncodedAttribute
-		if err := json.Unmarshal([]byte(canonical), &attrs); err != nil {
-			return "", nil, fmt.Errorf("decode filter: %w", err)
-		}
-		b = b.Where("has("+col+", tuple(?, ?, ?))", attrs[0].Key, attrs[0].Type, string(attrs[0].Value))
+	metadata, err = applyAttributeFilters(metadata, q.Filters)
+	if err != nil {
+		return "", nil, err
 	}
 	for i, d := range q.GroupBy {
 		col, err := d.column()
 		if err != nil {
 			return "", nil, err
 		}
+		metadata = metadata.Column("any(toJSONString(tuple(arrayExists(a -> a.key = ?, "+col+"), arrayFirst(a -> a.key = ?, "+col+").type, arrayFirst(a -> a.key = ?, "+col+").value))) AS "+fmt.Sprintf("dimension_%d", i), d.Key, d.Key, d.Key)
+	}
+	metadataSQL, metadataArgs, err := metadata.ToSql()
+	if err != nil {
+		return "", nil, err
+	}
+	b := squirrel.Select().Column("toDateTime(intDiv(toUInt64(bucket), ?) * ?, 'UTC') AS window_start", int64(q.Interval/time.Second), int64(q.Interval/time.Second)).
+		Columns("number_kind", "sum(contributions) AS total_count", "toString(sum(integer_sum)) AS total_integer", "sum(floating_sum) AS total_floating").
+		Prefix("WITH points AS ("+source+")", sourceArgs...).From("points").
+		JoinClause("INNER JOIN ("+metadataSQL+") AS metadata USING (series_id)", metadataArgs...).
+		GroupBy("window_start", "number_kind").OrderBy("window_start", "number_kind")
+	if q.Definition.Instrument == Histogram {
+		b = b.Columns("min(integer_min)", "max(integer_max)", "min(floating_min)", "max(floating_max)")
+	}
+	for i := range q.GroupBy {
 		alias := fmt.Sprintf("dimension_%d", i)
-		b = b.Column("toJSONString(tuple(arrayExists(a -> a.key = ?, "+col+"), arrayFirst(a -> a.key = ?, "+col+").type, arrayFirst(a -> a.key = ?, "+col+").value)) AS "+alias, d.Key, d.Key, d.Key).GroupBy(alias).OrderBy(alias)
+		b = b.Column(alias).GroupBy(alias).OrderBy(alias)
 	}
 	sql, args, err := b.ToSql()
 	if err != nil {
@@ -227,12 +228,37 @@ func buildQuery(q Query, now time.Time) (string, []any, error) {
 	return sql, args, nil
 }
 
+func applyAttributeFilters(b squirrel.SelectBuilder, filters []Filter) (squirrel.SelectBuilder, error) {
+	for _, f := range filters {
+		col, err := f.Dimension.column()
+		if err != nil {
+			return b, err
+		}
+		if f.Missing {
+			b = b.Where("NOT arrayExists(a -> a.key = ?, "+col+")", f.Dimension.Key)
+			continue
+		}
+		canonical, err := CanonicalAttributes([]attribute.KeyValue{{Key: attribute.Key(f.Dimension.Key), Value: f.Value}})
+		if err != nil {
+			return b, err
+		}
+		var attrs []EncodedAttribute
+		if err := json.Unmarshal([]byte(canonical), &attrs); err != nil {
+			return b, fmt.Errorf("decode filter: %w", err)
+		}
+		b = b.Where("has("+col+", tuple(?, ?, ?))", attrs[0].Key, attrs[0].Type, string(attrs[0].Value))
+	}
+	return b, nil
+}
+
 func boundedQueryContext(ctx context.Context) context.Context {
 	return clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
 		"max_result_rows": QueryMaxRows, "max_result_bytes": 16 << 20, "result_overflow_mode": "throw",
 		"max_rows_to_read": QueryMaxReadRows, "max_bytes_to_read": QueryMaxReadBytes, "read_overflow_mode": "throw",
 		"max_memory_usage": QueryMaxMemory, "max_execution_time": QueryMaxSeconds, "timeout_overflow_mode": "throw",
-		"max_rows_to_group_by": QueryMaxRows, "group_by_overflow_mode": "throw", "max_threads": 2,
+		"max_rows_to_group_by": QueryMaxSeries, "group_by_overflow_mode": "throw", "max_threads": 2,
+		"max_rows_in_set": QueryMaxActiveSeries, "max_bytes_in_set": 32 << 20, "set_overflow_mode": "throw",
+		"max_rows_in_join": QueryMaxSeries, "max_bytes_in_join": 32 << 20, "join_overflow_mode": "throw",
 	}))
 }
 
@@ -241,8 +267,27 @@ func boundedQueryContext(ctx context.Context) context.Context {
 func (r *Repository) Query(ctx context.Context, q Query) ([]Aggregate, error) {
 	ctx, cancel := context.WithTimeout(ctx, QueryMaxSeconds*time.Second)
 	defer cancel()
+	if err := querySlots.Acquire(ctx, 1); err != nil {
+		return nil, fmt.Errorf("metric query capacity: %w", err)
+	}
+	defer querySlots.Release(1)
 	now := r.now().UTC()
 	sql, args, err := buildQuery(q, now)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := r.resolveSeries(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return []Aggregate{}, nil
+	}
+	ctx, err = withSeriesIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	sql, args, err = buildResolvedQuery(q, now, ids)
 	if err != nil {
 		return nil, err
 	}

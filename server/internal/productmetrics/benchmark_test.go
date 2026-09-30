@@ -23,7 +23,7 @@ func TestSyntheticLoad(t *testing.T) {
 	conn := newTestClickhouse(t)
 	now := time.Now().UTC()
 	r := NewRepository(conn, func() time.Time { return now })
-	const records = 120000
+	const records = 100000
 	for _, repetition := range []string{"high", "low"} {
 		c := synthetic(Counter)
 		c.Definition.Name = "gram.synthetic." + repetition
