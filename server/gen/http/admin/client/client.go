@@ -264,6 +264,14 @@ type Client struct {
 	// the setRegistryEntryPublished endpoint.
 	SetRegistryEntryPublishedDoer goahttp.Doer
 
+	// GetStripeSubscriptionCandidate Doer is the HTTP client used to make requests
+	// to the getStripeSubscriptionCandidate endpoint.
+	GetStripeSubscriptionCandidateDoer goahttp.Doer
+
+	// SetStripeSubscription Doer is the HTTP client used to make requests to the
+	// setStripeSubscription endpoint.
+	SetStripeSubscriptionDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -346,6 +354,8 @@ func NewClient(
 		CreateRegistryEntryDoer:                   doer,
 		SaveRegistryEntryDoer:                     doer,
 		SetRegistryEntryPublishedDoer:             doer,
+		GetStripeSubscriptionCandidateDoer:        doer,
+		SetStripeSubscriptionDoer:                 doer,
 		RestoreResponseBody:                       restoreBody,
 		scheme:                                    scheme,
 		host:                                      host,
@@ -1842,6 +1852,54 @@ func (c *Client) SetRegistryEntryPublished() goa.Endpoint {
 		resp, err := c.SetRegistryEntryPublishedDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "setRegistryEntryPublished", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetStripeSubscriptionCandidate returns an endpoint that makes HTTP requests
+// to the admin service getStripeSubscriptionCandidate server.
+func (c *Client) GetStripeSubscriptionCandidate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetStripeSubscriptionCandidateRequest(c.encoder)
+		decodeResponse = DecodeGetStripeSubscriptionCandidateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetStripeSubscriptionCandidateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetStripeSubscriptionCandidateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getStripeSubscriptionCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetStripeSubscription returns an endpoint that makes HTTP requests to the
+// admin service setStripeSubscription server.
+func (c *Client) SetStripeSubscription() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetStripeSubscriptionRequest(c.encoder)
+		decodeResponse = DecodeSetStripeSubscriptionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetStripeSubscriptionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetStripeSubscriptionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setStripeSubscription", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -19,6 +19,7 @@ import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import { canStartTrial } from "@/pages/organizations/rowActions";
 import { SetStripeCustomer } from "@/pages/organization/SetStripeCustomer";
+import { SetStripeSubscription } from "@/pages/organization/SetStripeSubscription";
 import {
   Select,
   SelectContent,
@@ -418,15 +419,11 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             />
           </Row>
           <Row label="Stripe subscription ID">
-            {org.stripe_subscription_id ? (
-              <CopyValue
-                label="Stripe subscription ID"
-                value={org.stripe_subscription_id}
-                className="text-sm"
-              />
-            ) : (
-              <span className="text-muted-foreground text-sm">-</span>
-            )}
+            <SetStripeSubscription
+              key={org.id}
+              org={org}
+              focusFallbackRef={detailsHeading}
+            />
           </Row>
           <Row label="Account type">
             <Select
