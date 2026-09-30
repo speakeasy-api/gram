@@ -263,13 +263,35 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return fmt.Errorf("create pubsub client: %w", err)
 	}
+	pubsubShutdown := len(shutdown.funcs)
 	shutdown.funcs = append(shutdown.funcs, stop)
-	publishers, stop, err := newPublishers(ctx, psbroker)
+	publishers, stopPublishers, err := newPublishers(ctx, psbroker)
 	if err != nil {
 		return fmt.Errorf("create publishers: %w", err)
 	}
-	publishersShutdown := len(shutdown.funcs)
-	shutdown.funcs = append(shutdown.funcs, stop)
+	enforcementDispatcher, enforcementShutdown := newRiskEnforcementDispatcher(
+		ctx,
+		logger,
+		tracerProvider,
+		meterProvider,
+		redisClient,
+		psbroker,
+		featureFlags,
+	)
+	// Shutdown funcs run concurrently, so everything publishing through
+	// psbroker stops in order inside its close.
+	var drainRisk func(context.Context) error
+	stopPubSub := shutdown.funcs[pubsubShutdown]
+	shutdown.funcs[pubsubShutdown] = func(ctx context.Context) error {
+		var errs []error
+		if drainRisk != nil {
+			errs = append(errs, drainRisk(ctx))
+		}
+		if enforcementShutdown != nil {
+			errs = append(errs, enforcementShutdown(ctx))
+		}
+		return errors.Join(append(errs, stopPublishers(ctx), stopPubSub(ctx))...)
+	}
 
 	logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 	toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
@@ -290,17 +312,13 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
-		c, logger, tracerProvider, meterProvider, db, redisClient, featureFlags, completions, publishers, shadowMCPClient,
+		c, logger, tracerProvider, meterProvider, db, redisClient, featureFlags, enforcementDispatcher, completions, publishers, shadowMCPClient,
 	)
 	if err != nil {
 		return err
 	}
-	shutdown.funcs = append(shutdown.funcs, mcpRiskScanner.Shutdown)
-	// Shutdown funcs run concurrently, so flag findings drain inside the
-	// publishers' stop instead of racing it.
-	stopPublishers := shutdown.funcs[publishersShutdown]
-	shutdown.funcs[publishersShutdown] = func(ctx context.Context) error {
-		return errors.Join(mcpRiskEvaluator.Drain(ctx), stopPublishers(ctx))
+	drainRisk = func(ctx context.Context) error {
+		return errors.Join(mcpRiskEvaluator.Drain(ctx), mcpRiskScanner.Shutdown(ctx))
 	}
 	slackClient := slack_client.NewSlackClient(guardianPolicy)
 	// Listing and reading triggers works without Temporal; scheduling one
