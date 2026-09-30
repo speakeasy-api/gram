@@ -96,6 +96,14 @@ type Client struct {
 	// the listOrganizationActivity endpoint.
 	ListOrganizationActivityDoer goahttp.Doer
 
+	// ListUsers Doer is the HTTP client used to make requests to the listUsers
+	// endpoint.
+	ListUsersDoer goahttp.Doer
+
+	// ListUserOrganizations Doer is the HTTP client used to make requests to the
+	// listUserOrganizations endpoint.
+	ListUserOrganizationsDoer goahttp.Doer
+
 	// ListOrganizations Doer is the HTTP client used to make requests to the
 	// listOrganizations endpoint.
 	ListOrganizationsDoer goahttp.Doer
@@ -240,6 +248,38 @@ type Client struct {
 	// updateSupportMatrix endpoint.
 	UpdateSupportMatrixDoer goahttp.Doer
 
+	// GetSupportCoverage Doer is the HTTP client used to make requests to the
+	// getSupportCoverage endpoint.
+	GetSupportCoverageDoer goahttp.Doer
+
+	// ListRegistryEntries Doer is the HTTP client used to make requests to the
+	// listRegistryEntries endpoint.
+	ListRegistryEntriesDoer goahttp.Doer
+
+	// GetRegistryEntry Doer is the HTTP client used to make requests to the
+	// getRegistryEntry endpoint.
+	GetRegistryEntryDoer goahttp.Doer
+
+	// CreateRegistryEntry Doer is the HTTP client used to make requests to the
+	// createRegistryEntry endpoint.
+	CreateRegistryEntryDoer goahttp.Doer
+
+	// SaveRegistryEntry Doer is the HTTP client used to make requests to the
+	// saveRegistryEntry endpoint.
+	SaveRegistryEntryDoer goahttp.Doer
+
+	// SetRegistryEntryPublished Doer is the HTTP client used to make requests to
+	// the setRegistryEntryPublished endpoint.
+	SetRegistryEntryPublishedDoer goahttp.Doer
+
+	// GetStripeSubscriptionCandidate Doer is the HTTP client used to make requests
+	// to the getStripeSubscriptionCandidate endpoint.
+	GetStripeSubscriptionCandidateDoer goahttp.Doer
+
+	// SetStripeSubscription Doer is the HTTP client used to make requests to the
+	// setStripeSubscription endpoint.
+	SetStripeSubscriptionDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -280,6 +320,8 @@ func NewClient(
 		ListOrganizationProjectsDoer:              doer,
 		ListProjectMcpServersDoer:                 doer,
 		ListOrganizationActivityDoer:              doer,
+		ListUsersDoer:                             doer,
+		ListUserOrganizationsDoer:                 doer,
 		ListOrganizationsDoer:                     doer,
 		ExtendTrialDoer:                           doer,
 		CreateOrganizationDoer:                    doer,
@@ -316,6 +358,14 @@ func NewClient(
 		GetSpendBreakdownDoer:                     doer,
 		GetSupportMatrixDoer:                      doer,
 		UpdateSupportMatrixDoer:                   doer,
+		GetSupportCoverageDoer:                    doer,
+		ListRegistryEntriesDoer:                   doer,
+		GetRegistryEntryDoer:                      doer,
+		CreateRegistryEntryDoer:                   doer,
+		SaveRegistryEntryDoer:                     doer,
+		SetRegistryEntryPublishedDoer:             doer,
+		GetStripeSubscriptionCandidateDoer:        doer,
+		SetStripeSubscriptionDoer:                 doer,
 		RestoreResponseBody:                       restoreBody,
 		scheme:                                    scheme,
 		host:                                      host,
@@ -799,6 +849,54 @@ func (c *Client) ListOrganizationActivity() goa.Endpoint {
 		resp, err := c.ListOrganizationActivityDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "listOrganizationActivity", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListUsers returns an endpoint that makes HTTP requests to the admin service
+// listUsers server.
+func (c *Client) ListUsers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListUsersRequest(c.encoder)
+		decodeResponse = DecodeListUsersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListUsersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListUsersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listUsers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListUserOrganizations returns an endpoint that makes HTTP requests to the
+// admin service listUserOrganizations server.
+func (c *Client) ListUserOrganizations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListUserOrganizationsRequest(c.encoder)
+		decodeResponse = DecodeListUserOrganizationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListUserOrganizationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListUserOrganizationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listUserOrganizations", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -1668,6 +1766,198 @@ func (c *Client) UpdateSupportMatrix() goa.Endpoint {
 		resp, err := c.UpdateSupportMatrixDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "updateSupportMatrix", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSupportCoverage returns an endpoint that makes HTTP requests to the admin
+// service getSupportCoverage server.
+func (c *Client) GetSupportCoverage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSupportCoverageRequest(c.encoder)
+		decodeResponse = DecodeGetSupportCoverageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSupportCoverageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSupportCoverageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getSupportCoverage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRegistryEntries returns an endpoint that makes HTTP requests to the
+// admin service listRegistryEntries server.
+func (c *Client) ListRegistryEntries() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRegistryEntriesRequest(c.encoder)
+		decodeResponse = DecodeListRegistryEntriesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRegistryEntriesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRegistryEntriesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listRegistryEntries", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRegistryEntry returns an endpoint that makes HTTP requests to the admin
+// service getRegistryEntry server.
+func (c *Client) GetRegistryEntry() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRegistryEntryRequest(c.encoder)
+		decodeResponse = DecodeGetRegistryEntryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRegistryEntryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRegistryEntryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getRegistryEntry", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateRegistryEntry returns an endpoint that makes HTTP requests to the
+// admin service createRegistryEntry server.
+func (c *Client) CreateRegistryEntry() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateRegistryEntryRequest(c.encoder)
+		decodeResponse = DecodeCreateRegistryEntryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateRegistryEntryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateRegistryEntryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createRegistryEntry", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SaveRegistryEntry returns an endpoint that makes HTTP requests to the admin
+// service saveRegistryEntry server.
+func (c *Client) SaveRegistryEntry() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSaveRegistryEntryRequest(c.encoder)
+		decodeResponse = DecodeSaveRegistryEntryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSaveRegistryEntryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SaveRegistryEntryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "saveRegistryEntry", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetRegistryEntryPublished returns an endpoint that makes HTTP requests to
+// the admin service setRegistryEntryPublished server.
+func (c *Client) SetRegistryEntryPublished() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetRegistryEntryPublishedRequest(c.encoder)
+		decodeResponse = DecodeSetRegistryEntryPublishedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetRegistryEntryPublishedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetRegistryEntryPublishedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setRegistryEntryPublished", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetStripeSubscriptionCandidate returns an endpoint that makes HTTP requests
+// to the admin service getStripeSubscriptionCandidate server.
+func (c *Client) GetStripeSubscriptionCandidate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetStripeSubscriptionCandidateRequest(c.encoder)
+		decodeResponse = DecodeGetStripeSubscriptionCandidateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetStripeSubscriptionCandidateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetStripeSubscriptionCandidateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getStripeSubscriptionCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetStripeSubscription returns an endpoint that makes HTTP requests to the
+// admin service setStripeSubscription server.
+func (c *Client) SetStripeSubscription() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetStripeSubscriptionRequest(c.encoder)
+		decodeResponse = DecodeSetStripeSubscriptionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetStripeSubscriptionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetStripeSubscriptionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setStripeSubscription", err)
 		}
 		return decodeResponse(resp)
 	}

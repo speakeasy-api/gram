@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -21,16 +23,18 @@ import (
 // Decode the existing schema-agnostic safety snapshot rather than querying raw
 // SQL in tests. Full snapshots below also catch changes to unmodeled columns.
 type adminSeedSnapshotRow struct {
-	Name           string     `json:"name"`
-	DisplayName    string     `json:"display_name"`
-	ID             any        `json:"id"`
-	CreatedAt      time.Time  `json:"created_at"`
-	DisabledAt     *time.Time `json:"disabled_at"`
-	DeletedAt      *time.Time `json:"deleted_at"`
-	Deleted        bool       `json:"deleted"`
-	WorkosID       *string    `json:"workos_id"`
-	UserID         string     `json:"user_id"`
-	OrganizationID string     `json:"organization_id"`
+	Name            string     `json:"name"`
+	DisplayName     string     `json:"display_name"`
+	ID              any        `json:"id"`
+	CreatedAt       time.Time  `json:"created_at"`
+	DisabledAt      *time.Time `json:"disabled_at"`
+	DeletedAt       *time.Time `json:"deleted_at"`
+	LastLogin       *time.Time `json:"last_login"`
+	WorkosDeletedAt *time.Time `json:"workos_deleted_at"`
+	Deleted         bool       `json:"deleted"`
+	WorkosID        *string    `json:"workos_id"`
+	UserID          string     `json:"user_id"`
+	OrganizationID  string     `json:"organization_id"`
 }
 
 func adminSeedSnapshotRows(t *testing.T, snapshot demoseedtest.PostgresSnapshot, table string) map[string]adminSeedSnapshotRow {
@@ -99,11 +103,17 @@ func TestAdminSeedSafetyAndIdempotency(t *testing.T) {
 		ids := make([]string, 0, len(members))
 		for id, member := range members {
 			ids = append(ids, id)
+			if strings.HasPrefix(member.UserID, "user_local_admin_edge_") {
+				continue
+			}
 			require.Nil(t, member.DeletedAt)
 			require.False(t, member.Deleted)
 			counts[member.OrganizationID]++
 		}
 		for _, user := range users {
+			if strings.HasPrefix(fmt.Sprint(user.ID), "user_local_admin_edge_") {
+				continue
+			}
 			require.Nil(t, user.DeletedAt)
 			if user.ID != "user_admin_seed_sentinel" {
 				require.Equal(t, "Fictional Admin Member", user.DisplayName)
@@ -118,8 +128,56 @@ func TestAdminSeedSafetyAndIdempotency(t *testing.T) {
 			require.Equal(t, fixture.Members, counts[fixture.ID])
 			require.Nil(t, org.WorkosID)
 		}
-		require.Len(t, users, expectedMembers)
-		require.Len(t, members, expectedMembers)
+		require.Greater(t, expectedMembers, 50)
+		extraMembers := 0
+		for _, fixture := range adminSeedUserFixtures() {
+			user := users[fixture.ID]
+			require.Equal(t, fixture.Name, user.DisplayName)
+			require.Equal(t, fixture.Deleted, user.DeletedAt != nil)
+			require.Equal(t, fixture.WorkosDeleted, user.WorkosDeletedAt != nil)
+			require.Equal(t, fixture.HasLogin, user.LastLogin != nil)
+			actual := []string{}
+			for _, member := range members {
+				if member.UserID == fixture.ID {
+					actual = append(actual, member.OrganizationID)
+					require.Equal(t, fixture.DeletedMembership, member.Deleted)
+				}
+			}
+			require.ElementsMatch(t, fixture.Organizations, actual)
+			extraMembers += len(actual)
+		}
+		require.Equal(t, orgs["org_local_admin_fixture_01"].Name, orgs["org_local_admin_fixture_61"].Name)
+		require.NotNil(t, orgs["org_local_admin_fixture_61"].DisabledAt)
+		require.Len(t, users, expectedMembers+6)
+		require.Len(t, members, expectedMembers+extraMembers)
+		// Exercise the actual Task 2 reads against lifecycle and overflow fixtures.
+		queries := adminrepo.New(db)
+		params := adminrepo.AdminListUsersParams{
+			NamePatterns: []string{}, EmailPatterns: []string{`%user\_local\_admin\_edge\_%`}, OrgPatterns: []string{}, AnyPatterns: []string{}, PageLimit: 50,
+		}
+		page, err := queries.AdminListUsers(ctx, params)
+		require.NoError(t, err)
+		actualIDs := []string{}
+		for _, user := range page {
+			actualIDs = append(actualIDs, user.ID)
+		}
+		require.Equal(t, []string{"user_local_admin_edge_login", "user_local_admin_edge_membership_deleted", "user_local_admin_edge_multi", "user_local_admin_edge_zero"}, actualIDs)
+		total, err := queries.AdminCountUsers(ctx, adminrepo.AdminCountUsersParams{NamePatterns: params.NamePatterns, EmailPatterns: params.EmailPatterns, OrgPatterns: params.OrgPatterns, AnyPatterns: params.AnyPatterns})
+		require.NoError(t, err)
+		require.EqualValues(t, 4, total)
+		previews, err := queries.AdminListUsersOrganizationPreviews(ctx, actualIDs)
+		require.NoError(t, err)
+		require.Len(t, previews, 3)
+		for _, preview := range previews {
+			require.Equal(t, "user_local_admin_edge_multi", preview.UserID.String)
+			require.EqualValues(t, 5, preview.OrganizationCount)
+		}
+		overflow, err := queries.AdminListUserOrganizations(ctx, adminrepo.AdminListUserOrganizationsParams{UserID: "user_local_admin_edge_multi", PageOffset: 3, PageLimit: 50})
+		require.NoError(t, err)
+		require.Len(t, overflow, 2)
+		orgTotal, err := queries.AdminCountUserOrganizations(ctx, "user_local_admin_edge_multi")
+		require.NoError(t, err)
+		require.EqualValues(t, 5, orgTotal)
 		slices.Sort(ids)
 		if iteration == 0 {
 			initialIDs = ids
@@ -152,13 +210,18 @@ func TestAdminSeedRollsBackOnCollision(t *testing.T) {
 
 func TestAdminSeedRejectsReservedIdentityCollision(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"organization slug", "organization external identity", "user email", "user external identity", "user unrelated membership"} {
+	for _, kind := range []string{"organization slug", "organization external identity", "user email", "user external identity", "user unrelated membership", "edge user email", "edge user external identity", "edge user unrelated membership"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			ctx := t.Context()
 			db, err := infra.CloneTestDatabase(t, "testdb")
 			require.NoError(t, err)
 			fixtures := testrepo.New(db)
+			userID := "user_local_admin_fixture_02_001"
+			if strings.HasPrefix(kind, "edge ") {
+				userID = "user_local_admin_edge_zero"
+				kind = strings.TrimPrefix(kind, "edge ")
+			}
 			switch kind {
 			case "organization slug", "organization external identity":
 				slug := "unrelated-fictional-org"
@@ -174,14 +237,14 @@ func TestAdminSeedRejectsReservedIdentityCollision(t *testing.T) {
 			case "user email", "user external identity", "user unrelated membership":
 				email := "unrelated@example.invalid"
 				if kind != "user email" {
-					email = "user_local_admin_fixture_02_001@admin-seed.invalid"
+					email = userID + "@admin-seed.invalid"
 				}
 				require.NoError(t, fixtures.InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{
-					ID: "user_local_admin_fixture_02_001", Email: email, DisplayName: "Unrelated fictional user",
+					ID: userID, Email: email, DisplayName: "Unrelated fictional user",
 				}))
 				if kind == "user external identity" {
 					require.NoError(t, userrepo.New(db).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
-						ID: "user_local_admin_fixture_02_001", WorkosID: pgtype.Text{String: "user_unrelated_fictional", Valid: true},
+						ID: userID, WorkosID: pgtype.Text{String: "user_unrelated_fictional", Valid: true},
 					}))
 				}
 				if kind == "user unrelated membership" {
@@ -190,7 +253,7 @@ func TestAdminSeedRejectsReservedIdentityCollision(t *testing.T) {
 						ID: "org_unrelated_fictional", Name: "Unrelated fictional org", Slug: "unrelated-fictional-org",
 					}))
 					require.NoError(t, fixtures.CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{
-						OrganizationID: "org_unrelated_fictional", UserID: pgtype.Text{String: "user_local_admin_fixture_02_001", Valid: true},
+						OrganizationID: "org_unrelated_fictional", UserID: pgtype.Text{String: userID, Valid: true},
 					}))
 				}
 			}
@@ -223,6 +286,9 @@ func TestAdminSeedConcurrentReruns(t *testing.T) {
 	for _, fixture := range adminSeedFixtures(now) {
 		expectedMembers += fixture.Members
 	}
-	require.Len(t, snapshot["users"], expectedMembers)
+	require.Len(t, snapshot["users"], expectedMembers+len(adminSeedUserFixtures()))
+	for _, fixture := range adminSeedUserFixtures() {
+		expectedMembers += len(fixture.Organizations)
+	}
 	require.Len(t, snapshot["organization_user_relationships"], expectedMembers)
 }

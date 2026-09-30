@@ -59,6 +59,10 @@ type Service interface {
 	// update: status, assignee, hidden, or clear_assignee=true. Assignee is
 	// mutually exclusive with clear_assignee=true.
 	UpdateSetupTask(context.Context, *UpdateSetupTaskPayload) (res *SetupTask, err error)
+	// Record the onboarding survey result. The server picks the use case's default
+	// playbook, which decides the setup tasks the wizard walks; progress and
+	// assignments are kept.
+	SubmitOnboardingSurvey(context.Context, *SubmitOnboardingSurveyPayload) (res *ListSetupTasksResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -81,7 +85,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask"}
+var MethodNames = [17]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -372,6 +376,14 @@ type SetupTaskAssigneeInput struct {
 	// Email address to assign before membership exists. Mutually exclusive with
 	// user_id.
 	Email *string
+}
+
+// SubmitOnboardingSurveyPayload is the payload type of the organizations
+// service submitOnboardingSurvey method.
+type SubmitOnboardingSurveyPayload struct {
+	// Use case the survey answers resolved to.
+	UseCase      string
+	SessionToken *string
 }
 
 // UpdateInviteRolePayload is the payload type of the organizations service

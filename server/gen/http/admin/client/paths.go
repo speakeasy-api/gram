@@ -107,6 +107,16 @@ func ListOrganizationActivityAdminPath() string {
 	return "/admin/organization.activity"
 }
 
+// ListUsersAdminPath returns the URL path to the admin service listUsers HTTP endpoint.
+func ListUsersAdminPath() string {
+	return "/admin/users.list"
+}
+
+// ListUserOrganizationsAdminPath returns the URL path to the admin service listUserOrganizations HTTP endpoint.
+func ListUserOrganizationsAdminPath() string {
+	return "/admin/users.organizations.list"
+}
+
 // ListOrganizationsAdminPath returns the URL path to the admin service listOrganizations HTTP endpoint.
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"
@@ -285,4 +295,44 @@ func GetSupportMatrixAdminPath() string {
 // UpdateSupportMatrixAdminPath returns the URL path to the admin service updateSupportMatrix HTTP endpoint.
 func UpdateSupportMatrixAdminPath() string {
 	return "/admin/supportMatrix.update"
+}
+
+// GetSupportCoverageAdminPath returns the URL path to the admin service getSupportCoverage HTTP endpoint.
+func GetSupportCoverageAdminPath() string {
+	return "/admin/supportCoverage.get"
+}
+
+// ListRegistryEntriesAdminPath returns the URL path to the admin service listRegistryEntries HTTP endpoint.
+func ListRegistryEntriesAdminPath() string {
+	return "/admin/registry.list"
+}
+
+// GetRegistryEntryAdminPath returns the URL path to the admin service getRegistryEntry HTTP endpoint.
+func GetRegistryEntryAdminPath() string {
+	return "/admin/registry.get"
+}
+
+// CreateRegistryEntryAdminPath returns the URL path to the admin service createRegistryEntry HTTP endpoint.
+func CreateRegistryEntryAdminPath() string {
+	return "/admin/registry.create"
+}
+
+// SaveRegistryEntryAdminPath returns the URL path to the admin service saveRegistryEntry HTTP endpoint.
+func SaveRegistryEntryAdminPath() string {
+	return "/admin/registry.save"
+}
+
+// SetRegistryEntryPublishedAdminPath returns the URL path to the admin service setRegistryEntryPublished HTTP endpoint.
+func SetRegistryEntryPublishedAdminPath() string {
+	return "/admin/registry.setPublished"
+}
+
+// GetStripeSubscriptionCandidateAdminPath returns the URL path to the admin service getStripeSubscriptionCandidate HTTP endpoint.
+func GetStripeSubscriptionCandidateAdminPath() string {
+	return "/admin/organization.stripeSubscriptionCandidate"
+}
+
+// SetStripeSubscriptionAdminPath returns the URL path to the admin service setStripeSubscription HTTP endpoint.
+func SetStripeSubscriptionAdminPath() string {
+	return "/admin/organization.setStripeSubscription"
 }

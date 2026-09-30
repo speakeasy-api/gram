@@ -474,7 +474,7 @@ func (s *PluginsService) requestMCPAccessURL(ctx context.Context, organizationID
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != organizationID || strings.TrimSpace(authCtx.OrganizationSlug) == "" {
 		return ""
 	}
-	return mcpaccess.RequestAccessURL(s.dashboardURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
+	return mcpaccess.RequestAccessURL(requestDashboardURL(ctx, s.dashboardURL, s.serverURL), authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
 		Scope: string(authz.ScopeMCPConnect), ResourceID: mcpID, ResourceName: name,
 	})
 }

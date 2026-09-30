@@ -25,16 +25,20 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 
-	// The default board is the guided journey only: the eight tasks marked
-	// HiddenByDefault stay off it for every org.
-	require.Len(t, result.Tasks, 4)
+	// New boards show every onboarding task except the optional LiteLLM setup.
+	require.Len(t, result.Tasks, 11)
 	require.Equal(t, "identity-provider", result.Tasks[0].Key)
-	require.Equal(t, "additional-agent-config", result.Tasks[3].Key)
-	for _, key := range []string{"create-marketplace", "enable-logging", "confirm-traffic", "anthropic-admin-controls", "litellm", "distribute-servers", "configure-policies", "platform-mcp"} {
-		require.Nil(t, setupTask(result.Tasks, key), key)
-	}
+	require.Equal(t, "configure-policies", result.Tasks[10].Key)
+	require.Nil(t, setupTask(result.Tasks, "litellm"))
 	for _, task := range result.Tasks {
-		require.Empty(t, task.BlockedBy, task.Key)
+		switch task.Key {
+		case "confirm-traffic":
+			require.Equal(t, []string{"instrument-agents"}, task.BlockedBy)
+		case "distribute-servers":
+			require.Equal(t, []string{"create-marketplace"}, task.BlockedBy)
+		default:
+			require.Empty(t, task.BlockedBy, task.Key)
+		}
 		require.Equal(t, "todo", task.Status, task.Key)
 		require.False(t, task.Hidden, task.Key)
 	}
@@ -43,7 +47,7 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 }
 
 // A platform admin asking for hidden tasks gets the whole catalog, with the
-// default-hidden ones flagged so the board can mark them.
+// default-hidden LiteLLM task flagged so the board can mark it.
 func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T) {
 	t.Parallel()
 
@@ -58,11 +62,13 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	result, err := ti.service.ListSetupTasks(platformCtx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
 	require.Len(t, result.Tasks, 12)
-	require.Equal(t, "platform-mcp", result.Tasks[11].Key)
-	for _, key := range []string{"create-marketplace", "enable-logging", "confirm-traffic", "anthropic-admin-controls", "litellm", "distribute-servers", "configure-policies", "platform-mcp"} {
-		require.True(t, setupTask(result.Tasks, key).Hidden, key)
+	require.Equal(t, "configure-policies", result.Tasks[11].Key)
+	require.True(t, setupTask(result.Tasks, "litellm").Hidden)
+	for _, task := range result.Tasks {
+		if task.Key != "litellm" {
+			require.False(t, task.Hidden, task.Key)
+		}
 	}
-	require.False(t, setupTask(result.Tasks, "identity-provider").Hidden)
 	keys := make([]string, 0, len(result.Tasks))
 	for _, task := range result.Tasks {
 		keys = append(keys, task.Key)
@@ -73,7 +79,7 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 		"instrument-agents", "litellm", "additional-agent-config", "confirm-traffic",
 		"distribute-servers", "configure-policies", "platform-mcp",
 	}, keys)
-	require.Empty(t, setupTask(result.Tasks, "distribute-servers").BlockedBy)
+	require.Equal(t, []string{"create-marketplace"}, setupTask(result.Tasks, "distribute-servers").BlockedBy)
 }
 
 func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T) {
@@ -176,26 +182,26 @@ func TestService_ListSetupTasksRestoresADefaultHiddenTask(t *testing.T) {
 
 	before, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
-	require.Nil(t, setupTask(before.Tasks, "configure-policies"), "hidden by default")
+	require.Nil(t, setupTask(before.Tasks, "litellm"), "hidden by default")
 
 	visible := false
-	_, err = ti.service.UpdateSetupTask(platformCtx, &gen.UpdateSetupTaskPayload{TaskKey: "configure-policies", Hidden: &visible})
+	_, err = ti.service.UpdateSetupTask(platformCtx, &gen.UpdateSetupTaskPayload{TaskKey: "litellm", Hidden: &visible})
 	require.NoError(t, err)
 
 	after, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
-	restored := setupTask(after.Tasks, "configure-policies")
+	restored := setupTask(after.Tasks, "litellm")
 	require.NotNil(t, restored, "restore has to reveal it on the ordinary board")
 	require.False(t, restored.Hidden)
 
 	// And it can be hidden again.
 	hidden := true
-	_, err = ti.service.UpdateSetupTask(platformCtx, &gen.UpdateSetupTaskPayload{TaskKey: "configure-policies", Hidden: &hidden})
+	_, err = ti.service.UpdateSetupTask(platformCtx, &gen.UpdateSetupTaskPayload{TaskKey: "litellm", Hidden: &hidden})
 	require.NoError(t, err)
 
 	again, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
-	require.Nil(t, setupTask(again.Tasks, "configure-policies"))
+	require.Nil(t, setupTask(again.Tasks, "litellm"))
 }
 
 func TestService_ListSetupTasksRequiresOrgRead(t *testing.T) {
@@ -381,7 +387,7 @@ func TestService_UpdateSetupTaskCompletesMergedCatalog(t *testing.T) {
 
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 4)
+	require.Len(t, result.Tasks, 11)
 	for _, task := range result.Tasks {
 		require.Equal(t, "done", task.Status, task.Key)
 	}

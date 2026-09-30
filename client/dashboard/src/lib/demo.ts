@@ -1,3 +1,5 @@
+import { isProdHost } from "@/lib/utils";
+
 // The shared read-only demo org. Sessions enter it via /explore-demo
 // (auth.enterDemo) or the platform-admin override cookie; identity is carried
 // by the org slug on the frontend.
@@ -6,6 +8,7 @@ export const DEMO_ORG_SLUG = "acme-demo";
 // The demo org is seeded with a single project. New visitors land here so
 // they see sample data instead of the empty org home.
 const DEMO_PROJECT_SLUG = "default";
+// Non-prod builds (local, previews) link to the canonical prod demo.
 const DEMO_APP_ORIGIN = "https://app.getgram.ai";
 
 export const DEMO_LANDING_PATH = `/${DEMO_ORG_SLUG}/projects/${DEMO_PROJECT_SLUG}`;
@@ -24,6 +27,7 @@ export const DEMO_REDIRECT_PARAM = "redirect";
 export function demoProjectPageHref(
   pathname: string,
   projectSlug?: string,
+  currentOrigin = window.location.origin,
 ): string {
   const projectRoot = projectSlug ? `/projects/${projectSlug}` : undefined;
   const projectRootIndex = projectRoot ? pathname.indexOf(projectRoot) : -1;
@@ -33,7 +37,10 @@ export function demoProjectPageHref(
       : "";
 
   const demoPath = `${DEMO_LANDING_PATH}${pagePath}`;
-  return `${DEMO_APP_ORIGIN}/explore-demo?${DEMO_REDIRECT_PARAM}=${encodeURIComponent(demoPath)}`;
+  // Prod hosts serve /explore-demo themselves; stay on them so the host-only
+  // session cookie is kept.
+  const origin = isProdHost(currentOrigin) ? "" : DEMO_APP_ORIGIN;
+  return `${origin}/explore-demo?${DEMO_REDIRECT_PARAM}=${encodeURIComponent(demoPath)}`;
 }
 
 // Set by the /explore-demo page before switching, so Exit demo can return a

@@ -1,12 +1,12 @@
-import { QueryClient } from "@tanstack/react-query";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { aProject, anOrganization } from "@/test/fixtures";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 
-import { organizationQuery } from "@/lib/adminQueries";
 import { GramAdminError } from "@/lib/gramAdminApi";
-import { routeTree } from "@/routeTree.gen";
-import { anOrganization, aProject } from "@/test/fixtures";
+import { QueryClient } from "@tanstack/react-query";
+import { organizationQuery } from "@/lib/adminQueries";
 import { renderRouteTree } from "@/test/harness";
+import { routeTree } from "@/routeTree.gen";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -177,6 +177,25 @@ function navState(): Record<string, { active: boolean; current: boolean }> {
 }
 
 describe("AppSidebar", () => {
+  it("renders the existing MCP logo as the decorative Registry icon", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    const link = within(sidebar()).getByRole("link", {
+      name: "MCP Registry",
+    });
+    const icon = link.querySelector("svg");
+    expect(icon?.getAttribute("viewBox")).toBe("0 0 195 195");
+    expect(icon?.getAttribute("stroke")).toBe("currentColor");
+    expect(icon?.getAttribute("aria-hidden")).toBe("true");
+    expect(icon?.querySelectorAll("path")).toHaveLength(3);
+    expect(link.getAttribute("href")).toBe("/registry");
+    expect(
+      within(sidebar())
+        .getByRole("link", { name: "Support matrix" })
+        .querySelector("svg")
+        ?.classList.contains("lucide-grid-2x2"),
+    ).toBe(true);
+  });
+
   it("renders the global nav outside a record", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
@@ -194,6 +213,7 @@ describe("AppSidebar", () => {
       {
         label: "Account Management",
         links: [
+          { label: "Users", href: "/users" },
           { label: "Organizations", href: "/organizations" },
           { label: "Projects", href: "/projects" },
           { label: "S-token Calculator", href: "/stoken-calculator" },
@@ -202,8 +222,14 @@ describe("AppSidebar", () => {
       {
         label: "Platform Management",
         links: [
+          { label: "MCP Registry", href: "/registry" },
           { label: "Support matrix", href: "/integration-coverage" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
+          { label: "Admin MCP", href: "/mcp-setup" },
+          {
+            label: "Demo organization",
+            href: "https://app.getgram.ai/explore-demo",
+          },
         ],
       },
     ]);
@@ -235,18 +261,27 @@ describe("AppSidebar", () => {
     expect(isActive("Projects")).toBe(true);
   });
 
-  it("renders the record nav inside a record", async () => {
-    await renderRouteTree(routeTree, {
-      initialPath: `/organizations/${ORG.slug}`,
-    });
+  it.each(["", "/projects", `/projects/${PROJECT.slug}`, "/members"])(
+    "renders only record navigation inside a record at %s",
+    async (path) => {
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}${path}`,
+      });
 
-    expect(
-      await screen.findByRole("link", { name: "All organizations" }),
-    ).toBeTruthy();
-    // The record nav replaces the global one. Two navs on screen at once was
-    // the rejected shape.
-    expect(hrefs()).not.toContain("/projects");
-  });
+      expect(
+        await screen.findByRole("link", { name: "All organizations" }),
+      ).toBeTruthy();
+      // Only the app home and back link leave the organization scope.
+      expect(
+        hrefs().every(
+          (href) =>
+            href === "/" ||
+            href === "/organizations" ||
+            href?.startsWith(`/organizations/${ORG.slug}`),
+        ),
+      ).toBe(true);
+    },
+  );
 
   it("falls back to the global nav when the record fails to load", async () => {
     mocks.getOrganization.mockRejectedValue(

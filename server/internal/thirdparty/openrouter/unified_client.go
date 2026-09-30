@@ -1078,7 +1078,7 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),
 		EncodingFormat: nil,
 		Dimensions:     dimensions,
-		User:           nil,
+		User:           &orgID,
 		Provider:       nil,
 		InputType:      nil,
 	})

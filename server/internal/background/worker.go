@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -76,18 +77,20 @@ type WorkerOptions struct {
 	// TunnelHTTPClient carries back-channel OAuth calls for remote session
 	// clients bound to an MCP tunnel. Nil means tunnel-bound refreshes fail
 	// closed with a configuration error.
-	TunnelHTTPClient    *tunnelrouting.HTTPClient
-	DB                  *pgxpool.Pool
-	EncryptionClient    *encryption.Client
-	FeatureProvider     feature.Provider
-	AssetStorage        assets.BlobStore
-	SlackClient         *slack_client.SlackClient
-	ChatMessageWriter   *chat.ChatMessageWriter
-	ChatClient          *chat.Client
-	OpenRouter          openrouter.Provisioner
-	OpenRouterSpend     openrouter.SpendClient
-	K8sClient           *k8s.KubernetesClients
-	ExpectedTargetCNAME string
+	TunnelHTTPClient *tunnelrouting.HTTPClient
+	DB               *pgxpool.Pool
+	EncryptionClient *encryption.Client
+	FeatureProvider  feature.Provider
+	AssetStorage     assets.BlobStore
+	SlackClient      *slack_client.SlackClient
+	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
+	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
+	ChatMessageWriter            *chat.ChatMessageWriter
+	ChatClient                   *chat.Client
+	OpenRouter                   openrouter.Provisioner
+	OpenRouterSpend              openrouter.SpendClient
+	K8sClient                    *k8s.KubernetesClients
+	ExpectedTargetCNAME          string
 	// ExpectedARecords are the static ingress IPs apex custom domains point A
 	// records at; used alongside ExpectedTargetCNAME for verification/health.
 	ExpectedARecords []netip.Addr
@@ -190,6 +193,7 @@ func ForDeploymentProcessing(
 		AuditLogger:                  auditLogger,
 		RemoteSessionAssertionSigner: nil,
 		SlackClient:                  nil,
+		SlackDirectoryTokenRefresher: nil,
 		ChatMessageWriter:            nil,
 		ChatClient:                   nil,
 		OpenRouter:                   nil,
@@ -278,6 +282,7 @@ func NewTemporalWorker(
 		FeatureProvider:              nil,
 		AssetStorage:                 nil,
 		SlackClient:                  nil,
+		SlackDirectoryTokenRefresher: nil,
 		ChatMessageWriter:            nil,
 		ChatClient:                   nil,
 		OpenRouter:                   nil,
@@ -333,6 +338,7 @@ func NewTemporalWorker(
 			FeatureProvider:              conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                 conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                  conv.Default(o.SlackClient, opts.SlackClient),
+			SlackDirectoryTokenRefresher: conv.Default(o.SlackDirectoryTokenRefresher, opts.SlackDirectoryTokenRefresher),
 			ChatMessageWriter:            conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
 			OpenRouter:                   conv.Default(o.OpenRouter, opts.OpenRouter),
 			OpenRouterSpend:              conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
@@ -659,6 +665,13 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
+	temporalWorker.RegisterWorkflow(SlackDirectorySyncWorkflow)
+	temporalWorker.RegisterWorkflow(SlackDirectorySweepWorkflow)
+	if opts.DB != nil && opts.EncryptionClient != nil && opts.GuardianPolicy != nil {
+		slackDirectory := newSlackDirectoryActivities(opts.DB, opts.EncryptionClient, opts.GuardianPolicy.PooledClient(), opts.SlackDirectoryTokenRefresher)
+		temporalWorker.RegisterActivity(slackDirectory.SyncSlackDirectory)
+		temporalWorker.RegisterActivity(slackDirectory.ListDueSlackDirectories)
+	}
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
@@ -763,6 +776,41 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
+	// Schedules whose ID names the task queue: every worker owns its own copy.
+	if err := AddSlackDirectorySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add Slack directory sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddOktaApplicationSyncCoordinatorSchedule(ctx, env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(ctx, "failed to add okta application sync schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddTrustedDelegationCleanupSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
+	}
+
+	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
+	}
+
+	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
+	}
+
+	// Everything below is registered under a fixed ID and belongs to the
+	// shared queue. PR previews poll their own queue in the dev namespace; if
+	// they registered these, each preview would re-point dev's schedule at its
+	// own queue and dev's jobs would stop once that preview went away. Giving
+	// previews their own copies instead would still collide with dev, because
+	// the per-row workflows these sweeps start are keyed by database IDs and
+	// preview databases are clones of dev's.
+	if env.Queue() != sharedTaskQueue {
+		logger.InfoContext(ctx, "skipping fleet-wide schedules on non-shared task queue")
+		return
+	}
+
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add platform usage metrics schedule", attr.SlogError(err))
@@ -782,12 +830,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if err := AddDeviceIntegrationSyncCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add device integration sync schedule", attr.SlogError(err))
-		}
-	}
-
-	if err := AddOktaApplicationSyncCoordinatorSchedule(ctx, env); err != nil {
-		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(ctx, "failed to add okta application sync schedule", attr.SlogError(err))
 		}
 	}
 
@@ -811,10 +853,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
 	}
 
-	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add assistant memories reaper schedule", attr.SlogError(err))
-	}
-
 	// One image recycle sweep per deployed runtime image: a new worker build
 	// carries a new image ref, so kicking on startup is the deploy signal.
 	// Best-effort — a failed kick just leaves runtimes to the lazy
@@ -827,8 +865,8 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
-	if err := AddTrustedDelegationCleanupSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
+	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant memories reaper schedule", attr.SlogError(err))
 	}
 
 	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {
@@ -849,14 +887,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddIdentityMapSyncSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add identity map sync schedule", attr.SlogError(err))
-	}
-
-	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
-	}
-
-	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddSpendRuleEvaluationSchedule(ctx, env); err != nil {

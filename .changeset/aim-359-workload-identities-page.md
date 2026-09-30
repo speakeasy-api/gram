@@ -1,5 +1,0 @@
----
-"dashboard": minor
----
-
-Add the Workload Identities page: trust an external issuer, admit the subjects it asserts, and assign the agent each admitted workload inherits its policy from. Admitting a subject and assigning its agent happen in one action, and withdrawing an issuer withdraws the subjects admitted under it. Wildcard admission is offered only where the issuer permits it, and a rule that would match nothing — a `*` in an exact subject, a missing or misplaced terminator, a stem ending in whitespace — is flagged next to the field in the destructive color rather than refused on submit. Issuer and JWKS URLs are checked against the server's https and fully-qualified-domain rules before submit. Only active agents are offered, since a suspended or revoked one contributes no policy, and an organization whose agents are all inactive is told to reactivate one rather than create another. The page stays usable where agent management is not rolled out: the agent lookup returns `404` there, so listing and withdrawing still work and only the admit action is disabled, with the reason. `workload:read` to view, `workload:write` to change.

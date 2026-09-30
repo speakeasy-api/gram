@@ -40,6 +40,7 @@ type staffChallenge struct {
 	BrowserProof  string    `json:"browser_proof"`
 	SessionHash   string    `json:"session_hash"`
 	ResourceURI   string    `json:"resource_uri"`
+	Scopes        []string  `json:"scopes"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -75,12 +76,13 @@ type StaffOAuthAuthorization struct {
 	verifier adminSessionVerifier
 	cipher   *encryption.Client
 	resource string
+	writes   WriteConfig
 }
 
 func NewStaffOAuthAuthorization(clients staffClientStore, store staffAuthorizationStore, challengeCache cache.Cache, verifier adminSessionVerifier, cipher *encryption.Client, resource string) *StaffOAuthAuthorization {
 	return &StaffOAuthAuthorization{
 		clients: clients, store: store, cache: cache.NewTypedObjectCache[staffChallenge](nil, challengeCache, cache.SuffixNone),
-		verifier: verifier, cipher: cipher, resource: resource,
+		verifier: verifier, cipher: cipher, resource: resource, writes: WriteConfig{Enabled: false, Operations: nil},
 	}
 }
 
@@ -122,6 +124,11 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 			staffRedirectError(w, r, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_request", Description: "invalid PKCE S256 challenge"})
 			return
 		}
+		scopes, ok := normalizeRequestedScopes(r.URL.Query().Get("scope"), s.writes.WritesAvailable())
+		if !ok {
+			staffRedirectError(w, r, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
+			return
+		}
 		csrf, err := staffOpaqueToken()
 		if err != nil {
 			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not start authorization")
@@ -132,7 +139,7 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 			staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not start authorization")
 			return
 		}
-		challenge := staffChallenge{ID: uuid.NewString(), ClientID: client.ID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrf, BrowserProof: staffTokenHash(proof), SessionHash: "", ResourceURI: s.resource, CreatedAt: time.Now()}
+		challenge := staffChallenge{ID: uuid.NewString(), ClientID: client.ID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrf, BrowserProof: staffTokenHash(proof), SessionHash: "", ResourceURI: s.resource, Scopes: scopes, CreatedAt: time.Now()}
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not start authorization")
 			return
@@ -200,16 +207,67 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 		staffOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not prepare authorization")
 		return
 	}
+	view := staffConsentView{
+		ClientName:  client.Name,
+		RedirectURI: challenge.RedirectURI,
+		State:       challenge.ID,
+		CSRF:        challenge.CSRFToken,
+		Write:       slices.Contains(challenge.Scopes, ScopeWrite),
+	}
 	var page strings.Builder
-	if err := staffConsentPage.Execute(&page, struct{ ClientName, RedirectURI, State, CSRF string }{ClientName: client.Name, RedirectURI: challenge.RedirectURI, State: challenge.ID, CSRF: challenge.CSRFToken}); err != nil {
+	if err := staffConsentPage.Execute(&page, view); err != nil {
 		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
 		return
 	}
+	// Chrome also checks form-action on the 303 after consent. Only this
+	// registered callback may receive the resulting browser navigation.
+	callback, err := url.Parse(challenge.RedirectURI)
+	if err != nil {
+		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
+		return
+	}
+	callbackSource := callback.Scheme + ":"
+	if callback.Host != "" {
+		callbackSource = callback.Scheme + "://" + callback.Host
+	}
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' "+callbackSource+"; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page.String()))
 }
 
-var staffConsentPage = template.Must(template.New("staff-consent").Parse(`<!doctype html><html><head><title>Connect Staff Admin MCP</title></head><body><h1>Connect Staff Admin MCP</h1><p>{{.ClientName}} requests access to staff administration. The callback is {{.RedirectURI}}.</p><form method="post" action="/admin-mcp/connect"><input type="hidden" name="state" value="{{.State}}"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><button type="submit" name="action" value="approve">Approve</button><button type="submit" name="action" value="deny">Deny</button></form></body></html>`))
+// staffConsentView is the data rendered on the staff consent page.
+type staffConsentView struct {
+	// ClientName is the registered MCP client's display name.
+	ClientName string
+	// RedirectURI is the registered callback that receives the authorization code.
+	RedirectURI string
+	// State is the opaque challenge ID posted back on approve or deny.
+	State string
+	// CSRF binds the form post to this challenge.
+	CSRF string
+	// Write is true when the client requested admin:write.
+	Write bool
+}
+
+var staffConsentPage = template.Must(template.New("staff-consent").Parse(`<!doctype html>
+<html>
+<head><title>Connect Staff Admin MCP</title></head>
+<body>
+<h1>Connect Staff Admin MCP</h1>
+<p>{{.ClientName}} requests access to staff administration. The callback is {{.RedirectURI}}.</p>
+{{if .Write}}
+<p><strong>This client also requests admin:write.</strong> It may prepare staff changes. Each change still needs your separate approval in this admin site before it runs.</p>
+{{else}}
+<p>Access is read-only.</p>
+{{end}}
+<form method="post" action="/admin-mcp/connect">
+<input type="hidden" name="state" value="{{.State}}">
+<input type="hidden" name="csrf_token" value="{{.CSRF}}">
+<button type="submit" name="action" value="approve">Approve</button>
+<button type="submit" name="action" value="deny">Deny</button>
+</form>
+</body>
+</html>`))
 
 func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
@@ -258,10 +316,17 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
 		return
 	}
+	// Revalidate against the current switch: writes may have been turned off
+	// between authorize and consent.
+	scopes, ok := normalizeRequestedScopes(strings.Join(challenge.Scopes, " "), s.writes.WritesAvailable())
+	if !ok {
+		staffRedirectError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
+		return
+	}
 	now := time.Now()
 	input := staffAuthorization{
 		Subject: urn.NewUserSubject(staff.OIDCSubject).String(), ClientID: challenge.ClientID,
-		SessionEnc: encryptedSession, ResourceURI: s.resource, Scopes: []string{"admin:read"},
+		SessionEnc: encryptedSession, ResourceURI: s.resource, Scopes: scopes,
 		CodeHash: staffTokenHash(code), CodeChallenge: challenge.CodeChallenge, RedirectURI: challenge.RedirectURI,
 		ExpiresAt: now.Add(staffAuthorizationLifetime), GrantExpires: now.Add(staffCodeLifetime),
 	}

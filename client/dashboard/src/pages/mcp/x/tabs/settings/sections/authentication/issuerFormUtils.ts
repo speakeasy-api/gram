@@ -1,4 +1,5 @@
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { getServerURL } from "@/lib/utils";
 
 // Snapshot of the issuer + RFC 8414 metadata for a given Issuer URL. Created
 // fresh on every successful discovery and seeded from saved records in the
@@ -101,23 +102,6 @@ export function clientSecretUpdateValue(
   return secret.trim() || undefined;
 }
 
-// Picks the preferred auth method from the issuer's advertised list.
-// Preference order: client_secret_basic > client_secret_post > none.
-// Falls back to client_secret_basic when the issuer advertises no recognized
-// method, so DCR always sends one — upstreams that require an explicit method
-// reject a registration that omits it ("No supported Token Endpoint Auth
-// Method provided."). This fallback was the pre-#2910 server-side default.
-export function pickPreferredAuthMethod(
-  supported: string[],
-): CreateRemoteSessionClientFormTokenEndpointAuthMethod {
-  const { ClientSecretBasic, ClientSecretPost, None } =
-    CreateRemoteSessionClientFormTokenEndpointAuthMethod;
-  for (const preferred of [ClientSecretBasic, ClientSecretPost, None]) {
-    if (supported.includes(preferred)) return preferred;
-  }
-  return ClientSecretBasic;
-}
-
 // Derive a unique slug from the Issuer URL's hostname. Mirrors the hyphen-style
 // transform an operator would reasonably hand-write so the auto-filled value
 // looks natural. Returns null for unparseable URLs — callers keep the prior slug
@@ -189,7 +173,7 @@ export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
 
 // The selectable client types for an issuer. DCR and CIMD appear only when the
 // issuer supports them; Manual is always available. The first entry is the
-// default — an automatic type (DCR, then CIMD) when one is available, so the
+// default — an automatic type (CIMD, then DCR) when one is available, so the
 // recommended path stays pre-selected while remaining switchable.
 export function availableClientTypes({
   dcrAvailable,
@@ -199,8 +183,8 @@ export function availableClientTypes({
   cimdAvailable: boolean;
 }): ClientType[] {
   const types: ClientType[] = [];
-  if (dcrAvailable) types.push("dcr");
   if (cimdAvailable) types.push("cimd");
+  if (dcrAvailable) types.push("dcr");
   types.push("manual");
   return types;
 }
@@ -226,4 +210,28 @@ export function clientTypeHelp(
       return help;
     }
   }
+}
+
+// remoteLoginCallbackURL is the single stable redirect_uri Gram uses for
+// every upstream OAuth provider, regardless of MCP server or slug (see
+// canonicalCallbackRouteBase in server/internal/remotesessions/challenge.go).
+// Manual clients need it registered on the upstream's app out-of-band; DCR
+// and CIMD clients send/publish it automatically, so this only surfaces
+// where the operator has to do that registration by hand.
+export function remoteLoginCallbackURL(): string {
+  return `${callbackBaseURL()}/mcp/remote_login_callback`;
+}
+
+// legacyCallbackURL is the callback clients registered before
+// /mcp/remote_login_callback existed. The server still mounts it and forwards
+// into the current callback, for clients in legacy callback compatibility mode.
+export function legacyCallbackURL(): string {
+  return `${callbackBaseURL()}/oauth/callback`;
+}
+
+// The server trims a trailing slash from its public URL before building
+// redirect URIs, so the URLs shown here must too or they will not match what
+// is registered.
+function callbackBaseURL(): string {
+  return getServerURL().replace(/\/+$/, "");
 }

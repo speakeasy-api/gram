@@ -369,6 +369,10 @@ func vendorFaviconURL(scheme, host string) string {
 	)
 }
 
+func isCanonicalHostedWrapper(server repo.McpServer) bool {
+	return server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID
+}
+
 // grantResourceID is the RBAC resource id for an mcp_servers row: the backing
 // toolset id when toolset-backed, else the row id. These are the ids the
 // serving path checks and the ids role-grant selectors name, so keying
@@ -658,6 +662,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err != nil {
 		return nil, err
 	}
+	if isCanonicalHostedWrapper(unlocked) || (ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID) {
+		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
+	}
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
 	if err != nil {
 		if payload.NetworkAccessMode == nil {
@@ -703,6 +710,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
+	if isCanonicalHostedWrapper(existing) {
+		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
+	}
 	// Authorization keys on the row as it exists, not the backing the payload
 	// may switch it to.
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(existing.ID, existing.ToolsetID), authCtx.ProjectID.String())); err != nil {
@@ -1008,8 +1018,12 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if _, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+	preexisting, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger)
+	if err != nil {
 		return err
+	}
+	if isCanonicalHostedWrapper(preexisting) {
+		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1048,6 +1062,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
 
+	if isCanonicalHostedWrapper(locked) {
+		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
+	}
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(locked.ID, locked.ToolsetID), authCtx.ProjectID.String())); err != nil {
 		return err
 	}

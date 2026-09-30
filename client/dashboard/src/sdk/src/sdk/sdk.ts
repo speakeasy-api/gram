@@ -64,6 +64,7 @@ import { PlatformKillswitches } from "./platformkillswitches.js";
 import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
+import { RegistryDiscovery } from "./registrydiscovery.js";
 import { RemoteMcp } from "./remotemcp.js";
 import { RemoteSessionClients } from "./remotesessionclients.js";
 import { RemoteSessionIssuers } from "./remotesessionissuers.js";
@@ -72,6 +73,7 @@ import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
 import { SkillEfficacy } from "./skillefficacy.js";
 import { Skills } from "./skills.js";
+import { SlackDirectoryConnections } from "./slackdirectoryconnections.js";
 import { SpendRules } from "./spendrules.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
@@ -458,6 +460,13 @@ export class Gram extends ClientSDK {
     return (this._skills ??= new Skills(this._options));
   }
 
+  private _slackDirectoryConnections?: SlackDirectoryConnections;
+  get slackDirectoryConnections(): SlackDirectoryConnections {
+    return (this._slackDirectoryConnections ??= new SlackDirectoryConnections(
+      this._options,
+    ));
+  }
+
   private _spendRules?: SpendRules;
   get spendRules(): SpendRules {
     return (this._spendRules ??= new SpendRules(this._options));
@@ -544,5 +553,10 @@ export class Gram extends ClientSDK {
   private _workloadIdentities?: WorkloadIdentities;
   get workloadIdentities(): WorkloadIdentities {
     return (this._workloadIdentities ??= new WorkloadIdentities(this._options));
+  }
+
+  private _registryDiscovery?: RegistryDiscovery;
+  get registryDiscovery(): RegistryDiscovery {
+    return (this._registryDiscovery ??= new RegistryDiscovery(this._options));
   }
 }

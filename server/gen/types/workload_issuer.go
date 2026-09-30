@@ -21,8 +21,14 @@ type WorkloadIssuer struct {
 	Issuer string
 	// Where the issuer publishes its signing keys.
 	JwksURI string
+	// What the platform is and what runs on it. Empty rather than absent where
+	// none is set.
+	Description string
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	AllowWildcardAdmission bool
-	CreatedAt              string
-	UpdatedAt              string
+	// Free-form labels for grouping and filtering trusted platforms. Empty rather
+	// than absent where none are set.
+	Tags      []string
+	CreatedAt string
+	UpdatedAt string
 }

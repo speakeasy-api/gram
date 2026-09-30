@@ -1,7 +1,7 @@
 import { useRef, useState, type JSX, type Ref } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { LoaderCircle } from "lucide-react";
+import { ExternalLinkIcon, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
@@ -19,6 +19,7 @@ import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import { canStartTrial } from "@/pages/organizations/rowActions";
 import { SetStripeCustomer } from "@/pages/organization/SetStripeCustomer";
+import { SetStripeSubscription } from "@/pages/organization/SetStripeSubscription";
 import {
   Select,
   SelectContent,
@@ -385,11 +386,27 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           </Row>
           <Row label="WorkOS org ID">
             {org.workos_id ? (
-              <CopyValue
-                label="WorkOS org ID"
-                value={org.workos_id}
-                className="text-sm"
-              />
+              <span className="flex min-w-0 items-center gap-1">
+                <CopyValue
+                  label="WorkOS org ID"
+                  value={org.workos_id}
+                  className="text-sm"
+                />
+                {/* Absent when the deployment has no WorkOS environment set. */}
+                {org.workos_dashboard_url ? (
+                  <Button asChild variant="ghost" size="icon-xs">
+                    <a
+                      href={org.workos_dashboard_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Open in WorkOS"
+                      title="Open in WorkOS"
+                    >
+                      <ExternalLinkIcon aria-hidden="true" />
+                    </a>
+                  </Button>
+                ) : null}
+              </span>
             ) : (
               <span className="text-muted-foreground text-sm">-</span>
             )}
@@ -402,15 +419,11 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             />
           </Row>
           <Row label="Stripe subscription ID">
-            {org.stripe_subscription_id ? (
-              <CopyValue
-                label="Stripe subscription ID"
-                value={org.stripe_subscription_id}
-                className="text-sm"
-              />
-            ) : (
-              <span className="text-muted-foreground text-sm">-</span>
-            )}
+            <SetStripeSubscription
+              key={org.id}
+              org={org}
+              focusFallbackRef={detailsHeading}
+            />
           </Row>
           <Row label="Account type">
             <Select

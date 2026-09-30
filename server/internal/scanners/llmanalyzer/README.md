@@ -255,8 +255,8 @@ scanners.PublishFindings ─► Finding topic ─► FindingCHWriter ─► Clic
 ```
 
 - Findings are **ClickHouse-only**. No `risk_results` rows are written for
-  covered sources, so the org must also have `risk-list-from-clickhouse` and
-  `risk-overview-from-clickhouse` enabled.
+  covered sources, so the org must also have `risk-overview-from-clickhouse`
+  enabled.
 - The handler bypasses `AsyncShadowGate` (requests only reach the lane for
   orgs in the `llm` or `shadow` mode). It acks analyzer failures with nothing
   published and nacks only when the findings publish fails. A batch whose LLM
@@ -423,8 +423,8 @@ model) fails streams startup with `create risk llm client: …`.
   Evaluated in the API server (sync) and the worker (async) through
   `policyflags.ProjectFlagMode`; reads as `off` when the flag is off, absent,
   unrecognized or the provider errors.
-- The org must also have `risk-list-from-clickhouse` and
-  `risk-overview-from-clickhouse` on, or async findings are invisible.
+- The org must also have `risk-overview-from-clickhouse` on, or async
+  findings are missing from the overview.
 - The `gram-risk-v1-llm-*` topics and subscriptions must exist in the
   environment (`infra/gen/kcc.yaml`, see `docs/pubsub-topology.md`).
 
@@ -485,11 +485,21 @@ Log lines worth grepping: `risk llm completion failed`,
 ## Known POC limits
 
 - **Postgres-backed surfaces are blind.** Async findings exist only in
-  ClickHouse. Chat-transcript badges and the skills / platform-MCP risk
-  status read `risk_results` and will not show LLM findings until they move
-  to ClickHouse. The Watchdog reads `risk_findings`, and the retroactive
-  exclusion reconcile walks both stores, so those two see LLM findings
-  (and hide shadow rows) already.
+  ClickHouse. Surfaces that read `risk_results` will not show LLM findings
+  until they move to ClickHouse:
+  - chat-transcript badges and the skills risk status;
+  - the chat-scoped Risk Events listing and the by-chat grouping;
+  - false-positive dismissal, in the dashboard and through the Platform MCP
+    `mark_risk_findings_false_positive` / `unmark_risk_findings_false_positive`
+    tools (an LLM finding id comes back as not found);
+  - Platform MCP session recall masking.
+
+  Surfaces that read `risk_findings` see LLM findings (and hide shadow rows)
+  already: the project-wide Risk Events listing, the Watchdog, and the
+  Platform MCP `list_risk_findings`, `list_risk_findings_by_chat`,
+  `get_risk_rule_breakdown` and `list_watchdog_findings` tools. The
+  retroactive exclusion reconcile walks both stores.
+
 - **Reasoning may quote content.** `Finding.Description` is the model's
   rationale and can paraphrase the secret or personal data it flagged. It is
   stored with the same care as the judge rationale (500 rune cap, treated
@@ -530,8 +540,8 @@ lives in streams. All three need the same environment.
 2. **Flag.** Local flags come from a CSV named by
    `GRAM_LOCAL_FEATURE_FLAGS_CSV` (unset by default, so no local flag is on).
    `server/flags.csv` already carries `gram-risk-llm-analyzer` with the
-   `shadow` variant (fourth column) plus the two ClickHouse flags for the
-   local dev org (the id the other risk flag rows use) and the demo org;
+   `shadow` variant (fourth column) plus `risk-overview-from-clickhouse` for
+   the local dev org (the id the other risk flag rows use) and the demo org;
    change the variant to `llm` to exercise the replacing mode. To use it, add
    to `mise.local.toml`:
 
@@ -543,8 +553,8 @@ lives in streams. All three need the same environment.
    For a custom set, copy `server/flags.local.csv.example` to
    `server/flags.local.csv`, uncomment the `gram-risk-llm-analyzer` row with
    your organization id (`select id, slug from organization_metadata;`) and
-   the variant you want, add `risk-list-from-clickhouse` and
-   `risk-overview-from-clickhouse` rows, and point the env var at that file.
+   the variant you want, add a `risk-overview-from-clickhouse` row, and point
+   the env var at that file.
    The path must stay under `server/`. A row without the fourth column keeps
    the boolean contract and resolves to `llm` (the transition rule).
 

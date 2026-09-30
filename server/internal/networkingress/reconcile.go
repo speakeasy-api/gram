@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -217,7 +218,15 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 	err = provider.Delete(callCtx, resources)
 	callCancel()
 	if err != nil {
-		return ReconcileResult{Requeue: false}, providerFailure(err, "")
+		failure := providerFailure(err, "")
+		blocker := ""
+		if failure.Code == k8s.NetworkIngressErrorProviderCredentialsRejected {
+			blocker = failure.Code
+		}
+		if err := recordCleanupBlocker(ctx, repo.New(conn), row, blocker); err != nil {
+			return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
+		}
+		return ReconcileResult{Requeue: false}, failure
 	}
 
 	tx, err := conn.Begin(ctx)
@@ -247,6 +256,25 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 	}
 	return ReconcileResult{Requeue: false}, nil
+}
+
+// recordCleanupBlocker exposes why a tombstone cannot finish cleanup, or clears
+// a previous blocker once teardown is progressing again.
+func recordCleanupBlocker(ctx context.Context, queries *repo.Queries, row repo.NetworkIngress, code string) error {
+	current := ""
+	if row.LastError.Valid {
+		current = row.LastError.String
+	}
+	if current == code {
+		return nil
+	}
+	_, err := queries.RecordDeletedNetworkIngressCleanupError(ctx, repo.RecordDeletedNetworkIngressCleanupErrorParams{
+		ID: row.ID, OrganizationID: row.OrganizationID, ExpectedUpdatedAt: row.UpdatedAt, LastError: conv.ToPGTextEmpty(code),
+	})
+	if err != nil {
+		return fmt.Errorf("record network ingress cleanup blocker: %w", err)
+	}
+	return nil
 }
 
 func (e *Executor) record(ctx context.Context, conn *pgxpool.Conn, row repo.NetworkIngress, observation k8s.NetworkIngressObservation, failure *ReconcileError, gateCode string) (ReconcileResult, error) {
@@ -341,6 +369,8 @@ func sameIngressDesired(a, b repo.NetworkIngress) bool {
 
 func providerFailure(err error, code string) *ReconcileError {
 	switch {
+	case errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected):
+		return reconcileFailure(k8s.NetworkIngressErrorProviderCredentialsRejected)
 	case errors.Is(err, k8s.ErrNetworkIngressDeletionPending):
 		return reconcileFailure("deletion_pending")
 	case errors.Is(err, k8s.ErrNetworkIngressReplacementPending):
@@ -361,7 +391,10 @@ func providerFailure(err error, code string) *ReconcileError {
 func reconcileFailure(code string) *ReconcileError {
 	retryable := true
 	switch code {
-	case "invalid_desired_state", "unsupported_provider", "invalid_credentials", "provider_configuration_unavailable":
+	// Rejected provider credentials need a human to fix them. The hourly sweep
+	// and "Retry cleanup" re-drive the ingress instead of spinning here.
+	case "invalid_desired_state", "unsupported_provider", "invalid_credentials", "provider_configuration_unavailable",
+		k8s.NetworkIngressErrorProviderCredentialsRejected:
 		retryable = false
 	}
 	return &ReconcileError{Code: code, Retryable: retryable}

@@ -179,6 +179,82 @@ describe("Overview", () => {
     expect(
       screen.queryByRole("button", { name: "Copy Stripe subscription ID" }),
     ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Set subscription ID" }),
+    ).toBeNull();
+  });
+
+  it("explains why a PAYG organization without a Stripe customer cannot record a subscription", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "payg",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const note = await screen.findByText(
+      /Set a Stripe customer ID before recording a subscription/,
+    );
+    expect(valueBeside("Stripe subscription ID").contains(note)).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: "Set subscription ID" }),
+    ).toBeNull();
+  });
+
+  it("lets a PAYG organization with a customer and no subscription record one", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "payg",
+      stripe_customer_id: "cus_example",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Set subscription ID" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/Set a Stripe customer ID before recording/),
+    ).toBeNull();
+  });
+
+  it("links the WorkOS org ID to the WorkOS dashboard in a new tab", async () => {
+    const link =
+      "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder";
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      workos_id: "org_workos_placeholder",
+      workos_dashboard_url: link,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const open = await screen.findByRole("link", { name: "Open in WorkOS" });
+    expect(open.getAttribute("href")).toBe(link);
+    expect(open.getAttribute("target")).toBe("_blank");
+    expect(open.getAttribute("rel")).toBe("noopener noreferrer");
+    // Beside the copy control, in the WorkOS org ID row.
+    const row = valueBeside("WorkOS org ID");
+    expect(row.contains(open)).toBe(true);
+    expect(
+      within(row).getByRole("button", { name: "Copy WorkOS org ID" }),
+    ).toBeTruthy();
+  });
+
+  it("keeps the WorkOS org ID copyable without a WorkOS link", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      workos_id: "org_workos_placeholder",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("button", { name: "Copy WorkOS org ID" });
+    expect(screen.queryByRole("link", { name: "Open in WorkOS" })).toBeNull();
   });
 
   it("marks an organization a platform admin created", async () => {

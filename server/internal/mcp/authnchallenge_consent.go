@@ -804,7 +804,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
 		if err != nil {
-			return oops.E(oops.CodeForbidden, err, "selected agent is not eligible").LogWarn(ctx, logger)
+			return consentAgentAuthorizationError(err, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		// Keep the challenge retryable while the human connects and attaches
 		// required services. Human-owned tokens alone do not authorize an agent.
@@ -814,6 +814,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
 		}
 		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
+			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
+				return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+			}
+			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+				return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
+			}
 			if !errors.Is(err, remotesessions.ErrNoValidToken) {
 				return oops.E(oops.CodeUnavailable, err, "check agent connections").LogError(ctx, logger)
 			}
@@ -917,7 +923,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		agentAuthorization, ferr = s.authorizeConsentAgent(ctx, challengeState, finalEndpoint, selectedAgentID)
 		if ferr != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
-			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
+			return consumedConsentAgentAuthorizationError(ferr).LogWarn(ctx, logger)
 		}
 	}
 

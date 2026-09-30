@@ -69,6 +69,9 @@ function PrivateNetworkCleanup({
       handleAPIError(error, "Failed to retry private network cleanup"),
   });
 
+  const credentialsRejected =
+    ingress.lastError === "provider_credentials_rejected";
+
   return (
     <SettingsSection.Panel>
       <SettingsSection.Body>
@@ -76,9 +79,15 @@ function PrivateNetworkCleanup({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Text variant="subheading">Tailscale</Text>
-              <Badge variant="warning" background>
-                Cleaning up
-              </Badge>
+              {credentialsRejected ? (
+                <Badge variant="destructive" background>
+                  Cleanup blocked
+                </Badge>
+              ) : (
+                <Badge variant="warning" background>
+                  Cleaning up
+                </Badge>
+              )}
             </div>
             <Text small muted>
               Hostname label <code>{ingress.hostname}</code>
@@ -88,11 +97,21 @@ function PrivateNetworkCleanup({
             Removal started <HumanizeDateTime date={ingress.updatedAt} />
           </Text>
         </div>
-        <Alert variant="info" dismissible={false}>
-          Gram is removing the private route and its provider resources. You can
-          connect another tailnet after cleanup completes. This page checks for
-          completion automatically.
-        </Alert>
+        {credentialsRejected ? (
+          <Alert variant="error" dismissible={false}>
+            Tailscale rejected the credentials saved for this connection, so
+            Gram can't remove its devices from your tailnet. If you disabled the
+            OAuth client or removed its scopes, restore them in the Tailscale
+            admin console, then retry cleanup. If the client or its secret was
+            deleted or regenerated, contact support to finish cleanup.
+          </Alert>
+        ) : (
+          <Alert variant="info" dismissible={false}>
+            Gram is removing the private route and its provider resources. You
+            can connect another tailnet after cleanup completes. This page
+            checks for completion automatically.
+          </Alert>
+        )}
         {statusStale && (
           <Alert variant="warning" dismissible={false}>
             Cleanup status may be out of date because the latest check failed.
@@ -144,7 +163,11 @@ function ConfiguredPrivateNetwork({
   const health = useNetworkIngressCheckHealthMutation({
     onSuccess: async () => {
       await invalidateAllNetworkIngress(queryClient);
-      toast.success("Private network health check requested");
+      toast.success(
+        ingress.status === "error"
+          ? "Private network provisioning retried"
+          : "Private network health checked",
+      );
     },
     onError: (error) =>
       handleAPIError(error, "Failed to check private network health"),
@@ -227,6 +250,36 @@ function ConfiguredPrivateNetwork({
             Latest check: {statusLabel(ingress.lastError)}
           </Alert>
         )}
+        {ingress.status === "error" && (
+          <Alert variant="warning" dismissible={false}>
+            <div className="space-y-3">
+              <Text small>
+                Tailscale could not be connected. Check your OAuth client and
+                tailnet policy, then retry provisioning. If it still fails, our
+                team can help.
+              </Text>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!entitled || health.isPending}
+                  onClick={() =>
+                    health.mutate({
+                      security: { sessionHeaderGramSession: "" },
+                    })
+                  }
+                >
+                  {health.isPending ? "Retrying..." : "Retry provisioning"}
+                </Button>
+                <Button asChild variant="tertiary" size="sm">
+                  <a href="mailto:support@speakeasy.com?subject=Tailscale%20setup%20help">
+                    Contact support
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </Alert>
+        )}
         <div className="flex items-start justify-between gap-6 border-t pt-4">
           <div className="space-y-1">
             <Text variant="subheading">Require user identity</Text>
@@ -273,16 +326,18 @@ function ConfiguredPrivateNetwork({
           unavailable.
         </SettingsSection.FooterHint>
         <SettingsSection.FooterActions>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!entitled || health.isPending}
-            onClick={() =>
-              health.mutate({ security: { sessionHeaderGramSession: "" } })
-            }
-          >
-            {health.isPending ? "Checking..." : "Check health"}
-          </Button>
+          {ingress.status !== "error" && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!entitled || health.isPending}
+              onClick={() =>
+                health.mutate({ security: { sessionHeaderGramSession: "" } })
+              }
+            >
+              {health.isPending ? "Checking..." : "Check health"}
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"

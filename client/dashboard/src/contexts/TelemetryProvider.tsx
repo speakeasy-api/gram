@@ -1,4 +1,4 @@
-import { getServerURL } from "@/lib/utils";
+import { getServerURL, isProdHost } from "@/lib/utils";
 import posthog from "posthog-js";
 import { type ReactNode, useEffect } from "react";
 import { datadogRum } from "@datadog/browser-rum";
@@ -50,14 +50,6 @@ export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
     reset: telemetry.reset.bind(telemetry),
     group: telemetry.group.bind(telemetry),
   };
-}
-
-// Hosts serving the production dashboard. Compared exactly: a substring check
-// would also match dev.ai.speakeasy.com and preview hosts.
-const PROD_HOSTS = new Set(["app.getgram.ai", "ai.speakeasy.com"]);
-
-export function isProdHost(serverURL: string): boolean {
-  return PROD_HOSTS.has(new URL(serverURL).hostname);
 }
 
 // Gram's own hosts: getgram.ai, ai.speakeasy.com and their subdomains. Matched

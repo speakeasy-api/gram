@@ -1,7 +1,7 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
-import { Dialog } from "@/components/ui/Dialog";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Link as ExternalLink } from "@/components/ui/Link";
 import {
   Sheet,
@@ -577,31 +577,32 @@ function ManualIdentity({ os }: { os: OsKey }) {
 const ORG_TOKEN_SENTINEL = "__SLOT_orgToken__";
 
 // GenerateInlineButton is a compact button sized to sit inline in the code, in
-// place of the org_token value.
+// place of the org_token value. Re-generating mints an additional token; it
+// never revokes the ones already deployed.
 function GenerateInlineButton({
   onClick,
   pending,
-  disabled,
+  canGenerate,
   existing,
 }: {
   onClick: () => void;
   pending: boolean;
-  disabled?: boolean;
+  canGenerate: boolean;
   existing: boolean;
 }) {
-  const label = existing ? "Rotate token" : "Generate token";
-  const pendingLabel = existing ? "Rotating…" : "Generating…";
+  const label = existing ? "Re-generate token" : "Generate token";
+  const pendingLabel = existing ? "Re-generating…" : "Generating…";
   return (
     <Button
       variant="secondary"
       size="sm"
       onClick={onClick}
-      disabled={pending || disabled}
+      disabled={pending || !canGenerate}
       title={
-        disabled
+        !canGenerate
           ? "Generating an agent token requires the org:admin role."
           : existing
-            ? "An agent token already exists — this rotates your existing tokens and adds the new token into managed.json."
+            ? "Creates a new agent token. Existing tokens keep working; revoke them under Settings → API Keys."
             : undefined
       }
       className="-my-1 inline-flex h-6 items-center px-2 py-0 align-middle text-xs"
@@ -654,13 +655,12 @@ function ConfigurationProfileNote() {
 }
 
 // ManagedProfileExample is the managed.json template plus the inline
-// mint/rotate action for its org_token. Shared by the setup sheet's identity
+// mint action for its org_token. Shared by the setup sheet's identity
 // step and onboarding's MDM rollout breakdown, so the file an admin copies is
 // identical wherever they meet it.
 export function ManagedProfileExample(): React.JSX.Element {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
-  const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
 
   // org_slug / org_name are org-level constants, safe to prefill. email is
   // per-user: this fleet-wide file must not pin one identity, so the example
@@ -681,8 +681,8 @@ export function ManagedProfileExample(): React.JSX.Element {
       2,
     );
 
-  // Mint/rotate the org_token (an agent-scoped key) and copy the ready-to-paste
-  // managed.json on success. See useAgentToken for the create→revoke ordering.
+  // Mint the org_token (an agent-scoped key) and copy the ready-to-paste
+  // managed.json on success.
   const {
     generatedToken,
     autoCopied,
@@ -699,20 +699,6 @@ export function ManagedProfileExample(): React.JSX.Element {
     generatedToken ?? ORG_TOKEN_SENTINEL,
   );
 
-  const handleGenerateOrRotate = () => {
-    if (hasExistingAgentKey) {
-      setRotateConfirmOpen(true);
-      return;
-    }
-
-    generate();
-  };
-
-  const confirmRotation = () => {
-    setRotateConfirmOpen(false);
-    generate();
-  };
-
   // Host the inline action only while no token exists. CodeBlock matches the
   // sentinel as a substring of whatever token shiki emits (it ends up quoted as
   // a JSON value), so we key by the bare sentinel; copyText keeps a
@@ -723,9 +709,9 @@ export function ManagedProfileExample(): React.JSX.Element {
         [ORG_TOKEN_SENTINEL]: {
           node: (
             <GenerateInlineButton
-              onClick={handleGenerateOrRotate}
+              onClick={generate}
               pending={isPending}
-              disabled={!canGenerate}
+              canGenerate={canGenerate}
               existing={hasExistingAgentKey}
             />
           ),
@@ -746,7 +732,7 @@ export function ManagedProfileExample(): React.JSX.Element {
         <code>email</code> and have each user run <code>speakeasy enroll</code>.
         Click{" "}
         <strong className="text-foreground">
-          {hasExistingAgentKey ? "Rotate token" : "Generate token"}
+          {hasExistingAgentKey ? "Re-generate token" : "Generate token"}
         </strong>{" "}
         in the example to mint the <code>org_token</code>.
       </Text>
@@ -788,39 +774,6 @@ export function ManagedProfileExample(): React.JSX.Element {
           </Alert>
         )}
       </div>
-
-      <Dialog open={rotateConfirmOpen} onOpenChange={setRotateConfirmOpen}>
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>Rotate device agent token?</Dialog.Title>
-            <Dialog.Description>
-              This expires the token currently deployed in your MDM settings.
-            </Dialog.Description>
-          </Dialog.Header>
-          <Alert variant="error">
-            <AlertTitle>
-              Your current MDM integration will stop working
-            </AlertTitle>
-            <AlertDescription>
-              You must replace the existing <code>org_token</code> with the new
-              token and propagate the updated configuration to every managed
-              device. Until then, policy syncing to end-user devices will not
-              work.
-            </AlertDescription>
-          </Alert>
-          <Dialog.Footer>
-            <Button
-              variant="tertiary"
-              onClick={() => setRotateConfirmOpen(false)}
-            >
-              <Button.Text>Cancel</Button.Text>
-            </Button>
-            <Button variant="destructive-primary" onClick={confirmRotation}>
-              <Button.Text>Rotate token</Button.Text>
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
     </>
   );
 }
@@ -1474,6 +1427,95 @@ function PlatformTile({
   );
 }
 
+// OrgValues surfaces the two per-org values every MDM profile needs, org_slug
+// and org_token, so an admin can copy them without opening a platform
+// walkthrough. The token is minted here the same way the walkthrough's
+// managed.json example does it, and is shown only once.
+function OrgValues() {
+  const { slug: orgSlug } = useOrganization();
+  const apiKeysHref = useOrgRoutes().apiKeys.href();
+  const {
+    generatedToken,
+    autoCopied,
+    isPending,
+    isError,
+    canGenerate,
+    hasExistingAgentKey,
+    generate,
+  } = useAgentToken({ buildCopyText: (token) => token });
+
+  return (
+    <div className="border-border bg-card border p-4">
+      <p className="text-eyebrow mb-2">Organization values</p>
+      <Text small muted className="mb-3">
+        Every MDM profile needs these two values. Each platform&apos;s
+        walkthrough pre-fills <code>org_slug</code>. The <code>org_token</code>{" "}
+        is displayed once when generated. Re-generating creates a new token and
+        leaves existing ones working.
+      </Text>
+      <dl className="grid grid-cols-[max-content_1fr] items-center gap-x-4 gap-y-2">
+        <dt className="font-mono text-xs">org_slug</dt>
+        <dd className="flex min-w-0 items-center gap-2">
+          <code className="truncate text-xs">{orgSlug}</code>
+          <CopyButton text={orgSlug} size="xs" tooltip="Copy org_slug" />
+        </dd>
+        <dt className="font-mono text-xs">org_token</dt>
+        <dd className="flex min-w-0 items-center gap-2">
+          {generatedToken ? (
+            <>
+              <code className="truncate text-xs">{generatedToken}</code>
+              <CopyButton
+                text={generatedToken}
+                size="xs"
+                tooltip="Copy org_token"
+              />
+            </>
+          ) : (
+            <GenerateInlineButton
+              onClick={generate}
+              pending={isPending}
+              canGenerate={canGenerate}
+              existing={hasExistingAgentKey}
+            />
+          )}
+        </dd>
+      </dl>
+
+      {generatedToken && (
+        <Alert variant="warning" alignTop className="mt-3">
+          <AlertTitle>
+            {autoCopied
+              ? "org_token copied to your clipboard"
+              : "Copy your org_token now"}
+          </AlertTitle>
+          <AlertDescription>
+            The <code>org_token</code> is shown only once and can't be retrieved
+            again. Manage or revoke agent tokens anytime under Settings →{" "}
+            <Link to={apiKeysHref} className={LINK_CLASS}>
+              API Keys
+            </Link>
+            .
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {isError && (
+        <Alert variant="error" alignTop className="mt-3">
+          <AlertTitle>Couldn't generate a token</AlertTitle>
+          <AlertDescription>
+            Something went wrong creating the agent token. Try again, or create
+            one under Settings →{" "}
+            <Link to={apiKeysHref} className={LINK_CLASS}>
+              API Keys
+            </Link>{" "}
+            with the Agent scope.
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
+  );
+}
+
 // DeviceAgentSetup is the shared device-agent setup UI: pick a local OS or
 // Remote sessions from the tile grid, then walk its steps in a sheet. Rendered
 // both on the standalone Device Agent page and inside onboarding.
@@ -1506,6 +1548,7 @@ export function DeviceAgentSetup(): React.JSX.Element {
               path in each local platform&apos;s walkthrough covers it.
             </Text>
           </div>
+          <OrgValues />
           <Text small muted>
             Pick the platform you're installing on to walk through setup.
           </Text>

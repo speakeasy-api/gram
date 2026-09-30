@@ -7,6 +7,7 @@ import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscri
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
 import { adminCreateGlobalIssuer } from "../funcs/adminCreateGlobalIssuer.js";
 import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
+import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDisableOrganization } from "../funcs/adminDisableOrganization.js";
 import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
@@ -25,10 +26,13 @@ import { adminGetOrganizationOnboarding } from "../funcs/adminGetOrganizationOnb
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
+import { adminGetRegistryEntry } from "../funcs/adminGetRegistryEntry.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
 import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.js";
+import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubscriptionCandidate.js";
+import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
@@ -37,18 +41,24 @@ import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMemb
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
+import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
+import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
+import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
+import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetOrganizationOnboarding } from "../funcs/adminSetOrganizationOnboarding.js";
+import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
+import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
 import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
@@ -65,20 +75,26 @@ import { AdminInferenceSpendMonth } from "../models/components/admininferencespe
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
+import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
+import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingConfiguration } from "../models/components/adminonboardingconfiguration.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
 import { AdminProjectDetail } from "../models/components/adminprojectdetail.js";
+import { AdminRegistryEntry } from "../models/components/adminregistryentry.js";
+import { AdminRegistryPage } from "../models/components/adminregistrypage.js";
 import { AdminSession } from "../models/components/adminsession.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
+import { AdminStripeSubscriptionCandidate } from "../models/components/adminstripesubscriptioncandidate.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
 import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
+import { CreateRegistryEntryRequestBody } from "../models/components/createregistryentryrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
 import { DisableOrganizationRequestBody } from "../models/components/disableorganizationrequestbody.js";
 import { EnableOrganizationRequestBody } from "../models/components/enableorganizationrequestbody.js";
@@ -98,12 +114,16 @@ import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remo
 import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
+import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { SetOrganizationOnboardingRequestBody } from "../models/components/setorganizationonboardingrequestbody.js";
+import { SetRegistryEntryPublishedRequestBody } from "../models/components/setregistryentrypublishedrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
+import { SetStripeSubscriptionRequestBody } from "../models/components/setstripesubscriptionrequestbody.js";
 import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
+import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
 import { SupportMatrix } from "../models/components/supportmatrix.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
@@ -123,9 +143,12 @@ import { AdminGetOrganizationFeaturesRequest } from "../models/operations/adming
 import { AdminGetOrganizationOnboardingRequest } from "../models/operations/admingetorganizationonboarding.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
+import { AdminGetRegistryEntryRequest } from "../models/operations/admingetregistryentry.js";
 import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
+import { AdminGetStripeSubscriptionCandidateRequest } from "../models/operations/admingetstripesubscriptioncandidate.js";
+import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
   AdminListGlobalIssuerConvergenceCandidatesResponse,
@@ -145,6 +168,9 @@ import {
   AdminListOrganizationsResponse,
 } from "../models/operations/adminlistorganizations.js";
 import { AdminListProjectMcpServersRequest } from "../models/operations/adminlistprojectmcpservers.js";
+import { AdminListRegistryEntriesRequest } from "../models/operations/adminlistregistryentries.js";
+import { AdminListUserOrganizationsRequest } from "../models/operations/adminlistuserorganizations.js";
+import { AdminListUsersRequest } from "../models/operations/adminlistusers.js";
 import {
   AdminServeImageRequest,
   AdminServeImageResponse,
@@ -538,6 +564,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * setStripeSubscription admin
+   *
+   * @remarks
+   * Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.
+   */
+  async setStripeSubscription(
+    request: SetStripeSubscriptionRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminSetStripeSubscription(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getSpendBreakdown admin
    *
    * @remarks
@@ -582,6 +625,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminStripeSubscription> {
     return unwrapAsync(adminGetStripeSubscription(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getStripeSubscriptionCandidate admin
+   *
+   * @remarks
+   * Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.
+   */
+  async getStripeSubscriptionCandidate(
+    request: AdminGetStripeSubscriptionCandidateRequest,
+    options?: RequestOptions,
+  ): Promise<AdminStripeSubscriptionCandidate> {
+    return unwrapAsync(adminGetStripeSubscriptionCandidate(
       this,
       request,
       options,
@@ -699,6 +759,91 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminListProjectMcpServersResult> {
     return unwrapAsync(adminListProjectMcpServers(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * createRegistryEntry admin
+   *
+   * @remarks
+   * Staff-only registry administration.
+   */
+  async createRegistryEntry(
+    request: CreateRegistryEntryRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryEntry> {
+    return unwrapAsync(adminCreateRegistryEntry(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getRegistryEntry admin
+   *
+   * @remarks
+   * Staff-only registry administration.
+   */
+  async getRegistryEntry(
+    request: AdminGetRegistryEntryRequest,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryEntry> {
+    return unwrapAsync(adminGetRegistryEntry(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listRegistryEntries admin
+   *
+   * @remarks
+   * Staff-only registry administration.
+   */
+  async listRegistryEntries(
+    request?: AdminListRegistryEntriesRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryPage> {
+    return unwrapAsync(adminListRegistryEntries(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * saveRegistryEntry admin
+   *
+   * @remarks
+   * Staff-only registry administration.
+   */
+  async saveRegistryEntry(
+    request: SaveRegistryEntryRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryEntry> {
+    return unwrapAsync(adminSaveRegistryEntry(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setRegistryEntryPublished admin
+   *
+   * @remarks
+   * Staff-only registry administration.
+   */
+  async setRegistryEntryPublished(
+    request: SetRegistryEntryPublishedRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryEntry> {
+    return unwrapAsync(adminSetRegistryEntryPublished(
       this,
       request,
       options,
@@ -914,6 +1059,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * getSupportCoverage admin
+   *
+   * @remarks
+   * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.
+   */
+  async getSupportCoverage(
+    request: AdminGetSupportCoverageRequest,
+    options?: RequestOptions,
+  ): Promise<SupportCoverageResult> {
+    return unwrapAsync(adminGetSupportCoverage(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getSupportMatrix admin
    *
    * @remarks
@@ -1024,6 +1186,40 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminStartTrial(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listUsers admin
+   *
+   * @remarks
+   * Staff-only active user discovery.
+   */
+  async listUsers(
+    request?: AdminListUsersRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminListUsersResult> {
+    return unwrapAsync(adminListUsers(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listUserOrganizations admin
+   *
+   * @remarks
+   * Staff-only active user discovery.
+   */
+  async listUserOrganizations(
+    request: AdminListUserOrganizationsRequest,
+    options?: RequestOptions,
+  ): Promise<AdminListUserOrganizationsResult> {
+    return unwrapAsync(adminListUserOrganizations(
       this,
       request,
       options,

@@ -1,3 +1,24 @@
+import type {
+  AdminSetRegistryEntryPublishedMutationData,
+  AdminSetRegistryEntryPublishedMutationError,
+  AdminSetRegistryEntryPublishedMutationVariables,
+} from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
+import type {
+  AdminSaveRegistryEntryMutationData,
+  AdminSaveRegistryEntryMutationError,
+  AdminSaveRegistryEntryMutationVariables,
+} from "@gram/admin-client/react-query/adminSaveRegistryEntry";
+import type {
+  AdminCreateRegistryEntryMutationData,
+  AdminCreateRegistryEntryMutationError,
+  AdminCreateRegistryEntryMutationVariables,
+} from "@gram/admin-client/react-query/adminCreateRegistryEntry";
+import type { AdminListRegistryEntriesRequest } from "@gram/admin-client/models/operations/adminlistregistryentries";
+import { buildAdminListRegistryEntriesQuery } from "@gram/admin-client/react-query/adminListRegistryEntries.core";
+import { buildAdminGetRegistryEntryQuery } from "@gram/admin-client/react-query/adminGetRegistryEntry.core";
+import { buildAdminCreateRegistryEntryMutation } from "@gram/admin-client/react-query/adminCreateRegistryEntry";
+import { buildAdminSaveRegistryEntryMutation } from "@gram/admin-client/react-query/adminSaveRegistryEntry";
+import { buildAdminSetRegistryEntryPublishedMutation } from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { AdminMeterUsageResponse } from "@gram/admin-client/models/components/adminmeterusageresponse";
 import { buildAdminGetMeterUsageQuery } from "@gram/admin-client/react-query/adminGetMeterUsage.core";
@@ -36,17 +57,23 @@ import {
   type AdminCreateGlobalIssuerMutationVariables,
 } from "@gram/admin-client/react-query/adminCreateGlobalIssuer";
 import { buildAdminServeImageQuery } from "@gram/admin-client/react-query/adminServeImage.core";
+import { adminGetStripeSubscriptionCandidate } from "@gram/admin-client/funcs/adminGetStripeSubscriptionCandidate";
 import { buildAdminDisableOrganizationMutation } from "@gram/admin-client/react-query/adminDisableOrganization";
 import { buildAdminEnableOrganizationMutation } from "@gram/admin-client/react-query/adminEnableOrganization";
 import { buildAdminExtendTrialMutation } from "@gram/admin-client/react-query/adminExtendTrial";
 import { buildAdminRearmTrialMutation } from "@gram/admin-client/react-query/adminRearmTrial";
+import { buildAdminSetStripeSubscriptionMutation } from "@gram/admin-client/react-query/adminSetStripeSubscription";
 import { buildAdminStartTrialMutation } from "@gram/admin-client/react-query/adminStartTrial";
 import type { AdminOrganization as SdkAdminOrganization } from "@gram/admin-client/models/components/adminorganization";
+import type { AdminStripeSubscriptionCandidate } from "@gram/admin-client/models/components/adminstripesubscriptioncandidate";
 import type { DisableOrganizationRequestBody } from "@gram/admin-client/models/components/disableorganizationrequestbody";
 import type { EnableOrganizationRequestBody } from "@gram/admin-client/models/components/enableorganizationrequestbody";
 import type { ExtendTrialRequestBody } from "@gram/admin-client/models/components/extendtrialrequestbody";
 import type { RearmTrialRequestBody } from "@gram/admin-client/models/components/rearmtrialrequestbody";
+import type { SetStripeSubscriptionRequestBody } from "@gram/admin-client/models/components/setstripesubscriptionrequestbody";
 import type { StartTrialRequestBody } from "@gram/admin-client/models/components/starttrialrequestbody";
+import type { AdminGetStripeSubscriptionCandidateRequest } from "@gram/admin-client/models/operations/admingetstripesubscriptioncandidate";
+import { unwrapAsync } from "@gram/admin-client/types/fp";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { buildAdminGetGlobalIssuerMigratePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerMigratePreflight.core";
 import { buildAdminGetGlobalIssuerDuplicatePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerDuplicatePreflight.core";
@@ -279,6 +306,7 @@ export function organizationFromSdk(
     slug: org.slug,
     account_type: org.accountType,
     workos_id: org.workosId,
+    workos_dashboard_url: org.workosDashboardUrl,
     stripe_customer_id: org.stripeCustomerId,
     stripe_subscription_id: org.stripeSubscriptionId,
     whitelisted: org.whitelisted,
@@ -303,8 +331,31 @@ const disableOrganizationMutation =
   buildAdminDisableOrganizationMutation(redirectingClient);
 const enableOrganizationMutation =
   buildAdminEnableOrganizationMutation(redirectingClient);
+const setStripeSubscriptionMutation =
+  buildAdminSetStripeSubscriptionMutation(redirectingClient);
 const changeTrialEndDateMutation =
   buildAdminChangeTrialEndDateMutation(redirectingClient);
+
+// Preview is a one-shot confirmation read of live Stripe state, not a
+// typed-as-you-go query.
+export function getStripeSubscriptionCandidate(
+  request: AdminGetStripeSubscriptionCandidateRequest,
+): Promise<AdminStripeSubscriptionCandidate> {
+  return redirecting(
+    unwrapAsync(
+      adminGetStripeSubscriptionCandidate(redirectingClient, request),
+    ),
+  );
+}
+
+export async function setStripeSubscription(
+  request: SetStripeSubscriptionRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(setStripeSubscriptionMutation.mutationFn({ request })),
+  );
+}
+
 export async function changeTrialEndDate(
   request: ChangeTrialEndDateRequestBody,
 ): Promise<AdminOrganization> {
@@ -573,4 +624,69 @@ export function adminIssuerImageQuery(
   id: string,
 ): ReturnType<typeof createAdminIssuerImageQuery> {
   return createAdminIssuerImageQuery(id);
+}
+
+function createRegistryEntriesQuery(params: AdminListRegistryEntriesRequest) {
+  const generated = buildAdminListRegistryEntriesQuery(
+    redirectingClient,
+    params,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createRegistryEntryQuery(id: string) {
+  const generated = buildAdminGetRegistryEntryQuery(redirectingClient, { id });
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    enabled: id !== "",
+  });
+}
+
+export function useCreateRegistryEntryMutation(): UseMutationResult<
+  AdminCreateRegistryEntryMutationData,
+  AdminCreateRegistryEntryMutationError,
+  AdminCreateRegistryEntryMutationVariables
+> {
+  return useMutation({
+    ...buildAdminCreateRegistryEntryMutation(redirectingClient),
+    retry: false,
+  });
+}
+
+export function useSaveRegistryEntryMutation(): UseMutationResult<
+  AdminSaveRegistryEntryMutationData,
+  AdminSaveRegistryEntryMutationError,
+  AdminSaveRegistryEntryMutationVariables
+> {
+  return useMutation({
+    ...buildAdminSaveRegistryEntryMutation(redirectingClient),
+    retry: false,
+  });
+}
+
+export function useSetRegistryEntryPublishedMutation(): UseMutationResult<
+  AdminSetRegistryEntryPublishedMutationData,
+  AdminSetRegistryEntryPublishedMutationError,
+  AdminSetRegistryEntryPublishedMutationVariables
+> {
+  return useMutation({
+    ...buildAdminSetRegistryEntryPublishedMutation(redirectingClient),
+    retry: false,
+  });
+}
+
+export function registryEntriesQuery(
+  params: AdminListRegistryEntriesRequest,
+): ReturnType<typeof createRegistryEntriesQuery> {
+  return createRegistryEntriesQuery(params);
+}
+
+export function registryEntryQuery(
+  id: string,
+): ReturnType<typeof createRegistryEntryQuery> {
+  return createRegistryEntryQuery(id);
 }

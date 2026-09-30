@@ -16,9 +16,67 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
+
+func TestTransactionalEndpointWritesRejectCanonicalHostedServers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-hosted")
+	serverID := toolset.ID
+	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: serverID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText("hosted server"),
+		Slug:      conv.ToPGText("hosted-" + uuid.NewString()),
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: *authCtx.ProjectID, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: authCtx.OrganizationSlug + "-existing",
+	})
+	require.NoError(t, err)
+
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = ti.service.CreateMcpEndpointInTransaction(ctx, tx, mcpendpoints.CreateMcpEndpointInTransactionInput{
+		AuthContext: authCtx, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: authCtx.OrganizationSlug + "-new",
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "hosted MCP endpoints are managed through the toolset")
+	_, _, err = ti.service.UpdateMcpEndpointAddressInTransaction(ctx, tx, mcpendpoints.UpdateMcpEndpointAddressInput{
+		AuthContext: authCtx, EndpointID: endpoint.ID, Slug: authCtx.OrganizationSlug + "-renamed",
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "hosted MCP endpoints are managed through the toolset")
+	stored, err := mcpendpointsrepo.New(tx).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{ID: endpoint.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, endpoint.Slug, stored.Slug)
+}
+
+func TestTransactionalEndpointWritesAllowIndependentToolsetBackedServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-independent")
+	serverID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	endpoint, err := ti.service.CreateMcpEndpointInTransaction(ctx, tx, mcpendpoints.CreateMcpEndpointInTransactionInput{
+		AuthContext: authCtx, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: authCtx.OrganizationSlug + "-independent-endpoint",
+	})
+	require.NoError(t, err)
+	_, _, err = ti.service.UpdateMcpEndpointAddressInTransaction(ctx, tx, mcpendpoints.UpdateMcpEndpointAddressInput{
+		AuthContext: authCtx, EndpointID: uuid.MustParse(endpoint.ID), Slug: authCtx.OrganizationSlug + "-independent-renamed",
+	})
+	require.NoError(t, err)
+}
 
 func TestUpdateMcpEndpointAddressInTransaction(t *testing.T) {
 	t.Parallel()

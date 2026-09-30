@@ -441,3 +441,23 @@ UPDATE chats SET title = @title, updated_at = NOW()
 WHERE id = @id AND project_id = @project_id
   AND NOT title_manually_set
   AND title IS DISTINCT FROM @title;
+
+-- name: ListToolCallBlockSurfaceEvidence :many
+-- Per-provider, per-chat block counts inside a window, used to attribute
+-- synchronous policy decisions to the consuming surface they were returned to.
+-- chat_id is the join key onto the ClickHouse session summaries that carry
+-- hook_source: blocks whose chat was never resolved (enforcement can run
+-- before the chat row is persisted) come back under a NULL chat_id and are
+-- attributed at the coarser provider granularity instead of being dropped.
+SELECT
+    provider
+  , chat_id
+  , count(*) AS block_count
+  , max(created_at)::timestamptz AS last_block_at
+FROM tool_call_blocks
+WHERE organization_id = sqlc.arg(organization_id)
+  AND project_id = ANY(sqlc.arg(project_ids)::uuid[])
+  AND deleted IS FALSE
+  AND created_at >= sqlc.arg(from_time)
+  AND created_at <= sqlc.arg(to_time)
+GROUP BY provider, chat_id;

@@ -4,39 +4,18 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ClosedEnum } from "../../types/enums.js";
-
-/**
- * Omit to preserve the saved preset. Null/reset is not supported.
- */
-export const SetOrganizationOnboardingRequestBodyPreset = {
-  Gateway: "gateway",
-  Security: "security",
-} as const;
-/**
- * Omit to preserve the saved preset. Null/reset is not supported.
- */
-export type SetOrganizationOnboardingRequestBodyPreset = ClosedEnum<
-  typeof SetOrganizationOnboardingRequestBodyPreset
->;
 
 export type SetOrganizationOnboardingRequestBody = {
   organizationId: string;
   /**
-   * Omit to preserve the saved preset. Null/reset is not supported.
+   * A key from presets. Omit to preserve the saved preset. Null/reset is not supported.
    */
-  preset?: SetOrganizationOnboardingRequestBodyPreset | undefined;
+  preset?: string | undefined;
   /**
    * Complete explicit selection; an empty array selects no tasks.
    */
   visibleTaskKeys: Array<string>;
 };
-
-/** @internal */
-export const SetOrganizationOnboardingRequestBodyPreset$outboundSchema:
-  z.ZodMiniEnum<typeof SetOrganizationOnboardingRequestBodyPreset> = z.enum(
-    SetOrganizationOnboardingRequestBodyPreset,
-  );
 
 /** @internal */
 export type SetOrganizationOnboardingRequestBody$Outbound = {
@@ -52,9 +31,7 @@ export const SetOrganizationOnboardingRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     organizationId: z.string(),
-    preset: z.optional(
-      SetOrganizationOnboardingRequestBodyPreset$outboundSchema,
-    ),
+    preset: z.optional(z.string()),
     visibleTaskKeys: z.array(z.string()),
   }),
   z.transform((v) => {

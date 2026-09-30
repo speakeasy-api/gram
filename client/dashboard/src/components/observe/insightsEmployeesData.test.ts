@@ -18,6 +18,7 @@ function makeMember(
     joinedAt: new Date("2025-01-01T00:00:00Z"),
     principalUrn: `user:${overrides.id}`,
     roleIds: [],
+    directoryRoleIds: [],
     ...overrides,
   };
 }

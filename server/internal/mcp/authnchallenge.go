@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -285,6 +288,10 @@ var (
 	errAgentSessionCredentialLoad = errors.New("load agent session credential")
 )
 
+// errIssuerGateCallerProfile marks an operational lookup failure while preparing
+// a caller assertion, after the session subject has already been validated.
+var errIssuerGateCallerProfile = errors.New("resolve caller assertion user profile")
+
 // errCredentialRejected marks a rejection the presented credential itself
 // earned: a bad signature, the wrong audience, an expired or revoked token, a
 // session row that is gone, or a principal whose admission has been withdrawn.
@@ -342,12 +349,50 @@ const (
 	// a required upstream remote session for the issuer is missing or
 	// unusable, so the runtime challenged the client to reconnect.
 	issuerGateReasonInvalidRemoteSession = "invalid_remote_session"
+
+	// issuerGateReasonRemoteSessionUnavailable: the bearer token was accepted
+	// but a required upstream token could not be refreshed for a reason that
+	// clears on its own, so the runtime answered 503 for the client to retry.
+	// Separate from invalid_remote_session so an upstream outage does not read
+	// as a wave of users needing to reconnect.
+	issuerGateReasonRemoteSessionUnavailable = "remote_session_unavailable"
+
+	// issuerGateReasonRemoteSessionMisconfigured: the bearer token was accepted
+	// but a required upstream token could not be refreshed because the issuer
+	// or client configuration is broken, which only an administrator repairs.
+	issuerGateReasonRemoteSessionMisconfigured = "remote_session_misconfigured"
 )
+
+// The texts the issuer gate returns when the bearer token was accepted but a
+// required upstream remote session cannot be used. Each doubles as an RFC 6750
+// error_description, so it must stay printable ASCII without '"' or '\'.
+const (
+	// remoteSessionReconnectDescription tells the user the upstream grant is
+	// gone and that authorizing the MCP server again reconnects it.
+	remoteSessionReconnectDescription = "The upstream connection for this MCP server is missing or expired. Reauthorize the MCP server to reconnect it."
+
+	// remoteSessionMisconfiguredDescription tells the user that reconnecting
+	// cannot help and who can.
+	remoteSessionMisconfiguredDescription = "The upstream connection for this MCP server is misconfigured. Contact the MCP server administrator."
+
+	// remoteSessionUnavailableMessage tells the client the failure is
+	// temporary and the request can be retried unchanged.
+	remoteSessionUnavailableMessage = "The upstream authorization server for this MCP server is temporarily unavailable. Retry shortly."
+)
+
+// remoteSessionUnavailableRetryAfter is the Retry-After on a 503 for a
+// temporarily unavailable upstream token endpoint. Refresh attempts for one
+// session are single-flighted, so retrying sooner mostly queues behind the
+// same failing attempt; 30 seconds lets a brief upstream outage pass without
+// holding a user's request for long.
+const remoteSessionUnavailableRetryAfter = 30 * time.Second
 
 func issuerGateFailureReason(err error) string {
 	switch {
 	case errors.Is(err, errIssuerGateOrgLookup):
 		return "org_lookup_failed"
+	case errors.Is(err, errIssuerGateCallerProfile):
+		return "caller_profile_unavailable"
 	case errors.Is(err, errToolSelectionResourceMismatch):
 		return "tool_selection_resource_mismatch"
 	case errors.Is(err, errToolSelectionLoad):
@@ -429,13 +474,17 @@ func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *Resolv
 // authz.Engine.ShouldEnforce / PrepareContext treat the request as a real
 // authenticated session. AccountType is retained as session metadata but does
 // not control RBAC enforcement.
-func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, *toolfilter.SessionSelection, error) {
+//
+// The bool reports whether the session came from a refreshable grant, which
+// is what lets a client recover from invalid_token through its refresh token
+// and, failing that, a new authorization.
+func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, *toolfilter.SessionSelection, bool, error) {
 	if token == "" {
-		return ctx, nil, nil, nil
+		return ctx, nil, nil, false, nil
 	}
 	resource, err := endpoint.RootURL(baseURL)
 	if err != nil {
-		return ctx, nil, nil, fmt.Errorf("build user-session resource audience: %w", err)
+		return ctx, nil, nil, false, fmt.Errorf("build user-session resource audience: %w", err)
 	}
 	legacyAudience, _ := endpoint.legacyToolsetAudienceURN()
 	session, acceptedAudience, err := validateUserSessionBearerAudiences(ctx, s.userSessionSigner, s.chatSessionsManager, token, userSessionBearerAudiences{
@@ -447,9 +496,9 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		// A revocation store that could not answer judged nothing; everything
 		// else here is the token failing on its own merits.
 		if errors.Is(err, sessiontokens.ErrRevocationUnavailable) {
-			return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
+			return ctx, nil, nil, false, fmt.Errorf("validate user-session bearer: %w", err)
 		}
-		return ctx, nil, nil, fmt.Errorf("%w: validate user-session bearer: %w", errCredentialRejected, err)
+		return ctx, nil, nil, false, fmt.Errorf("%w: validate user-session bearer: %w", errCredentialRejected, err)
 	}
 	if acceptedAudience == userSessionAudienceLegacy {
 		s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
@@ -461,19 +510,19 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	// widen a restrictive session to all tools.
 	toolSelection, err := s.loadSessionToolSelection(ctx, endpoint, session.JTI())
 	if err != nil {
-		return ctx, nil, nil, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
+		return ctx, nil, nil, false, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
 	}
 	if toolSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, toolSelection.Resource) {
 		// Issuer-scoped tokens are portable across endpoints sharing the
 		// issuer; a selection consented on endpoint A must not authorize
 		// same-named tools on endpoint B. Reject into reauth.
-		return ctx, nil, nil, errToolSelectionResourceMismatch
+		return ctx, nil, nil, false, errToolSelectionResourceMismatch
 	}
 
 	subject := session.Subject()
 	newCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, session.JTI(), session.ClientID())
 	if err != nil {
-		return ctx, nil, nil, err
+		return ctx, nil, nil, false, err
 	}
 	if subject.Kind == urn.SessionSubjectKindAgent {
 		row, qerr := usersessions_repo.New(s.db).GetUserSessionPrincipalCredentialByJTI(ctx, usersessions_repo.GetUserSessionPrincipalCredentialByJTIParams{
@@ -482,17 +531,17 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		})
 		if qerr != nil {
 			if errors.Is(qerr, pgx.ErrNoRows) {
-				return ctx, nil, nil, oops.C(oops.CodeUnauthorized)
+				return ctx, nil, nil, false, oops.C(oops.CodeUnauthorized)
 			}
-			return ctx, nil, nil, fmt.Errorf("%w: %w", errAgentSessionCredentialLoad, qerr)
+			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errAgentSessionCredentialLoad, qerr)
 		}
 		credential, cerr := loadAgentSessionCredential(endpoint, subject, row.SubjectUrn, row.OrganizationID, row.AuthorizerUserID, row.DelegatedGrants, row.DelegatedGrantsVersion)
 		if cerr != nil {
-			return ctx, nil, nil, cerr
+			return ctx, nil, nil, false, cerr
 		}
 		newCtx, err = s.admitAgentSession(newCtx, endpoint, subject, credential)
 		if err != nil {
-			return ctx, nil, nil, err
+			return ctx, nil, nil, false, err
 		}
 	}
 	if subject.Kind == urn.SessionSubjectKindWorkload {
@@ -503,21 +552,25 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		if qerr != nil {
 			// The session row is gone: revoked, or never ours.
 			if errors.Is(qerr, pgx.ErrNoRows) {
-				return ctx, nil, nil, fmt.Errorf("%w: %w", errCredentialRejected, oops.C(oops.CodeUnauthorized))
+				return ctx, nil, nil, false, fmt.Errorf("%w: %w", errCredentialRejected, oops.C(oops.CodeUnauthorized))
 			}
-			return ctx, nil, nil, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, qerr)
+			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, qerr)
 		}
 		credential, cerr := loadWorkloadSessionCredential(endpoint, subject, row.SubjectUrn, row.OrganizationID, row.DelegatedGrants, row.DelegatedGrantsVersion)
 		if cerr != nil {
-			return ctx, nil, nil, fmt.Errorf("%w: %w", errCredentialRejected, cerr)
+			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errCredentialRejected, cerr)
 		}
 		newCtx, err = s.admitWorkloadSession(newCtx, endpoint, subject, credential)
 		if err != nil {
-			return ctx, nil, nil, err
+			return ctx, nil, nil, false, err
 		}
 	}
 	newCtx = s.identityValidator.StampValidatedSession(newCtx, session)
-	return newCtx, &subject, toolSelection, nil
+	// Only the token endpoint's issuer-scoped grants carry a refresh token.
+	// They are the sessions that validate against the issuer audience; ID-JAG
+	// and workload sessions are minted for the exact resource and have none.
+	refreshable := acceptedAudience != userSessionAudienceResource
+	return newCtx, &subject, toolSelection, refreshable, nil
 }
 
 type userSessionBearerAudiences struct {
@@ -633,6 +686,23 @@ func (s *Service) contextForSessionSubject(
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		authCtx.UserID = subject.ID
+		// Resolve the validated Gram subject through the session manager's
+		// cached database profile. Request-authentication profile values may
+		// belong to a different user.
+		needsProfile, err := s.endpointNeedsCallerProfile(ctx, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		if needsProfile {
+			profile, _, err := s.sessions.GetUserInfo(ctx, subject.ID)
+			if err != nil {
+				return nil, fmt.Errorf("%w: %w", errIssuerGateCallerProfile, err)
+			}
+			if profile == nil || profile.UserID != subject.ID {
+				return nil, fmt.Errorf("%w: profile does not match session subject", errIssuerGateCallerProfile)
+			}
+			authCtx.Email = &profile.Email
+		}
 		return contextvalues.WithAuthenticatedActor(
 			ctx, authCtx, urn.NewPrincipal(urn.PrincipalTypeUser, subject.ID),
 		), nil
@@ -662,6 +732,23 @@ func (s *Service) contextForSessionSubject(
 	return ctx, oops.C(oops.CodeUnauthorized)
 }
 
+func (s *Service) endpointNeedsCallerProfile(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
+	// Meta dispatch can select a private tunneled member after authentication.
+	if endpoint.MetaMcpServerID.Valid {
+		return true, nil
+	}
+	if endpoint.IsPublic || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid {
+		return false, nil
+	}
+	server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
+		ID: endpoint.McpServerID.UUID, ProjectID: endpoint.ProjectID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("%w: resolve destination: %w", errIssuerGateCallerProfile, err)
+	}
+	return server.TunneledMcpServerID.Valid && server.Visibility == mcpservers.VisibilityPrivate, nil
+}
+
 // AuthenticateChallengeHeader builds the WWW-Authenticate value (RFC 9728
 // §5.3): `Bearer resource_metadata="<protectedResourceURL>"`. The remote-MCP
 // proxy also uses it to replace upstream challenges on relayed 401/403
@@ -686,8 +773,22 @@ func WriteAuthenticateChallenge(w http.ResponseWriter, protectedResourceURL, mes
 // §3.1 invalid_token error code, telling the client to drop the token it holds
 // and obtain a new one rather than retry with it.
 func writeInvalidTokenChallenge(w http.ResponseWriter, protectedResourceURL, message string) error {
-	header := fmt.Sprintf(`%s, error="%s"`, AuthenticateChallengeHeader(protectedResourceURL), oautherr.CodeInvalidToken)
-	return writeChallenge(w, header, message)
+	return writeChallenge(w, bearerErrorChallengeHeader(protectedResourceURL, oautherr.CodeInvalidToken, ""), message)
+}
+
+// bearerErrorChallengeHeader is AuthenticateChallengeHeader with the RFC 6750
+// §3 error and error_description attributes, each omitted when empty. RFC 6750
+// limits both to printable ASCII without '"' or '\', so callers pass fixed
+// strings rather than anything derived from a request or an upstream.
+func bearerErrorChallengeHeader(protectedResourceURL, errorCode, errorDescription string) string {
+	header := AuthenticateChallengeHeader(protectedResourceURL)
+	if errorCode != "" {
+		header += fmt.Sprintf(`, error="%s"`, errorCode)
+	}
+	if errorDescription != "" {
+		header += fmt.Sprintf(`, error_description="%s"`, errorDescription)
+	}
+	return header
 }
 
 func writeChallenge(w http.ResponseWriter, header, message string) error {
@@ -711,6 +812,12 @@ type issuerGateAuthentication struct {
 	mcpURL               string
 	surface              mcpmetrics.Surface
 	subject              urn.SessionSubject
+
+	// refreshableUserSession reports that the bearer was a Gram-minted user
+	// session from a refreshable grant, not an assistant-runtime token, an
+	// agent API key, or a resource-scoped session. Only such a client can
+	// act on invalid_token by refreshing and then reauthorizing.
+	refreshableUserSession bool
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -758,7 +865,8 @@ func (s *Service) authenticateIssuerGate(
 		surface = mcpmetrics.SurfaceMeta
 	}
 
-	newCtx, subject, toolSelection, valErr := s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
+	newCtx, subject, toolSelection, refreshable, valErr := s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
+	refreshableUserSession := subject != nil && refreshable
 	if subject == nil {
 		// Accept an assistant-runtime JWT, but only when the assistant
 		// belongs to the endpoint's project — otherwise a token minted
@@ -817,6 +925,8 @@ func (s *Service) authenticateIssuerGate(
 		mcpURL:               mcpURL,
 		surface:              surface,
 		subject:              *subject,
+
+		refreshableUserSession: refreshableUserSession,
 	}, toolSelection, nil
 }
 
@@ -845,30 +955,71 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 		return tokens, nil
 	}
 
+	// The Gram credential is valid in every rejection below; only the upstream
+	// remote session behind it is not. The specific broken upstream and the
+	// answer its token endpoint gave are logged by remotesessions.
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
 	switch {
+	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
+		// The upstream token endpoint failed in a way that clears on its own.
+		// A 401 would send the user through reauthorization over an outage, so
+		// the client is told to retry the same request instead.
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate deferred: upstream remote session temporarily unavailable", issuerGateReasonRemoteSessionUnavailable)
+		return nil, remoteSessionUnavailableError(w, err)
+	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
+		// Reauthorizing goes through the same broken issuer or client
+		// configuration, so the challenge omits invalid_token and names who
+		// can repair it instead.
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session misconfigured", issuerGateReasonRemoteSessionMisconfigured)
+		header := bearerErrorChallengeHeader(authentication.protectedResourceURL, "", remoteSessionMisconfiguredDescription)
+		return nil, writeChallenge(w, header, remoteSessionMisconfiguredDescription)
 	case errors.Is(err, remotesessions.ErrNoValidToken):
-		// The Gram user-session token is valid, but a required upstream
-		// remote session for this issuer is missing or unusable, so the
-		// runtime issues a re-auth challenge pointing the user at
-		// {routeBase}/{slug}/connect. This 401 is byte-identical to an
-		// invalid-token rejection (both are CodeUnauthorized), so without
-		// this line the two are indistinguishable in production. The
-		// specific broken upstream (and its refresh reason) is logged by
-		// remotesessions.ResolveAccessToken.
-		endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected: upstream remote session missing or unusable",
-			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-			attr.SlogToolsetMCPSlug(endpoint.Slug),
-			attr.SlogMcpURL(authentication.mcpURL),
-			attr.SlogOAuthFailureReason(issuerGateReasonInvalidRemoteSession),
-		)
-		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonInvalidRemoteSession, authentication.mcpURL, authentication.surface)
-		return nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "")
+		// A required upstream remote session is missing or its grant is gone,
+		// and only the user reconnecting it at {routeBase}/{slug}/connect
+		// repairs that. RFC 6750 reads a 401 without an error code as "no
+		// credentials presented", so clients replay the token they hold
+		// indefinitely; invalid_token makes them refresh, which the token
+		// endpoint refuses for the same reason, and then reauthorize through
+		// the consent page that reconnects the upstream. Only a user session
+		// from a refreshable grant can follow that path. Every other caller
+		// keeps the bare challenge, since telling it to discard a credential
+		// it cannot replace, or an agent session whose attached credential
+		// belongs to someone else, would strand it.
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession)
+		errorCode := ""
+		if authentication.refreshableUserSession && authentication.subject.Kind == urn.SessionSubjectKindUser {
+			errorCode = oautherr.CodeInvalidToken
+		}
+		header := bearerErrorChallengeHeader(authentication.protectedResourceURL, errorCode, remoteSessionReconnectDescription)
+		return nil, writeChallenge(w, header, remoteSessionReconnectDescription)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 	default:
 		return tokens, nil
 	}
+}
+
+// remoteSessionUnavailableError sets Retry-After on w and returns the 503 for a
+// required upstream token endpoint that is temporarily unavailable, so every
+// path that hits one tells the client the same thing and paces its retries.
+func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
+	w.Header().Set("Retry-After", strconv.Itoa(int(remoteSessionUnavailableRetryAfter.Seconds())))
+	return oops.E(oops.CodeUnavailable, err, "%s", remoteSessionUnavailableMessage)
+}
+
+// recordRemoteSessionRejection logs and counts an issuer-gate rejection whose
+// bearer token was accepted but whose upstream remote session was not. The
+// response itself is byte-identical to other rejections of the same status,
+// so this line is what tells them apart in production.
+func (s *Service) recordRemoteSessionRejection(ctx context.Context, authentication *issuerGateAuthentication, message, reason string) {
+	endpoint := authentication.endpoint
+	endpoint.LogWith(s.logger).WarnContext(ctx, message,
+		attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
+		attr.SlogToolsetMCPSlug(endpoint.Slug),
+		attr.SlogMcpURL(authentication.mcpURL),
+		attr.SlogOAuthFailureReason(reason),
+	)
+	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
 }
 
 // ApplyIssuerGate authenticates and immediately resolves upstream credentials.

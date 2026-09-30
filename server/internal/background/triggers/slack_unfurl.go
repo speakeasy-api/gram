@@ -64,7 +64,7 @@ func (a *App) unfurlSlackGramLinks(ctx context.Context, instance triggerrepo.Tri
 			break
 		}
 		parsed, err := url.Parse(link.URL)
-		if err != nil || !strings.EqualFold(parsed.Hostname(), a.siteURL.Hostname()) {
+		if err != nil || !a.isDashboardHost(parsed.Hostname()) {
 			continue
 		}
 		unfurls[link.URL] = map[string]any{
@@ -92,6 +92,16 @@ func (a *App) unfurlSlackGramLinks(ctx context.Context, instance triggerrepo.Tri
 	}); err != nil {
 		a.logger.WarnContext(ctx, "unfurl slack gram links", attr.SlogError(err))
 	}
+}
+
+// isDashboardHost reports whether host serves the Gram dashboard: the site URL
+// host or one of the extra first-party platform hosts.
+func (a *App) isDashboardHost(host string) bool {
+	if strings.EqualFold(host, a.siteURL.Hostname()) {
+		return true
+	}
+	_, ok := a.platformHosts[strings.ToLower(host)]
+	return ok
 }
 
 // opaqueSlugPattern matches path segments that carry no human meaning: UUIDs,

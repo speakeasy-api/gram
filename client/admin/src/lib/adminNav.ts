@@ -10,16 +10,26 @@
 
 import {
   BuildingIcon,
+  UsersIcon,
   CalculatorIcon,
   FolderIcon,
-  KeyRoundIcon,
   Grid2X2Icon,
+  KeyRoundIcon,
+  PlugZapIcon,
 } from "lucide-react";
+
+import { McpIcon } from "@/components/ui/mcp-icon";
 
 export const ADMIN_NAV_GROUPS = [
   {
     label: "Account Management",
     items: [
+      {
+        to: "/users",
+        label: "Users",
+        keywords: "people email members directory",
+        icon: UsersIcon,
+      },
       {
         to: "/organizations",
         label: "Organizations",
@@ -47,6 +57,12 @@ export const ADMIN_NAV_GROUPS = [
     label: "Platform Management",
     items: [
       {
+        to: "/registry",
+        label: "MCP Registry",
+        keywords: "catalog mcp servers",
+        icon: McpIcon,
+      },
+      {
         to: "/integration-coverage",
         label: "Support matrix",
         keywords: "support matrix products capabilities integrations",
@@ -57,6 +73,12 @@ export const ADMIN_NAV_GROUPS = [
         label: "Remote Session Issuers",
         keywords: "oauth identity providers issuers",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/mcp-setup",
+        label: "Admin MCP",
+        keywords: "install connect agents claude codex cursor tailscale",
+        icon: PlugZapIcon,
       },
     ],
   },

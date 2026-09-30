@@ -1,5 +1,69 @@
 # dashboard
 
+## 0.128.0
+
+### Minor Changes
+
+- ecf54b8: Choose when a Slack assistant replies: only when @-mentioned, when @-mentioned and then for the rest of that thread, or to any message in its channels. Slack setup asks this in plain terms, and it can be changed later from the chat or the trigger settings. An assistant following a thread can step out once it is no longer needed, and an @-mention brings it back caught up on what it missed. It never replies to its own messages, and when it starts a new thread it can keep the replies in its current conversation.
+- 7181521: A grant made directly to a person for a specific resource now outranks a block they inherit from a role or from everyone. Administrators can block an MCP server for a role, including a directory-synced one, and still give individual members of that role access to it by name without changing role membership. A person's own blocks still apply, grants covering every resource do not outrank blocks, and agent grants never outrank blocks. The rule applies to every blockable permission (the organization, projects, MCP servers, environments, skills, plugins, and workloads). `access.listGrants` now reports each scope's `direct_selectors`, and the MCP server access page shows who keeps access through their own rules before a role or everyone is removed from a server.
+- 679c03b: Redesign how a remote MCP server's User Identity client is shown and changed. A connected client reads as "Connected" with how many people are signed in and its scopes, plus an Advanced link to the client. Clearing it offers an existing client, Auto-Configure or Manual credentials. Auto-Configure can choose between CIMD and DCR when the provider supports both, Manual can set scopes, and replacing a client asks first because everyone has to sign in again.
+
+### Patch Changes
+
+- 35621c4: Set the command palette's intent-resolved verbs apart under an "Actions" heading, and run reversible ones on the first Enter with an Undo in the toast. Only actions that cannot be undone, such as publishing the plugin marketplace, still ask for a second Enter.
+- 679c03b: Add `remoteSessions.count`, which returns how many distinct people hold a live session through one remote session client. The dashboard's User Identity row will use it to show how many people are signed in.
+- 0fb637f: Show members who hold a role through a directory role mapping on the Team page, the Roles & Permissions page, role filters, and role member counts. Members now report mapped roles in a separate `directory_role_ids` field, and the Team page marks them as coming from the directory because they cannot be removed there.
+- 7fef8b5: Enable hook fail-open during control-plane outages for newly created organizations. Existing organization settings and explicit fail-closed choices are preserved.
+- 679c03b: `remoteSessions.commitServerIdentityConfiguration` accepts an optional `registration_method` in auto client mode. `cimd`, the default, prefers a Client ID Metadata Document and falls back to dynamic client registration; `dcr` always registers dynamically.
+- f143e71: An MCP-scoped risk policy no longer requires at least one tool per selected server. An empty tool list (or unchecking every tool in the dashboard scope picker) is now normalized to "every tool on this server," matching what happens when no tool selection is made at all, instead of being rejected or silently dropping the server from the policy's scope.
+- f143e71: Fix the MCP scope picker losing focus on the server a user just deselected, jumping to whichever server happens to be first in the list instead. This made it look like individual tools could no longer be picked after unchecking a server with many tools.
+- 0be1824: Okta setup checklist: order the public-key steps the way the Okta console requires (save the key URL first, then switch client authentication), list the required API scopes and admin roles one per line, submit the client ID from its checklist step instead of a separate section, and make the group headings easier to see.
+- 2aa7341: Use a tunneled server's saved resource identifier as the audience of signed caller assertions. When the setting is empty, use `tunneled-mcp-server:<ID>`. Preserve trailing slashes and escaped characters when saving the identifier, and explain the audience setting in the dashboard. Show the organization ID that caller assertions carry in `organization_id` on tunneled MCP server settings.
+
+## 0.127.0
+
+### Minor Changes
+
+- 7f9ba34: Show observed public versus private traffic in an MCP server's or gateway's Network access panel, so admins can check which route clients still use before switching to private only or back to public.
+  
+  Each resolved inbound MCP request to a hosted, remote, tunneled or stored gateway endpoint now writes one `mcp_network_request` telemetry log carrying the server id and network surface. Rows carry no tool URN, so they never count as tool calls. A new `mcp_network_traffic_hourly_summaries` table keeps hourly totals for 90 days, and `telemetry.getMcpNetworkTraffic` returns zero-filled hourly points for a 24h or 7d window plus the last time each route was seen. Counts only cover requests observed while telemetry logs are enabled, and the panel says so.
+
+### Patch Changes
+
+- 5d1d293: The Inspect Connect button no longer opens a first-party route that returns not found. Connect is offered only for issuer-gated servers on a Gram-hosted address; other servers point at authentication settings.
+
+## 0.126.0
+
+### Minor Changes
+
+- 8636862: Add the Workload Identities page: trust an external issuer, admit the subjects it asserts, and assign the agent each admitted workload inherits its policy from. Admitting a subject and assigning its agent happen in one action, and withdrawing an issuer withdraws the subjects admitted under it. Wildcard admission is offered only where the issuer permits it, and a rule that would match nothing — a `*` in an exact subject, a missing or misplaced terminator, a stem ending in whitespace — is flagged next to the field in the destructive color rather than refused on submit. Issuer and JWKS URLs are checked against the server's https and fully-qualified-domain rules before submit. Only active agents are offered, since a suspended or revoked one contributes no policy, and an organization whose agents are all inactive is told to reactivate one rather than create another. The page stays usable where agent management is not rolled out: the agent lookup returns `404` there, so listing and withdrawing still work and only the admit action is disabled, with the reason. `workload:read` to view, `workload:write` to change.
+- d621b76: The setup board now has a single "Set up identity provider" task with three steps: verify a domain, connect single sign-on, and sync the directory. The separate "Verify your domain" task, and the legacy "Connect identity provider" and "Set up directory sync" tasks, are gone, so nothing on the board is blocked behind another identity task. The security onboarding preset and the demo organization show the combined task. The single sign-on step stays disabled until a domain is verified, and a blocked portal popup now shows an error on every step.
+- 3552233: Allow risk policies to target selected MCP servers, gateways, and tools while restricting those policies to tool traffic.
+- e251e57: Add User, Agent, and No Identity modes for Remote MCP servers, including identity selection during creation, managed Authorization credentials, and editable Remote Identity Provider setup.
+- 4769ce6: Manage directory role mappings on the IDP and SSO page. Every directory group is listed with its own role picker, unmapped groups first, and picking a role saves it. Attribute values are available as a collapsed fallback, and "Create role…" opens the role editor and maps the new role on return. The role editor no longer fails when the agents service is unavailable, the active navigation item drops its box border, and Team rows no longer show the killswitch status icon.
+- 8a4657e: Add organization Slack workspace authorization. Organization administrators can connect and disconnect multiple workspaces from Identity; connecting a listed workspace again reauthorizes it. Credentials remain encrypted and workspace changes are audited. Shared Explore Demo shows read-only workspace history. Directory sync and identity mapping are not included.
+- 662c2d9: Sync organization Slack directories after connection or on an administrator's request. Show workspace sync history, member counts, and a searchable read-only directory across workspaces. Complete snapshots preserve identity mappings and retained members; failed fetches leave the prior directory intact.
+  
+  Shared Explore Demo shows saved directories without allowing sync. Disconnecting a workspace deletes its synced members. Connected workspaces sync every 30 minutes, refreshing rotating Slack tokens as needed, and admins can still sync now.
+- 0d17f90: Let organization administrators map Slack memberships to existing personnel from an inline picker, reassign or remove mappings, and review directory changes without granting new permissions. Syncs map members whose email matches exactly one person.
+  
+  The shared demo shows synthetic mappings with read-only controls. Disconnecting a workspace removes its mappings.
+
+### Patch Changes
+
+- c4e433b: Serve the full product on extra first-party hosts listed in `GRAM_PLATFORM_HOSTS` (such as `ai.speakeasy.com`) alongside the server URL's host. Login started on such a host calls back and lands on that same host, and the dashboard reports telemetry for `ai.speakeasy.com` to the production projects.
+- ada7519: Make API key scopes readable at a glance. Creating a key now opens in a side pane rather than a modal, so the form is no longer boxed in by a fixed height, and each scope is a card that leads with the integration it exists for — calling MCP servers at runtime, setup automation, plugin telemetry, device agent rollout — with its exact grants and exclusions one click away instead of crowding the page. The descriptions were also corrected against what the API enforces: a Consumer key does not reach the toolsets service, a Producer key covers everything a Consumer key can do, and the Agent key's setup instructions are now separate from its permissions. The Chat scope is no longer offered, since nothing is provisioned against it any more; keys that already carry it keep working. The project binding list is now alphabetical rather than newest-first.
+- 068e1bf: Configure Remote MCP server identity through one atomic provider and client setup operation.
+- 52cbebd: Rank command palette (⌘K) results by intent. On every keystroke the palette sends the typed text and a short list of prefiltered candidates to `launcher.judge`, re-orders the list from Jev's probability distributions, and shows a green ↵ on the top row when the intent is settled. Jev can also pick a verb per row: open, enable or disable an MCP server, or publish the plugin marketplace; mutating verbs always require a second Enter inside the palette. Without a resolvable OpenRouter key the palette behaves as before.
+- c5b9863: Let organization admins turn off the device agent's Shadow AI scan from the fleet configuration.
+- d192f03: Add management API and SDK operations to prepare, inspect, and unlink downstream identity-chaining client registrations with explicit grant evidence and generation checks. Readiness fails closed on missing grant evidence, and uncertain registration persistence requires reconciliation rather than replay.
+- 1bae108: Gate the MCP scope picker in the risk policy editor behind the `gram-mcp-scoped-policies` rollout flag. Policies that already have an MCP scope keep the picker.
+- 35060d1: Protect active identity-chaining bindings during issuer lifecycle changes. Block unsafe issuer deletion and consolidation, and show binding counts and explicit unlinking guidance in the dashboard and admin migration review.
+- bcc9952: In the MCP scope picker for risk policies, unchecking "All MCP servers" now clears the selection, and tools can be picked on a server that is not yet in scope.
+- 0e155d1: Make the setup wizard the only onboarding view at /setup, and derive the tasks it walks from the onboarding survey result recorded through a new submitOnboardingSurvey endpoint. Onboarding presets and setup cards are each defined in one registry.
+- 1edb857: Add the latest OpenRouter models to the playground, chat, and assistant model pickers: Claude Opus 5.5, Claude Fable 5.1, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, Gemini 3.8 Flash, DeepSeek V4.1 Flash, Grok 4.7, Qwen3.8 Max, Qwen3.8 Flash, GLM-5.3, and Kimi K3.
+- 632cdc4: Show mapped Slack workspace accounts under Work identities on a person's Accounts & devices page. Employees can read their own mappings and contact an administrator for corrections. Organization administrators can review an active person's exact membership in the organization directory. Reads require a browser session and active membership; mappings grant no additional permissions.
+
 ## 0.125.0
 
 ### Minor Changes

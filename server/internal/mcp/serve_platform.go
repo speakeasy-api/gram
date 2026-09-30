@@ -210,19 +210,25 @@ func (s *Service) handlePlatformToolsetRequest(
 		}()
 	}
 
+	if !methodAvailable(req, *protocolVersion, mcpversions.SupportedPlatformToolset()) {
+		return nil, unavailableMethod(req)
+	}
+
 	switch req.Method {
-	case "ping":
+	case mcpversions.MethodPing:
 		return handlePing(ctx, s.logger, req.ID, serverInfoPlatformToolset)
-	case "initialize":
+	case mcpversions.MethodServerDiscover:
+		return handleServerDiscover(ctx, s.logger, req.ID, describePlatformServer(), mcpversions.SupportedPlatformToolset())
+	case mcpversions.MethodInitialize:
 		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion)
-	case "notifications/initialized", "notifications/cancelled":
+	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case "tools/list":
+	case mcpversions.MethodToolsList:
 		return s.listPlatformToolsetTools(ctx, authCtx, toolset, req)
-	case "tools/call":
+	case mcpversions.MethodToolsCall:
 		return s.callPlatformToolsetTool(ctx, authCtx, toolset, req, chatIDHeader)
 	default:
-		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
+		return nil, unavailableMethod(req)
 	}
 }
 
@@ -241,22 +247,18 @@ func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetr
 	// resolution because entry-time resolution saw a handshake with no
 	// declared version; anything downstream of dispatch must see the
 	// negotiated value.
-	negotiated := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedPlatformToolset())
+	negotiated, ok := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedPlatformToolset())
+	if !ok {
+		return nil, unavailableMethod(req)
+	}
 	protocolVersion.InEffect = negotiated
 
 	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, negotiated)
 	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)
 
 	result := &result[initializeResult]{
-		ID: req.ID,
-		Result: initializeResult{
-			ProtocolVersion: negotiated,
-			Capabilities: map[string]json.RawMessage{
-				"tools": json.RawMessage("{}"),
-			},
-			ServerInfo:   serverInfoPlatformToolset,
-			Instructions: "",
-		},
+		ID:             req.ID,
+		Result:         describePlatformServer().initializeResult(negotiated),
 		serverIdentity: serverInfoPlatformToolset,
 		cacheHints:     nil,
 	}
@@ -478,18 +480,18 @@ func (s *Service) callPlatformToolsetTool(
 	}()
 
 	decision := s.scanEvaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
-		Surface:        mcpriskscan.SurfacePlatformMCP,
-		Method:         mcpriskscan.MethodToolsCall,
-		OrganizationID: descriptor.OrganizationID,
-		ProjectID:      descriptor.ProjectID,
-		ServerID:       "",
-		MetaServerID:   "",
-		ToolsetID:      "",
-		ToolName:       descriptor.Name,
-		ResourceURI:    "",
-		PromptName:     "",
-		// The header only: the assistant thread id fallback above is not a chat.
-		ChatID: chatIDHeader,
+		Surface:         mcpriskscan.SurfacePlatformMCP,
+		Method:          mcpriskscan.MethodToolsCall,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        platformtools.PlatformToolsetID(toolset.Slug).String(),
+		MetaServerID:    "",
+		ToolsetID:       "",
+		ToolName:        descriptor.Name,
+		ResourceURI:     "",
+		PromptName:      "",
+		ChatID:          chatIDHeader,
+		ToolAnnotations: desc.Annotations,
 	}, mcpriskscan.BorrowPayload(requestBodyBytes)))
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)

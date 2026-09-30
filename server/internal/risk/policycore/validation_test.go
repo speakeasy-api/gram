@@ -31,8 +31,9 @@ func TestNormalizeAndValidateMCPScope(t *testing.T) {
 		MCPServerID: serverID,
 		Tools:       []string{"read", "write"},
 	}}, scope.Servers)
-	require.NoError(t, ValidateMCPScopeOwnership(scope, []uuid.UUID{serverID}))
-	require.Error(t, ValidateMCPScopeOwnership(scope, nil))
+	require.NoError(t, ValidateMCPScopeOwnership(scope, []uuid.UUID{serverID}, nil))
+	require.NoError(t, ValidateMCPScopeOwnership(scope, nil, []uuid.UUID{serverID}))
+	require.Error(t, ValidateMCPScopeOwnership(scope, nil, nil))
 
 	allServers, err := NormalizeMCPScope(&MCPScopeInput{
 		AllServers:      true,
@@ -49,17 +50,46 @@ func TestNormalizeAndValidateMCPScope(t *testing.T) {
 	_, err = NormalizeMCPScope(&MCPScopeInput{ToolAnnotations: []string{"unknownHint"}})
 	require.ErrorContains(t, err, "not recognized")
 
-	_, err = NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{{
+	wildcard, err := NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{{
 		MCPServerID: serverID.String(),
 		Tools:       []string{},
 	}}})
-	require.ErrorContains(t, err, "must include at least one tool")
+	require.NoError(t, err)
+	require.Equal(t, []MCPServerScope{{
+		MCPServerID: serverID,
+		Tools:       []string{AllToolsWildcard},
+	}}, wildcard.Servers)
+
+	allServersWildcard, err := NormalizeMCPScope(&MCPScopeInput{
+		AllServers: true,
+		Servers: []*MCPServerScopeInput{{
+			MCPServerID: serverID.String(),
+			Tools:       []string{},
+		}},
+	})
+	require.NoError(t, err, "an empty tool list also satisfies the all-servers custom-tools requirement")
+	require.Equal(t, []string{AllToolsWildcard}, allServersWildcard.Servers[0].Tools)
 
 	_, err = NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{
 		{MCPServerID: serverID.String()},
 		{MCPServerID: serverID.String()},
 	}})
 	require.Error(t, err)
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{Servers: []*MCPServerScopeInput{{
+		MCPServerID: serverID.String(),
+		Tools:       []string{AllToolsWildcard},
+	}}})
+	require.ErrorContains(t, err, "reserved")
+
+	_, err = NormalizeMCPScope(&MCPScopeInput{
+		ToolAnnotations: []string{"readOnlyHint"},
+		Servers: []*MCPServerScopeInput{{
+			MCPServerID: serverID.String(),
+			Tools:       []string{},
+		}},
+	})
+	require.Error(t, err, "an empty tool list must not silently override a tool-annotation rule")
 }
 
 func TestValidateMCPScopeSources(t *testing.T) {

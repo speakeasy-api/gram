@@ -14,6 +14,8 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 import type { SetOrganizationOnboardingRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingrequestbody";
+import type { SetStripeSubscriptionRequestBody } from "@gram/admin-client/models/components/setstripesubscriptionrequestbody";
+import type { AdminGetStripeSubscriptionCandidateRequest } from "@gram/admin-client/models/operations/admingetstripesubscriptioncandidate";
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 
 import {
@@ -51,6 +53,14 @@ describe("generated admin boundary", () => {
       boundary.setAdminOrganizationOnboarding,
     ).parameters.toEqualTypeOf<
       [request: SetOrganizationOnboardingRequestBody]
+    >();
+    expectTypeOf(boundary.setStripeSubscription).parameters.toEqualTypeOf<
+      [request: SetStripeSubscriptionRequestBody]
+    >();
+    expectTypeOf(
+      boundary.getStripeSubscriptionCandidate,
+    ).parameters.toEqualTypeOf<
+      [request: AdminGetStripeSubscriptionCandidateRequest]
     >();
   });
 
@@ -162,6 +172,7 @@ describe("generated admin boundary", () => {
       presets: [
         {
           key: "gateway",
+          title: "Gateway",
           visible_task_keys: ["create-marketplace", "distribute-servers"],
         },
       ],
@@ -184,7 +195,11 @@ describe("generated admin boundary", () => {
       organizationId: "org_explicit",
       preset: "gateway",
       presets: [
-        { visibleTaskKeys: ["create-marketplace", "distribute-servers"] },
+        {
+          key: "gateway",
+          title: "Gateway",
+          visibleTaskKeys: ["create-marketplace", "distribute-servers"],
+        },
       ],
     });
     const read = fetch.mock.calls[0]![0] as Request;
@@ -479,6 +494,88 @@ describe("organization writes through the generated client", () => {
     });
   });
 
+  it("loads a Stripe subscription candidate through the generated client", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "sub_placeholder_1",
+          customer_id: "cus_placeholder_1",
+          status: "active",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      boundary.getStripeSubscriptionCandidate({
+        organizationId: "org one",
+        stripeSubscriptionId: "sub_placeholder_1",
+      }),
+    ).resolves.toEqual({
+      id: "sub_placeholder_1",
+      customerId: "cus_placeholder_1",
+      status: "active",
+    });
+
+    const request = fetch.mock.calls[0]![0] as Request;
+    const url = new URL(request.url);
+    expect(url.pathname).toBe(
+      "/admin/organization.stripeSubscriptionCandidate",
+    );
+    expect(url.searchParams.get("organization_id")).toBe("org one");
+    expect(url.searchParams.get("stripe_subscription_id")).toBe(
+      "sub_placeholder_1",
+    );
+    expect(request.method).toBe("GET");
+  });
+
+  it("posts the subscription id to the set path", async () => {
+    const fetch = stubFetch();
+
+    await expect(
+      boundary.setStripeSubscription({
+        organizationId: WIRE.id,
+        stripeSubscriptionId: "sub_placeholder_1",
+      }),
+    ).resolves.toEqual(RECORD);
+
+    expect(await requestOf(fetch)).toEqual({
+      path: "/admin/organization.setStripeSubscription",
+      method: "POST",
+      contentType: "application/json",
+      body: {
+        organization_id: WIRE.id,
+        stripe_subscription_id: "sub_placeholder_1",
+      },
+    });
+  });
+
+  it("redirects an expired session on a subscription write", async () => {
+    vi.resetModules();
+    const freshBoundary = await import("@/lib/gramAdminClient");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(unauthorizedBody, {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const href = vi.spyOn(window.location, "href", "set");
+
+    await expect(
+      freshBoundary.setStripeSubscription({
+        organizationId: WIRE.id,
+        stripeSubscriptionId: "sub_placeholder_1",
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+
+    expect(freshBoundary.isRedirectingToLogin()).toBe(true);
+    expect(href).toHaveBeenCalledOnce();
+  });
+
   // A record write takes the login redirect on a 401 like every read of the
   // record does. The start is the exception below.
   it("redirects an expired session on a record write", async () => {
@@ -564,6 +661,8 @@ describe("organizationFromSdk", () => {
         slug: "placeholder-one",
         accountType: "enterprise",
         workosId: "org_workos_placeholder",
+        workosDashboardUrl:
+          "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder",
         stripeCustomerId: "cus_placeholder",
         stripeSubscriptionId: "sub_placeholder",
         whitelisted: true,
@@ -584,6 +683,8 @@ describe("organizationFromSdk", () => {
       slug: "placeholder-one",
       account_type: "enterprise",
       workos_id: "org_workos_placeholder",
+      workos_dashboard_url:
+        "https://dashboard.workos.com/environment_placeholder/organizations/org_workos_placeholder",
       stripe_customer_id: "cus_placeholder",
       stripe_subscription_id: "sub_placeholder",
       whitelisted: true,
@@ -621,6 +722,7 @@ describe("organizationFromSdk", () => {
     expect(record.trial_converted_at).toBeUndefined();
     expect(record.trial_demoted_at).toBeUndefined();
     expect(record.workos_id).toBeUndefined();
+    expect(record.workos_dashboard_url).toBeUndefined();
     expect(record.stripe_customer_id).toBeUndefined();
     expect(record.creation_source).toBeUndefined();
   });
@@ -650,3 +752,48 @@ it("serves issuer logos through the generated same-origin image operation", asyn
   expect(request.headers.has("gram-session")).toBe(false);
   expect(request.headers.has("Authorization")).toBe(false);
 });
+
+it.each([
+  ["useCreateRegistryEntryMutation", { dataJson: "{}" }],
+  [
+    "useSaveRegistryEntryMutation",
+    {
+      id: "00000000-0000-4000-8000-000000000001",
+      dataJson: "{}",
+      updatedAt: "opaque",
+    },
+  ],
+  [
+    "useSetRegistryEntryPublishedMutation",
+    {
+      id: "00000000-0000-4000-8000-000000000001",
+      updatedAt: "opaque",
+      published: false,
+    },
+  ],
+] as const)(
+  "redirects expired registry sessions for %s",
+  async (hook, request) => {
+    vi.resetModules();
+    const fresh = await import("@/lib/gramAdminClient");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(unauthorizedBody, {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const href = vi.spyOn(window.location, "href", "set");
+    fresh[hook]();
+    const options = useMutation.mock.lastCall![0];
+    await expect(
+      options.mutationFn({
+        request,
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    expect(fresh.isRedirectingToLogin()).toBe(true);
+    expect(href).toHaveBeenCalledOnce();
+  },
+);

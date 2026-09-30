@@ -1,15 +1,9 @@
-import { useFetcher } from "@/contexts/Fetcher";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
 import {
   deleteSourceCascade,
   fetchLinkedMcpServers,
 } from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
 import { invalidateWrapperDeleteAuthViews } from "@/pages/mcp/x/tabs/settings/sections/sourceInvalidation";
-import {
-  useProjectSlugForRequests,
-  useSdkClient,
-  useSlugs,
-} from "@/contexts/Sdk";
+import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
   createDefaultMcpEndpoint,
   DEFAULT_ENDPOINT_FAILED_MESSAGE,
@@ -30,21 +24,24 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  autoConfigureRemoteMcpAuth,
-  type AutoConfigureAuthResult,
-} from "./autoConfigureAuth";
+  configureCreatedRemoteMcpIdentity,
+  type ConfigureCreatedIdentityResult,
+  type RemoteMcpCreationIdentity,
+} from "./configureCreatedIdentity";
 
 export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
   url: string;
   userSessionIssuerId?: string | undefined;
   organizationOwnedUserSessionIssuer?: boolean | undefined;
+  identityMode: RemoteMcpCreationIdentity;
+  agentAuthorization?: string;
 };
 
 export type CreateRemoteMcpSourceData = {
   remoteMcpServer: RemoteMcpServer;
   mcpServer: McpServer;
-  authAutoConfig: AutoConfigureAuthResult;
+  identityConfiguration: ConfigureCreatedIdentityResult;
 };
 
 export function useCreateRemoteMcpSource(): UseMutationResult<
@@ -53,16 +50,15 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   CreateRemoteMcpSourceVariables
 > {
   const client = useSdkClient();
-  const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
-  const projectSlug = useProjectSlugForRequests();
-  const isPlatformAdmin = useIsPlatformAdmin();
 
   return useMutation({
     mutationFn: async ({
       name,
       url,
+      identityMode,
+      agentAuthorization,
       userSessionIssuerId,
       organizationOwnedUserSessionIssuer,
     }) => {
@@ -76,18 +72,17 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
           },
         });
 
-      const authAutoConfig = await autoConfigureRemoteMcpAuth({
+      const identityConfiguration = await configureCreatedRemoteMcpIdentity({
         client,
-        authedFetch,
         remoteMcpServer,
         mcpServer,
-        isPlatformAdmin,
-        projectSlug,
+        identityMode,
+        agentAuthorization,
         organizationOwnedUserSessionIssuer,
       });
       const configuredMcpServer =
-        authAutoConfig.status === "configured"
-          ? authAutoConfig.mcpServer
+        identityConfiguration.status === "configured"
+          ? identityConfiguration.mcpServer
           : mcpServer;
 
       // Pre-stage a default endpoint so the user doesn't have to create one
@@ -101,10 +96,10 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
       return {
         remoteMcpServer,
         mcpServer: configuredMcpServer,
-        authAutoConfig,
+        identityConfiguration,
       };
     },
-    onSuccess: async ({ authAutoConfig }) => {
+    onSuccess: async ({ identityConfiguration }) => {
       // refetchType "all" forces the refetch even when there are no active
       // observers — Sources isn't mounted while the create form is, so without
       // this the listServers cache stays stale until the next mount.
@@ -116,10 +111,10 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         // so refresh the effective list in both cases.
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ];
-      // The issuer/client caches only change when auto-configuration actually
-      // ran to completion; a skipped run leaves them untouched, so don't force
-      // those extra refetches on the common no-OAuth path.
-      if (authAutoConfig.status === "configured") {
+      // The issuer/client caches only change when explicit identity setup ran
+      // to completion; an incomplete setup leaves them untouched, so don't
+      // force those extra refetches on the common no-OAuth path.
+      if (identityConfiguration.userIdentity?.status) {
         invalidations.push(
           invalidateAllRemoteSessionIssuers(queryClient, {
             refetchType: "all",

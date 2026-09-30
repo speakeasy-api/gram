@@ -37,13 +37,13 @@ type RiskFindingUnmaskRow struct {
 	Path           string
 	ToolCallID     string
 	OrganizationID string
+	RiskPolicyID   string
 }
 
 // GetRiskFindingForUnmask returns the reveal-relevant state for one finding id,
-// or nil when no live row exists. The gates mirror the Postgres unmask ones
-// (GetRiskResultByID): no dead-letter sentinels, no excluded rows, no false
-// positives, tenant-scoped. Shadow engine-comparison rows are hidden from
-// every user-facing surface, so a shadow id reads as absent here too.
+// or nil when no live row exists: no dead-letter sentinels, no excluded rows,
+// no false positives, tenant-scoped. Shadow engine-comparison rows are hidden
+// from every user-facing surface, so a shadow id reads as absent here too.
 //
 // The table is append-only with at-least-once delivery, so one id can have
 // several rows (redeliveries and exclusion / false-positive state mirrors).
@@ -69,6 +69,7 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		"path",
 		"tool_call_id",
 		"organization_id",
+		"risk_policy_id",
 		"dead_letter_reason",
 		"excluded_at",
 		"false_positive_at",
@@ -98,6 +99,7 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		"path",
 		"tool_call_id",
 		"organization_id",
+		"risk_policy_id",
 	).
 		FromSelect(latest, "latest").
 		Where("dead_letter_reason = ''").
@@ -143,6 +145,7 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		&row.Path,
 		&row.ToolCallID,
 		&row.OrganizationID,
+		&row.RiskPolicyID,
 	); err != nil {
 		return nil, fmt.Errorf("scan risk finding unmask row: %w", err)
 	}

@@ -24,3 +24,8 @@ distinct_id,flag,enabled,variant
 # PostHog key).
 #
 # <your-organization-id>,gram-risk-llm-analyzer,true,shadow
+#
+# risk-enforcement-pubsub is on for every organization locally, because local
+# dev runs Presidio only in pystreams. Turn it off for one organization with:
+#
+# <your-organization-id>,risk-enforcement-pubsub,false

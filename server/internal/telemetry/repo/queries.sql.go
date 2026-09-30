@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"sort"
 	"strconv"
@@ -2992,6 +2993,10 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 type GetChatMetricsByIDsParams struct {
 	GramProjectID string
 	ChatIDs       []string // UUIDs of chats to get metrics for
+
+	// EventTimeFrom, when non-zero, restricts reads to events at or after this
+	// instant so ClickHouse can prune partitions and hourly summary buckets.
+	EventTimeFrom time.Time
 }
 
 // ChatMetricsRow represents token and cost metrics for a single chat.
@@ -3004,14 +3009,58 @@ type ChatMetricsRow struct {
 }
 
 // GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
-// This is used to enrich chat overview data from PostgreSQL with metrics from ClickHouse.
-//
-//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+// Agent-session surfaces (Claude Code, Codex, Cursor, …) are served from
+// chat_session_summaries so chat.load does not scan raw telemetry_logs.
+// Managed assistant completions are absent from that summary, so any chat
+// missing from it falls back to the raw gen_ai.usage projection.
 func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByIDsParams) (map[string]ChatMetricsRow, error) {
 	if len(arg.ChatIDs) == 0 {
 		return make(map[string]ChatMetricsRow), nil
 	}
 
+	metricsMap, err := q.scanChatMetrics(ctx, chatMetricsFromSessionSummaries(arg))
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics from session summaries: %w", err)
+	}
+
+	missing := make([]string, 0)
+	for _, id := range arg.ChatIDs {
+		if _, ok := metricsMap[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return metricsMap, nil
+	}
+
+	raw, err := q.scanChatMetrics(ctx, chatMetricsFromRawLogs(GetChatMetricsByIDsParams{
+		GramProjectID: arg.GramProjectID,
+		ChatIDs:       missing,
+		EventTimeFrom: arg.EventTimeFrom,
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics from telemetry logs: %w", err)
+	}
+	maps.Copy(metricsMap, raw)
+	return metricsMap, nil
+}
+
+func chatMetricsFromSessionSummaries(arg GetChatMetricsByIDsParams) squirrel.SelectBuilder {
+	sb := sq.Select(
+		"s.chat_id as gram_chat_id",
+		"sum(s.total_input_tokens) as total_input_tokens",
+		"sum(s.total_output_tokens) as total_output_tokens",
+		"sum(s.total_tokens) as total_tokens",
+		"sum(s.total_cost) as total_cost",
+	).
+		From("chat_session_summaries s").
+		Where("s.gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"s.chat_id": arg.ChatIDs}).
+		GroupBy("s.chat_id")
+	return withChatMetricsEventTimeFrom(sb, "s.time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?, 'UTC'))", arg.EventTimeFrom)
+}
+
+func chatMetricsFromRawLogs(arg GetChatMetricsByIDsParams) squirrel.SelectBuilder {
 	sb := sq.Select(
 		"chat_id as gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
@@ -3023,7 +3072,18 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where(squirrel.Eq{"chat_id": arg.ChatIDs}).
 		GroupBy("chat_id")
+	return withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+}
 
+func withChatMetricsEventTimeFrom(sb squirrel.SelectBuilder, pred string, eventTimeFrom time.Time) squirrel.SelectBuilder {
+	if eventTimeFrom.IsZero() {
+		return sb
+	}
+	return sb.Where(pred, eventTimeFrom.UnixNano())
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) scanChatMetrics(ctx context.Context, sb squirrel.SelectBuilder) (map[string]ChatMetricsRow, error) {
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building get chat metrics by IDs query: %w", err)
@@ -3056,6 +3116,10 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 type GetClaudeTurnUsageByChatIDsParams struct {
 	GramProjectID string
 	ChatIDs       []string
+
+	// EventTimeFrom, when non-zero, restricts the raw telemetry_logs scan to
+	// events at or after this instant so ClickHouse can prune daily partitions.
+	EventTimeFrom time.Time
 }
 
 // ClaudeTurnUsageRow represents aggregated Claude Code usage for one prompt.id turn.
@@ -3130,8 +3194,10 @@ func (q *Queries) GetClaudeTurnUsageByChatIDs(ctx context.Context, arg GetClaude
 		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
 		Where("gram_chat_id IS NOT NULL").
 		Where("gram_chat_id != ''").
-		Where(promptIDExpr+" != ''").
-		Where(isClaudeCodeExpr).
+		Where(promptIDExpr + " != ''").
+		Where(isClaudeCodeExpr)
+	sb = withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+	sb = sb.
 		GroupBy("gram_chat_id", promptIDExpr).
 		OrderBy("gram_chat_id ASC", "start_time_unix_nano ASC", "prompt_id ASC")
 
@@ -3193,10 +3259,12 @@ func (q *Queries) GetClaudeToolUsageByChatIDs(ctx context.Context, arg GetClaude
 		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
 		Where("gram_chat_id IS NOT NULL").
 		Where("gram_chat_id != ''").
-		Where(toolUseIDExpr+" != ''").
-		Where(promptIDExpr+" != ''").
+		Where(toolUseIDExpr + " != ''").
+		Where(promptIDExpr + " != ''").
 		Where(isToolResultExpr).
-		Where(isClaudeCodeExpr).
+		Where(isClaudeCodeExpr)
+	sb = withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+	sb = sb.
 		GroupBy("gram_chat_id", toolUseIDExpr, promptIDExpr).
 		OrderBy("gram_chat_id ASC", "min(time_unix_nano) ASC", "tool_use_id ASC")
 
@@ -4034,6 +4102,7 @@ type HostedMCPMatcher struct {
 // servers receive their own target type.
 type MCPServerMatcher struct {
 	SourceID    string
+	MCPServerID string
 	TargetType  string
 	TargetID    string
 	TargetLabel string
@@ -7475,36 +7544,69 @@ func (q *Queries) GetTopUsers(ctx context.Context, arg GetTopUsersParams) ([]Top
 
 // GetTopServersParams contains parameters for getting top servers.
 type GetTopServersParams struct {
-	GramProjectID  string
-	TimeStart      int64
-	TimeEnd        int64
-	ExternalUserID string // Optional filter
-	APIKeyID       string // Optional filter
-	ToolsetSlug    string // Optional filter
-	Limit          int
+	GramProjectID     string
+	TimeStart         int64
+	TimeEnd           int64
+	HostedMCPMatchers []HostedMCPMatcher
+	MCPServerMatchers []MCPServerMatcher
+	MetaMCPMatchers   []MetaMCPMatcher
+	Limit             int
 }
 
-// GetTopServers retrieves top MCP servers by tool call count, excluding "local" tool calls.
+func projectOverviewServerFilter(arg GetTopServersParams) GetToolUsageSummaryParams {
+	return GetToolUsageSummaryParams{
+		GramProjectID:     arg.GramProjectID,
+		TimeStart:         arg.TimeStart,
+		TimeEnd:           arg.TimeEnd,
+		BucketSizeNs:      0,
+		HostedMCPMatchers: arg.HostedMCPMatchers,
+		MCPServerMatchers: arg.MCPServerMatchers,
+		MetaMCPMatchers:   arg.MetaMCPMatchers,
+		TargetTypes: []string{
+			ToolUsageTargetTypeHostedMCP,
+			ToolUsageTargetTypeTunneledMCP,
+			ToolUsageTargetTypeShadowMCP,
+			ToolUsageTargetTypeMetaMCP,
+		},
+		HostedToolsetSlugs: nil,
+		ShadowServerNames:  nil,
+		MetaMCPServerIDs:   nil,
+		UserFilters:        nil,
+		ClientKeys:         nil,
+		HookSources:        nil,
+		AccountType:        "",
+		TargetLimit:        0,
+		UserLimit:          0,
+		UsersByTargetLimit: 0,
+		TargetToolRowLimit: 0,
+		TimeSeriesRowLimit: 0,
+		UserSeriesRowLimit: 0,
+		ClientLimit:        0,
+		ClientToolRowLimit: 0,
+		Statuses:           nil,
+		Query:              "",
+		Filters:            nil,
+	}
+}
+
+// GetTopServers retrieves MCP servers by tool call count across hosted, proxied,
+// tunneled, and hook-observed traffic. Local tools and skills are excluded.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([]TopServer, error) {
-	sb := sq.Select(
-		"if(tool_source = '', 'local', tool_source) as server_name",
-		"count(*) as tool_call_count",
-	).
-		From("trace_summaries").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("event_source = 'hook'").
-		Where("tool_source != ''"). // Exclude "local" tool calls (empty tool_source)
-		Where("start_time_unix_nano >= ?", arg.TimeStart).
-		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		GroupBy("server_name").
-		OrderBy("tool_call_count DESC").
-		//nolint:gosec // Limit is bounded by API validation
-		Limit(uint64(arg.Limit))
-
-	// Note: trace_summaries doesn't have external_user_id/api_key_id, so we can't filter by those
-	// If filtering is needed, we'd have to query telemetry_logs instead
+	sb, err := toolUsageFilteredSelect(projectOverviewServerFilter(arg),
+		"target_label AS server_name",
+		"count() AS tool_call_count",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building top servers source: %w", err)
+	}
+	sb = sb.
+		GroupBy("target_type", "target_id", "target_label").
+		OrderBy("tool_call_count DESC", "server_name ASC")
+	if arg.Limit > 0 {
+		sb = sb.Limit(uint64(arg.Limit))
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -7529,7 +7631,84 @@ func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	if err = rows.Close(); err != nil {
+		return nil, fmt.Errorf("closing top servers rows: %w", err)
+	}
 
+	// A proxied call always carries the stable fronting mcp_server_id, but
+	// older rows and tools with non-URN-safe names can lack tool_source. Those
+	// traces are intentionally absent from normalized_events, so fold this
+	// direct-only fallback in without double-counting rows already classified
+	// by tool_source or toolset_slug.
+	proxiedSB := sq.Select(
+		"mcp_server_id",
+		"count() AS tool_call_count",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("event_source != 'hook'").
+		Where("startsWith(gram_urn, 'tools:')").
+		Where("mcp_server_id != ''").
+		Where("tool_source = ''").
+		Where("toolset_slug = ''").
+		GroupBy("mcp_server_id").
+		OrderBy("tool_call_count DESC")
+	if arg.Limit > 0 {
+		proxiedSB = proxiedSB.Limit(uint64(arg.Limit))
+	}
+	proxiedQuery, proxiedArgs, err := proxiedSB.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building proxied top servers query: %w", err)
+	}
+	proxiedRows, err := q.conn.Query(ctx, proxiedQuery, proxiedArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer proxiedRows.Close()
+
+	labelsByID := make(map[string]string, len(arg.MCPServerMatchers))
+	for _, matcher := range arg.MCPServerMatchers {
+		if matcher.MCPServerID != "" {
+			labelsByID[matcher.MCPServerID] = matcher.TargetLabel
+		}
+	}
+	for proxiedRows.Next() {
+		var serverID string
+		var callCount uint64
+		if err = proxiedRows.Scan(&serverID, &callCount); err != nil {
+			return nil, fmt.Errorf("scanning proxied top server row: %w", err)
+		}
+		label := labelsByID[serverID]
+		if label == "" {
+			label = serverID
+		}
+		merged := false
+		for i := range servers {
+			if servers[i].ServerName == label {
+				servers[i].ToolCallCount += callCount
+				merged = true
+				break
+			}
+		}
+		if !merged {
+			servers = append(servers, TopServer{ServerName: label, ToolCallCount: callCount})
+		}
+	}
+	if err = proxiedRows.Err(); err != nil {
+		return nil, err
+	}
+
+	sort.SliceStable(servers, func(i, j int) bool {
+		if servers[i].ToolCallCount != servers[j].ToolCallCount {
+			return servers[i].ToolCallCount > servers[j].ToolCallCount
+		}
+		return servers[i].ServerName < servers[j].ServerName
+	})
+	if arg.Limit > 0 && len(servers) > arg.Limit {
+		servers = servers[:arg.Limit]
+	}
 	return servers, nil
 }
 
@@ -7614,7 +7793,21 @@ type GetActiveCountsParams struct {
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
 	ToolsetSlug    string // Optional filter
-	SessionMode    bool   // If true, count by messages; if false, count by tool calls
+	MCPServerID    string // Optional filter - scopes to calls the gateway proxied to one configured MCP server
+	// MCPServerURLSuffixes and ToolSources scope to the same server as an agent
+	// hook observed it: by the URL the agent called (/mcp/<slug>) or, for a
+	// hook that never resolved a URL, by the server name it reported (by exact
+	// value, every spelling supplied). Hook rows carry neither a toolset slug nor
+	// an mcp_server_id, so without these a hook-only server counts no users.
+	MCPServerURLSuffixes []string // Optional filter
+	ToolSources          []string // Optional filter
+	SessionMode          bool     // If true, count by messages; if false, count by tool calls
+}
+
+// selectsHookObserved reports whether the read names a server by a hook-side
+// identity, in which case hook-observed tool calls count toward active users.
+func (arg GetActiveCountsParams) selectsHookObserved() bool {
+	return len(arg.MCPServerURLSuffixes) > 0 || len(arg.ToolSources) > 0
 }
 
 // ActiveCounts represents active server and user counts.
@@ -7627,14 +7820,28 @@ type ActiveCounts struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams) (*ActiveCounts, error) {
-	var userCountCondition string
-	if arg.SessionMode {
+	// Active users are the distinct people, keyed by userKey, with an event
+	// matching eventPredicate in the window.
+	userKey := "if(external_user_id != '', external_user_id, user_id)"
+	var eventPredicate string
+	switch {
+	case arg.SessionMode:
 		// Count users with chat completion messages
-		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion') AND if(external_user_id != '', external_user_id, user_id) != '')"
-	} else {
+		eventPredicate = "toString(attributes.gram.resource.urn) IN ('chat:completion', 'assistants:chat:completion')"
+	case arg.selectsHookObserved():
+		// Count users with tool calls the gateway or an agent hook observed. A
+		// hook row records a hooks: URN rather than tools:, and identifies the
+		// actor by email where a gateway row may carry only an id, so the
+		// person is keyed the way ListMCPUsageUsers keys them, email first:
+		// the two readers then agree, and someone seen through both lanes
+		// counts once whenever both rows name the same email.
+		userKey = chFirstNonEmpty("user_email", "external_user_id", "user_id", "''")
+		eventPredicate = "((event_source != 'hook' AND startsWith(gram_urn, 'tools:')) OR (event_source = 'hook' AND tool_name != ''))"
+	default:
 		// Count users with tool calls
-		userCountCondition = "uniqExactIf(if(external_user_id != '', external_user_id, user_id), startsWith(gram_urn, 'tools:') AND if(external_user_id != '', external_user_id, user_id) != '')"
+		eventPredicate = "startsWith(gram_urn, 'tools:')"
 	}
+	userCountCondition := "uniqExactIf(" + userKey + ", " + eventPredicate + " AND " + userKey + " != '')"
 
 	sb := sq.Select(
 		"uniqExactIf(tool_source, tool_source != '' AND event_source = 'hook') as active_servers_count",
@@ -7651,8 +7858,25 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 	if arg.APIKeyID != "" {
 		sb = sb.Where(squirrel.Eq{"api_key_id": arg.APIKeyID})
 	}
+	// One configured server is recorded under whichever identity the observing
+	// side had: a hosted call under its toolset slug, a proxied call under its
+	// configured id, a hook-observed call under the URL or name the agent used.
+	// A row carries one of them, so matching any never counts a user twice.
+	identity := squirrel.Or{}
 	if arg.ToolsetSlug != "" {
-		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+		identity = append(identity, squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+	if arg.MCPServerID != "" {
+		identity = append(identity, squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
+	if len(arg.MCPServerURLSuffixes) > 0 {
+		identity = append(identity, hookServerURLMatch(arg.MCPServerURLSuffixes))
+	}
+	if len(arg.ToolSources) > 0 {
+		identity = append(identity, hookToolSourceMatch(arg.ToolSources))
+	}
+	if len(identity) > 0 {
+		sb = sb.Where(identity)
 	}
 
 	query, args, err := sb.ToSql()
@@ -7681,8 +7905,90 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	if err = rows.Close(); err != nil {
+		return nil, fmt.Errorf("closing active counts rows: %w", err)
+	}
 
 	return &counts, nil
+}
+
+// GetUnifiedActiveServerCount counts distinct MCP server identities across the
+// same hosted, proxied, tunneled, gateway, and hook-observed attribution used
+// by GetTopServers without materializing the server list.
+func (q *Queries) GetUnifiedActiveServerCount(ctx context.Context, arg GetTopServersParams) (uint64, error) {
+	normalizedSB, err := toolUsageFilteredSelect(projectOverviewServerFilter(arg), "target_type", "target_id")
+	if err != nil {
+		return 0, fmt.Errorf("building active servers source: %w", err)
+	}
+	normalizedQuery, normalizedArgs, err := normalizedSB.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building active servers query: %w", err)
+	}
+
+	mcpServerIDs := make([]string, 0, len(arg.MCPServerMatchers))
+	targetTypes := make([]string, 0, len(arg.MCPServerMatchers))
+	targetIDs := make([]string, 0, len(arg.MCPServerMatchers))
+	for _, matcher := range arg.MCPServerMatchers {
+		if matcher.MCPServerID == "" {
+			continue
+		}
+		mcpServerIDs = append(mcpServerIDs, matcher.MCPServerID)
+		targetTypes = append(targetTypes, matcher.TargetType)
+		targetIDs = append(targetIDs, matcher.TargetID)
+	}
+
+	proxiedSB := sq.Select()
+	if len(mcpServerIDs) > 0 {
+		proxiedSB = proxiedSB.
+			Column("transform(mcp_server_id, ?, ?, ?) AS target_type", mcpServerIDs, targetTypes, ToolUsageTargetTypeHostedMCP).
+			Column("transform(mcp_server_id, ?, ?, mcp_server_id) AS target_id", mcpServerIDs, targetIDs)
+	} else {
+		proxiedSB = proxiedSB.
+			Column("? AS target_type", ToolUsageTargetTypeHostedMCP).
+			Column("mcp_server_id AS target_id")
+	}
+	proxiedSB = proxiedSB.
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("time_unix_nano >= ?", arg.TimeStart).
+		Where("time_unix_nano <= ?", arg.TimeEnd).
+		Where("event_source != 'hook'").
+		Where("startsWith(gram_urn, 'tools:')").
+		Where("mcp_server_id != ''").
+		Where("tool_source = ''").
+		Where("toolset_slug = ''").
+		GroupBy("target_type", "target_id")
+	proxiedQuery, proxiedArgs, err := proxiedSB.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building proxied active servers query: %w", err)
+	}
+
+	query := fmt.Sprintf(
+		"SELECT uniqExact(tuple(target_type, target_id)) AS active_servers_count FROM ((%s) UNION ALL (%s))",
+		normalizedQuery, proxiedQuery,
+	)
+	args := make([]any, 0, len(normalizedArgs)+len(proxiedArgs))
+	args = append(args, normalizedArgs...)
+	args = append(args, proxiedArgs...)
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("querying active server count: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		return 0, nil
+	}
+	var count uint64
+	if err = rows.Scan(&count); err != nil {
+		return 0, fmt.Errorf("scanning active server count: %w", err)
+	}
+	if err = rows.Err(); err != nil {
+		return 0, fmt.Errorf("reading active server count rows: %w", err)
+	}
+	if err = rows.Close(); err != nil {
+		return 0, fmt.Errorf("closing active server count rows: %w", err)
+	}
+	return count, nil
 }
 
 // ListRecentHookEventsForOnboardingParams contains the parameters for the

@@ -22,10 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-type policyLookupFunc func(context.Context, string, uuid.UUID, uuid.UUID, string) ([]policycore.Policy, error)
+type policyLookupFunc func(context.Context, string, uuid.UUID, policycore.MCPTarget) ([]policycore.Policy, error)
 
-func (f policyLookupFunc) ListEnabledForMCPServer(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, toolName string) ([]policycore.Policy, error) {
-	return f(ctx, organizationID, projectID, serverID, toolName)
+func (f policyLookupFunc) ListEnabledForMCP(ctx context.Context, organizationID string, projectID uuid.UUID, target policycore.MCPTarget) ([]policycore.Policy, error) {
+	return f(ctx, organizationID, projectID, target)
 }
 
 type policyDetectorFunc func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error)
@@ -61,11 +61,13 @@ func TestPolicyEvaluator_BlockDecisionPublishesAttributedFinding(t *testing.T) {
 	policyID := uuid.New()
 	message := "Use an approved credential."
 	publisher := &findingPublisher{}
-	evaluator := newPolicyEvaluator(t, policyLookupFunc(func(_ context.Context, organizationID string, gotProjectID, gotServerID uuid.UUID, toolName string) ([]policycore.Policy, error) {
+	evaluator := newPolicyEvaluator(t, policyLookupFunc(func(_ context.Context, organizationID string, gotProjectID uuid.UUID, target policycore.MCPTarget) ([]policycore.Policy, error) {
 		require.Equal(t, "org-test", organizationID)
 		require.Equal(t, projectID, gotProjectID)
-		require.Equal(t, serverID, gotServerID)
-		require.Equal(t, "lookup", toolName)
+		require.Equal(t, serverID, target.ServerID)
+		require.Equal(t, "lookup", target.ToolName)
+		require.Nil(t, target.ToolAnnotations)
+		require.False(t, target.PlatformToolset)
 		return []policycore.Policy{{ID: policyID, ProjectID: projectID, OrganizationID: organizationID, Name: "Credential policy", Action: "block", UserMessage: &message, Version: 3}}, nil
 	}), policyDetectorFunc(func(_ context.Context, policy policycore.Policy, request risk.MCPScanRequest) ([]scanners.Finding, error) {
 		require.Equal(t, policyID, policy.ID)
@@ -226,7 +228,7 @@ func TestPolicyEvaluator_FailModeResolvesIndeterminateEvaluation(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			evaluator := newPolicyEvaluator(t, policyLookupFunc(func(context.Context, string, uuid.UUID, uuid.UUID, string) ([]policycore.Policy, error) {
+			evaluator := newPolicyEvaluator(t, policyLookupFunc(func(context.Context, string, uuid.UUID, policycore.MCPTarget) ([]policycore.Policy, error) {
 				return nil, lookupErr
 			}), policyDetectorFunc(nil), &findingPublisher{}, mcpriskscan.PolicyConfig{Deadline: time.Second, FailMode: test.failMode, FlagConcurrency: 1})
 			decision := evaluator.Scan(t.Context(), requestSubject(t.Context(), uuid.New(), uuid.New(), `{}`))
@@ -372,7 +374,7 @@ func newPolicyEvaluator(t *testing.T, lookup mcpriskscan.PolicyLookup, detector 
 }
 
 func staticPolicies(policies ...policycore.Policy) policyLookupFunc {
-	return func(context.Context, string, uuid.UUID, uuid.UUID, string) ([]policycore.Policy, error) {
+	return func(context.Context, string, uuid.UUID, policycore.MCPTarget) ([]policycore.Policy, error) {
 		return policies, nil
 	}
 }

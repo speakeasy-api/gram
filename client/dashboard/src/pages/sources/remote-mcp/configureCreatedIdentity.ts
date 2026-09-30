@@ -1,0 +1,405 @@
+import { isNotFoundError } from "@/lib/errors";
+import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
+import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
+import {
+  preferredScopes,
+  serverIdentityAuthMethod,
+} from "@/lib/remote-identity/model/clientConfiguration";
+import type { Gram } from "@gram/client";
+import type { RequestOptions } from "@gram/client/lib/sdks.js";
+import type { CommitServerIdentityConfigurationResult } from "@gram/client/models/components/commitserveridentityconfigurationresult.js";
+import type {
+  McpServer,
+  McpServerVisibility,
+} from "@gram/client/models/components/mcpserver.js";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
+
+export type RemoteMcpCreationIdentity = "user" | "agent" | "none";
+
+type ConfigureCreatedIdentityInput = {
+  client: Gram;
+  remoteMcpServer: RemoteMcpServer;
+  mcpServer: McpServer;
+  identityMode: RemoteMcpCreationIdentity;
+  agentAuthorization?: string;
+  /** The server's issuer is organization-owned, so a project may not set it up. */
+  organizationOwnedUserSessionIssuer?: boolean;
+  options?: RequestOptions;
+};
+
+export type ConfigureCreatedIdentityResult =
+  | {
+      status: "configured";
+      mcpServer: McpServer;
+      identityMode: RemoteMcpCreationIdentity;
+      userIdentity?: CommitServerIdentityConfigurationResult;
+    }
+  | {
+      status: "setup-required";
+      mcpServer: McpServer;
+      identityMode: RemoteMcpCreationIdentity;
+      message: string;
+      userIdentity?: CommitServerIdentityConfigurationResult;
+    };
+
+export async function configureCreatedRemoteMcpIdentity({
+  client,
+  remoteMcpServer,
+  mcpServer,
+  identityMode,
+  agentAuthorization,
+  organizationOwnedUserSessionIssuer = false,
+  options,
+}: ConfigureCreatedIdentityInput): Promise<ConfigureCreatedIdentityResult> {
+  if (identityMode === "none") {
+    try {
+      return configured(
+        await setMcpServerVisibility(client, mcpServer, "private", options),
+        identityMode,
+      );
+    } catch {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "The server could not be enabled. Review it in Settings.",
+      );
+    }
+  }
+
+  if (identityMode === "agent") {
+    const authorization = agentAuthorization?.trim();
+    if (!authorization) {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "Add a Service Account credential in Settings > Identity.",
+      );
+    }
+    try {
+      await client.remoteMcp.createServerHeader(
+        {
+          createServerHeaderForm: {
+            remoteMcpServerId: remoteMcpServer.id,
+            name: "Authorization",
+            isRequired: true,
+            isSecret: true,
+            value: authorization,
+          },
+        },
+        undefined,
+        options,
+      );
+    } catch {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "Service Account could not be configured. Add the credential in Settings > Identity.",
+      );
+    }
+
+    try {
+      return configured(
+        await setMcpServerVisibility(client, mcpServer, "private", options),
+        identityMode,
+      );
+    } catch {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
+      );
+    }
+  }
+
+  // Only User Identity touches the session issuer, and an organization-owned
+  // one is not a project's to set up.
+  if (organizationOwnedUserSessionIssuer) {
+    return setupRequired(
+      mcpServer,
+      identityMode,
+      "Organization user session issuers are configured by organization administrators.",
+    );
+  }
+
+  if (!mcpServer.userSessionIssuerId) {
+    return setupRequired(
+      mcpServer,
+      identityMode,
+      "The server has no user identity session configuration.",
+    );
+  }
+
+  const protectedResource = await discoverProtectedResource(
+    client,
+    remoteMcpServer,
+    options,
+  );
+  const authorizationServer =
+    protectedResource?.metadata?.authorizationServers?.[0];
+  if (!protectedResource?.available || !authorizationServer) {
+    return setupRequired(
+      mcpServer,
+      identityMode,
+      "OAuth metadata could not be discovered. Configure User Identity in Settings > Identity.",
+    );
+  }
+
+  // Look for a provider this project already has for that authorization
+  // server BEFORE reaching for metadata. A saved provider carries the
+  // capabilities this call needs, and a private issuer cannot be discovered
+  // from the browser at all — asking first is what lets one be reused.
+  let provider: RemoteSessionIssuer | null;
+  try {
+    provider = await client.remoteSessionIssuers.get(
+      { issuer: authorizationServer },
+      undefined,
+      options,
+    );
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "Existing identity providers could not be checked. Configure User Identity in Settings > Identity.",
+      );
+    }
+    provider = null;
+  }
+
+  if (
+    provider &&
+    (!provider.authorizationEndpoint || !provider.tokenEndpoint)
+  ) {
+    return setupRequired(
+      mcpServer,
+      identityMode,
+      "The matching identity provider is missing OAuth endpoints. Update it in Remote Identity Providers.",
+    );
+  }
+
+  // Only a provider that does not exist yet needs a draft: the draft exists to
+  // build the creation form, and fetching one for a saved provider would fail
+  // for exactly the private issuers reuse is meant to serve.
+  let draft: RemoteSessionIssuerDraft | null = null;
+  if (!provider) {
+    try {
+      draft = await client.remoteSessionIssuers.fetchMetadata(
+        { fetchIssuerMetadataRequestBody: { issuer: authorizationServer } },
+        undefined,
+        options,
+      );
+    } catch {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "The authorization server metadata could not be discovered. Configure User Identity in Settings > Identity.",
+      );
+    }
+    // RFC 8414 requires the document to name the issuer it was fetched for.
+    // A mismatch means the resource pointed at one authorization server and
+    // got another's metadata, and the provider is created from `draft.issuer`
+    // — so accepting it would bind this server to whichever issuer the
+    // document claimed. Exact equality, deliberately: no trailing-slash
+    // normalization, which belongs to readers and not to a write like this.
+    if (draft.issuer !== authorizationServer) {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "The authorization server metadata identified a different issuer. Configure User Identity in Settings > Identity.",
+      );
+    }
+    if (!draft.authorizationEndpoint || !draft.tokenEndpoint) {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "OAuth metadata is missing required endpoints. Configure User Identity in Settings > Identity.",
+      );
+    }
+  }
+
+  // Capabilities come from whichever side actually knows them.
+  const issuerScopes = provider?.scopesSupported ?? draft?.scopesSupported;
+  const issuerAuthMethods =
+    provider?.tokenEndpointAuthMethodsSupported ??
+    draft?.tokenEndpointAuthMethodsSupported ??
+    [];
+
+  const scopes = preferredScopes(
+    protectedResource.metadata?.scopesSupported,
+    issuerScopes,
+  );
+  let result: CommitServerIdentityConfigurationResult;
+  try {
+    result = await client.remoteSessions.commitServerIdentityConfiguration(
+      {
+        commitServerIdentityConfigurationForm: {
+          mcpServerId: mcpServer.id,
+          providerId: provider?.id,
+          createProvider:
+            provider || !draft ? undefined : providerForm(draft, mcpServer),
+          clientMode: "auto",
+          clientConfiguration: {
+            scope: scopes.length > 0 ? scopes : undefined,
+            tokenEndpointAuthMethod:
+              serverIdentityAuthMethod(issuerAuthMethods),
+          },
+        },
+      },
+      undefined,
+      options,
+    );
+  } catch {
+    return setupRequired(
+      mcpServer,
+      identityMode,
+      "User Identity could not be configured. Open Settings > Identity to finish setup.",
+    );
+  }
+
+  if (!result.status) {
+    return setupRequired(
+      mcpServer,
+      identityMode,
+      commitFailureMessage(result),
+      result,
+    );
+  }
+
+  // The provider landed but the upstream needs a human to finish registering
+  // the client, so nobody can sign in yet. Enabling the server here would
+  // advertise it as ready when the first connection is going to fail.
+  if (result.manualSetupRequired) {
+    return setupRequired(
+      mcpServer,
+      identityMode,
+      "The identity provider needs its client registered by hand. Finish setup in Settings > Identity.",
+      result,
+    );
+  }
+
+  try {
+    return configured(
+      await setMcpServerVisibility(client, mcpServer, "private", options),
+      identityMode,
+      result,
+    );
+  } catch {
+    return setupRequired(
+      mcpServer,
+      identityMode,
+      "User Identity was configured, but the server could not be enabled. Enable it from Settings.",
+      result,
+    );
+  }
+}
+
+async function discoverProtectedResource(
+  client: Gram,
+  remoteMcpServer: RemoteMcpServer,
+  options: RequestOptions | undefined,
+) {
+  try {
+    return await client.remoteMcp.discoverProtectedResourceMetadata(
+      {
+        discoverProtectedResourceMetadataRequestBody: {
+          remoteMcpServerId: remoteMcpServer.id,
+        },
+      },
+      undefined,
+      options,
+    );
+  } catch {
+    return null;
+  }
+}
+
+function providerForm(draft: RemoteSessionIssuerDraft, mcpServer: McpServer) {
+  return {
+    slug: buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
+    issuer: draft.issuer,
+    name: deriveRemoteSessionIssuerNameFromUrl(draft.issuer) ?? undefined,
+    authorizationEndpoint: draft.authorizationEndpoint,
+    tokenEndpoint: draft.tokenEndpoint,
+    registrationEndpoint: draft.registrationEndpoint,
+    jwksUri: draft.jwksUri,
+    scopesSupported: draft.scopesSupported ?? [],
+    grantTypesSupported: draft.grantTypesSupported ?? [],
+    responseTypesSupported: draft.responseTypesSupported ?? [],
+    tokenEndpointAuthMethodsSupported:
+      draft.tokenEndpointAuthMethodsSupported ?? [],
+    clientIdMetadataDocumentSupported: draft.clientIdMetadataDocumentSupported,
+    userinfoEndpoint: draft.userinfoEndpoint,
+    introspectionEndpoint: draft.introspectionEndpoint,
+    introspectionEndpointAuthMethodsSupported:
+      draft.introspectionEndpointAuthMethodsSupported ?? undefined,
+    idTokenSigningAlgValuesSupported:
+      draft.idTokenSigningAlgValuesSupported ?? undefined,
+    claimsSupported: draft.claimsSupported ?? undefined,
+    backchannelLogoutSupported: draft.backchannelLogoutSupported,
+    authorizationResponseIssParameterSupported:
+      draft.authorizationResponseIssParameterSupported,
+    oidc: draft.oidc,
+    passthrough: draft.passthrough,
+  };
+}
+
+function commitFailureMessage(
+  result: CommitServerIdentityConfigurationResult,
+): string {
+  if (result.failure) {
+    const outcome =
+      result.failure.outcome === "unreachable"
+        ? "The identity provider was unreachable"
+        : "The identity provider refused registration";
+    return `${outcome}. Configure User Identity in Settings > Identity.`;
+  }
+  return "Automatic client registration is unavailable. Configure User Identity in Settings > Identity.";
+}
+
+async function setMcpServerVisibility(
+  client: Gram,
+  mcpServer: McpServer,
+  visibility: McpServerVisibility,
+  options?: RequestOptions,
+): Promise<McpServer> {
+  return await client.mcpServers.update(
+    {
+      updateMcpServerForm: {
+        id: mcpServer.id,
+        name: mcpServer.name ?? undefined,
+        remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+        toolsetId: mcpServer.toolsetId ?? undefined,
+        environmentId: mcpServer.environmentId ?? undefined,
+        toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
+        visibility,
+      },
+    },
+    undefined,
+    options,
+  );
+}
+
+function configured(
+  mcpServer: McpServer,
+  identityMode: RemoteMcpCreationIdentity,
+  userIdentity?: CommitServerIdentityConfigurationResult,
+): ConfigureCreatedIdentityResult {
+  return { status: "configured", mcpServer, identityMode, userIdentity };
+}
+
+function setupRequired(
+  mcpServer: McpServer,
+  identityMode: RemoteMcpCreationIdentity,
+  message: string,
+  userIdentity?: CommitServerIdentityConfigurationResult,
+): ConfigureCreatedIdentityResult {
+  return {
+    status: "setup-required",
+    mcpServer,
+    identityMode,
+    message,
+    userIdentity,
+  };
+}

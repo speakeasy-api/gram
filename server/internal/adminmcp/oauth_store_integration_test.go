@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -71,9 +72,9 @@ func TestStaffOAuthStoreSingleUseGrantAndRefresh(t *testing.T) {
 	_, err = grants.PrepareRefresh(ctx, second.RefreshHash, clientID, now)
 	require.ErrorIs(t, err, errStaffGrant)
 
-	var reason string
-	require.NoError(t, db.QueryRow(ctx, `SELECT reauthorization_reason FROM admin_mcp_connections WHERE id = $1`, connection.ID).Scan(&reason)) //nolint:glint // notestingrawsql: Assert the terminal database state of this transaction directly.
-	require.Equal(t, "refresh_reuse", reason)
+	reason, err := repo.New(db).GetReauthorizationReasonFixture(ctx, connection.ID)
+	require.NoError(t, err)
+	require.Equal(t, "refresh_reuse", reason.String)
 }
 
 func TestStaffOAuthReauthorizationInvalidatesOldGeneration(t *testing.T) {

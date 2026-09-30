@@ -1130,6 +1130,73 @@ func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDs
 	return items, nil
 }
 
+const getImportedSessionObservations = `-- name: GetImportedSessionObservations :many
+SELECT m.id, m.chat_id, m.created_at, m.source, m.model, c.external_chat_id,
+       COALESCE(m.external_user_id, c.external_user_id, '')::text AS external_user_id,
+       COALESCE(NULLIF(m.user_id, ''), c.user_id, '')::text AS user_id,
+       COALESCE(u.email,
+         CASE WHEN m.external_user_id LIKE '%@%' THEN m.external_user_id END,
+         CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END, '')::text AS user_email,
+       c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+LEFT JOIN users u ON u.id = COALESCE(NULLIF(m.user_id, ''), c.user_id)
+WHERE m.project_id = $1
+  AND m.id = ANY($2::uuid[])
+  AND c.deleted IS FALSE
+`
+
+type GetImportedSessionObservationsParams struct {
+	ProjectID  uuid.NullUUID
+	MessageIds []uuid.UUID
+}
+
+type GetImportedSessionObservationsRow struct {
+	ID             uuid.UUID
+	ChatID         uuid.UUID
+	CreatedAt      pgtype.Timestamptz
+	Source         pgtype.Text
+	Model          pgtype.Text
+	ExternalChatID pgtype.Text
+	ExternalUserID string
+	UserID         string
+	UserEmail      string
+	OrganizationID string
+}
+
+// Read current ownership at consumption time, so attribution repaired between
+// capture and delivery is reflected in analytics. Never read transcript text.
+func (q *Queries) GetImportedSessionObservations(ctx context.Context, arg GetImportedSessionObservationsParams) ([]GetImportedSessionObservationsRow, error) {
+	rows, err := q.db.Query(ctx, getImportedSessionObservations, arg.ProjectID, arg.MessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetImportedSessionObservationsRow
+	for rows.Next() {
+		var i GetImportedSessionObservationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.CreatedAt,
+			&i.Source,
+			&i.Model,
+			&i.ExternalChatID,
+			&i.ExternalUserID,
+			&i.UserID,
+			&i.UserEmail,
+			&i.OrganizationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getInferenceAcceptedCheckpoint = `-- name: GetInferenceAcceptedCheckpoint :one
 SELECT inference_accepted_checkpoint FROM chats
 WHERE project_id = $1 AND external_chat_id = $2
@@ -1232,6 +1299,30 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 	var generation int32
 	err := row.Scan(&generation)
 	return generation, err
+}
+
+const getOldestChatCreatedAt = `-- name: GetOldestChatCreatedAt :one
+SELECT MIN(created_at)::timestamptz AS created_at
+FROM chats
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+`
+
+type GetOldestChatCreatedAtParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+// Lowest chats.created_at for these ids in this project, including
+// soft-deleted rows. Work-units verdicts outlive chat deletion, and
+// GetChatMetricsByIDs still reads those ids, so dropping deleted created_at
+// values would shift the ClickHouse bound later and omit earlier tokens.
+// Tenancy only: project_id plus the caller-supplied id list.
+func (q *Queries) GetOldestChatCreatedAt(ctx context.Context, arg GetOldestChatCreatedAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getOldestChatCreatedAt, arg.ProjectID, arg.Ids)
+	var created_at pgtype.Timestamptz
+	err := row.Scan(&created_at)
+	return created_at, err
 }
 
 const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one
@@ -2777,6 +2868,57 @@ func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Co
 	for rows.Next() {
 		var i ListClaudeUserMessagesForPromptAttachmentParentRow
 		if err := rows.Scan(&i.ID, &i.Content); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listImportedSessionObservationReplay = `-- name: ListImportedSessionObservationReplay :many
+SELECT m.id, c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+WHERE m.project_id = $1 AND c.deleted IS FALSE
+  AND m.external_message_id IS NOT NULL
+  AND m.created_at >= $2 AND m.created_at < $3
+  AND m.id > $4
+ORDER BY m.id
+LIMIT $5
+`
+
+type ListImportedSessionObservationReplayParams struct {
+	ProjectID uuid.NullUUID
+	FromTime  pgtype.Timestamptz
+	ToTime    pgtype.Timestamptz
+	AfterID   uuid.UUID
+	RowLimit  int32
+}
+
+type ListImportedSessionObservationReplayRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ListImportedSessionObservationReplay(ctx context.Context, arg ListImportedSessionObservationReplayParams) ([]ListImportedSessionObservationReplayRow, error) {
+	rows, err := q.db.Query(ctx, listImportedSessionObservationReplay,
+		arg.ProjectID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.AfterID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListImportedSessionObservationReplayRow
+	for rows.Next() {
+		var i ListImportedSessionObservationReplayRow
+		if err := rows.Scan(&i.ID, &i.OrganizationID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

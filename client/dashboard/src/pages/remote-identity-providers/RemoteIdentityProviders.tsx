@@ -21,10 +21,7 @@ import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useMoveOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/moveOrganizationRemoteSessionIssuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { useOrganizationRemoteSessionIssuerDeletePreflight } from "@gram/client/react-query/organizationRemoteSessionIssuerDeletePreflight.js";
-import {
-  invalidateAllOrganizationRemoteSessionIssuers,
-  useOrganizationRemoteSessionIssuers,
-} from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/refreshOrganizationRemoteSessionIssuerMetadata.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -48,8 +45,8 @@ import { CreateRemoteIdentityProviderSheet } from "./CreateRemoteIdentityProvide
 import { CreateRemoteSessionClientSheet } from "./CreateRemoteSessionClientSheet";
 import { issuerDisplayName } from "./issuerDisplay";
 import { MigrateIssuerDialog } from "./MigrateIssuerDialog";
+import { useOrganizationIssuerTier } from "./useOrganizationIssuerTier";
 import { migrationCandidates } from "./migrationCandidates";
-import { remoteSessionScopeTier } from "@/lib/sources";
 
 export function RemoteIdentityProvidersRoot(): JSX.Element {
   return <Outlet />;
@@ -65,7 +62,11 @@ export function RemoteIdentityProvidersPage(): JSX.Element {
 
 function RemoteIdentityProvidersOverview() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useOrganizationRemoteSessionIssuers({});
+  const organizationalTier = useOrganizationIssuerTier("organization", {
+    drain: true,
+  });
+  const projectTier = useOrganizationIssuerTier("project", { drain: true });
+  const platformTier = useOrganizationIssuerTier("platform", { drain: false });
   const [deleteTarget, setDeleteTarget] =
     useState<OrganizationRemoteSessionIssuer | null>(null);
   const [moveTarget, setMoveTarget] =
@@ -76,24 +77,18 @@ function RemoteIdentityProvidersOverview() {
     useState<OrganizationRemoteSessionIssuer | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const allItems = useMemo(() => data?.result.items ?? [], [data]);
-
-  // Three tenancy tiers. Platform issuers are inherited from the shared catalog
-  // and are read-only to the tenant, so they render in their own section without
-  // the move/consolidate/delete actions that would 404 against a global row.
-  const { platform, organizational, projectSpecific } = useMemo(
-    () => ({
-      platform: allItems.filter(
-        (item) => remoteSessionScopeTier(item.issuer) === "platform",
-      ),
-      organizational: allItems.filter(
-        (item) => remoteSessionScopeTier(item.issuer) === "organization",
-      ),
-      projectSpecific: allItems.filter(
-        (item) => remoteSessionScopeTier(item.issuer) === "project",
-      ),
-    }),
-    [allItems],
+  // Three tenancy tiers, each listed on its own. Platform issuers are
+  // inherited from the shared catalog and are read-only to the tenant, so they
+  // render in their own section without the move/consolidate/delete actions
+  // that would 404 against a global row.
+  const organizational = organizationalTier.items;
+  const projectSpecific = projectTier.items;
+  const platform = platformTier.items;
+  // Consolidation never targets a platform issuer, so the organization's own
+  // tiers, both loaded in full, are every possible candidate.
+  const consolidationPool = useMemo(
+    () => [...organizational, ...projectSpecific],
+    [organizational, projectSpecific],
   );
 
   // Promoting a project-specific issuer to organizational applies immediately
@@ -178,7 +173,8 @@ function RemoteIdentityProvidersOverview() {
       >
         <IssuerTable
           items={organizational}
-          isLoading={isLoading}
+          isLoading={organizationalTier.isLoading}
+          isError={organizationalTier.isError}
           showProject={false}
           emptyMessage="No organizational identity providers yet."
           onDelete={setDeleteTarget}
@@ -205,7 +201,8 @@ function RemoteIdentityProvidersOverview() {
           </div>
           <IssuerTable
             items={projectSpecific}
-            isLoading={isLoading}
+            isLoading={projectTier.isLoading}
+            isError={projectTier.isError}
             showProject
             emptyMessage="No project-specific identity providers yet."
             onDelete={setDeleteTarget}
@@ -217,7 +214,7 @@ function RemoteIdentityProvidersOverview() {
           />
         </Stack>
 
-        {platform.length > 0 && (
+        {(platform.length > 0 || platformTier.isError) && (
           <Stack gap={6} className="mt-3 mb-6">
             <Stack
               direction="horizontal"
@@ -240,7 +237,11 @@ function RemoteIdentityProvidersOverview() {
             </Stack>
             <IssuerTable
               items={platform}
-              isLoading={isLoading}
+              isLoading={platformTier.isLoading}
+              isError={platformTier.isError}
+              hasMore={platformTier.hasMore}
+              loadingMore={platformTier.loadingMore}
+              onLoadMore={platformTier.loadMore}
               showProject={false}
               readOnly
               onAddClient={setAddClientTarget}
@@ -280,7 +281,7 @@ function RemoteIdentityProvidersOverview() {
       {migrateSource && (
         <MigrateIssuerDialog
           source={migrateSource}
-          candidates={migrationCandidates(migrateSource, allItems)}
+          candidates={migrationCandidates(migrateSource, consolidationPool)}
           onClose={() => setMigrateSource(null)}
         />
       )}
@@ -304,6 +305,10 @@ function RemoteIdentityProvidersOverview() {
 function IssuerTable({
   items,
   isLoading,
+  isError = false,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
   showProject,
   readOnly = false,
   onAddClient,
@@ -317,6 +322,11 @@ function IssuerTable({
 }: {
   items: OrganizationRemoteSessionIssuer[];
   isLoading: boolean;
+  isError?: boolean;
+  /** Paged tiers: more rows lie past what has loaded. */
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
   showProject: boolean;
   // readOnly drops the issuer-mutation actions for tiers the tenant cannot
   // change (platform issuers): the row still links to the detail view.
@@ -353,82 +363,113 @@ function IssuerTable({
         align="center"
         justify="center"
       >
-        <Text variant="body" muted>
-          {emptyMessage}
-        </Text>
+        {isError ? (
+          <Text variant="body" className="text-destructive">
+            Failed to load identity providers. Refresh the page to try again.
+          </Text>
+        ) : (
+          <Text variant="body" muted>
+            {emptyMessage}
+          </Text>
+        )}
       </Stack>
     );
   }
 
   return (
-    <DotTable headers={headers}>
-      {items.map((item) => (
-        <DotRow
-          key={item.issuer.id}
-          icon={
-            item.issuer.logoAssetId ? (
-              <AssetImage
-                assetId={item.issuer.logoAssetId}
-                alt=""
-                className="h-5 w-5 shrink-0 object-contain"
-              />
-            ) : (
-              <Icon
-                name="fingerprint"
-                className="text-muted-foreground h-5 w-5"
-              />
-            )
-          }
-          href={issuerHref(item.issuer)}
-          ariaLabel={`View remote identity provider ${issuerDisplayName(item.issuer)}`}
-        >
-          <td className="px-3 py-3">
-            <Text
-              variant="subheading"
-              as="div"
-              className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
-            >
-              {issuerDisplayName(item.issuer)}
-            </Text>
-            <Text small muted as="div" className="truncate">
-              {item.issuer.issuer}
-            </Text>
-          </td>
-          {showProject && (
-            <td className="px-3 py-3">
-              <Text small muted>
-                {item.projectName || "—"}
-              </Text>
-            </td>
-          )}
-          <td className="px-3 py-3">
-            <Text small muted>
-              {item.clientCount} {item.clientCount === 1 ? "client" : "clients"}
-            </Text>
-          </td>
-          {showActions && (
-            <td className="px-3 py-3 text-right">
-              {readOnly ? (
-                <InheritedIssuerRowActions
-                  issuerLabel={issuerDisplayName(item.issuer)}
-                  onAddClient={() => onAddClient?.(item)}
+    <>
+      <DotTable headers={headers}>
+        {items.map((item) => (
+          <DotRow
+            key={item.issuer.id}
+            icon={
+              item.issuer.logoAssetId ? (
+                <AssetImage
+                  assetId={item.issuer.logoAssetId}
+                  alt=""
+                  className="h-5 w-5 shrink-0 object-contain"
                 />
               ) : (
-                <RowActions
-                  item={item}
-                  onDelete={() => onDelete(item)}
-                  onMakeOrganizational={() => onMakeOrganizational(item)}
-                  onMoveToProject={() => onMoveToProject(item)}
-                  onConsolidate={() => onConsolidate(item)}
-                  onRefreshMetadata={() => onRefreshMetadata(item)}
-                  refreshPending={refreshPending}
+                <Icon
+                  name="fingerprint"
+                  className="text-muted-foreground h-5 w-5"
                 />
-              )}
+              )
+            }
+            href={issuerHref(item.issuer)}
+            ariaLabel={`View remote identity provider ${issuerDisplayName(item.issuer)}`}
+          >
+            <td className="px-3 py-3">
+              <Text
+                variant="subheading"
+                as="div"
+                className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
+              >
+                {issuerDisplayName(item.issuer)}
+              </Text>
+              <Text small muted as="div" className="truncate">
+                {item.issuer.issuer}
+              </Text>
             </td>
-          )}
-        </DotRow>
-      ))}
-    </DotTable>
+            {showProject && (
+              <td className="px-3 py-3">
+                <Text small muted>
+                  {item.projectName || "—"}
+                </Text>
+              </td>
+            )}
+            <td className="px-3 py-3">
+              <Text small muted>
+                {item.clientCount}{" "}
+                {item.clientCount === 1 ? "client" : "clients"}
+              </Text>
+            </td>
+            {showActions && (
+              <td className="px-3 py-3 text-right">
+                {readOnly ? (
+                  <InheritedIssuerRowActions
+                    issuerLabel={issuerDisplayName(item.issuer)}
+                    onAddClient={() => onAddClient?.(item)}
+                  />
+                ) : (
+                  <RowActions
+                    item={item}
+                    onDelete={() => onDelete(item)}
+                    onMakeOrganizational={() => onMakeOrganizational(item)}
+                    onMoveToProject={() => onMoveToProject(item)}
+                    onConsolidate={() => onConsolidate(item)}
+                    onRefreshMetadata={() => onRefreshMetadata(item)}
+                    refreshPending={refreshPending}
+                  />
+                )}
+              </td>
+            )}
+          </DotRow>
+        ))}
+      </DotTable>
+      {isError ? (
+        <Text small className="text-destructive py-2">
+          Couldn&apos;t load every identity provider. Refresh the page to try
+          again.
+        </Text>
+      ) : null}
+      {hasMore && onLoadMore ? (
+        <Stack
+          direction="horizontal"
+          justify="center"
+          className="border-t py-3"
+        >
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={loadingMore}
+            onClick={onLoadMore}
+          >
+            <Button.Text>{loadingMore ? "Loading…" : "Load more"}</Button.Text>
+          </Button>
+        </Stack>
+      ) : null}
+    </>
   );
 }
 

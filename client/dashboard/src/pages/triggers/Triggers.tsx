@@ -30,6 +30,11 @@ import { TriggerInstance } from "@gram/client/models/components/triggerinstance.
 import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
 import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
+import { SlackReplyModeOptions } from "@/pages/assistants/onboarding/SlackReplyModeOptions";
+import {
+  SLACK_CONVERSATION_EVENT_TYPES,
+  isSlackReplyMode,
+} from "@/pages/assistants/onboarding/slackCapabilities";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
@@ -334,6 +339,75 @@ function ConfigField({
   );
 }
 
+const SLACK_REPLY_MODE_FIELD = "routing";
+
+// The reply mode decides messages and mentions, so they leave the extra event
+// types once one is picked.
+function withoutConversationEventTypes(eventTypes: unknown): string[] {
+  if (!Array.isArray(eventTypes)) return [];
+  return eventTypes.filter(
+    (t): t is string =>
+      typeof t === "string" && !SLACK_CONVERSATION_EVENT_TYPES.includes(t),
+  );
+}
+
+// Once a reply mode is set it decides messages and mentions, so the extra
+// event types stop offering them.
+function withoutConversationEventOptions(
+  properties: Record<string, TriggerConfigSchemaProperty>,
+  config: TriggerConfig,
+): Record<string, TriggerConfigSchemaProperty> {
+  const eventTypes = properties.event_types;
+  if (!isSlackReplyMode(config[SLACK_REPLY_MODE_FIELD]) || !eventTypes?.items) {
+    return properties;
+  }
+  return {
+    ...properties,
+    event_types: {
+      ...eventTypes,
+      items: {
+        ...eventTypes.items,
+        enum: eventTypes.items.enum?.filter(
+          (t) => !SLACK_CONVERSATION_EVENT_TYPES.includes(t),
+        ),
+      },
+    },
+  };
+}
+
+function SlackReplyModeField({
+  config,
+  onChange,
+}: {
+  config: TriggerConfig;
+  onChange: (config: TriggerConfig) => void;
+}) {
+  const current = config[SLACK_REPLY_MODE_FIELD];
+  return (
+    <div>
+      <Text variant="body" className="mb-1 font-medium">
+        When should it reply?
+      </Text>
+      {!isSlackReplyMode(current) && (
+        <Text small muted className="mb-2">
+          Not set: the event types below decide which messages wake it up.
+        </Text>
+      )}
+      <SlackReplyModeOptions
+        idPrefix="trigger-slack-reply"
+        value={isSlackReplyMode(current) ? current : undefined}
+        onChange={(mode) =>
+          onChange({
+            ...config,
+            [SLACK_REPLY_MODE_FIELD]: mode,
+            event_types: withoutConversationEventTypes(config.event_types),
+          })
+        }
+      />
+    </div>
+  );
+}
+
 function TriggerConfigFields({
   definition,
   config,
@@ -354,7 +428,15 @@ function TriggerConfigFields({
     );
   }
 
-  const properties = schema.properties ?? {};
+  // The Slack reply mode gets its own plain-language picker instead of the
+  // generic field rendering.
+  const { [SLACK_REPLY_MODE_FIELD]: slackReplyModeProp, ...otherProperties } =
+    schema.properties ?? {};
+  const showSlackReplyMode =
+    definition.slug === "slack" && slackReplyModeProp !== undefined;
+  const properties = showSlackReplyMode
+    ? withoutConversationEventOptions(otherProperties, config)
+    : (schema.properties ?? {});
   const required: string[] = schema.required ?? [];
 
   const requiredEntries = Object.entries(properties).filter(([key]) =>
@@ -366,6 +448,9 @@ function TriggerConfigFields({
 
   return (
     <Stack gap={3}>
+      {showSlackReplyMode && (
+        <SlackReplyModeField config={config} onChange={onChange} />
+      )}
       {requiredEntries.map(([key, prop]) => (
         <ConfigField
           key={key}

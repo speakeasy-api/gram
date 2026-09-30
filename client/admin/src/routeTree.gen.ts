@@ -11,19 +11,24 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
+import { Route as McpSetupRouteImport } from './routes/mcp-setup'
 import { Route as OrganizationsRouteImport } from './routes/organizations'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
 import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
+import { Route as UsersRouteImport } from './routes/users'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
 import { Route as OrganizationsIdOrSlugRouteImport } from './routes/organizations.$idOrSlug'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as ProjectsIdOrSlugRouteImport } from './routes/projects.$idOrSlug'
 import { Route as RemoteSessionIssuersIndexRouteImport } from './routes/remote-session-issuers.index'
 import { Route as RemoteSessionIssuersIssuerIdRouteImport } from './routes/remote-session-issuers.$issuerId'
+import { Route as UsersIndexRouteImport } from './routes/users.index'
 import { Route as OrganizationsIdOrSlugIndexRouteImport } from './routes/organizations.$idOrSlug.index'
 import { Route as OrganizationsIdOrSlugActivityRouteImport } from './routes/organizations.$idOrSlug.activity'
 import { Route as OrganizationsIdOrSlugBillingRouteImport } from './routes/organizations.$idOrSlug.billing'
+import { Route as OrganizationsIdOrSlugCoverageRouteImport } from './routes/organizations.$idOrSlug.coverage'
 import { Route as OrganizationsIdOrSlugFeaturesRouteImport } from './routes/organizations.$idOrSlug.features'
 import { Route as OrganizationsIdOrSlugMcpServersRouteImport } from './routes/organizations.$idOrSlug.mcp-servers'
 import { Route as OrganizationsIdOrSlugMembersRouteImport } from './routes/organizations.$idOrSlug.members'
@@ -43,6 +48,11 @@ const IntegrationCoverageRoute = IntegrationCoverageRouteImport.update({
   path: '/integration-coverage',
   getParentRoute: () => rootRouteImport,
 } as any)
+const McpSetupRoute = McpSetupRouteImport.update({
+  id: '/mcp-setup',
+  path: '/mcp-setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrganizationsRoute = OrganizationsRouteImport.update({
   id: '/organizations',
   path: '/organizations',
@@ -53,6 +63,11 @@ const ProjectsRoute = ProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RegistryRoute = RegistryRouteImport.update({
+  id: '/registry',
+  path: '/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RemoteSessionIssuersRoute = RemoteSessionIssuersRouteImport.update({
   id: '/remote-session-issuers',
   path: '/remote-session-issuers',
@@ -61,6 +76,11 @@ const RemoteSessionIssuersRoute = RemoteSessionIssuersRouteImport.update({
 const StokenCalculatorRoute = StokenCalculatorRouteImport.update({
   id: '/stoken-calculator',
   path: '/stoken-calculator',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UsersRoute = UsersRouteImport.update({
+  id: '/users',
+  path: '/users',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrganizationsIndexRoute = OrganizationsIndexRouteImport.update({
@@ -95,6 +115,11 @@ const RemoteSessionIssuersIssuerIdRoute =
     path: '/$issuerId',
     getParentRoute: () => RemoteSessionIssuersRoute,
   } as any)
+const UsersIndexRoute = UsersIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => UsersRoute,
+} as any)
 const OrganizationsIdOrSlugIndexRoute =
   OrganizationsIdOrSlugIndexRouteImport.update({
     id: '/',
@@ -111,6 +136,12 @@ const OrganizationsIdOrSlugBillingRoute =
   OrganizationsIdOrSlugBillingRouteImport.update({
     id: '/billing',
     path: '/billing',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
+const OrganizationsIdOrSlugCoverageRoute =
+  OrganizationsIdOrSlugCoverageRouteImport.update({
+    id: '/coverage',
+    path: '/coverage',
     getParentRoute: () => OrganizationsIdOrSlugRoute,
   } as any)
 const OrganizationsIdOrSlugFeaturesRoute =
@@ -165,18 +196,23 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
+  '/mcp-setup': typeof McpSetupRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/remote-session-issuers/$issuerId': typeof RemoteSessionIssuersIssuerIdRouteWithChildren
   '/organizations/': typeof OrganizationsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/remote-session-issuers/': typeof RemoteSessionIssuersIndexRoute
+  '/users/': typeof UsersIndexRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
+  '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
@@ -190,13 +226,17 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
+  '/mcp-setup': typeof McpSetupRoute
+  '/registry': typeof RegistryRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations': typeof OrganizationsIndexRoute
   '/projects': typeof ProjectsIndexRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersIndexRoute
+  '/users': typeof UsersIndexRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
+  '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
@@ -211,18 +251,23 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
+  '/mcp-setup': typeof McpSetupRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/remote-session-issuers/$issuerId': typeof RemoteSessionIssuersIssuerIdRouteWithChildren
   '/organizations/': typeof OrganizationsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/remote-session-issuers/': typeof RemoteSessionIssuersIndexRoute
+  '/users/': typeof UsersIndexRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
+  '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
@@ -238,18 +283,23 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/integration-coverage'
+    | '/mcp-setup'
     | '/organizations'
     | '/projects'
+    | '/registry'
     | '/remote-session-issuers'
     | '/stoken-calculator'
+    | '/users'
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
     | '/remote-session-issuers/$issuerId'
     | '/organizations/'
     | '/projects/'
     | '/remote-session-issuers/'
+    | '/users/'
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
+    | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/mcp-servers'
     | '/organizations/$idOrSlug/members'
@@ -263,13 +313,17 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/integration-coverage'
+    | '/mcp-setup'
+    | '/registry'
     | '/stoken-calculator'
     | '/projects/$idOrSlug'
     | '/organizations'
     | '/projects'
     | '/remote-session-issuers'
+    | '/users'
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
+    | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/mcp-servers'
     | '/organizations/$idOrSlug/members'
@@ -283,18 +337,23 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/integration-coverage'
+    | '/mcp-setup'
     | '/organizations'
     | '/projects'
+    | '/registry'
     | '/remote-session-issuers'
     | '/stoken-calculator'
+    | '/users'
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
     | '/remote-session-issuers/$issuerId'
     | '/organizations/'
     | '/projects/'
     | '/remote-session-issuers/'
+    | '/users/'
     | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
+    | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/mcp-servers'
     | '/organizations/$idOrSlug/members'
@@ -309,10 +368,13 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
+  McpSetupRoute: typeof McpSetupRoute
   OrganizationsRoute: typeof OrganizationsRouteWithChildren
   ProjectsRoute: typeof ProjectsRouteWithChildren
+  RegistryRoute: typeof RegistryRoute
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
   StokenCalculatorRoute: typeof StokenCalculatorRoute
+  UsersRoute: typeof UsersRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -331,6 +393,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IntegrationCoverageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mcp-setup': {
+      id: '/mcp-setup'
+      path: '/mcp-setup'
+      fullPath: '/mcp-setup'
+      preLoaderRoute: typeof McpSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/organizations': {
       id: '/organizations'
       path: '/organizations'
@@ -345,6 +414,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/registry': {
+      id: '/registry'
+      path: '/registry'
+      fullPath: '/registry'
+      preLoaderRoute: typeof RegistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/remote-session-issuers': {
       id: '/remote-session-issuers'
       path: '/remote-session-issuers'
@@ -357,6 +433,13 @@ declare module '@tanstack/react-router' {
       path: '/stoken-calculator'
       fullPath: '/stoken-calculator'
       preLoaderRoute: typeof StokenCalculatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/users': {
+      id: '/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof UsersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/organizations/': {
@@ -401,6 +484,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RemoteSessionIssuersIssuerIdRouteImport
       parentRoute: typeof RemoteSessionIssuersRoute
     }
+    '/users/': {
+      id: '/users/'
+      path: '/'
+      fullPath: '/users/'
+      preLoaderRoute: typeof UsersIndexRouteImport
+      parentRoute: typeof UsersRoute
+    }
     '/organizations/$idOrSlug/': {
       id: '/organizations/$idOrSlug/'
       path: '/'
@@ -420,6 +510,13 @@ declare module '@tanstack/react-router' {
       path: '/billing'
       fullPath: '/organizations/$idOrSlug/billing'
       preLoaderRoute: typeof OrganizationsIdOrSlugBillingRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
+    '/organizations/$idOrSlug/coverage': {
+      id: '/organizations/$idOrSlug/coverage'
+      path: '/coverage'
+      fullPath: '/organizations/$idOrSlug/coverage'
+      preLoaderRoute: typeof OrganizationsIdOrSlugCoverageRouteImport
       parentRoute: typeof OrganizationsIdOrSlugRoute
     }
     '/organizations/$idOrSlug/features': {
@@ -484,6 +581,7 @@ declare module '@tanstack/react-router' {
 interface OrganizationsIdOrSlugRouteChildren {
   OrganizationsIdOrSlugActivityRoute: typeof OrganizationsIdOrSlugActivityRoute
   OrganizationsIdOrSlugBillingRoute: typeof OrganizationsIdOrSlugBillingRoute
+  OrganizationsIdOrSlugCoverageRoute: typeof OrganizationsIdOrSlugCoverageRoute
   OrganizationsIdOrSlugFeaturesRoute: typeof OrganizationsIdOrSlugFeaturesRoute
   OrganizationsIdOrSlugMcpServersRoute: typeof OrganizationsIdOrSlugMcpServersRoute
   OrganizationsIdOrSlugMembersRoute: typeof OrganizationsIdOrSlugMembersRoute
@@ -495,6 +593,7 @@ interface OrganizationsIdOrSlugRouteChildren {
 const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
   OrganizationsIdOrSlugActivityRoute: OrganizationsIdOrSlugActivityRoute,
   OrganizationsIdOrSlugBillingRoute: OrganizationsIdOrSlugBillingRoute,
+  OrganizationsIdOrSlugCoverageRoute: OrganizationsIdOrSlugCoverageRoute,
   OrganizationsIdOrSlugFeaturesRoute: OrganizationsIdOrSlugFeaturesRoute,
   OrganizationsIdOrSlugMcpServersRoute: OrganizationsIdOrSlugMcpServersRoute,
   OrganizationsIdOrSlugMembersRoute: OrganizationsIdOrSlugMembersRoute,
@@ -573,13 +672,26 @@ const RemoteSessionIssuersRouteChildren: RemoteSessionIssuersRouteChildren = {
 const RemoteSessionIssuersRouteWithChildren =
   RemoteSessionIssuersRoute._addFileChildren(RemoteSessionIssuersRouteChildren)
 
+interface UsersRouteChildren {
+  UsersIndexRoute: typeof UsersIndexRoute
+}
+
+const UsersRouteChildren: UsersRouteChildren = {
+  UsersIndexRoute: UsersIndexRoute,
+}
+
+const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
+  McpSetupRoute: McpSetupRoute,
   OrganizationsRoute: OrganizationsRouteWithChildren,
   ProjectsRoute: ProjectsRouteWithChildren,
+  RegistryRoute: RegistryRoute,
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
   StokenCalculatorRoute: StokenCalculatorRoute,
+  UsersRoute: UsersRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

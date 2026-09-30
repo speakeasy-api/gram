@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Setup GitHub token as part of onboarding"
 //MISE hide=true

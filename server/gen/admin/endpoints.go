@@ -37,6 +37,8 @@ type Endpoints struct {
 	ListOrganizationProjects              goa.Endpoint
 	ListProjectMcpServers                 goa.Endpoint
 	ListOrganizationActivity              goa.Endpoint
+	ListUsers                             goa.Endpoint
+	ListUserOrganizations                 goa.Endpoint
 	ListOrganizations                     goa.Endpoint
 	ExtendTrial                           goa.Endpoint
 	CreateOrganization                    goa.Endpoint
@@ -73,6 +75,14 @@ type Endpoints struct {
 	GetSpendBreakdown                     goa.Endpoint
 	GetSupportMatrix                      goa.Endpoint
 	UpdateSupportMatrix                   goa.Endpoint
+	GetSupportCoverage                    goa.Endpoint
+	ListRegistryEntries                   goa.Endpoint
+	GetRegistryEntry                      goa.Endpoint
+	CreateRegistryEntry                   goa.Endpoint
+	SaveRegistryEntry                     goa.Endpoint
+	SetRegistryEntryPublished             goa.Endpoint
+	GetStripeSubscriptionCandidate        goa.Endpoint
+	SetStripeSubscription                 goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -118,6 +128,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListOrganizationProjects:              NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
 		ListProjectMcpServers:                 NewListProjectMcpServersEndpoint(s, a.APIKeyAuth),
 		ListOrganizationActivity:              NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
+		ListUsers:                             NewListUsersEndpoint(s, a.APIKeyAuth),
+		ListUserOrganizations:                 NewListUserOrganizationsEndpoint(s, a.APIKeyAuth),
 		ListOrganizations:                     NewListOrganizationsEndpoint(s, a.APIKeyAuth),
 		ExtendTrial:                           NewExtendTrialEndpoint(s, a.APIKeyAuth),
 		CreateOrganization:                    NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
@@ -154,6 +166,14 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSpendBreakdown:                     NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
 		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
+		GetSupportCoverage:                    NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
+		ListRegistryEntries:                   NewListRegistryEntriesEndpoint(s, a.APIKeyAuth),
+		GetRegistryEntry:                      NewGetRegistryEntryEndpoint(s, a.APIKeyAuth),
+		CreateRegistryEntry:                   NewCreateRegistryEntryEndpoint(s, a.APIKeyAuth),
+		SaveRegistryEntry:                     NewSaveRegistryEntryEndpoint(s, a.APIKeyAuth),
+		SetRegistryEntryPublished:             NewSetRegistryEntryPublishedEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscriptionCandidate:        NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
+		SetStripeSubscription:                 NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -179,6 +199,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
 	e.ListProjectMcpServers = m(e.ListProjectMcpServers)
 	e.ListOrganizationActivity = m(e.ListOrganizationActivity)
+	e.ListUsers = m(e.ListUsers)
+	e.ListUserOrganizations = m(e.ListUserOrganizations)
 	e.ListOrganizations = m(e.ListOrganizations)
 	e.ExtendTrial = m(e.ExtendTrial)
 	e.CreateOrganization = m(e.CreateOrganization)
@@ -215,6 +237,14 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSpendBreakdown = m(e.GetSpendBreakdown)
 	e.GetSupportMatrix = m(e.GetSupportMatrix)
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
+	e.GetSupportCoverage = m(e.GetSupportCoverage)
+	e.ListRegistryEntries = m(e.ListRegistryEntries)
+	e.GetRegistryEntry = m(e.GetRegistryEntry)
+	e.CreateRegistryEntry = m(e.CreateRegistryEntry)
+	e.SaveRegistryEntry = m(e.SaveRegistryEntry)
+	e.SetRegistryEntryPublished = m(e.SetRegistryEntryPublished)
+	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
+	e.SetStripeSubscription = m(e.SetStripeSubscription)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -644,6 +674,52 @@ func NewListOrganizationActivityEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.ListOrganizationActivity(ctx, p)
+	}
+}
+
+// NewListUsersEndpoint returns an endpoint function that calls the method
+// "listUsers" of service "admin".
+func NewListUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListUsersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListUsers(ctx, p)
+	}
+}
+
+// NewListUserOrganizationsEndpoint returns an endpoint function that calls the
+// method "listUserOrganizations" of service "admin".
+func NewListUserOrganizationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListUserOrganizationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListUserOrganizations(ctx, p)
 	}
 }
 
@@ -1463,5 +1539,189 @@ func NewUpdateSupportMatrixEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.UpdateSupportMatrix(ctx, p)
+	}
+}
+
+// NewGetSupportCoverageEndpoint returns an endpoint function that calls the
+// method "getSupportCoverage" of service "admin".
+func NewGetSupportCoverageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSupportCoveragePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSupportCoverage(ctx, p)
+	}
+}
+
+// NewListRegistryEntriesEndpoint returns an endpoint function that calls the
+// method "listRegistryEntries" of service "admin".
+func NewListRegistryEntriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRegistryEntriesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRegistryEntries(ctx, p)
+	}
+}
+
+// NewGetRegistryEntryEndpoint returns an endpoint function that calls the
+// method "getRegistryEntry" of service "admin".
+func NewGetRegistryEntryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRegistryEntryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRegistryEntry(ctx, p)
+	}
+}
+
+// NewCreateRegistryEntryEndpoint returns an endpoint function that calls the
+// method "createRegistryEntry" of service "admin".
+func NewCreateRegistryEntryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateRegistryEntryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateRegistryEntry(ctx, p)
+	}
+}
+
+// NewSaveRegistryEntryEndpoint returns an endpoint function that calls the
+// method "saveRegistryEntry" of service "admin".
+func NewSaveRegistryEntryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SaveRegistryEntryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SaveRegistryEntry(ctx, p)
+	}
+}
+
+// NewSetRegistryEntryPublishedEndpoint returns an endpoint function that calls
+// the method "setRegistryEntryPublished" of service "admin".
+func NewSetRegistryEntryPublishedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetRegistryEntryPublishedPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetRegistryEntryPublished(ctx, p)
+	}
+}
+
+// NewGetStripeSubscriptionCandidateEndpoint returns an endpoint function that
+// calls the method "getStripeSubscriptionCandidate" of service "admin".
+func NewGetStripeSubscriptionCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetStripeSubscriptionCandidatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetStripeSubscriptionCandidate(ctx, p)
+	}
+}
+
+// NewSetStripeSubscriptionEndpoint returns an endpoint function that calls the
+// method "setStripeSubscription" of service "admin".
+func NewSetStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetStripeSubscriptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetStripeSubscription(ctx, p)
 	}
 }

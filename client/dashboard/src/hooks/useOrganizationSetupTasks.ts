@@ -1,6 +1,4 @@
 import type { GramCore } from "@gram/client/core.js";
-import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import type { QueryHookOptions } from "@gram/client/react-query/_types.js";
 import {
@@ -48,23 +46,5 @@ export function invalidateOrganizationSetupTasks(
           "organizationId" in part &&
           part.organizationId === organizationId,
       ),
-  });
-}
-
-export function useOrganizationSetupTasks(
-  organizationId: string,
-  includeHidden: boolean,
-  options?: QueryHookOptions<ListSetupTasksQueryData, ListSetupTasksQueryError>,
-): UseQueryResult<ListSetupTasksQueryData, ListSetupTasksQueryError> {
-  const client = useGramContext();
-  return useQuery({
-    ...buildOrganizationSetupTasksQuery(
-      client,
-      organizationId,
-      includeHidden,
-      options,
-    ),
-    throwOnError: false,
-    ...options,
   });
 }
