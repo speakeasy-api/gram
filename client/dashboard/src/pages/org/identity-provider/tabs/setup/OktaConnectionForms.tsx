@@ -14,6 +14,7 @@ import { useRecordIdentityProviderConnectionAgentMutation } from "@gram/client/r
 import { useReplaceIdentityProviderConnectionClientSecretMutation } from "@gram/client/react-query/replaceIdentityProviderConnectionClientSecret.js";
 import { useSubmitIdentityProviderConnectionClientIdMutation } from "@gram/client/react-query/submitIdentityProviderConnectionClientId.js";
 
+import { usesClientSecret } from "../../connectionView";
 import {
   inlineError,
   invalidateIdentityProviderQueries,
@@ -158,13 +159,6 @@ export function CreateConnectionForm(): JSX.Element {
       </SettingsSection.Panel>
     </SettingsSection>
   );
-}
-
-// Older OIN connections still authenticate with a private key.
-export function usesClientSecret(
-  connection: OktaIdentityProviderConnection,
-): boolean {
-  return connection.listingMode === "oin" && !connection.jwksUrl;
 }
 
 function ClientSecretField({

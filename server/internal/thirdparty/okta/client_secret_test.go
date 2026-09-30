@@ -2,11 +2,14 @@ package okta
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -333,4 +336,94 @@ func TestClient_ClientSecretBasic_LatchesDPoPAfterTokenExpiry(t *testing.T) {
 	_, err := tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0, MaxPages: 0})
 	require.ErrorContains(t, err, "not accepted for client_secret_basic")
 	require.Len(t, tc.stub.recordedResourceRequests(), 1, "downgraded token must never reach the resource")
+}
+
+// fakeCredentials is a comparable CredentialProvider whose pin and Observe
+// outcome the test controls, standing in for the durable connection record.
+type fakeCredentials struct {
+	secret     string
+	pinned     atomic.Bool
+	observeErr atomic.Pointer[error]
+	mu         sync.Mutex
+	observed   []bool
+}
+
+func (f *fakeCredentials) Acquire(context.Context, Config) (CredentialLease, error) {
+	return fakeLease{provider: f}, nil
+}
+
+func (f *fakeCredentials) RequireDPoP(context.Context, Config) (bool, error) {
+	return f.pinned.Load(), nil
+}
+
+func (f *fakeCredentials) observations() []bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.observed)
+}
+
+type fakeLease struct{ provider *fakeCredentials }
+
+func (l fakeLease) EncryptedSecret() string { return l.provider.secret }
+func (l fakeLease) RequireDPoP() bool       { return l.provider.pinned.Load() }
+func (l fakeLease) Close()                  {}
+func (l fakeLease) Observe(_ context.Context, bound bool) error {
+	if err := l.provider.observeErr.Load(); err != nil {
+		return *err
+	}
+	l.provider.mu.Lock()
+	defer l.provider.mu.Unlock()
+	l.provider.observed = append(l.provider.observed, bound)
+	if bound {
+		l.provider.pinned.Store(true)
+	}
+	return nil
+}
+
+func TestClient_ClientSecretBasic_CachedBearerStopsAtConcurrentPin(t *testing.T) {
+	t.Parallel()
+	credentials := &fakeCredentials{secret: stubCiphertextPrefix + "stub-secret", pinned: atomic.Bool{}, observeErr: atomic.Pointer[error]{}, mu: sync.Mutex{}, observed: nil}
+	cfg := basicTestConfig("stub-secret")
+	cfg.Credentials = credentials
+	tc := newTestClient(t, testenv.NewTracerProvider(t), testenv.NewLogger(t), cfg)
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setTokenType("Bearer")
+	require.Len(t, listApps(t, tc), 1)
+	require.Equal(t, []bool{false}, credentials.observations())
+	exchanges := len(tc.stub.recordedTokenForms())
+
+	// Another process pins the connection while this client's Bearer token is unexpired.
+	credentials.pinned.Store(true)
+	_, err := tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0, MaxPages: 0})
+	require.ErrorContains(t, err, "not accepted for client_secret_basic")
+	require.Greater(t, len(tc.stub.recordedTokenForms()), exchanges, "the pinned client mints again instead of reusing Bearer")
+	require.Len(t, tc.stub.recordedResourceRequests(), 1, "the cached Bearer token must not reach the resource after the pin")
+
+	// Okta now binds tokens, so the same client recovers under the pin.
+	tc.stub.setTokenType(dpop.TokenType)
+	require.Len(t, listApps(t, tc), 1)
+	require.Equal(t, dpop.TokenType, tc.stub.recordedResourceRequests()[1].scheme)
+}
+
+func TestClient_ClientSecretBasic_ObserveFailureDiscardsTokenWithoutLatching(t *testing.T) {
+	t.Parallel()
+	credentials := &fakeCredentials{secret: stubCiphertextPrefix + "stub-secret", pinned: atomic.Bool{}, observeErr: atomic.Pointer[error]{}, mu: sync.Mutex{}, observed: nil}
+	cfg := basicTestConfig("stub-secret")
+	cfg.Credentials = credentials
+	tc := newTestClient(t, testenv.NewTracerProvider(t), testenv.NewLogger(t), cfg)
+	tc.stub.setApps(stubApps(1))
+	observeErr := errors.New("transient pin write failure")
+	credentials.observeErr.Store(&observeErr)
+
+	_, err := tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0, MaxPages: 0})
+	require.ErrorIs(t, err, observeErr)
+	require.Empty(t, tc.stub.recordedResourceRequests(), "an unrecorded token must not reach the resource")
+	require.False(t, tc.client.dpopObserved, "the in-memory latch must not run ahead of the durable record")
+
+	// With the record unwritten, the client's requirement still follows the
+	// record: a Bearer token is accepted until a binding is recorded.
+	credentials.observeErr.Store(nil)
+	tc.stub.setTokenType("Bearer")
+	require.Len(t, listApps(t, tc), 1)
+	require.Equal(t, []bool{false}, credentials.observations())
 }

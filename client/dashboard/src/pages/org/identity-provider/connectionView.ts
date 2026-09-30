@@ -35,6 +35,13 @@ export function connectionStep(
   return "connected";
 }
 
+/** Older OIN connections still authenticate with a private key. */
+export function usesClientSecret(
+  connection: Pick<OktaIdentityProviderConnection, "listingMode" | "jwksUrl">,
+): boolean {
+  return connection.listingMode === "oin" && !connection.jwksUrl;
+}
+
 /** Mirrors the server: a verification has completed, whether or not it found gaps. */
 export function isConnectionChecked(connection: {
   status: OktaIdentityProviderConnectionStatus;

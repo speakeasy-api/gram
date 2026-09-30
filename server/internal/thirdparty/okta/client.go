@@ -655,6 +655,30 @@ func (c *httpClient) cachedToken() (cachedToken, bool) {
 	return c.cached, true
 }
 
+// liveCachedToken returns the unexpired cached token unless it is a Bearer
+// token and the durable record has since pinned the connection to DPoP: a
+// client that cached Bearer before another process observed binding must not
+// keep presenting it until expiry. A pinned Bearer token is evicted so the
+// caller mints again under the pin.
+func (c *httpClient) liveCachedToken(ctx context.Context) (cachedToken, bool, error) {
+	tok, ok := c.cachedToken()
+	if !ok {
+		return noToken, false, nil
+	}
+	if c.cfg.Credentials == nil || strings.EqualFold(tok.tokenType, dpop.TokenType) {
+		return tok, true, nil
+	}
+	pinned, err := c.cfg.Credentials.RequireDPoP(ctx, c.cfg)
+	if err != nil {
+		return noToken, false, fmt.Errorf("check okta token binding pin: %w", err)
+	}
+	if pinned {
+		c.evictRejectedToken(tok.accessToken)
+		return noToken, false, nil
+	}
+	return tok, true, nil
+}
+
 func (c *httpClient) evictToken() {
 	c.mu.Lock()
 	c.cached = noToken
@@ -694,16 +718,16 @@ func (c *httpClient) token(ctx context.Context) (cachedToken, error) {
 	if err := ctx.Err(); err != nil {
 		return noToken, fmt.Errorf("get okta token: %w", err)
 	}
-	if tok, ok := c.cachedToken(); ok {
-		return tok, nil
+	if tok, ok, err := c.liveCachedToken(ctx); err != nil || ok {
+		return tok, err
 	}
 
 	if err := c.acquireMint(ctx); err != nil {
 		return noToken, err
 	}
 	defer c.releaseMint()
-	if tok, ok := c.cachedToken(); ok {
-		return tok, nil
+	if tok, ok, err := c.liveCachedToken(ctx); err != nil || ok {
+		return tok, err
 	}
 
 	tok, err := c.mint(ctx, defaultScopes)
@@ -742,13 +766,15 @@ func (c *httpClient) mint(ctx context.Context, scopes []string) (cachedToken, er
 	if err != nil {
 		return noToken, err
 	}
+	// The token is unusable until its binding is recorded; the in-memory latch
+	// never runs ahead of the durable record.
 	bound := strings.EqualFold(tok.tokenType, dpop.TokenType)
-	c.dpopObserved = c.dpopObserved || bound
 	if lease != nil {
 		if err := lease.Observe(ctx, bound); err != nil {
 			return noToken, fmt.Errorf("persist okta token binding: %w", err)
 		}
 	}
+	c.dpopObserved = c.dpopObserved || bound
 	tok.requireDPoP = required
 	return tok, nil
 }

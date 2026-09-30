@@ -50,9 +50,10 @@ vi.mock(
 );
 afterEach(cleanup);
 beforeEach(() => {
-  mutation.mutate.mockClear();
+  mutation.mutate.mockReset();
   mutation.isPending = false;
   mutation.error = undefined;
+  mutation.onSuccess = undefined;
 });
 
 function Wrapper({ children }: { children: React.ReactNode }) {

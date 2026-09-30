@@ -34,12 +34,10 @@ func tokenFactory(t *testing.T, bc *basicConnection) okta.ClientFactory {
 	return okta.NewClientFactory(testenv.NewLogger(t), policy, nil, bc.enc)
 }
 
-func TestWorkerTokenCredentialLivenessAndBinding(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	bc := newBasicConnection(t, ctx)
-	var bearer atomic.Bool
-	var exchanges atomic.Int32
+// tokenServer answers every token exchange with a DPoP token, or a Bearer
+// token while bearer is set, and every other path with an empty collection.
+func tokenServer(t *testing.T, bearer *atomic.Bool, exchanges *atomic.Int32) *httptest.Server {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path != "/oauth2/v1/token" {
@@ -53,7 +51,17 @@ func TestWorkerTokenCredentialLivenessAndBinding(t *testing.T) {
 		}
 		_, _ = fmt.Fprintf(w, `{"access_token":"test-token","token_type":%q,"expires_in":3600,"scope":"okta.apps.read okta.users.read okta.groups.read"}`, kind)
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestWorkerTokenCredentialLivenessAndBinding(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	bc := newBasicConnection(t, ctx)
+	var bearer atomic.Bool
+	var exchanges atomic.Int32
+	srv := tokenServer(t, &bearer, &exchanges)
 	cfg := tokenConfig(t, bc)
 	cfg.OrgURL = srv.URL
 	factory := tokenFactory(t, bc)
@@ -80,6 +88,40 @@ func TestWorkerTokenCredentialLivenessAndBinding(t *testing.T) {
 	_, err = stale.ListApps(ctx, okta.ListAppsRequest{})
 	require.ErrorContains(t, err, "credential revoked")
 	require.Equal(t, before, exchanges.Load(), "revoked snapshot cannot contact the token endpoint")
+}
+
+func TestWorkerCachedBearerStopsAfterVerificationPins(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	bc := newBasicConnection(t, ctx)
+	var bearer atomic.Bool
+	var exchanges atomic.Int32
+	bearer.Store(true)
+	srv := tokenServer(t, &bearer, &exchanges)
+	cfg := tokenConfig(t, bc)
+	cfg.OrgURL = srv.URL
+	client, err := tokenFactory(t, bc).Client(cfg)
+	require.NoError(t, err)
+	_, err = client.ListApps(ctx, okta.ListAppsRequest{})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, exchanges.Load())
+
+	// A verification in another process observes binding and commits the pin
+	// while the worker's Bearer token is unexpired.
+	tx := testenv.BeginTx(t, ctx, bc.conn)
+	lease, err := oktacredentials.Provider{Tx: tx, ConnectionID: bc.connectionID}.Acquire(ctx, cfg)
+	require.NoError(t, err)
+	require.NoError(t, lease.Observe(ctx, true))
+	lease.Close()
+	require.NoError(t, tx.Commit(ctx))
+
+	_, err = client.ListApps(ctx, okta.ListAppsRequest{})
+	require.ErrorContains(t, err, "not accepted for client_secret_basic")
+	require.EqualValues(t, 2, exchanges.Load(), "the pinned worker mints again instead of reusing its Bearer token")
+
+	bearer.Store(false)
+	_, err = client.ListApps(ctx, okta.ListAppsRequest{})
+	require.NoError(t, err, "the same worker client recovers once Okta binds tokens")
 }
 
 func TestTokenCredentialLeaseSerializesWithdrawal(t *testing.T) {

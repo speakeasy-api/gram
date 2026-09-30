@@ -79,6 +79,22 @@ func (p Provider) Acquire(ctx context.Context, cfg okta.Config) (okta.Credential
 	return l, nil
 }
 
+// RequireDPoP reads the committed pin, or the transaction's view of it for a
+// verification provider, without locking the connection.
+func (p Provider) RequireDPoP(ctx context.Context, cfg okta.Config) (bool, error) {
+	var q *repo.Queries
+	if p.Tx != nil {
+		q = repo.New(p.Tx)
+	} else {
+		q = repo.New(p.DB)
+	}
+	rows, err := q.GetOktaIdentityProviderConnection(ctx, repo.GetOktaIdentityProviderConnectionParams{ID: conv.ToNullUUID(p.ConnectionID), OrganizationID: cfg.OrganizationID})
+	if err != nil {
+		return false, fmt.Errorf("read okta connection pin: %w", err)
+	}
+	return rows.OktaIdentityProviderConnection.DpopRequired, nil
+}
+
 type lease struct {
 	clientID     string
 	observed     *atomic.Bool
