@@ -213,6 +213,7 @@ describe("AppSidebar", () => {
       {
         label: "Account Management",
         links: [
+          { label: "Users", href: "/users" },
           { label: "Organizations", href: "/organizations" },
           { label: "Projects", href: "/projects" },
           { label: "S-token Calculator", href: "/stoken-calculator" },

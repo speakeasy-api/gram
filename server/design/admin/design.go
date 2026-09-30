@@ -25,6 +25,37 @@ var MarkEnterpriseTrialConvertedResult = Type("MarkEnterpriseTrialConvertedResul
 	})
 })
 
+var AdminUserOrganization = Type("AdminUserOrganization", func() {
+	Required("id", "name", "slug")
+	Attribute("id", String)
+	Attribute("name", String)
+	Attribute("slug", String)
+	Attribute("disabled_at", String, func() { Format(FormatDateTime) })
+})
+var AdminUser = Type("AdminUser", func() {
+	Required("id", "display_name", "email", "organizations", "organization_count")
+	Attribute("id", String)
+	Attribute("display_name", String)
+	Attribute("email", String)
+	Attribute("last_login", String, func() { Format(FormatDateTime) })
+	Attribute("organizations", ArrayOf(AdminUserOrganization))
+	Attribute("organization_count", Int64)
+})
+var AdminListUsersResult = Type("AdminListUsersResult", func() {
+	Required("users", "total", "page", "limit")
+	Attribute("users", ArrayOf(AdminUser))
+	Attribute("total", Int64)
+	Attribute("page", Int)
+	Attribute("limit", Int)
+})
+var AdminListUserOrganizationsResult = Type("AdminListUserOrganizationsResult", func() {
+	Required("organizations", "total", "page", "limit")
+	Attribute("organizations", ArrayOf(AdminUserOrganization))
+	Attribute("total", Int64)
+	Attribute("page", Int)
+	Attribute("limit", Int)
+})
+
 var AdminOrganization = Type("AdminOrganization", func() {
 	Description("Organization details surfaced to admin operators.")
 	Required("id", "name", "slug", "account_type", "whitelisted", "member_count", "created_at", "updated_at")
@@ -785,6 +816,46 @@ var _ = Service("admin", func() {
 
 		shared.CursorPagination()
 		Meta("openapi:operationId", "adminListOrganizationActivity")
+	})
+
+	Method("listUsers", func() {
+		Description("Staff-only active user discovery.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("q", String)
+
+			Attribute("page", Int, func() { Minimum(1) })
+			Attribute("limit", Int, func() { Minimum(1); Maximum(100) })
+		})
+		Result(AdminListUsersResult)
+		HTTP(func() {
+			GET("/admin/users.list")
+			Param("q")
+			Param("page")
+			Param("limit")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminListUsers")
+	})
+
+	Method("listUserOrganizations", func() {
+		Description("Staff-only active user discovery.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("user_id", String)
+			Required("user_id")
+			Attribute("page", Int, func() { Minimum(1) })
+			Attribute("limit", Int, func() { Minimum(1); Maximum(100) })
+		})
+		Result(AdminListUserOrganizationsResult)
+		HTTP(func() {
+			GET("/admin/users.organizations.list")
+			Param("user_id")
+			Param("page")
+			Param("limit")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminListUserOrganizations")
 	})
 
 	Method("listOrganizations", func() {

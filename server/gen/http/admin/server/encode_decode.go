@@ -4155,6 +4155,490 @@ func EncodeListOrganizationActivityError(encoder func(context.Context, http.Resp
 	}
 }
 
+// EncodeListUsersResponse returns an encoder for responses returned by the
+// admin listUsers endpoint.
+func EncodeListUsersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminListUsersResult)
+		enc := encoder(ctx, w)
+		body := NewListUsersResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListUsersRequest returns a decoder for requests sent to the admin
+// listUsers endpoint.
+func DecodeListUsersRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.ListUsersPayload, error) {
+	return func(r *http.Request) (*admin.ListUsersPayload, error) {
+		var payload *admin.ListUsersPayload
+		var (
+			q                 *string
+			page              *int
+			limit             *int
+			adminSessionToken *string
+			err               error
+		)
+		qp := r.URL.Query()
+		qRaw := qp.Get("q")
+		if qRaw != "" {
+			q = &qRaw
+		}
+		{
+			pageRaw := qp.Get("page")
+			if pageRaw != "" {
+				v, err2 := strconv.ParseInt(pageRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("page", pageRaw, "integer"))
+				}
+				pv := int(v)
+				page = &pv
+			}
+		}
+		if page != nil {
+			if *page < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("page", *page, 1, true))
+			}
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				pv := int(v)
+				limit = &pv
+			}
+		}
+		if limit != nil {
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+		}
+		if limit != nil {
+			if *limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 100, false))
+			}
+		}
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListUsersPayload(q, page, limit, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListUsersError returns an encoder for errors returned by the listUsers
+// admin endpoint.
+func EncodeListUsersError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUsersUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUsersForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUsersBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUsersNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUsersConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUsersUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUsersInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUsersInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUsersUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUsersGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeListUserOrganizationsResponse returns an encoder for responses
+// returned by the admin listUserOrganizations endpoint.
+func EncodeListUserOrganizationsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminListUserOrganizationsResult)
+		enc := encoder(ctx, w)
+		body := NewListUserOrganizationsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListUserOrganizationsRequest returns a decoder for requests sent to
+// the admin listUserOrganizations endpoint.
+func DecodeListUserOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.ListUserOrganizationsPayload, error) {
+	return func(r *http.Request) (*admin.ListUserOrganizationsPayload, error) {
+		var payload *admin.ListUserOrganizationsPayload
+		var (
+			userID            string
+			page              *int
+			limit             *int
+			adminSessionToken *string
+			err               error
+		)
+		qp := r.URL.Query()
+		userID = qp.Get("user_id")
+		if userID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "query string"))
+		}
+		{
+			pageRaw := qp.Get("page")
+			if pageRaw != "" {
+				v, err2 := strconv.ParseInt(pageRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("page", pageRaw, "integer"))
+				}
+				pv := int(v)
+				page = &pv
+			}
+		}
+		if page != nil {
+			if *page < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("page", *page, 1, true))
+			}
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				pv := int(v)
+				limit = &pv
+			}
+		}
+		if limit != nil {
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+		}
+		if limit != nil {
+			if *limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 100, false))
+			}
+		}
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListUserOrganizationsPayload(userID, page, limit, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListUserOrganizationsError returns an encoder for errors returned by
+// the listUserOrganizations admin endpoint.
+func EncodeListUserOrganizationsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUserOrganizationsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUserOrganizationsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUserOrganizationsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUserOrganizationsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUserOrganizationsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUserOrganizationsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUserOrganizationsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUserOrganizationsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUserOrganizationsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListUserOrganizationsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListOrganizationsResponse returns an encoder for responses returned by
 // the admin listOrganizations endpoint.
 func EncodeListOrganizationsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -13909,6 +14393,46 @@ func marshalAdminAuditLogToAuditLogResponseBody(v *admin.AuditLog) *AuditLogResp
 			tv := val
 			res.Metadata[tk] = tv
 		}
+	}
+
+	return res
+}
+
+// marshalAdminAdminUserToAdminUserResponseBody builds a value of type
+// *AdminUserResponseBody from a value of type *admin.AdminUser.
+func marshalAdminAdminUserToAdminUserResponseBody(v *admin.AdminUser) *AdminUserResponseBody {
+	res := &AdminUserResponseBody{
+		ID:                v.ID,
+		DisplayName:       v.DisplayName,
+		Email:             v.Email,
+		LastLogin:         v.LastLogin,
+		OrganizationCount: v.OrganizationCount,
+	}
+	if v.Organizations != nil {
+		res.Organizations = make([]*AdminUserOrganizationResponseBody, len(v.Organizations))
+		for i, val := range v.Organizations {
+			if val == nil {
+				res.Organizations[i] = nil
+				continue
+			}
+			res.Organizations[i] = marshalAdminAdminUserOrganizationToAdminUserOrganizationResponseBody(val)
+		}
+	} else {
+		res.Organizations = []*AdminUserOrganizationResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminUserOrganizationToAdminUserOrganizationResponseBody builds
+// a value of type *AdminUserOrganizationResponseBody from a value of type
+// *admin.AdminUserOrganization.
+func marshalAdminAdminUserOrganizationToAdminUserOrganizationResponseBody(v *admin.AdminUserOrganization) *AdminUserOrganizationResponseBody {
+	res := &AdminUserOrganizationResponseBody{
+		ID:         v.ID,
+		Name:       v.Name,
+		Slug:       v.Slug,
+		DisabledAt: v.DisabledAt,
 	}
 
 	return res

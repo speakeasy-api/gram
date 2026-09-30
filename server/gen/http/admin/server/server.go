@@ -41,6 +41,8 @@ type Server struct {
 	ListOrganizationProjects              http.Handler
 	ListProjectMcpServers                 http.Handler
 	ListOrganizationActivity              http.Handler
+	ListUsers                             http.Handler
+	ListUserOrganizations                 http.Handler
 	ListOrganizations                     http.Handler
 	ExtendTrial                           http.Handler
 	CreateOrganization                    http.Handler
@@ -134,6 +136,8 @@ func New(
 			{"ListOrganizationProjects", "GET", "/admin/organization.projects"},
 			{"ListProjectMcpServers", "GET", "/admin/project.mcpServers"},
 			{"ListOrganizationActivity", "GET", "/admin/organization.activity"},
+			{"ListUsers", "GET", "/admin/users.list"},
+			{"ListUserOrganizations", "GET", "/admin/users.organizations.list"},
 			{"ListOrganizations", "GET", "/admin/organizations.list"},
 			{"ExtendTrial", "POST", "/admin/trial.extend"},
 			{"CreateOrganization", "POST", "/admin/organization.create"},
@@ -199,6 +203,8 @@ func New(
 		ListOrganizationProjects:              NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
 		ListProjectMcpServers:                 NewListProjectMcpServersHandler(e.ListProjectMcpServers, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationActivity:              NewListOrganizationActivityHandler(e.ListOrganizationActivity, mux, decoder, encoder, errhandler, formatter),
+		ListUsers:                             NewListUsersHandler(e.ListUsers, mux, decoder, encoder, errhandler, formatter),
+		ListUserOrganizations:                 NewListUserOrganizationsHandler(e.ListUserOrganizations, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizations:                     NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
 		ExtendTrial:                           NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
 		CreateOrganization:                    NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
@@ -271,6 +277,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListOrganizationProjects = m(s.ListOrganizationProjects)
 	s.ListProjectMcpServers = m(s.ListProjectMcpServers)
 	s.ListOrganizationActivity = m(s.ListOrganizationActivity)
+	s.ListUsers = m(s.ListUsers)
+	s.ListUserOrganizations = m(s.ListUserOrganizations)
 	s.ListOrganizations = m(s.ListOrganizations)
 	s.ExtendTrial = m(s.ExtendTrial)
 	s.CreateOrganization = m(s.CreateOrganization)
@@ -342,6 +350,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListOrganizationProjectsHandler(mux, h.ListOrganizationProjects)
 	MountListProjectMcpServersHandler(mux, h.ListProjectMcpServers)
 	MountListOrganizationActivityHandler(mux, h.ListOrganizationActivity)
+	MountListUsersHandler(mux, h.ListUsers)
+	MountListUserOrganizationsHandler(mux, h.ListUserOrganizations)
 	MountListOrganizationsHandler(mux, h.ListOrganizations)
 	MountExtendTrialHandler(mux, h.ExtendTrial)
 	MountCreateOrganizationHandler(mux, h.CreateOrganization)
@@ -1438,6 +1448,112 @@ func NewListOrganizationActivityHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listOrganizationActivity")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListUsersHandler configures the mux to serve the "admin" service
+// "listUsers" endpoint.
+func MountListUsersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/users.list", f)
+}
+
+// NewListUsersHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "listUsers" endpoint.
+func NewListUsersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListUsersRequest(mux, decoder)
+		encodeResponse = EncodeListUsersResponse(encoder)
+		encodeError    = EncodeListUsersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listUsers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListUserOrganizationsHandler configures the mux to serve the "admin"
+// service "listUserOrganizations" endpoint.
+func MountListUserOrganizationsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/users.organizations.list", f)
+}
+
+// NewListUserOrganizationsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listUserOrganizations" endpoint.
+func NewListUserOrganizationsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListUserOrganizationsRequest(mux, decoder)
+		encodeResponse = EncodeListUserOrganizationsResponse(encoder)
+		encodeError    = EncodeListUserOrganizationsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listUserOrganizations")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

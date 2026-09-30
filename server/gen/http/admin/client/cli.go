@@ -565,6 +565,132 @@ func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizat
 	return v, nil
 }
 
+// BuildListUsersPayload builds the payload for the admin listUsers endpoint
+// from CLI flags.
+func BuildListUsersPayload(adminListUsersQ string, adminListUsersPage string, adminListUsersLimit string, adminListUsersAdminSessionToken string) (*admin.ListUsersPayload, error) {
+	var err error
+	var q *string
+	{
+		if adminListUsersQ != "" {
+			q = &adminListUsersQ
+		}
+	}
+	var page *int
+	{
+		if adminListUsersPage != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListUsersPage, 10, strconv.IntSize)
+			val := int(v)
+			page = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for page, must be INT")
+			}
+			if *page < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("page", *page, 1, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit *int
+	{
+		if adminListUsersLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListUsersLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListUsersAdminSessionToken != "" {
+			adminSessionToken = &adminListUsersAdminSessionToken
+		}
+	}
+	v := &admin.ListUsersPayload{}
+	v.Q = q
+	v.Page = page
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListUserOrganizationsPayload builds the payload for the admin
+// listUserOrganizations endpoint from CLI flags.
+func BuildListUserOrganizationsPayload(adminListUserOrganizationsUserID string, adminListUserOrganizationsPage string, adminListUserOrganizationsLimit string, adminListUserOrganizationsAdminSessionToken string) (*admin.ListUserOrganizationsPayload, error) {
+	var err error
+	var userID string
+	{
+		userID = adminListUserOrganizationsUserID
+	}
+	var page *int
+	{
+		if adminListUserOrganizationsPage != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListUserOrganizationsPage, 10, strconv.IntSize)
+			val := int(v)
+			page = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for page, must be INT")
+			}
+			if *page < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("page", *page, 1, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit *int
+	{
+		if adminListUserOrganizationsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListUserOrganizationsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListUserOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminListUserOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.ListUserOrganizationsPayload{}
+	v.UserID = userID
+	v.Page = page
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
 func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {

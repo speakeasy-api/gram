@@ -72,6 +72,8 @@ trackedFiles:
   src/funcs/adminListOrganizations.ts: {}
   src/funcs/adminListProjectMcpServers.ts: {}
   src/funcs/adminListRegistryEntries.ts: {}
+  src/funcs/adminListUserOrganizations.ts: {}
+  src/funcs/adminListUsers.ts: {}
   src/funcs/adminLogout.ts: {}
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
@@ -121,6 +123,8 @@ trackedFiles:
   src/models/components/adminlistorganizationprojectsresult.ts: {}
   src/models/components/adminlistorganizationsresult.ts: {}
   src/models/components/adminlistprojectmcpserversresult.ts: {}
+  src/models/components/adminlistuserorganizationsresult.ts: {}
+  src/models/components/adminlistusersresult.ts: {}
   src/models/components/adminmcpserver.ts: {}
   src/models/components/adminmeterusagebucket.ts: {}
   src/models/components/adminmeterusageresponse.ts: {}
@@ -142,6 +146,8 @@ trackedFiles:
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
   src/models/components/adminstripesubscriptioncandidate.ts: {}
+  src/models/components/adminuser.ts: {}
+  src/models/components/adminuserorganization.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/auditlog.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
@@ -233,6 +239,8 @@ trackedFiles:
   src/models/operations/adminlistorganizations.ts: {}
   src/models/operations/adminlistprojectmcpservers.ts: {}
   src/models/operations/adminlistregistryentries.ts: {}
+  src/models/operations/adminlistuserorganizations.ts: {}
+  src/models/operations/adminlistusers.ts: {}
   src/models/operations/adminserveimage.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
@@ -301,6 +309,10 @@ trackedFiles:
   src/react-query/adminListProjectMcpServers.ts: {}
   src/react-query/adminListRegistryEntries.core.ts: {}
   src/react-query/adminListRegistryEntries.ts: {}
+  src/react-query/adminListUserOrganizations.core.ts: {}
+  src/react-query/adminListUserOrganizations.ts: {}
+  src/react-query/adminListUsers.core.ts: {}
+  src/react-query/adminListUsers.ts: {}
   src/react-query/adminLogout.ts: {}
   src/react-query/adminMarkEnterpriseTrialConverted.ts: {}
   src/react-query/adminMigrateToGlobalIssuer.ts: {}
@@ -896,6 +908,27 @@ examples:
       responses:
         "200":
           application/json: {"entries": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminListUserOrganizations:
+    speakeasy-default-admin-list-user-organizations:
+      parameters:
+        query:
+          user_id: "<id>"
+      responses:
+        "200":
+          application/json: {"limit": 519276, "organizations": [], "page": 947677, "total": 637828}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminListUsers:
+    speakeasy-default-admin-list-users:
+      responses:
+        "200":
+          application/json: {"limit": 433798, "page": 439408, "total": 735721, "users": [{"display_name": "Brent_Schroeder", "email": "Marjorie_Bergstrom94@yahoo.com", "id": "<id>", "organization_count": 558780, "organizations": [{"id": "<id>", "name": "<value>", "slug": "<value>"}]}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

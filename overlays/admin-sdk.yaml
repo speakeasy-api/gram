@@ -130,6 +130,12 @@ actions:
   - target: $.paths.*[?@.operationId=='adminListProjectMcpServers']
     update:
       x-speakeasy-name-override: listProjectMcpServers
+  - target: $.paths.*[?@.operationId=='adminListUsers']
+    update:
+      x-speakeasy-name-override: listUsers
+  - target: $.paths.*[?@.operationId=='adminListUserOrganizations']
+    update:
+      x-speakeasy-name-override: listUserOrganizations
   - target: $.paths.*[?@.operationId=='adminListOrganizations']
     update:
       x-speakeasy-name-override: listOrganizations

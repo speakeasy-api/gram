@@ -42,6 +42,8 @@ import { adminListOrganizationProjects } from "../funcs/adminListOrganizationPro
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
+import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
+import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
@@ -73,6 +75,8 @@ import { AdminInferenceSpendMonth } from "../models/components/admininferencespe
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
+import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
+import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingConfiguration } from "../models/components/adminonboardingconfiguration.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
@@ -165,6 +169,8 @@ import {
 } from "../models/operations/adminlistorganizations.js";
 import { AdminListProjectMcpServersRequest } from "../models/operations/adminlistprojectmcpservers.js";
 import { AdminListRegistryEntriesRequest } from "../models/operations/adminlistregistryentries.js";
+import { AdminListUserOrganizationsRequest } from "../models/operations/adminlistuserorganizations.js";
+import { AdminListUsersRequest } from "../models/operations/adminlistusers.js";
 import {
   AdminServeImageRequest,
   AdminServeImageResponse,
@@ -1180,6 +1186,40 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminStartTrial(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listUsers admin
+   *
+   * @remarks
+   * Staff-only active user discovery.
+   */
+  async listUsers(
+    request?: AdminListUsersRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminListUsersResult> {
+    return unwrapAsync(adminListUsers(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listUserOrganizations admin
+   *
+   * @remarks
+   * Staff-only active user discovery.
+   */
+  async listUserOrganizations(
+    request: AdminListUserOrganizationsRequest,
+    options?: RequestOptions,
+  ): Promise<AdminListUserOrganizationsResult> {
+    return unwrapAsync(adminListUserOrganizations(
       this,
       request,
       options,
