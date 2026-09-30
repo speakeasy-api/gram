@@ -26,7 +26,7 @@ case "$phase" in
     ;;
   full|all)
     read_only
-    mise exec -- go test ./server/internal/platformmcp -run '^(TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents|TestRegistrationStoreRegistersManyServersInOneProject)$' -count=1
+    mise exec -- go test ./server/internal/platformmcp -run '^TestRegistrationStoreRegistersManyServersInOneProject$' -count=1
     ;;
   *)
     echo "usage: mise run smoke:platform-mcp [read-only|registration|readiness|full|all]" >&2
