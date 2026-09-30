@@ -80,14 +80,14 @@ func (s *Service) GetRegistryEntry(ctx context.Context, p *gen.GetRegistryEntryP
 func (s *Service) registryMutationResult(ctx context.Context, action string, e mcpregistry.Entry, err error) (*gen.AdminRegistryEntry, error) {
 	actor, _, _ := adminActor(ctx)
 	if err != nil {
-		// Issue paths carry no submitted values; InvalidError's text is constant.
+		// Issue paths carry no submitted values; unexpected causes are logged once by registryError.
 		paths := make([]string, 0)
 		if invalid, ok := errors.AsType[*mcpregistry.InvalidError](err); ok {
 			for _, issue := range invalid.Issues {
 				paths = append(paths, issue.Path)
 			}
 		}
-		s.logger.WarnContext(ctx, "registry mutation failed", attr.SlogAuditAction(action), attr.SlogAuthorizationActorID(actor.String()), attr.SlogError(err), attr.SlogRegistryIssuePaths(paths))
+		s.logger.WarnContext(ctx, "registry mutation failed", attr.SlogAuditAction(action), attr.SlogAuthorizationActorID(actor.String()), attr.SlogRegistryIssuePaths(paths))
 		return nil, s.registryError(ctx, err)
 	}
 
