@@ -9699,6 +9699,26 @@ CREATE TABLE IF NOT EXISTS okta_resource_connections (
 CREATE INDEX IF NOT EXISTS okta_resource_connections_remote_session_issuer_idx
 ON okta_resource_connections (remote_session_issuer_id);
 
+-- An organization administrator dismissed the suggestion to add the MCP server
+-- a Gram-owned catalog entry describes, made because a synced Okta application
+-- maps to that entry. One row per organization x entry; restore deletes it, so
+-- created_at is when it was dismissed. Dismissals outlive the Okta connection:
+-- the decision was about the server, not the connection. Who dismissed or
+-- restored lives in the audit log.
+CREATE TABLE IF NOT EXISTS okta_server_suggestion_dismissals (
+  organization_id TEXT NOT NULL,
+  registry_entry_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_server_suggestion_dismissals_pkey PRIMARY KEY (organization_id, registry_entry_id),
+  CONSTRAINT okta_server_suggestion_dismissals_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT okta_server_suggestion_dismissals_registry_entry_id_fkey FOREIGN KEY (registry_entry_id) REFERENCES mcp_registry_entries (id) ON DELETE CASCADE
+);
+
+-- Serves the cascade from mcp_registry_entries.
+CREATE INDEX IF NOT EXISTS okta_server_suggestion_dismissals_registry_entry_id_idx
+ON okta_server_suggestion_dismissals (registry_entry_id);
+
 CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
