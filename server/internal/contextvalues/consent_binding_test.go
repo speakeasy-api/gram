@@ -39,6 +39,12 @@ func TestConsentBindingProvenanceIsScopedAndNotASession(t *testing.T) {
 		"oauth":                SetOAuthClientID(ctx, "oauth-client"),
 		"assistant":            SetAssistantPrincipal(ctx, AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}),
 		"scope override":       SetRBACScopeOverride(ctx, "root"),
+		"acting surface":       SetActingSurface(ctx, ActingSurfacePlatformMCP),
+		"legacy impersonation": WithValidatedGramSession(ctx, auth, true),
+		"agent actor":          WithAuthenticatedActor(ctx, auth, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.String())),
+		"other human actor":    WithAuthenticatedActor(ctx, auth, urn.NewPrincipal(urn.PrincipalTypeUser, "other")),
+		"missing actor":        WithAuthenticatedActor(ctx, auth, urn.Principal{}),
+		"invalid human actor":  WithAuthenticatedActor(ctx, auth, urn.NewPrincipal(urn.PrincipalTypeUser, "")),
 		"principal credential": WithPrincipalCredentialAuthorization(ctx, auth, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.String()), PrincipalCredential{}),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -47,4 +53,37 @@ func TestConsentBindingProvenanceIsScopedAndNotASession(t *testing.T) {
 			require.False(t, ok)
 		})
 	}
+}
+
+func TestConsentBindingRejectsConflictingAuthProvenance(t *testing.T) {
+	t.Parallel()
+	ctx := WithConsentBindingAuthorization(t.Context(), "human", "org", uuid.New(), uuid.New(), uuid.New())
+	auth, _ := GetAuthContext(ctx)
+	for name, modify := range map[string]func(*AuthContext){
+		"session ID":       func(a *AuthContext) { session := "session"; a.SessionID = &session },
+		"empty session ID": func(a *AuthContext) { session := ""; a.SessionID = &session },
+		"API key ID":       func(a *AuthContext) { a.APIKeyID = "key" },
+		"API key name":     func(a *AuthContext) { a.APIKeyName = "key" },
+		"API key scopes":   func(a *AuthContext) { a.APIKeyScopes = []string{"root"} },
+		"plugin hooks key": func(a *AuthContext) { a.OrgWidePluginHooksKey = true },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			copied := *auth
+			modify(&copied)
+			require.Same(t, auth.consentBinding, copied.consentBinding)
+			_, ok := GetConsentBindingAuthorization(SetAuthContext(ctx, &copied))
+			require.False(t, ok)
+		})
+	}
+	t.Run("support session", func(t *testing.T) {
+		t.Parallel()
+		copied := *auth
+		copied.IsAdmin = true
+		copied.SupportOrganizationID = copied.ActiveOrganizationID
+		support := WithValidatedSupportSession(ctx, &copied)
+		require.True(t, IsSupportSession(support))
+		_, ok := GetConsentBindingAuthorization(support)
+		require.False(t, ok)
+	})
 }

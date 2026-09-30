@@ -146,7 +146,13 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 		require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 		for _, action := range []string{"agent_connections", "agent_attach", "agent_detach"} {
 			_, err := call(action, false, url.Values{"remote_session_id": {owned.String()}, "binding_id": {uuid.NewString()}})
-			require.Error(t, err, "%s: %s", name, action)
+			var denied *oops.ShareableError
+			require.ErrorAs(t, err, &denied, "%s: %s", name, action)
+			want := oops.CodeForbidden
+			if name == "missing browser proof" {
+				want = oops.CodeUnauthorized
+			}
+			require.Equal(t, want, denied.Code, "%s: %s", name, action)
 		}
 	}
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, original))

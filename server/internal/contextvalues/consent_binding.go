@@ -58,6 +58,10 @@ func GetConsentBindingAuthorization(ctx context.Context) (ConsentBindingAuthoriz
 		return zero, false
 	}
 	scope := *auth.consentBinding
+	actor, ok := AuthenticatedActor(ctx)
+	if !ok || actor.Type != urn.PrincipalTypeUser || actor.ID != scope.UserID {
+		return zero, false
+	}
 	if scope.UserID == "" || scope.OrganizationID == "" || scope.ProjectID == uuid.Nil || scope.AgentID == uuid.Nil || scope.IssuerID == uuid.Nil || auth.UserID != scope.UserID || auth.ActiveOrganizationID != scope.OrganizationID || auth.ProjectID == nil || *auth.ProjectID != scope.ProjectID {
 		return zero, false
 	}

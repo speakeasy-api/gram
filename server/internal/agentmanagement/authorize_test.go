@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -276,4 +277,32 @@ func TestConsentProvenanceOnlyAuthorizesSelectedAgentAttachments(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 	_, err = authorizer.RequireHuman(ctx, tx)
 	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestConsentNonOwnerRequiresLiveAuthorizeGrant(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedOrganizationUser(t, conn, "org-a", "caller")
+	agent := createAgent(t, conn, "org-a", "owner", "Consent delegation agent")
+	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}, loadedGrantsOnly: true}
+	authorizer := NewAuthorizer(engine)
+	ctx := contextvalues.WithConsentBindingAuthorization(t.Context(), "caller", "org-a", uuid.New(), agent.ID, uuid.New())
+	// Prepared grants cannot substitute for a current database grant.
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeAgentAuthorize, agent.ID.String())})
+	tx := testenv.BeginTx(t, ctx, conn)
+	_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.NotEmpty(t, engine.checks)
+	require.Equal(t, authz.ScopeAgentAuthorize, engine.checks[0].Scope)
+	require.Equal(t, agent.ID.String(), engine.checks[0].ResourceID)
+	principal := urn.NewPrincipal(urn.PrincipalTypeUser, "caller")
+	seedGrant(t, ctx, conn, "org-a", principal, authz.ScopeAgentAuthorize, agent.ID.String())
+	_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{OrganizationID: "org-a", PrincipalUrn: principal})
+	require.NoError(t, err)
+	_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

@@ -46,7 +46,7 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 	}
 	human, err := s.loadConsentHuman(ctx, state, *target)
 	if err != nil {
-		return oops.E(oops.CodeForbidden, err, "consent authorizer is not eligible")
+		return consentAgentAuthorizationError(err, "consent authorizer is not eligible")
 	}
 	if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
 		return oops.C(oops.CodeNotFound)
@@ -66,7 +66,7 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 	} else {
 		selected, err = s.authorizeConsentAgent(ctx, state, endpoint, r.PostForm.Get("agent_id"))
 		if err != nil {
-			return oops.E(oops.CodeForbidden, err, "selected agent is not eligible")
+			return consentAgentAuthorizationError(err, "selected agent is not eligible")
 		}
 	}
 	// This trust is scoped to attachment management for this exact target. The

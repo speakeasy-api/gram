@@ -804,7 +804,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
 		if err != nil {
-			return oops.E(oops.CodeForbidden, err, "selected agent is not eligible").LogWarn(ctx, logger)
+			return consentAgentAuthorizationError(err, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		// Keep the challenge retryable while the human connects and attaches
 		// required services. Human-owned tokens alone do not authorize an agent.
@@ -923,7 +923,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		agentAuthorization, ferr = s.authorizeConsentAgent(ctx, challengeState, finalEndpoint, selectedAgentID)
 		if ferr != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
-			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
+			return consentAgentAuthorizationError(ferr, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 	}
 
