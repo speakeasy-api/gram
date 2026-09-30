@@ -549,9 +549,9 @@ describe("AuthProvider cross-organization links", () => {
   });
 });
 
-// Portable "/~" paths let external links (marketing CTAs, docs) deep-link
-// into the app without knowing the visitor's org or project slugs. They match
-// no route, so AuthProvider must resolve them before route matching runs.
+// Portable "/@self" paths let external links (marketing CTAs, docs) deep-link
+// into the app without knowing the visitor's org slug. They match no route,
+// so AuthProvider must resolve them before route matching runs.
 describe("AuthProvider portable paths", () => {
   const PROJECT_ORG = {
     id: "org-3",
@@ -589,52 +589,6 @@ describe("AuthProvider portable paths", () => {
   afterEach(() => {
     cleanup();
     localStorage.clear();
-  });
-
-  it("bounces a logged-out visitor through login with the destination", () => {
-    mocks.sessionData.mockReturnValue({
-      session: null,
-      error: new Error("unauthorized"),
-      status: "error",
-    });
-
-    renderGate("/~/toolsets?tab=all");
-
-    expect(screen.getByTestId("location").textContent).toBe(
-      "/login?redirect=%2F~%2Ftoolsets%3Ftab%3Dall",
-    );
-  });
-
-  it("sends a session with no organization to sign-up with the destination", () => {
-    mocks.sessionData.mockReturnValue(noOrgSession());
-
-    renderGate("/~/toolsets");
-
-    expect(screen.getByTestId("location").textContent).toBe(
-      "/sign-up?redirect=%2F~%2Ftoolsets",
-    );
-  });
-
-  it("expands into the active org and first project", () => {
-    mocks.sessionData.mockReturnValue(portableSession());
-
-    renderGate("/~/toolsets?tab=all");
-
-    expect(screen.getByTestId("location").textContent).toBe(
-      "/acme/projects/proj-a/toolsets?tab=all",
-    );
-    expect(screen.getByTestId("app")).toBeTruthy();
-  });
-
-  it("prefers the last-visited project", () => {
-    localStorage.setItem("preferredProject", "proj-b");
-    mocks.sessionData.mockReturnValue(portableSession());
-
-    renderGate("/~/toolsets");
-
-    expect(screen.getByTestId("location").textContent).toBe(
-      "/acme/projects/proj-b/toolsets",
-    );
   });
 
   it("bounces a logged-out /@self visitor through login with the destination", () => {
@@ -678,6 +632,17 @@ describe("AuthProvider portable paths", () => {
     renderGate("/login?redirect=%2F%40self%2Fsettings");
 
     expect(screen.getByTestId("location").textContent).toBe("/acme/settings");
+  });
+
+  it("keeps an explicit project instead of the last-visited one", () => {
+    localStorage.setItem("preferredProject", "proj-b");
+    mocks.sessionData.mockReturnValue(portableSession());
+
+    renderGate("/@self/projects/default/toolsets");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/acme/projects/default/toolsets",
+    );
   });
 
   it("leaves ordinary paths alone", () => {
