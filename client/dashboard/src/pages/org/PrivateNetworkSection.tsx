@@ -69,6 +69,9 @@ function PrivateNetworkCleanup({
       handleAPIError(error, "Failed to retry private network cleanup"),
   });
 
+  const credentialsRejected =
+    ingress.lastError === "provider_credentials_rejected";
+
   return (
     <SettingsSection.Panel>
       <SettingsSection.Body>
@@ -76,9 +79,15 @@ function PrivateNetworkCleanup({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Text variant="subheading">Tailscale</Text>
-              <Badge variant="warning" background>
-                Cleaning up
-              </Badge>
+              {credentialsRejected ? (
+                <Badge variant="destructive" background>
+                  Cleanup blocked
+                </Badge>
+              ) : (
+                <Badge variant="warning" background>
+                  Cleaning up
+                </Badge>
+              )}
             </div>
             <Text small muted>
               Hostname label <code>{ingress.hostname}</code>
@@ -88,11 +97,21 @@ function PrivateNetworkCleanup({
             Removal started <HumanizeDateTime date={ingress.updatedAt} />
           </Text>
         </div>
-        <Alert variant="info" dismissible={false}>
-          Gram is removing the private route and its provider resources. You can
-          connect another tailnet after cleanup completes. This page checks for
-          completion automatically.
-        </Alert>
+        {credentialsRejected ? (
+          <Alert variant="error" dismissible={false}>
+            Tailscale rejected the OAuth client this connection uses, so Gram
+            can't remove its devices from your tailnet. Re-enable or restore
+            that OAuth client in the Tailscale admin console, then retry
+            cleanup. If the client was deleted, contact support to finish
+            cleanup.
+          </Alert>
+        ) : (
+          <Alert variant="info" dismissible={false}>
+            Gram is removing the private route and its provider resources. You
+            can connect another tailnet after cleanup completes. This page
+            checks for completion automatically.
+          </Alert>
+        )}
         {statusStale && (
           <Alert variant="warning" dismissible={false}>
             Cleanup status may be out of date because the latest check failed.

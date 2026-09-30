@@ -144,6 +144,7 @@ UPDATE network_ingresses
 SET
     enabled = FALSE,
     status = 'deleting',
+    last_error = NULL,
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
@@ -227,6 +228,16 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND updated_at = @expected_updated_at
   AND deleted IS FALSE;
+
+-- name: RecordDeletedNetworkIngressCleanupError :execrows
+-- Records why cleanup of a tombstone is blocked. NULL means cleanup is
+-- progressing normally. updated_at stays the desired-state version.
+UPDATE network_ingresses
+SET last_error = sqlc.narg('last_error')
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND updated_at = @expected_updated_at
+  AND deleted IS TRUE;
 
 -- name: ListDueNetworkIngresses :many
 SELECT id, organization_id, provider, deleted_at

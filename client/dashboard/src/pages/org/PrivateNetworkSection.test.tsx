@@ -33,6 +33,7 @@ const state = vi.hoisted(() => ({
         identityRequired: boolean;
         credentialsConfigured: boolean;
         status: string;
+        lastError?: string;
         createdAt: Date;
         updatedAt: Date;
       }
@@ -330,6 +331,35 @@ describe("PrivateNetworkSection", () => {
     expect(
       screen.queryByText(/Private network settings could not be loaded/),
     ).toBeNull();
+  });
+
+  it("shows blocked cleanup when Tailscale rejects the saved credentials", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: false,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "deleting",
+      lastError: "provider_credentials_rejected",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(screen.getByText("Cleanup blocked")).toBeTruthy();
+    expect(screen.queryByText("Cleaning up")).toBeNull();
+    expect(
+      screen.getByText(/Tailscale rejected the OAuth client/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry cleanup" }));
+    expect(state.deleteMutate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
+    });
   });
 
   it.each([
