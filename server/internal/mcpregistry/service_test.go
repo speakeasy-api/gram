@@ -57,7 +57,7 @@ func TestReadyMissingTable(t *testing.T) {
 	ctx, s, db := newTestService(t)
 	require.NoError(t, s.Ready(ctx))
 
-	_, err := db.Exec(ctx, "DROP TABLE mcp_registry_entries") //nolint:glint // notestingrawsql: drop only this test database table to exercise readiness failure; never expose destructive DDL through production SQLc methods.
+	_, err := db.Exec(ctx, "DROP TABLE mcp_registry_entries CASCADE") //nolint:glint // notestingrawsql: drop only this test database table to exercise readiness failure; never expose destructive DDL through production SQLc methods.
 	require.NoError(t, err)
 	require.Error(t, s.Ready(ctx))
 }
