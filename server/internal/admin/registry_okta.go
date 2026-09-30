@@ -17,30 +17,21 @@ import (
 // observedOktaNames loads the cross-tenant aggregate, leaving out Okta's own
 // applications, which every tenant has and no entry should claim.
 func (s *Service) observedOktaNames(ctx context.Context) ([]oktamatch.Observed, error) {
-	rows, err := repo.New(s.db).AdminListObservedOktaApplicationNames(ctx)
+	names := make([]string, 0, len(oktaapplications.InternalApplications))
+	modes := make([]string, 0, len(oktaapplications.InternalApplications))
+	for _, rule := range oktaapplications.InternalApplications {
+		names = append(names, rule.Name)
+		modes = append(modes, rule.SignOnMode)
+	}
+	rows, err := repo.New(s.db).AdminListObservedOktaApplicationNames(ctx, repo.AdminListObservedOktaApplicationNamesParams{InternalNames: names, InternalModes: modes})
 	if err != nil {
 		return nil, fmt.Errorf("list observed okta application names: %w", err)
 	}
 	observed := make([]oktamatch.Observed, 0, len(rows))
 	for _, row := range rows {
-		if isInternalOktaApplication(row.Name) {
-			continue
-		}
 		observed = append(observed, oktamatch.Observed{Name: row.Name, Labels: row.Labels, SignOnModes: row.SignOnModes, Organizations: int(row.Organizations)})
 	}
 	return observed, nil
-}
-
-// isInternalOktaApplication matches Okta's own applications by name alone;
-// the sync keeps admin-created apps reusing such a name, but none of them
-// belong in a catalog mapping either.
-func isInternalOktaApplication(name string) bool {
-	for _, rule := range oktaapplications.InternalApplications {
-		if rule.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 // oktaMappings returns which entry claims each OIN name.
@@ -88,6 +79,7 @@ func (s *Service) GetRegistryOktaCandidates(ctx context.Context, p *gen.GetRegis
 			Organizations: c.Organizations,
 			SignOnModes:   c.SignOnModes,
 			Reason:        c.Reason,
+			Integrator:    oktamatch.Integrator(c.Name),
 			MappedBy:      mappedBy,
 		})
 	}
@@ -124,6 +116,7 @@ func (s *Service) ListRegistryOktaUnmapped(ctx context.Context, _ *gen.ListRegis
 			OinName:            o.Name,
 			Organizations:      o.Organizations,
 			SignOnModes:        o.SignOnModes,
+			Integrator:         oktamatch.Integrator(o.Name),
 			SuggestedEntryID:   nil,
 			SuggestedEntryName: nil,
 			Reason:             nil,

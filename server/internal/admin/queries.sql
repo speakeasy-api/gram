@@ -760,22 +760,36 @@ FROM users u WHERE u.id = @user_id::text AND u.deleted_at IS NULL AND u.workos_d
 
 -- name: AdminListObservedOktaApplicationNames :many
 -- Staff-only, deliberately cross-tenant: the OIN key is public catalog data
--- and only counts and labels leave here, never organization ids. Labels are
--- admin-editable per tenant and are used for matching, capped per name.
+-- and only counts and labels leave here, never organization ids. Only active
+-- applications with a live assignment count, as suggestions do; Okta's own
+-- applications are excluded by (name, sign-on mode) as the sync defines them.
+-- Labels are admin-editable per tenant and are used for matching, capped.
+WITH live AS (
+    SELECT a.organization_id, a.name, a.label, a.sign_on_mode
+    FROM okta_applications AS a
+    WHERE a.removed_at IS NULL
+      AND a.status = 'ACTIVE'
+      AND EXISTS (
+        SELECT 1 FROM okta_application_assignments AS s
+        WHERE s.organization_id = a.organization_id
+          AND s.identity_provider_connection_id = a.identity_provider_connection_id
+          AND s.okta_app_id = a.okta_app_id
+          AND s.removed_at IS NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM ROWS FROM (unnest(sqlc.arg(internal_names)::text[]), unnest(sqlc.arg(internal_modes)::text[])) AS i(name, mode)
+        WHERE i.name = a.name AND i.mode = a.sign_on_mode
+      )
+)
 SELECT
-    a.name,
-    COUNT(DISTINCT a.organization_id)::integer AS organizations,
-    (ARRAY(SELECT DISTINCT l.label FROM okta_applications AS l
-        WHERE l.name = a.name AND l.removed_at IS NULL
-        ORDER BY l.label LIMIT 8))::text[] AS labels,
-    (ARRAY(SELECT DISTINCT m.sign_on_mode FROM okta_applications AS m
-        WHERE m.name = a.name AND m.removed_at IS NULL
-        ORDER BY m.sign_on_mode))::text[] AS sign_on_modes
-FROM okta_applications AS a
-WHERE a.removed_at IS NULL
-  AND a.status = 'ACTIVE'
-GROUP BY a.name
-ORDER BY organizations DESC, a.name;
+    l.name,
+    COUNT(DISTINCT l.organization_id)::integer AS organizations,
+    (ARRAY(SELECT DISTINCT x.label FROM live AS x WHERE x.name = l.name ORDER BY x.label LIMIT 8))::text[] AS labels,
+    (ARRAY(SELECT DISTINCT x.sign_on_mode FROM live AS x WHERE x.name = l.name ORDER BY x.sign_on_mode))::text[] AS sign_on_modes
+FROM live AS l
+GROUP BY l.name
+ORDER BY organizations DESC, l.name;
 
 -- name: AdminListRegistryOktaMappings :many
 -- Every OIN name a catalog entry claims, published or not, so a candidate

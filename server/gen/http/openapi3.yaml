@@ -80941,6 +80941,9 @@ components:
         AdminRegistryOktaCandidate:
             type: object
             properties:
+                integrator:
+                    type: boolean
+                    description: Whether the name comes from an integrator listing rather than Okta's public catalog; any integrator account can publish under a vendor-like key, so confirm with care.
                 mapped_by:
                     type: string
                     description: Name of the entry that already claims this key, when one does.
@@ -80969,6 +80972,7 @@ components:
                 - organizations
                 - sign_on_modes
                 - reason
+                - integrator
         AdminRegistryOktaCandidates:
             type: object
             properties:
@@ -80992,6 +80996,9 @@ components:
         AdminRegistryOktaUnmappedName:
             type: object
             properties:
+                integrator:
+                    type: boolean
+                    description: Whether the name comes from an integrator listing rather than Okta's public catalog.
                 oin_name:
                     type: string
                 organizations:
@@ -81017,6 +81024,7 @@ components:
                 - oin_name
                 - organizations
                 - sign_on_modes
+                - integrator
         AdminRegistryPage:
             type: object
             properties:

@@ -51,6 +51,17 @@ var instanceSuffix = regexp.MustCompile(`_\d+$`)
 
 var nonWord = regexp.MustCompile(`[^a-z0-9]+`)
 
+// genericNames are what Okta assigns to admin-created apps; they say nothing
+// about the vendor, and their labels are chosen by the tenant.
+var genericNames = regexp.MustCompile(`^(oidc_client|bookmark|template_.*|saml_2_0|wsfed|auto_login|browser_plugin|secure_password_store)$`)
+
+// Integrator reports whether the name comes from an integrator listing rather
+// than Okta's public catalog. Any integrator account can publish under a
+// vendor-like key, so staff should confirm these with more care.
+func Integrator(name string) bool {
+	return integratorPrefix.MatchString(strings.ToLower(name))
+}
+
 // Key reduces an Okta application name to its vendor token: the integrator
 // prefix and instance suffix are dropped and separators removed, so
 // "integrator-4080826_linear_1" and "linear" both read "linear".
@@ -92,7 +103,7 @@ func Match(entry Entry, observed []Observed) []Candidate {
 	candidates := make([]Candidate, 0)
 	for _, o := range observed {
 		key := Key(o.Name)
-		if key == "" {
+		if key == "" || genericNames.MatchString(strings.ToLower(o.Name)) {
 			continue
 		}
 		switch {
@@ -140,17 +151,27 @@ func domainTokens(entry Entry) map[string]bool {
 	return tokens
 }
 
-// registrableLabel returns the label left of the public suffix for the
-// common shapes vendors use ("mcp.notion.com" → notion, "app.linear.app"
-// → linear, "mcp.atlassian.co.uk" → atlassian). Two-label suffixes with a
-// short second-level label are treated as a public suffix.
+// secondLevelSuffixes are the common two-label public suffixes; anything
+// else is treated as a single-label suffix, so "mcp.foo.io" reads foo.
+var secondLevelSuffixes = map[string]bool{
+	"co.uk": true, "org.uk": true, "ac.uk": true, "gov.uk": true, "me.uk": true,
+	"co.jp": true, "ne.jp": true, "or.jp": true, "ac.jp": true,
+	"com.au": true, "net.au": true, "org.au": true, "edu.au": true,
+	"com.br": true, "com.mx": true, "com.ar": true, "com.co": true,
+	"co.nz": true, "co.in": true, "co.za": true, "co.kr": true, "co.il": true,
+	"com.sg": true, "com.cn": true, "com.tw": true, "com.hk": true, "com.my": true, "com.tr": true,
+}
+
+// registrableLabel returns the label left of the public suffix
+// ("mcp.notion.com" → notion, "mcp.atlassian.co.uk" → atlassian,
+// "mcp.foo.io" → foo).
 func registrableLabel(host string) string {
 	parts := strings.Split(strings.ToLower(host), ".")
-	if len(parts) < 2 {
+	n := len(parts)
+	if n < 2 {
 		return ""
 	}
-	n := len(parts)
-	if n >= 3 && len(parts[n-1]) == 2 && len(parts[n-2]) <= 3 {
+	if n >= 3 && secondLevelSuffixes[parts[n-2]+"."+parts[n-1]] {
 		return nonWord.ReplaceAllString(parts[n-3], "")
 	}
 	return nonWord.ReplaceAllString(parts[n-2], "")

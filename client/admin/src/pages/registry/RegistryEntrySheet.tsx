@@ -265,10 +265,14 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
                   disabled={busy}
                   onAdd={(name) => {
                     const next = addOinName(text, name);
-                    if (next === null) return;
-                    setText(formatRegistryJson(next) ?? next);
+                    if ("error" in next) {
+                      setFailure(new Error(next.error));
+                      return;
+                    }
+                    setText(next.text);
                     setIssues([]);
                     setServerIssues([]);
+                    setFailure(null);
                     setEdited(true);
                   }}
                 />

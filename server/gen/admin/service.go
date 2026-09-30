@@ -628,6 +628,10 @@ type AdminRegistryOktaCandidate struct {
 	// domain: the vendor token matches a remote or website host; title: it matches
 	// the entry title; label: a tenant's label equals the entry title.
 	Reason string
+	// Whether the name comes from an integrator listing rather than Okta's public
+	// catalog; any integrator account can publish under a vendor-like key, so
+	// confirm with care.
+	Integrator bool
 	// Name of the entry that already claims this key, when one does.
 	MappedBy *string
 }
@@ -651,6 +655,9 @@ type AdminRegistryOktaUnmappedName struct {
 	OinName       string
 	Organizations int
 	SignOnModes   []string
+	// Whether the name comes from an integrator listing rather than Okta's public
+	// catalog.
+	Integrator bool
 	// The entry the heuristic would map it to, when one matches.
 	SuggestedEntryID   *string
 	SuggestedEntryName *string

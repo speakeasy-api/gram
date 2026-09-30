@@ -1,57 +1,50 @@
 /** Helpers for editing the Okta namespace of a registry record as text. */
+import {
+  applyEdits,
+  modify,
+  parseTree,
+  findNodeAtLocation,
+} from "jsonc-parser";
 
 export const OKTA_NAMESPACE = "com.speakeasy.ai/okta";
 
+const FORMAT = { tabSize: 2, insertSpaces: true, eol: "\n" };
+
 /**
- * Adds an OIN name to the record's Okta namespace and returns the new JSON
- * text, or null when the text is not a JSON object. Everything else in the
- * record is preserved as parsed; the caller formats the result.
+ * Adds an OIN name to the record's Okta namespace with a source-preserving
+ * edit: every other byte of the text, including numbers JavaScript cannot
+ * represent, stays exactly as typed. Returns the new text, or an error to
+ * show when the text is not an editable JSON object.
  */
-export function addOinName(text: string, name: string): string | null {
-  let root: unknown;
-  try {
-    root = JSON.parse(text);
-  } catch {
-    return null;
+export function addOinName(
+  text: string,
+  name: string,
+): { text: string } | { error: string } {
+  const root = parseTree(text);
+  if (!root || root.type !== "object") {
+    return { error: "Fix the JSON before adding an Okta application." };
   }
-  if (typeof root !== "object" || root === null || Array.isArray(root)) {
-    return null;
+  const names = findNodeAtLocation(root, ["_meta", OKTA_NAMESPACE, "oinNames"]);
+  if (names && names.type !== "array") {
+    return { error: "oinNames must be an array before adding to it." };
   }
-  const record = root as Record<string, unknown>;
-  const meta =
-    typeof record._meta === "object" &&
-    record._meta !== null &&
-    !Array.isArray(record._meta)
-      ? (record._meta as Record<string, unknown>)
-      : {};
-  const namespace =
-    typeof meta[OKTA_NAMESPACE] === "object" &&
-    meta[OKTA_NAMESPACE] !== null &&
-    !Array.isArray(meta[OKTA_NAMESPACE])
-      ? (meta[OKTA_NAMESPACE] as Record<string, unknown>)
-      : {};
-  const names = Array.isArray(namespace.oinNames)
-    ? namespace.oinNames.filter((n): n is string => typeof n === "string")
-    : [];
-  if (!names.includes(name)) names.push(name);
-  record._meta = {
-    ...meta,
-    [OKTA_NAMESPACE]: { ...namespace, oinNames: names },
-  };
-  return JSON.stringify(record);
+  if (currentOinNames(text).includes(name)) return { text };
+  const edits = modify(
+    text,
+    ["_meta", OKTA_NAMESPACE, "oinNames", names ? -1 : 0],
+    name,
+    { formattingOptions: FORMAT, isArrayInsertion: true },
+  );
+  return { text: applyEdits(text, edits) };
 }
 
-/** Reads the OIN names currently in the editor text, if it parses. */
+/** Reads the OIN names currently in the text, if it parses. */
 export function currentOinNames(text: string): string[] {
-  try {
-    const root = JSON.parse(text) as {
-      _meta?: { [OKTA_NAMESPACE]?: { oinNames?: unknown } };
-    };
-    const names = root?._meta?.[OKTA_NAMESPACE]?.oinNames;
-    return Array.isArray(names)
-      ? names.filter((n): n is string => typeof n === "string")
-      : [];
-  } catch {
-    return [];
-  }
+  const root = parseTree(text);
+  if (!root) return [];
+  const names = findNodeAtLocation(root, ["_meta", OKTA_NAMESPACE, "oinNames"]);
+  if (!names || names.type !== "array") return [];
+  return (names.children ?? [])
+    .filter((n) => n.type === "string")
+    .map((n) => n.value as string);
 }

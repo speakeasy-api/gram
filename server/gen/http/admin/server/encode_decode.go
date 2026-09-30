@@ -15430,6 +15430,7 @@ func marshalAdminAdminRegistryOktaCandidateToAdminRegistryOktaCandidateResponseB
 		OinName:       v.OinName,
 		Organizations: v.Organizations,
 		Reason:        v.Reason,
+		Integrator:    v.Integrator,
 		MappedBy:      v.MappedBy,
 	}
 	if v.SignOnModes != nil {
@@ -15451,6 +15452,7 @@ func marshalAdminAdminRegistryOktaUnmappedNameToAdminRegistryOktaUnmappedNameRes
 	res := &AdminRegistryOktaUnmappedNameResponseBody{
 		OinName:            v.OinName,
 		Organizations:      v.Organizations,
+		Integrator:         v.Integrator,
 		SuggestedEntryID:   v.SuggestedEntryID,
 		SuggestedEntryName: v.SuggestedEntryName,
 		Reason:             v.Reason,

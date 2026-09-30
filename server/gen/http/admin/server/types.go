@@ -15451,6 +15451,10 @@ type AdminRegistryOktaCandidateResponseBody struct {
 	// domain: the vendor token matches a remote or website host; title: it matches
 	// the entry title; label: a tenant's label equals the entry title.
 	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// Whether the name comes from an integrator listing rather than Okta's public
+	// catalog; any integrator account can publish under a vendor-like key, so
+	// confirm with care.
+	Integrator bool `form:"integrator" json:"integrator" xml:"integrator"`
 	// Name of the entry that already claims this key, when one does.
 	MappedBy *string `form:"mapped_by,omitempty" json:"mapped_by,omitempty" xml:"mapped_by,omitempty"`
 }
@@ -15461,6 +15465,9 @@ type AdminRegistryOktaUnmappedNameResponseBody struct {
 	OinName       string   `form:"oin_name" json:"oin_name" xml:"oin_name"`
 	Organizations int      `form:"organizations" json:"organizations" xml:"organizations"`
 	SignOnModes   []string `form:"sign_on_modes" json:"sign_on_modes" xml:"sign_on_modes"`
+	// Whether the name comes from an integrator listing rather than Okta's public
+	// catalog.
+	Integrator bool `form:"integrator" json:"integrator" xml:"integrator"`
 	// The entry the heuristic would map it to, when one matches.
 	SuggestedEntryID   *string `form:"suggested_entry_id,omitempty" json:"suggested_entry_id,omitempty" xml:"suggested_entry_id,omitempty"`
 	SuggestedEntryName *string `form:"suggested_entry_name,omitempty" json:"suggested_entry_name,omitempty" xml:"suggested_entry_name,omitempty"`

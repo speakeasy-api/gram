@@ -22,9 +22,15 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
+// plantedApp is one application in a planted tenant.
+type plantedApp struct {
+	name, label, mode string
+	assigned          bool
+}
+
 // plantOktaTenant creates an organization with a verified Okta connection and
-// the given active application names, one app per name, all assigned.
-func plantOktaTenant(t *testing.T, ctx context.Context, db *pgxpool.Pool, apps map[string]string) {
+// the given active applications; assigned ones get one live user assignment.
+func plantOktaTenant(t *testing.T, ctx context.Context, db *pgxpool.Pool, apps []plantedApp) {
 	t.Helper()
 	orgID := "org_" + uuid.NewString()
 	_, err := orgrepo.New(db).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
@@ -59,12 +65,17 @@ func plantOktaTenant(t *testing.T, ctx context.Context, db *pgxpool.Pool, apps m
 	require.NoError(t, err)
 	names, labels, modes, statuses := []string{}, []string{}, []string{}, []string{}
 	ids := []string{}
-	for name, label := range apps {
-		ids = append(ids, "0oa"+uuid.NewString()[:17])
-		names = append(names, name)
-		labels = append(labels, label)
-		modes = append(modes, "SAML_2_0")
+	assignedIDs := []string{}
+	for _, app := range apps {
+		id := "0oa" + uuid.NewString()[:17]
+		ids = append(ids, id)
+		names = append(names, app.name)
+		labels = append(labels, app.label)
+		modes = append(modes, app.mode)
 		statuses = append(statuses, "ACTIVE")
+		if app.assigned {
+			assignedIDs = append(assignedIDs, id)
+		}
 	}
 	q := apprepo.New(db)
 	seen := pgtype.Timestamptz{Valid: true, InfinityModifier: pgtype.Finite}
@@ -73,14 +84,37 @@ func plantOktaTenant(t *testing.T, ctx context.Context, db *pgxpool.Pool, apps m
 		OktaAppIds: ids, Labels: labels, Names: names, SignOnModes: modes, Statuses: statuses,
 		FeaturesCsv: make([]string, len(ids)), OktaCreatedAts: make([]pgtype.Timestamptz, len(ids)), OktaLastUpdatedAts: make([]pgtype.Timestamptz, len(ids)), SeenAt: seen,
 	}))
+	if len(assignedIDs) == 0 {
+		return
+	}
+	kinds, principals, scopes := []string{}, []string{}, []string{}
+	for _, id := range assignedIDs {
+		kinds = append(kinds, "user")
+		principals = append(principals, "00u"+id)
+		scopes = append(scopes, "USER")
+	}
+	require.NoError(t, q.UpsertAssignments(ctx, apprepo.UpsertAssignmentsParams{
+		OrganizationID: orgID, IdentityProviderConnectionID: connectionID,
+		OktaAppIds: assignedIDs, PrincipalKinds: kinds, OktaPrincipalIds: principals, AssignmentScopes: scopes, SeenAt: seen,
+	}))
 }
 
 func TestRegistryOktaCandidatesAndUnmapped(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 
-	plantOktaTenant(t, ctx, db, map[string]string{"notion": "Notion", "integrator-4080826_linear_1": "Linear", "realtime_board": "Miro", "okta_enduser": "Okta Dashboard"})
-	plantOktaTenant(t, ctx, db, map[string]string{"notion": "Notion (SAML)", "slack": "Slack"})
+	plantOktaTenant(t, ctx, db, []plantedApp{
+		{name: "notion", label: "Notion", mode: "BROWSER_PLUGIN", assigned: true},
+		{name: "integrator-4080826_linear_1", label: "Linear", mode: "SAML_2_0", assigned: true},
+		{name: "realtime_board", label: "Miro", mode: "SAML_2_0", assigned: true},
+		{name: "okta_enduser", label: "Okta Dashboard", mode: "OPENID_CONNECT", assigned: true},
+		{name: "github", label: "GitHub", mode: "SAML_2_0", assigned: false},
+		{name: "oidc_client", label: "Linear", mode: "OPENID_CONNECT", assigned: true},
+	})
+	plantOktaTenant(t, ctx, db, []plantedApp{
+		{name: "notion", label: "Notion (SAML)", mode: "SAML_2_0", assigned: true},
+		{name: "slack", label: "Slack", mode: "BROWSER_PLUGIN", assigned: true},
+	})
 
 	registry := registryrepo.New(db)
 	linear := uuid.New()
@@ -90,13 +124,15 @@ func TestRegistryOktaCandidatesAndUnmapped(t *testing.T) {
 	miro := uuid.New()
 	require.NoError(t, registry.InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: miro, Published: false, Data: json.RawMessage(`{"server":{"name":"com.miro/mcp","title":"Miro","description":"Miro","version":"1","remotes":[{"type":"streamable-http","url":"https://mcp.miro.com/mcp"}]}}`)}))
 
-	// Linear: the integrator instance matches on domain and is unclaimed.
+	// Linear: the integrator instance matches on domain and is unclaimed; the
+	// custom app a tenant labelled "Linear" never surfaces.
 	res, err := svc.GetRegistryOktaCandidates(ctx, &gen.GetRegistryOktaCandidatesPayload{AdminSessionToken: nil, ID: linear.String()})
 	require.NoError(t, err)
 	require.Len(t, res.Candidates, 1)
 	require.Equal(t, "integrator-4080826_linear_1", res.Candidates[0].OinName)
 	require.Equal(t, "domain", res.Candidates[0].Reason)
 	require.Equal(t, 1, res.Candidates[0].Organizations)
+	require.True(t, res.Candidates[0].Integrator)
 	require.Nil(t, res.Candidates[0].MappedBy)
 
 	// Notion already carries its key, so nothing is proposed for it.
@@ -114,17 +150,22 @@ func TestRegistryOktaCandidatesAndUnmapped(t *testing.T) {
 	_, err = svc.GetRegistryOktaCandidates(ctx, &gen.GetRegistryOktaCandidatesPayload{AdminSessionToken: nil, ID: "nope"})
 	require.Error(t, err)
 
-	// Unmapped: notion is claimed, Okta's own app is dropped, the rest are
-	// ranked by organizations with the proposed entry when one matches.
+	// Unmapped: notion is claimed, Okta's own app and the unassigned GitHub
+	// app are dropped, the rest are ranked by organizations with the proposed
+	// entry when one matches. Generic custom-app names are listed but never
+	// proposed.
 	unmapped, err := svc.ListRegistryOktaUnmapped(ctx, &gen.ListRegistryOktaUnmappedPayload{AdminSessionToken: nil})
 	require.NoError(t, err)
 	names := make([]string, 0, len(unmapped.Names))
 	for _, n := range unmapped.Names {
 		names = append(names, n.OinName)
 	}
-	require.Equal(t, []string{"integrator-4080826_linear_1", "realtime_board", "slack"}, names)
+	require.Equal(t, []string{"integrator-4080826_linear_1", "oidc_client", "realtime_board", "slack"}, names)
 	require.Equal(t, "app.linear/mcp", conv.PtrValOrEmpty(unmapped.Names[0].SuggestedEntryName, ""))
 	require.Equal(t, linear.String(), conv.PtrValOrEmpty(unmapped.Names[0].SuggestedEntryID, ""))
-	require.Equal(t, "com.miro/mcp", conv.PtrValOrEmpty(unmapped.Names[1].SuggestedEntryName, ""))
-	require.Nil(t, unmapped.Names[2].SuggestedEntryID)
+	require.True(t, unmapped.Names[0].Integrator)
+	require.Nil(t, unmapped.Names[1].SuggestedEntryID)
+	require.Equal(t, "com.miro/mcp", conv.PtrValOrEmpty(unmapped.Names[2].SuggestedEntryName, ""))
+	require.False(t, unmapped.Names[2].Integrator)
+	require.Nil(t, unmapped.Names[3].SuggestedEntryID)
 }

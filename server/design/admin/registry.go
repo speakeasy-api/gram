@@ -41,8 +41,9 @@ var AdminRegistryOktaCandidate = Type("AdminRegistryOktaCandidate", func() {
 	Attribute("reason", String, "domain: the vendor token matches a remote or website host; title: it matches the entry title; label: a tenant's label equals the entry title.", func() {
 		Enum("domain", "title", "label")
 	})
+	Attribute("integrator", Boolean, "Whether the name comes from an integrator listing rather than Okta's public catalog; any integrator account can publish under a vendor-like key, so confirm with care.")
 	Attribute("mapped_by", String, "Name of the entry that already claims this key, when one does.")
-	Required("oin_name", "organizations", "sign_on_modes", "reason")
+	Required("oin_name", "organizations", "sign_on_modes", "reason", "integrator")
 })
 var AdminRegistryOktaCandidates = Type("AdminRegistryOktaCandidates", func() {
 	Attribute("candidates", ArrayOf(AdminRegistryOktaCandidate), "Strongest reason first, then by organizations.")
@@ -53,12 +54,13 @@ var AdminRegistryOktaUnmappedName = Type("AdminRegistryOktaUnmappedName", func()
 	Attribute("oin_name", String)
 	Attribute("organizations", Int)
 	Attribute("sign_on_modes", ArrayOf(String))
+	Attribute("integrator", Boolean, "Whether the name comes from an integrator listing rather than Okta's public catalog.")
 	Attribute("suggested_entry_id", String, "The entry the heuristic would map it to, when one matches.")
 	Attribute("suggested_entry_name", String)
 	Attribute("reason", String, func() {
 		Enum("domain", "title", "label")
 	})
-	Required("oin_name", "organizations", "sign_on_modes")
+	Required("oin_name", "organizations", "sign_on_modes", "integrator")
 })
 var AdminRegistryOktaUnmapped = Type("AdminRegistryOktaUnmapped", func() {
 	Attribute("names", ArrayOf(AdminRegistryOktaUnmappedName), "By organizations, most first. Okta's own applications are left out.")

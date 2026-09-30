@@ -17228,6 +17228,7 @@ func unmarshalAdminRegistryOktaCandidateResponseBodyToAdminAdminRegistryOktaCand
 		OinName:       *v.OinName,
 		Organizations: *v.Organizations,
 		Reason:        *v.Reason,
+		Integrator:    *v.Integrator,
 		MappedBy:      v.MappedBy,
 	}
 	res.SignOnModes = make([]string, len(v.SignOnModes))
@@ -17245,6 +17246,7 @@ func unmarshalAdminRegistryOktaUnmappedNameResponseBodyToAdminAdminRegistryOktaU
 	res := &admin.AdminRegistryOktaUnmappedName{
 		OinName:            *v.OinName,
 		Organizations:      *v.Organizations,
+		Integrator:         *v.Integrator,
 		SuggestedEntryID:   v.SuggestedEntryID,
 		SuggestedEntryName: v.SuggestedEntryName,
 		Reason:             v.Reason,

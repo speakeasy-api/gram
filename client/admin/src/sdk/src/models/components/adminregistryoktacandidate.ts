@@ -27,6 +27,10 @@ export type Reason = ClosedEnum<typeof Reason>;
  */
 export type AdminRegistryOktaCandidate = {
   /**
+   * Whether the name comes from an integrator listing rather than Okta's public catalog; any integrator account can publish under a vendor-like key, so confirm with care.
+   */
+  integrator: boolean;
+  /**
    * Name of the entry that already claims this key, when one does.
    */
   mappedBy?: string | undefined;
@@ -59,6 +63,7 @@ export const AdminRegistryOktaCandidate$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    integrator: z.boolean(),
     mapped_by: z.optional(z.string()),
     oin_name: z.string(),
     organizations: z.int(),

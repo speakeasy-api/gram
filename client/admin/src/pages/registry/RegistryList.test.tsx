@@ -151,11 +151,17 @@ it("keeps accessible headers and a spanning cell while loading and empty", async
   list.mockImplementation(() => new Promise(() => {}));
   const { unmount } = await renderWithApp(<RegistryList />);
   expect(
-    screen
-      .getAllByRole("columnheader")
-      .slice(0, 4)
-      .map((header) => header.textContent),
-  ).toEqual(["Name", "Publication", "Validation", "Actions"]);
+    screen.getAllByRole("columnheader").map((header) => header.textContent),
+  ).toEqual([
+    "Name",
+    "Publication",
+    "Validation",
+    "Actions",
+    "Okta name",
+    "Organizations",
+    "Sign-on modes",
+    "Proposed entry",
+  ]);
   expect(
     screen
       .getByRole("cell", { name: "Loading registry…" })

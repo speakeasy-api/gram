@@ -15463,6 +15463,10 @@ type AdminRegistryOktaCandidateResponseBody struct {
 	// domain: the vendor token matches a remote or website host; title: it matches
 	// the entry title; label: a tenant's label equals the entry title.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Whether the name comes from an integrator listing rather than Okta's public
+	// catalog; any integrator account can publish under a vendor-like key, so
+	// confirm with care.
+	Integrator *bool `form:"integrator,omitempty" json:"integrator,omitempty" xml:"integrator,omitempty"`
 	// Name of the entry that already claims this key, when one does.
 	MappedBy *string `form:"mapped_by,omitempty" json:"mapped_by,omitempty" xml:"mapped_by,omitempty"`
 }
@@ -15473,6 +15477,9 @@ type AdminRegistryOktaUnmappedNameResponseBody struct {
 	OinName       *string  `form:"oin_name,omitempty" json:"oin_name,omitempty" xml:"oin_name,omitempty"`
 	Organizations *int     `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 	SignOnModes   []string `form:"sign_on_modes,omitempty" json:"sign_on_modes,omitempty" xml:"sign_on_modes,omitempty"`
+	// Whether the name comes from an integrator listing rather than Okta's public
+	// catalog.
+	Integrator *bool `form:"integrator,omitempty" json:"integrator,omitempty" xml:"integrator,omitempty"`
 	// The entry the heuristic would map it to, when one matches.
 	SuggestedEntryID   *string `form:"suggested_entry_id,omitempty" json:"suggested_entry_id,omitempty" xml:"suggested_entry_id,omitempty"`
 	SuggestedEntryName *string `form:"suggested_entry_name,omitempty" json:"suggested_entry_name,omitempty" xml:"suggested_entry_name,omitempty"`
@@ -47874,6 +47881,9 @@ func ValidateAdminRegistryOktaCandidateResponseBody(body *AdminRegistryOktaCandi
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
+	if body.Integrator == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("integrator", "body"))
+	}
 	if body.Reason != nil {
 		if !(*body.Reason == "domain" || *body.Reason == "title" || *body.Reason == "label") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"domain", "title", "label"}))
@@ -47893,6 +47903,9 @@ func ValidateAdminRegistryOktaUnmappedNameResponseBody(body *AdminRegistryOktaUn
 	}
 	if body.SignOnModes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sign_on_modes", "body"))
+	}
+	if body.Integrator == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("integrator", "body"))
 	}
 	if body.Reason != nil {
 		if !(*body.Reason == "domain" || *body.Reason == "title" || *body.Reason == "label") {

@@ -22,6 +22,10 @@ export type AdminRegistryOktaUnmappedNameReason = ClosedEnum<
  * An observed Okta application name no catalog entry claims.
  */
 export type AdminRegistryOktaUnmappedName = {
+  /**
+   * Whether the name comes from an integrator listing rather than Okta's public catalog.
+   */
+  integrator: boolean;
   oinName: string;
   organizations: number;
   reason?: AdminRegistryOktaUnmappedNameReason | undefined;
@@ -44,6 +48,7 @@ export const AdminRegistryOktaUnmappedName$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    integrator: z.boolean(),
     oin_name: z.string(),
     organizations: z.int(),
     reason: z.optional(AdminRegistryOktaUnmappedNameReason$inboundSchema),

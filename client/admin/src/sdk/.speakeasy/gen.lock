@@ -740,7 +740,7 @@ examples:
           id: "bda14fdd-2193-435b-91e6-7eeb66b521a2"
       responses:
         "200":
-          application/json: {"candidates": [{"oin_name": "<value>", "organizations": 823725, "reason": "title", "sign_on_modes": ["<value 1>"]}]}
+          application/json: {"candidates": [{"integrator": false, "oin_name": "<value>", "organizations": 823725, "reason": "title", "sign_on_modes": ["<value 1>"]}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

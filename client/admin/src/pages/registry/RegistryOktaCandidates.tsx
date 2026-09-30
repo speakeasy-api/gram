@@ -67,7 +67,8 @@ export function RegistryOktaCandidates({
       </h3>
       <p className="text-muted-foreground mt-1">
         Observed in synced tenants. Adding one puts it in{" "}
-        <code>_meta.{OKTA_NAMESPACE}.oinNames</code>; review, then Save.
+        <code>_meta[&quot;{OKTA_NAMESPACE}&quot;].oinNames</code>; review, then
+        Save.
       </p>
       <ul className="mt-2 space-y-1">
         {items.map((c) => (
@@ -91,6 +92,9 @@ export function RegistryOktaCandidates({
               ))}
               <span className="text-muted-foreground">
                 {REASONS[c.reason] ?? c.reason}
+                {c.integrator
+                  ? "; from an integrator listing, not Okta's public catalog"
+                  : ""}
               </span>
             </span>
             {c.mappedBy ? (

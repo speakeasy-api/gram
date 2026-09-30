@@ -77,6 +77,16 @@ func TestMatch(t *testing.T) {
 	require.Equal(t, "github", got[0].Name)
 	require.Equal(t, ReasonDomain, got[0].Reason)
 
+	// A title match ranks below a domain match and never comes from a
+	// generic custom-app name, whatever the tenant labelled it.
+	titled := EntryFromRecord(json.RawMessage(`{"server":{"name":"app.foo/mcp","title":"Notion","remotes":[{"url":"https://mcp.foo.com/mcp"}]}}`))
+	got = Match(titled, append(observed, Observed{Name: "oidc_client", Labels: []string{"Notion"}, SignOnModes: []string{"OPENID_CONNECT"}, Organizations: 7}))
+	require.Len(t, got, 1)
+	require.Equal(t, "notion", got[0].Name)
+	require.Equal(t, ReasonTitle, got[0].Reason)
+	require.True(t, Integrator("integrator-4080826_linear_1"))
+	require.False(t, Integrator("linear"))
+
 	// Nothing matches an unrelated entry; Okta's own apps never do.
 	require.Empty(t, Match(EntryFromRecord(json.RawMessage(`{"server":{"name":"io.example/fixture","title":"Fixture","remotes":[{"url":"https://mcp.example.test/mcp"}]}}`)), observed))
 }

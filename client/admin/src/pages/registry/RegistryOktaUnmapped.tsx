@@ -74,6 +74,11 @@ export function RegistryOktaUnmapped({ onOpen }: Props): JSX.Element {
                 <TableRow key={item.oinName}>
                   <TableCell className="font-medium">
                     <code>{item.oinName}</code>
+                    {item.integrator && (
+                      <span className="text-muted-foreground ml-2 text-xs">
+                        integrator listing
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>{item.organizations}</TableCell>
                   <TableCell className="space-x-1">
