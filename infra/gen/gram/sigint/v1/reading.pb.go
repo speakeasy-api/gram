@@ -21,52 +21,51 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Role of the evaluated message, independent of its human attribution.
-type Reading_MessageRole int32
+type Reading_ConversationMessage_Role int32
 
 const (
-	Reading_MESSAGE_ROLE_UNSPECIFIED Reading_MessageRole = 0
-	Reading_MESSAGE_ROLE_USER        Reading_MessageRole = 1
-	Reading_MESSAGE_ROLE_ASSISTANT   Reading_MessageRole = 2
+	Reading_ConversationMessage_ROLE_UNSPECIFIED Reading_ConversationMessage_Role = 0
+	Reading_ConversationMessage_ROLE_USER        Reading_ConversationMessage_Role = 1
+	Reading_ConversationMessage_ROLE_ASSISTANT   Reading_ConversationMessage_Role = 2
 )
 
-// Enum value maps for Reading_MessageRole.
+// Enum value maps for Reading_ConversationMessage_Role.
 var (
-	Reading_MessageRole_name = map[int32]string{
-		0: "MESSAGE_ROLE_UNSPECIFIED",
-		1: "MESSAGE_ROLE_USER",
-		2: "MESSAGE_ROLE_ASSISTANT",
+	Reading_ConversationMessage_Role_name = map[int32]string{
+		0: "ROLE_UNSPECIFIED",
+		1: "ROLE_USER",
+		2: "ROLE_ASSISTANT",
 	}
-	Reading_MessageRole_value = map[string]int32{
-		"MESSAGE_ROLE_UNSPECIFIED": 0,
-		"MESSAGE_ROLE_USER":        1,
-		"MESSAGE_ROLE_ASSISTANT":   2,
+	Reading_ConversationMessage_Role_value = map[string]int32{
+		"ROLE_UNSPECIFIED": 0,
+		"ROLE_USER":        1,
+		"ROLE_ASSISTANT":   2,
 	}
 )
 
-func (x Reading_MessageRole) Enum() *Reading_MessageRole {
-	p := new(Reading_MessageRole)
+func (x Reading_ConversationMessage_Role) Enum() *Reading_ConversationMessage_Role {
+	p := new(Reading_ConversationMessage_Role)
 	*p = x
 	return p
 }
 
-func (x Reading_MessageRole) String() string {
+func (x Reading_ConversationMessage_Role) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (Reading_MessageRole) Descriptor() protoreflect.EnumDescriptor {
+func (Reading_ConversationMessage_Role) Descriptor() protoreflect.EnumDescriptor {
 	return file_gram_sigint_v1_reading_proto_enumTypes[0].Descriptor()
 }
 
-func (Reading_MessageRole) Type() protoreflect.EnumType {
+func (Reading_ConversationMessage_Role) Type() protoreflect.EnumType {
 	return &file_gram_sigint_v1_reading_proto_enumTypes[0]
 }
 
-func (x Reading_MessageRole) Number() protoreflect.EnumNumber {
+func (x Reading_ConversationMessage_Role) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Reading is one successful sensor evaluation of one conversation message.
+// Reading is one successful sensor evaluation of one source event.
 // Delivery and evaluation are at-least-once: the same id can carry different
 // answers from different attempts. Storage consumers choose the winning attempt.
 type Reading struct {
@@ -75,23 +74,20 @@ type Reading struct {
 	xxx_hidden_EvaluationAttemptId *string                `protobuf:"bytes,2,opt,name=evaluation_attempt_id,json=evaluationAttemptId"`
 	xxx_hidden_OrganizationId      *string                `protobuf:"bytes,3,opt,name=organization_id,json=organizationId"`
 	xxx_hidden_ProjectId           *string                `protobuf:"bytes,4,opt,name=project_id,json=projectId"`
-	xxx_hidden_ConversationId      *string                `protobuf:"bytes,5,opt,name=conversation_id,json=conversationId"`
-	xxx_hidden_MessageId           *string                `protobuf:"bytes,6,opt,name=message_id,json=messageId"`
-	xxx_hidden_MessageRole         Reading_MessageRole    `protobuf:"varint,7,opt,name=message_role,json=messageRole,enum=gram.sigint.v1.Reading_MessageRole"`
-	xxx_hidden_SensorId            *string                `protobuf:"bytes,8,opt,name=sensor_id,json=sensorId"`
-	xxx_hidden_SensorSlug          *string                `protobuf:"bytes,9,opt,name=sensor_slug,json=sensorSlug"`
-	xxx_hidden_MessageCreatedAt    *string                `protobuf:"bytes,10,opt,name=message_created_at,json=messageCreatedAt"`
-	xxx_hidden_EvaluatedAt         *string                `protobuf:"bytes,11,opt,name=evaluated_at,json=evaluatedAt"`
-	xxx_hidden_DefinitionHash      *string                `protobuf:"bytes,12,opt,name=definition_hash,json=definitionHash"`
-	xxx_hidden_ConfiguredModel     *string                `protobuf:"bytes,13,opt,name=configured_model,json=configuredModel"`
-	xxx_hidden_Models              []string               `protobuf:"bytes,14,rep,name=models"`
-	xxx_hidden_CompilerVersion     *string                `protobuf:"bytes,15,opt,name=compiler_version,json=compilerVersion"`
-	xxx_hidden_Actor               *Reading_Actor         `protobuf:"bytes,16,opt,name=actor"`
-	xxx_hidden_BillingUserId       *string                `protobuf:"bytes,17,opt,name=billing_user_id,json=billingUserId"`
-	xxx_hidden_Source              *string                `protobuf:"bytes,18,opt,name=source"`
-	xxx_hidden_Account             *Reading_Account       `protobuf:"bytes,19,opt,name=account"`
-	xxx_hidden_AssistantId         *string                `protobuf:"bytes,20,opt,name=assistant_id,json=assistantId"`
-	xxx_hidden_Replayed            bool                   `protobuf:"varint,21,opt,name=replayed"`
+	xxx_hidden_Event               *Reading_Event         `protobuf:"bytes,5,opt,name=event"`
+	xxx_hidden_SensorId            *string                `protobuf:"bytes,6,opt,name=sensor_id,json=sensorId"`
+	xxx_hidden_SensorSlug          *string                `protobuf:"bytes,7,opt,name=sensor_slug,json=sensorSlug"`
+	xxx_hidden_EvaluatedAt         *string                `protobuf:"bytes,8,opt,name=evaluated_at,json=evaluatedAt"`
+	xxx_hidden_DefinitionHash      *string                `protobuf:"bytes,9,opt,name=definition_hash,json=definitionHash"`
+	xxx_hidden_ConfiguredModel     *string                `protobuf:"bytes,10,opt,name=configured_model,json=configuredModel"`
+	xxx_hidden_Models              []string               `protobuf:"bytes,11,rep,name=models"`
+	xxx_hidden_CompilerVersion     *string                `protobuf:"bytes,12,opt,name=compiler_version,json=compilerVersion"`
+	xxx_hidden_Actor               *Reading_Actor         `protobuf:"bytes,13,opt,name=actor"`
+	xxx_hidden_BillingUserId       *string                `protobuf:"bytes,14,opt,name=billing_user_id,json=billingUserId"`
+	xxx_hidden_Source              *string                `protobuf:"bytes,15,opt,name=source"`
+	xxx_hidden_Account             *Reading_Account       `protobuf:"bytes,16,opt,name=account"`
+	xxx_hidden_AssistantId         *string                `protobuf:"bytes,17,opt,name=assistant_id,json=assistantId"`
+	xxx_hidden_Replayed            bool                   `protobuf:"varint,18,opt,name=replayed"`
 	xxx_hidden_Result              isReading_Result       `protobuf_oneof:"result"`
 	XXX_raceDetectHookData         protoimpl.RaceDetectHookData
 	XXX_presence                   [1]uint32
@@ -164,33 +160,11 @@ func (x *Reading) GetProjectId() string {
 	return ""
 }
 
-func (x *Reading) GetConversationId() string {
+func (x *Reading) GetEvent() *Reading_Event {
 	if x != nil {
-		if x.xxx_hidden_ConversationId != nil {
-			return *x.xxx_hidden_ConversationId
-		}
-		return ""
+		return x.xxx_hidden_Event
 	}
-	return ""
-}
-
-func (x *Reading) GetMessageId() string {
-	if x != nil {
-		if x.xxx_hidden_MessageId != nil {
-			return *x.xxx_hidden_MessageId
-		}
-		return ""
-	}
-	return ""
-}
-
-func (x *Reading) GetMessageRole() Reading_MessageRole {
-	if x != nil {
-		if protoimpl.X.Present(&(x.XXX_presence[0]), 6) {
-			return x.xxx_hidden_MessageRole
-		}
-	}
-	return Reading_MESSAGE_ROLE_UNSPECIFIED
+	return nil
 }
 
 func (x *Reading) GetSensorId() string {
@@ -207,16 +181,6 @@ func (x *Reading) GetSensorSlug() string {
 	if x != nil {
 		if x.xxx_hidden_SensorSlug != nil {
 			return *x.xxx_hidden_SensorSlug
-		}
-		return ""
-	}
-	return ""
-}
-
-func (x *Reading) GetMessageCreatedAt() string {
-	if x != nil {
-		if x.xxx_hidden_MessageCreatedAt != nil {
-			return *x.xxx_hidden_MessageCreatedAt
 		}
 		return ""
 	}
@@ -350,67 +314,51 @@ func (x *Reading) GetScore() *Reading_Score {
 
 func (x *Reading) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 19)
 }
 
 func (x *Reading) SetEvaluationAttemptId(v string) {
 	x.xxx_hidden_EvaluationAttemptId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 19)
 }
 
 func (x *Reading) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 19)
 }
 
 func (x *Reading) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 19)
 }
 
-func (x *Reading) SetConversationId(v string) {
-	x.xxx_hidden_ConversationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 22)
-}
-
-func (x *Reading) SetMessageId(v string) {
-	x.xxx_hidden_MessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 22)
-}
-
-func (x *Reading) SetMessageRole(v Reading_MessageRole) {
-	x.xxx_hidden_MessageRole = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 22)
+func (x *Reading) SetEvent(v *Reading_Event) {
+	x.xxx_hidden_Event = v
 }
 
 func (x *Reading) SetSensorId(v string) {
 	x.xxx_hidden_SensorId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 19)
 }
 
 func (x *Reading) SetSensorSlug(v string) {
 	x.xxx_hidden_SensorSlug = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 22)
-}
-
-func (x *Reading) SetMessageCreatedAt(v string) {
-	x.xxx_hidden_MessageCreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 19)
 }
 
 func (x *Reading) SetEvaluatedAt(v string) {
 	x.xxx_hidden_EvaluatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 19)
 }
 
 func (x *Reading) SetDefinitionHash(v string) {
 	x.xxx_hidden_DefinitionHash = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 19)
 }
 
 func (x *Reading) SetConfiguredModel(v string) {
 	x.xxx_hidden_ConfiguredModel = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 19)
 }
 
 func (x *Reading) SetModels(v []string) {
@@ -419,7 +367,7 @@ func (x *Reading) SetModels(v []string) {
 
 func (x *Reading) SetCompilerVersion(v string) {
 	x.xxx_hidden_CompilerVersion = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 19)
 }
 
 func (x *Reading) SetActor(v *Reading_Actor) {
@@ -428,12 +376,12 @@ func (x *Reading) SetActor(v *Reading_Actor) {
 
 func (x *Reading) SetBillingUserId(v string) {
 	x.xxx_hidden_BillingUserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 19)
 }
 
 func (x *Reading) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 19)
 }
 
 func (x *Reading) SetAccount(v *Reading_Account) {
@@ -442,12 +390,12 @@ func (x *Reading) SetAccount(v *Reading_Account) {
 
 func (x *Reading) SetAssistantId(v string) {
 	x.xxx_hidden_AssistantId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 19)
 }
 
 func (x *Reading) SetReplayed(v bool) {
 	x.xxx_hidden_Replayed = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 22)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 19)
 }
 
 func (x *Reading) SetMultiLabel(v *Reading_MultiLabel) {
@@ -502,74 +450,53 @@ func (x *Reading) HasProjectId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
 }
 
-func (x *Reading) HasConversationId() bool {
+func (x *Reading) HasEvent() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
-}
-
-func (x *Reading) HasMessageId() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
-}
-
-func (x *Reading) HasMessageRole() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
+	return x.xxx_hidden_Event != nil
 }
 
 func (x *Reading) HasSensorId() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
 }
 
 func (x *Reading) HasSensorSlug() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
-}
-
-func (x *Reading) HasMessageCreatedAt() bool {
-	if x == nil {
-		return false
-	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
 }
 
 func (x *Reading) HasEvaluatedAt() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 10)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
 }
 
 func (x *Reading) HasDefinitionHash() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
 }
 
 func (x *Reading) HasConfiguredModel() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 12)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
 }
 
 func (x *Reading) HasCompilerVersion() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 14)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
 }
 
 func (x *Reading) HasActor() bool {
@@ -583,14 +510,14 @@ func (x *Reading) HasBillingUserId() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 16)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 13)
 }
 
 func (x *Reading) HasSource() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 17)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 14)
 }
 
 func (x *Reading) HasAccount() bool {
@@ -604,14 +531,14 @@ func (x *Reading) HasAssistantId() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 19)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 16)
 }
 
 func (x *Reading) HasReplayed() bool {
 	if x == nil {
 		return false
 	}
-	return protoimpl.X.Present(&(x.XXX_presence[0]), 20)
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 17)
 }
 
 func (x *Reading) HasResult() bool {
@@ -665,53 +592,37 @@ func (x *Reading) ClearProjectId() {
 	x.xxx_hidden_ProjectId = nil
 }
 
-func (x *Reading) ClearConversationId() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
-	x.xxx_hidden_ConversationId = nil
-}
-
-func (x *Reading) ClearMessageId() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
-	x.xxx_hidden_MessageId = nil
-}
-
-func (x *Reading) ClearMessageRole() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
-	x.xxx_hidden_MessageRole = Reading_MESSAGE_ROLE_UNSPECIFIED
+func (x *Reading) ClearEvent() {
+	x.xxx_hidden_Event = nil
 }
 
 func (x *Reading) ClearSensorId() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 7)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
 	x.xxx_hidden_SensorId = nil
 }
 
 func (x *Reading) ClearSensorSlug() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 8)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
 	x.xxx_hidden_SensorSlug = nil
 }
 
-func (x *Reading) ClearMessageCreatedAt() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
-	x.xxx_hidden_MessageCreatedAt = nil
-}
-
 func (x *Reading) ClearEvaluatedAt() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 10)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 7)
 	x.xxx_hidden_EvaluatedAt = nil
 }
 
 func (x *Reading) ClearDefinitionHash() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 8)
 	x.xxx_hidden_DefinitionHash = nil
 }
 
 func (x *Reading) ClearConfiguredModel() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 12)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
 	x.xxx_hidden_ConfiguredModel = nil
 }
 
 func (x *Reading) ClearCompilerVersion() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 14)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
 	x.xxx_hidden_CompilerVersion = nil
 }
 
@@ -720,12 +631,12 @@ func (x *Reading) ClearActor() {
 }
 
 func (x *Reading) ClearBillingUserId() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 16)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 13)
 	x.xxx_hidden_BillingUserId = nil
 }
 
 func (x *Reading) ClearSource() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 17)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 14)
 	x.xxx_hidden_Source = nil
 }
 
@@ -734,12 +645,12 @@ func (x *Reading) ClearAccount() {
 }
 
 func (x *Reading) ClearAssistantId() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 19)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 16)
 	x.xxx_hidden_AssistantId = nil
 }
 
 func (x *Reading) ClearReplayed() {
-	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 20)
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 17)
 	x.xxx_hidden_Replayed = false
 }
 
@@ -766,9 +677,9 @@ func (x *Reading) ClearScore() {
 }
 
 const Reading_Result_not_set_case case_Reading_Result = 0
-const Reading_MultiLabel_case case_Reading_Result = 22
-const Reading_Choice_case case_Reading_Result = 23
-const Reading_Score_case case_Reading_Result = 24
+const Reading_MultiLabel_case case_Reading_Result = 19
+const Reading_Choice_case case_Reading_Result = 20
+const Reading_Score_case case_Reading_Result = 21
 
 func (x *Reading) WhichResult() case_Reading_Result {
 	if x == nil {
@@ -789,44 +700,38 @@ func (x *Reading) WhichResult() case_Reading_Result {
 type Reading_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// UUIDv5 identity of tenant, immutable logical message ID, and sensor ID.
+	// UUIDv5 identity of tenant, event kind, immutable event ID, and sensor ID.
 	// Configuration changes between attempts do not change this identity.
 	Id *string
-	// Fresh UUID for a logical message evaluation, shared by its sensor readings.
+	// Fresh UUID for a logical event evaluation, shared by its sensor readings.
 	// A retry gets a new attempt ID even when the logical reading ID is unchanged.
 	EvaluationAttemptId *string
-	// Gram organization owning the source message and evaluation.
+	// Gram organization owning the source event and evaluation.
 	OrganizationId *string
-	// Gram project UUID owning the source message and sensor configuration.
+	// Gram project UUID owning the source event and sensor configuration.
 	ProjectId *string
-	// Gram conversation UUID, not the source system's session identifier.
-	ConversationId *string
-	// Persisted Gram message UUID; multiple provenance snapshots can share this ID.
-	MessageId *string
-	// Only user and assistant messages produce readings.
-	MessageRole *Reading_MessageRole
+	Event     *Reading_Event
 	// Gram sensor UUID; stable across display-name, slug and definition edits.
 	SensorId *string
 	// Always populated with the sensor slug observed during evaluation.
-	SensorSlug       *string
-	MessageCreatedAt *string
-	EvaluatedAt      *string
+	SensorSlug  *string
+	EvaluatedAt *string
 	// Hash of mode, instructions and ordered signal IDs/criteria. Excludes display
 	// names, slugs and actor/account attribution. Traceability metadata, not an
 	// immutable configuration revision or part of reading identity.
 	DefinitionHash *string
-	// Model requested for classification, not the model that authored the message.
+	// Model requested for classification, not the model that produced the source event.
 	ConfiguredModel *string
 	// A logical evaluation may span multiple provider requests/model versions.
-	// Reported models for the whole logical message evaluation, not per-sensor
+	// Reported models for the whole logical event evaluation, not per-sensor
 	// attribution when questions were split across provider requests.
 	Models []string
 	// Version of the sigint and classifier compilation logic used for this attempt.
 	CompilerVersion *string
-	// Identity associated with the source message, preserved as observed at ingestion.
+	// Identity associated with the source event, preserved as observed at ingestion.
 	Actor *Reading_Actor
-	// Gram user ID to which the ingestion producer explicitly allocates usage,
-	// using the same attribution as agent-session storage metering. May differ
+	// Gram user ID to which the source producer explicitly allocates usage. For
+	// conversations this matches agent-session storage metering. May differ
 	// from actor.user_id or exist without an actor (e.g. generated compaction
 	// messages allocated to the chat owner). Interpret with organization_id.
 	// This is usage attribution, not proof that a charge occurred. Absence means
@@ -853,78 +758,63 @@ func (b0 Reading_builder) Build() *Reading {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 19)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.EvaluationAttemptId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 19)
 		x.xxx_hidden_EvaluationAttemptId = b.EvaluationAttemptId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 19)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 19)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
-	if b.ConversationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 22)
-		x.xxx_hidden_ConversationId = b.ConversationId
-	}
-	if b.MessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 22)
-		x.xxx_hidden_MessageId = b.MessageId
-	}
-	if b.MessageRole != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 22)
-		x.xxx_hidden_MessageRole = *b.MessageRole
-	}
+	x.xxx_hidden_Event = b.Event
 	if b.SensorId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 19)
 		x.xxx_hidden_SensorId = b.SensorId
 	}
 	if b.SensorSlug != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 19)
 		x.xxx_hidden_SensorSlug = b.SensorSlug
 	}
-	if b.MessageCreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 22)
-		x.xxx_hidden_MessageCreatedAt = b.MessageCreatedAt
-	}
 	if b.EvaluatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 19)
 		x.xxx_hidden_EvaluatedAt = b.EvaluatedAt
 	}
 	if b.DefinitionHash != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 19)
 		x.xxx_hidden_DefinitionHash = b.DefinitionHash
 	}
 	if b.ConfiguredModel != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 19)
 		x.xxx_hidden_ConfiguredModel = b.ConfiguredModel
 	}
 	x.xxx_hidden_Models = b.Models
 	if b.CompilerVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 19)
 		x.xxx_hidden_CompilerVersion = b.CompilerVersion
 	}
 	x.xxx_hidden_Actor = b.Actor
 	if b.BillingUserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 19)
 		x.xxx_hidden_BillingUserId = b.BillingUserId
 	}
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 19)
 		x.xxx_hidden_Source = b.Source
 	}
 	x.xxx_hidden_Account = b.Account
 	if b.AssistantId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 19)
 		x.xxx_hidden_AssistantId = b.AssistantId
 	}
 	if b.Replayed != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 22)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 19)
 		x.xxx_hidden_Replayed = *b.Replayed
 	}
 	if b.MultiLabel != nil {
@@ -954,15 +844,15 @@ type isReading_Result interface {
 }
 
 type reading_MultiLabel_ struct {
-	MultiLabel *Reading_MultiLabel `protobuf:"bytes,22,opt,name=multi_label,json=multiLabel,oneof"`
+	MultiLabel *Reading_MultiLabel `protobuf:"bytes,19,opt,name=multi_label,json=multiLabel,oneof"`
 }
 
 type reading_Choice_ struct {
-	Choice *Reading_Choice `protobuf:"bytes,23,opt,name=choice,oneof"`
+	Choice *Reading_Choice `protobuf:"bytes,20,opt,name=choice,oneof"`
 }
 
 type reading_Score_ struct {
-	Score *Reading_Score `protobuf:"bytes,24,opt,name=score,oneof"`
+	Score *Reading_Score `protobuf:"bytes,21,opt,name=score,oneof"`
 }
 
 func (*reading_MultiLabel_) isReading_Result() {}
@@ -971,7 +861,7 @@ func (*reading_Choice_) isReading_Result() {}
 
 func (*reading_Score_) isReading_Result() {}
 
-// Message-user attribution copied from the consumed conversation snapshot.
+// Actor attribution copied from the consumed source event.
 // Independent of billing_user_id and account; missing fields remain unknown.
 type Reading_Actor struct {
 	state                     protoimpl.MessageState `protogen:"opaque.v1"`
@@ -1093,15 +983,15 @@ func (x *Reading_Actor) ClearUserEmail() {
 type Reading_Actor_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// Gram user ID attached to the persisted message. Identifies the person the
-	// message is attributed to, not necessarily its author: assistant responses
-	// can carry the requesting user's ID. Does not allocate billing usage.
+	// Gram user ID attributed to the source event, not necessarily its author:
+	// assistant responses can carry the requesting user's ID. Does not allocate
+	// billing usage.
 	UserId *string
 	// Opaque user ID reported by the source system, not a Gram user/account ID.
 	// Interpret within organization_id and source. Can exist without user_id
 	// when ingestion has not resolved the external identity to a Gram user.
 	ExternalUserId *string
-	// Message actor email explicitly observed by ingestion. Not a current Gram
+	// Actor email explicitly observed by ingestion. Not a current Gram
 	// directory lookup, a billing-user email, or an inferred provider-account email.
 	UserEmail *string
 }
@@ -1125,7 +1015,7 @@ func (b0 Reading_Actor_builder) Build() *Reading_Actor {
 	return m0
 }
 
-// The external AI account/credentials used for the source session, as resolved
+// The external AI account/credentials used for the source workload, as resolved
 // by ingestion. Not the Gram user allocated usage or the organization's Gram
 // billing plan. Classification may be known without a persisted account ID.
 type Reading_Account struct {
@@ -1284,6 +1174,546 @@ func (b0 Reading_Account_builder) Build() *Reading_Account {
 	return m0
 }
 
+// Stable reference to the evaluated source event. Source-specific context is
+// optional; new event kinds need not manufacture conversation identifiers.
+type Reading_Event struct {
+	state                  protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_Kind        *string                 `protobuf:"bytes,1,opt,name=kind"`
+	xxx_hidden_Id          *string                 `protobuf:"bytes,2,opt,name=id"`
+	xxx_hidden_OccurredAt  *string                 `protobuf:"bytes,3,opt,name=occurred_at,json=occurredAt"`
+	xxx_hidden_Context     isReading_Event_Context `protobuf_oneof:"context"`
+	XXX_raceDetectHookData protoimpl.RaceDetectHookData
+	XXX_presence           [1]uint32
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *Reading_Event) Reset() {
+	*x = Reading_Event{}
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Reading_Event) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Reading_Event) ProtoMessage() {}
+
+func (x *Reading_Event) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *Reading_Event) GetKind() string {
+	if x != nil {
+		if x.xxx_hidden_Kind != nil {
+			return *x.xxx_hidden_Kind
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Reading_Event) GetId() string {
+	if x != nil {
+		if x.xxx_hidden_Id != nil {
+			return *x.xxx_hidden_Id
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Reading_Event) GetOccurredAt() string {
+	if x != nil {
+		if x.xxx_hidden_OccurredAt != nil {
+			return *x.xxx_hidden_OccurredAt
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Reading_Event) GetConversationMessage() *Reading_ConversationMessage {
+	if x != nil {
+		if x, ok := x.xxx_hidden_Context.(*reading_Event_ConversationMessage); ok {
+			return x.ConversationMessage
+		}
+	}
+	return nil
+}
+
+func (x *Reading_Event) GetToolCall() *Reading_ToolCall {
+	if x != nil {
+		if x, ok := x.xxx_hidden_Context.(*reading_Event_ToolCall); ok {
+			return x.ToolCall
+		}
+	}
+	return nil
+}
+
+func (x *Reading_Event) SetKind(v string) {
+	x.xxx_hidden_Kind = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 4)
+}
+
+func (x *Reading_Event) SetId(v string) {
+	x.xxx_hidden_Id = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 4)
+}
+
+func (x *Reading_Event) SetOccurredAt(v string) {
+	x.xxx_hidden_OccurredAt = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 4)
+}
+
+func (x *Reading_Event) SetConversationMessage(v *Reading_ConversationMessage) {
+	if v == nil {
+		x.xxx_hidden_Context = nil
+		return
+	}
+	x.xxx_hidden_Context = &reading_Event_ConversationMessage{v}
+}
+
+func (x *Reading_Event) SetToolCall(v *Reading_ToolCall) {
+	if v == nil {
+		x.xxx_hidden_Context = nil
+		return
+	}
+	x.xxx_hidden_Context = &reading_Event_ToolCall{v}
+}
+
+func (x *Reading_Event) HasKind() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *Reading_Event) HasId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *Reading_Event) HasOccurredAt() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *Reading_Event) HasContext() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Context != nil
+}
+
+func (x *Reading_Event) HasConversationMessage() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Context.(*reading_Event_ConversationMessage)
+	return ok
+}
+
+func (x *Reading_Event) HasToolCall() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_Context.(*reading_Event_ToolCall)
+	return ok
+}
+
+func (x *Reading_Event) ClearKind() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_Kind = nil
+}
+
+func (x *Reading_Event) ClearId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_Id = nil
+}
+
+func (x *Reading_Event) ClearOccurredAt() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_OccurredAt = nil
+}
+
+func (x *Reading_Event) ClearContext() {
+	x.xxx_hidden_Context = nil
+}
+
+func (x *Reading_Event) ClearConversationMessage() {
+	if _, ok := x.xxx_hidden_Context.(*reading_Event_ConversationMessage); ok {
+		x.xxx_hidden_Context = nil
+	}
+}
+
+func (x *Reading_Event) ClearToolCall() {
+	if _, ok := x.xxx_hidden_Context.(*reading_Event_ToolCall); ok {
+		x.xxx_hidden_Context = nil
+	}
+}
+
+const Reading_Event_Context_not_set_case case_Reading_Event_Context = 0
+const Reading_Event_ConversationMessage_case case_Reading_Event_Context = 4
+const Reading_Event_ToolCall_case case_Reading_Event_Context = 5
+
+func (x *Reading_Event) WhichContext() case_Reading_Event_Context {
+	if x == nil {
+		return Reading_Event_Context_not_set_case
+	}
+	switch x.xxx_hidden_Context.(type) {
+	case *reading_Event_ConversationMessage:
+		return Reading_Event_ConversationMessage_case
+	case *reading_Event_ToolCall:
+		return Reading_Event_ToolCall_case
+	default:
+		return Reading_Event_Context_not_set_case
+	}
+}
+
+type Reading_Event_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Stable source namespace, e.g. "conversation.message" or "mcp.tool_call".
+	// Distinct from Reading.source, which namespaces external actor identities.
+	Kind *string
+	// Producer-assigned immutable logical event identity, unique within tenant
+	// and kind. Opaque: it need not be a UUID. Not a Pub/Sub delivery ID.
+	Id *string
+	// UTC RFC3339Nano event time, independent of evaluation completion time.
+	OccurredAt *string
+	// Fields of oneof xxx_hidden_Context:
+	ConversationMessage *Reading_ConversationMessage
+	ToolCall            *Reading_ToolCall
+	// -- end of xxx_hidden_Context
+}
+
+func (b0 Reading_Event_builder) Build() *Reading_Event {
+	m0 := &Reading_Event{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Kind != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 4)
+		x.xxx_hidden_Kind = b.Kind
+	}
+	if b.Id != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 4)
+		x.xxx_hidden_Id = b.Id
+	}
+	if b.OccurredAt != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 4)
+		x.xxx_hidden_OccurredAt = b.OccurredAt
+	}
+	if b.ConversationMessage != nil {
+		x.xxx_hidden_Context = &reading_Event_ConversationMessage{b.ConversationMessage}
+	}
+	if b.ToolCall != nil {
+		x.xxx_hidden_Context = &reading_Event_ToolCall{b.ToolCall}
+	}
+	return m0
+}
+
+type case_Reading_Event_Context protoreflect.FieldNumber
+
+func (x case_Reading_Event_Context) String() string {
+	md := file_gram_sigint_v1_reading_proto_msgTypes[3].Descriptor()
+	if x == 0 {
+		return "not set"
+	}
+	return protoimpl.X.MessageFieldStringOf(md, protoreflect.FieldNumber(x))
+}
+
+type isReading_Event_Context interface {
+	isReading_Event_Context()
+}
+
+type reading_Event_ConversationMessage struct {
+	ConversationMessage *Reading_ConversationMessage `protobuf:"bytes,4,opt,name=conversation_message,json=conversationMessage,oneof"`
+}
+
+type reading_Event_ToolCall struct {
+	ToolCall *Reading_ToolCall `protobuf:"bytes,5,opt,name=tool_call,json=toolCall,oneof"`
+}
+
+func (*reading_Event_ConversationMessage) isReading_Event_Context() {}
+
+func (*reading_Event_ToolCall) isReading_Event_Context() {}
+
+// Context supplied by the conversation adapter. Event.id is the message UUID.
+type Reading_ConversationMessage struct {
+	state                     protoimpl.MessageState           `protogen:"opaque.v1"`
+	xxx_hidden_ConversationId *string                          `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId"`
+	xxx_hidden_Role           Reading_ConversationMessage_Role `protobuf:"varint,2,opt,name=role,enum=gram.sigint.v1.Reading_ConversationMessage_Role"`
+	XXX_raceDetectHookData    protoimpl.RaceDetectHookData
+	XXX_presence              [1]uint32
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *Reading_ConversationMessage) Reset() {
+	*x = Reading_ConversationMessage{}
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Reading_ConversationMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Reading_ConversationMessage) ProtoMessage() {}
+
+func (x *Reading_ConversationMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *Reading_ConversationMessage) GetConversationId() string {
+	if x != nil {
+		if x.xxx_hidden_ConversationId != nil {
+			return *x.xxx_hidden_ConversationId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Reading_ConversationMessage) GetRole() Reading_ConversationMessage_Role {
+	if x != nil {
+		if protoimpl.X.Present(&(x.XXX_presence[0]), 1) {
+			return x.xxx_hidden_Role
+		}
+	}
+	return Reading_ConversationMessage_ROLE_UNSPECIFIED
+}
+
+func (x *Reading_ConversationMessage) SetConversationId(v string) {
+	x.xxx_hidden_ConversationId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 2)
+}
+
+func (x *Reading_ConversationMessage) SetRole(v Reading_ConversationMessage_Role) {
+	x.xxx_hidden_Role = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 2)
+}
+
+func (x *Reading_ConversationMessage) HasConversationId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *Reading_ConversationMessage) HasRole() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *Reading_ConversationMessage) ClearConversationId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_ConversationId = nil
+}
+
+func (x *Reading_ConversationMessage) ClearRole() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_Role = Reading_ConversationMessage_ROLE_UNSPECIFIED
+}
+
+type Reading_ConversationMessage_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Gram conversation UUID, not the source system's session identifier.
+	ConversationId *string
+	// Independent of human attribution; only user/assistant messages are evaluated.
+	Role *Reading_ConversationMessage_Role
+}
+
+func (b0 Reading_ConversationMessage_builder) Build() *Reading_ConversationMessage {
+	m0 := &Reading_ConversationMessage{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.ConversationId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 2)
+		x.xxx_hidden_ConversationId = b.ConversationId
+	}
+	if b.Role != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 2)
+		x.xxx_hidden_Role = *b.Role
+	}
+	return m0
+}
+
+// Optional execution context for a tool-call source adapter. Event.id is the
+// producer's stable execution identity, not necessarily the protocol call ID.
+type Reading_ToolCall struct {
+	state                  protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ToolName    *string                `protobuf:"bytes,1,opt,name=tool_name,json=toolName"`
+	xxx_hidden_ToolCallId  *string                `protobuf:"bytes,2,opt,name=tool_call_id,json=toolCallId"`
+	xxx_hidden_McpServerId *string                `protobuf:"bytes,3,opt,name=mcp_server_id,json=mcpServerId"`
+	XXX_raceDetectHookData protoimpl.RaceDetectHookData
+	XXX_presence           [1]uint32
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *Reading_ToolCall) Reset() {
+	*x = Reading_ToolCall{}
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Reading_ToolCall) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Reading_ToolCall) ProtoMessage() {}
+
+func (x *Reading_ToolCall) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *Reading_ToolCall) GetToolName() string {
+	if x != nil {
+		if x.xxx_hidden_ToolName != nil {
+			return *x.xxx_hidden_ToolName
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Reading_ToolCall) GetToolCallId() string {
+	if x != nil {
+		if x.xxx_hidden_ToolCallId != nil {
+			return *x.xxx_hidden_ToolCallId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Reading_ToolCall) GetMcpServerId() string {
+	if x != nil {
+		if x.xxx_hidden_McpServerId != nil {
+			return *x.xxx_hidden_McpServerId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Reading_ToolCall) SetToolName(v string) {
+	x.xxx_hidden_ToolName = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
+}
+
+func (x *Reading_ToolCall) SetToolCallId(v string) {
+	x.xxx_hidden_ToolCallId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 3)
+}
+
+func (x *Reading_ToolCall) SetMcpServerId(v string) {
+	x.xxx_hidden_McpServerId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
+}
+
+func (x *Reading_ToolCall) HasToolName() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *Reading_ToolCall) HasToolCallId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *Reading_ToolCall) HasMcpServerId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *Reading_ToolCall) ClearToolName() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_ToolName = nil
+}
+
+func (x *Reading_ToolCall) ClearToolCallId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_ToolCallId = nil
+}
+
+func (x *Reading_ToolCall) ClearMcpServerId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_McpServerId = nil
+}
+
+type Reading_ToolCall_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	ToolName *string
+	// Protocol call ID, scoped to its originating session/connection.
+	ToolCallId *string
+	// Gram MCP server UUID when the execution belongs to an MCP server.
+	McpServerId *string
+}
+
+func (b0 Reading_ToolCall_builder) Build() *Reading_ToolCall {
+	m0 := &Reading_ToolCall{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.ToolName != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
+		x.xxx_hidden_ToolName = b.ToolName
+	}
+	if b.ToolCallId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 3)
+		x.xxx_hidden_ToolCallId = b.ToolCallId
+	}
+	if b.McpServerId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 3)
+		x.xxx_hidden_McpServerId = b.McpServerId
+	}
+	return m0
+}
+
 // One signal's classification probability. In MultiLabel it is independent
 // of other signals; in Choice/Score it is an entry in the option distribution.
 type Reading_Probability struct {
@@ -1299,7 +1729,7 @@ type Reading_Probability struct {
 
 func (x *Reading_Probability) Reset() {
 	*x = Reading_Probability{}
-	mi := &file_gram_sigint_v1_reading_proto_msgTypes[3]
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1311,7 +1741,7 @@ func (x *Reading_Probability) String() string {
 func (*Reading_Probability) ProtoMessage() {}
 
 func (x *Reading_Probability) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_sigint_v1_reading_proto_msgTypes[3]
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1440,7 +1870,7 @@ type Reading_MultiLabel struct {
 
 func (x *Reading_MultiLabel) Reset() {
 	*x = Reading_MultiLabel{}
-	mi := &file_gram_sigint_v1_reading_proto_msgTypes[4]
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1452,7 +1882,7 @@ func (x *Reading_MultiLabel) String() string {
 func (*Reading_MultiLabel) ProtoMessage() {}
 
 func (x *Reading_MultiLabel) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_sigint_v1_reading_proto_msgTypes[4]
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1507,7 +1937,7 @@ type Reading_Choice struct {
 
 func (x *Reading_Choice) Reset() {
 	*x = Reading_Choice{}
-	mi := &file_gram_sigint_v1_reading_proto_msgTypes[5]
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1519,7 +1949,7 @@ func (x *Reading_Choice) String() string {
 func (*Reading_Choice) ProtoMessage() {}
 
 func (x *Reading_Choice) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_sigint_v1_reading_proto_msgTypes[5]
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1669,7 +2099,7 @@ type Reading_Score struct {
 
 func (x *Reading_Score) Reset() {
 	*x = Reading_Score{}
-	mi := &file_gram_sigint_v1_reading_proto_msgTypes[6]
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1681,7 +2111,7 @@ func (x *Reading_Score) String() string {
 func (*Reading_Score) ProtoMessage() {}
 
 func (x *Reading_Score) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_sigint_v1_reading_proto_msgTypes[6]
+	mi := &file_gram_sigint_v1_reading_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1785,37 +2215,33 @@ var File_gram_sigint_v1_reading_proto protoreflect.FileDescriptor
 
 const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf6\x0e\n" +
+	"\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xc1\x11\n" +
 	"\aReading\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
 	"\x15evaluation_attempt_id\x18\x02 \x01(\tR\x13evaluationAttemptId\x12'\n" +
 	"\x0forganization_id\x18\x03 \x01(\tR\x0eorganizationId\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x04 \x01(\tR\tprojectId\x12'\n" +
-	"\x0fconversation_id\x18\x05 \x01(\tR\x0econversationId\x12\x1d\n" +
-	"\n" +
-	"message_id\x18\x06 \x01(\tR\tmessageId\x12F\n" +
-	"\fmessage_role\x18\a \x01(\x0e2#.gram.sigint.v1.Reading.MessageRoleR\vmessageRole\x12\x1b\n" +
-	"\tsensor_id\x18\b \x01(\tR\bsensorId\x12\x1f\n" +
-	"\vsensor_slug\x18\t \x01(\tR\n" +
-	"sensorSlug\x12,\n" +
-	"\x12message_created_at\x18\n" +
-	" \x01(\tR\x10messageCreatedAt\x12!\n" +
-	"\fevaluated_at\x18\v \x01(\tR\vevaluatedAt\x12'\n" +
-	"\x0fdefinition_hash\x18\f \x01(\tR\x0edefinitionHash\x12)\n" +
-	"\x10configured_model\x18\r \x01(\tR\x0fconfiguredModel\x12\x16\n" +
-	"\x06models\x18\x0e \x03(\tR\x06models\x12)\n" +
-	"\x10compiler_version\x18\x0f \x01(\tR\x0fcompilerVersion\x123\n" +
-	"\x05actor\x18\x10 \x01(\v2\x1d.gram.sigint.v1.Reading.ActorR\x05actor\x12&\n" +
-	"\x0fbilling_user_id\x18\x11 \x01(\tR\rbillingUserId\x12\x16\n" +
-	"\x06source\x18\x12 \x01(\tR\x06source\x129\n" +
-	"\aaccount\x18\x13 \x01(\v2\x1f.gram.sigint.v1.Reading.AccountR\aaccount\x12!\n" +
-	"\fassistant_id\x18\x14 \x01(\tR\vassistantId\x12\x1a\n" +
-	"\breplayed\x18\x15 \x01(\bR\breplayed\x12E\n" +
-	"\vmulti_label\x18\x16 \x01(\v2\".gram.sigint.v1.Reading.MultiLabelH\x00R\n" +
+	"project_id\x18\x04 \x01(\tR\tprojectId\x123\n" +
+	"\x05event\x18\x05 \x01(\v2\x1d.gram.sigint.v1.Reading.EventR\x05event\x12\x1b\n" +
+	"\tsensor_id\x18\x06 \x01(\tR\bsensorId\x12\x1f\n" +
+	"\vsensor_slug\x18\a \x01(\tR\n" +
+	"sensorSlug\x12!\n" +
+	"\fevaluated_at\x18\b \x01(\tR\vevaluatedAt\x12'\n" +
+	"\x0fdefinition_hash\x18\t \x01(\tR\x0edefinitionHash\x12)\n" +
+	"\x10configured_model\x18\n" +
+	" \x01(\tR\x0fconfiguredModel\x12\x16\n" +
+	"\x06models\x18\v \x03(\tR\x06models\x12)\n" +
+	"\x10compiler_version\x18\f \x01(\tR\x0fcompilerVersion\x123\n" +
+	"\x05actor\x18\r \x01(\v2\x1d.gram.sigint.v1.Reading.ActorR\x05actor\x12&\n" +
+	"\x0fbilling_user_id\x18\x0e \x01(\tR\rbillingUserId\x12\x16\n" +
+	"\x06source\x18\x0f \x01(\tR\x06source\x129\n" +
+	"\aaccount\x18\x10 \x01(\v2\x1f.gram.sigint.v1.Reading.AccountR\aaccount\x12!\n" +
+	"\fassistant_id\x18\x11 \x01(\tR\vassistantId\x12\x1a\n" +
+	"\breplayed\x18\x12 \x01(\bR\breplayed\x12E\n" +
+	"\vmulti_label\x18\x13 \x01(\v2\".gram.sigint.v1.Reading.MultiLabelH\x00R\n" +
 	"multiLabel\x128\n" +
-	"\x06choice\x18\x17 \x01(\v2\x1e.gram.sigint.v1.Reading.ChoiceH\x00R\x06choice\x125\n" +
-	"\x05score\x18\x18 \x01(\v2\x1d.gram.sigint.v1.Reading.ScoreH\x00R\x05score\x1ai\n" +
+	"\x06choice\x18\x14 \x01(\v2\x1e.gram.sigint.v1.Reading.ChoiceH\x00R\x06choice\x125\n" +
+	"\x05score\x18\x15 \x01(\v2\x1d.gram.sigint.v1.Reading.ScoreH\x00R\x05score\x1ai\n" +
 	"\x05Actor\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12(\n" +
 	"\x10external_user_id\x18\x02 \x01(\tR\x0eexternalUserId\x12\x1d\n" +
@@ -1824,7 +2250,27 @@ const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\aAccount\x12&\n" +
 	"\x0fuser_account_id\x18\x01 \x01(\tR\ruserAccountId\x12!\n" +
 	"\faccount_type\x18\x02 \x01(\tR\vaccountType\x12!\n" +
-	"\fbilling_mode\x18\x03 \x01(\tR\vbillingMode\x1am\n" +
+	"\fbilling_mode\x18\x03 \x01(\tR\vbillingMode\x1a\xfa\x01\n" +
+	"\x05Event\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1f\n" +
+	"\voccurred_at\x18\x03 \x01(\tR\n" +
+	"occurredAt\x12`\n" +
+	"\x14conversation_message\x18\x04 \x01(\v2+.gram.sigint.v1.Reading.ConversationMessageH\x00R\x13conversationMessage\x12?\n" +
+	"\ttool_call\x18\x05 \x01(\v2 .gram.sigint.v1.Reading.ToolCallH\x00R\btoolCallB\t\n" +
+	"\acontext\x1a\xc5\x01\n" +
+	"\x13ConversationMessage\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12D\n" +
+	"\x04role\x18\x02 \x01(\x0e20.gram.sigint.v1.Reading.ConversationMessage.RoleR\x04role\"?\n" +
+	"\x04Role\x12\x14\n" +
+	"\x10ROLE_UNSPECIFIED\x10\x00\x12\r\n" +
+	"\tROLE_USER\x10\x01\x12\x12\n" +
+	"\x0eROLE_ASSISTANT\x10\x02\x1am\n" +
+	"\bToolCall\x12\x1b\n" +
+	"\ttool_name\x18\x01 \x01(\tR\btoolName\x12 \n" +
+	"\ftool_call_id\x18\x02 \x01(\tR\n" +
+	"toolCallId\x12\"\n" +
+	"\rmcp_server_id\x18\x03 \x01(\tR\vmcpServerId\x1am\n" +
 	"\vProbability\x12\x1b\n" +
 	"\tsignal_id\x18\x01 \x01(\tR\bsignalId\x12 \n" +
 	"\vprobability\x18\x02 \x01(\x01R\vprobability\x12\x1f\n" +
@@ -1845,41 +2291,43 @@ const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\fdistribution\x18\x02 \x03(\v2#.gram.sigint.v1.Reading.ProbabilityR\fdistribution\x12\x1e\n" +
 	"\n" +
 	"confidence\x18\x03 \x01(\x01R\n" +
-	"confidence\"^\n" +
-	"\vMessageRole\x12\x1c\n" +
-	"\x18MESSAGE_ROLE_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11MESSAGE_ROLE_USER\x10\x01\x12\x1a\n" +
-	"\x16MESSAGE_ROLE_ASSISTANT\x10\x02:\n" +
+	"confidence:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\x8c\x15B\b\n" +
 	"\x06resultBAZ?github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1b\beditionsp\xe9\a"
 
 var file_gram_sigint_v1_reading_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_gram_sigint_v1_reading_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_gram_sigint_v1_reading_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_gram_sigint_v1_reading_proto_goTypes = []any{
-	(Reading_MessageRole)(0),    // 0: gram.sigint.v1.Reading.MessageRole
-	(*Reading)(nil),             // 1: gram.sigint.v1.Reading
-	(*Reading_Actor)(nil),       // 2: gram.sigint.v1.Reading.Actor
-	(*Reading_Account)(nil),     // 3: gram.sigint.v1.Reading.Account
-	(*Reading_Probability)(nil), // 4: gram.sigint.v1.Reading.Probability
-	(*Reading_MultiLabel)(nil),  // 5: gram.sigint.v1.Reading.MultiLabel
-	(*Reading_Choice)(nil),      // 6: gram.sigint.v1.Reading.Choice
-	(*Reading_Score)(nil),       // 7: gram.sigint.v1.Reading.Score
+	(Reading_ConversationMessage_Role)(0), // 0: gram.sigint.v1.Reading.ConversationMessage.Role
+	(*Reading)(nil),                       // 1: gram.sigint.v1.Reading
+	(*Reading_Actor)(nil),                 // 2: gram.sigint.v1.Reading.Actor
+	(*Reading_Account)(nil),               // 3: gram.sigint.v1.Reading.Account
+	(*Reading_Event)(nil),                 // 4: gram.sigint.v1.Reading.Event
+	(*Reading_ConversationMessage)(nil),   // 5: gram.sigint.v1.Reading.ConversationMessage
+	(*Reading_ToolCall)(nil),              // 6: gram.sigint.v1.Reading.ToolCall
+	(*Reading_Probability)(nil),           // 7: gram.sigint.v1.Reading.Probability
+	(*Reading_MultiLabel)(nil),            // 8: gram.sigint.v1.Reading.MultiLabel
+	(*Reading_Choice)(nil),                // 9: gram.sigint.v1.Reading.Choice
+	(*Reading_Score)(nil),                 // 10: gram.sigint.v1.Reading.Score
 }
 var file_gram_sigint_v1_reading_proto_depIdxs = []int32{
-	0, // 0: gram.sigint.v1.Reading.message_role:type_name -> gram.sigint.v1.Reading.MessageRole
-	2, // 1: gram.sigint.v1.Reading.actor:type_name -> gram.sigint.v1.Reading.Actor
-	3, // 2: gram.sigint.v1.Reading.account:type_name -> gram.sigint.v1.Reading.Account
-	5, // 3: gram.sigint.v1.Reading.multi_label:type_name -> gram.sigint.v1.Reading.MultiLabel
-	6, // 4: gram.sigint.v1.Reading.choice:type_name -> gram.sigint.v1.Reading.Choice
-	7, // 5: gram.sigint.v1.Reading.score:type_name -> gram.sigint.v1.Reading.Score
-	4, // 6: gram.sigint.v1.Reading.MultiLabel.signals:type_name -> gram.sigint.v1.Reading.Probability
-	4, // 7: gram.sigint.v1.Reading.Choice.distribution:type_name -> gram.sigint.v1.Reading.Probability
-	4, // 8: gram.sigint.v1.Reading.Score.distribution:type_name -> gram.sigint.v1.Reading.Probability
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	4,  // 0: gram.sigint.v1.Reading.event:type_name -> gram.sigint.v1.Reading.Event
+	2,  // 1: gram.sigint.v1.Reading.actor:type_name -> gram.sigint.v1.Reading.Actor
+	3,  // 2: gram.sigint.v1.Reading.account:type_name -> gram.sigint.v1.Reading.Account
+	8,  // 3: gram.sigint.v1.Reading.multi_label:type_name -> gram.sigint.v1.Reading.MultiLabel
+	9,  // 4: gram.sigint.v1.Reading.choice:type_name -> gram.sigint.v1.Reading.Choice
+	10, // 5: gram.sigint.v1.Reading.score:type_name -> gram.sigint.v1.Reading.Score
+	5,  // 6: gram.sigint.v1.Reading.Event.conversation_message:type_name -> gram.sigint.v1.Reading.ConversationMessage
+	6,  // 7: gram.sigint.v1.Reading.Event.tool_call:type_name -> gram.sigint.v1.Reading.ToolCall
+	0,  // 8: gram.sigint.v1.Reading.ConversationMessage.role:type_name -> gram.sigint.v1.Reading.ConversationMessage.Role
+	7,  // 9: gram.sigint.v1.Reading.MultiLabel.signals:type_name -> gram.sigint.v1.Reading.Probability
+	7,  // 10: gram.sigint.v1.Reading.Choice.distribution:type_name -> gram.sigint.v1.Reading.Probability
+	7,  // 11: gram.sigint.v1.Reading.Score.distribution:type_name -> gram.sigint.v1.Reading.Probability
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_gram_sigint_v1_reading_proto_init() }
@@ -1892,13 +2340,17 @@ func file_gram_sigint_v1_reading_proto_init() {
 		(*reading_Choice_)(nil),
 		(*reading_Score_)(nil),
 	}
+	file_gram_sigint_v1_reading_proto_msgTypes[3].OneofWrappers = []any{
+		(*reading_Event_ConversationMessage)(nil),
+		(*reading_Event_ToolCall)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gram_sigint_v1_reading_proto_rawDesc), len(file_gram_sigint_v1_reading_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   7,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

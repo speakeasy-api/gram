@@ -70,7 +70,7 @@ func TestPubSubEvaluationPublishesCompleteSuccess(t *testing.T) {
 	c := classifiertest.NewMock(t)
 	c.On("Classify", mock.Anything, mock.Anything).Return(partialResult(false))
 	h, _ := handler(t, m, partialSensors(), c, testenv.NewMeterProvider(t))
-	h.publisher = outputPub
+	h.evaluator.publisher = outputPub
 	done := make(chan error, 1)
 	go func() {
 		done <- sub.ReceiveBatchWithResult(ctx, gcp.BatchReceiveSettings{MaxMessages: 1, MaxBytes: 1 << 20, MaxLatency: time.Millisecond}, h.HandleBatchWithResult)
@@ -92,7 +92,7 @@ func TestPubSubEvaluationPublishesCompleteSuccess(t *testing.T) {
 	require.NotEmpty(t, received.GetReceivedMessages())
 	var reading sigintv1.Reading
 	require.NoError(t, proto.Unmarshal(received.GetReceivedMessages()[0].GetMessage().GetData(), &reading))
-	require.Equal(t, m.GetId(), reading.GetMessageId())
+	require.Equal(t, m.GetId(), reading.GetEvent().GetId())
 	require.Equal(t, "other", reading.GetSensorId())
 	require.Len(t, reading.GetMultiLabel().GetSignals(), 1)
 }

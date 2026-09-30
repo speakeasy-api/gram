@@ -29,8 +29,6 @@ type BlobReader interface {
 	Read(context.Context, *url.URL) (io.ReadCloser, error)
 }
 
-const maxContentBytes = 16 << 20
-
 // permanentError contains a bounded reason, never message content or credentials.
 type permanentError struct{ reason string }
 

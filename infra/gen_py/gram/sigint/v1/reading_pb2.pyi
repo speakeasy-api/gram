@@ -9,15 +9,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Reading(_message.Message):
-    __slots__ = ("id", "evaluation_attempt_id", "organization_id", "project_id", "conversation_id", "message_id", "message_role", "sensor_id", "sensor_slug", "message_created_at", "evaluated_at", "definition_hash", "configured_model", "models", "compiler_version", "actor", "billing_user_id", "source", "account", "assistant_id", "replayed", "multi_label", "choice", "score")
-    class MessageRole(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-        __slots__ = ()
-        MESSAGE_ROLE_UNSPECIFIED: _ClassVar[Reading.MessageRole]
-        MESSAGE_ROLE_USER: _ClassVar[Reading.MessageRole]
-        MESSAGE_ROLE_ASSISTANT: _ClassVar[Reading.MessageRole]
-    MESSAGE_ROLE_UNSPECIFIED: Reading.MessageRole
-    MESSAGE_ROLE_USER: Reading.MessageRole
-    MESSAGE_ROLE_ASSISTANT: Reading.MessageRole
+    __slots__ = ("id", "evaluation_attempt_id", "organization_id", "project_id", "event", "sensor_id", "sensor_slug", "evaluated_at", "definition_hash", "configured_model", "models", "compiler_version", "actor", "billing_user_id", "source", "account", "assistant_id", "replayed", "multi_label", "choice", "score")
     class Actor(_message.Message):
         __slots__ = ("user_id", "external_user_id", "user_email")
         USER_ID_FIELD_NUMBER: _ClassVar[int]
@@ -36,6 +28,43 @@ class Reading(_message.Message):
         account_type: str
         billing_mode: str
         def __init__(self, user_account_id: _Optional[str] = ..., account_type: _Optional[str] = ..., billing_mode: _Optional[str] = ...) -> None: ...
+    class Event(_message.Message):
+        __slots__ = ("kind", "id", "occurred_at", "conversation_message", "tool_call")
+        KIND_FIELD_NUMBER: _ClassVar[int]
+        ID_FIELD_NUMBER: _ClassVar[int]
+        OCCURRED_AT_FIELD_NUMBER: _ClassVar[int]
+        CONVERSATION_MESSAGE_FIELD_NUMBER: _ClassVar[int]
+        TOOL_CALL_FIELD_NUMBER: _ClassVar[int]
+        kind: str
+        id: str
+        occurred_at: str
+        conversation_message: Reading.ConversationMessage
+        tool_call: Reading.ToolCall
+        def __init__(self, kind: _Optional[str] = ..., id: _Optional[str] = ..., occurred_at: _Optional[str] = ..., conversation_message: _Optional[_Union[Reading.ConversationMessage, _Mapping]] = ..., tool_call: _Optional[_Union[Reading.ToolCall, _Mapping]] = ...) -> None: ...
+    class ConversationMessage(_message.Message):
+        __slots__ = ("conversation_id", "role")
+        class Role(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+            __slots__ = ()
+            ROLE_UNSPECIFIED: _ClassVar[Reading.ConversationMessage.Role]
+            ROLE_USER: _ClassVar[Reading.ConversationMessage.Role]
+            ROLE_ASSISTANT: _ClassVar[Reading.ConversationMessage.Role]
+        ROLE_UNSPECIFIED: Reading.ConversationMessage.Role
+        ROLE_USER: Reading.ConversationMessage.Role
+        ROLE_ASSISTANT: Reading.ConversationMessage.Role
+        CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
+        ROLE_FIELD_NUMBER: _ClassVar[int]
+        conversation_id: str
+        role: Reading.ConversationMessage.Role
+        def __init__(self, conversation_id: _Optional[str] = ..., role: _Optional[_Union[Reading.ConversationMessage.Role, str]] = ...) -> None: ...
+    class ToolCall(_message.Message):
+        __slots__ = ("tool_name", "tool_call_id", "mcp_server_id")
+        TOOL_NAME_FIELD_NUMBER: _ClassVar[int]
+        TOOL_CALL_ID_FIELD_NUMBER: _ClassVar[int]
+        MCP_SERVER_ID_FIELD_NUMBER: _ClassVar[int]
+        tool_name: str
+        tool_call_id: str
+        mcp_server_id: str
+        def __init__(self, tool_name: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., mcp_server_id: _Optional[str] = ...) -> None: ...
     class Probability(_message.Message):
         __slots__ = ("signal_id", "probability", "signal_slug")
         SIGNAL_ID_FIELD_NUMBER: _ClassVar[int]
@@ -74,12 +103,9 @@ class Reading(_message.Message):
     EVALUATION_ATTEMPT_ID_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    CONVERSATION_ID_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_ROLE_FIELD_NUMBER: _ClassVar[int]
+    EVENT_FIELD_NUMBER: _ClassVar[int]
     SENSOR_ID_FIELD_NUMBER: _ClassVar[int]
     SENSOR_SLUG_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     EVALUATED_AT_FIELD_NUMBER: _ClassVar[int]
     DEFINITION_HASH_FIELD_NUMBER: _ClassVar[int]
     CONFIGURED_MODEL_FIELD_NUMBER: _ClassVar[int]
@@ -98,12 +124,9 @@ class Reading(_message.Message):
     evaluation_attempt_id: str
     organization_id: str
     project_id: str
-    conversation_id: str
-    message_id: str
-    message_role: Reading.MessageRole
+    event: Reading.Event
     sensor_id: str
     sensor_slug: str
-    message_created_at: str
     evaluated_at: str
     definition_hash: str
     configured_model: str
@@ -118,4 +141,4 @@ class Reading(_message.Message):
     multi_label: Reading.MultiLabel
     choice: Reading.Choice
     score: Reading.Score
-    def __init__(self, id: _Optional[str] = ..., evaluation_attempt_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ..., conversation_id: _Optional[str] = ..., message_id: _Optional[str] = ..., message_role: _Optional[_Union[Reading.MessageRole, str]] = ..., sensor_id: _Optional[str] = ..., sensor_slug: _Optional[str] = ..., message_created_at: _Optional[str] = ..., evaluated_at: _Optional[str] = ..., definition_hash: _Optional[str] = ..., configured_model: _Optional[str] = ..., models: _Optional[_Iterable[str]] = ..., compiler_version: _Optional[str] = ..., actor: _Optional[_Union[Reading.Actor, _Mapping]] = ..., billing_user_id: _Optional[str] = ..., source: _Optional[str] = ..., account: _Optional[_Union[Reading.Account, _Mapping]] = ..., assistant_id: _Optional[str] = ..., replayed: _Optional[bool] = ..., multi_label: _Optional[_Union[Reading.MultiLabel, _Mapping]] = ..., choice: _Optional[_Union[Reading.Choice, _Mapping]] = ..., score: _Optional[_Union[Reading.Score, _Mapping]] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., evaluation_attempt_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ..., event: _Optional[_Union[Reading.Event, _Mapping]] = ..., sensor_id: _Optional[str] = ..., sensor_slug: _Optional[str] = ..., evaluated_at: _Optional[str] = ..., definition_hash: _Optional[str] = ..., configured_model: _Optional[str] = ..., models: _Optional[_Iterable[str]] = ..., compiler_version: _Optional[str] = ..., actor: _Optional[_Union[Reading.Actor, _Mapping]] = ..., billing_user_id: _Optional[str] = ..., source: _Optional[str] = ..., account: _Optional[_Union[Reading.Account, _Mapping]] = ..., assistant_id: _Optional[str] = ..., replayed: _Optional[bool] = ..., multi_label: _Optional[_Union[Reading.MultiLabel, _Mapping]] = ..., choice: _Optional[_Union[Reading.Choice, _Mapping]] = ..., score: _Optional[_Union[Reading.Score, _Mapping]] = ...) -> None: ...
