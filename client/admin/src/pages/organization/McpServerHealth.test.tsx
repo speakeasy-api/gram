@@ -418,12 +418,17 @@ describe("McpServerHealth", () => {
     ).toBeTruthy();
   });
 
-  it("keeps the configuration when telemetry fails", async () => {
+  it("keeps the configuration when telemetry fails, and retries telemetry alone", async () => {
     toolCallsResponse = Promise.resolve(
-      json({ name: "unexpected", message: "boom" }, 500),
+      json(
+        { name: "unexpected", message: "upstream said something private" },
+        500,
+      ),
     );
     await open();
-    await screen.findByText(/Tool call telemetry did not load:/);
+    await screen.findByText("Tool calls couldn't be loaded.");
+    // Fixed copy only: the server's error text never reaches the page.
+    expect(screen.queryByText(/something private/)).toBe(null);
 
     expect(card("Tool calls").textContent).toContain("Unavailable");
     expect(card("User session issuer").textContent).toContain("Configured");
@@ -431,6 +436,38 @@ describe("McpServerHealth", () => {
       screen.getByRole("region", { name: "User session issuer" }),
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: /Tool call tail/ })).toBeTruthy();
+
+    const configReads = healthRequests().length;
+    const telemetryReads = requestsTo(TOOL_CALLS_PATH).length;
+    toolCallsResponse = undefined;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await screen.findByRole("heading", { name: "Tool calls per day" });
+    await waitFor(() =>
+      expect(card("Tool calls").textContent).toContain("420"),
+    );
+    expect(requestsTo(TOOL_CALLS_PATH).length).toBe(telemetryReads + 1);
+    expect(healthRequests().length).toBe(configReads);
+  });
+
+  it("offers a retry, not the error text, when the configuration fails", async () => {
+    mocks.healthFetch.mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(
+        requestUrl(input).pathname === "/admin/project.mcpServerHealth"
+          ? json(
+              {
+                name: "unexpected",
+                message: "upstream said something private",
+              },
+              500,
+            )
+          : new Response("not found", { status: 404 }),
+      ),
+    );
+    await open();
+    await screen.findByText("Server health couldn't be loaded.");
+    expect(screen.queryByText(/something private/)).toBe(null);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 
   it("names a legacy auth mode when there is no issuer", async () => {

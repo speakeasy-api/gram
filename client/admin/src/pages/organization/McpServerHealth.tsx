@@ -36,7 +36,7 @@ import {
   organizationQuery,
 } from "@/lib/adminQueries";
 import { badgeTone } from "@/lib/badgeTone";
-import { errorMessage, type AdminOrganization } from "@/lib/gramAdminApi";
+import type { AdminOrganization } from "@/lib/gramAdminApi";
 import {
   mcpServerHealthQuery,
   mcpServerToolCallsQuery,
@@ -135,13 +135,13 @@ export function McpServerHealth({
     );
   }
 
+  // Fixed copy, never the error's own text: a server error can carry detail
+  // this page must not repeat.
   if (!health.data) {
-    return (
-      <span className={cn(MUTED, "text-sm")}>
-        {health.isError
-          ? `Unable to load server health: ${errorMessage(health.error)}`
-          : "Loading..."}
-      </span>
+    return health.isError ? (
+      <LoadFailed what="Server health" onRetry={() => void health.refetch()} />
+    ) : (
+      <span className={cn(MUTED, "text-sm")}>Loading...</span>
     );
   }
 
@@ -154,7 +154,8 @@ export function McpServerHealth({
   } else if (toolCalls.isError) {
     toolCallsState = {
       status: "error",
-      message: errorMessage(toolCalls.error),
+      // Telemetry alone: the configuration on screen is fine.
+      retry: () => void toolCalls.refetch(),
     };
   }
 
@@ -181,7 +182,7 @@ export function McpServerHealth({
 
 type ToolCallsState =
   | { status: "loading" }
-  | { status: "error"; message: string }
+  | { status: "error"; retry: () => void }
   | { status: "ready"; toolCalls: AdminMcpServerToolCalls };
 
 function HealthReport({
@@ -566,13 +567,13 @@ function ToolCallsChart({
   let summary = worst
     ? `${failed} of ${total} calls failed; the worst ${unit} was ${bucketName(worst, weekly)} with ${worst.failed} of ${worst.total}.`
     : `${total} calls, none failed.`;
-  let message: string | undefined;
+  let message: ReactNode;
   if (state.status === "loading") {
     summary = "Loading.";
     message = "Loading tool calls...";
   } else if (state.status === "error") {
-    summary = "Tool call telemetry did not load.";
-    message = `Tool call telemetry did not load: ${state.message}`;
+    summary = "Tool calls couldn't be loaded.";
+    message = <LoadFailed what="Tool calls" onRetry={state.retry} />;
   } else if (total === 0) {
     message = "No calls reached the server directly in this window.";
   }
@@ -619,44 +620,48 @@ function ToolCallsChart({
         {/* One plot for every state, so the page below it never moves:
             columns are a fixed height whatever the busiest bucket holds, and
             an empty window lays its message over the same empty plot. */}
-        <div
-          role="img"
-          aria-label={`Tool calls per ${unit}, ${rangeLabel(range)}. ${summary}`}
-          className={cn(
-            PLOT,
-            "relative flex items-end justify-between gap-1 mx-6 overflow-x-auto px-6 pt-8 pb-4",
-          )}
-        >
-          {points.map((point, index) => (
-            <BucketColumn
-              key={point.bucketStart.toISOString()}
-              point={point}
-              perSquare={perSquare}
-              label={index % labelEvery === 0}
-              weekly={weekly}
-              spike={point === worst}
-            />
-          ))}
-          {points.length === 0 && (
-            <div aria-hidden="true" className="invisible">
+        <div className="relative mx-6">
+          <div
+            role="img"
+            aria-label={`Tool calls per ${unit}, ${rangeLabel(range)}. ${summary}`}
+            className={cn(
+              PLOT,
+              "flex items-end justify-between gap-1 overflow-x-auto px-6 pt-8 pb-4",
+            )}
+          >
+            {points.map((point, index) => (
               <BucketColumn
-                point={SPACER_POINT}
-                perSquare={1}
-                label
-                weekly={false}
-                spike={false}
+                key={point.bucketStart.toISOString()}
+                point={point}
+                perSquare={perSquare}
+                label={index % labelEvery === 0}
+                weekly={weekly}
+                spike={point === worst}
               />
-            </div>
-          )}
+            ))}
+            {points.length === 0 && (
+              <div aria-hidden="true" className="invisible">
+                <BucketColumn
+                  point={SPACER_POINT}
+                  perSquare={1}
+                  label
+                  weekly={false}
+                  spike={false}
+                />
+              </div>
+            )}
+          </div>
+          {/* Beside the plot rather than in it: an image's children are hidden
+            from assistive technology, and the retry has to be reachable. */}
           {message && (
-            <p
+            <div
               className={cn(
                 MUTED,
                 "absolute inset-0 flex items-center justify-center text-sm",
               )}
             >
-              <span className="bg-card rounded-md px-2 py-1">{message}</span>
-            </p>
+              <div className="bg-card rounded-md px-2 py-1">{message}</div>
+            </div>
           )}
         </div>
       </div>
@@ -675,6 +680,23 @@ function ToolCallsChart({
         })}
       />
     </section>
+  );
+}
+
+function LoadFailed({
+  what,
+  onRetry,
+}: {
+  what: string;
+  onRetry: () => void;
+}): JSX.Element {
+  return (
+    <span className="flex items-center gap-3 text-sm">
+      <span className={MUTED}>{what} couldn't be loaded.</span>
+      <Button variant="outline" size="xs" onClick={onRetry}>
+        Try again
+      </Button>
+    </span>
   );
 }
 
