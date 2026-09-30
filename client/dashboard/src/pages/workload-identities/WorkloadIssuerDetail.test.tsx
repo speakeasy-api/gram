@@ -9,7 +9,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import type { ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { WorkloadIssuerDetailPage } from "./WorkloadIssuerDetail";
 
@@ -62,6 +62,7 @@ vi.mock("sonner", () => ({
 }));
 
 const ISSUER_ID = "11111111-1111-1111-1111-111111111111";
+const OTHER_ISSUER_ID = "33333333-3333-3333-3333-333333333333";
 
 const baseIssuer = {
   id: ISSUER_ID,
@@ -79,13 +80,25 @@ const baseIssuer = {
 
 let issuer = baseIssuer;
 
-function admission(index: number, tags: string[] = []): WorkloadAdmission {
+const otherIssuer = {
+  ...baseIssuer,
+  id: OTHER_ISSUER_ID,
+  name: "Other CI",
+  issuer: "https://other-ci-identity.example.com",
+  jwksUri: "https://other-ci-identity.example.com/jwks",
+};
+
+function admission(
+  index: number,
+  tags: string[] = [],
+  workloadIssuerId: string = ISSUER_ID,
+): WorkloadAdmission {
   const label = `machine-${String(index).padStart(2, "0")}`;
   return {
-    id: `admission-${index}`,
+    id: `admission-${workloadIssuerId}-${index}`,
     organizationId: "example-org",
     projectId: "",
-    workloadIssuerId: ISSUER_ID,
+    workloadIssuerId,
     issuer: issuer.issuer,
     issuerName: issuer.name,
     subject: `repo:example/${label}`,
@@ -104,7 +117,7 @@ let admissions: WorkloadAdmission[] = [];
 
 vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
   useWorkloadIdentities: () => ({
-    data: { issuers: [issuer], admissions },
+    data: { issuers: [issuer, otherIssuer], admissions },
     isPending: false,
     isError: false,
     refetch: vi.fn(),
@@ -169,6 +182,7 @@ function renderPage() {
   const page = () => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[`/access-hub/${ISSUER_ID}`]}>
+        <Link to={`/access-hub/${OTHER_ISSUER_ID}`}>Other platform</Link>
         <Routes>
           <Route
             path="/access-hub/:issuerId"
@@ -247,6 +261,25 @@ it("returns to the first page when the search changes", async () => {
   await waitFor(() => expect(visibleMachines()).toHaveLength(9));
   expect(visibleMachines()[0]).toBe("machine-01");
   expect(screen.queryByRole("button", { name: "Next page" })).toBeNull();
+});
+
+it("starts each platform on the first page", () => {
+  admissions = [
+    ...Array.from({ length: 12 }, (_, i) => admission(i + 1)),
+    ...Array.from({ length: 12 }, (_, i) =>
+      admission(i + 1, [], OTHER_ISSUER_ID),
+    ),
+  ];
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  expect(screen.getByText("11–12 of 12")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("link", { name: "Other platform" }));
+
+  expect(screen.getByText("Other CI")).toBeTruthy();
+  expect(screen.getByText("1–10 of 12")).toBeTruthy();
+  expect(visibleMachines()[0]).toBe("machine-01");
 });
 
 it("puts stop trusting in its own section below the machines", () => {
