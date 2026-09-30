@@ -7,6 +7,7 @@ import {
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MoreActions } from "@/components/ui/MoreActions";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
@@ -365,32 +366,30 @@ function IssuerDetail(): JSX.Element {
     {
       key: "actions",
       header: "",
-      width: "180px",
+      width: "56px",
       render: (admission) => (
-        <Stack direction="horizontal" gap={1}>
-          <RequireScope scope="workload:write" level="component">
-            <Button
-              size="sm"
-              variant="tertiary"
-              onClick={() => {
-                setEditingAdmission(admission);
-                setEditAdmissionOpen(true);
-              }}
-            >
-              <Button.Text>Edit</Button.Text>
-            </Button>
-          </RequireScope>
-          <RequireScope scope="workload:write" level="component">
-            <Button
-              size="sm"
-              variant="tertiary"
-              disabled={withdrawSubject.isPending}
-              onClick={() => setRemoving(admission)}
-            >
-              <Button.Text>Remove</Button.Text>
-            </Button>
-          </RequireScope>
-        </Stack>
+        <RequireScope scope="workload:write" level="component">
+          <MoreActions
+            triggerAriaLabel={`Actions for ${admission.name || admission.subject}`}
+            actions={[
+              {
+                label: "Edit",
+                icon: "pencil",
+                onClick: () => {
+                  setEditingAdmission(admission);
+                  setEditAdmissionOpen(true);
+                },
+              },
+              {
+                label: "Remove",
+                icon: "trash",
+                destructive: true,
+                disabled: withdrawSubject.isPending,
+                onClick: () => setRemoving(admission),
+              },
+            ]}
+          />
+        </RequireScope>
       ),
     },
   ];
