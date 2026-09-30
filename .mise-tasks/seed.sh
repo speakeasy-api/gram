@@ -18,6 +18,16 @@ set -euo pipefail
 # (GRAM_API_KEY) is now a fixed value checked into mise.toml.
 cd server
 go run . demo-seed --local "$@"
+
 # The Gram-owned catalog is global; seed the Okta-mapped vendors so server
-# suggestions have something to match locally.
-exec go run . registry-okta-seed
+# suggestions have something to match locally. Only the database override is
+# shared with the demo seed; its other flags do not apply here.
+catalog_args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --database-url) catalog_args+=("$1" "$2"); shift ;;
+    --database-url=*) catalog_args+=("$1") ;;
+  esac
+  shift
+done
+exec go run . registry-okta-seed "${catalog_args[@]}"
