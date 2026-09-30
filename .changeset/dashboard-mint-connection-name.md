@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-Name dashboard-minted MCP connections Dashboard in the connections list, instead of leaving them without a client name.
+Sessions minted from the dashboard show up in the connections list with the client name "Dashboard".
