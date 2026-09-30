@@ -19,7 +19,6 @@ import { SetStripeSubscription } from "./SetStripeSubscription";
 
 const mocks = vi.hoisted(() => ({
   getStripeSubscriptionCandidate: vi.fn(),
-  getOrganization: vi.fn(),
   setStripeSubscription: vi.fn(),
 }));
 
@@ -28,7 +27,6 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   return {
     ...actual,
     getStripeSubscriptionCandidate: mocks.getStripeSubscriptionCandidate,
-    getOrganization: mocks.getOrganization,
     setStripeSubscription: mocks.setStripeSubscription,
   };
 });
@@ -74,7 +72,6 @@ async function renderEditor(org: AdminOrganization = ORG) {
   qc.setQueryData(organizationQuery(org.slug).queryKey, org);
   const announce = vi.fn<(message: string) => void>();
   const showFailure = vi.fn<(message: string | null) => void>();
-  mocks.getOrganization.mockResolvedValue(org);
   const mounted = await renderWithApp(
     <WriteReportContext.Provider value={{ announce, showFailure }}>
       <CachedEditor org={org} />
@@ -104,7 +101,6 @@ function confirmationValue(dialog: HTMLElement, label: string): string | null {
 
 beforeEach(() => {
   mocks.getStripeSubscriptionCandidate.mockReset();
-  mocks.getOrganization.mockReset();
   mocks.setStripeSubscription.mockReset();
   mocks.getStripeSubscriptionCandidate.mockImplementation(
     (_organizationID: string, stripeSubscriptionID: string) =>
