@@ -115,6 +115,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminGetStripeSubscription']
     update:
       x-speakeasy-name-override: getStripeSubscription
+  - target: $.paths.*[?@.operationId=='adminGetStripeSubscriptionCandidate']
+    update:
+      x-speakeasy-name-override: getStripeSubscriptionCandidate
   - target: $.paths.*[?@.operationId=='adminListOrganizationActivity']
     update:
       x-speakeasy-name-override: listOrganizationActivity
@@ -163,6 +166,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminSetStripeCustomer']
     update:
       x-speakeasy-name-override: setStripeCustomer
+  - target: $.paths.*[?@.operationId=='adminSetStripeSubscription']
+    update:
+      x-speakeasy-name-override: setStripeSubscription
   - target: $.paths.*[?@.operationId=='adminTriggerOrganizationChatAnalysis']
     update:
       x-speakeasy-name-override: triggerOrganizationChatAnalysis

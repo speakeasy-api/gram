@@ -1522,6 +1522,68 @@ FROM (
 )
 WHERE k >= 0;
 
+-- One MCP-only blocked request with no chat anchor. This exercises the Risk
+-- Events and Watchdog fallback that shows execution context instead of an
+-- "Untitled" chat session.
+INSERT INTO risk_findings
+  (id, created_at, organization_id, project_id, chat_message_id, chat_id,
+   user_id, external_user_id, user_email, team, chat_source,
+   risk_policy_id, risk_policy_version, rule_id, description, source,
+   confidence, category, tags, start_pos, end_pos, match_len, match_redacted,
+   surface, field, message_created_at, execution_id, mcp_server_id, toolset_id,
+   tool_name, phase, mediation_surface, mcp_method, principal_kind,
+   identity_stamped, enforcement_outcome)
+SELECT
+  toUUID(concat(substring(hfinding, 1, 8), '-', substring(hfinding, 9, 4), '-5',
+                substring(hfinding, 14, 3), '-8', substring(hfinding, 18, 3),
+                '-', substring(hfinding, 21, 12))),
+  ts,
+  'org_gram_demo_workspace',
+  'dec0de00-0000-4000-a000-000000000001',
+  '',
+  '',
+  'user_demo_amara',
+  '',
+  'amara@demo.getgram.ai',
+  'Support Engineering',
+  'claude-code',
+  'dec0de00-0000-4000-a000-00000000f001',
+  1,
+  'secret.github_pat',
+  'GitHub access token in an MCP tool request',
+  'gitleaks',
+  0.98,
+  'secrets',
+  ['secret', 'github'],
+  24,
+  64,
+  40,
+  concat('ghp_', repeat('*', 32), 'demo'),
+  'tool.args',
+  'tool.args',
+  ts,
+  toUUID(concat(substring(hexecution, 1, 8), '-', substring(hexecution, 9, 4), '-5',
+                substring(hexecution, 14, 3), '-8', substring(hexecution, 18, 3),
+                '-', substring(hexecution, 21, 12))),
+  toUUID(concat(substring(hserver, 1, 8), '-', substring(hserver, 9, 4), '-5',
+                substring(hserver, 14, 3), '-8', substring(hserver, 18, 3),
+                '-', substring(hserver, 21, 12))),
+  'dec0de00-0000-4000-a000-000000005e01',
+  'get_customer',
+  'request',
+  'hosted_mcp',
+  'tools/call',
+  'user_session',
+  true,
+  'denied'
+FROM (
+  SELECT
+    lower(hex(MD5('gram-demo-risk-181'))) AS hfinding,
+    lower(hex(MD5('gram-demo-mcp-execution-181'))) AS hexecution,
+    lower(hex(MD5('gram-demo-mcpserver-support'))) AS hserver,
+    now64(9) - toIntervalHour(2) AS ts
+);
+
 -- Skill efficacy mappings: one skill_session_versions row per Postgres
 -- skill_observation (same det-uuid ids, same skill-per-chat formula
 -- 1 + (((i-1)/2) % 3)). surface='dev' — the insights query joins scores to
@@ -2187,14 +2249,20 @@ SELECT throwIf(
    WHERE organization_id = 'org_gram_demo_workspace'
      AND mcp_server_id != ''
      AND (execution_id = '' OR toolset_id = '' OR tool_name = ''
-          OR phase != 'response' OR mediation_surface != 'hosted_mcp'
+          OR phase NOT IN ('request', 'response')
+          OR mediation_surface != 'hosted_mcp'
           OR mcp_method != 'tools/call' OR principal_kind != 'user_session'
-          OR identity_stamped = false OR enforcement_outcome != 'logged')) > 0
+          OR identity_stamped = false
+          OR enforcement_outcome NOT IN ('logged', 'denied'))) > 0
   OR
   (SELECT count() FROM risk_findings
    WHERE organization_id = 'org_gram_demo_workspace'
-     AND mcp_server_id != '') = 0,
-  'demo seed postflight: mediated risk findings missing complete MCP attribution');
+     AND mcp_server_id != '') = 0
+  OR
+  (SELECT count() FROM risk_findings
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND mcp_server_id != '' AND chat_id = '') = 0,
+  'demo seed postflight: mediated risk findings missing complete MCP-only attribution');
 
 -- Fewer than four distinct rule clusters means the weighted type draw
 -- collapsed and the Watchdog list is a flat rotation again.

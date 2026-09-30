@@ -588,6 +588,43 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestUpdateRemoteSessionClient_LegacyCallbackURLRequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-legacycb", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-legacycb").String()
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
+		ClientID:              "legacycb-client-id",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+
+	enabled := true
+	payload := &clientsgen.UpdateRemoteSessionClientPayload{
+		ID:                created.ID,
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		LegacyCallbackURL: &enabled,
+	}
+	_, err = ti.service.UpdateRemoteSessionClient(ctx, payload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	unchanged, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.False(t, unchanged.LegacyCallbackURL, "a refused update must not change the flag")
+
+	updated, err := ti.service.UpdateRemoteSessionClient(withAdmin(t, ctx), payload)
+	require.NoError(t, err)
+	require.True(t, updated.LegacyCallbackURL)
+}
+
 func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
 	t.Parallel()
 

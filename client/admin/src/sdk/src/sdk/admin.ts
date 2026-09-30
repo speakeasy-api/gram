@@ -31,6 +31,7 @@ import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
 import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.js";
+import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubscriptionCandidate.js";
 import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
@@ -57,6 +58,7 @@ import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeatur
 import { adminSetOrganizationOnboarding } from "../funcs/adminSetOrganizationOnboarding.js";
 import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
+import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
 import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
@@ -87,6 +89,7 @@ import { AdminSession } from "../models/components/adminsession.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
+import { AdminStripeSubscriptionCandidate } from "../models/components/adminstripesubscriptioncandidate.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
@@ -118,6 +121,7 @@ import { SetOrganizationFeatureRequestBody } from "../models/components/setorgan
 import { SetOrganizationOnboardingRequestBody } from "../models/components/setorganizationonboardingrequestbody.js";
 import { SetRegistryEntryPublishedRequestBody } from "../models/components/setregistryentrypublishedrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
+import { SetStripeSubscriptionRequestBody } from "../models/components/setstripesubscriptionrequestbody.js";
 import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
 import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
 import { SupportMatrix } from "../models/components/supportmatrix.js";
@@ -143,6 +147,7 @@ import { AdminGetRegistryEntryRequest } from "../models/operations/admingetregis
 import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
+import { AdminGetStripeSubscriptionCandidateRequest } from "../models/operations/admingetstripesubscriptioncandidate.js";
 import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
@@ -559,6 +564,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * setStripeSubscription admin
+   *
+   * @remarks
+   * Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.
+   */
+  async setStripeSubscription(
+    request: SetStripeSubscriptionRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminSetStripeSubscription(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getSpendBreakdown admin
    *
    * @remarks
@@ -603,6 +625,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminStripeSubscription> {
     return unwrapAsync(adminGetStripeSubscription(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getStripeSubscriptionCandidate admin
+   *
+   * @remarks
+   * Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.
+   */
+  async getStripeSubscriptionCandidate(
+    request: AdminGetStripeSubscriptionCandidateRequest,
+    options?: RequestOptions,
+  ): Promise<AdminStripeSubscriptionCandidate> {
+    return unwrapAsync(adminGetStripeSubscriptionCandidate(
       this,
       request,
       options,

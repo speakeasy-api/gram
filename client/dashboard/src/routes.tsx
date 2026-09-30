@@ -544,6 +544,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Team Access",
             url: "team-access",
           },
+          guardrails: {
+            title: "MCP Server Guardrails",
+            url: "guardrails",
+          },
           sessions: {
             title: "MCP Server Clients and Sessions",
             url: "sessions",
@@ -714,6 +718,7 @@ const ROUTE_STRUCTURE = {
     title: "Agent Identity",
     url: "agent-management",
     icon: "bot",
+    stage: "preview",
     component: AgentsPage,
   },
   // One page per person, reached from every surface that renders a human. The

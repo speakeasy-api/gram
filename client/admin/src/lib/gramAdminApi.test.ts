@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GramCore } from "@gram/admin-client/core";
 import { HTTPClient } from "@gram/admin-client/lib/http";
 import { adminListOrganizations } from "@gram/admin-client/funcs/adminListOrganizations";
+import { ServiceError } from "@gram/admin-client/models/errors/serviceerror";
 
 import {
   GramAdminError,
@@ -494,7 +495,58 @@ describe("errorMessage", () => {
     const e = new GramAdminError(404, null, "gram admin 404 Not Found");
     expect(errorMessage(e)).toBe("gram admin 404 Not Found");
   });
+
+  it("prefers the generated 4xx message the operator can act on", () => {
+    expect(
+      errorMessage(
+        generatedServiceError(
+          409,
+          "Conflict",
+          "Stripe subscription does not belong to the organization's Stripe customer",
+        ),
+      ),
+    ).toBe(
+      "Stripe subscription does not belong to the organization's Stripe customer",
+    );
+  });
+
+  it("keeps the status line for a generated server fault", () => {
+    expect(
+      errorMessage(
+        generatedServiceError(
+          500,
+          "Internal Server Error",
+          "list organizations",
+        ),
+      ),
+    ).toBe("gram admin 500 Internal Server Error");
+  });
 });
+
+function generatedServiceError(
+  status: number,
+  statusText: string,
+  message: string,
+): ServiceError {
+  return new ServiceError(
+    {
+      fault: status >= 500,
+      id: "placeholder",
+      message,
+      name: status >= 500 ? "internal" : "conflict",
+      temporary: false,
+      timeout: false,
+    },
+    {
+      response: new Response(JSON.stringify({ message }), {
+        status,
+        statusText,
+      }),
+      request: new Request("https://admin.example.test/rpc"),
+      body: JSON.stringify({ message }),
+    },
+  );
+}
 
 // The writes that still leave through this hand-written client: organization.create,
 // enterprise conversion, and the bulk account-type update. A test naming each path is what

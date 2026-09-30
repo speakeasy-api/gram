@@ -10,7 +10,7 @@ import type { AnalyticsQueryResult } from "@gram/client/models/components/analyt
 // fields each has, what each field can be filtered or aggregated by. Nothing
 // here knows a dataset by name, so a new dataset ships with no client change.
 
-export type ChartType = "line" | "area" | "bar" | "table" | "number";
+export type ChartType = "line" | "area" | "bar" | "ranked" | "table" | "number";
 export type WindowPreset = "1h" | "24h" | "7d" | "30d" | "90d";
 export type Grain = NonNullable<AnalyticsQueryPayload["grain"]>;
 export type MeasureOp = AnalyticsMeasure["op"];
@@ -33,6 +33,7 @@ export const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
   { value: "line", label: "Line" },
   { value: "area", label: "Area" },
   { value: "bar", label: "Bar" },
+  { value: "ranked", label: "Ranked" },
   { value: "table", label: "Table" },
   { value: "number", label: "Number" },
 ];

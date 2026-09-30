@@ -369,7 +369,7 @@ func TestManagedClient_DeletableOnceConnectionTombstoned(t *testing.T) {
 func listIssuerIDs(t *testing.T, ctx context.Context, ti *testInstance) []string {
 	t.Helper()
 
-	result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{Cursor: nil, Limit: nil, SessionToken: nil, ApikeyToken: nil})
+	result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{Cursor: nil, Limit: nil, Tier: nil, SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	ids := make([]string, 0, len(result.Items))
 	for _, item := range result.Items {

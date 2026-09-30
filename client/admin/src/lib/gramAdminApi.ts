@@ -1,3 +1,5 @@
+import { GramError } from "@gram/admin-client/models/errors/gramerror";
+
 import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
 
 export { isRedirectingToLogin } from "@/lib/gramAdminClient";
@@ -30,6 +32,10 @@ export class GramAdminError extends Error {
 // verb phrase the handler passed to oops.E, such as "list organizations"
 // (server/internal/admin/impl.go:343, surfaced by pp.go:83), which reads worse
 // than the status line. So trust the body below 500 and nowhere else.
+//
+// Generated ServiceError puts that verb on Error.message for every status, so
+// a 5xx from the SDK has to be rewritten to the status line the handwritten
+// client already used.
 export function errorMessage(e: unknown): string {
   if (
     e instanceof GramAdminError &&
@@ -39,6 +45,9 @@ export function errorMessage(e: unknown): string {
   ) {
     const message = (e.body as { message?: unknown }).message;
     if (typeof message === "string" && message) return message;
+  }
+  if (e instanceof GramError && e.statusCode >= 500) {
+    return `gram admin ${e.statusCode} ${e.rawResponse.statusText || "Internal Server Error"}`;
   }
   return e instanceof Error ? e.message : String(e);
 }

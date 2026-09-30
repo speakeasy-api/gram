@@ -64,6 +64,7 @@ var riskFindingListColumns = []string{
 	"content_part_id",
 	"chat_id",
 	"external_user_id",
+	"user_id",
 	"assistant_id",
 	"risk_policy_id",
 	"risk_policy_version",
@@ -98,6 +99,7 @@ type RiskFindingListRow struct {
 	ContentPartID      string
 	ChatID             string
 	ExternalUserID     string
+	UserID             string
 	AssistantID        string
 	RiskPolicyID       string
 	RiskPolicyVersion  int64
@@ -133,6 +135,7 @@ func (r *RiskFindingListRow) scanTargets() []any {
 		&r.ContentPartID,
 		&r.ChatID,
 		&r.ExternalUserID,
+		&r.UserID,
 		&r.AssistantID,
 		&r.RiskPolicyID,
 		&r.RiskPolicyVersion,

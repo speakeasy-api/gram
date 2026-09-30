@@ -33,8 +33,10 @@ import { type DateRangePreset } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
+import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
 import { useRiskMcpServerCounts } from "@gram/client/react-query/riskMcpServerCounts.js";
 import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
@@ -49,6 +51,10 @@ import {
 } from "../risk-utils";
 import { invalidateExclusionSurfaces } from "../exclusion-invalidation";
 import { useDismissFinding } from "../useDismissFinding";
+import {
+  buildMCPFindingNames,
+  type MCPFindingNames,
+} from "../mcp-finding-context";
 import {
   SEVERITY_ACCENT,
   SEVERITY_ORDER,
@@ -116,6 +122,33 @@ export default function Watchdog(): JSX.Element {
 
 function WatchdogContent(): JSX.Element {
   const organization = useOrganization();
+  const gramProject = useProjectSlugForRequests();
+  const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const { data: metaMcpServersData } = useMetaMcpServers(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
+  const { data: toolsetsData } = useListToolsets({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const mcpFindingNames: MCPFindingNames = useMemo(
+    () =>
+      buildMCPFindingNames(
+        [
+          ...(mcpServersData?.mcpServers ?? []),
+          ...(metaMcpServersData?.metaMcpServers ?? []),
+        ],
+        toolsetsData?.toolsets ?? [],
+      ),
+    [
+      mcpServersData?.mcpServers,
+      metaMcpServersData?.metaMcpServers,
+      toolsetsData?.toolsets,
+    ],
+  );
   const featuresQuery = useProductFeatures({
     organizationId: organization.id,
   });
@@ -176,7 +209,6 @@ function WatchdogContent(): JSX.Element {
     [values.category],
   );
 
-  const gramProject = useProjectSlugForRequests();
   const {
     values: serverValues,
     setValue: setServerValue,
@@ -185,10 +217,6 @@ function WatchdogContent(): JSX.Element {
   } = useFilterState(WATCHDOG_SERVER_FILTERS);
   const mcpServerId = mcpScoped ? (serverValues.mcp_server_id ?? "") : "";
 
-  const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
-    throwOnError: false,
-    enabled: mcpScoped,
-  });
   const { data: serverCountsData } = useRiskMcpServerCounts(
     { from: window.from, to: window.to },
     undefined,
@@ -570,12 +598,13 @@ function WatchdogContent(): JSX.Element {
               signals branch on purpose too, since it reads a different endpoint
               and has its own loading, error, and empty handling. A failed
               signals query must not take the audit trail down with it. */}
-          <SuppressedFindings />
+          <SuppressedFindings mcpFindingNames={mcpFindingNames} />
           {/* Inside Body on purpose: Page.Section slot-extracts only its known
               child components and silently drops anything else, so the drawer
               must live under a slot to render at all. */}
           <SignalDrawer
             signal={selectedSignal}
+            mcpFindingNames={mcpFindingNames}
             onClose={() => setUrlParam("signal", null)}
           />
           <SuppressFindingsDialog

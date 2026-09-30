@@ -56,6 +56,7 @@ func TestListRiskResults_MCPServerFilterIncludesUnanchoredAndScopesAllPaths(t *t
 	unanchored.PrincipalKind = "api_key"
 	unanchored.IdentityStamped = true
 	unanchored.EnforcementOutcome = "logged"
+	unanchored.UserID = authCtx.UserID
 	anchored := unanchored
 	anchored.ID = uuid.New()
 	anchored.ChatID = chatID.String()
@@ -116,6 +117,7 @@ func TestListRiskResults_MCPServerFilterIncludesUnanchoredAndScopesAllPaths(t *t
 			require.Nil(t, result.ChatID)
 			require.Nil(t, result.ChatMessageID)
 			require.Equal(t, "create_issue", *result.ToolName)
+			require.Equal(t, *authCtx.Email, *result.UserID)
 		}
 	}
 

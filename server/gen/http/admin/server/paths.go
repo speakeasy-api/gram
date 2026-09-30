@@ -326,3 +326,13 @@ func SaveRegistryEntryAdminPath() string {
 func SetRegistryEntryPublishedAdminPath() string {
 	return "/admin/registry.setPublished"
 }
+
+// GetStripeSubscriptionCandidateAdminPath returns the URL path to the admin service getStripeSubscriptionCandidate HTTP endpoint.
+func GetStripeSubscriptionCandidateAdminPath() string {
+	return "/admin/organization.stripeSubscriptionCandidate"
+}
+
+// SetStripeSubscriptionAdminPath returns the URL path to the admin service setStripeSubscription HTTP endpoint.
+func SetStripeSubscriptionAdminPath() string {
+	return "/admin/organization.setStripeSubscription"
+}

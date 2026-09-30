@@ -7,10 +7,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type fakeAuthorizationEngine struct {
@@ -142,7 +145,9 @@ func TestRequireHumanRejectsAlternateAndUntrustedCallers(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := map[string]context.Context{
-		"anonymous": t.Context(),
+		"anonymous":                     t.Context(),
+		"consent is not dashboard auth": contextvalues.WithConsentBindingAuthorization(t.Context(), "human", "org-a", uuid.New(), uuid.New(), uuid.New()),
+		"principal credential with session attribution": contextvalues.WithPrincipalCredentialAuthorization(valid, mustAuthContext(t, valid), urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()), contextvalues.PrincipalCredential{}),
 		"unvalidated attribution": contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 			ActiveOrganizationID: "org-a", UserID: "human", SessionID: func() *string { value := "untrusted"; return &value }(),
 		}),
@@ -251,4 +256,53 @@ func TestHumanContextLiveGrantsAreIsolated(t *testing.T) {
 	require.Equal(t, authz.ScopeMCPConnect, human.grants[0].Scope)
 	require.Equal(t, "example-server", human.grants[0].Selector[authz.SelectorKeyResourceID])
 	require.Nil(t, (HumanContext{}).LiveGrants())
+}
+
+func TestConsentProvenanceOnlyAuthorizesSelectedAgentAttachments(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	agent := createAgent(t, conn, "org-a", "owner", "Consent agent")
+	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := contextvalues.WithConsentBindingAuthorization(t.Context(), "owner", "org-a", uuid.New(), agent.ID, uuid.New())
+	tx := testenv.BeginTx(t, ctx, conn)
+	_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
+	require.NoError(t, err)
+	for _, predicate := range []OwnerPredicate{OwnedAgentRead, OwnedAgentSetup, OwnedAgentTransfer} {
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, predicate)
+		requireOopsCode(t, err, oops.CodeUnauthorized)
+	}
+	_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, uuid.New(), OwnedAgentAuthorize)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	_, err = authorizer.RequireHuman(ctx, tx)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestConsentNonOwnerRequiresLiveAuthorizeGrant(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedOrganizationUser(t, conn, "org-a", "caller")
+	agent := createAgent(t, conn, "org-a", "owner", "Consent delegation agent")
+	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}, loadedGrantsOnly: true}
+	authorizer := NewAuthorizer(engine)
+	ctx := contextvalues.WithConsentBindingAuthorization(t.Context(), "caller", "org-a", uuid.New(), agent.ID, uuid.New())
+	// Prepared grants cannot substitute for a current database grant.
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeAgentAuthorize, agent.ID.String())})
+	tx := testenv.BeginTx(t, ctx, conn)
+	_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.NotEmpty(t, engine.checks)
+	require.Equal(t, authz.ScopeAgentAuthorize, engine.checks[0].Scope)
+	require.Equal(t, agent.ID.String(), engine.checks[0].ResourceID)
+	principal := urn.NewPrincipal(urn.PrincipalTypeUser, "caller")
+	seedGrant(t, ctx, conn, "org-a", principal, authz.ScopeAgentAuthorize, agent.ID.String())
+	_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{OrganizationID: "org-a", PrincipalUrn: principal})
+	require.NoError(t, err)
+	_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

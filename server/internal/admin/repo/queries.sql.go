@@ -12,6 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminAcquireStripeSubscriptionLock = `-- name: AdminAcquireStripeSubscriptionLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Serializes assignments of the same Stripe subscription across organizations.
+func (q *Queries) AdminAcquireStripeSubscriptionLock(ctx context.Context, stripeSubscriptionID string) error {
+	_, err := q.db.Exec(ctx, adminAcquireStripeSubscriptionLock, stripeSubscriptionID)
+	return err
+}
+
 const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
 UPDATE organization_metadata
 SET
@@ -1292,6 +1302,49 @@ type AdminSetStripeCustomerParams struct {
 
 func (q *Queries) AdminSetStripeCustomer(ctx context.Context, arg AdminSetStripeCustomerParams) (string, error) {
 	row := q.db.QueryRow(ctx, adminSetStripeCustomer, arg.OrganizationID, arg.StripeCustomerID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
+}
+
+const adminSetStripeSubscription = `-- name: AdminSetStripeSubscription :one
+UPDATE billing_metadata
+SET
+    stripe_subscription_id = $1::text,
+    stripe_billing_cycle_anchor = $2::timestamptz,
+    billing_cycle_anchor_day = $3::integer,
+    updated_at = clock_timestamp()
+FROM organization_metadata
+WHERE billing_metadata.organization_id = organization_metadata.id
+  AND billing_metadata.organization_id = $4::text
+  AND billing_metadata.stripe_customer_id = $5::text
+  AND billing_metadata.stripe_subscription_id IS NULL
+  AND organization_metadata.gram_account_type = 'payg'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM billing_metadata AS other
+    WHERE other.stripe_subscription_id = $1::text
+      AND other.organization_id <> billing_metadata.organization_id
+  )
+RETURNING billing_metadata.organization_id
+`
+
+type AdminSetStripeSubscriptionParams struct {
+	StripeSubscriptionID     string
+	StripeBillingCycleAnchor pgtype.Timestamptz
+	BillingCycleAnchorDay    int32
+	OrganizationID           string
+	StripeCustomerID         string
+}
+
+func (q *Queries) AdminSetStripeSubscription(ctx context.Context, arg AdminSetStripeSubscriptionParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminSetStripeSubscription,
+		arg.StripeSubscriptionID,
+		arg.StripeBillingCycleAnchor,
+		arg.BillingCycleAnchorDay,
+		arg.OrganizationID,
+		arg.StripeCustomerID,
+	)
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err

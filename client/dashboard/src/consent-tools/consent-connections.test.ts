@@ -214,17 +214,21 @@ describe("consent agent connections", () => {
     expect(button.disabled).toBe(true);
   });
 
-  it("keeps approval disabled and shows sign-in recovery when management authentication is missing", async () => {
+  it("keeps approval disabled when the consent human cannot authorize the agent", async () => {
     fetchMock.mockResolvedValue(reply({}, 401));
     const button = page();
     select("agent-a");
     await waitFor(() =>
       expect(
-        document.querySelector<HTMLElement>("[data-agent-access-login]")!
+        document.querySelector<HTMLElement>("[data-agent-access-unavailable]")!
           .hidden,
       ).toBe(false),
     );
     expect(button.disabled).toBe(true);
+    expect(document.body.textContent).toContain(
+      "not available for authorization",
+    );
+    expect(document.body.textContent).not.toContain("Sign in to Gram");
   });
 });
 

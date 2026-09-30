@@ -10,9 +10,9 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 // ConsentBindingService is the existing attachment management API. Its
@@ -35,18 +35,18 @@ func (s *Service) SetConsentBindingService(bindings ConsentBindingService) {
 	s.consentBindings = bindings
 }
 
-// Runs after endpoint, challenge and CSRF checks. Management additionally
-// requires a real Gram session; an OIDC challenge is not a dashboard session.
+// Runs after endpoint, browser, challenge and CSRF checks. Reuse the human
+// already resolved by OAuth, without pretending it is a dashboard session.
 func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
-	cookie, err := r.Cookie(constants.SessionCookie)
-	if err != nil || cookie.Value == "" {
-		return oops.C(oops.CodeUnauthorized)
+	target := state.AgentAuthorizationTarget
+	if target == nil || !target.matches(endpoint) {
+		return oops.E(oops.CodeForbidden, nil, "agent authorization target does not match endpoint")
 	}
-	ctx, err = s.sessions.Authenticate(ctx, cookie.Value)
+	human, err := s.loadConsentHuman(ctx, state, *target)
 	if err != nil {
-		return fmt.Errorf("manage consent connection: %w", err)
+		return consentAgentAuthorizationError(err, "consent authorizer is not eligible")
 	}
 	if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
 		return oops.C(oops.CodeNotFound)
@@ -66,22 +66,19 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 	} else {
 		selected, err = s.authorizeConsentAgent(ctx, state, endpoint, r.PostForm.Get("agent_id"))
 		if err != nil {
-			return oops.E(oops.CodeForbidden, err, "selected agent is not eligible")
+			return consentAgentAuthorizationError(err, "selected agent is not eligible")
 		}
 	}
-	auth, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || auth == nil || auth.UserID != selected.AuthorizerUserID || auth.ActiveOrganizationID != endpoint.OrganizationID {
-		return oops.E(oops.CodeForbidden, nil, "sign in to Gram as the consent authorizer in this organization")
-	}
-	// Match the RPC middleware's project check using only the resolved endpoint.
-	scoped := *auth
-	scoped.ProjectID = &endpoint.ProjectID
-	ctx = contextvalues.SetAuthContext(ctx, &scoped)
-	// Consent routes do not run the RPC middleware that prepares session grants.
-	ctx, err = s.authz.PrepareContext(ctx)
+	// This trust is scoped to attachment management for this exact target. The
+	// shared binding authorizer still locks membership/ownership and reloads grants.
+	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, endpoint.OrganizationID)
 	if err != nil {
-		return fmt.Errorf("manage consent connection: %w", err)
+		return oops.E(oops.CodeUnavailable, err, "load consent organization")
 	}
+	ctx = contextvalues.WithConsentBindingAuthorization(ctx, human.userID, endpoint.OrganizationID, endpoint.ProjectID, selected.AgentID, endpoint.UserSessionIssuerID)
+	// Preserve authoritative feature-flag groups for the shared binding authorizer.
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	auth.OrganizationSlug = organization.Slug
 	principal, issuer := selected.AgentID.String(), endpoint.UserSessionIssuerID.String()
 	switch action {
 	case "agent_connections":

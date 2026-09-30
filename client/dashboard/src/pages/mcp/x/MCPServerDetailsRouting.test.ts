@@ -13,7 +13,13 @@ describe("activeTabFromPath", () => {
     ).toBeUndefined();
   });
 
-  it.each(["overview", "inspect", "team-access", "settings"] as const)(
+  it.each([
+    "overview",
+    "inspect",
+    "team-access",
+    "guardrails",
+    "settings",
+  ] as const)(
     "reads the %s tab when the server slug has the same value",
     (tab) => {
       expect(

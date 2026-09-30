@@ -533,6 +533,9 @@ func TestListRemoteSessionIssuers(t *testing.T) {
 	result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 		Cursor:           nil,
 		Limit:            nil,
+		Search:           nil,
+		UpstreamHost:     nil,
+		Tier:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -564,6 +567,9 @@ func TestListRemoteSessionIssuers_PaginationTraversal(t *testing.T) {
 		result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 			Cursor:           cursor,
 			Limit:            &pageSize,
+			Search:           nil,
+			UpstreamHost:     nil,
+			Tier:             nil,
 			SessionToken:     nil,
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
@@ -594,6 +600,9 @@ func TestListRemoteSessionIssuers_RBACForbidden(t *testing.T) {
 	_, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 		Cursor:           nil,
 		Limit:            nil,
+		Search:           nil,
+		UpstreamHost:     nil,
+		Tier:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -1867,6 +1876,9 @@ func TestListRemoteSessionIssuers_InheritsPlatformIssuer(t *testing.T) {
 	result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 		Cursor:           nil,
 		Limit:            nil,
+		Search:           nil,
+		UpstreamHost:     nil,
+		Tier:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,

@@ -81,6 +81,8 @@ type Endpoints struct {
 	CreateRegistryEntry                   goa.Endpoint
 	SaveRegistryEntry                     goa.Endpoint
 	SetRegistryEntryPublished             goa.Endpoint
+	GetStripeSubscriptionCandidate        goa.Endpoint
+	SetStripeSubscription                 goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -170,6 +172,8 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateRegistryEntry:                   NewCreateRegistryEntryEndpoint(s, a.APIKeyAuth),
 		SaveRegistryEntry:                     NewSaveRegistryEntryEndpoint(s, a.APIKeyAuth),
 		SetRegistryEntryPublished:             NewSetRegistryEntryPublishedEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscriptionCandidate:        NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
+		SetStripeSubscription:                 NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -239,6 +243,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRegistryEntry = m(e.CreateRegistryEntry)
 	e.SaveRegistryEntry = m(e.SaveRegistryEntry)
 	e.SetRegistryEntryPublished = m(e.SetRegistryEntryPublished)
+	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
+	e.SetStripeSubscription = m(e.SetStripeSubscription)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1671,5 +1677,51 @@ func NewSetRegistryEntryPublishedEndpoint(s Service, authAPIKeyFn security.AuthA
 			return nil, err
 		}
 		return s.SetRegistryEntryPublished(ctx, p)
+	}
+}
+
+// NewGetStripeSubscriptionCandidateEndpoint returns an endpoint function that
+// calls the method "getStripeSubscriptionCandidate" of service "admin".
+func NewGetStripeSubscriptionCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetStripeSubscriptionCandidatePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetStripeSubscriptionCandidate(ctx, p)
+	}
+}
+
+// NewSetStripeSubscriptionEndpoint returns an endpoint function that calls the
+// method "setStripeSubscription" of service "admin".
+func NewSetStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetStripeSubscriptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetStripeSubscription(ctx, p)
 	}
 }
