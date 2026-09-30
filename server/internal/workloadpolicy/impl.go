@@ -280,11 +280,15 @@ func validateJWKSURI(raw string) error {
 	return requireTrustDomain(raw, "jwks_uri")
 }
 
-// normalizeIssuerName trims a name and refuses one that is blank after it.
+// normalizeIssuerName trims a name and refuses one that is blank after it or
+// holds a NUL byte, which Postgres text cannot store.
 func normalizeIssuerName(raw string) (string, error) {
 	name := strings.TrimSpace(raw)
 	if name == "" {
 		return "", oops.E(oops.CodeInvalid, nil, "name must not be blank")
+	}
+	if strings.ContainsRune(name, 0) {
+		return "", oops.E(oops.CodeInvalid, nil, "name must not contain a NUL character")
 	}
 	return name, nil
 }
@@ -468,8 +472,21 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPay
 
 	q := repo.New(dbtx)
 
-	// Locked before the read, so the fields this edit leaves alone are merged
-	// from the row as it stands rather than one a concurrent edit has replaced.
+	getParams := repo.GetWorkloadIssuerParams{
+		OrganizationID: t.organizationID,
+		ProjectID:      t.projectID,
+		ID:             id,
+	}
+
+	// Tenancy-scoped, and read before the organization-wide lock, so a caller
+	// cannot contend on a sibling project's issuer row it has no access to.
+	if _, err := q.GetWorkloadIssuer(ctx, getParams); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "workload issuer not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading workload issuer").LogError(ctx, s.logger)
+	}
+
 	if _, err := q.LockWorkloadIssuerForWrite(ctx, repo.LockWorkloadIssuerForWriteParams{
 		OrganizationID: t.organizationID,
 		ID:             id,
@@ -480,13 +497,9 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
 	}
 
-	// Tenancy-scoped, so a sibling project's issuer is a not-found here even
-	// though the organization-wide lock above resolved it.
-	existing, err := q.GetWorkloadIssuer(ctx, repo.GetWorkloadIssuerParams{
-		OrganizationID: t.organizationID,
-		ProjectID:      t.projectID,
-		ID:             id,
-	})
+	// Read again under the lock, so the fields this edit leaves alone are merged
+	// from the row as it stands rather than one a concurrent edit has replaced.
+	existing, err := q.GetWorkloadIssuer(ctx, getParams)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "workload issuer not found")

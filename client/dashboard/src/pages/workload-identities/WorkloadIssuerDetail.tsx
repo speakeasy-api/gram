@@ -444,13 +444,16 @@ function IssuerDetail(): JSX.Element {
     </RequireScope>
   );
 
-  const handleEdit = (values: RegisterIssuerValues) => {
-    if (issuer === undefined || editValues === undefined) return;
+  const handleEdit = (
+    values: RegisterIssuerValues,
+    baseline: RegisterIssuerValues | undefined,
+  ) => {
+    if (issuer === undefined || baseline === undefined) return;
     updateIssuer.mutate({
       request: {
         updateWorkloadIssuerForm: {
           id: issuer.id,
-          ...changedIssuerFields(editValues, values),
+          ...changedIssuerFields(baseline, values),
         },
       },
     });

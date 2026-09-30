@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 // registerDescribedAnthropic registers an issuer with every editable field set,
@@ -51,6 +53,11 @@ func updatePayload(id string) *gen.UpdateIssuerPayload {
 		Tags:             nil,
 	}
 }
+
+// siblingLockWait bounds an update against a row another transaction holds.
+// The refusal needs no lock, so it returns in milliseconds; a call that waited
+// on the lock would instead fail with the deadline.
+const siblingLockWait = 5 * time.Second
 
 func onlyIssuer(t *testing.T, policy *gen.WorkloadIdentityPolicy) *types.WorkloadIssuer {
 	t.Helper()
@@ -174,17 +181,18 @@ func TestUpdateIssuer_WithNoFieldsLeavesTheIssuerUnchanged(t *testing.T) {
 	require.Equal(t, original.JwksURI, updated.JwksURI)
 }
 
-func TestUpdateIssuer_RefusesInvalidFields(t *testing.T) {
+func TestUpdateIssuer_RefusesInvalidFields(t *testing.T) { //nolint:tparallel // subtests run serially so the List assertion below follows every attempt
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
 	original := registerDescribedAnthropic(t, ctx, ti)
 
-	for _, tc := range []struct {
+	for _, tc := range []struct { //nolint:paralleltest // subtests run serially so the List assertion below follows every attempt
 		name  string
 		apply func(*gen.UpdateIssuerPayload)
 	}{
 		{name: "blank name", apply: func(p *gen.UpdateIssuerPayload) { p.Name = new("   ") }},
+		{name: "name with a nul character", apply: func(p *gen.UpdateIssuerPayload) { p.Name = new("Claude\x00Tag") }},
 		{name: "http jwks_uri", apply: func(p *gen.UpdateIssuerPayload) { p.JwksURI = new("http://identity.anthropic.com/jwks") }},
 		{name: "ip address jwks_uri", apply: func(p *gen.UpdateIssuerPayload) { p.JwksURI = new("https://10.0.0.1/jwks") }},
 		{name: "single label jwks_uri", apply: func(p *gen.UpdateIssuerPayload) { p.JwksURI = new("https://internal/jwks") }},
@@ -195,8 +203,6 @@ func TestUpdateIssuer_RefusesInvalidFields(t *testing.T) {
 		{name: "invalid id", apply: func(p *gen.UpdateIssuerPayload) { p.ID = "not-a-uuid" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
 			payload := updatePayload(original.ID)
 			tc.apply(payload)
 			_, err := ti.service.UpdateIssuer(ctx, payload)
@@ -293,6 +299,22 @@ func TestUpdateIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
 	payload := updatePayload(siblingIssuer.String())
 	payload.Name = new("taken over")
 	_, err = ti.service.UpdateIssuer(ctx, payload)
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	// With the sibling's row locked elsewhere, the refusal must come from the
+	// visibility check rather than wait on that lock.
+	holder, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary that holds the SQLc-taken row lock
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holder.Rollback(context.Background()) })
+	_, err = repo.New(holder).LockWorkloadIssuerForWrite(ctx, repo.LockWorkloadIssuerForWriteParams{
+		OrganizationID: ti.orgID,
+		ID:             siblingIssuer,
+	})
+	require.NoError(t, err)
+
+	bounded, cancel := context.WithTimeout(ctx, siblingLockWait)
+	defer cancel()
+	_, err = ti.service.UpdateIssuer(bounded, payload)
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
