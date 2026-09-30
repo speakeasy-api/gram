@@ -215,6 +215,10 @@ func TestNetworkIngressExecutorSurfacesRejectedCredentialsDuringCleanup(t *testi
 	deleteErr = fmt.Errorf("%w: Tailnet", k8s.ErrNetworkIngressProviderCredentialsRejected)
 	_, err = executor.Reconcile(ctx, ti.orgID, id)
 	require.ErrorContains(t, err, "provider_credentials_rejected")
+	result, err = ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, result.Ingress.LastError)
+	require.Equal(t, "provider_credentials_rejected", *result.Ingress.LastError)
 	deleteErr = nil
 	_, err = executor.Reconcile(ctx, ti.orgID, id)
 	require.NoError(t, err)
