@@ -32,9 +32,9 @@ Baseline first: watch an agent attempt the task WITHOUT the skill and record the
 
 Vary rounds between do-the-task and adversarial trap questions; live environments surface what desk-checking cannot. Edits after the ship verdict also get a round — one-line additions included.
 
-## External (recommended) skills
+## Vendored skills
 
-Third-party skills are not committed. Declare them in `.agents/recommended-skills.json` — `repo` + `ref` (absolute commit SHA) + `path` (subdirectory to extract). `mise run skills:recommended` (`--yes` skips the prompt) installs or updates the set into `.agents/skills/<name>/` and keeps every installed path out of git via `.git/info/exclude`; then run `mise run skills:sync` to link it into each harness. Neither runs automatically. To bump: change the SHA and re-run both.
+Every skill an agent should have is committed under `.agents/skills/` and linked into each harness by `mise run skills:sync`. Third-party skills are copied in and committed the same way; there is no installer that fetches them.
 
 ## Common mistakes
 
