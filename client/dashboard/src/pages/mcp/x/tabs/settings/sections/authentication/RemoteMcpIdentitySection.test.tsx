@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   siblings: vi.fn(),
   issuers: vi.fn(),
   issuersByIds: vi.fn(),
+  hostIssuers: vi.fn(),
   source: vi.fn(),
   rbac: vi.fn(),
   hasScope: vi.fn(),
@@ -106,7 +107,22 @@ vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
-  useRemoteSessionIssuers: () => mocks.issuers(),
+  useRemoteSessionIssuers: (request?: { upstreamHost?: string }) => {
+    const listed = mocks.issuers();
+    const host = request?.upstreamHost;
+    if (!host) return listed;
+    const hostItems = mocks.hostIssuers(host);
+    if (hostItems) return { data: { result: { items: hostItems } } };
+    // Stands in for the server's upstream_host filter: the issuer's host is
+    // the given host or one of its parent domains.
+    const items = (
+      (listed.data?.result.items ?? []) as Array<{ issuer: string }>
+    ).filter((issuer) => {
+      const issuerHost = new URL(issuer.issuer).host;
+      return issuerHost === host || host.endsWith(`.${issuerHost}`);
+    });
+    return { data: { result: { items } }, isLoading: false };
+  },
   invalidateAllRemoteSessionIssuers: vi.fn(),
 }));
 
@@ -501,6 +517,65 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ) as HTMLButtonElement;
     expect(trigger.textContent).toContain("Checking");
     expect(trigger.disabled).toBe(true);
+  });
+
+  it("suggests a same-site provider the issuer listing does not contain", async () => {
+    // The listing page is empty, standing in for a catalog large enough to
+    // push the matching provider off it; only the host lookup finds it.
+    mocks.hostIssuers.mockImplementation((host: string) =>
+      host === "mcp.linear.app"
+        ? [
+            {
+              id: "provider-linear",
+              name: "Linear",
+              issuer: "https://linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://linear.app/authorize",
+              tokenEndpoint: "https://linear.app/token",
+            },
+          ]
+        : undefined,
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Will be created")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          providerId: "provider-linear",
+        }),
+      }),
+    );
+  });
+
+  it("does not offer to create an advertised provider the project already has", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: ["https://auth.example.test"] },
+    });
+    mocks.hostIssuers.mockImplementation((host: string) =>
+      host === "auth.example.test"
+        ? [
+            {
+              id: "provider-known",
+              name: "Known provider",
+              issuer: "https://auth.example.test/oauth",
+              slug: "known",
+            },
+          ]
+        : undefined,
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Will be created")).toBeNull();
   });
 
   it("offers the discovered provider as one that will be created", () => {
