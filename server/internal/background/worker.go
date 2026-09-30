@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -110,6 +111,7 @@ type WorkerOptions struct {
 	FunctionsVersion    functions.RunnerVersion
 	RagService          *rag.ToolsetVectorStore
 	MCPRegistryClient   *externalmcp.RegistryClient
+	MCPCatalog          *externalmcp.CatalogService
 	TelemetryLogger     *telemetry.Logger
 	ClickhouseConn      clickhouse.Conn
 	// MeterReadConn uses the least-privilege ClickHouse reader for billing summaries.
@@ -185,6 +187,10 @@ func ForDeploymentProcessing(
 	mcpRegistryClient *externalmcp.RegistryClient,
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
+	validator, err := mcpregistry.LoadValidator()
+	if err != nil {
+		panic(fmt.Errorf("load test worker catalog validator: %w", err))
+	}
 	return &WorkerOptions{
 		PublicationRequests:          plugins.PublicationRequests{Enabled: false},
 		DB:                           db,
@@ -196,6 +202,7 @@ func ForDeploymentProcessing(
 		FunctionsDeployer:            deployer,
 		FunctionsVersion:             "local", // Test deployers don't use baked versions
 		MCPRegistryClient:            mcpRegistryClient,
+		MCPCatalog:                   externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, validator)), f),
 		AuditLogger:                  auditLogger,
 		RemoteSessionAssertionSigner: nil,
 		StartupSeeds:                 nil,
@@ -366,6 +373,7 @@ func NewTemporalWorker(
 			FunctionsVersion:             conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
 			RagService:                   conv.Default(o.RagService, opts.RagService),
 			MCPRegistryClient:            conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
+			MCPCatalog:                   conv.Default(o.MCPCatalog, opts.MCPCatalog),
 			TelemetryLogger:              conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			MeterReadConn:                conv.Default(o.MeterReadConn, opts.MeterReadConn),
 			TelemetryRepo:                conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
@@ -477,6 +485,7 @@ func NewTemporalWorker(
 		opts.FunctionsVersion,
 		opts.RagService,
 		opts.MCPRegistryClient,
+		opts.MCPCatalog,
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.ClickhouseConn,
