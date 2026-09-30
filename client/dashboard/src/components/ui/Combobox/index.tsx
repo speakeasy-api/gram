@@ -46,6 +46,9 @@ export function Combobox<T extends DropdownItem>({
   searchable = false,
   searchPlaceholder = "Search...",
   contentClassName,
+  onSearchChange,
+  emptyMessage = "No items found.",
+  listFooter,
 }: {
   items: T[];
   selected: T | string | undefined;
@@ -61,12 +64,34 @@ export function Combobox<T extends DropdownItem>({
   searchable?: boolean;
   searchPlaceholder?: string;
   contentClassName?: string;
+  /** Searches on the caller's side (usually the server) instead of filtering
+   * `items` locally: the input is shown and each keystroke is reported here,
+   * and `items` is rendered as given. Cleared to "" whenever the list closes. */
+  onSearchChange?: (search: string) => void;
+  emptyMessage?: ReactNode;
+  /** Rendered below the items inside the scrolling list, e.g. a load-more row. */
+  listFooter?: ReactNode;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const remoteSearch = !!onSearchChange;
+
+  const setOpenAndResetSearch = (open: boolean) => {
+    setOpen(open);
+    if (!open && remoteSearch) {
+      setSearch("");
+      onSearchChange("");
+    }
+  };
 
   const handleOpenChange = (open: boolean) => {
-    setOpen(open);
+    setOpenAndResetSearch(open);
     onOpenChange?.(open);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    onSearchChange?.(value);
   };
 
   let trigger = (
@@ -107,12 +132,20 @@ export function Combobox<T extends DropdownItem>({
     <Popover open={open} onOpenChange={handleOpenChange}>
       {trigger}
       <PopoverContent className={cn("w-[200px] p-0", contentClassName)}>
-        <Command label={searchPlaceholder}>
-          {(searchable || items.length > 4) && (
-            <CommandInput placeholder={searchPlaceholder} className="h-9" />
-          )}
+        <Command label={searchPlaceholder} shouldFilter={!remoteSearch}>
+          {(searchable || remoteSearch || items.length > 4) &&
+            (remoteSearch ? (
+              <CommandInput
+                placeholder={searchPlaceholder}
+                className="h-9"
+                value={search}
+                onValueChange={handleSearchChange}
+              />
+            ) : (
+              <CommandInput placeholder={searchPlaceholder} className="h-9" />
+            ))}
           <CommandList>
-            <CommandEmpty>No items found.</CommandEmpty>
+            <CommandEmpty>{emptyMessage}</CommandEmpty>
             <CommandGroup>
               {items.map((item) => (
                 <Fragment key={item.value}>
@@ -128,7 +161,7 @@ export function Combobox<T extends DropdownItem>({
                       onSelectionChange(
                         items.find((item) => item.value === v)!,
                       );
-                      setOpen(false);
+                      setOpenAndResetSearch(false);
                     }}
                   >
                     {item.icon}
@@ -159,6 +192,7 @@ export function Combobox<T extends DropdownItem>({
                 </Fragment>
               ))}
             </CommandGroup>
+            {listFooter}
           </CommandList>
         </Command>
       </PopoverContent>

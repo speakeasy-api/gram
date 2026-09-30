@@ -27,6 +27,7 @@ import {
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -384,6 +385,7 @@ function ModifyRemoteIdentityProviderSheetBody({
     onSuccess: async () => {
       await Promise.all([
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteSessionIssuer(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         // Also invalidate MCP server queries so the sidebar readiness bar
         // refreshes (AGE-3279).

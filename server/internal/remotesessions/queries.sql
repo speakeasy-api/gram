@@ -295,6 +295,16 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 -- issuer by slug must apply it explicitly rather than relying on row order,
 -- which is by descending uuidv7 (creation time) and therefore says nothing
 -- about tier.
+--
+-- Two optional filters narrow the listing without touching the keyset cursor,
+-- which stays on id alone:
+--   - search: a LIKE pattern the caller has already escaped and wrapped in
+--     wildcards, matched case-insensitively against name, slug and issuer.
+--   - hosts: issuers whose URL host is one of these. The caller expands an
+--     upstream host into itself plus its parent domains, so this is how an
+--     upstream at mcp.example.com finds the issuer at example.com. The host is
+--     lowercased and a trailing :443 or :80 dropped, matching how a browser
+--     reports URL.host. An empty or NULL set applies no filter.
 SELECT *
 FROM remote_session_issuers
 WHERE (
@@ -303,6 +313,20 @@ WHERE (
     OR (@include_global::boolean AND project_id IS NULL AND organization_id IS NULL)
   )
   AND deleted IS FALSE
+  AND (
+    sqlc.narg('search')::text IS NULL
+    OR name ILIKE sqlc.narg('search')::text
+    OR slug ILIKE sqlc.narg('search')::text
+    OR issuer ILIKE sqlc.narg('search')::text
+  )
+  AND (
+    COALESCE(cardinality(@hosts::text[]), 0) = 0
+    OR regexp_replace(
+      lower(substring(issuer FROM '^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]+)')),
+      ':(443|80)$',
+      ''
+    ) = ANY(@hosts::text[])
+  )
   AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
 ORDER BY id DESC
 LIMIT sqlc.arg('limit_value');

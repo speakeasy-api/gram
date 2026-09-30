@@ -1,5 +1,6 @@
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Combobox } from "@/components/ui/Combobox";
+import { FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -28,7 +29,10 @@ import {
   proxyRegisterUpstreamClient,
   registrationProvenance,
 } from "@/lib/proxyRegisterUpstreamClient";
-import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
+import {
+  deriveRemoteSessionIssuerNameFromUrl,
+  remoteSessionScopeTier,
+} from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { CreateRemoteSessionIssuerForm } from "@gram/client/models/components/createremotesessionissuerform.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
@@ -36,10 +40,17 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
-import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { useRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
+import {
+  invalidateAllRemoteSessionIssuers,
+  useRemoteSessionIssuers,
+  useRemoteSessionIssuersInfinite,
+} from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
+import { CommandItem } from "@/components/ui/Command";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -73,12 +84,22 @@ import {
 
 type Mode = "select" | "new";
 
+const NO_EXCLUDED_ISSUERS: readonly string[] = [];
+// The listing's server-side page ceiling (constants.MaxPageLimit).
+const MAX_ISSUER_PAGE = 100;
+
+const ISSUER_TIER_LABEL = {
+  project: "This project",
+  organization: "Organization",
+  platform: "Platform catalog",
+} as const satisfies Record<ReturnType<typeof remoteSessionScopeTier>, string>;
+
 export function AttachRemoteIdentityProviderSheet({
   open,
   onOpenChange,
   target,
   userSessionIssuer,
-  selectableIssuers,
+  excludedIssuerIds = NO_EXCLUDED_ISSUERS,
   initialIssuerUrl,
   initialScopes,
 }: {
@@ -89,10 +110,10 @@ export function AttachRemoteIdentityProviderSheet({
   // null when the target has no issuer yet — the first add creates one and
   // links it via target.linkUserSessionIssuer.
   userSessionIssuer: UserSessionIssuer | null;
-  // remote_session_issuers (organization-level and same-project) that are not
-  // already associated with userSessionIssuer. Empty list hides the issuer
-  // "Select existing" mode.
-  selectableIssuers: RemoteSessionIssuer[];
+  // remote_session_issuers already associated with userSessionIssuer, left
+  // out of the "Select existing" picker. Every other issuer the project can
+  // see (its own, its organization's, the platform catalog's) is offered.
+  excludedIssuerIds?: readonly string[];
   // When the caller opens via "Start With Discovered Configuration", this is the
   // authorization_servers[0] entry from the RFC 9728 probe. The sheet starts
   // in "new" mode and runs RFC 8414 discovery against this URL to prefill the
@@ -108,7 +129,26 @@ export function AttachRemoteIdentityProviderSheet({
   const isPlatformAdmin = useIsPlatformAdmin();
   const projectSlug = useProjectSlugForRequests();
 
-  const hasSelectable = selectableIssuers.length > 0;
+  // Whether "Select existing" has anything to offer. One more row than there
+  // are exclusions is enough to know: if every row of that page is excluded
+  // and no page follows, the project sees no issuer beyond them. The server
+  // caps the page, so a following page also counts as something to offer.
+  // Fetched while closed too, so the answer is ready when the sheet opens
+  // rather than flipping its mode (and resetting the form) a moment later.
+  const excludedIds = useMemo(
+    () => new Set(excludedIssuerIds),
+    [excludedIssuerIds],
+  );
+  const { data: probePage } = useRemoteSessionIssuers(
+    { limit: Math.min(excludedIds.size + 1, MAX_ISSUER_PAGE) },
+    undefined,
+    { throwOnError: false },
+  );
+  const hasSelectable =
+    !!probePage?.result.nextCursor ||
+    (probePage?.result.items ?? []).some(
+      (issuer) => !excludedIds.has(issuer.id),
+    );
   const [mode, setMode] = useState<Mode>(
     initialIssuerUrl || !hasSelectable ? "new" : "select",
   );
@@ -199,10 +239,16 @@ export function AttachRemoteIdentityProviderSheet({
 
   // Resolve the issuer record the operator picked in Select-existing mode. We
   // need it to know whether the picked issuer supports DCR/CIMD and to pull its
-  // registration_endpoint at submit time.
+  // registration_endpoint at submit time. Fetched by id: the picker pages and
+  // searches the listing, so the pick may not be in any page it has loaded.
+  const { data: pickedIssuer, isError: pickedIssuerError } =
+    useRemoteSessionIssuer({ id: selectedIssuerId }, undefined, {
+      enabled: mode === "select" && !!selectedIssuerId,
+      throwOnError: false,
+    });
   const selectedIssuer =
-    mode === "select"
-      ? selectableIssuers.find((issuer) => issuer.id === selectedIssuerId)
+    mode === "select" && pickedIssuer?.id === selectedIssuerId
+      ? pickedIssuer
       : undefined;
 
   // DCR and CIMD availability drive the Client Type selector. In Add-new the
@@ -337,9 +383,7 @@ export function AttachRemoteIdentityProviderSheet({
       let remoteIssuerId: string;
       if (mode === "select") {
         remoteIssuerId = selectedIssuerId;
-        resolvedIssuer = selectableIssuers.find(
-          (issuer) => issuer.id === selectedIssuerId,
-        );
+        resolvedIssuer = selectedIssuer;
       } else {
         const created = await client.remoteSessionIssuers.create({
           createRemoteSessionIssuerForm: createProvider!,
@@ -570,22 +614,12 @@ export function AttachRemoteIdentityProviderSheet({
   }, [selectedIssuerId, mode]);
 
   // One-click reuse switches this sheet from creating an issuer to selecting
-  // the one that already describes the URL. It is offered only when the match
-  // is in selectableIssuers, which is narrower than "the preflight found it"
-  // in two ways worth being explicit about: that list excludes issuers already
-  // attached to this target, and it is itself bounded. Offering the action for
-  // a match outside it would flip the sheet into select mode with an id the
-  // dropdown cannot resolve, leaving the client section incoherent. When the
-  // match is already attached here, the warning text alone is the right
-  // outcome — there is nothing left to reuse.
-  const selectableIssuerIds = useMemo(
-    () => new Set(selectableIssuers.map((issuer) => issuer.id)),
-    [selectableIssuers],
-  );
+  // the one that already describes the URL. It is not offered when the match
+  // is already attached to this target: the warning text alone is the right
+  // outcome there, since there is nothing left to reuse.
   const primaryDuplicate = duplicateMatches[0];
   const canReuseDuplicate =
-    primaryDuplicate !== undefined &&
-    selectableIssuerIds.has(primaryDuplicate.id);
+    primaryDuplicate !== undefined && !excludedIds.has(primaryDuplicate.id);
   const handleUseExistingIssuer = (
     match: RemoteSessionIssuerDuplicateMatch,
   ) => {
@@ -597,7 +631,9 @@ export function AttachRemoteIdentityProviderSheet({
     // Issuer must be resolvable: an existing pick, or a complete new-issuer
     // form.
     if (mode === "select") {
-      if (!selectedIssuerId) return false;
+      // Held until the pick's record loads: submit needs its registration
+      // metadata, and a failed lookup must not attach without it.
+      if (!selectedIssuer) return false;
     } else if (!slug.trim() || !issuerUrl.trim()) {
       return false;
     }
@@ -609,7 +645,7 @@ export function AttachRemoteIdentityProviderSheet({
     return true;
   }, [
     mode,
-    selectedIssuerId,
+    selectedIssuer,
     slug,
     issuerUrl,
     effectiveClientMode,
@@ -701,8 +737,10 @@ export function AttachRemoteIdentityProviderSheet({
 
             {mode === "select" ? (
               <SelectExistingFields
-                selectableIssuers={selectableIssuers}
+                excludedIssuerIds={excludedIds}
                 selectedIssuerId={selectedIssuerId}
+                selectedIssuer={selectedIssuer}
+                pickFailed={pickedIssuerError}
                 onChange={setSelectedIssuerId}
               />
             ) : (
@@ -909,48 +947,98 @@ function ModeSwitch({
   );
 }
 
+function issuerOptionLabel(issuer: RemoteSessionIssuer): string {
+  return `${issuer.name?.trim() || issuer.slug} — ${issuer.issuer}`;
+}
+
+// Searched and paged on the server: the listing spans the project, its
+// organization and the whole platform catalog, which is too large to load
+// in full for a dropdown.
 function SelectExistingFields({
-  selectableIssuers,
+  excludedIssuerIds,
   selectedIssuerId,
+  selectedIssuer,
+  pickFailed,
   onChange,
 }: {
-  selectableIssuers: RemoteSessionIssuer[];
+  excludedIssuerIds: ReadonlySet<string>;
   selectedIssuerId: string;
+  selectedIssuer: RemoteSessionIssuer | undefined;
+  pickFailed: boolean;
   onChange: (id: string) => void;
 }) {
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search.trim(), 250);
+  const {
+    data,
+    isFetching,
+    isError,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useRemoteSessionIssuersInfinite(
+    { search: debouncedSearch || undefined },
+    undefined,
+    { throwOnError: false },
+  );
   const issuerOptions = useMemo(
     () =>
-      selectableIssuers
+      (data?.pages.flatMap((page) => page.result.items) ?? [])
+        .filter((issuer) => !excludedIssuerIds.has(issuer.id))
         .map((issuer) => ({
           value: issuer.id,
-          label: `${issuer.name?.trim() || issuer.slug} — ${issuer.issuer}`,
-          keywords: [issuer.name ?? "", issuer.slug, issuer.issuer],
-        }))
-        .toSorted((a, b) => a.label.localeCompare(b.label)),
-    [selectableIssuers],
+          label: issuerOptionLabel(issuer),
+          // Tiers can hold records with the same name and URL; the tier is
+          // what tells them apart.
+          description: ISSUER_TIER_LABEL[remoteSessionScopeTier(issuer)],
+        })),
+    [data, excludedIssuerIds],
   );
-  const selectedIssuer = issuerOptions.find(
-    (issuer) => issuer.value === selectedIssuerId,
-  );
+
+  let emptyMessage = "No identity providers match.";
+  if (isError) emptyMessage = "Failed to load identity providers.";
+  else if (isFetching) emptyMessage = "Searching…";
+
+  const loadMore = hasNextPage ? (
+    <CommandItem
+      value="__load_more__"
+      disabled={isFetchingNextPage}
+      onSelect={() => void fetchNextPage()}
+      className="text-muted-foreground cursor-pointer justify-center"
+    >
+      {isFetchingNextPage ? "Loading…" : "Load more"}
+    </CommandItem>
+  ) : null;
 
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">Identity Provider</Label>
       <Combobox
         items={issuerOptions}
-        selected={selectedIssuer}
+        selected={selectedIssuerId}
         onSelectionChange={(issuer) => onChange(issuer.value)}
-        searchable
+        onSearchChange={setSearch}
+        emptyMessage={emptyMessage}
+        listFooter={loadMore}
         searchPlaceholder="Search identity providers…"
         className="w-full justify-between"
         contentClassName="w-[min(500px,calc(100vw-2rem))]"
       >
-        {selectedIssuer?.label ?? "Choose an identity provider…"}
+        {selectedIssuer
+          ? issuerOptionLabel(selectedIssuer)
+          : "Choose an identity provider…"}
       </Combobox>
-      <Text muted small>
-        Pick an organization-level or project identity provider already
-        configured on this project.
-      </Text>
+      {pickFailed ? (
+        <FieldError>
+          Failed to load this identity provider. Pick it again, or refresh the
+          page.
+        </FieldError>
+      ) : (
+        <Text muted small>
+          Pick an identity provider this project already has: its own, its
+          organization&apos;s, or one from the platform catalog.
+        </Text>
+      )}
     </Stack>
   );
 }

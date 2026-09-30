@@ -10,7 +10,10 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
-import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import {
+  invalidateAllRemoteSessionIssuers,
+  useRemoteSessionIssuers,
+} from "@gram/client/react-query/remoteSessionIssuers.js";
 import {
   invalidateAllRemoteSessionsCount,
   useRemoteSessionsCount,
@@ -24,6 +27,7 @@ import {
 } from "../model/clientConfiguration";
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
 import { useProtectedResourceMetadata } from "../queries/useProtectedResourceMetadata";
+import { useRemoteSessionIssuersByIds } from "../queries/useRemoteSessionIssuersByIds";
 
 /**
  * The provider the upstream advertises but Speakeasy has no record of yet.
@@ -180,6 +184,23 @@ async function protectedResourceScopes(
   }
 }
 
+// Issuers whose host is `host` or one of its parent domains, from every tier
+// the project can see. Off for an empty host.
+function useIssuersForHost(
+  host: string,
+  enabled: boolean,
+): { issuers: RemoteSessionIssuer[]; isLoading: boolean; isError: boolean } {
+  const query = useRemoteSessionIssuers({ upstreamHost: host }, undefined, {
+    enabled: enabled && host !== "",
+    throwOnError: false,
+  });
+  return {
+    issuers: query.data?.result.items ?? [],
+    isLoading: query.isLoading,
+    isError: query.isError,
+  };
+}
+
 function hostOf(url: string | undefined | null): string {
   if (!url) return "";
   try {
@@ -219,6 +240,8 @@ export type UserIdentityDraft = {
   /** The upstream advertised no provider and none matched. */
   providerUnreachable: boolean;
   providerLoading: boolean;
+  /** A provider lookup failed, so the choices may be incomplete. */
+  providerLoadFailed: boolean;
 
   clientsLoading: boolean;
   /** A discovered provider's capabilities are still being read. */
@@ -282,7 +305,7 @@ export function useUserIdentityDraft({
   mcpServerId,
   remoteMcpServerId,
   upstreamUrl,
-  issuers,
+  issuers: listedIssuers,
   linkedClients,
   configured,
   enabled,
@@ -312,28 +335,77 @@ export function useUserIdentityDraft({
     kind: "idle",
   });
 
+  // The linked provider is resolved by id and merged in, never looked for in
+  // the listing alone: the listing is paginated across the project, its
+  // organization and the platform catalog, so a linked issuer can sit past
+  // any page and the server would render with no provider selected.
+  const linkedIssuerId = linkedClients[0]?.remoteSessionIssuerId;
+  const linkedIssuerIds = useMemo(
+    () => (linkedIssuerId ? [linkedIssuerId] : []),
+    [linkedIssuerId],
+  );
+  const {
+    items: linkedIssuers,
+    isLoading: linkedIssuerLoading,
+    isError: linkedIssuerError,
+  } = useRemoteSessionIssuersByIds(linkedIssuerIds, { enabled });
+
+  // The provider this server's upstream points at, found on the server: the
+  // same-site rule (the upstream's host or a parent domain of it) runs over
+  // every issuer the project can see, not just a loaded page. Newest first,
+  // as the listing is.
+  const upstreamHost = hostOf(upstreamUrl);
+  const hostMatchQuery = useIssuersForHost(upstreamHost, enabled);
+  const matchedIssuer = hostMatchQuery.issuers.find((issuer) =>
+    sameSite(hostOf(issuer.issuer), upstreamHost),
+  );
+
   // Only probe for a provider to create when none of the existing ones match;
   // a configured server already has its answer.
-  const upstreamHost = hostOf(upstreamUrl);
-  const matchedIssuer = useMemo(
-    () =>
-      issuers.find((issuer) => sameSite(hostOf(issuer.issuer), upstreamHost)),
-    [issuers, upstreamHost],
-  );
-  const linkedIssuerId = linkedClients[0]?.remoteSessionIssuerId;
   const prm = useProtectedResourceMetadata(
     remoteMcpServerId,
-    enabled && !configured && !matchedIssuer && !linkedIssuerId,
+    enabled &&
+      !configured &&
+      !hostMatchQuery.isLoading &&
+      !matchedIssuer &&
+      !linkedIssuerId,
   );
   const discoveredIssuerUrl = prm.metadata?.authorizationServers?.[0] ?? null;
-  const discoveredIsKnown =
-    !!discoveredIssuerUrl &&
-    issuers.some(
-      (issuer) => hostOf(issuer.issuer) === hostOf(discoveredIssuerUrl),
-    );
+  // An advertised provider is new only when no issuer the project can see
+  // shares its host. Held (not offered) until that lookup answers.
+  const discoveredHost = hostOf(discoveredIssuerUrl);
+  const discoveredQuery = useIssuersForHost(discoveredHost, enabled);
+  const knownDiscoveredIssuer = discoveredQuery.issuers.find(
+    (issuer) => hostOf(issuer.issuer) === discoveredHost,
+  );
+  const discoveredIsKnown = !!knownDiscoveredIssuer;
+
+  // Every issuer the chooser may need to name: the listed page, plus the
+  // linked and matched ones resolved above, which may sit past that page.
+  const issuers = useMemo(() => {
+    const merged = new Map(listedIssuers.map((issuer) => [issuer.id, issuer]));
+    for (const issuer of [
+      ...linkedIssuers,
+      ...(matchedIssuer ? [matchedIssuer] : []),
+      ...(knownDiscoveredIssuer ? [knownDiscoveredIssuer] : []),
+    ]) {
+      if (!merged.has(issuer.id)) merged.set(issuer.id, issuer);
+    }
+    return [...merged.values()];
+  }, [listedIssuers, linkedIssuers, matchedIssuer, knownDiscoveredIssuer]);
+
+  // A lookup that failed is not an answer: offering a provider as new, or
+  // picking none, on a failed lookup could duplicate or hide one the project
+  // already has. The row reports the failure and Save stays off instead.
+  const providerLoadFailed =
+    linkedIssuerError || hostMatchQuery.isError || discoveredQuery.isError;
+
   const discovered = useMemo<ProviderOption | null>(
     () =>
-      discoveredIssuerUrl && !discoveredIsKnown
+      discoveredIssuerUrl &&
+      !discoveredQuery.isLoading &&
+      !discoveredQuery.isError &&
+      !discoveredIsKnown
         ? {
             id: DISCOVERED_PROVIDER_ID,
             name:
@@ -344,14 +416,22 @@ export function useUserIdentityDraft({
             match: true,
           }
         : null,
-    [discoveredIssuerUrl, discoveredIsKnown],
+    [
+      discoveredIssuerUrl,
+      discoveredQuery.isLoading,
+      discoveredQuery.isError,
+      discoveredIsKnown,
+    ],
   );
 
   // Nothing matched and nothing was advertised: the upstream could not tell us
   // where its users sign in, so the chooser opens empty.
+  // Not claimed while our own lookup failed: that alert already explains the
+  // missing provider, and the upstream may be fine.
   const providerUnreachable =
     enabled &&
     !configured &&
+    !providerLoadFailed &&
     !matchedIssuer &&
     !linkedIssuerId &&
     !discovered &&
@@ -676,6 +756,7 @@ export function useUserIdentityDraft({
   const canSave =
     !!selected &&
     !connected &&
+    !providerLoadFailed &&
     !capabilitiesLoading &&
     // Saving before the client list lands would miss an existing client and
     // register a duplicate in its place.
@@ -689,7 +770,12 @@ export function useUserIdentityDraft({
     selected,
     selectProvider,
     providerUnreachable,
-    providerLoading: prm.status === "loading",
+    providerLoading:
+      prm.status === "loading" ||
+      linkedIssuerLoading ||
+      hostMatchQuery.isLoading ||
+      discoveredQuery.isLoading,
+    providerLoadFailed,
 
     clientsLoading,
     capabilitiesLoading,

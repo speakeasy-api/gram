@@ -77,7 +77,7 @@ export type RemoteSessionIssuersQueryError =
  * listRemoteSessionIssuers remoteSessionIssuers
  *
  * @remarks
- * List remote_session_issuers in the caller's project.
+ * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.
  */
 export function useRemoteSessionIssuers(
   request?: ListRemoteSessionIssuersRequest | undefined,
@@ -106,7 +106,7 @@ export function useRemoteSessionIssuers(
  * listRemoteSessionIssuers remoteSessionIssuers
  *
  * @remarks
- * List remote_session_issuers in the caller's project.
+ * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.
  */
 export function useRemoteSessionIssuersSuspense(
   request?: ListRemoteSessionIssuersRequest | undefined,
@@ -135,7 +135,7 @@ export function useRemoteSessionIssuersSuspense(
  * listRemoteSessionIssuers remoteSessionIssuers
  *
  * @remarks
- * List remote_session_issuers in the caller's project.
+ * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.
  */
 export function useRemoteSessionIssuersInfinite(
   request?: ListRemoteSessionIssuersRequest | undefined,
@@ -178,7 +178,7 @@ export function useRemoteSessionIssuersInfinite(
  * listRemoteSessionIssuers remoteSessionIssuers
  *
  * @remarks
- * List remote_session_issuers in the caller's project.
+ * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.
  */
 export function useRemoteSessionIssuersInfiniteSuspense(
   request?: ListRemoteSessionIssuersRequest | undefined,
@@ -223,6 +223,8 @@ export function setRemoteSessionIssuersData(
     parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      search?: string | undefined;
+      upstreamHost?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -241,6 +243,8 @@ export function invalidateRemoteSessionIssuers(
     [parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      search?: string | undefined;
+      upstreamHost?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

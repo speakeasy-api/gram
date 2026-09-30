@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	remotesessionissuers "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	goa "goa.design/goa/v3/pkg"
@@ -356,7 +357,7 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 
 // BuildListRemoteSessionIssuersPayload builds the payload for the
 // remoteSessionIssuers listRemoteSessionIssuers endpoint from CLI flags.
-func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionIssuersCursor string, remoteSessionIssuersListRemoteSessionIssuersLimit string, remoteSessionIssuersListRemoteSessionIssuersSessionToken string, remoteSessionIssuersListRemoteSessionIssuersApikeyToken string, remoteSessionIssuersListRemoteSessionIssuersProjectSlugInput string) (*remotesessionissuers.ListRemoteSessionIssuersPayload, error) {
+func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionIssuersCursor string, remoteSessionIssuersListRemoteSessionIssuersLimit string, remoteSessionIssuersListRemoteSessionIssuersSearch string, remoteSessionIssuersListRemoteSessionIssuersUpstreamHost string, remoteSessionIssuersListRemoteSessionIssuersSessionToken string, remoteSessionIssuersListRemoteSessionIssuersApikeyToken string, remoteSessionIssuersListRemoteSessionIssuersProjectSlugInput string) (*remotesessionissuers.ListRemoteSessionIssuersPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -373,6 +374,30 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 			limit = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var search *string
+	{
+		if remoteSessionIssuersListRemoteSessionIssuersSearch != "" {
+			search = &remoteSessionIssuersListRemoteSessionIssuersSearch
+			if utf8.RuneCountInString(*search) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 256, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var upstreamHost *string
+	{
+		if remoteSessionIssuersListRemoteSessionIssuersUpstreamHost != "" {
+			upstreamHost = &remoteSessionIssuersListRemoteSessionIssuersUpstreamHost
+			if utf8.RuneCountInString(*upstreamHost) > 260 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("upstream_host", *upstreamHost, utf8.RuneCountInString(*upstreamHost), 260, false))
+			}
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -397,6 +422,8 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 	v := &remotesessionissuers.ListRemoteSessionIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Search = search
+	v.UpstreamHost = upstreamHost
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

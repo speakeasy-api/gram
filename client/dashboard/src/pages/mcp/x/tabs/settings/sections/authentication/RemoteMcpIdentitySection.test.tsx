@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   clients: vi.fn(),
   siblings: vi.fn(),
   issuers: vi.fn(),
+  issuersByIds: vi.fn(),
+  hostIssuers: vi.fn(),
   source: vi.fn(),
   rbac: vi.fn(),
   hasScope: vi.fn(),
@@ -105,7 +107,23 @@ vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
-  useRemoteSessionIssuers: () => mocks.issuers(),
+  useRemoteSessionIssuers: (request?: { upstreamHost?: string }) => {
+    const listed = mocks.issuers();
+    const host = request?.upstreamHost;
+    if (!host) return listed;
+    const hostItems = mocks.hostIssuers(host);
+    if (hostItems === "error") return { data: undefined, isError: true };
+    if (hostItems) return { data: { result: { items: hostItems } } };
+    // Stands in for the server's upstream_host filter: the issuer's host is
+    // the given host or one of its parent domains.
+    const items = (
+      (listed.data?.result.items ?? []) as Array<{ issuer: string }>
+    ).filter((issuer) => {
+      const issuerHost = new URL(issuer.issuer).host;
+      return issuerHost === host || host.endsWith(`.${issuerHost}`);
+    });
+    return { data: { result: { items } }, isLoading: false };
+  },
   invalidateAllRemoteSessionIssuers: vi.fn(),
 }));
 
@@ -132,6 +150,10 @@ vi.mock("@gram/client/react-query/remoteSessionsCount.js", () => ({
 
 vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
   useAllRemoteSessionClients: () => mocks.clients(),
+}));
+
+vi.mock("@/lib/remote-identity/queries/useRemoteSessionIssuersByIds", () => ({
+  useRemoteSessionIssuersByIds: (ids: string[]) => mocks.issuersByIds(ids),
 }));
 
 vi.mock("@/lib/remote-identity/queries/useUpstreamProbe", () => ({
@@ -249,6 +271,16 @@ beforeEach(() => {
     isError: false,
   });
   mocks.issuers.mockReturnValue({ data: { result: { items: [] } } });
+  // No host override: host lookups filter the listing above.
+  mocks.hostIssuers.mockImplementation(() => undefined);
+  // By default a lookup by id finds whatever the listing holds.
+  mocks.issuersByIds.mockImplementation((ids: string[]) => ({
+    items: (
+      (mocks.issuers().data?.result.items ?? []) as Array<{ id: string }>
+    ).filter((issuer) => ids.includes(issuer.id)),
+    isLoading: false,
+    isError: false,
+  }));
   mocks.sessions.mockReturnValue({ data: { subjects: 1 } });
   mocks.protectedResourceMetadata.mockReturnValue({
     status: "idle",
@@ -490,6 +522,101 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(trigger.disabled).toBe(true);
   });
 
+  it("suggests a same-site provider the issuer listing does not contain", async () => {
+    // The listing page is empty, standing in for a catalog large enough to
+    // push the matching provider off it; only the host lookup finds it.
+    mocks.hostIssuers.mockImplementation((host: string) =>
+      host === "mcp.linear.app"
+        ? [
+            {
+              id: "provider-linear",
+              name: "Linear",
+              issuer: "https://linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://linear.app/authorize",
+              tokenEndpoint: "https://linear.app/token",
+            },
+          ]
+        : undefined,
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Will be created")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          providerId: "provider-linear",
+        }),
+      }),
+    );
+  });
+
+  it("does not offer to create an advertised provider the project already has", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: ["https://auth.example.test"] },
+    });
+    mocks.hostIssuers.mockImplementation((host: string) =>
+      host === "auth.example.test"
+        ? [
+            {
+              id: "provider-known",
+              name: "Known provider",
+              issuer: "https://auth.example.test/oauth",
+              slug: "known",
+            },
+          ]
+        : undefined,
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Will be created")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Identity provider"));
+    expect(screen.getByText("Known provider")).toBeDefined();
+  });
+
+  it("does not offer to create a provider when the known-provider lookup fails", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: ["https://auth.example.test"] },
+    });
+    mocks.hostIssuers.mockImplementation((host: string) =>
+      host === "auth.example.test" ? "error" : undefined,
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Will be created")).toBeNull();
+    expect(
+      screen.getByText(/Couldn.t load this server.s identity providers/),
+    ).toBeDefined();
+  });
+
+  it("does not call the upstream unreachable when our own lookup failed", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "unavailable",
+      metadata: null,
+    });
+    mocks.hostIssuers.mockImplementation(() => "error");
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(
+      screen.getByText(/Couldn.t load this server.s identity providers/),
+    ).toBeDefined();
+    expect(screen.queryByText(/Couldn.t reach the upstream/)).toBeNull();
+  });
+
   it("offers the discovered provider as one that will be created", () => {
     mocks.protectedResourceMetadata.mockReturnValue({
       status: "available",
@@ -640,6 +767,41 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     expect(save().disabled).toBe(true);
     expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("shows the linked provider when the issuer listing does not contain it", () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-far",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    // The listing is empty, standing in for a linked issuer pushed past the
+    // first page by the platform catalog; only the lookup by id finds it.
+    mocks.issuersByIds.mockReturnValue({
+      items: [
+        {
+          id: "provider-far",
+          name: "Far provider",
+          issuer: "https://id.example",
+          slug: "far",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    renderIdentity();
+
+    expect(mocks.issuersByIds).toHaveBeenCalledWith(["provider-far"]);
+    expect(screen.getByText("Far provider")).toBeDefined();
   });
 
   it("holds a mode change as a draft until Save", async () => {
