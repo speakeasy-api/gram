@@ -296,24 +296,53 @@ func applySupportMatrixFacts(current map[string]*gen.SupportFact, changes []Supp
 func previewSupportMatrixChanges(before, after *gen.SupportDraft, changes []SupportMatrixChange) ([]supportMatrixPreviewChange, error) {
 	preview := make([]supportMatrixPreviewChange, 0, len(changes))
 	for _, change := range changes {
-		var oldEntry, newEntry any
-		if change.Kind == "mapping" {
-			key := change.MethodID + "/" + change.ProductID
-			oldEntry, newEntry = before.Mappings[key], after.Mappings[key]
-		} else {
-			oldEntry, newEntry = before.References[change.MethodID], after.References[change.MethodID]
-		}
-		oldJSON, err := json.Marshal(oldEntry)
+		oldJSON, err := json.Marshal(previewSupportMatrixFields(before, change))
 		if err != nil {
 			return nil, fmt.Errorf("encode support matrix before preview: %w", err)
 		}
-		newJSON, err := json.Marshal(newEntry)
+		newJSON, err := json.Marshal(previewSupportMatrixFields(after, change))
 		if err != nil {
 			return nil, fmt.Errorf("encode support matrix after preview: %w", err)
 		}
 		preview = append(preview, supportMatrixPreviewChange{Kind: change.Kind, MethodID: change.MethodID, ProductID: change.ProductID, Before: oldJSON, After: newJSON})
 	}
 	return preview, nil
+}
+
+func previewSupportMatrixFields(draft *gen.SupportDraft, change SupportMatrixChange) map[string]any {
+	fields := map[string]any{}
+	var facts map[string]*gen.SupportFact
+	if change.Kind == "mapping" {
+		mapping := draft.Mappings[change.MethodID+"/"+change.ProductID]
+		if change.Applicability != nil {
+			fields["applicability"] = mapping.Applicability
+		}
+		if change.Conditions != nil {
+			fields["conditions"] = mapping.Conditions
+		}
+		facts = mapping.Facts
+	} else {
+		facts = draft.References[change.MethodID]
+	}
+	if len(change.Facts) > 0 {
+		selected := make([]SupportMatrixFactChange, 0, len(change.Facts))
+		for _, requested := range change.Facts {
+			fact := facts[requested.CapabilityID]
+			entry := SupportMatrixFactChange{CapabilityID: requested.CapabilityID}
+			if requested.Status != nil {
+				entry.Status = &fact.Status
+			}
+			if requested.Note != nil {
+				entry.Note = &fact.Note
+			}
+			if requested.Verify != nil {
+				entry.Verify = &fact.Verify
+			}
+			selected = append(selected, entry)
+		}
+		fields["facts"] = selected
+	}
+	return fields
 }
 
 func (s *supportMatrixWriter) view(proposal Proposal) (proposalView, error) {
@@ -368,7 +397,7 @@ func (s *supportMatrixWriter) execution(_ writeAuthority) ProposalExecution {
 }
 
 func (s *supportMatrixWriter) registerPrepare(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "prepare_update_support_matrix", Title: "Prepare Global Support Matrix Update", Description: "Prepare bounded changes to existing global mapping or reference entries only. Use stable IDs and the exact revision from get_support_matrix_entry. Only supplied fields change; all other entries, notes, conditions, and verification flags are preserved. The full before/after preview is stored for separate same-staff approval. Does not create catalogue entries or modify issuers. Requires admin:write.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true)}}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareSupportMatrixInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "prepare_update_support_matrix", Title: "Prepare Global Support Matrix Update", Description: "Prepare bounded changes to existing global mapping or reference entries only. Use stable IDs and the exact revision from get_support_matrix_entry. Only supplied fields change; all other entries, notes, conditions, and verification flags are preserved. The before/after preview includes only supplied fields and is stored for separate same-staff approval. Does not create catalogue entries or modify issuers. Requires admin:write.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true)}}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareSupportMatrixInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := s.prepare(ctx, input)
 		return nil, out, err
 	})

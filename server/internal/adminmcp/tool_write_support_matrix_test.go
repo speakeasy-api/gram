@@ -68,6 +68,10 @@ func TestSupportMatrixWriterProposalPreservesUnchangedFieldsAndReplays(t *testin
 	require.Len(t, preview.Changes, 1)
 	require.Contains(t, string(preview.Changes[0].Before), "keep this note")
 	require.Contains(t, string(preview.Changes[0].After), "updated note")
+	for _, omitted := range []string{"keep these conditions", "keep neighbour", "status", "verify"} {
+		require.NotContains(t, string(preview.Changes[0].Before), omitted)
+		require.NotContains(t, string(preview.Changes[0].After), omitted)
+	}
 
 	proposalID, err := uuid.Parse(prepared.ProposalID)
 	require.NoError(t, err)
@@ -206,6 +210,50 @@ func TestSupportMatrixWriterSmallEditOnLargeDraft(t *testing.T) {
 	updated := supportMatrixSnapshot(t, f.db)
 	require.Equal(t, "small edit", updated.Draft.References["device"]["org"].Note)
 	require.Equal(t, matrix.Draft.Mappings, updated.Draft.Mappings)
+}
+
+func TestSupportMatrixPreviewIncludesOnlySuppliedFields(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"mapping", "reference"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			matrix := supportMatrixFixture()
+			facts := supportMatrixFacts(10)
+			for _, fact := range facts {
+				fact.Note = strings.Repeat("n", 8000)
+				fact.Verify = true
+			}
+			matrix.Draft.Mappings["method-a/product-a"].Conditions = strings.Repeat("c", 8000)
+			matrix.Draft.Mappings["method-a/product-a"].Facts = facts
+			matrix.Draft.References["method-a"] = facts
+			change := SupportMatrixChange{Kind: kind, MethodID: "method-a", Facts: []SupportMatrixFactChange{{CapabilityID: "capability-0", Status: new("unimplemented"), Verify: new(false)}}}
+			if kind == "mapping" {
+				change.ProductID = "product-a"
+			}
+			changes := []SupportMatrixChange{change}
+			after, err := applySupportMatrixChanges(matrix.Draft, changes)
+			require.NoError(t, err)
+			preview, err := previewSupportMatrixChanges(matrix.Draft, after, changes)
+			require.NoError(t, err)
+			require.Len(t, preview, 1)
+			require.JSONEq(t, `{"facts":[{"capability_id":"capability-0","status":"supported","verify":true}]}`, string(preview[0].Before))
+			require.JSONEq(t, `{"facts":[{"capability_id":"capability-0","status":"unimplemented","verify":false}]}`, string(preview[0].After))
+			encoded, err := json.Marshal(preview)
+			require.NoError(t, err)
+			require.Less(t, len(encoded), maxProposalPreviewBytes)
+		})
+	}
+	t.Run("mapping fields", func(t *testing.T) {
+		t.Parallel()
+		matrix := supportMatrixFixture()
+		changes := []SupportMatrixChange{{Kind: "mapping", MethodID: "method-a", ProductID: "product-a", Conditions: new(""), Applicability: new("na")}}
+		after, err := applySupportMatrixChanges(matrix.Draft, changes)
+		require.NoError(t, err)
+		preview, err := previewSupportMatrixChanges(matrix.Draft, after, changes)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"applicability":"applicable","conditions":"private operator condition"}`, string(preview[0].Before))
+		require.JSONEq(t, `{"applicability":"na","conditions":""}`, string(preview[0].After))
+	})
 }
 
 func TestSupportMatrixWriterRejectsNoOp(t *testing.T) {

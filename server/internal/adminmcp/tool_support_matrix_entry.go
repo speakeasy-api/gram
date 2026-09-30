@@ -51,7 +51,7 @@ func registerSupportMatrixEntryTool(server *mcp.Server, reader SupportMatrixRead
 			return nil, SupportMatrixEntryOutput{}, err
 		}
 		matrix, err := reader.GetSupportMatrix(ctx, &gen.GetSupportMatrixPayload{})
-		if err != nil || matrix == nil || matrix.Draft == nil || !validSupportMatrixText(matrix.Revision) || adminservice.ValidateSupportDraft(matrix.Draft, matrix) != nil {
+		if err != nil || !validSupportMatrixEntrySource(matrix) || adminservice.ValidateSupportDraft(matrix.Draft, matrix) != nil {
 			return nil, SupportMatrixEntryOutput{}, errSupportMatrixUnavailable
 		}
 		output, err := projectSupportMatrixEntry(matrix, input)
@@ -60,6 +60,51 @@ func registerSupportMatrixEntryTool(server *mcp.Server, reader SupportMatrixRead
 		}
 		return nil, output, nil
 	})
+}
+
+func validSupportMatrixEntrySource(matrix *gen.SupportMatrix) bool {
+	if matrix == nil || matrix.Draft == nil || !validSupportMatrixText(matrix.Revision) || len(matrix.Methods) > maxSupportMatrixEntries || len(matrix.Products) > maxSupportMatrixEntries || len(matrix.Capabilities) > maxSupportMatrixEntries || len(matrix.Draft.Mappings) > maxSupportMatrixFacts || len(matrix.Draft.References) > maxSupportMatrixEntries {
+		return false
+	}
+	factCount := 0
+	for _, method := range matrix.Methods {
+		if method == nil || !validSupportMatrixText(method.ID) || !validSupportMatrixText(method.Name) || !validSupportMatrixText(method.Vendor) {
+			return false
+		}
+		factCount += len(method.Facts)
+		if factCount > maxSupportMatrixFacts {
+			return false
+		}
+		if _, valid := projectSupportMatrixFacts(method.Facts); !valid {
+			return false
+		}
+	}
+	for _, product := range matrix.Products {
+		if product == nil || !validSupportMatrixText(product.ID) || !validSupportMatrixText(product.Name) || !validSupportMatrixText(product.Vendor) || !validSupportMatrixText(product.Family) || !validSupportMatrixText(product.Surface) {
+			return false
+		}
+	}
+	for _, capability := range matrix.Capabilities {
+		if capability == nil || !validSupportMatrixText(capability.ID) || !validSupportMatrixText(capability.Name) || !validSupportMatrixText(capability.Group) {
+			return false
+		}
+	}
+	for _, mapping := range matrix.Draft.Mappings {
+		if mapping == nil {
+			return false
+		}
+		factCount += len(mapping.Facts)
+		if factCount > maxSupportMatrixFacts {
+			return false
+		}
+	}
+	for _, facts := range matrix.Draft.References {
+		factCount += len(facts)
+		if factCount > maxSupportMatrixFacts {
+			return false
+		}
+	}
+	return true
 }
 
 func validateSupportMatrixEntryTarget(input GetSupportMatrixEntryInput) error {

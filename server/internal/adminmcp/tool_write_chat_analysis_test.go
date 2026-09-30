@@ -98,7 +98,8 @@ func TestChatAnalysisWriteRejectsInvalidInputsAndNoOps(t *testing.T) {
 		{OrganizationID: f.orgA, Judge: "unknown", Enabled: true, DailyCap: 1, RetryKey: "judge"},
 		{OrganizationID: f.orgA, Judge: analysis.WorkUnitsJudgeName, DailyCap: -1, RetryKey: "negative"},
 		{OrganizationID: f.orgA, Judge: analysis.WorkUnitsJudgeName, DailyCap: chatanalysis.MaxDailyCap + 1, RetryKey: "oversized"},
-		{OrganizationID: f.orgA, Judge: analysis.WorkUnitsJudgeName, DailyCap: 1<<32 + 1, RetryKey: "narrowing"},
+		// Validate before narrowing: converting this value to int32 first would produce the valid cap 1.
+		{OrganizationID: f.orgA, Judge: analysis.WorkUnitsJudgeName, DailyCap: 1<<32 + 1, RetryKey: "validate-before-narrowing"},
 		{OrganizationID: "synthetic-a", Judge: analysis.WorkUnitsJudgeName, Enabled: true, DailyCap: 1, RetryKey: "slug"},
 		{OrganizationID: f.orgA, Judge: analysis.WorkUnitsJudgeName, Enabled: true, DailyCap: 1},
 	} {

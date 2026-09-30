@@ -135,6 +135,8 @@ export const AUDIT_ACTIONS = [
   "openrouter-key:enable",
   "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
+  "organization:disabled",
+  "organization:enabled",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
@@ -584,6 +586,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "openrouter-key:set_spend_cap":
       return "changed inference cap for";
 
+    case "organization:enabled":
+      return "enabled organization access for";
+    case "organization:disabled":
+      return "disabled organization access for";
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";
     case "organization:webhooks_disabled":

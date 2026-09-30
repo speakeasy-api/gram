@@ -71,7 +71,7 @@ func TestOrganizationAccessPrepareExecuteAndReplay(t *testing.T) {
 	require.True(t, replayPrepare.Replay)
 	require.Equal(t, prepared.ProposalID, replayPrepare.ProposalID)
 
-	// A disabled state change after preparation invalidates both approval and execution.
+	// A disabled state change after preparation invalidates approval.
 	stale, err := writer.prepare(ctx, PrepareOrganizationAccessInput{OrganizationID: f.orgB, RetryKey: "stale-access"})
 	require.NoError(t, err)
 	_, err = repo.New(f.db).AdminDisableOrganization(t.Context(), f.orgB)
@@ -111,6 +111,31 @@ func TestOrganizationAccessPrepareExecuteAndReplay(t *testing.T) {
 	require.True(t, replay.Replay)
 	require.Equal(t, int64(1), auditCount(t, f, audit.ActionOrganizationDisabled))
 	require.Equal(t, 1, countWriteEvents(t, f.db, uuid.MustParse(prepared.ProposalID), "executed"))
+}
+
+func TestOrganizationAccessRejectsStateChangeAfterApproval(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "admin_mcp_organization_access_stale_execution")
+	writer, tools := newOrganizationAccessWriter(f, OperationDisableOrganization)
+	ctx := writeContext(t, f)
+	prepared, err := writer.prepare(ctx, PrepareOrganizationAccessInput{OrganizationID: f.orgA, RetryKey: "stale-after-approval"})
+	require.NoError(t, err)
+	approveOrganizationAccess(t, f, writer, prepared.ProposalID)
+	_, err = repo.New(f.db).AdminDisableOrganization(t.Context(), f.orgA)
+	require.NoError(t, err)
+	changed := organizationAccessState(t, f, f.orgA)
+
+	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.ErrorIs(t, err, ErrStaleState)
+	require.Equal(t, changed, organizationAccessState(t, f, f.orgA), "refused execution must not change the target")
+	proposalID := uuid.MustParse(prepared.ProposalID)
+	proposal, err := f.store.GetForOwner(t.Context(), proposalID, f.owner)
+	require.NoError(t, err)
+	require.Equal(t, ProposalInvalidated, proposal.Status)
+	require.Equal(t, reasonStaleState, proposal.InvalidationReason)
+	require.Equal(t, 1, countWriteEvents(t, f.db, proposalID, string(ProposalInvalidated)))
+	require.Zero(t, countWriteEvents(t, f.db, proposalID, "executed"))
+	require.Zero(t, auditCount(t, f, audit.ActionOrganizationDisabled))
 }
 
 func TestOrganizationEnableProposalClearsDisabledAt(t *testing.T) {
