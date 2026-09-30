@@ -17,6 +17,12 @@ export function httpsUrlProblem(raw: string, isIssuer: boolean): string | null {
   if (parsed.protocol !== "https:") {
     return "Must use https. Gram fetches the signing keys over this URL, so http would put key retrieval in the clear.";
   }
+  // The browser repairs "https:host" and "https:/host" into a URL with a host;
+  // the server parses the raw string and finds none. Require the authority as
+  // written.
+  if (!/^https:\/\/[^/?#]/i.test(trimmed)) {
+    return "Enter a complete URL, including https://.";
+  }
   const host = parsed.hostname.replace(/\.$/, "");
   if (!host.includes(".") || /^[\d.]+$/.test(host)) {
     return "Must name a fully qualified domain, not an IP address or a single-label host.";

@@ -121,8 +121,9 @@ export function RegisterIssuerSheet({
           </SheetTitle>
           <SheetDescription>
             Both values come from the platform issuing your machines&apos;
-            tokens. Gram stores them exactly as entered, because an assertion is
-            matched against the spelling you register.
+            tokens. Gram trims surrounding spaces and otherwise stores them
+            exactly as entered, because an assertion is matched against the
+            spelling you register.
           </SheetDescription>
         </SheetHeader>
 

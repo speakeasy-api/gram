@@ -27,7 +27,11 @@ export function WithdrawSubjectDialog({
   }, [admission?.id]);
 
   const expected = admission ? withdrawConfirmation(admission) : "";
-  const confirmed = admission !== null && typed.trim() === expected;
+  // Exact first: the server stores a subject as supplied, so one admitted
+  // through the API can carry outer whitespace and must still be confirmable.
+  // The trimmed comparison forgives a stray space around a pasted subject.
+  const confirmed =
+    admission !== null && (typed === expected || typed.trim() === expected);
 
   return (
     <Dialog

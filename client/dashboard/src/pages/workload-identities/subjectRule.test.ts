@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import {
   buildAdmitValues,
   inferMatchKind,
+  MAX_SUBJECT_BYTES,
   subjectRuleWarning,
 } from "./subjectRule";
 
@@ -106,4 +107,18 @@ it("submits an exact subject as exact", () => {
       "https://identity.example.com",
     ).matchKind,
   ).toBe("exact");
+});
+
+it("refuses a subject longer than the server can store, counting bytes", () => {
+  expect(subjectRuleWarning("exact", "a".repeat(MAX_SUBJECT_BYTES))).toBeNull();
+  expect(
+    subjectRuleWarning("exact", "a".repeat(MAX_SUBJECT_BYTES + 1)),
+  ).toContain("too long");
+  // "é" is one character but two bytes, so half the limit in them is already over.
+  expect(
+    subjectRuleWarning(
+      "exact",
+      "é".repeat(Math.ceil((MAX_SUBJECT_BYTES + 1) / 2)),
+    ),
+  ).toContain("too long");
 });

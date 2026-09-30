@@ -87,3 +87,11 @@ it("warns that existing sessions survive the withdrawal", () => {
     screen.getByText(/Sessions it already holds are not revoked/),
   ).toBeTruthy();
 });
+
+it("confirms a subject stored with surrounding whitespace", () => {
+  const { withdraw, field } = renderDialog(admission({ subject: " spaced " }));
+
+  fireEvent.change(field, { target: { value: " spaced " } });
+
+  expect(withdraw.disabled).toBe(false);
+});

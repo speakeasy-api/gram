@@ -4,6 +4,7 @@ import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -27,7 +28,7 @@ import {
   type AdmitSubjectValues,
 } from "./AdmitSubjectSheet";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -263,12 +264,48 @@ function IssuerDetail(): JSX.Element {
     },
   ];
 
+  // Loading first: an empty table during the first fetch would read as "no
+  // machines match" before anything has loaded.
+  let machinesSection: ReactNode;
+  if (isPending) {
+    machinesSection = <SkeletonTable />;
+  } else if (admissions.length === 0) {
+    machinesSection = (
+      <InlineEmptyState
+        icon="cpu"
+        heading="No machines allowed from this platform"
+        description="Trusting a platform allows nothing on its own. Allow a machine so it can exchange its identity token for a Gram session."
+      />
+    );
+  } else {
+    machinesSection = (
+      <>
+        <Page.Toolbar className="mb-4">
+          <Page.Toolbar.Search
+            className="w-full"
+            value={search}
+            onChange={setSearch}
+            placeholder="Search subject, label, tag or agent…"
+          />
+        </Page.Toolbar>
+        <Table
+          columns={columns}
+          data={visibleAdmissions}
+          rowKey={(row) => row.id}
+          noResultsMessage={<Text>No machines match that search.</Text>}
+        />
+      </>
+    );
+  }
+
   const allowButton = (
     <RequireScope scope="workload:write" level="component">
       <Button
         size="sm"
         onClick={() => setAdmitOpen(true)}
-        disabled={agents.length === 0}
+        // The sheet is mounted only once the platform has loaded, so the button
+        // waits for it too rather than opening nothing.
+        disabled={issuer === undefined || agents.length === 0}
       >
         <Button.LeftIcon>
           <Plus className="h-4 w-4" />
@@ -284,7 +321,7 @@ function IssuerDetail(): JSX.Element {
         size="sm"
         variant="tertiary"
         onClick={() => setWithdrawOpen(true)}
-        disabled={withdrawIssuer.isPending}
+        disabled={issuer === undefined || withdrawIssuer.isPending}
       >
         <Button.Text>Stop trusting</Button.Text>
       </Button>
@@ -326,30 +363,7 @@ function IssuerDetail(): JSX.Element {
           {allowUnavailableReason}
         </Text>
       )}
-      {admissions.length === 0 && !isPending ? (
-        <InlineEmptyState
-          icon="cpu"
-          heading="No machines allowed from this platform"
-          description="Trusting a platform allows nothing on its own. Allow a machine so it can exchange its identity token for a Gram session."
-        />
-      ) : (
-        <>
-          <Page.Toolbar className="mb-4">
-            <Page.Toolbar.Search
-              className="w-full"
-              value={search}
-              onChange={setSearch}
-              placeholder="Search subject, label, tag or agent…"
-            />
-          </Page.Toolbar>
-          <Table
-            columns={columns}
-            data={visibleAdmissions}
-            rowKey={(row) => row.id}
-            noResultsMessage={<Text>No machines match that search.</Text>}
-          />
-        </>
-      )}
+      {machinesSection}
       <WithdrawSubjectDialog
         admission={withdrawing}
         onOpenChange={(open) => {

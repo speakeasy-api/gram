@@ -75,7 +75,7 @@ vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
 
 afterEach(cleanup);
 
-function renderPage() {
+function renderPageOnCatalog() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -86,6 +86,10 @@ function renderPage() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+function renderPage() {
+  renderPageOnCatalog();
   // Catalog leads, so the platforms live behind the Custom toggle.
   fireEvent.click(screen.getByRole("button", { name: /^Custom/ }));
 }
@@ -170,4 +174,13 @@ it("shows a platform's description in place of its issuer URL", () => {
   const build = screen.getByRole("link", { name: /^build/ });
   expect(build.textContent).not.toContain("Issuer:");
   expect(build.textContent).toContain("https://build.example.com");
+});
+
+it("opens on the catalog, which is empty until presets exist", () => {
+  renderPageOnCatalog();
+
+  // Catalog leads: an operator arrives asking which platform they are
+  // connecting, so presets are the first thing shown.
+  expect(screen.getByText("No catalog platforms yet")).toBeTruthy();
+  expect(screen.queryAllByRole("link")).toHaveLength(0);
 });

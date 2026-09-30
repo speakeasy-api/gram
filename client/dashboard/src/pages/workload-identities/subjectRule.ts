@@ -7,6 +7,11 @@ const WILDCARD_SUFFIX = "*";
 
 export type MatchKind = "exact" | "wildcard";
 
+// The server's limit on a stored subject, in UTF-8 bytes: a workload subject's
+// id is 1024 bytes, less the issuer uuid and its delimiter that prefix it
+// (urn.MaxWorkloadExternalSubjectLength).
+export const MAX_SUBJECT_BYTES = 987;
+
 /**
  * The match kind a subject states, read off the value itself.
  *
@@ -32,6 +37,10 @@ export function subjectRuleWarning(
   const trimmed = subject.trim();
   if (trimmed.length === 0) {
     return null;
+  }
+
+  if (new TextEncoder().encode(trimmed).length > MAX_SUBJECT_BYTES) {
+    return `A subject is at most ${MAX_SUBJECT_BYTES} bytes. This one is too long to store.`;
   }
 
   if (matchKind === "exact") {

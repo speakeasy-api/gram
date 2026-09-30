@@ -41,3 +41,26 @@ it("refuses a query string or fragment on either URL, even a bare delimiter", ()
     expect(httpsUrlProblem(url, false), url).not.toBeNull();
   }
 });
+
+it("refuses http, IP addresses, single-label hosts and unparseable input", () => {
+  expect(httpsUrlProblem("http://identity.example.com", true)).toContain(
+    "Must use https",
+  );
+  for (const url of ["https://192.168.1.1", "https://localhost"]) {
+    expect(httpsUrlProblem(url, true), url).toContain("fully qualified domain");
+  }
+  expect(httpsUrlProblem("not a url", true)).toBe(
+    "Enter a complete URL, including https://.",
+  );
+});
+
+it("refuses https spellings the browser repairs but the server cannot parse", () => {
+  for (const url of [
+    "https:identity.example.com",
+    "https:/identity.example.com",
+  ]) {
+    expect(httpsUrlProblem(url, true), url).toBe(
+      "Enter a complete URL, including https://.",
+    );
+  }
+});
