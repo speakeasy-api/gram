@@ -222,6 +222,7 @@ describe("the queries a spec describes", () => {
   it("draws a chart only for a timeseries over at least one measure", () => {
     expect(hasChartShape(spec({ chartType: "line" }))).toBe(true);
     expect(hasChartShape(spec({ chartType: "bar" }))).toBe(true);
+    expect(hasChartShape(spec({ chartType: "ranked" }))).toBe(false);
     expect(hasChartShape(spec({ chartType: "table" }))).toBe(false);
     expect(hasChartShape(spec({ chartType: "number" }))).toBe(false);
     expect(hasChartShape(spec({ chartType: "line", measures: [] }))).toBe(

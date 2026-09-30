@@ -31,8 +31,9 @@ func TestNormalizeAndValidateMCPScope(t *testing.T) {
 		MCPServerID: serverID,
 		Tools:       []string{"read", "write"},
 	}}, scope.Servers)
-	require.NoError(t, ValidateMCPScopeOwnership(scope, []uuid.UUID{serverID}))
-	require.Error(t, ValidateMCPScopeOwnership(scope, nil))
+	require.NoError(t, ValidateMCPScopeOwnership(scope, []uuid.UUID{serverID}, nil))
+	require.NoError(t, ValidateMCPScopeOwnership(scope, nil, []uuid.UUID{serverID}))
+	require.Error(t, ValidateMCPScopeOwnership(scope, nil, nil))
 
 	allServers, err := NormalizeMCPScope(&MCPScopeInput{
 		AllServers:      true,

@@ -20,22 +20,20 @@ vi.mock("@/routes", () => ({
     },
   }),
 }));
-vi.mock("@gram/client/react-query/organizationRemoteSessionIssuers.js", () => ({
-  useOrganizationRemoteSessionIssuers: () => ({
-    data: {
-      result: {
-        items: [
-          { issuer: { id: "other-issuer", projectId: "other-project" } },
-          {
-            issuer: {
-              id: "inaccessible-issuer",
-              projectId: "inaccessible-project",
-            },
-          },
-        ],
-      },
-    },
-  }),
+// Resolved by id, so a match past the org's first listing page still links.
+const issuersById: Record<string, { id: string; projectId: string }> = {
+  "other-issuer": { id: "other-issuer", projectId: "other-project" },
+  "inaccessible-issuer": {
+    id: "inaccessible-issuer",
+    projectId: "inaccessible-project",
+  },
+};
+vi.mock("@gram/client/react-query/organizationRemoteSessionIssuer.js", () => ({
+  useOrganizationRemoteSessionIssuer: (
+    request: { id: string },
+    _security: unknown,
+    options: { enabled: boolean },
+  ) => ({ data: options.enabled ? issuersById[request.id] : undefined }),
 }));
 afterEach(cleanup);
 

@@ -400,8 +400,10 @@ func TestStaleCacheIsNotAColdStart(t *testing.T) {
 }
 
 // TestGateBudgetBeatsHangingServer: a hanging control plane must resolve the
-// gate within gateSendBudget — fail-closed here (posture cached) — instead of
-// riding the full sendBudget past the provider-side deadline.
+// gate within the derived gate budget — fail-closed here (posture cached) —
+// instead of riding the full sendBudget past the provider-side deadline. The
+// budget is capped at maxGateSendBudget, so the verdict lands far inside
+// Claude Code's own hook timeout rather than at the 45s sendBudget.
 func TestGateBudgetBeatsHangingServer(t *testing.T) {
 	shrinkRetryBudget(t)
 	release := make(chan struct{})
@@ -418,5 +420,5 @@ func TestGateBudgetBeatsHangingServer(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "fail-closed posture must block")
-	require.Less(t, elapsed, 8*time.Second, "gate verdict must resolve within the gate budget")
+	require.Less(t, elapsed, maxGateSendBudget+5*time.Second, "gate verdict must resolve within the gate budget, not ride the full sendBudget")
 }

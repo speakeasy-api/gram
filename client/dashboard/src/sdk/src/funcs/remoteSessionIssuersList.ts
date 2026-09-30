@@ -46,7 +46,7 @@ import {
  * listRemoteSessionIssuers remoteSessionIssuers
  *
  * @remarks
- * List remote_session_issuers in the caller's project.
+ * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.
  */
 export function remoteSessionIssuersList(
   client: GramCore,
@@ -123,6 +123,9 @@ async function $do(
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "search": payload?.search,
+    "tier": payload?.tier,
+    "upstream_host": payload?.upstream_host,
   });
 
   const headers = new Headers(compactMap({

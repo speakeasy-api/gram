@@ -980,11 +980,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 
 	if privateNetworkInstall && (authCtx == nil || authCtx.ActiveOrganizationID == "") {
 		if s.serverURL != nil {
-			loginURL := s.serverURL.JoinPath("login")
-			query := loginURL.Query()
-			query.Set("redirect", r.URL.RequestURI())
-			loginURL.RawQuery = query.Encode()
-			http.Redirect(w, r, loginURL.String(), http.StatusFound)
+			http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
 			return nil
 		}
 		return s.serveNotFoundPage(w, mcpSlug)
@@ -1011,8 +1007,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		// If no auth context, redirect to login page
 		if authCtx == nil {
 			if s.serverURL != nil {
-				loginURL := s.serverURL.String() + "/login"
-				http.Redirect(w, r, loginURL, http.StatusFound)
+				http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
 				return nil
 			}
 			// Fallback if serverURL is nil
@@ -1068,6 +1063,23 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	default:
 		return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 	}
+}
+
+// loginRedirectURL returns the dashboard login URL that brings the visitor back
+// to this install page afterwards. It stays on the platform host the request
+// arrived on, because the session cookie is host-only. The return target is
+// the request's own path and query, never an absolute URL, so it cannot send
+// the visitor to another origin.
+func (s *Service) loginRedirectURL(r *http.Request) string {
+	loginURL := s.serverURL.JoinPath("login")
+	serverBase := s.serverURL.String()
+	if base, err := url.Parse(requestorigin.PlatformHostBaseURL(r.Context(), serverBase, serverBase)); err == nil {
+		loginURL = base.JoinPath("login")
+	}
+	query := loginURL.Query()
+	query.Set("redirect", r.URL.RequestURI())
+	loginURL.RawQuery = query.Encode()
+	return loginURL.String()
 }
 
 // resolveInstallContext tries the mcp_endpoints → mcp_server resolution path

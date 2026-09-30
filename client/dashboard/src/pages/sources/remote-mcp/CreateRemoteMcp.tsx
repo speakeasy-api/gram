@@ -89,6 +89,12 @@ function CreateRemoteMcpForm() {
   // The verify result is cleared whenever the URL changes (see
   // useVerifyRemoteMcpUrl), so this can only be true for the URL on screen.
   const isVerified = verify.result?.verified === true;
+  // Unproxied servers are often only reachable from the customer's network,
+  // so our infrastructure failing to reach one says nothing about whether it
+  // works. Verification only gates saving when we sit in the request path.
+  // Gateway members are always proxied, whatever the Connection choice says.
+  const requiresVerification = mode === "proxied" || !!flow.gatewayId;
+  const readyToSave = isVerified || !requiresVerification;
   const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
     issuerQuery.organizationIssuers,
   );
@@ -131,7 +137,7 @@ function CreateRemoteMcpForm() {
     // Connectivity is part of saving rather than a side errand: an unverified
     // URL falls through to a verify instead of creating a server nobody can
     // reach.
-    if (!isVerified) {
+    if (!readyToSave) {
       void verify.trigger();
       return;
     }
@@ -383,7 +389,7 @@ function CreateRemoteMcpForm() {
                 <Button.LeftIcon>
                   <Loader2 className="size-4 animate-spin" />
                 </Button.LeftIcon>
-              ) : !isVerified ? (
+              ) : !readyToSave ? (
                 <Button.LeftIcon>
                   <Plug className="size-4" />
                 </Button.LeftIcon>
@@ -393,12 +399,12 @@ function CreateRemoteMcpForm() {
                   ? "Verifying"
                   : isPending
                     ? "Saving"
-                    : isVerified
+                    : readyToSave
                       ? "Save"
                       : "Verify connectivity"}
               </Button.Text>
             </Button>
-            {isVerified && (
+            {isVerified && requiresVerification && (
               <Button
                 type="button"
                 variant="secondary"

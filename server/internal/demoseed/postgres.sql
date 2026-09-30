@@ -1369,7 +1369,7 @@ BEGIN
      token_endpoint, jwks_uri, scopes_supported, grant_types_supported,
      response_types_supported, token_endpoint_auth_methods_supported,
      code_challenge_methods_supported, client_id_metadata_document_supported,
-     name)
+     name, scope_override)
   VALUES
     (demo.det_uuid('gram-demo-remote-identity-provider-linear'), proj_a, demo_org,
      'example-workspace-identity', 'https://identity.example.com',
@@ -1378,7 +1378,9 @@ BEGIN
      'https://identity.example.com/.well-known/jwks.json',
      ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
      ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
-     'Example Workspace Identity');
+     -- A pinned scope request, so the provider's page shows its override and
+     -- its clients' scope fields show the ignored-scopes warning.
+     'Example Workspace Identity', ARRAY['read']);
 
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -1535,10 +1537,11 @@ BEGIN
   -- prevent this display fixture from becoming a usable upstream credential.
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,
-     token_endpoint_auth_method)
+     token_endpoint_auth_method, scope, legacy_callback_url)
   VALUES (demo.det_uuid('gram-demo-attachment-client'), proj_a, demo_org,
           demo.det_uuid('gram-demo-remote-identity-provider-linear'),
-          demo.det_uuid('gram-demo-attachment-client')::text, 'none');
+          demo.det_uuid('gram-demo-attachment-client')::text, 'none',
+          ARRAY['read', 'write'], TRUE);
 
   INSERT INTO remote_session_client_user_session_issuers
     (remote_session_client_id, user_session_issuer_id)

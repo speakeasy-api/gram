@@ -844,7 +844,7 @@ func TestExpireLifecycleStaleCheckoutSessionAcceptsConcurrentExpiration(t *testi
 	}
 
 	replaceKey, err := ti.service.expireLifecycleStaleCheckoutSession(
-		t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug, "https://example.test/billing",
+		t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug,
 		stripeCheckoutIntent{idempotencyKey: "checkout-session:org:3:4:new-lifecycle"}, now,
 	)
 	require.NoError(t, err)
@@ -888,7 +888,7 @@ func TestExpireLifecycleStaleCheckoutSessionRejectsUnconfirmedConcurrentExpirati
 			ti.stripe.checkoutGetErr = test.queryErr
 
 			_, err := ti.service.expireLifecycleStaleCheckoutSession(
-				t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug, "https://example.test/billing",
+				t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug,
 				stripeCheckoutIntent{idempotencyKey: "checkout-session:org:3:4:new-lifecycle"}, now,
 			)
 			require.Error(t, err)

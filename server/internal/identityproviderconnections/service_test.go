@@ -757,7 +757,7 @@ func TestCreate_ProvisionFailureLeavesOrgRetryable(t *testing.T) {
 	empty, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Nil(t, empty.Connection)
-	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{OrganizationID: conv.ToPGText(si.orgID), IncludeGlobal: false, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10})
+	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{OrganizationID: conv.ToPGText(si.orgID), IncludeOrganizational: true, IncludeProjectSpecific: true, IncludeGlobal: false, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10})
 	require.NoError(t, err)
 	require.Empty(t, issuers, "the abandoned issuer was tombstoned")
 

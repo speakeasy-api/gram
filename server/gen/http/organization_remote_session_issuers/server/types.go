@@ -5812,10 +5812,11 @@ func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string,
 
 // NewListIssuersPayload builds a organizationRemoteSessionIssuers service
 // listIssuers endpoint payload.
-func NewListIssuersPayload(cursor *string, limit *int, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.ListIssuersPayload {
+func NewListIssuersPayload(cursor *string, limit *int, tier *string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.ListIssuersPayload {
 	v := &organizationremotesessionissuers.ListIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Tier = tier
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 

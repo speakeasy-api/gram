@@ -186,7 +186,7 @@ func (a *LiveOrgAdminAuthorizer) requestAccessURL(ctx context.Context, check aut
 	if organizationSlug == "" {
 		return ""
 	}
-	return mcpaccess.RequestAccessURL(a.dashboardURL, organizationSlug, mcpaccess.RequestAccessURLParams{
+	return mcpaccess.RequestAccessURL(requestDashboardURL(ctx, a.dashboardURL, a.serverURL), organizationSlug, mcpaccess.RequestAccessURLParams{
 		Scope:        string(check.Scope),
 		ResourceID:   check.ResourceID,
 		ResourceName: "",

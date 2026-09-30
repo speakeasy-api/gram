@@ -57,17 +57,23 @@ import {
   type AdminCreateGlobalIssuerMutationVariables,
 } from "@gram/admin-client/react-query/adminCreateGlobalIssuer";
 import { buildAdminServeImageQuery } from "@gram/admin-client/react-query/adminServeImage.core";
+import { adminGetStripeSubscriptionCandidate } from "@gram/admin-client/funcs/adminGetStripeSubscriptionCandidate";
 import { buildAdminDisableOrganizationMutation } from "@gram/admin-client/react-query/adminDisableOrganization";
 import { buildAdminEnableOrganizationMutation } from "@gram/admin-client/react-query/adminEnableOrganization";
 import { buildAdminExtendTrialMutation } from "@gram/admin-client/react-query/adminExtendTrial";
 import { buildAdminRearmTrialMutation } from "@gram/admin-client/react-query/adminRearmTrial";
+import { buildAdminSetStripeSubscriptionMutation } from "@gram/admin-client/react-query/adminSetStripeSubscription";
 import { buildAdminStartTrialMutation } from "@gram/admin-client/react-query/adminStartTrial";
 import type { AdminOrganization as SdkAdminOrganization } from "@gram/admin-client/models/components/adminorganization";
+import type { AdminStripeSubscriptionCandidate } from "@gram/admin-client/models/components/adminstripesubscriptioncandidate";
 import type { DisableOrganizationRequestBody } from "@gram/admin-client/models/components/disableorganizationrequestbody";
 import type { EnableOrganizationRequestBody } from "@gram/admin-client/models/components/enableorganizationrequestbody";
 import type { ExtendTrialRequestBody } from "@gram/admin-client/models/components/extendtrialrequestbody";
 import type { RearmTrialRequestBody } from "@gram/admin-client/models/components/rearmtrialrequestbody";
+import type { SetStripeSubscriptionRequestBody } from "@gram/admin-client/models/components/setstripesubscriptionrequestbody";
 import type { StartTrialRequestBody } from "@gram/admin-client/models/components/starttrialrequestbody";
+import type { AdminGetStripeSubscriptionCandidateRequest } from "@gram/admin-client/models/operations/admingetstripesubscriptioncandidate";
+import { unwrapAsync } from "@gram/admin-client/types/fp";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { buildAdminGetGlobalIssuerMigratePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerMigratePreflight.core";
 import { buildAdminGetGlobalIssuerDuplicatePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerDuplicatePreflight.core";
@@ -325,8 +331,31 @@ const disableOrganizationMutation =
   buildAdminDisableOrganizationMutation(redirectingClient);
 const enableOrganizationMutation =
   buildAdminEnableOrganizationMutation(redirectingClient);
+const setStripeSubscriptionMutation =
+  buildAdminSetStripeSubscriptionMutation(redirectingClient);
 const changeTrialEndDateMutation =
   buildAdminChangeTrialEndDateMutation(redirectingClient);
+
+// Preview is a one-shot confirmation read of live Stripe state, not a
+// typed-as-you-go query.
+export function getStripeSubscriptionCandidate(
+  request: AdminGetStripeSubscriptionCandidateRequest,
+): Promise<AdminStripeSubscriptionCandidate> {
+  return redirecting(
+    unwrapAsync(
+      adminGetStripeSubscriptionCandidate(redirectingClient, request),
+    ),
+  );
+}
+
+export async function setStripeSubscription(
+  request: SetStripeSubscriptionRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(setStripeSubscriptionMutation.mutationFn({ request })),
+  );
+}
+
 export async function changeTrialEndDate(
   request: ChangeTrialEndDateRequestBody,
 ): Promise<AdminOrganization> {
