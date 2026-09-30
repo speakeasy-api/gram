@@ -8,11 +8,13 @@ import {
   autoGrain,
   completeMeasures,
   hasChartShape,
+  isRowsMode,
   queryDimensions,
   type ExploreSpec,
 } from "./exploreModel";
 import { CHART_HEIGHT, ResultChart } from "./ResultChart";
 import { ResultNumbers } from "./ResultNumbers";
+import { ResultRanked } from "./ResultRanked";
 import { seriesFromRows, sharedUnit } from "./resultSeries";
 import { ResultTable } from "./ResultTable";
 
@@ -20,8 +22,8 @@ export type RunQuery = UseQueryResult<AnalyticsQueryResult, Error>;
 
 /**
  * The results panel under the builder. A timeseries chart draws the chart
- * query with the summary query tabled beneath it; a table or number chart
- * draws the summary query alone. One generic empty state covers every reason
+ * query with the summary query tabled beneath it; a ranked, table or number
+ * chart draws the summary query alone. One generic empty state covers every reason
  * there is nothing to draw.
  */
 export function ExploreResults({
@@ -108,6 +110,9 @@ function ResultsBody({
     return (
       <ResultNumbers dataset={dataset} spec={spec} row={primary.data.rows[0]} />
     );
+  }
+  if (spec.chartType === "ranked" && !isRowsMode(spec)) {
+    return <ResultRanked spec={spec} rows={primary.data.rows} />;
   }
   return <ResultTable dataset={dataset} spec={spec} rows={primary.data.rows} />;
 }
