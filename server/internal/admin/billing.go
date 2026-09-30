@@ -392,6 +392,13 @@ func (s *Service) SetStripeSubscription(ctx context.Context, payload *gen.SetStr
 	if err := queries.AdminAcquireStripeSubscriptionLock(ctx, state.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock Stripe subscription").LogError(ctx, s.logger)
 	}
+	// The advisory lock only serializes database assignments. Re-check the
+	// live Stripe subscription after acquiring it so a deletion in the
+	// meantime is not recorded.
+	organization, state, err = s.verifiedStripeSubscription(ctx, organization.ID, state.ID)
+	if err != nil {
+		return nil, err
+	}
 	_, err = queries.AdminSetStripeSubscription(ctx, repo.AdminSetStripeSubscriptionParams{
 		StripeSubscriptionID:     state.ID,
 		StripeBillingCycleAnchor: conv.ToPGTimestamptz(state.BillingCycleAnchor.UTC()),

@@ -82,6 +82,7 @@ type fakeBillingOperations struct {
 	subscriptionByID       *stripeclient.SubscriptionState
 	subscriptionCustomerID string
 	subscriptionErr        error
+	liveSubscriptionErr    error
 	subscriptionLookups    []string
 }
 
@@ -166,6 +167,9 @@ func (f *fakeBillingOperations) GetStripeSubscriptionByID(_ context.Context, sub
 	f.subscriptionLookups = append(f.subscriptionLookups, subscriptionID)
 	if f.subscriptionErr != nil {
 		return nil, f.subscriptionErr
+	}
+	if f.liveSubscriptionErr != nil && len(f.subscriptionLookups) > 1 {
+		return nil, f.liveSubscriptionErr
 	}
 	if f.subscriptionByID != nil {
 		return f.subscriptionByID, nil

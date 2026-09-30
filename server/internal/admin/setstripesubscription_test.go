@@ -102,6 +102,7 @@ func TestSetStripeSubscription_RecordsSubscriptionAndAnchorWithoutAuditEvent(t *
 	countAfter, err := audittest.AuditLogCount(ctx, conn)
 	require.NoError(t, err)
 	require.Equal(t, countBefore, countAfter)
+	require.Equal(t, 2, fake.subscriptionLookupCount())
 }
 
 func TestSetStripeSubscription_RejectsCustomerMismatchWithoutWriting(t *testing.T) {
@@ -273,7 +274,26 @@ func TestSetStripeSubscription_RejectsRetryAfterSuccess(t *testing.T) {
 		OrganizationID: "org_sub_retry", StripeSubscriptionID: "sub_retry",
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
-	require.Equal(t, 1, fake.subscriptionLookupCount())
+	require.Equal(t, 2, fake.subscriptionLookupCount())
+}
+
+func TestSetStripeSubscription_RejectsSubscriptionGoneAfterLock(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	fake := enableStripeCustomerLookup(svc)
+	anchor := time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC)
+	fake.subscriptionByID = subscriptionFor("cus_gone", "sub_gone", anchor)
+	fake.liveSubscriptionErr = oops.E(oops.CodeNotFound, stripeclient.ErrSubscriptionNotFound, "Stripe subscription not found")
+	seedPaygCustomer(t, ctx, conn, "org_sub_gone", "sub-gone", "cus_gone")
+
+	_, err := svc.SetStripeSubscription(ctx, &gen.SetStripeSubscriptionPayload{
+		OrganizationID: "org_sub_gone", StripeSubscriptionID: "sub_gone",
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.Equal(t, 2, fake.subscriptionLookupCount())
+	metadata, err := usagerepo.New(conn).GetBillingMetadata(ctx, "org_sub_gone")
+	require.NoError(t, err)
+	require.False(t, metadata.StripeSubscriptionID.Valid)
 }
 
 func TestSetStripeSubscription_ConcurrentAssignmentsOnlyOneSucceeds(t *testing.T) {
