@@ -322,3 +322,15 @@ func TestFake_SetBearerOnly(t *testing.T) {
 	require.False(t, v.DPoPBound)
 	require.False(t, v.ExpiresAt.IsZero())
 }
+
+func TestClient_ClientSecretBasic_LatchesDPoPAfterTokenExpiry(t *testing.T) {
+	t.Parallel()
+	tc := newTestClient(t, testenv.NewTracerProvider(t), testenv.NewLogger(t), basicTestConfig("stub-secret"))
+	tc.stub.setApps(stubApps(1))
+	require.Len(t, listApps(t, tc), 1)
+	tc.clock.advance(2 * time.Hour)
+	tc.stub.setTokenType("Bearer")
+	_, err := tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0, MaxPages: 0})
+	require.ErrorContains(t, err, "not accepted for client_secret_basic")
+	require.Len(t, tc.stub.recordedResourceRequests(), 1, "downgraded token must never reach the resource")
+}

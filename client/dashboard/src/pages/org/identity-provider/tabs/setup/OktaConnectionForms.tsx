@@ -5,11 +5,13 @@ import { toast } from "sonner";
 import { ApiErrorAlert } from "@/components/api-error-alert";
 import { Button } from "@/components/ui/Button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Input } from "@/components/ui/Input";
 import { SettingsSection } from "@/components/page-templates";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
 import { useCreateIdentityProviderConnectionMutation } from "@gram/client/react-query/createIdentityProviderConnection.js";
 import { useRecordIdentityProviderConnectionAgentMutation } from "@gram/client/react-query/recordIdentityProviderConnectionAgent.js";
+import { useReplaceIdentityProviderConnectionClientSecretMutation } from "@gram/client/react-query/replaceIdentityProviderConnectionClientSecret.js";
 import { useSubmitIdentityProviderConnectionClientIdMutation } from "@gram/client/react-query/submitIdentityProviderConnectionClientId.js";
 
 import {
@@ -27,6 +29,9 @@ import {
 export function CreateConnectionForm(): JSX.Element {
   const queryClient = useQueryClient();
   const [orgUrl, setOrgUrl] = useState("");
+  const [listingMode, setListingMode] = useState<"custom_app" | "oin">(
+    "custom_app",
+  );
   const create = useCreateIdentityProviderConnectionMutation({
     onSuccess: () => {
       toast.success("Okta connection created");
@@ -44,7 +49,7 @@ export function CreateConnectionForm(): JSX.Element {
       request: {
         createIdentityProviderConnectionRequestBody: {
           orgUrl: normalizedOrgUrl,
-          listingMode: "custom_app",
+          listingMode,
         },
       },
     });
@@ -64,6 +69,32 @@ export function CreateConnectionForm(): JSX.Element {
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
+          <Field className="max-w-xl">
+            <FieldLabel id="okta-installation-label">
+              Installation method
+            </FieldLabel>
+            <RadioGroup
+              aria-labelledby="okta-installation-label"
+              value={listingMode}
+              onValueChange={(value) =>
+                setListingMode(value === "oin" ? "oin" : "custom_app")
+              }
+              disabled={create.isPending}
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem id="okta-custom-app" value="custom_app" />
+                <FieldLabel htmlFor="okta-custom-app">
+                  Custom API Services app (private key)
+                </FieldLabel>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem id="okta-oin" value="oin" />
+                <FieldLabel htmlFor="okta-oin">
+                  Okta Integration Network (client secret)
+                </FieldLabel>
+              </div>
+            </RadioGroup>
+          </Field>
           <Field className="max-w-xl">
             <FieldLabel htmlFor="okta-org-url">
               Okta organization URL
@@ -125,6 +156,50 @@ export function CreateConnectionForm(): JSX.Element {
   );
 }
 
+// Older OIN connections still authenticate with a private key.
+export function usesClientSecret(
+  connection: OktaIdentityProviderConnection,
+): boolean {
+  return connection.listingMode === "oin" && !connection.jwksUrl;
+}
+
+function ClientSecretField({
+  value,
+  onChange,
+  disabled,
+  onEnter,
+  replacement = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  onEnter: () => void;
+  replacement?: boolean;
+}): JSX.Element {
+  return (
+    <Field className="max-w-xl">
+      <FieldLabel htmlFor="okta-client-secret">
+        {replacement ? "New client secret" : "Client secret"}
+      </FieldLabel>
+      <Input
+        id="okta-client-secret"
+        type="password"
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        onEnter={onEnter}
+        autoComplete="new-password"
+        spellCheck={false}
+        aria-describedby="okta-client-secret-help"
+      />
+      <FieldDescription id="okta-client-secret-help">
+        Copy the client secret from the Speakeasy integration in Okta. It is
+        encrypted when saved and never displayed again.
+      </FieldDescription>
+    </Field>
+  );
+}
+
 export function ClientIdForm({
   connection,
 }: {
@@ -132,13 +207,17 @@ export function ClientIdForm({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const secretMode = usesClientSecret(connection);
   const submit = useSubmitIdentityProviderConnectionClientIdMutation({
+    gcTime: 0,
     onSuccess: (updated) => {
+      setClientSecret("");
       if (updated.status === "verified") {
         toast.success("Connection verified");
       } else {
         toast.warning(
-          "Client ID saved. Review the verification results below.",
+          "Credentials saved. Review the verification results below.",
         );
       }
       void invalidateIdentityProviderQueries(queryClient).then(
@@ -151,13 +230,19 @@ export function ClientIdForm({
   const validClientId = /^0oa[A-Za-z0-9]{17,}$/.test(trimmed);
   const showClientIdError = trimmed !== "" && !validClientId;
   const submitClientId = () => {
-    if (!validClientId || submit.isPending) return;
+    if (
+      !validClientId ||
+      (secretMode && !clientSecret.trim()) ||
+      submit.isPending
+    )
+      return;
     submit.mutate({
       security: SESSION_SECURITY,
       request: {
         submitIdentityProviderConnectionClientIDRequestBody: {
           id: connection.id,
           clientId: trimmed,
+          ...(secretMode ? { clientSecret } : {}),
         },
       },
     });
@@ -186,9 +271,10 @@ export function ClientIdForm({
           spellCheck={false}
         />
         <FieldDescription id="okta-client-id-help">
-          Use the API Services app&apos;s client ID, not the single sign-on
-          (SSO) app or AI agent ID. You can save this ID only once. To change
-          it, revoke this connection and connect again.
+          Use the {secretMode ? "Speakeasy integration" : "API Services app"}
+          &apos;s client ID, not the single sign-on (SSO) app or AI agent ID.
+          You can save this ID only once. To change it, revoke this connection
+          and connect again.
         </FieldDescription>
         {showClientIdError && (
           <p
@@ -201,13 +287,102 @@ export function ClientIdForm({
           </p>
         )}
       </Field>
-      <ApiErrorAlert error={submit.error} />
+      {secretMode && (
+        <ClientSecretField
+          value={clientSecret}
+          onChange={setClientSecret}
+          disabled={submit.isPending}
+          onEnter={submitClientId}
+        />
+      )}
+      {secretMode && submit.error && (
+        <p role="alert" className="text-destructive text-sm">
+          Unable to save credentials. Check the Okta app settings and try again.
+        </p>
+      )}
+      {!secretMode && <ApiErrorAlert error={submit.error} />}
       <div>
         <Button
-          disabled={!validClientId || submit.isPending}
+          disabled={
+            !validClientId ||
+            (secretMode && !clientSecret.trim()) ||
+            submit.isPending
+          }
           onClick={submitClientId}
         >
           {submit.isPending ? "Verifying..." : "Submit and verify"}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+export function ReplaceClientSecretForm({
+  connection,
+}: {
+  connection: OktaIdentityProviderConnection;
+}): JSX.Element | null {
+  const queryClient = useQueryClient();
+  const [clientSecret, setClientSecret] = useState("");
+  const replace = useReplaceIdentityProviderConnectionClientSecretMutation({
+    gcTime: 0,
+    onSuccess: (updated) => {
+      setClientSecret("");
+      if (updated.status === "verified") {
+        toast.success("Client secret replaced and connection verified");
+      } else {
+        toast.warning(
+          "Client secret replaced. Review the verification results.",
+        );
+      }
+      void invalidateIdentityProviderQueries(queryClient);
+    },
+    onError: inlineError,
+  });
+  if (
+    !usesClientSecret(connection) ||
+    !connection.clientIdSubmitted ||
+    connection.status === "revoked"
+  )
+    return null;
+  const replaceSecret = () => {
+    if (!clientSecret.trim() || replace.isPending) return;
+    replace.mutate({
+      security: SESSION_SECURITY,
+      request: {
+        replaceIdentityProviderConnectionClientSecretRequestBody: {
+          id: connection.id,
+          clientSecret,
+        },
+      },
+    });
+  };
+  return (
+    <section
+      aria-label="Replace Okta client secret"
+      className="flex max-w-3xl flex-col gap-4"
+    >
+      <ClientSecretField
+        replacement
+        value={clientSecret}
+        onChange={setClientSecret}
+        disabled={replace.isPending}
+        onEnter={replaceSecret}
+      />
+      {replace.error && (
+        <p role="alert" className="text-destructive text-sm">
+          Unable to replace the client secret. Check the Okta app settings and
+          try again.
+        </p>
+      )}
+      <div>
+        <Button
+          disabled={!clientSecret.trim() || replace.isPending}
+          onClick={replaceSecret}
+        >
+          {replace.isPending
+            ? "Verifying..."
+            : "Replace client secret and verify"}
         </Button>
       </div>
     </section>

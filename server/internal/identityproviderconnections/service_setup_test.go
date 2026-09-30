@@ -178,6 +178,11 @@ func newTestServiceWithFlags(t *testing.T, features feature.Provider) (context.C
 
 func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxConns int32) (context.Context, *serviceInstance) {
 	t.Helper()
+	return newTestServiceWithClientFactory(t, features, maxConns, nil)
+}
+
+func newTestServiceWithClientFactory(t *testing.T, features feature.Provider, maxConns int32, wrap func(okta.ClientFactory) okta.ClientFactory) (context.Context, *serviceInstance) {
+	t.Helper()
 
 	ctx, ti := newTestDB(t)
 	if maxConns > 0 {
@@ -218,6 +223,10 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 	discovery := newFakeDiscovery()
 	fakes := okta.NewFakeFactory(oktaFixtures())
+	var clients okta.ClientFactory = fakes
+	if wrap != nil {
+		clients = wrap(clients)
+	}
 	syncTrigger := &fakeSyncTrigger{}
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
@@ -234,7 +243,7 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 			audit.NewLogger(),
 			features,
 			provisioner,
-			fakes,
+			clients,
 			enc,
 			discovery.discover,
 			ratelimit.NewRedisStore(redisClient),

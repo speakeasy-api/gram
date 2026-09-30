@@ -259,10 +259,12 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- Secret bindings are sticky, but private-key checklist values describe the
+-- current verification observation.
 -- name: UpdateOktaIdentityProviderConnectionVerification :one
 UPDATE okta_identity_provider_connections
 SET ownership_claimed = ownership_claimed OR @ownership_claimed::boolean,
-    dpop_required = @dpop_required,
+    dpop_required = CASE WHEN @preserve_dpop::boolean THEN dpop_required OR @dpop_required::boolean ELSE @dpop_required::boolean END,
     granted_scopes = @granted_scopes,
     updated_at = clock_timestamp()
 WHERE identity_provider_connection_id = @identity_provider_connection_id
@@ -378,3 +380,30 @@ SET token_endpoint_auth_method = @token_endpoint_auth_method
 WHERE id = @id
   AND organization_id = @organization_id
   AND project_id IS NULL;
+
+-- Token acquisition holds the connection lock before this lock; revoking a
+-- secret updates this same row, so it cannot commit during an exchange.
+-- name: LockOktaTokenCredential :one
+SELECT client_secret_encrypted, client_id
+FROM remote_session_clients
+WHERE id = @id AND organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND project_id IS NULL AND deleted IS FALSE
+FOR UPDATE;
+
+-- Secret binding observations are monotonic, including worker observations.
+-- Match the observed client identity so a rolled-back initial submission cannot
+-- pin the placeholder (or a later submission of a different client).
+-- name: PinOktaDPoP :exec
+UPDATE okta_identity_provider_connections AS o
+SET dpop_required = true
+WHERE o.identity_provider_connection_id = @identity_provider_connection_id
+  AND o.organization_id = @organization_id AND o.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = o.remote_session_client_id
+      AND c.identity_provider_connection_id = o.identity_provider_connection_id
+      AND c.organization_id = o.organization_id AND c.project_id IS NULL
+      AND c.deleted IS FALSE AND c.token_endpoint_auth_method = 'client_secret_basic'
+      AND c.client_id = @client_id
+  );

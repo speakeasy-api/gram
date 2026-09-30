@@ -16,7 +16,11 @@ import { STEP_AFFORDANCES } from "./checklistAffordances";
 import { ConnectionChecklist } from "./ConnectionChecklist";
 import { ConnectionSetupProgress } from "./ConnectionSetupProgress";
 import { ConnectionFacts, ConnectionScopes } from "./OktaConnectionDetails";
-import { CreateConnectionForm } from "./OktaConnectionForms";
+import {
+  CreateConnectionForm,
+  ReplaceClientSecretForm,
+  usesClientSecret,
+} from "./OktaConnectionForms";
 import { RevokeConnectionButton } from "./RevokeConnectionButton";
 import {
   CONNECTION_STATUS,
@@ -184,7 +188,7 @@ function ConnectionCard({
                   ? "Next: fix the connection issues"
                   : "Next: verify your connection"
               }
-              body={`Check the app's permissions (scopes), admin role, and public key settings in Okta, then verify access.${
+              body={`Check the app's permissions (scopes), admin role, and ${usesClientSecret(connection) ? "client secret" : "public key"} settings in Okta, then verify access.${
                 step === "repair"
                   ? " Application sync is paused until verification passes."
                   : ""
@@ -204,6 +208,10 @@ function ConnectionCard({
         </SettingsSection.Body>
         <SettingsSection.Body className="border-t">
           <ConnectionScopes connection={connection} />
+          <ReplaceClientSecretForm
+            key={connection.id}
+            connection={connection}
+          />
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>

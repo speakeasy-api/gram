@@ -815,6 +815,35 @@ func (q *Queries) LockOktaIdentityProviderConnection(ctx context.Context, arg Lo
 	return i, err
 }
 
+const lockOktaTokenCredential = `-- name: LockOktaTokenCredential :one
+SELECT client_secret_encrypted, client_id
+FROM remote_session_clients
+WHERE id = $1 AND organization_id = $2
+  AND identity_provider_connection_id = $3
+  AND project_id IS NULL AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockOktaTokenCredentialParams struct {
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
+type LockOktaTokenCredentialRow struct {
+	ClientSecretEncrypted pgtype.Text
+	ClientID              string
+}
+
+// Token acquisition holds the connection lock before this lock; revoking a
+// secret updates this same row, so it cannot commit during an exchange.
+func (q *Queries) LockOktaTokenCredential(ctx context.Context, arg LockOktaTokenCredentialParams) (LockOktaTokenCredentialRow, error) {
+	row := q.db.QueryRow(ctx, lockOktaTokenCredential, arg.ID, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var i LockOktaTokenCredentialRow
+	err := row.Scan(&i.ClientSecretEncrypted, &i.ClientID)
+	return i, err
+}
+
 const managedClientIDInUse = `-- name: ManagedClientIDInUse :one
 SELECT EXISTS (
   SELECT 1
@@ -900,6 +929,35 @@ func (q *Queries) ObserveRotationPublication(ctx context.Context, arg ObserveRot
 	var updated_at pgtype.Timestamptz
 	err := row.Scan(&updated_at)
 	return updated_at, err
+}
+
+const pinOktaDPoP = `-- name: PinOktaDPoP :exec
+UPDATE okta_identity_provider_connections AS o
+SET dpop_required = true
+WHERE o.identity_provider_connection_id = $1
+  AND o.organization_id = $2 AND o.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients AS c
+    WHERE c.id = o.remote_session_client_id
+      AND c.identity_provider_connection_id = o.identity_provider_connection_id
+      AND c.organization_id = o.organization_id AND c.project_id IS NULL
+      AND c.deleted IS FALSE AND c.token_endpoint_auth_method = 'client_secret_basic'
+      AND c.client_id = $3
+  )
+`
+
+type PinOktaDPoPParams struct {
+	IdentityProviderConnectionID uuid.UUID
+	OrganizationID               string
+	ClientID                     string
+}
+
+// Secret binding observations are monotonic, including worker observations.
+// Match the observed client identity so a rolled-back initial submission cannot
+// pin the placeholder (or a later submission of a different client).
+func (q *Queries) PinOktaDPoP(ctx context.Context, arg PinOktaDPoPParams) error {
+	_, err := q.db.Exec(ctx, pinOktaDPoP, arg.IdentityProviderConnectionID, arg.OrganizationID, arg.ClientID)
+	return err
 }
 
 const recordIdentityProviderConnectionVerificationFailure = `-- name: RecordIdentityProviderConnectionVerificationFailure :one
@@ -1363,26 +1421,30 @@ func (q *Queries) UpdateOktaIdentityProviderConnectionAgent(ctx context.Context,
 const updateOktaIdentityProviderConnectionVerification = `-- name: UpdateOktaIdentityProviderConnectionVerification :one
 UPDATE okta_identity_provider_connections
 SET ownership_claimed = ownership_claimed OR $1::boolean,
-    dpop_required = $2,
-    granted_scopes = $3,
+    dpop_required = CASE WHEN $2::boolean THEN dpop_required OR $3::boolean ELSE $3::boolean END,
+    granted_scopes = $4,
     updated_at = clock_timestamp()
-WHERE identity_provider_connection_id = $4
-  AND organization_id = $5
+WHERE identity_provider_connection_id = $5
+  AND organization_id = $6
   AND deleted IS FALSE
 RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOktaIdentityProviderConnectionVerificationParams struct {
 	OwnershipClaimed             bool
+	PreserveDpop                 bool
 	DpopRequired                 bool
 	GrantedScopes                []string
 	IdentityProviderConnectionID uuid.UUID
 	OrganizationID               string
 }
 
+// Secret bindings are sticky, but private-key checklist values describe the
+// current verification observation.
 func (q *Queries) UpdateOktaIdentityProviderConnectionVerification(ctx context.Context, arg UpdateOktaIdentityProviderConnectionVerificationParams) (OktaIdentityProviderConnection, error) {
 	row := q.db.QueryRow(ctx, updateOktaIdentityProviderConnectionVerification,
 		arg.OwnershipClaimed,
+		arg.PreserveDpop,
 		arg.DpopRequired,
 		arg.GrantedScopes,
 		arg.IdentityProviderConnectionID,

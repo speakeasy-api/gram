@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"weak"
@@ -43,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
+	"github.com/speakeasy-api/gram/server/internal/oktacredentials"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -820,7 +822,9 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	// The factory memoizes per client row; drop the placeholder configuration.
 	s.oktaClients.Forget(managed.ClientRowID)
 	current := connectionRows{Connection: before.Connection, Okta: before.Okta, Managed: managed}
-	outcome, err := s.runVerification(ctx, logger, current)
+	credentials, finishCredentials := s.verificationCredentials(ctx, logger, dbtx, current)
+	defer finishCredentials()
+	outcome, err := s.runVerification(ctx, logger, credentials, current)
 	if err != nil {
 		// The client id is only persisted once Okta answered for it.
 		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
@@ -904,7 +908,9 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 
 	s.oktaClients.Forget(managed.ClientRowID)
 	current := connectionRows{Connection: before.Connection, Okta: before.Okta, Managed: managed}
-	outcome, err := s.runVerification(ctx, logger, current)
+	credentials, finishCredentials := s.verificationCredentials(ctx, logger, dbtx, current)
+	defer finishCredentials()
+	outcome, err := s.runVerification(ctx, logger, credentials, current)
 	if err != nil {
 		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
 			logger.ErrorContext(ctx, "failed to roll back rejected client secret replacement", attr.SlogError(rollbackErr))
@@ -959,7 +965,9 @@ func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.
 		return nil, oops.E(oops.CodeFailedPrecondition, nil, "submit the Okta client id before verifying")
 	}
 
-	outcome, err := s.runVerification(ctx, logger, *before)
+	credentials, finishCredentials := s.verificationCredentials(ctx, logger, dbtx, *before)
+	defer finishCredentials()
+	outcome, err := s.runVerification(ctx, logger, credentials, *before)
 	if err != nil {
 		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
 			logger.ErrorContext(ctx, "failed to release connection lock after verification failure", attr.SlogError(rollbackErr))
@@ -982,8 +990,33 @@ func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.
 	return s.view(ctx, logger, s.db, *after), nil
 }
 
+// verificationCredentials uses the caller's transaction, including an uncommitted
+// replacement. Binding evidence must survive a later rollback (for example, a
+// failed permission probe). Release that transaction before persisting the pin
+// independently, never while holding its connection lock. The pin write matches
+// the observed client ID, so rolled-back initial submissions cannot pin a
+// placeholder or a later, different client.
+func (s *Service) verificationCredentials(ctx context.Context, logger *slog.Logger, tx pgx.Tx, rows connectionRows) (okta.CredentialProvider, func()) {
+	if rows.authMethod() != remotesessions.TokenEndpointAuthMethodBasic {
+		return nil, func() {}
+	}
+	observed := &atomic.Bool{}
+	provider := oktacredentials.Provider{DB: nil, Tx: tx, ConnectionID: rows.Connection.ID, ObservedDPoP: observed}
+	return provider, func() {
+		if !observed.Load() {
+			return
+		}
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanupCtx)
+		if err := repo.New(s.db).PinOktaDPoP(cleanupCtx, repo.PinOktaDPoPParams{ClientID: rows.Managed.ClientID, IdentityProviderConnectionID: rows.Connection.ID, OrganizationID: rows.Connection.OrganizationID}); err != nil {
+			logger.ErrorContext(cleanupCtx, "failed to preserve okta token binding observation", attr.SlogError(err))
+		}
+	}
+}
+
 // runVerification verifies the connection's current credential; any failure forgets the memoized client.
-func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, rows connectionRows) (*verificationOutcome, error) {
+func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, credentials okta.CredentialProvider, rows connectionRows) (*verificationOutcome, error) {
 	// A client-secret connection once seen DPoP-bound must stay bound.
 	dpopPinned := rows.Managed.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic && rows.Okta.DpopRequired
 	client, err := s.oktaClients.Client(okta.Config{
@@ -995,6 +1028,7 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, rows
 		AuthMethod:            rows.Managed.AuthMethod,
 		JSONWebKeySetID:       rows.Managed.JSONWebKeySetID.UUID,
 		ClientSecretEncrypted: rows.Managed.ClientSecretEncrypted,
+		Credentials:           credentials,
 		RequireDPoP:           dpopPinned,
 		MaxPages:              verifyMaxPages,
 	})
@@ -1105,6 +1139,7 @@ func (s *Service) persistVerification(ctx context.Context, logger *slog.Logger, 
 	oktaRow, err := q.UpdateOktaIdentityProviderConnectionVerification(ctx, repo.UpdateOktaIdentityProviderConnectionVerificationParams{
 		OwnershipClaimed:             outcome.CredentialProven,
 		DpopRequired:                 dpopRequired,
+		PreserveDpop:                 rows.authMethod() == remotesessions.TokenEndpointAuthMethodBasic,
 		GrantedScopes:                outcome.Granted,
 		IdentityProviderConnectionID: rows.Connection.ID,
 		OrganizationID:               rows.Connection.OrganizationID,
