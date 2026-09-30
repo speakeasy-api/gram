@@ -493,9 +493,10 @@ describe("NetworkAccessSection", () => {
   });
 
   it.each(["base", "payg"] as const)(
-    "blocks private choices for %s even with staff entitlement",
+    "shows the Enterprise upsell to %s without staff entitlement",
     (tier) => {
       testState.productTier = tier;
+      testState.entitled = false;
       render(
         <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
       );
@@ -520,6 +521,40 @@ describe("NetworkAccessSection", () => {
       ).toBe("");
     },
   );
+
+  it.each(["base", "payg"] as const)(
+    "allows private choices for %s when staff enabled Tailscale",
+    (tier) => {
+      testState.productTier = tier;
+      render(
+        <NetworkAccessSection
+          mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+          endpoints={endpoints}
+        />,
+      );
+      expect(screen.queryByText(/available on the Enterprise plan/)).toBeNull();
+      expect(screen.queryByText(/no longer enabled/)).toBeNull();
+      expect(
+        screen.getByText("Changes apply to new connections."),
+      ).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole("combobox", { name: "Network access mode" }),
+      );
+      expect(
+        screen
+          .getByRole("option", { name: /Public and private/ })
+          .hasAttribute("data-disabled"),
+      ).toBe(false);
+    },
+  );
+
+  it("points Enterprise without staff entitlement to support", () => {
+    testState.entitled = false;
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+    );
+    expect(screen.getByText(/Contact support to enable it/)).toBeTruthy();
+  });
 
   it("hides public-only network access for a non-admin without rollout", () => {
     testState.orgAdmin = false;

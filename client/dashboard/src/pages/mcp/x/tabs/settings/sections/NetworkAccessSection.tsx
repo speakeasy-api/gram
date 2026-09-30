@@ -191,7 +191,7 @@ function NetworkAccessSectionContent({
   });
   const domains = domainsResult.data?.domains;
 
-  const entitled = enterprise && features.data?.networkIngressEnabled === true;
+  const entitled = features.data?.networkIngressEnabled === true;
   const ingressOnline =
     ingress?.enabled === true && ingress.status === "online";
   const eligibleEndpoints = useMemo(
@@ -484,6 +484,8 @@ function NetworkAccessSectionContent({
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
             {!enterprise &&
+            featureQuerySuccessful &&
+            !entitled &&
             currentMode === McpServerNetworkAccessMode.PublicOnly ? (
               <>
                 Tailscale private access is available on the Enterprise plan.{" "}
@@ -637,7 +639,7 @@ function networkAccessHint({
   }
   if (!entitled) {
     return currentMode === McpServerNetworkAccessMode.PublicOnly
-      ? "Private network access is not enabled for this organization."
+      ? "Private network access is not enabled for this organization. Contact support to enable it."
       : "Private network access is no longer enabled. You can still switch to public only.";
   }
   if (!ingressOnline) {
