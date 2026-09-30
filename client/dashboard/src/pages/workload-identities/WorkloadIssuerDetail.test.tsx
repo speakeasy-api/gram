@@ -24,15 +24,18 @@ vi.mock("@/components/page-templates", async (importOriginal) => ({
     description,
     belowHeader,
     primaryAction,
+    stage,
   }: {
     children: ReactNode;
     title: string;
     description?: string;
     belowHeader?: ReactNode;
     primaryAction?: ReactNode;
+    stage?: string;
   }) => (
     <>
       <h1>{title}</h1>
+      {stage && <span data-testid="stage">{stage}</span>}
       {description && <p data-testid="description">{description}</p>}
       <div data-testid="actions">{primaryAction}</div>
       {belowHeader}
@@ -210,6 +213,12 @@ function visibleMachines(): string[] {
     .queryAllByText(/^machine-\d+$/)
     .map((node) => node.textContent ?? "");
 }
+
+it("marks a platform's page as a preview", () => {
+  renderPage();
+
+  expect(screen.getByTestId("stage").textContent).toBe("preview");
+});
 
 it("keeps the issuer URL on its own labeled line, apart from the description", () => {
   renderPage();
