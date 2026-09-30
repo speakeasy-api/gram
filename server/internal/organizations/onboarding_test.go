@@ -348,3 +348,39 @@ func TestOnboardingStorageIsOrganizationScoped(t *testing.T) {
 	require.Len(t, selection, 1)
 	require.False(t, selection[0].OnboardingPreset.Valid)
 }
+
+func TestOnboardingAuditsCardsNotGroups(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestOrganizationsService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	before, err := organizations.LoadOnboardingConfiguration(ctx, ti.conn, ac.ActiveOrganizationID)
+	require.NoError(t, err)
+	cards := make([]string, 0, len(before.Tasks))
+	groups := 0
+	for _, task := range before.Tasks {
+		if task.Hidden {
+			continue
+		}
+		if task.Group {
+			groups++
+			continue
+		}
+		cards = append(cards, task.Key)
+	}
+	require.Positive(t, groups, "a group is visible while one of its cards is")
+	// Hiding every card flips the groups too; only the cards are audited.
+	_, err = organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, []string{}, nil, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
+	require.NoError(t, err)
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationSetupTaskUpdated)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(cards)), count)
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationOnboardingUpdated)
+	require.NoError(t, err)
+	var snapshotBefore, snapshotAfter audit.OrganizationOnboardingSnapshot
+	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &snapshotBefore))
+	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &snapshotAfter))
+	require.ElementsMatch(t, cards, snapshotBefore.VisibleTaskKeys)
+	require.NotContains(t, snapshotBefore.VisibleTaskKeys, "agent-observability")
+	require.Empty(t, snapshotAfter.VisibleTaskKeys)
+}

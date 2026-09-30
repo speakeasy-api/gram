@@ -180,6 +180,10 @@ func SaveOnboardingConfigurationTx(ctx context.Context, tx pgx.Tx, logger *audit
 		return nil, err
 	}
 	for _, task := range beforeTasks {
+		// A group's visibility follows its cards, so only the cards are audited.
+		if task.Group {
+			continue
+		}
 		next := setupTaskByKey(afterTasks, task.Key)
 		if task.Hidden == next.Hidden {
 			continue
@@ -214,9 +218,11 @@ func SaveOnboardingConfigurationTx(ctx context.Context, tx pgx.Tx, logger *audit
 func onboardingSnapshot(config *gen.AdminOnboardingConfiguration) *audit.OrganizationOnboardingSnapshot {
 	keys := make([]string, 0, len(config.Tasks))
 	for _, task := range config.Tasks {
-		if !task.Hidden {
-			keys = append(keys, task.Key)
+		// Groups are derived from their cards, so the snapshot lists cards only.
+		if task.Group || task.Hidden {
+			continue
 		}
+		keys = append(keys, task.Key)
 	}
 	return &audit.OrganizationOnboardingSnapshot{Preset: config.Preset, VisibleTaskKeys: keys}
 }
