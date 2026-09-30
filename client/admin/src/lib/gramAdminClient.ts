@@ -28,6 +28,7 @@ import type { AdminGetMeterUsageRequest } from "@gram/admin-client/models/operat
 import type { AdminSpendBreakdownResponse } from "@gram/admin-client/models/components/adminspendbreakdownresponse";
 import { buildAdminGetSpendBreakdownQuery } from "@gram/admin-client/react-query/adminGetSpendBreakdown.core";
 import type { AdminGetSpendBreakdownRequest } from "@gram/admin-client/models/operations/admingetspendbreakdown";
+import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react-query/adminDescribeMcpServerHealth.core";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import {
@@ -199,6 +200,59 @@ export function organizationSpendBreakdownQuery(
   );
   return queryOptions({
     ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: 30_000,
+  });
+}
+
+// Keyed on the route's own address for the organization, id or slug as typed,
+// the way `projectQuery` is: the breadcrumb builds this key from the route
+// alone and cannot know the resolved id. A missing window is the default one,
+// so the bar and the page agree on the key either way.
+export function mcpServerHealthKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+  mcpServerId: string,
+  windowDays: 14 | 30 | 90 = 14,
+): readonly [string, string, string, string, number] {
+  return [
+    "gram-admin-mcp-server-health",
+    organizationIdOrSlug,
+    projectId,
+    mcpServerId,
+    windowDays,
+  ] as const;
+}
+
+type McpServerHealthRequest = {
+  organizationId: string;
+  projectId: string;
+  mcpServerId: string;
+  windowDays: 14 | 30 | 90;
+};
+
+export function mcpServerHealthQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+): ReturnType<typeof createMcpServerHealthQuery> {
+  return createMcpServerHealthQuery(organizationIdOrSlug, request);
+}
+
+function createMcpServerHealthQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+) {
+  const generated = buildAdminDescribeMcpServerHealthQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    queryKey: mcpServerHealthKey(
+      organizationIdOrSlug,
+      request.projectId,
+      request.mcpServerId,
+      request.windowDays,
+    ),
     queryFn: (context) => redirecting(generated.queryFn(context)),
     staleTime: 30_000,
   });

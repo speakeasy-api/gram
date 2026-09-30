@@ -140,7 +140,14 @@ describe("McpServers", () => {
     await screen.findByRole("cell", { name: /Linear/ });
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Name", "Server URL", "Visibility", "Source", "Created"]);
+    ).toEqual([
+      "Name",
+      "Server URL",
+      "Visibility",
+      "Source",
+      "Created",
+      "Open",
+    ]);
 
     const [, linear, legacy] = screen.getAllByRole("row");
     expect(
@@ -153,6 +160,7 @@ describe("McpServers", () => {
       "Public",
       "Remote",
       shortDate(LINEAR.created_at),
+      "",
     ]);
     // No address is a dash, not an empty copy button.
     expect(
@@ -165,6 +173,7 @@ describe("McpServers", () => {
       "Private",
       "Legacy toolset",
       shortDate(LEGACY.created_at),
+      "",
     ]);
     expect(screen.getByText("2 MCP servers")).toBeTruthy();
   });
@@ -186,6 +195,45 @@ describe("McpServers", () => {
     expect(
       screen.getByRole("button", { name: "Linear server URL copied" }),
     ).toBeTruthy();
+  });
+
+  it("links each server to its health page in the selected project", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/mcp-servers?project=${OLDEST.id}`,
+    });
+
+    const link = await screen.findByRole("link", { name: "Linear" });
+    expect(link.getAttribute("href")).toBe(
+      `/organizations/${ORG.slug}/mcp-servers/${LINEAR.id}?project=${OLDEST.id}`,
+    );
+
+    // Anywhere on the row goes there too.
+    fireEvent.click(screen.getByRole("cell", { name: "Remote" }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/organizations/${ORG.slug}/mcp-servers/${LINEAR.id}`,
+      ),
+    );
+    expect(router.state.location.search).toEqual({ project: OLDEST.id });
+  });
+
+  it("copies a server's URL without leaving the list", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/mcp-servers?project=${OLDEST.id}`,
+    });
+
+    const copy = await screen.findByRole("button", {
+      name: "Copy Linear server URL",
+    });
+    await act(async () => {
+      fireEvent.click(copy);
+      await Promise.resolve();
+    });
+
+    expect(writeText).toHaveBeenCalledWith(LINEAR.url);
+    expect(router.state.location.pathname).toBe(
+      `/organizations/${ORG.slug}/mcp-servers`,
+    );
   });
 
   it("switches project from the picker and replaces the address", async () => {
