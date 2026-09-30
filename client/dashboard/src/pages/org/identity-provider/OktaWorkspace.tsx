@@ -120,11 +120,13 @@ export function OktaWorkspace(): JSX.Element {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           All identity providers
         </Link>
-        <Heading variant="h2">Okta</Heading>
         {connected && (
-          <Text muted>
-            Manage how your AI agents access company applications using Okta.
-          </Text>
+          <>
+            <Heading variant="h2">Okta</Heading>
+            <Text muted>
+              Manage how your AI agents access company applications using Okta.
+            </Text>
+          </>
         )}
       </div>
       {query.isPending ? (

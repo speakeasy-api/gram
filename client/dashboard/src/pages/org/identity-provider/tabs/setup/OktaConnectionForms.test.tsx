@@ -8,15 +8,12 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import {
-  ClientIdForm,
-  CreateConnectionForm,
-  ReplaceClientSecretForm,
-} from "./OktaConnectionForms";
+import { ClientIdForm, CreateConnectionForm } from "./OktaConnectionForms";
 import { makeConnection } from "./testFixtures";
 
 const mutation = vi.hoisted(() => ({
   mutate: vi.fn(),
+  reset: vi.fn(),
   isPending: false,
   error: undefined as Error | undefined,
   onSuccess: undefined as
@@ -30,17 +27,6 @@ vi.mock(
   "@gram/client/react-query/submitIdentityProviderConnectionClientId.js",
   () => ({
     useSubmitIdentityProviderConnectionClientIdMutation: (options: {
-      onSuccess: typeof mutation.onSuccess;
-    }) => {
-      mutation.onSuccess = options.onSuccess;
-      return mutation;
-    },
-  }),
-);
-vi.mock(
-  "@gram/client/react-query/replaceIdentityProviderConnectionClientSecret.js",
-  () => ({
-    useReplaceIdentityProviderConnectionClientSecretMutation: (options: {
       onSuccess: typeof mutation.onSuccess;
     }) => {
       mutation.onSuccess = options.onSuccess;
@@ -205,9 +191,15 @@ describe("OIN credentials", () => {
     const id = screen.getByLabelText("Client ID");
     const secret = screen.getByLabelText("Client secret") as HTMLInputElement;
     expect(secret.type).toBe("password");
+    expect(secret.autocomplete).toBe("new-password");
     fireEvent.change(id, { target: { value: "0oa00000000000000000" } });
     fireEvent.keyDown(id, { key: "Enter" });
     expect(mutation.mutate).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole("button", { name: "Submit and verify" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
     fireEvent.change(secret, { target: { value: "DEMO_CLIENT_SECRET" } });
     fireEvent.keyDown(secret, { key: "Enter" });
     expect(mutation.mutate).toHaveBeenCalledWith(
@@ -247,56 +239,5 @@ describe("OIN credentials", () => {
         },
       }),
     );
-  });
-
-  it("replaces a saved secret without displaying backend error details", () => {
-    const saved = { ...connection, clientIdSubmitted: true };
-    const { rerender } = render(
-      <ReplaceClientSecretForm connection={saved} />,
-      { wrapper: Wrapper },
-    );
-    const secret = screen.getByLabelText(
-      "New client secret",
-    ) as HTMLInputElement;
-    expect(secret.type).toBe("password");
-    fireEvent.keyDown(secret, { key: "Enter" });
-    expect(mutation.mutate).not.toHaveBeenCalled();
-    fireEvent.change(secret, { target: { value: "DEMO_REPLACEMENT_SECRET" } });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Replace client secret and verify" }),
-    );
-    expect(mutation.mutate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: {
-          replaceIdentityProviderConnectionClientSecretRequestBody: {
-            id: saved.id,
-            clientSecret: "DEMO_REPLACEMENT_SECRET",
-          },
-        },
-      }),
-    );
-    mutation.isPending = true;
-    mutation.error = new Error("DEMO_REPLACEMENT_SECRET");
-    rerender(<ReplaceClientSecretForm connection={saved} />);
-    expect(secret.disabled).toBe(true);
-    expect(screen.getByRole("alert").textContent).not.toContain(
-      "DEMO_REPLACEMENT_SECRET",
-    );
-    fireEvent.keyDown(secret, { key: "Enter" });
-    expect(mutation.mutate).toHaveBeenCalledTimes(1);
-    act(() => mutation.onSuccess?.(makeConnection({ status: "verified" })));
-    expect(secret.value).toBe("");
-  });
-
-  it.each([
-    makeConnection({ listingMode: "oin", clientIdSubmitted: true }),
-    makeConnection({ clientIdSubmitted: true }),
-    { ...connection, clientIdSubmitted: false },
-    { ...connection, clientIdSubmitted: true, status: "revoked" as const },
-  ])("does not offer replacement for ineligible connections (%#)", (value) => {
-    render(<ReplaceClientSecretForm connection={value} />, {
-      wrapper: Wrapper,
-    });
-    expect(screen.queryByLabelText("New client secret")).toBeNull();
   });
 });
