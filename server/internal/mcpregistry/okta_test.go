@@ -33,9 +33,11 @@ func TestParseOktaMapping(t *testing.T) {
 	}, mapping)
 	_, err = ParseOktaMapping(json.RawMessage(basicRecord))
 	require.ErrorIs(t, err, ErrNoOktaMapping)
-	_, err = ParseOktaMapping(json.RawMessage(`{"_meta":{"com.speakeasy.ai/okta":"nope"}}`))
-	require.Error(t, err)
-	require.NotErrorIs(t, err, ErrNoOktaMapping)
+	for _, raw := range []string{`{"_meta":{"com.speakeasy.ai/okta":"nope"}}`, `{"_meta":{"com.speakeasy.ai/okta":null}}`} {
+		_, err = ParseOktaMapping(json.RawMessage(raw))
+		require.Error(t, err, raw)
+		require.NotErrorIs(t, err, ErrNoOktaMapping, raw)
+	}
 	// A case-variant root key is not the namespace, matching the SQL scan.
 	_, err = ParseOktaMapping(json.RawMessage(strings.Replace(oktaRecord("example.test/linear", "linear"), `"_meta"`, `"_Meta"`, 1)))
 	require.ErrorIs(t, err, ErrNoOktaMapping)
@@ -119,21 +121,29 @@ func TestOktaMappingUniqueness(t *testing.T) {
 		`{"server":{"name":"example.test/broken-%d","description":"Broken","version":"1"},"_meta":{"com.speakeasy.ai/okta":{"oinNames":"notion"}}}`,
 		`{"server":{"name":"example.test/broken-%d","description":"Broken","version":"1"},"_Meta":{"com.speakeasy.ai/okta":{"oinNames":["notion"]}}}`,
 		`{"server":{"name":"example.test/broken-%d","description":"Broken","version":"1"},"_meta":{"com.speakeasy.ai/okta":{"oinNames":[null,5,["notion"],{"notion":1}]}}}`,
+		`{"server":{"name":"example.test/broken-%d","description":"Broken","version":"1"},"_meta":{"com.speakeasy.ai/okta":null}}`,
 	} {
 		id := uuid.New()
 		require.NoError(t, repo.New(db).InsertRegistryEntryFixture(ctx, repo.InsertRegistryEntryFixtureParams{ID: id, Data: []byte(strings.Replace(raw, "%d", strconv.Itoa(i), 1)), Published: true}))
 	}
 	_, err = s.Create(ctx, json.RawMessage(oktaRecord("example.test/notion", "notion")))
 	require.NoError(t, err)
+	// A numeric 5 in a historical array never blocks the string "5".
+	_, err = s.Create(ctx, json.RawMessage(oktaRecord("example.test/five", "5")))
+	require.NoError(t, err)
 }
 
 func TestOktaMappingConcurrentClaims(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"create-create", "create-save"} {
+	for _, mode := range []string{"create-create", "create-save", "save-save"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			ctx, s, _ := newTestService(t)
 			e, err := s.Create(ctx, json.RawMessage(basicRecord))
+			require.NoError(t, err)
+			// save-save: the holder re-saves its claim while another entry
+			// tries to take it; row locks precede the advisory lock on both.
+			holder, err := s.Create(ctx, json.RawMessage(oktaRecord("example.test/holder", "held")))
 			require.NoError(t, err)
 			start := make(chan struct{})
 			results := make(chan error, 2)
@@ -141,9 +151,14 @@ func TestOktaMappingConcurrentClaims(t *testing.T) {
 				go func() {
 					<-start
 					var err error
-					if mode == "create-save" && i == 1 {
+					switch {
+					case mode == "save-save" && i == 0:
+						_, err = s.Save(ctx, holder.ID, Token(holder), holder.Data)
+					case mode == "save-save":
+						_, err = s.Save(ctx, e.ID, Token(e), json.RawMessage(oktaRecord("example.test/demo", "held")))
+					case mode == "create-save" && i == 1:
 						_, err = s.Save(ctx, e.ID, Token(e), json.RawMessage(oktaRecord("example.test/demo", "linear")))
-					} else {
+					default:
 						_, err = s.Create(ctx, json.RawMessage(oktaRecord("example.test/race-"+strconv.Itoa(i), "linear")))
 					}
 					results <- err

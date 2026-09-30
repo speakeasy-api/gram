@@ -755,9 +755,15 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oinNames": ["integrator-4080826_fixture_1", "fixture"],
+          "oinNames": [
+            "integrator-4080826_fixture_1",
+            "fixture"
+          ],
           "oinIntegrationId": "4080826",
-          "xaaSignOnModes": ["SAML_2_0", "OPENID_CONNECT"],
+          "xaaSignOnModes": [
+            "SAML_2_0",
+            "OPENID_CONNECT"
+          ],
           "xaaIssuer": "https://auth.example.test"
         }
       }
@@ -774,7 +780,9 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oinNames": ["fixture"]
+          "oinNames": [
+            "fixture"
+          ]
         }
       }
     },
@@ -822,7 +830,10 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oinNames": ["fixture", "fixture"]
+          "oinNames": [
+            "fixture",
+            "fixture"
+          ]
         }
       }
     },
@@ -838,7 +849,9 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oinNames": ["fixture 1"]
+          "oinNames": [
+            "fixture 1"
+          ]
         }
       }
     },
@@ -854,7 +867,9 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oinNames": ["fixture"],
+          "oinNames": [
+            "fixture"
+          ],
           "oinIntegrationId": "abc"
         }
       }
@@ -871,8 +886,12 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oinNames": ["fixture"],
-          "xaaSignOnModes": ["SWA"]
+          "oinNames": [
+            "fixture"
+          ],
+          "xaaSignOnModes": [
+            "SWA"
+          ]
         }
       }
     },
@@ -888,7 +907,9 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oinNames": ["fixture"],
+          "oinNames": [
+            "fixture"
+          ],
           "xaaIssuer": "http://auth.example.test"
         }
       }
@@ -905,7 +926,9 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oinNames": ["fixture"],
+          "oinNames": [
+            "fixture"
+          ],
           "xaaIssuer": "https://auth.example.test/?x=1"
         }
       }
@@ -922,7 +945,9 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oinNames": ["fixture"],
+          "oinNames": [
+            "fixture"
+          ],
           "xaaIssuer": "https://auth.example.test/oauth"
         }
       }
@@ -939,7 +964,9 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oinNames": ["fixture"],
+          "oinNames": [
+            "fixture"
+          ],
           "mcpUrl": "https://mcp.example.test"
         }
       }
@@ -956,8 +983,62 @@
       },
       "_meta": {
         "com.speakeasy.ai/okta": {
-          "oin_names": ["fixture"]
+          "oin_names": [
+            "fixture"
+          ]
         }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping issuer with fragment",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": [
+            "fixture"
+          ],
+          "xaaIssuer": "https://auth.example.test#frag"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping issuer with userinfo",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": [
+            "fixture"
+          ],
+          "xaaIssuer": "https://user@auth.example.test"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping null namespace",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": null
       }
     },
     "valid": false

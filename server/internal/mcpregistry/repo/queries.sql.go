@@ -373,17 +373,18 @@ func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]Lis
 
 const listOktaMappingConflicts = `-- name: ListOktaMappingConflicts :many
 SELECT DISTINCT
-    n.name::text AS oin_name,
-    (e.data #>> '{server,name}')::text AS entry_name
+    (n.value #>> '{}')::text AS oin_name,
+    COALESCE(e.data #>> '{server,name}', '')::text AS entry_name
 FROM mcp_registry_entries e
-CROSS JOIN LATERAL jsonb_array_elements_text(
+CROSS JOIN LATERAL jsonb_array_elements(
     CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
         THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
         ELSE '[]'::jsonb
     END
-) AS n(name)
+) AS n(value)
 WHERE e.id <> $1::uuid
-AND n.name = ANY($2::text[])
+AND jsonb_typeof(n.value) = 'string'
+AND (n.value #>> '{}') = ANY($2::text[])
 `
 
 type ListOktaMappingConflictsParams struct {
@@ -396,7 +397,8 @@ type ListOktaMappingConflictsRow struct {
 	EntryName string
 }
 
-// Invalid historical rows may hold a non-array; treat them as unmapped.
+// Invalid historical rows may hold a non-array, non-string elements or no
+// name; none of those can claim or be blamed for a key.
 func (q *Queries) ListOktaMappingConflicts(ctx context.Context, arg ListOktaMappingConflictsParams) ([]ListOktaMappingConflictsRow, error) {
 	rows, err := q.db.Query(ctx, listOktaMappingConflicts, arg.ID, arg.Names)
 	if err != nil {

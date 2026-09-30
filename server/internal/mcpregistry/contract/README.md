@@ -24,10 +24,10 @@ Gram rules live in record/mutation validation: exact-case name identity, payload
 limits, immutable identity, ordered remote endpoints, and catalog-wide uniqueness
 of every `_meta["com.speakeasy.ai/okta"].oinNames` element across published and
 unpublished entries. That namespace is closed and its issuer must be an https
-URL without query, fragment or userinfo; other extensions stay open. Stored invalid data stays
-readable and repairable within those invariants; this schema does not rewrite it.
-Validation preserves extension JSON and numeric precision rather than projecting
-records through Go structs.
+URL without query, fragment or userinfo; other extensions stay open. Stored
+invalid data stays readable and repairable within those invariants; this schema
+does not rewrite it. Validation preserves extension JSON and numeric precision
+rather than projecting records through Go structs.
 
 Run `mise exec -- go test ./server/internal/mcpregistry/contract`.
 `testdata/contract-cases.json` covers record rules and native format boundaries. No starter

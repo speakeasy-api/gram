@@ -134,19 +134,21 @@ SELECT count(*) FROM mcp_registry_entries;
 SELECT pg_advisory_xact_lock(hashtextextended('mcp_registry_entries:com.speakeasy.ai/okta', 0));
 
 -- name: ListOktaMappingConflicts :many
--- Invalid historical rows may hold a non-array; treat them as unmapped.
+-- Invalid historical rows may hold a non-array, non-string elements or no
+-- name; none of those can claim or be blamed for a key.
 SELECT DISTINCT
-    n.name::text AS oin_name,
-    (e.data #>> '{server,name}')::text AS entry_name
+    (n.value #>> '{}')::text AS oin_name,
+    COALESCE(e.data #>> '{server,name}', '')::text AS entry_name
 FROM mcp_registry_entries e
-CROSS JOIN LATERAL jsonb_array_elements_text(
+CROSS JOIN LATERAL jsonb_array_elements(
     CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
         THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
         ELSE '[]'::jsonb
     END
-) AS n(name)
+) AS n(value)
 WHERE e.id <> sqlc.arg(id)::uuid
-AND n.name = ANY(sqlc.arg(names)::text[]);
+AND jsonb_typeof(n.value) = 'string'
+AND (n.value #>> '{}') = ANY(sqlc.arg(names)::text[]);
 
 -- name: DiscoverEntries :many
 -- Limit candidate metadata before measuring stored bodies.

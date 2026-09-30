@@ -51,10 +51,14 @@ func ParseOktaMapping(data json.RawMessage) (OktaMapping, error) {
 	if !ok {
 		return mapping, ErrNoOktaMapping
 	}
-	if err := json.Unmarshal(raw, &mapping); err != nil {
+	var decoded *OktaMapping
+	if err := json.Unmarshal(raw, &decoded); err != nil {
 		return mapping, fmt.Errorf("decode registry okta mapping: %w", err)
 	}
-	return mapping, nil
+	if decoded == nil {
+		return mapping, errors.New("decode registry okta mapping: namespace must be an object")
+	}
+	return *decoded, nil
 }
 
 // validateOktaMapping applies the checks the schema cannot express.
