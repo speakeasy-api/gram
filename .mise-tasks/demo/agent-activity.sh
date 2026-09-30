@@ -21,10 +21,9 @@ set -euo pipefail
 #
 # Attribution is the whole trick. Every harness reports the identity of the
 # account signed in at the keyboard and offers no override, so all six users
-# would otherwise land as one. Both honour OTEL_RESOURCE_ATTRIBUTES, though,
-# so each run is marked there and the shared collector rewrites that onto the
-# attribute Gram reads. See local/otel/gram-demo-forward.yaml for the pipeline
-# that does it.
+# would otherwise land as one. Both honour OTEL_RESOURCE_ATTRIBUTES, so each
+# run is marked with gram.demo.user_email. Logs go straight to this
+# worktree's Gram hooks ingest — there is no shared rewrite hop.
 #
 # Every prompt below is read-only work, and both harnesses are held to that --
 # Codex by its read-only sandbox, Claude Code by an allowlist of the tools the
@@ -37,7 +36,7 @@ minutes="${usage_minutes}"
 claude_model="${usage_claude_model}"
 codex_model="${usage_codex_model}"
 
-collector_logs_endpoint="http://localhost:${OTLP_HTTP_PORT}/v1/logs"
+collector_logs_endpoint="${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs"
 
 # One turn's share of the budget is capped here as well as by the deadline, so
 # a single session that wedges cannot swallow the whole run before the loop
@@ -238,8 +237,7 @@ model_reasoning_effort = "low"
 [otel]
 environment = "dev"
 log_user_prompt = true
-# Logs only. Metrics and traces would carry the real account's identity, since
-# only the log pipeline does the rewrite.
+# Logs only. Metrics and traces would carry the real account's identity.
 trace_exporter = "none"
 metrics_exporter = "none"
 
@@ -396,22 +394,6 @@ run_turn() {
 
 # endregion: harnesses
 
-curl -sf -o /dev/null -X POST "$collector_logs_endpoint" \
-  -H 'Content-Type: application/json' -d '{"resourceLogs":[]}' 2>/dev/null ||
-  fail "no OTLP collector on ${collector_logs_endpoint} — run \`mise run infra:lgtm\` first"
-
-# That collector is one container shared by every worktree, and it keeps the
-# forwarding endpoint of whichever worktree started it. A run from a different
-# tree would be attributed correctly and then delivered to someone else's
-# server, so check rather than discover it in the wrong dashboard.
-lgtm_container=$(docker compose -f compose.shared.yml -p gram-shared ps -q lgtm 2>/dev/null || true)
-if [ -n "$lgtm_container" ]; then
-  forwarding_to=$(docker inspect "$lgtm_container" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | sed -n 's/^GRAM_DEMO_OTLP_LOGS_ENDPOINT=//p' | head -1)
-  if [ -n "$forwarding_to" ] && [ "$forwarding_to" != "${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-}" ]; then
-    fail "the shared collector forwards to ${forwarding_to}, which is not this worktree's ${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-<unset>}. It keeps the endpoint of whichever worktree started it — restart it from here with \`mise run infra:lgtm\`."
-  fi
-fi
-
 curl -skf -o /dev/null "${GRAM_SERVER_URL}/health" 2>/dev/null ||
   curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs" 2>/dev/null | grep -qE '^[0-9]' ||
   fail "the Gram server is not answering on ${GRAM_SERVER_URL} — run \`mise run start\` first"
@@ -516,7 +498,7 @@ done
 
 echo ""
 echo "Driving ${#users[@]} seeded users × ${prompts_per_user} prompts (${total} sessions): ${deal}."
-echo "Attributing through the shared collector at ${collector_logs_endpoint}, stopping after ${minutes}m."
+echo "Posting OTEL logs to ${collector_logs_endpoint}, stopping after ${minutes}m."
 echo ""
 
 # Round index outermost so every user makes progress before anyone finishes:
@@ -569,6 +551,6 @@ session_word="sessions"
 user_word="users"
 [ "$users_touched" -eq 1 ] && user_word="user"
 echo "Done: ${sessions} ${session_word} across ${users_touched} ${user_word}."
-echo "The collector batches, so give it a few seconds before looking."
+echo "Give the server a few seconds to ingest before looking."
 echo "The sessions land wherever this branch reads agent telemetry: the"
 echo "observability pages today, and Explore once agent_events ships."

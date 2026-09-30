@@ -4,8 +4,6 @@
 # Services shared safely through explicit worktree namespaces live in
 # compose.shared.yml and run once for the whole machine. Pub/Sub starts
 # with `mise run infra:start`, as does a cheap OTLP sink on 4317/4318.
-# LGTM is an opt-in profile (`mise run infra:lgtm`). LGTM replaces the
-# sink on the same OTLP ports.
 name: ${COMPOSE_PROJECT_NAME:-gram}
 
 services:

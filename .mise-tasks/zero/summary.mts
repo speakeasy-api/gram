@@ -195,14 +195,6 @@ await pokeDockerService(
   true,
 );
 
-const grafanaPort = process.env["GRAFANA_PORT"] ?? "13000";
-await pokeDockerService(
-  "lgtm",
-  "Grafana",
-  `http://localhost:${grafanaPort}`,
-  true,
-);
-
 const clickhouseHTTPPort = process.env["CLICKHOUSE_HTTP_PORT"] ?? "8123";
 await pokeDockerService(
   "clickhouse",

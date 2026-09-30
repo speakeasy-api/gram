@@ -1,14 +1,9 @@
-# Local development only. Default shared collector: accept OTLP and drop it.
+# Local development only. Shared collector: accept OTLP and drop it.
 #
 # gram-server, gram-worker, pystreams, mock-oidc, and anything else that
-# honours OTEL_EXPORTER_OTLP_ENDPOINT keep exporting to localhost:4317/4318
-# even when the full LGTM stack is not running. Without a listener they retry
-# forever and spam `otel error` / connection-refused logs. This collector is
-# that listener — the same ports, a nop exporter, no Grafana/Tempo/Prometheus.
-#
-# `mise run infra:lgtm` removes this container so LGTM can bind the ports
-# and actually store the signals. `mise run infra:start` brings this back
-# whenever LGTM is not running.
+# honours OTEL_EXPORTER_OTLP_ENDPOINT keep exporting to localhost:4317/4318.
+# Without a listener they retry forever and spam `otel error` / connection-
+# refused logs. This collector is that listener — a nop exporter, no store.
 receivers:
   otlp:
     protocols:

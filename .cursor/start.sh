@@ -12,10 +12,10 @@ cd /workspace
 ensure_dockerd
 eval "$(mise activate bash)"
 
-# Core images only. Presidio and LGTM are opt-in profiles and must not be
-# pulled onto a 21GB VM. The shared OTLP sink is tiny and is the default
-# listener for local exporters. Install cannot start dockerd, so this is
-# the first chance to cache the images for infra:start.
+# Core images only. Presidio is an opt-in profile and must not be pulled
+# onto a 21GB VM. The shared OTLP sink is tiny and is the default listener
+# for local exporters. Install cannot start dockerd, so this is the first
+# chance to cache the images for infra:start.
 docker compose pull
 docker compose -f compose.shared.yml -p gram-shared pull pubsub-emulator otlp-sink
 
@@ -39,8 +39,7 @@ mise run zero:encryption
 mise run zero:tunnel-identity
 mise run zero:tls
 
-# Core containers only. LGTM stays down unless a later command opts in
-# with `mise run infra:lgtm`. The OTLP sink starts with infra:start so
+# Core containers only. The OTLP sink starts with infra:start so
 # exporters have a listener.
 INFRA_READINESS_TIMEOUT="${INFRA_READINESS_TIMEOUT:-300}" mise run infra:start
 

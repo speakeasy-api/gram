@@ -49,14 +49,9 @@ import { checkPort } from "get-port-please";
  */
 const SHARED_PORT_ENV_VARS = new Set([
   "PUBSUB_EMULATOR_PORT",
-  // The LGTM stack is shared, so every worktree must reach it
-  // on the same default host ports.
-  // OTEL_EXPORTER_OTLP_ENDPOINT is derived from skipped ports and therefore
-  // keeps its mise.toml default too.
-  "GRAFANA_PORT",
-  "TEMPO_HTTP_PORT",
-  "LOKI_HTTP_PORT",
-  "PROMETHEUS_PORT",
+  // The OTLP sink is shared, so every worktree must reach it on the
+  // same default host ports. OTEL_EXPORTER_OTLP_ENDPOINT is derived
+  // from these and therefore keeps its mise.toml default too.
   "OTLP_GRPC_PORT",
   "OTLP_HTTP_PORT",
 ]);

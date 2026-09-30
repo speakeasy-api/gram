@@ -2,7 +2,7 @@
 # Cursor Cloud install: tools, deps, local secrets, and a warm server compile.
 # Do not start dockerd here — the Build sandbox cannot run it. Image pulls
 # happen in start.sh after the daemon is up. Keep the snapshot small: Cloud
-# VMs are ~21GB and cannot hold Presidio, LGTM, and leftover package caches.
+# VMs are ~21GB and cannot hold Presidio and leftover package caches.
 set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 export DEBIAN_FRONTEND=noninteractive

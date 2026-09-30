@@ -169,13 +169,12 @@ if grep -E '^PRESIDIO_ANALYZER_URL[[:space:]]*=' mise.local.toml \
   echo "✅ Removed auto-generated PRESIDIO_PORT / PRESIDIO_ANALYZER_URL."
 fi
 
-# The LGTM observability stack moved to the shared stack for the same reason,
-# and needs the same treatment: a pre-existing worktree still carries the
-# auto-generated remaps for Grafana/Tempo/Loki/Prometheus and the OTLP
-# receivers, which now point at ports nothing is listening on. Same proof as
-# above — `zero:remap-ports` is the only thing that writes the
+# The OTLP sink is shared and needs the same treatment: a pre-existing
+# worktree still carries auto-generated remaps for the OTLP receivers
+# (and leftover Grafana/Tempo/Loki/Prometheus keys from a removed store).
+# `zero:remap-ports` is the only thing that writes the
 # `{{env.OTLP_GRPC_PORT}}` template into OTEL_EXPORTER_OTLP_ENDPOINT, and it
-# emitted the whole group in one pass, so the marker attests the group is
+# emitted the group in one pass, so the marker attests the group is
 # generated and the group is reset together.
 if grep -E '^OTEL_EXPORTER_OTLP_ENDPOINT[[:space:]]*=' mise.local.toml \
      | grep -qF '{{env.OTLP_GRPC_PORT}}'; then
@@ -185,7 +184,7 @@ if grep -E '^OTEL_EXPORTER_OTLP_ENDPOINT[[:space:]]*=' mise.local.toml \
       mise unset --file mise.local.toml "$key"
     fi
   done
-  echo "✅ Reset auto-generated LGTM ports to the shared defaults."
+  echo "✅ Reset auto-generated OTLP ports to the shared defaults."
 fi
 
 # Backfill worktree identities written by git:workinit, preserving custom values.
@@ -208,7 +207,7 @@ if [ -n "$worktree_project" ]; then
   fi
 
   # Without this label, telemetry from same-commit worktrees is
-  # indistinguishable in the shared LGTM stack.
+  # indistinguishable when a collector stores it.
   if ! grep -qE '^OTEL_RESOURCE_ATTRIBUTES[[:space:]]*=' mise.local.toml; then
     mise set --file mise.local.toml \
       "OTEL_RESOURCE_ATTRIBUTES=worktree=${worktree_project}"

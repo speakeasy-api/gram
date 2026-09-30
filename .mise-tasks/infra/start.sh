@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
 #MISE description="Start up databases, caches and so on"
-#USAGE flag "--lgtm" help="Also start the optional shared LGTM observability stack"
-
 # Warn when a cached image's architecture differs from the Docker host's.
 # `compose up` never re-pulls a tag that already exists locally, so an image
 # pulled while DOCKER_DEFAULT_PLATFORM=linux/amd64 was exported keeps running
@@ -103,39 +101,7 @@ docker ps -a --filter "label=com.docker.compose.service=pubsub-emulator" --filte
 # for branches that have not migrated yet (no shared --remove-orphans).
 docker compose up -d --wait --wait-timeout 30 gram-temporal || exit 1
 docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 \
-  pubsub-emulator || exit 1
-
-# LGTM is a large, rarely used image behind a Compose profile. Default boot
-# skips it. Honor the flag and COMPOSE_PROFILES so a developer who already
-# opted in keeps that choice across `infra:start`.
-want_lgtm=false
-if [ "${usage_lgtm:-false}" = "true" ]; then
-  want_lgtm=true
-fi
-case ",${COMPOSE_PROFILES:-}," in
-  *,lgtm,*) want_lgtm=true ;;
-esac
-
-# OTLP 4317/4318 always need a listener: the cheap sink by default, LGTM
-# when opted in. Both publish those ports, so only one may run.
-lgtm_running=false
-if docker ps --filter "label=com.docker.compose.project=gram-shared" \
-  --filter "label=com.docker.compose.service=lgtm" \
-  --filter "status=running" --format '{{.ID}}' | grep -q .; then
-  lgtm_running=true
-fi
-if $want_lgtm; then
-  # infra:lgtm removes the sink before binding 4317/4318. If the LGTM image
-  # cannot start, put the sink back so exporters still have a listener.
-  if ! mise run infra:lgtm; then
-    echo "⚠️  Optional shared LGTM stack failed to start; continuing with degraded observability." >&2
-    mise run infra:otlp-sink \
-      || echo "⚠️  Shared OTLP sink failed to start; local telemetry export will error until it or LGTM is up." >&2
-  fi
-elif ! $lgtm_running; then
-  mise run infra:otlp-sink \
-    || echo "⚠️  Shared OTLP sink failed to start; local telemetry export will error until it or LGTM is up." >&2
-fi
+  pubsub-emulator otlp-sink || exit 1
 
 # Maximum time (seconds) to wait for a service to accept queries before giving
 # up. Bounded so headless callers (e.g. `./zero --agent`) fail fast instead of
