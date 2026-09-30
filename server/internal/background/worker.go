@@ -799,18 +799,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
 	}
 
-	// One image recycle sweep per deployed runtime image: a new worker build
-	// carries a new image ref, so kicking on startup is the deploy signal.
-	// Best-effort — a failed kick just leaves runtimes to the lazy
-	// per-admission recycle.
-	if opts.AssistantsCore != nil {
-		if imageRef := opts.AssistantsCore.RuntimeImageRef(); imageRef != "" {
-			if err := KickAssistantRuntimeImageRecycle(ctx, env, imageRef); err != nil {
-				logger.ErrorContext(ctx, "failed to kick assistant runtime image recycle", attr.SlogError(err))
-			}
-		}
-	}
-
 	// Everything below is registered under a fixed ID and belongs to the
 	// shared queue. PR previews poll their own queue in the dev namespace; if
 	// they registered these, each preview would re-point dev's schedule at its
@@ -863,6 +851,18 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddAssistantRuntimeJanitorSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+	}
+
+	// One image recycle sweep per deployed runtime image: a new worker build
+	// carries a new image ref, so kicking on startup is the deploy signal.
+	// Best-effort — a failed kick just leaves runtimes to the lazy
+	// per-admission recycle.
+	if opts.AssistantsCore != nil {
+		if imageRef := opts.AssistantsCore.RuntimeImageRef(); imageRef != "" {
+			if err := KickAssistantRuntimeImageRecycle(ctx, env, imageRef); err != nil {
+				logger.ErrorContext(ctx, "failed to kick assistant runtime image recycle", attr.SlogError(err))
+			}
+		}
 	}
 
 	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
