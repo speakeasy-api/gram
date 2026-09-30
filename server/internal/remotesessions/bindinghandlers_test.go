@@ -52,6 +52,9 @@ func TestBindingsRequireOrdinaryHuman(t *testing.T) {
 		"support":                 contextvalues.WithValidatedSupportSession(ordinary, auth),
 		"impersonated":            contextvalues.WithValidatedGramSession(t.Context(), auth, true),
 		"unconfigured-authorizer": ordinary,
+		"oauth":                   contextvalues.SetOAuthClientID(ordinary, "oauth-client"),
+		"assistant":               contextvalues.SetAssistantPrincipal(ordinary, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}),
+		"principal credential":    contextvalues.WithPrincipalCredentialAuthorization(ordinary, auth, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()), contextvalues.PrincipalCredential{}),
 	}
 	for name, ctx := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -352,5 +355,23 @@ func TestListRemoteSessionsRequiresPairedEligibilityFilters(t *testing.T) {
 	} {
 		_, err := svc.ListRemoteSessions(ctx, payload)
 		requireOopsCode(t, err, oops.CodeBadRequest)
+	}
+}
+
+func TestConsentBindingsRejectDifferentAgentOrIssuer(t *testing.T) {
+	t.Parallel()
+	svc := &remotesessions.Service{}
+	svc.SetBindingAuthorizer(func(context.Context, pgx.Tx, uuid.UUID) error {
+		t.Fatal("mismatched scope must fail before starting a transaction")
+		return nil
+	})
+	agent, issuer := uuid.New(), uuid.New()
+	ctx := contextvalues.WithConsentBindingAuthorization(t.Context(), "human", "org", uuid.New(), agent, issuer)
+	for _, scope := range [][2]string{{uuid.NewString(), issuer.String()}, {agent.String(), uuid.NewString()}} {
+		_, err := svc.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: scope[0], UserSessionIssuerID: scope[1]})
+		require.Error(t, err)
+		_, err = svc.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: scope[0], UserSessionIssuerID: scope[1], RemoteSessionID: uuid.NewString()})
+		require.Error(t, err)
+		require.Error(t, svc.DetachBinding(ctx, &gen.DetachBindingPayload{PrincipalID: scope[0], UserSessionIssuerID: scope[1], ID: uuid.NewString()}))
 	}
 }
