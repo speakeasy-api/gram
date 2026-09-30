@@ -1,4 +1,4 @@
-h1:FyHpGtd/D+c9yVRmIgfo4LOuONYF0/lxsk7P9n8I8SI=
+h1:aNZMGToFNFtrDJRD2cR4/VpokSv97zCHcMKIhj+Pq0o=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -123,3 +123,4 @@ h1:FyHpGtd/D+c9yVRmIgfo4LOuONYF0/lxsk7P9n8I8SI=
 20260928161103_imported_session_observations.sql h1:I0PjLiAvZqQB7fz4nyCXFO23oduQrDwVJdWE/SuNfZo=
 20260929180448_product_metrics.sql h1:kPCDnG7u1jL9PJHxRpnt8Xw9GiEu684/oWVtkAHD2MM=
 20260930004802_product_metrics_raw_deduplication.sql h1:I8iwOKnYZnBTxMnOv9pfGUb2cg9GrccXk09viJwYrto=
+20260930124629_product_metrics_series_tiers.sql h1:aeLgu1GKJ3WBY8e93KBSUPoli5k+iiMbhtJ/Gvw4YjQ=

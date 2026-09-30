@@ -1,4 +1,4 @@
-h1:9izFX5UlrLGKSNoEjBDkUFznbUxY5B3NhWxJ1kyfwCs=
+h1:QDomhD1EUKFIqZD5CQ+78kDswRQs/+yhUADCFkP85WE=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -118,3 +118,4 @@ h1:9izFX5UlrLGKSNoEjBDkUFznbUxY5B3NhWxJ1kyfwCs=
 20260928161107_imported_session_observations.up.sql h1:ZhguHLvKWzgV4knCWQCZ+/lXtanBUCOkyHoSIxvmvHk=
 20260929180455_product_metrics.up.sql h1:Q7Rd/rgb3lWzAJpAGZ5r8UrJqc95of+gjJK8vRoqffM=
 20260930004809_product_metrics_raw_deduplication.up.sql h1:tJQ5MSrQc3aMKw5nx8eJ5LR/TUSYQLChxEHHucBbMzY=
+20260930124635_product_metrics_series_tiers.up.sql h1:S0OWWX4rwJU7vsNkH9+KUFCPhWkIUk5Ma17MGuE1ksM=
