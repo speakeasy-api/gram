@@ -175,3 +175,16 @@ it("admits under the page's platform without asking which issuer", () => {
   expect(screen.queryByLabelText("Issuer")).toBeNull();
   expect(screen.queryByText("Select a trusted issuer")).toBeNull();
 });
+
+it("warns in the sheet about whitespace before the terminator", () => {
+  renderSheet(issuer({ allowWildcardAdmission: true }));
+
+  // The space is stored as part of the subject, so the rule would match
+  // nothing, and it is invisible in the field.
+  fireEvent.change(subjectField(), {
+    target: { value: "wimse://identity.example.com/org/acme/agent/ *" },
+  });
+
+  expect(subjectWarning()?.textContent).toContain("whitespace before");
+  expect(subjectField().getAttribute("aria-invalid")).toBe("true");
+});

@@ -71,7 +71,7 @@ function IssuerDetail(): JSX.Element {
   const [withdrawing, setWithdrawing] = useState<WorkloadAdmission | null>(
     null,
   );
-  const { data, isPending } = useWorkloadIdentities({});
+  const { data, isPending, isError, refetch } = useWorkloadIdentities({});
   // throwOnError because the whole agents service 404s where the agent
   // management rollout is off, and the global query policy suppresses only 401
   // and 403 — left to throw it takes this page down with it.
@@ -170,6 +170,30 @@ function IssuerDetail(): JSX.Element {
       );
     },
   });
+
+  // A failed load says nothing about whether the platform exists, so it gets a
+  // retry rather than the redirect below, which would otherwise hide the error
+  // behind the list.
+  if (isError) {
+    return (
+      <ResourceListPage title="Trusted platform">
+        <InlineEmptyState
+          icon="triangle-alert"
+          heading="Couldn't load this platform"
+          description="The trust policy failed to load. Try again in a moment."
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void refetch()}
+            >
+              <Button.Text>Try again</Button.Text>
+            </Button>
+          }
+        />
+      </ResourceListPage>
+    );
+  }
 
   // Withdrawn elsewhere, or a stale link. Send them back to the list rather than
   // rendering a page about a row that is gone.

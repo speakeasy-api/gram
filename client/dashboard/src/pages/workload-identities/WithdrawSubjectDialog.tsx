@@ -48,8 +48,8 @@ export function WithdrawSubjectDialog({
         {admission && (
           <div className="space-y-4 py-2">
             <Alert variant="warning" alignTop>
-              Sessions it already holds are not revoked. Allowing it again means
-              admitting it again with its agent.
+              Sessions it already holds are not revoked. To allow it again,
+              allow it with an agent as before.
             </Alert>
             <TypeToConfirmField
               id="withdraw-subject-confirm"

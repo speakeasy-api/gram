@@ -86,3 +86,29 @@ export function canAdmit(input: {
     input.warning === null
   );
 }
+
+/**
+ * The values an allow submits: the platform's issuer URL, the subject trimmed
+ * and stored as typed, and the match kind read off it rather than chosen.
+ * Kept apart from the sheet so the payload can be tested without driving its
+ * agent picker.
+ */
+export function buildAdmitValues(
+  form: { subject: string; name: string; tags: string[]; agentId: string },
+  issuerUrl: string,
+): {
+  issuer: string;
+  subject: string;
+  matchKind: MatchKind;
+  name: string;
+  tags: string[];
+  agentId: string;
+} {
+  const subject = form.subject.trim();
+  return {
+    ...form,
+    issuer: issuerUrl,
+    subject,
+    matchKind: inferMatchKind(subject),
+  };
+}

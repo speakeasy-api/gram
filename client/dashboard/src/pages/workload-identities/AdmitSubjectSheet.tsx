@@ -23,6 +23,7 @@ import { Text } from "@/components/ui/Text";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { useEffect, useState } from "react";
 import {
+  buildAdmitValues,
   canAdmit,
   inferMatchKind,
   type MatchKind,
@@ -139,12 +140,7 @@ export function AdmitSubjectSheet({
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     if (!canSubmit || isPending) return;
-    onSubmit({
-      ...values,
-      issuer: issuer.issuer,
-      subject: storedSubject,
-      matchKind,
-    });
+    onSubmit(buildAdmitValues(values, issuer.issuer));
   };
 
   return (

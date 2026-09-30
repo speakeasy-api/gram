@@ -1,5 +1,9 @@
 import { expect, it } from "vitest";
-import { inferMatchKind, subjectRuleWarning } from "./subjectRule";
+import {
+  buildAdmitValues,
+  inferMatchKind,
+  subjectRuleWarning,
+} from "./subjectRule";
 
 const STEM = "wimse://identity.example.com/org/acme/agent/";
 
@@ -72,4 +76,34 @@ it("reads a misplaced star as a wildcard, so the message names the real problem"
   // A bare star still says what it would do, rather than being read as exact.
   expect(inferMatchKind("*")).toBe("wildcard");
   expect(subjectRuleWarning("wildcard", "*")).toContain("bare");
+});
+
+it("submits the platform's issuer URL and the subject as it will be stored", () => {
+  const values = buildAdmitValues(
+    {
+      subject: `  ${STEM}*  `,
+      name: "Agent fleet",
+      tags: ["slack"],
+      agentId: "22222222-2222-2222-2222-222222222222",
+    },
+    "https://identity.example.com",
+  );
+
+  expect(values).toEqual({
+    issuer: "https://identity.example.com",
+    subject: `${STEM}*`,
+    matchKind: "wildcard",
+    name: "Agent fleet",
+    tags: ["slack"],
+    agentId: "22222222-2222-2222-2222-222222222222",
+  });
+});
+
+it("submits an exact subject as exact", () => {
+  expect(
+    buildAdmitValues(
+      { subject: `${STEM}a-1`, name: "", tags: [], agentId: "agent" },
+      "https://identity.example.com",
+    ).matchKind,
+  ).toBe("exact");
 });
