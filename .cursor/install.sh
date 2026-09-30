@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# Cursor Cloud install: tools, deps, core Docker images, and a warm server
-# compile. Keep this snapshot small — Cloud VMs are ~21GB and cannot hold
-# Presidio, LGTM, and leftover package caches on top of the core stack.
+# Cursor Cloud install: tools, deps, local secrets, and a warm server compile.
+# Do not start dockerd here — the Build sandbox cannot run it. Image pulls
+# happen in start.sh after the daemon is up. Keep the snapshot small: Cloud
+# VMs are ~21GB and cannot hold Presidio, LGTM, and leftover package caches.
 set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 export DEBIAN_FRONTEND=noninteractive
-
-# shellcheck source=.cursor/ensure-dockerd.sh
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ensure-dockerd.sh"
 
 if ! command -v dockerd >/dev/null 2>&1 || ! command -v fuse-overlayfs >/dev/null 2>&1; then
   sudo apt-get update
@@ -47,21 +45,12 @@ mise run zero:tunnel-identity
 mise run zero:tls
 mise run zero:assistants --skip-image
 
-# Drop rebuildable caches before pulling images so the 21GB disk has room.
+mise run build:server-cache
+
+# Drop rebuildable caches so the snapshot leaves room for core compose images
+# at start. Keep ~/go/pkg/mod and the aube virtual-store.
 mise exec -- go clean -cache || true
-if command -v uv >/dev/null 2>&1 || mise exec -- uv --version >/dev/null 2>&1; then
+if mise exec -- uv --version >/dev/null 2>&1; then
   mise exec -- uv cache clean || true
 fi
 rm -rf "${HOME}/.cache/aube/packuments-full-v1" "${HOME}/.cache/uv"
-
-# Bake only the default compose images. Presidio and LGTM are opt-in profiles
-# and must not land in the snapshot.
-ensure_dockerd
-eval "$(mise activate bash)"
-docker compose pull
-docker compose -f compose.shared.yml -p gram-shared pull pubsub-emulator
-
-mise run build:server-cache
-# The compile refills go-build; drop it again now that the cache is warm
-# enough for `go run` to be a hit on the module graph.
-mise exec -- go clean -cache || true

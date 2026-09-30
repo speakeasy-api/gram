@@ -12,6 +12,12 @@ cd /workspace
 ensure_dockerd
 eval "$(mise activate bash)"
 
+# Core images only. Presidio and LGTM are opt-in profiles and must not be
+# pulled onto a 21GB VM. Install cannot start dockerd, so this is the first
+# chance to cache the images for infra:start.
+docker compose pull
+docker compose -f compose.shared.yml -p gram-shared pull pubsub-emulator
+
 if [ -z "${ATLAS_TOKEN:-}" ]; then
   echo "ATLAS_TOKEN is required to log in to Atlas Pro" >&2
   exit 1
