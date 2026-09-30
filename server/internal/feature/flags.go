@@ -3,6 +3,9 @@ package feature
 type Flag string
 
 const (
+	// FlagGramMCPCatalog temporarily selects the Gram MCP catalog per organization.
+	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
+
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
 	FlagAssistants               Flag = "assistants"
