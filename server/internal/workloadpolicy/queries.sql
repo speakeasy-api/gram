@@ -45,8 +45,8 @@ WHERE organization_id = @organization_id
 ORDER BY (project_id IS NULL) DESC, name;
 
 -- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
-VALUES (@organization_id, @project_id, @name, @issuer, @jwks_uri, @allow_wildcard_admission)
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
+VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission)
 RETURNING *;
 
 -- name: SoftDeleteWorkloadIssuer :one
@@ -106,8 +106,8 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: CreateWorkloadAdmission :one
-INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name)
-VALUES (@organization_id, @project_id, @workload_issuer_id, @subject, @match_kind, @name)
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags)
+VALUES (@organization_id, @project_id, @workload_issuer_id, @subject, @match_kind, @name, @tags)
 RETURNING *;
 
 -- name: SoftDeleteWorkloadAdmission :one

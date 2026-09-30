@@ -174,9 +174,9 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.", func() {
 		Format(FormatURI)
 	})
-	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.", func() {
-		Default(false)
-	})
+	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.")
+	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.")
+	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
 	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Defaults to false.", func() {
 		Default(false)
 	})
@@ -198,6 +198,7 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("name", String, "Optional label, for platforms whose subjects are not self-describing.", func() {
 		MinLength(1)
 	})
+	Attribute("tags", ArrayOf(String), "Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits.", func() {
 		Format(FormatUUID)
 	})
@@ -221,7 +222,9 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 	Attribute("name", String, "The label an operator works with.")
 	Attribute("issuer", String, "The issuer identifier the assertion's iss claim must carry.")
 	Attribute("jwks_uri", String, "Where the issuer publishes its signing keys.")
+	Attribute("description", String, "What the platform is and what runs on it. Empty rather than absent where none is set.")
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule.")
+	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -229,7 +232,7 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "allow_wildcard_admission", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "description", "allow_wildcard_admission", "tags", "created_at", "updated_at")
 })
 
 var WorkloadAdmission = Type("WorkloadAdmission", func() {
@@ -252,6 +255,7 @@ var WorkloadAdmission = Type("WorkloadAdmission", func() {
 		Enum("exact", "wildcard")
 	})
 	Attribute("name", String, "Optional label; empty when none was supplied.")
+	Attribute("tags", ArrayOf(String), "Free-form labels for finding the admitted workload. Empty rather than absent where none are set.")
 	Attribute("agent_id", String, "The agent whose policy this workload inherits. Empty when the assignment is missing, which the token endpoint refuses.", func() {
 		Format(FormatUUID)
 	})
@@ -264,7 +268,7 @@ var WorkloadAdmission = Type("WorkloadAdmission", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "workload_issuer_id", "issuer", "issuer_name", "subject", "match_kind", "name", "agent_id", "agent_name", "wildcard_active", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "workload_issuer_id", "issuer", "issuer_name", "subject", "match_kind", "name", "tags", "agent_id", "agent_name", "wildcard_active", "created_at", "updated_at")
 })
 
 var WorkloadIdentityPolicy = Type("WorkloadIdentityPolicy", func() {

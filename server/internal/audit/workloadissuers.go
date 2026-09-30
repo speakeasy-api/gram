@@ -24,10 +24,12 @@ const (
 // AllowWildcardAdmission is what lets a single rule stand for a fleet. Recording
 // them is what makes a change reviewable as a diff rather than as a bare event.
 type WorkloadIssuerSnapshot struct {
-	Name                   string `json:"name"`
-	Issuer                 string `json:"issuer"`
-	JwksURI                string `json:"jwks_uri"`
-	AllowWildcardAdmission bool   `json:"allow_wildcard_admission"`
+	Name                   string   `json:"name"`
+	Issuer                 string   `json:"issuer"`
+	JwksURI                string   `json:"jwks_uri"`
+	Description            string   `json:"description,omitempty"`
+	Tags                   []string `json:"tags"`
+	AllowWildcardAdmission bool     `json:"allow_wildcard_admission"`
 	// Tier is "organization" or "project". Recorded because the same issuer name
 	// can exist at both, and the tier decides who the issuer is trusted by.
 	Tier string `json:"tier"`
