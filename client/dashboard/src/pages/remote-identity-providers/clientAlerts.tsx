@@ -106,8 +106,9 @@ export function LegacyCallbackAlert({
         <span>
           This app was registered with the{" "}
           <span className="font-mono">{legacyCallbackURL(current)}</span> URL.
-          New apps use <span className="font-mono">{current}</span>. This app
-          runs in compatibility mode with the URL. Register the new URL in order
+          Its replacement callback is{" "}
+          <span className="font-mono">{current}</span>. This app runs in
+          compatibility mode with the old URL. Register the replacement in order
           to migrate it.
         </span>
         {canMigrate && (

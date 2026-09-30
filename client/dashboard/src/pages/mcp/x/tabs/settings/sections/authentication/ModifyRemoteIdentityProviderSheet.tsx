@@ -563,7 +563,9 @@ function ModifyRemoteIdentityProviderSheetBody({
             tokenEndpointAuthMethod={tokenEndpointAuthMethod}
             allowPrivateKeyJwt={primaryClient?.jsonWebKeySetId != null}
             clientIdEditable={false}
-            callbackURL={primaryClient?.callbackUrl}
+            callbackURL={
+              primaryClient ? (primaryClient.callbackUrl ?? null) : undefined
+            }
             clientSecretLabel="Client Secret (leave blank to keep existing)"
             clientSecretPlaceholder="Type a new secret to rotate"
             onClientIdChange={() => undefined}

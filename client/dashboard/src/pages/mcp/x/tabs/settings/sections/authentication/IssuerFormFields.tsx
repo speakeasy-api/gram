@@ -30,19 +30,35 @@ import type { ReactNode } from "react";
 // upstream provider's OAuth app before typed-in client credentials will
 // work. Rendered inside ClientCredentialsFields so both the Attach sheet's
 // Manual add path and the Modify sheet's existing-client edit path show it.
-// An existing client passes the callbackURL it was registered with; a client
-// not yet created shows the one the server will register for it.
+// An existing client passes the callbackURL it was registered with, or null
+// when it registered none; a client not yet created passes undefined and
+// shows the one the server will register for it.
 function RedirectURICallout({
   callbackURL,
 }: {
-  callbackURL?: string;
-}): JSX.Element {
+  callbackURL?: string | null;
+}): JSX.Element | null {
   const newClientCallback = useNewRemoteSessionClientCallbackUrl(
     undefined,
     undefined,
     { enabled: callbackURL === undefined, throwOnError: false },
   );
+  if (callbackURL === null) return null;
   const redirectURI = callbackURL ?? newClientCallback.data?.callbackUrl;
+  if (redirectURI === undefined && newClientCallback.isError) {
+    return (
+      <Alert variant="error" dismissible={false}>
+        Couldn't load the redirect URI to register.{" "}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void newClientCallback.refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </Alert>
+    );
+  }
   if (redirectURI === undefined) {
     return (
       <Text muted small>
@@ -399,9 +415,9 @@ export function ClientCredentialsFields({
   clientSecretLabel?: string;
   clientSecretPlaceholder?: string;
   showHeading?: boolean;
-  // callbackURL is the redirect URI of an existing client. Omit it for a
-  // client not yet created.
-  callbackURL?: string;
+  // callbackURL is the redirect URI of an existing client, or null when it
+  // registered none. Omit it for a client not yet created.
+  callbackURL?: string | null;
   onClientIdChange: (value: string) => void;
   onClientSecretChange: (value: string) => void;
   onTokenEndpointAuthMethodChange: (

@@ -217,5 +217,10 @@ export function clientTypeHelp(
 // the origin it was registered with). The server still mounts it and forwards
 // into the current callback, for clients in legacy callback compatibility mode.
 export function legacyCallbackURL(callbackURL: string): string {
-  return `${new URL(callbackURL).origin}/oauth/callback`;
+  // Swap only the path: URL.origin would drop an explicit default port the
+  // server keeps.
+  return callbackURL.replace(
+    /\/mcp\/remote_login_callback$/,
+    "/oauth/callback",
+  );
 }
