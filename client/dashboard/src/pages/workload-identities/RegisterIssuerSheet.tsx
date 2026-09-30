@@ -29,7 +29,14 @@ export interface RegisterIssuerValues {
 interface RegisterIssuerSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: RegisterIssuerValues) => void;
+  /**
+   * Called with the submitted values and, when editing, the issuer's values as
+   * they stood when the sheet opened, which is what the edit is diffed against.
+   */
+  onSubmit: (
+    values: RegisterIssuerValues,
+    baseline: RegisterIssuerValues | undefined,
+  ) => void;
   isPending: boolean;
   /**
    * A registered issuer's current values. When set, the sheet edits that
@@ -102,6 +109,10 @@ export function RegisterIssuerSheet({
   const isEditing = initial !== undefined;
   const resetTo = initial ?? EMPTY;
   const [values, setValues] = useState<RegisterIssuerValues>(resetTo);
+  // The issuer as it stood when the sheet opened. A query refresh can replace
+  // `initial` mid-edit, and diffing against that would turn fields the operator
+  // never touched into changes that overwrite the newer values.
+  const [baseline, setBaseline] = useState(initial);
 
   // A successful submit closes the sheet through the parent's own state, which
   // never reaches handleOpenChange — so without this the next registration opens
@@ -110,6 +121,7 @@ export function RegisterIssuerSheet({
   useEffect(() => {
     if (!open) {
       setValues(initial ?? EMPTY);
+      setBaseline(initial);
     }
   }, [open, initial]);
 
@@ -128,7 +140,7 @@ export function RegisterIssuerSheet({
   const nameError = nameProblem(values.name);
 
   const hasChanges =
-    initial === undefined || issuerValuesDiffer(initial, values);
+    baseline === undefined || issuerValuesDiffer(baseline, values);
 
   const canSubmit =
     hasChanges &&
@@ -144,7 +156,7 @@ export function RegisterIssuerSheet({
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     if (!canSubmit || isPending) return;
-    onSubmit(values);
+    onSubmit(values, baseline);
   };
 
   return (

@@ -387,6 +387,25 @@ func TestRegisterIssuer_RefusesATagWithANulCharacter(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
+func TestRegisterIssuer_RefusesANameWithANulCharacter(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "Claude\x00Tag",
+		Issuer:                 anthropicIssuer,
+		JwksURI:                anthropicJWKS,
+		Description:            nil,
+		AllowWildcardAdmission: new(true),
+		Tags:                   nil,
+		ProjectScoped:          false,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
 func registerWithDescription(ctx context.Context, ti *testInstance, description string) (*gen.WorkloadIdentityPolicy, error) {
 	policy, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
 		SessionToken:           nil,

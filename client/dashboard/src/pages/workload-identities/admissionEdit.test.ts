@@ -14,6 +14,21 @@ describe("changedAdmissionFields", () => {
     expect(admissionValuesDiffer(stored, { ...stored })).toBe(false);
   });
 
+  it("differs when the label, tags or agent change", () => {
+    expect(
+      admissionValuesDiffer(stored, { ...stored, name: "Release bot" }),
+    ).toBe(true);
+    expect(admissionValuesDiffer(stored, { ...stored, tags: ["ci"] })).toBe(
+      true,
+    );
+    expect(
+      admissionValuesDiffer(stored, {
+        ...stored,
+        agentId: "33333333-3333-3333-3333-333333333333",
+      }),
+    ).toBe(true);
+  });
+
   it("ignores surrounding whitespace on the label, as the server trims it", () => {
     expect(
       changedAdmissionFields(stored, { ...stored, name: "  Deploy bot " }),
