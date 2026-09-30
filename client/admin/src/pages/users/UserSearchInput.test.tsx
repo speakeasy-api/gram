@@ -157,7 +157,7 @@ describe("UserSearchInput", () => {
   it("uses native buttons for keyboard editing without remove buttons", () => {
     setup("email:example.invalid");
     expect(edit("email", "example.invalid").tagName).toBe("BUTTON");
-    expect(screen.getAllByRole("button")).toHaveLength(2); // pill + help
+    expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
     fireEvent.click(edit("email", "example.invalid"));
     key("Enter", screen.getByDisplayValue("email:example.invalid"));
     expect(edit("email", "example.invalid")).toBeTruthy();
