@@ -79,7 +79,7 @@ WHERE organization_id = @organization_id;
 SELECT DISTINCT rtrim(r.url, '/')::text AS url
 FROM remote_mcp_servers AS r
 JOIN projects AS p ON p.id = r.project_id
-JOIN mcp_servers AS ms ON ms.remote_mcp_server_id = r.id AND ms.deleted IS FALSE
+JOIN mcp_servers AS ms ON ms.remote_mcp_server_id = r.id AND ms.project_id = r.project_id AND ms.deleted IS FALSE
 WHERE p.organization_id = @organization_id
   AND p.deleted IS FALSE
   AND r.deleted IS FALSE

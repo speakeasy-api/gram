@@ -96761,6 +96761,7 @@ components:
                 url:
                     type: string
                     description: Endpoint URL to create the remote MCP server with.
+                    format: uri
             description: One remote endpoint of the suggested server, as the catalog entry lists it. The administrator picks one when there are several.
             required:
                 - type

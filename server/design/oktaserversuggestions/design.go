@@ -21,7 +21,9 @@ var Remote = Type("OktaServerSuggestionRemote", func() {
 	Description("One remote endpoint of the suggested server, as the catalog entry lists it. The administrator picks one when there are several.")
 	Required("type", "url", "headers")
 	Attribute("type", String, "Transport type, for example streamable-http.")
-	Attribute("url", String, "Endpoint URL to create the remote MCP server with.")
+	Attribute("url", String, "Endpoint URL to create the remote MCP server with.", func() {
+		Format(FormatURI)
+	})
 	Attribute("headers", ArrayOf(RemoteHeader), "Headers the endpoint expects, in catalog order.")
 })
 

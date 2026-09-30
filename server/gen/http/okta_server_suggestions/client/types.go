@@ -2544,6 +2544,9 @@ func ValidateOktaServerSuggestionRemoteResponseBody(body *OktaServerSuggestionRe
 	if body.Headers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
 	}
+	if body.URL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
+	}
 	for _, e := range body.Headers {
 		if e != nil {
 			if err2 := ValidateOktaServerSuggestionRemoteHeaderResponseBody(e); err2 != nil {

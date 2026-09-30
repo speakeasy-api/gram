@@ -424,13 +424,14 @@ func (s *Service) decode(ctx context.Context, logger *slog.Logger, id uuid.UUID,
 }
 
 // group folds the per-application rows into one suggestion per entry, in
-// query order, dropping entries whose record was skipped.
+// query order, dropping entries whose record was skipped or that list no
+// remote to install.
 func group(rows []repo.ListMappedApplicationsRow, records map[uuid.UUID]record) []suggestion {
 	suggestions := make([]suggestion, 0)
 	index := make(map[uuid.UUID]int)
 	for _, row := range rows {
 		rec, ok := records[row.RegistryEntryID]
-		if !ok {
+		if !ok || len(rec.remotes) == 0 {
 			continue
 		}
 		i, ok := index[row.RegistryEntryID]

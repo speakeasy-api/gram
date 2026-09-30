@@ -224,6 +224,7 @@ func TestListMatchesAssignedActiveApplications(t *testing.T) {
 	createEntry(t, ctx, si, entryRecord("example.test/notion", []string{"https://mcp.notion.example/mcp"}, `{"oinNames":["notion"]}`), true)
 	createEntry(t, ctx, si, entryRecord("example.test/draft", []string{"https://mcp.draft.example/mcp"}, `{"oinNames":["slack"]}`), false)
 	createEntry(t, ctx, si, entryRecord("example.test/plain", []string{"https://mcp.plain.example/mcp"}, ""), true)
+	createEntry(t, ctx, si, entryRecord("example.test/noremote", nil, `{"oinNames":["github"]}`), true)
 
 	createApp(t, ctx, si, "0oa1", "Linear (SAML)", "linear", "SAML_2_0", true)
 	createApp(t, ctx, si, "0oa2", "Linear (SWA)", "integrator-4080826_linear_1", "BROWSER_PLUGIN", true)
@@ -266,6 +267,9 @@ func TestListMatchesAssignedActiveApplications(t *testing.T) {
 	require.Equal(t, "example.test/notion", result.Suggestions[1].ServerName)
 	require.True(t, result.Suggestions[1].OktaApplications[0].XaaSupported)
 	require.Equal(t, 1, result.Suggestions[1].OktaApplications[0].GroupAssignments)
+
+	// An entry with no remote to install is never suggested.
+	require.NotContains(t, []string{result.Suggestions[0].ServerName, result.Suggestions[1].ServerName}, "example.test/noremote")
 
 	// Removing every assignment drops it again.
 	n, err := si.q.RemoveOktaAssignmentsFixture(ctx, repo.RemoveOktaAssignmentsFixtureParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID, OktaAppID: "0oa3"})
