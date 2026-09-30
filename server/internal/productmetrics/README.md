@@ -284,8 +284,17 @@ filters. In the final time-first high-cardinality run, 90-day counter queries
 completed at 3.16 seconds p95 with one reader, but four readers hit the ten-second
 request deadline. That stress run did not pass its concurrency experiment; the
 catalogue and tiers do not make unconstrained dimensions inexpensive. The earlier
-series-first run also showed substantial catalogue cost. These short local
+series-first run also showed substantial catalogue cost. Docker subsequently
+reported the four-GiB benchmark container OOM-killed after the stress run. Per-query
+budgets do not bound all ClickHouse caches, background work, or allocator overhead;
+the high-cardinality profile has not passed whole-instance capacity acceptance.
+These short local
 experiments are directional evidence, not Cloud SLOs.
+
+The revised 1,000-record synchronous batch experiment also passed its 1,500/sec
+write proxy: 100,000 records per profile measured 12,226/sec with repeated series
+and 14,714/sec with distinct series. That testcontainer uses host resource limits,
+so its throughput is not directly comparable to the two-CPU historical-read seed.
 
 The measurements below are historical evidence for the original wide minute-only
 layout, not acceptance results for the catalogue/tier implementation.
