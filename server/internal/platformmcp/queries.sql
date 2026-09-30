@@ -732,37 +732,6 @@ WHERE id = @project_id
   AND deleted IS FALSE
 FOR UPDATE;
 
--- name: LockPlatformMCPProjectRegistrationQuota :exec
--- Serialize active-registration counting and desired-state creation for one
--- project. Callers acquire the receipt lock first, then this quota lock, then
--- the candidate-specific desired-state lock.
-SELECT pg_advisory_xact_lock(
-    hashtextextended(
-        jsonb_build_array('platform-mcp-registration-quota', @organization_id::text, @project_id::text)::text,
-        0
-    )
-);
-
--- name: CountActiveRegisteredPlatformMCPCatalogRegistrations :one
-SELECT COUNT(*)
-FROM platform_mcp_catalog_registrations
-WHERE organization_id = @organization_id
-  AND project_id = @project_id
-  AND status = 'registered'
-  AND deleted IS FALSE;
-
--- name: SoftDeletePendingPlatformMCPCatalogRegistration :exec
-UPDATE platform_mcp_catalog_registrations
-SET deleted_at = clock_timestamp()
-WHERE id = @registration_id
-  AND organization_id = @organization_id
-  AND project_id = @project_id
-  AND status = 'pending'
-  AND remote_mcp_server_id IS NULL
-  AND user_session_issuer_id IS NULL
-  AND mcp_server_id IS NULL
-  AND mcp_endpoint_id IS NULL;
-
 -- name: LockPlatformMCPCatalogRegistration :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(

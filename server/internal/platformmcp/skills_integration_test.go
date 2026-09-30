@@ -641,7 +641,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	})
 	require.NoError(t, err)
 
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 	allow := func() Limiter { return &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}} }
 	insights := &stubSkillInsightsReader{}

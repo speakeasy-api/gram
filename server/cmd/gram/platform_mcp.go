@@ -225,7 +225,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		}
 		return append(browserSources, platformmcp.RegistryCatalogSource{Client: fixtureRegistry, Descriptors: []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()}}), nil
 	})
-	store, err := platformmcp.NewRegistrationStore(config.DB, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := platformmcp.NewRegistrationStore(config.DB)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP registration store: %w", err)
 	}
@@ -703,7 +703,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	catalog := platformmcp.NewDynamicRegistryCatalogSources(func(ctx context.Context) ([]platformmcp.RegistryCatalogSource, error) {
 		return loadBrowserPlatformMCPCatalogDescriptors(ctx, config.Catalog)
 	})
-	store, err := platformmcp.NewRegistrationStore(config.DB, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := platformmcp.NewRegistrationStore(config.DB)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create Platform MCP registration store: %w", err)
 	}

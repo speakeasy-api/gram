@@ -419,34 +419,6 @@ func TestRegistrationServiceStopsBeforePersistenceWhenBudgetDenies(t *testing.T)
 	require.Zero(t, store.beginCalls)
 }
 
-func TestRegistrationServiceReturnsActiveRegistrationCapConflict(t *testing.T) {
-	t.Parallel()
-
-	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
-	store := &recordingRegistrationStore{
-		project: project,
-		begin: OperationReceipt{
-			ID:         uuid.New(),
-			Status:     receiptStatusSucceeded,
-			ResultCode: receiptResultActiveCap,
-			Replayed:   true,
-		},
-	}
-	service := newRegistrationService(
-		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http", remoteURL: "https://provider.test/mcp"}},
-		&testRegistrationGate{enabled: true},
-		store,
-	)
-
-	_, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
-		ProjectSlug: project.Slug, ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "request-key",
-	})
-
-	require.ErrorIs(t, err, ErrRegistrationCap)
-	require.Zero(t, store.convergeCalls)
-	require.Zero(t, store.completeCalls)
-}
-
 func TestRegistrationServiceReplayReturnsPersistedSecretSetupState(t *testing.T) {
 	t.Parallel()
 
