@@ -54916,7 +54916,7 @@ paths:
         type: mutation
   /rpc/risk.unmaskResult:
     post:
-      description: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
+      description: Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.
       operationId: unmaskRiskResult
       parameters:
         - allowEmptyValue: true
@@ -87285,7 +87285,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SetupTask'
-          description: Setup tasks in catalog order.
+          description: Setup tasks in catalog order. A group precedes the cards under it.
       required:
         - tasks
     ListShadowMCPInventoryResult:
@@ -95083,9 +95083,16 @@ components:
         match:
           type: string
           description: The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).
+        reveal_state:
+          type: string
+          description: Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+          enum:
+            - available
+            - evidence_not_stored
       required:
         - id
         - match
+        - reveal_state
     RiskUserBreakdownResult:
       type: object
       properties:
@@ -96890,12 +96897,18 @@ components:
         description:
           type: string
           description: Task description.
+        group:
+          type: boolean
+          description: 'True for a group that nests cards. A group has no card of its own: it is hidden when every card under it is, done when every visible card is, and cannot be assigned or marked by hand.'
         hidden:
           type: boolean
           description: Whether a platform administrator hid the task.
         key:
           type: string
           description: Stable code-owned task key.
+        parent_key:
+          type: string
+          description: Key of the group this card sits under. Absent for a top-level card or a group.
         status:
           type: string
           description: Effective task status.
@@ -96915,6 +96928,7 @@ components:
         - completed_by_fact
         - blocked_by
         - hidden
+        - group
     SetupTaskAssignee:
       type: object
       properties:

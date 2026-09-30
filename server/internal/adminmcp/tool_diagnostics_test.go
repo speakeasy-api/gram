@@ -80,7 +80,7 @@ func TestOrganizationOnboardingExactTargetAndRedactedProjection(t *testing.T) {
 	reads := testDiagnosticsReads()
 	preset := "guided"
 	reads.onboarding.Preset = &preset
-	reads.onboarding.Tasks = []*gen.AdminOnboardingTask{{Key: "connect", Title: "customer-authored private title", Description: "private description", Hidden: true}}
+	reads.onboarding.Tasks = []*gen.AdminOnboardingTask{{Key: "connect", Title: "customer-authored private title", Description: "private description", Hidden: true}, {Key: "agent-observability", Title: "Set up agent observability", Description: "derived", Hidden: false, Group: true}}
 	reads.onboarding.Presets = []*gen.AdminOnboardingPreset{{Key: "guided", VisibleTaskKeys: []string{"connect"}}}
 	status, body, data := callDiagnosticReadTool(t, reads, "get_organization_onboarding", `{"organization_id":"org-a"}`)
 	require.Equal(t, http.StatusOK, status)

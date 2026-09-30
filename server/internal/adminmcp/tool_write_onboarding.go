@@ -135,6 +135,10 @@ func (o *onboardingWriter) readState(ctx context.Context, tx pgx.Tx, organizatio
 	}
 	tasks := make([]onboardingTaskState, 0, len(config.Tasks))
 	for _, task := range config.Tasks {
+		// A group's visibility follows its cards and cannot be selected.
+		if task.Group {
+			continue
+		}
 		tasks = append(tasks, onboardingTaskState{Key: task.Key, Hidden: task.Hidden})
 	}
 	return onboardingState{OrganizationID: org.ID, Name: org.Name, Slug: org.Slug, Preset: config.Preset, Tasks: tasks}, nil

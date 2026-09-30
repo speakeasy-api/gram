@@ -26,8 +26,9 @@ function selection(
   return {
     organizationId: data.organizationId,
     preset: data.preset,
+    // Groups are derived from their cards and are never part of a selection.
     visibleTaskKeys: data.tasks
-      .filter((task) => !task.hidden)
+      .filter((task) => !task.hidden && !task.group)
       .map((task) => task.key),
   };
 }
@@ -161,41 +162,56 @@ function OnboardingEditor({
           </Button>
         </div>
         <div className="space-y-3">
-          {data.tasks.map((task) => (
-            <label
-              key={task.key}
-              className="flex cursor-pointer items-start gap-3"
-            >
-              <Checkbox
-                aria-label={task.title}
-                checked={current.visibleTaskKeys.includes(task.key)}
-                disabled={mutation.isPending}
-                onCheckedChange={(checked) => {
-                  mutation.reset();
-                  setPresetChoice("");
-                  setDraft({
-                    ...current,
-                    visibleTaskKeys:
-                      checked === true
-                        ? [...current.visibleTaskKeys, task.key]
-                        : current.visibleTaskKeys.filter(
-                            (key) => key !== task.key,
-                          ),
-                  });
-                }}
-              />
-              <span>
-                <span className="block text-sm font-medium">{task.title}</span>
-                <span className="text-muted-foreground text-sm">
-                  {task.description}
+          {data.tasks.map((task) =>
+            task.group ? (
+              <div key={task.key} className="pt-2">
+                <p className="text-sm font-medium">{task.title}</p>
+                <p className="text-muted-foreground text-sm">
+                  {task.description} Shown when any of its cards is.
+                </p>
+              </div>
+            ) : (
+              <label
+                key={task.key}
+                className={
+                  task.parentKey
+                    ? "ml-6 flex cursor-pointer items-start gap-3"
+                    : "flex cursor-pointer items-start gap-3"
+                }
+              >
+                <Checkbox
+                  aria-label={task.title}
+                  checked={current.visibleTaskKeys.includes(task.key)}
+                  disabled={mutation.isPending}
+                  onCheckedChange={(checked) => {
+                    mutation.reset();
+                    setPresetChoice("");
+                    setDraft({
+                      ...current,
+                      visibleTaskKeys:
+                        checked === true
+                          ? [...current.visibleTaskKeys, task.key]
+                          : current.visibleTaskKeys.filter(
+                              (key) => key !== task.key,
+                            ),
+                    });
+                  }}
+                />
+                <span>
+                  <span className="block text-sm font-medium">
+                    {task.title}
+                  </span>
+                  <span className="text-muted-foreground text-sm">
+                    {task.description}
+                  </span>
                 </span>
-              </span>
-            </label>
-          ))}
+              </label>
+            ),
+          )}
         </div>
         <p className="text-muted-foreground text-sm">
-          {current.visibleTaskKeys.length} of {data.tasks.length} tasks
-          selected.
+          {current.visibleTaskKeys.length} of{" "}
+          {data.tasks.filter((task) => !task.group).length} tasks selected.
           {current.visibleTaskKeys.length === 0
             ? " Customers will see no onboarding tasks."
             : ""}

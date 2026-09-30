@@ -195,7 +195,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|get-stripe-subscription-candidate|set-stripe-subscription)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|get-stripe-subscription-candidate|set-stripe-subscription)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4375,6 +4375,20 @@ func ParseEndpoint(
 		adminSetRegistryEntryPublishedBodyFlag              = adminSetRegistryEntryPublishedFlags.String("body", "REQUIRED", "")
 		adminSetRegistryEntryPublishedAdminSessionTokenFlag = adminSetRegistryEntryPublishedFlags.String("admin-session-token", "", "")
 
+		adminListOnboardingStepsFlags                 = flag.NewFlagSet("list-onboarding-steps", flag.ExitOnError)
+		adminListOnboardingStepsAdminSessionTokenFlag = adminListOnboardingStepsFlags.String("admin-session-token", "", "")
+
+		adminGetOnboardingStackOptionsFlags                 = flag.NewFlagSet("get-onboarding-stack-options", flag.ExitOnError)
+		adminGetOnboardingStackOptionsAdminSessionTokenFlag = adminGetOnboardingStackOptionsFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationOnboardingStackFlags                 = flag.NewFlagSet("get-organization-onboarding-stack", flag.ExitOnError)
+		adminGetOrganizationOnboardingStackOrganizationIDFlag    = adminGetOrganizationOnboardingStackFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationOnboardingStackAdminSessionTokenFlag = adminGetOrganizationOnboardingStackFlags.String("admin-session-token", "", "")
+
+		adminSetOrganizationOnboardingStackFlags                 = flag.NewFlagSet("set-organization-onboarding-stack", flag.ExitOnError)
+		adminSetOrganizationOnboardingStackBodyFlag              = adminSetOrganizationOnboardingStackFlags.String("body", "REQUIRED", "")
+		adminSetOrganizationOnboardingStackAdminSessionTokenFlag = adminSetOrganizationOnboardingStackFlags.String("admin-session-token", "", "")
+
 		adminGetStripeSubscriptionCandidateFlags                    = flag.NewFlagSet("get-stripe-subscription-candidate", flag.ExitOnError)
 		adminGetStripeSubscriptionCandidateOrganizationIDFlag       = adminGetStripeSubscriptionCandidateFlags.String("organization-id", "REQUIRED", "")
 		adminGetStripeSubscriptionCandidateStripeSubscriptionIDFlag = adminGetStripeSubscriptionCandidateFlags.String("stripe-subscription-id", "REQUIRED", "")
@@ -5576,6 +5590,10 @@ func ParseEndpoint(
 	adminCreateRegistryEntryFlags.Usage = adminCreateRegistryEntryUsage
 	adminSaveRegistryEntryFlags.Usage = adminSaveRegistryEntryUsage
 	adminSetRegistryEntryPublishedFlags.Usage = adminSetRegistryEntryPublishedUsage
+	adminListOnboardingStepsFlags.Usage = adminListOnboardingStepsUsage
+	adminGetOnboardingStackOptionsFlags.Usage = adminGetOnboardingStackOptionsUsage
+	adminGetOrganizationOnboardingStackFlags.Usage = adminGetOrganizationOnboardingStackUsage
+	adminSetOrganizationOnboardingStackFlags.Usage = adminSetOrganizationOnboardingStackUsage
 	adminGetStripeSubscriptionCandidateFlags.Usage = adminGetStripeSubscriptionCandidateUsage
 	adminSetStripeSubscriptionFlags.Usage = adminSetStripeSubscriptionUsage
 
@@ -8461,6 +8479,18 @@ func ParseEndpoint(
 			case "set-registry-entry-published":
 				epf = adminSetRegistryEntryPublishedFlags
 
+			case "list-onboarding-steps":
+				epf = adminListOnboardingStepsFlags
+
+			case "get-onboarding-stack-options":
+				epf = adminGetOnboardingStackOptionsFlags
+
+			case "get-organization-onboarding-stack":
+				epf = adminGetOrganizationOnboardingStackFlags
+
+			case "set-organization-onboarding-stack":
+				epf = adminSetOrganizationOnboardingStackFlags
+
 			case "get-stripe-subscription-candidate":
 				epf = adminGetStripeSubscriptionCandidateFlags
 
@@ -11295,6 +11325,18 @@ func ParseEndpoint(
 			case "set-registry-entry-published":
 				endpoint = c.SetRegistryEntryPublished()
 				data, err = adminc.BuildSetRegistryEntryPublishedPayload(*adminSetRegistryEntryPublishedBodyFlag, *adminSetRegistryEntryPublishedAdminSessionTokenFlag)
+			case "list-onboarding-steps":
+				endpoint = c.ListOnboardingSteps()
+				data, err = adminc.BuildListOnboardingStepsPayload(*adminListOnboardingStepsAdminSessionTokenFlag)
+			case "get-onboarding-stack-options":
+				endpoint = c.GetOnboardingStackOptions()
+				data, err = adminc.BuildGetOnboardingStackOptionsPayload(*adminGetOnboardingStackOptionsAdminSessionTokenFlag)
+			case "get-organization-onboarding-stack":
+				endpoint = c.GetOrganizationOnboardingStack()
+				data, err = adminc.BuildGetOrganizationOnboardingStackPayload(*adminGetOrganizationOnboardingStackOrganizationIDFlag, *adminGetOrganizationOnboardingStackAdminSessionTokenFlag)
+			case "set-organization-onboarding-stack":
+				endpoint = c.SetOrganizationOnboardingStack()
+				data, err = adminc.BuildSetOrganizationOnboardingStackPayload(*adminSetOrganizationOnboardingStackBodyFlag, *adminSetOrganizationOnboardingStackAdminSessionTokenFlag)
 			case "get-stripe-subscription-candidate":
 				endpoint = c.GetStripeSubscriptionCandidate()
 				data, err = adminc.BuildGetStripeSubscriptionCandidatePayload(*adminGetStripeSubscriptionCandidateOrganizationIDFlag, *adminGetStripeSubscriptionCandidateStripeSubscriptionIDFlag, *adminGetStripeSubscriptionCandidateAdminSessionTokenFlag)
@@ -23778,7 +23820,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    release-session-quarantine: Release an active session quarantine.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-for-agent: List risk analysis results with the `+"`"+`match`+"`"+` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `+"`"+`match`+"`"+` value — a non-sensitive server URL or command identifier — is passed through verbatim.`)
-	fmt.Fprintln(os.Stderr, `    unmask-risk-result: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.`)
+	fmt.Fprintln(os.Stderr, `    unmask-risk-result: Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
 	fmt.Fprintln(os.Stderr, `    mark-risk-results-false-positive: Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.`)
 	fmt.Fprintln(os.Stderr, `    unmark-risk-results-false-positive: Undo a false-positive dismissal for one or more risk results.`)
@@ -24166,7 +24208,7 @@ func riskUnmaskRiskResultUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.`)
+	fmt.Fprintln(os.Stderr, `Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -28810,6 +28852,10 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    create-registry-entry: Staff-only registry administration.`)
 	fmt.Fprintln(os.Stderr, `    save-registry-entry: Staff-only registry administration.`)
 	fmt.Fprintln(os.Stderr, `    set-registry-entry-published: Staff-only registry administration.`)
+	fmt.Fprintln(os.Stderr, `    list-onboarding-steps: Read the onboarding steps the code defines, mirrored into the database, with their groups, methods and prerequisites.`)
+	fmt.Fprintln(os.Stderr, `    get-onboarding-stack-options: Read the vendors, plans and platforms the stack form offers, from the support matrix catalog.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-onboarding-stack: Read the stack staff recorded for an organization: its vendors with plans and its device management.`)
+	fmt.Fprintln(os.Stderr, `    set-organization-onboarding-stack: Replace the stack recorded for an organization. Vendors and plans must come from the catalog; other needs a name and none clears it.`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.`)
 	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.`)
 	fmt.Fprintln(os.Stderr)
@@ -30164,6 +30210,82 @@ func adminSetRegistryEntryPublishedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-registry-entry-published --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"published\": false,\n      \"updated_at\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminListOnboardingStepsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-onboarding-steps", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the onboarding steps the code defines, mirrored into the database, with their groups, methods and prerequisites.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-onboarding-steps --admin-session-token \"abc123\"")
+}
+
+func adminGetOnboardingStackOptionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-onboarding-stack-options", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the vendors, plans and platforms the stack form offers, from the support matrix catalog.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-onboarding-stack-options --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationOnboardingStackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-onboarding-stack", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the stack staff recorded for an organization: its vendors with plans and its device management.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-onboarding-stack --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminSetOrganizationOnboardingStackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-organization-onboarding-stack", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the stack recorded for an organization. Vendors and plans must come from the catalog; other needs a name and none clears it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-organization-onboarding-stack --body '{\n      \"mdm_vendor\": \"abc123\",\n      \"mdm_vendor_name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"vendors\": [\n         {\n            \"plan_slug\": \"abc123\",\n            \"vendor\": \"abc123\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetStripeSubscriptionCandidateUsage() {

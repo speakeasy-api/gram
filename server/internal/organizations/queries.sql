@@ -1030,3 +1030,113 @@ ON CONFLICT (organization_id, task_key) DO UPDATE SET
     hidden_at = EXCLUDED.hidden_at,
     updated_at = clock_timestamp()
 WHERE (organization_setup_tasks.hidden_at IS NOT NULL) IS DISTINCT FROM @hidden::boolean;
+
+-- name: LockOnboardingSteps :exec
+SELECT pg_advisory_xact_lock(719438202);
+
+-- name: UpsertOnboardingStep :one
+INSERT INTO onboarding_steps (slug, title, description, completion, hidden_by_default, sort_order)
+VALUES (@slug, @title, @description, @completion, @hidden_by_default, @sort_order)
+ON CONFLICT (slug) DO UPDATE SET
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    completion = EXCLUDED.completion,
+    hidden_by_default = EXCLUDED.hidden_by_default,
+    sort_order = EXCLUDED.sort_order,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING id;
+
+-- name: SetOnboardingStepParent :exec
+UPDATE onboarding_steps
+SET parent_step_id = sqlc.narg(parent_step_id), updated_at = clock_timestamp()
+WHERE id = @id AND parent_step_id IS DISTINCT FROM sqlc.narg(parent_step_id);
+
+-- name: RetireOnboardingStepsNotIn :exec
+UPDATE onboarding_steps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE deleted_at IS NULL AND NOT (slug = ANY(@slugs::text[]));
+
+-- name: DeleteOnboardingStepMethods :exec
+DELETE FROM onboarding_step_methods WHERE step_id = @step_id;
+
+-- name: InsertOnboardingStepMethod :execrows
+INSERT INTO onboarding_step_methods (step_id, integration_method_id)
+SELECT @step_id, m.id
+FROM support_matrix_integration_methods m
+WHERE m.slug = @method_slug AND m.deleted_at IS NULL
+ON CONFLICT DO NOTHING;
+
+-- name: DeleteOnboardingStepDependencies :exec
+DELETE FROM onboarding_step_dependencies WHERE step_id = @step_id;
+
+-- name: InsertOnboardingStepDependency :exec
+INSERT INTO onboarding_step_dependencies (step_id, requires_step_id)
+SELECT @step_id, r.id
+FROM onboarding_steps r
+WHERE r.slug = @requires_slug
+ON CONFLICT DO NOTHING;
+
+-- name: ListOnboardingSteps :many
+SELECT s.id, s.slug, s.title, s.description, s.completion, s.hidden_by_default, s.sort_order,
+  p.slug AS parent_slug,
+  (
+    SELECT coalesce(array_agg(m.slug ORDER BY m.sort_order, m.slug), '{}')::text[]
+    FROM onboarding_step_methods sm
+    JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
+    WHERE sm.step_id = s.id
+  ) AS method_slugs,
+  (
+    SELECT coalesce(array_agg(r.slug ORDER BY r.sort_order, r.slug), '{}')::text[]
+    FROM onboarding_step_dependencies d
+    JOIN onboarding_steps r ON r.id = d.requires_step_id AND r.deleted_at IS NULL
+    WHERE d.step_id = s.id
+  ) AS requires_slugs
+FROM onboarding_steps s
+LEFT JOIN onboarding_steps p ON p.id = s.parent_step_id AND p.deleted_at IS NULL
+WHERE s.deleted_at IS NULL
+ORDER BY s.sort_order, s.slug;
+
+-- name: GetOrganizationOnboardingStack :one
+SELECT om.id, om.name, om.slug, onboarding.mdm_vendor, onboarding.mdm_vendor_name
+FROM organization_metadata om
+LEFT JOIN organization_onboarding onboarding ON onboarding.organization_id = om.id
+WHERE om.id = @organization_id;
+
+-- name: ListOrganizationOnboardingVendors :many
+SELECT v.vendor, p.slug AS plan_slug
+FROM organization_onboarding_vendors v
+LEFT JOIN support_matrix_plans p ON p.id = v.plan_id AND p.deleted_at IS NULL
+WHERE v.organization_id = @organization_id
+ORDER BY v.vendor;
+
+-- name: UpsertOrganizationOnboardingStack :exec
+INSERT INTO organization_onboarding (organization_id, mdm_vendor, mdm_vendor_name)
+VALUES (@organization_id::text, sqlc.narg(mdm_vendor), sqlc.narg(mdm_vendor_name))
+ON CONFLICT (organization_id) DO UPDATE SET
+    mdm_vendor = EXCLUDED.mdm_vendor,
+    mdm_vendor_name = EXCLUDED.mdm_vendor_name,
+    updated_at = clock_timestamp();
+
+-- name: DeleteOrganizationOnboardingVendors :exec
+DELETE FROM organization_onboarding_vendors WHERE organization_id = @organization_id;
+
+-- name: InsertOrganizationOnboardingVendor :exec
+INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_id)
+VALUES (
+  @organization_id,
+  @vendor,
+  (SELECT p.id FROM support_matrix_plans p WHERE p.slug = sqlc.narg(plan_slug)::text AND p.deleted_at IS NULL)
+);
+
+-- name: ListSupportMatrixPlatformsForOnboarding :many
+SELECT slug, name, vendor, family, surface
+FROM support_matrix_platforms
+WHERE deleted_at IS NULL
+ORDER BY sort_order, slug;
+
+-- name: ListSupportMatrixPlansForOnboarding :many
+SELECT slug, vendor, name
+FROM support_matrix_plans
+WHERE deleted_at IS NULL
+ORDER BY sort_order, slug;

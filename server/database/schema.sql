@@ -7226,6 +7226,23 @@ ON risk_results (chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_chat_content_part_idx
 ON risk_results (chat_content_part_id);
 
+-- Encrypted raw matches for MCP findings, retained with ClickHouse findings.
+CREATE TABLE IF NOT EXISTS risk_finding_evidence (
+  finding_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  match_encrypted TEXT NOT NULL,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  expires_at timestamptz NOT NULL,
+
+  CONSTRAINT risk_finding_evidence_pkey PRIMARY KEY (organization_id, project_id, finding_id),
+  CONSTRAINT risk_finding_evidence_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS risk_finding_evidence_expires_at_idx
+ON risk_finding_evidence (expires_at, organization_id, project_id, finding_id);
+
 -- risk_policy_eval_reviews is the durable "regression set" for a prompt-based
 -- risk policy: a reviewer's ground-truth verdict on whether a given chat session
 -- should be flagged by the policy. The policy-eval workbench replays the

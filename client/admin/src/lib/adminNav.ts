@@ -16,6 +16,7 @@ import {
   Grid2X2Icon,
   KeyRoundIcon,
   PlugZapIcon,
+  ListChecksIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -25,12 +26,6 @@ export const ADMIN_NAV_GROUPS = [
     label: "Account Management",
     items: [
       {
-        to: "/users",
-        label: "Users",
-        keywords: "people email members directory",
-        icon: UsersIcon,
-      },
-      {
         to: "/organizations",
         label: "Organizations",
         // Only the palette reads these. They are the words an operator types for a
@@ -38,6 +33,12 @@ export const ADMIN_NAV_GROUPS = [
         // the label still finds the page rather than reading as "no results".
         keywords: "orgs accounts customers tenants companies",
         icon: BuildingIcon,
+      },
+      {
+        to: "/users",
+        label: "Users",
+        keywords: "people email members directory",
+        icon: UsersIcon,
       },
       {
         to: "/projects",
@@ -67,6 +68,12 @@ export const ADMIN_NAV_GROUPS = [
         label: "Support matrix",
         keywords: "support matrix products capabilities integrations",
         icon: Grid2X2Icon,
+      },
+      {
+        to: "/onboarding-steps",
+        label: "Steps",
+        keywords: "onboarding steps setup wizard cards groups playbooks",
+        icon: ListChecksIcon,
       },
       {
         to: "/remote-session-issuers",

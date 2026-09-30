@@ -100,6 +100,12 @@ import { buildAdminOrganizationOnboardingQuery } from "@gram/admin-client/react-
 import { buildSetAdminOrganizationOnboardingMutation } from "@gram/admin-client/react-query/setAdminOrganizationOnboarding";
 import type { AdminOnboardingConfiguration } from "@gram/admin-client/models/components/adminonboardingconfiguration";
 import type { SetOrganizationOnboardingRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingrequestbody";
+import { buildAdminOnboardingStackOptionsQuery } from "@gram/admin-client/react-query/adminOnboardingStackOptions.core";
+import { buildAdminOrganizationOnboardingStackQuery } from "@gram/admin-client/react-query/adminOrganizationOnboardingStack.core";
+import { buildAdminOnboardingStepsQuery } from "@gram/admin-client/react-query/adminOnboardingSteps.core";
+import { buildSetAdminOrganizationOnboardingStackMutation } from "@gram/admin-client/react-query/setAdminOrganizationOnboardingStack";
+import type { AdminOnboardingStack } from "@gram/admin-client/models/components/adminonboardingstack";
+import type { SetOrganizationOnboardingStackRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingstackrequestbody";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
@@ -241,6 +247,66 @@ export function setAdminOrganizationOnboarding(
   request: SetOrganizationOnboardingRequestBody,
 ): Promise<AdminOnboardingConfiguration> {
   return generatedOnboardingMutation.mutationFn({ request });
+}
+
+// The stack form's options come from the support matrix catalog, which only
+// changes on deploy, so the list is fetched once per session.
+function createOnboardingStackOptionsQuery() {
+  const generated = buildAdminOnboardingStackOptionsQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: Infinity,
+  });
+}
+
+export function onboardingStackOptionsQuery(): ReturnType<
+  typeof createOnboardingStackOptionsQuery
+> {
+  return createOnboardingStackOptionsQuery();
+}
+
+function createOrganizationOnboardingStackQuery(organizationId: string) {
+  const generated = buildAdminOrganizationOnboardingStackQuery(
+    redirectingClient,
+    { organizationId },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function organizationOnboardingStackQuery(
+  organizationId: string,
+): ReturnType<typeof createOrganizationOnboardingStackQuery> {
+  return createOrganizationOnboardingStackQuery(organizationId);
+}
+
+const generatedOnboardingStackMutation =
+  buildSetAdminOrganizationOnboardingStackMutation(mutationClient);
+
+export function setAdminOrganizationOnboardingStack(
+  request: SetOrganizationOnboardingStackRequestBody,
+): Promise<AdminOnboardingStack> {
+  return generatedOnboardingStackMutation.mutationFn({ request });
+}
+
+// Steps are defined in code and mirrored at start-up, so they only change on
+// deploy.
+function createOnboardingStepsQuery() {
+  const generated = buildAdminOnboardingStepsQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: Infinity,
+  });
+}
+
+export function onboardingStepsQuery(): ReturnType<
+  typeof createOnboardingStepsQuery
+> {
+  return createOnboardingStepsQuery();
 }
 
 function createOrganizationActivityQuery(organizationId: string) {

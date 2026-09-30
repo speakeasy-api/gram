@@ -35,14 +35,16 @@ func (f policyDetectorFunc) ScanMCPPolicy(ctx context.Context, policy policycore
 }
 
 type findingPublisher struct {
-	mu       sync.Mutex
-	messages []*riskv1.Finding
+	mu          sync.Mutex
+	messages    []*riskv1.Finding
+	contextErrs []error
 }
 
-func (p *findingPublisher) Publish(_ context.Context, finding *riskv1.Finding, _ ...gcp.PublishOption) gcp.PublishResult {
+func (p *findingPublisher) Publish(ctx context.Context, finding *riskv1.Finding, _ ...gcp.PublishOption) gcp.PublishResult {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.messages = append(p.messages, finding)
+	p.contextErrs = append(p.contextErrs, ctx.Err())
 	return gcp.NewSuccessPublishResult()
 }
 
@@ -54,6 +56,38 @@ func (p *findingPublisher) snapshot() []*riskv1.Finding {
 	return append([]*riskv1.Finding(nil), p.messages...)
 }
 
+func (p *findingPublisher) contextErrors() []error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]error(nil), p.contextErrs...)
+}
+
+type evidenceWriter struct {
+	mu      sync.Mutex
+	err     error
+	store   func(context.Context, risk.MCPFindingEvidenceBatch) error
+	batches []risk.MCPFindingEvidenceBatch
+}
+
+func (w *evidenceWriter) Store(ctx context.Context, batch risk.MCPFindingEvidenceBatch) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.store != nil {
+		return w.store(ctx, batch)
+	}
+	if w.err != nil {
+		return w.err
+	}
+	w.batches = append(w.batches, batch)
+	return nil
+}
+
+func (w *evidenceWriter) snapshot() []risk.MCPFindingEvidenceBatch {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]risk.MCPFindingEvidenceBatch(nil), w.batches...)
+}
+
 func TestPolicyEvaluator_BlockDecisionPublishesAttributedFinding(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
@@ -61,6 +95,7 @@ func TestPolicyEvaluator_BlockDecisionPublishesAttributedFinding(t *testing.T) {
 	policyID := uuid.New()
 	message := "Use an approved credential."
 	publisher := &findingPublisher{}
+	evidence := &evidenceWriter{}
 	evaluator := newPolicyEvaluator(t, policyLookupFunc(func(_ context.Context, organizationID string, gotProjectID uuid.UUID, target policycore.MCPTarget) ([]policycore.Policy, error) {
 		require.Equal(t, "org-test", organizationID)
 		require.Equal(t, projectID, gotProjectID)
@@ -73,7 +108,7 @@ func TestPolicyEvaluator_BlockDecisionPublishesAttributedFinding(t *testing.T) {
 		require.Equal(t, policyID, policy.ID)
 		require.JSONEq(t, `{"token":"secret"}`, request.Text)
 		return []scanners.Finding{{RuleID: "secret.token", Description: "Credential detected", Match: "secret", StartPos: 10, EndPos: 16, Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
-	}), publisher, mcpriskscan.DefaultPolicyConfig)
+	}), publisher, mcpriskscan.DefaultPolicyConfig, mcpriskscan.WithMCPFindingEvidenceWriter(evidence))
 
 	decision := evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, serverID, `{"token":"secret"}`))
 	require.True(t, decision.Denied())
@@ -92,6 +127,92 @@ func TestPolicyEvaluator_BlockDecisionPublishesAttributedFinding(t *testing.T) {
 	require.Equal(t, mcpriskscan.MethodToolsCall, published[0].GetExecution().GetMethod())
 	require.Equal(t, serverID.String(), published[0].GetExecution().GetMcpServerId())
 	require.Equal(t, "lookup", published[0].GetExecution().GetToolName())
+	stored := evidence.snapshot()
+	require.Len(t, stored, 1)
+	require.Equal(t, "org-test", stored[0].OrganizationID)
+	require.Equal(t, projectID, stored[0].ProjectID)
+	require.Len(t, stored[0].Findings, 1)
+	require.Equal(t, uuid.MustParse(published[0].GetId()), stored[0].Findings[0].ID)
+	require.Equal(t, "secret", stored[0].Findings[0].Match)
+}
+
+func TestPolicyEvaluator_PublishesWhenEvidenceStorageFails(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	publisher := &findingPublisher{}
+	evidence := &evidenceWriter{err: errors.New("encryption unavailable")}
+	evaluator := newPolicyEvaluator(
+		t,
+		staticPolicies(policycore.Policy{
+			ID:             uuid.New(),
+			ProjectID:      projectID,
+			OrganizationID: "org-test",
+			Name:           "Credential policy",
+			Action:         "block",
+		}),
+		policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
+			return []scanners.Finding{{
+				RuleID:      "secret.token",
+				Description: "Credential detected",
+				Match:       "secret",
+				Tags:        []string{},
+				Source:      "gitleaks",
+				Confidence:  1,
+			}}, nil
+		}),
+		publisher,
+		mcpriskscan.DefaultPolicyConfig,
+		mcpriskscan.WithMCPFindingEvidenceWriter(evidence),
+	)
+
+	decision := evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, uuid.New(), `{"token":"secret"}`))
+	require.True(t, decision.Denied())
+	published := publisher.snapshot()
+	require.Len(t, published, 1)
+	require.Equal(t, riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED, published[0].GetEnforcementOutcome())
+}
+
+func TestPolicyEvaluator_SlowEvidenceStorageDoesNotStarvePublish(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	publisher := &findingPublisher{}
+	storeTimedOut := false
+	evidence := &evidenceWriter{store: func(ctx context.Context, _ risk.MCPFindingEvidenceBatch) error {
+		<-ctx.Done()
+		storeTimedOut = true
+		return ctx.Err()
+	}}
+	evaluator := newPolicyEvaluator(
+		t,
+		staticPolicies(policycore.Policy{
+			ID:             uuid.New(),
+			ProjectID:      projectID,
+			OrganizationID: "org-test",
+			Name:           "Credential policy",
+			Action:         "block",
+		}),
+		policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
+			return []scanners.Finding{{
+				RuleID:      "secret.token",
+				Description: "Credential detected",
+				Match:       "secret",
+				Tags:        []string{},
+				Source:      "gitleaks",
+				Confidence:  1,
+			}}, nil
+		}),
+		publisher,
+		mcpriskscan.PolicyConfig{Deadline: 50 * time.Millisecond, FailMode: mcpriskscan.FailOpen, FlagConcurrency: 1},
+		mcpriskscan.WithMCPFindingEvidenceWriter(evidence),
+	)
+
+	decision := evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, uuid.New(), `{"token":"secret"}`))
+	require.True(t, decision.Denied())
+	require.True(t, storeTimedOut)
+	require.Len(t, publisher.snapshot(), 1)
+	contextErrs := publisher.contextErrors()
+	require.Len(t, contextErrs, 1)
+	require.NoError(t, contextErrs[0], "finding publication must receive a live context before evidence storage")
 }
 
 func TestPolicyEvaluator_FlagLaneIsDetachedAndAtMostOnce(t *testing.T) {
@@ -102,6 +223,7 @@ func TestPolicyEvaluator_FlagLaneIsDetachedAndAtMostOnce(t *testing.T) {
 	started := make(chan struct{}, 1)
 	release := make(chan struct{})
 	publisher := &findingPublisher{}
+	evidence := &evidenceWriter{}
 	var mu sync.Mutex
 	calls := 0
 	evaluator := newPolicyEvaluator(t, staticPolicies(policycore.Policy{ID: policyID, ProjectID: projectID, OrganizationID: "org-test", Name: "Flag policy", Action: "warn", Version: 2}), policyDetectorFunc(func(ctx context.Context, _ policycore.Policy, _ risk.MCPScanRequest) ([]scanners.Finding, error) {
@@ -111,11 +233,11 @@ func TestPolicyEvaluator_FlagLaneIsDetachedAndAtMostOnce(t *testing.T) {
 		started <- struct{}{}
 		select {
 		case <-release:
-			return []scanners.Finding{{RuleID: "flag.rule", Description: "Flagged", Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
+			return []scanners.Finding{{RuleID: "flag.rule", Description: "Flagged", Match: "flag secret", Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-	}), publisher, mcpriskscan.PolicyConfig{Deadline: time.Second, FailMode: mcpriskscan.FailOpen, FlagConcurrency: 1})
+	}), publisher, mcpriskscan.PolicyConfig{Deadline: time.Second, FailMode: mcpriskscan.FailOpen, FlagConcurrency: 1}, mcpriskscan.WithMCPFindingEvidenceWriter(evidence))
 
 	subject := requestSubject(t.Context(), projectID, serverID, `{"query":"flag"}`)
 	decision := evaluator.Scan(t.Context(), subject)
@@ -132,6 +254,11 @@ func TestPolicyEvaluator_FlagLaneIsDetachedAndAtMostOnce(t *testing.T) {
 	require.Equal(t, 1, calls)
 	mu.Unlock()
 	require.Equal(t, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED, publisher.snapshot()[0].GetEnforcementOutcome())
+	stored := evidence.snapshot()
+	require.Len(t, stored, 1)
+	require.Len(t, stored[0].Findings, 1)
+	require.Equal(t, uuid.MustParse(publisher.snapshot()[0].GetId()), stored[0].Findings[0].ID)
+	require.Equal(t, "flag secret", stored[0].Findings[0].Match)
 }
 
 func TestPolicyEvaluator_DrainPublishesFlagFindingsReturnedWithError(t *testing.T) {
@@ -368,9 +495,16 @@ func TestPolicyEvaluator_DropsFlagLaneWhenCapacityIsFull(t *testing.T) {
 	t.Fatal("flag drop metric was not recorded")
 }
 
-func newPolicyEvaluator(t *testing.T, lookup mcpriskscan.PolicyLookup, detector mcpriskscan.PolicyDetector, publisher gcp.Publisher[*riskv1.Finding], config mcpriskscan.PolicyConfig) *mcpriskscan.Evaluator {
+func newPolicyEvaluator(
+	t *testing.T,
+	lookup mcpriskscan.PolicyLookup,
+	detector mcpriskscan.PolicyDetector,
+	publisher gcp.Publisher[*riskv1.Finding],
+	config mcpriskscan.PolicyConfig,
+	options ...mcpriskscan.PolicyEvaluatorOption,
+) *mcpriskscan.Evaluator {
 	t.Helper()
-	return mcpriskscan.NewPolicyEvaluator(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), lookup, detector, publisher, config)
+	return mcpriskscan.NewPolicyEvaluator(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), lookup, detector, publisher, config, options...)
 }
 
 func staticPolicies(policies ...policycore.Policy) policyLookupFunc {

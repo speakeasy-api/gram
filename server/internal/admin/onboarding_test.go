@@ -56,7 +56,7 @@ func TestOnboardingHTTP(t *testing.T) {
 	legacy, err := organizations.LoadOnboardingConfiguration(ctx, conn, orgID)
 	require.NoError(t, err)
 	require.Nil(t, legacy.Preset)
-	require.Len(t, legacy.Tasks, 12)
+	require.Len(t, legacy.Tasks, 14)
 	require.Len(t, legacy.Presets, 2)
 	require.Len(t, legacy.Presets[1].VisibleTaskKeys, 9)
 	require.NotContains(t, legacy.Presets[1].VisibleTaskKeys, "domain-verification")
@@ -99,7 +99,7 @@ func TestOnboardingHTTP(t *testing.T) {
 		require.Equal(t, preset.Key, *config.Preset)
 		var visible []string
 		for _, task := range config.Tasks {
-			if !task.Hidden {
+			if !task.Hidden && !task.Group {
 				visible = append(visible, task.Key)
 			}
 		}

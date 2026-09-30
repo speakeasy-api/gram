@@ -213,8 +213,8 @@ describe("AppSidebar", () => {
       {
         label: "Account Management",
         links: [
-          { label: "Users", href: "/users" },
           { label: "Organizations", href: "/organizations" },
+          { label: "Users", href: "/users" },
           { label: "Projects", href: "/projects" },
           { label: "S-token Calculator", href: "/stoken-calculator" },
         ],
@@ -224,6 +224,7 @@ describe("AppSidebar", () => {
         links: [
           { label: "MCP Registry", href: "/registry" },
           { label: "Support matrix", href: "/integration-coverage" },
+          { label: "Steps", href: "/onboarding-steps" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
           { label: "Admin MCP", href: "/mcp-setup" },
           {

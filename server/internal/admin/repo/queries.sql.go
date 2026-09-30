@@ -1488,6 +1488,23 @@ func (q *Queries) ReadSupportMatrix(ctx context.Context) ([]byte, error) {
 	return snapshot, err
 }
 
+const retireSupportPlans = `-- name: RetireSupportPlans :exec
+UPDATE support_matrix_plans
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE deleted_at IS NULL
+  AND slug NOT IN (
+    SELECT value->>'id'
+    FROM jsonb_array_elements($1::jsonb->'plans')
+  )
+`
+
+// An organization that declared a retired plan keeps its vendor and loses the
+// plan: the stack reads plans through deleted_at IS NULL.
+func (q *Queries) RetireSupportPlans(ctx context.Context, catalog []byte) error {
+	_, err := q.db.Exec(ctx, retireSupportPlans, catalog)
+	return err
+}
+
 const seedSupportCapabilities = `-- name: SeedSupportCapabilities :exec
 INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)
 SELECT value->>'id', value->>'name', value->>'group', ordinality::integer
@@ -1512,13 +1529,50 @@ func (q *Queries) SeedSupportMethods(ctx context.Context, catalog []byte) error 
 	return err
 }
 
+const seedSupportPlans = `-- name: SeedSupportPlans :exec
+INSERT INTO support_matrix_plans (slug, vendor, name, sort_order)
+SELECT value->>'id', value->>'vendor', value->>'name', ordinality::integer
+FROM jsonb_array_elements($1::jsonb->'plans') WITH ORDINALITY
+ON CONFLICT (slug) DO UPDATE SET
+    vendor = EXCLUDED.vendor,
+    name = EXCLUDED.name,
+    sort_order = EXCLUDED.sort_order,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE support_matrix_plans.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_plans.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_plans.sort_order IS DISTINCT FROM EXCLUDED.sort_order
+   OR support_matrix_plans.deleted_at IS NOT NULL
+`
+
+// The catalog owns plans outright: a plan it names is (re)instated with the
+// catalog's vendor, name and order, and RetireSupportPlans below soft-deletes
+// the ones it no longer names.
+func (q *Queries) SeedSupportPlans(ctx context.Context, catalog []byte) error {
+	_, err := q.db.Exec(ctx, seedSupportPlans, catalog)
+	return err
+}
+
 const seedSupportPlatforms = `-- name: SeedSupportPlatforms :exec
 INSERT INTO support_matrix_platforms (slug, name, vendor, family, surface, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'family', value->>'surface', ordinality::integer
 FROM jsonb_array_elements($1::jsonb->'products') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    family = EXCLUDED.family,
+    surface = EXCLUDED.surface,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE support_matrix_platforms.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_platforms.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_platforms.family IS DISTINCT FROM EXCLUDED.family
+   OR support_matrix_platforms.surface IS DISTINCT FROM EXCLUDED.surface
+   OR support_matrix_platforms.sort_order IS DISTINCT FROM EXCLUDED.sort_order
 `
 
+// The catalog owns a platform's name, vendor, family, surface and order, so
+// those follow the file on every start; staff edit facts, not platforms.
 func (q *Queries) SeedSupportPlatforms(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportPlatforms, catalog)
 	return err
