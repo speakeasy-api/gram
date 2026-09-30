@@ -3,19 +3,16 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 
-	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 // ConsentBindingService is the existing attachment management API. Its
@@ -38,8 +35,8 @@ func (s *Service) SetConsentBindingService(bindings ConsentBindingService) {
 	s.consentBindings = bindings
 }
 
-// Runs after endpoint, browser, challenge and CSRF checks. Management still
-// requires a freshly authenticated Gram session, including on custom origins.
+// Runs after endpoint, browser, challenge and CSRF checks. Reuse the human
+// already resolved by OAuth, without pretending it is a dashboard session.
 func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
@@ -51,52 +48,6 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return oops.E(oops.CodeForbidden, err, "consent authorizer is not eligible")
 	}
-	if r.PostForm.Get("action") == "agent_session_handoff" {
-		if !state.ConsentSessionRequired {
-			marked := state
-			marked.ConsentSessionRequired = true
-			swapped, err := s.authnChallengeCache.CompareAndSwapPreservingTTL(ctx, state, marked)
-			if err != nil {
-				return oops.E(oops.CodeUnavailable, err, "error requiring consent session confirmation")
-			}
-			if !swapped {
-				return oops.E(oops.CodeUnauthorized, nil, "consent state changed; retry authorization")
-			}
-			state = marked
-		}
-		return s.startConsentSessionHandoff(w, r, endpoint, state)
-	}
-	// Explicit confirmation selects the identity for this challenge. A stale
-	// or unrelated cookie on the MCP origin must not override that choice.
-	token := ""
-	handoff, err := s.consentSessionCache.Get(ctx, "consentSession:"+state.ID)
-	switch {
-	case err == nil:
-		if handoff.ChallengeID != state.ID || handoff.SessionToken == "" {
-			return oops.C(oops.CodeUnauthorized)
-		}
-		token = handoff.SessionToken
-	case errors.Is(err, redisCache.ErrCacheMiss):
-		if state.ConsentSessionRequired {
-			return oops.E(oops.CodeUnauthorized, nil, "confirm your Gram account again")
-		}
-		if cookie, err := r.Cookie(constants.SessionCookie); err == nil {
-			token = cookie.Value
-		}
-		if token == "" {
-			return oops.C(oops.CodeUnauthorized)
-		}
-	default:
-		return oops.E(oops.CodeUnavailable, err, "error checking consent session")
-	}
-	// Authentication failure for a confirmed session must never fall back to
-	// an ambient cookie, even when that cookie is another valid Gram session.
-	ctx, err = s.sessions.Authenticate(ctx, token)
-	if err != nil {
-		return fmt.Errorf("manage consent connection: %w", err)
-	}
-	// Never borrow ambient grants from a different request identity.
-	ctx = authz.GrantsToContext(ctx, human.grants)
 	if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
 		return oops.C(oops.CodeNotFound)
 	}
@@ -118,19 +69,16 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 			return oops.E(oops.CodeForbidden, err, "selected agent is not eligible")
 		}
 	}
-	auth, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || auth == nil || auth.UserID != selected.AuthorizerUserID || auth.ActiveOrganizationID != endpoint.OrganizationID {
-		return oops.E(oops.CodeForbidden, nil, "sign in to Gram as the consent authorizer in this organization")
-	}
-	// Match the RPC middleware's project check using only the resolved endpoint.
-	scoped := *auth
-	scoped.ProjectID = &endpoint.ProjectID
-	ctx = contextvalues.SetAuthContext(ctx, &scoped)
-	// Consent routes do not run the RPC middleware that prepares session grants.
-	ctx, err = s.authz.PrepareContext(ctx)
+	// This trust is scoped to attachment management for this exact target. The
+	// shared binding authorizer still locks membership/ownership and reloads grants.
+	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, endpoint.OrganizationID)
 	if err != nil {
-		return fmt.Errorf("manage consent connection: %w", err)
+		return oops.E(oops.CodeUnavailable, err, "load consent organization")
 	}
+	ctx = contextvalues.WithConsentBindingAuthorization(ctx, human.userID, endpoint.OrganizationID, endpoint.ProjectID, selected.AgentID, endpoint.UserSessionIssuerID)
+	// Preserve authoritative feature-flag groups for the shared binding authorizer.
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	auth.OrganizationSlug = organization.Slug
 	principal, issuer := selected.AgentID.String(), endpoint.UserSessionIssuerID.String()
 	switch action {
 	case "agent_connections":

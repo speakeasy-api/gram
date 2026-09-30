@@ -10,7 +10,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type fakeAuthorizationEngine struct {
@@ -142,7 +144,9 @@ func TestRequireHumanRejectsAlternateAndUntrustedCallers(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := map[string]context.Context{
-		"anonymous": t.Context(),
+		"anonymous":                     t.Context(),
+		"consent is not dashboard auth": contextvalues.WithConsentBindingAuthorization(t.Context(), "human", "org-a", uuid.New(), uuid.New(), uuid.New()),
+		"principal credential with session attribution": contextvalues.WithPrincipalCredentialAuthorization(valid, mustAuthContext(t, valid), urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()), contextvalues.PrincipalCredential{}),
 		"unvalidated attribution": contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 			ActiveOrganizationID: "org-a", UserID: "human", SessionID: func() *string { value := "untrusted"; return &value }(),
 		}),
@@ -251,4 +255,25 @@ func TestHumanContextLiveGrantsAreIsolated(t *testing.T) {
 	require.Equal(t, authz.ScopeMCPConnect, human.grants[0].Scope)
 	require.Equal(t, "example-server", human.grants[0].Selector[authz.SelectorKeyResourceID])
 	require.Nil(t, (HumanContext{}).LiveGrants())
+}
+
+func TestConsentProvenanceOnlyAuthorizesSelectedAgentAttachments(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	agent := createAgent(t, conn, "org-a", "owner", "Consent agent")
+	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := contextvalues.WithConsentBindingAuthorization(t.Context(), "owner", "org-a", uuid.New(), agent.ID, uuid.New())
+	tx := testenv.BeginTx(t, ctx, conn)
+	_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
+	require.NoError(t, err)
+	for _, predicate := range []OwnerPredicate{OwnedAgentRead, OwnedAgentSetup, OwnedAgentTransfer} {
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, predicate)
+		requireOopsCode(t, err, oops.CodeUnauthorized)
+	}
+	_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, uuid.New(), OwnedAgentAuthorize)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	_, err = authorizer.RequireHuman(ctx, tx)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 }

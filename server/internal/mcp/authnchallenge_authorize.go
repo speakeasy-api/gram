@@ -207,7 +207,6 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
 	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
-		ConsentSessionRequired:   false,
 		Browser:                  nil,
 		Federation:               nil,
 		ID:                       challengeID,

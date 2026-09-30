@@ -147,29 +147,12 @@
             " Connection state is unknown. Retry to reload the current state.";
           access.appendChild(message);
           if (error.status === 401 || error.status === 403) {
-            var login = document.createElement("p");
-            login.setAttribute("data-agent-access-login", "");
-            login.className = "text-muted-foreground text-xs";
-            var signIn = document.createElement("button");
-            signIn.type = "button";
-            signIn.textContent = "Confirm your Gram account";
-            signIn.addEventListener("click", async function () {
-              signIn.disabled = true;
-              try {
-                var handoff = await connectionRequest(
-                  "agent_session_handoff",
-                  agentId,
-                );
-                // The URL is server-generated, never a client redirect URI.
-                window.location.assign(handoff.url);
-              } catch (handoffError) {
-                signIn.disabled = false;
-                login.textContent =
-                  "Could not start account confirmation. Restart authorization.";
-              }
-            });
-            login.appendChild(signIn);
-            access.appendChild(login);
+            var unavailable = document.createElement("p");
+            unavailable.setAttribute("data-agent-access-unavailable", "");
+            unavailable.className = "text-muted-foreground text-xs";
+            unavailable.textContent =
+              "This agent is not available for authorization by the signed-in user. Select another identity or restart authorization.";
+            access.appendChild(unavailable);
           }
           var retry = document.createElement("button");
           retry.type = "button";

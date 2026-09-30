@@ -177,7 +177,6 @@ type Service struct {
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
-	consentSessionCache    cache.TypedCacheObject[consentSessionHandoff]
 	remoteLoginCache       cache.TypedCacheObject[remotesessions.RemoteLoginState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
@@ -505,8 +504,7 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		consentSessionCache: cache.NewTypedObjectCache[consentSessionHandoff](logger.With(attr.SlogCacheNamespace("consent_session")), cacheImpl, cache.SuffixNone),
-		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
+		remoteLoginCache: cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
 			cacheImpl,
@@ -632,9 +630,6 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
-	for _, method := range []string{http.MethodGet, http.MethodPost} {
-		o11y.AttachHandler(mux, method, "/oauth/agent-consent-session", oops.ErrHandle(service.logger, service.HandleConsentSessionHandoff).ServeHTTP)
-	}
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 	// Backwards-compat: remote_session_clients flagged LegacyCallbackUrl were

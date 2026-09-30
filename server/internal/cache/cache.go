@@ -71,12 +71,6 @@ type CompareAndSwapCache interface {
 	CompareAndDelete(ctx context.Context, key string, expected any) (bool, error)
 }
 
-// ExpiryPreservingCompareAndSwapCache replaces existing state atomically without
-// extending its lifetime or reviving an expired/consumed key.
-type ExpiryPreservingCompareAndSwapCache interface {
-	CompareAndSwapPreservingTTL(ctx context.Context, key string, expected, replacement any) (bool, error)
-}
-
 type TypedCacheObject[T CacheableObject[T]] struct {
 	logger    *slog.Logger
 	cache     Cache
@@ -213,24 +207,6 @@ func (d *TypedCacheObject[T]) CompareAndSwap(ctx context.Context, expected, repl
 	swapped, err := cas.CompareAndSwap(ctx, key, expected, replacement, replacement.TTL())
 	if err != nil {
 		return false, fmt.Errorf("compare and swap %s: %w", key, err)
-	}
-	return swapped, nil
-}
-
-// CompareAndSwapPreservingTTL atomically replaces expected while retaining the
-// existing expiry. Backends without this capability fail closed.
-func (d *TypedCacheObject[T]) CompareAndSwapPreservingTTL(ctx context.Context, expected, replacement T) (bool, error) {
-	if expected.CacheKey() != replacement.CacheKey() {
-		return false, errors.New("compare and swap cache keys differ")
-	}
-	cas, ok := d.cache.(ExpiryPreservingCompareAndSwapCache)
-	if !ok {
-		return false, errors.New("cache does not support expiry-preserving compare and swap")
-	}
-	key := d.fullKey(expected.CacheKey())
-	swapped, err := cas.CompareAndSwapPreservingTTL(ctx, key, expected, replacement)
-	if err != nil {
-		return false, fmt.Errorf("compare and swap preserving expiry %s: %w", key, err)
 	}
 	return swapped, nil
 }
