@@ -150,7 +150,7 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
 VALUES ($1, $2, 'Default', 'default', TRUE)
-RETURNING id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateDefaultPluginParams struct {
@@ -172,6 +172,7 @@ func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPlug
 		&i.Slug,
 		&i.Description,
 		&i.IsDefault,
+		&i.AutoCreated,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -184,7 +185,7 @@ const createPlugin = `-- name: CreatePlugin :one
 
 INSERT INTO plugins (organization_id, project_id, name, slug, description)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 `
 
 type CreatePluginParams struct {
@@ -214,6 +215,7 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 		&i.Slug,
 		&i.Description,
 		&i.IsDefault,
+		&i.AutoCreated,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -257,7 +259,7 @@ func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) erro
 }
 
 const getDefaultPlugin = `-- name: GetDefaultPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -284,6 +286,7 @@ func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginPara
 		&i.Slug,
 		&i.Description,
 		&i.IsDefault,
+		&i.AutoCreated,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -293,7 +296,7 @@ func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginPara
 }
 
 const getDefaultPluginForUpdate = `-- name: GetDefaultPluginForUpdate :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -321,6 +324,7 @@ func (q *Queries) GetDefaultPluginForUpdate(ctx context.Context, arg GetDefaultP
 		&i.Slug,
 		&i.Description,
 		&i.IsDefault,
+		&i.AutoCreated,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -538,7 +542,7 @@ func (q *Queries) GetOrganizationName(ctx context.Context, id string) (string, e
 }
 
 const getPlugin = `-- name: GetPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
@@ -563,6 +567,7 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 		&i.Slug,
 		&i.Description,
 		&i.IsDefault,
+		&i.AutoCreated,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -613,7 +618,7 @@ func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginSer
 
 const getPluginWithCounts = `-- name: GetPluginWithCounts :one
 SELECT
-  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (
     SELECT count(*)
@@ -667,6 +672,7 @@ func (q *Queries) GetPluginWithCounts(ctx context.Context, arg GetPluginWithCoun
 		&i.Plugin.Slug,
 		&i.Plugin.Description,
 		&i.Plugin.IsDefault,
+		&i.Plugin.AutoCreated,
 		&i.Plugin.CreatedAt,
 		&i.Plugin.UpdatedAt,
 		&i.Plugin.DeletedAt,
@@ -711,7 +717,7 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 }
 
 const getProspectiveDefaultPlugin = `-- name: GetProspectiveDefaultPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -737,6 +743,7 @@ func (q *Queries) GetProspectiveDefaultPlugin(ctx context.Context, arg GetProspe
 		&i.Slug,
 		&i.Description,
 		&i.IsDefault,
+		&i.AutoCreated,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -867,7 +874,7 @@ func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrgani
 }
 
 const listActivePluginsForProject = `-- name: ListActivePluginsForProject :many
-SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -899,6 +906,7 @@ func (q *Queries) ListActivePluginsForProject(ctx context.Context, arg ListActiv
 			&i.Slug,
 			&i.Description,
 			&i.IsDefault,
+			&i.AutoCreated,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1465,7 +1473,7 @@ func (q *Queries) ListPluginSkillsForProject(ctx context.Context, arg ListPlugin
 
 const listPlugins = `-- name: ListPlugins :many
 SELECT
-  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (
     SELECT count(*)
@@ -1508,6 +1516,7 @@ type ListPluginsRow struct {
 	Slug            string
 	Description     pgtype.Text
 	IsDefault       pgtype.Bool
+	AutoCreated     bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
@@ -1534,6 +1543,7 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 			&i.Slug,
 			&i.Description,
 			&i.IsDefault,
+			&i.AutoCreated,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1959,7 +1969,7 @@ WHERE organization_id = $1
   AND project_id = $2
   AND slug = 'default'
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 `
 
 type PromoteToDefaultPluginParams struct {
@@ -1983,6 +1993,7 @@ func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefau
 		&i.Slug,
 		&i.Description,
 		&i.IsDefault,
+		&i.AutoCreated,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -2425,7 +2436,7 @@ WHERE id = $4
   AND organization_id = $5
   AND project_id = $6
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginParams struct {
@@ -2455,6 +2466,7 @@ func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plu
 		&i.Slug,
 		&i.Description,
 		&i.IsDefault,
+		&i.AutoCreated,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

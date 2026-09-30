@@ -867,6 +867,7 @@ CREATE TABLE IF NOT EXISTS plugins (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   description TEXT,
   is_default boolean DEFAULT false,
+  auto_created boolean NOT NULL DEFAULT false,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

@@ -17,11 +17,12 @@ type Plugin struct {
 	Slug           string
 	Description    pgtype.Text
 	// Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).
-	IsDefault pgtype.Bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
-	Deleted   bool
+	IsDefault   pgtype.Bool
+	AutoCreated bool
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	Deleted     bool
 }
 
 type PluginAssignment struct {
