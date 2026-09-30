@@ -157,6 +157,13 @@ function ProviderGroupItems({
 
   return (
     <CommandGroup heading={group.tier}>
+      {!empty && group.isError ? (
+        // Rows can still show (the one in use is always offered), but the
+        // tier is incomplete, so say so rather than pass it off as the list.
+        <Text variant="small" className="text-destructive px-2 py-1.5">
+          Failed to load the rest
+        </Text>
+      ) : null}
       {empty ? (
         <Text muted variant="small" className="px-2 py-1.5">
           {emptyTierMessage(group, searching)}

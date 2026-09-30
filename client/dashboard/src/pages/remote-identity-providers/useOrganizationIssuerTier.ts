@@ -6,6 +6,7 @@ export type OrganizationIssuerTier = {
   items: OrganizationRemoteSessionIssuer[];
   /** Still loading the tier: its first page, or with `drain`, any page. */
   isLoading: boolean;
+  /** A page failed: the first (nothing to show) or a later one (partial). */
   isError: boolean;
   hasMore: boolean;
   loadingMore: boolean;
@@ -28,11 +29,19 @@ export function useOrganizationIssuerTier(
     undefined,
     { throwOnError: false },
   );
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+  const {
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    fetchNextPage,
+  } = query;
+  // A failed page stops the walk: the last good page still reports a next
+  // one, so retrying on every settle would loop without end.
+  const draining = drain && !!hasNextPage && !isFetchNextPageError;
 
   useEffect(() => {
-    if (drain && hasNextPage && !isFetchingNextPage) void fetchNextPage();
-  }, [drain, hasNextPage, isFetchingNextPage, fetchNextPage]);
+    if (draining && !isFetchingNextPage) void fetchNextPage();
+  }, [draining, isFetchingNextPage, fetchNextPage]);
 
   const items = useMemo(
     () => query.data?.pages.flatMap((page) => page.result.items) ?? [],
@@ -43,7 +52,7 @@ export function useOrganizationIssuerTier(
     items,
     // A drained tier is not done until its last page lands: deciding from a
     // partial list is exactly what this hook exists to prevent.
-    isLoading: query.isLoading || (drain && !!hasNextPage),
+    isLoading: query.isLoading || draining,
     isError: query.isError,
     hasMore: !drain && !!hasNextPage,
     loadingMore: isFetchingNextPage,

@@ -214,7 +214,7 @@ function RemoteIdentityProvidersOverview() {
           />
         </Stack>
 
-        {platform.length > 0 && (
+        {(platform.length > 0 || platformTier.isError) && (
           <Stack gap={6} className="mt-3 mb-6">
             <Stack
               direction="horizontal"
@@ -447,6 +447,12 @@ function IssuerTable({
           </DotRow>
         ))}
       </DotTable>
+      {isError ? (
+        <Text small className="text-destructive py-2">
+          Couldn&apos;t load every identity provider. Refresh the page to try
+          again.
+        </Text>
+      ) : null}
       {hasMore && onLoadMore ? (
         <Stack
           direction="horizontal"
