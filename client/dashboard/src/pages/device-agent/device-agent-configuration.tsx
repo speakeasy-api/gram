@@ -303,9 +303,12 @@ function DeviceAgentConfigurationForm({
     }
 
     // Update channel and blocked versions are Speakeasy-internal release
-    // controls. Non-admins never see the fields, so leave whatever is stored
-    // untouched rather than writing the (unchanged) local state back.
-    if (isPlatformAdmin) {
+    // controls. The server rejects them from non-admins even when unchanged,
+    // and keeps the stored values when they are omitted, so strip them.
+    if (!isPlatformAdmin) {
+      delete config.update_channel;
+      delete config.blocked_versions;
+    } else {
       config.update_channel = updateChannel.trim();
 
       const versions = blockedVersions
