@@ -1,6 +1,5 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
-import { cn } from "@/lib/utils";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -31,10 +30,10 @@ import {
  * The platforms this organization has trusted, one card each, and a way to trust
  * another.
  *
- * A card carries what an operator needs to recognise a platform and to judge its
- * reach: the identifier an assertion's `iss` must carry, where its keys are
- * published, and its tags. The machines allowed under it live on that
- * platform's own page, because those are per-machine rather than per-platform.
+ * A card carries what an operator needs to recognise a platform: its name, a
+ * description (or, without one, the identifier an assertion's `iss` must
+ * carry), and its tags. The identifiers and the machines allowed under it live
+ * on that platform's own page.
  */
 export function WorkloadIssuersRoot(): JSX.Element {
   return <Outlet />;
@@ -110,7 +109,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
     <>
       <ResourceListPage
         title="Access Hub"
-        description="Platform workloads, such as CI jobs, cloud services and AI agents running on other platforms, sign in to Gram with identity tokens from the platforms registered here. Registering a platform admits nothing on its own. Open it to admit the specific platform workloads that may connect and assign each one an agent whose permissions it inherits."
+        description="Let workloads on other platforms (CI jobs, cloud services, AI agents) sign in to Gram without a stored secret."
         primaryAction={registerButton}
       >
         <Stack
@@ -158,7 +157,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
               <InlineEmptyState
                 icon="cpu"
                 heading="No custom platforms yet"
-                description="Trust the platform that issues your machines\u2019 identity tokens, using the identifier and key URL from its console. Nothing is allowed until you then allow a machine under it."
+                description="Trust the platform that issues your machines\u2019 identity tokens, using the identifier and key URL from its console. Nothing is allowed until you then allow access for a machine under it."
               />
             </Cards>
           ) : (
@@ -217,7 +216,7 @@ type IssuerView = "catalog" | "custom";
 function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
   const routes = useRoutes();
   // A description identifies the platform better than its URL, so it takes the
-  // URL's place and the URL sits on a labeled line beside the keys.
+  // URL's place when there is one.
   const hasDescription = issuer.description !== "";
 
   return (
@@ -238,8 +237,8 @@ function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
             {hasDescription ? issuer.description : issuer.issuer}
           </Card.Description>
         </Card.Header>
-        <Card.Content>
-          {issuer.tags.length > 0 && (
+        {issuer.tags.length > 0 && (
+          <Card.Content>
             <div className="flex flex-wrap items-center gap-2">
               {issuer.tags.map((tag) => (
                 <Badge key={tag} variant="information">
@@ -247,20 +246,8 @@ function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
                 </Badge>
               ))}
             </div>
-          )}
-          {hasDescription && (
-            <Text muted small className="mt-3 block break-all">
-              Issuer: {issuer.issuer}
-            </Text>
-          )}
-          <Text
-            muted
-            small
-            className={cn("block break-all", hasDescription ? "mt-1" : "mt-3")}
-          >
-            Keys: {issuer.jwksUri}
-          </Text>
-        </Card.Content>
+          </Card.Content>
+        )}
       </Card>
     </Link>
   );

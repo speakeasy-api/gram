@@ -166,14 +166,21 @@ it("shows a platform's description in place of its issuer URL", () => {
   expect(staging.textContent).toContain(
     "Preview deploys for every pull request",
   );
-  // With a description, the URL sits on a labeled line beside the keys.
-  expect(staging.textContent).toContain("Issuer: https://staging.example.com");
+  expect(staging.textContent).not.toContain("https://staging.example.com");
 
-  // Without a description the issuer URL stays where the description would be,
-  // so it is not repeated on a labeled line.
+  // Without a description the issuer URL stands where the description would be.
   const build = screen.getByRole("link", { name: /^build/ });
-  expect(build.textContent).not.toContain("Issuer:");
   expect(build.textContent).toContain("https://build.example.com");
+});
+
+it("leaves the issuer and keys URLs to the platform's own page", () => {
+  renderPage();
+
+  for (const link of screen.getAllByRole("link")) {
+    expect(link.textContent).not.toContain("Issuer:");
+    expect(link.textContent).not.toContain("Keys:");
+    expect(link.textContent).not.toContain("/jwks");
+  }
 });
 
 it("opens on the catalog, which is empty until presets exist", () => {

@@ -4,15 +4,15 @@ import { Dialog } from "@/components/ui/Dialog";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import { useEffect, useState } from "react";
 import { TypeToConfirmField } from "./TypeToConfirmField";
-import { withdrawConfirmation } from "./withdrawConfirmation";
+import { removeConfirmation } from "./removeConfirmation";
 
-export function WithdrawSubjectDialog({
+export function RemoveSubjectDialog({
   admission,
   onOpenChange,
   onConfirm,
   isPending,
 }: {
-  /** The machine being withdrawn; the dialog is open while this is set. */
+  /** The machine being removed; the dialog is open while this is set. */
   admission: WorkloadAdmission | null;
   onOpenChange: (open: boolean) => void;
   onConfirm: (admission: WorkloadAdmission) => void;
@@ -21,12 +21,12 @@ export function WithdrawSubjectDialog({
   const [typed, setTyped] = useState("");
 
   // A fresh confirmation for every machine, so text typed for one never
-  // unlocks the withdrawal of the next.
+  // unlocks the removal of the next.
   useEffect(() => {
     setTyped("");
   }, [admission?.id]);
 
-  const expected = admission ? withdrawConfirmation(admission) : "";
+  const expected = admission ? removeConfirmation(admission) : "";
   // Exact first: the server stores a subject as supplied, so one admitted
   // through the API can carry outer whitespace and must still be confirmable.
   // The trimmed comparison forgives a stray space around a pasted subject.
@@ -43,7 +43,7 @@ export function WithdrawSubjectDialog({
     >
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Withdraw this machine?</Dialog.Title>
+          <Dialog.Title>Remove this machine's access?</Dialog.Title>
           <Dialog.Description>
             The machine can no longer exchange its identity token for a Gram
             session.
@@ -52,11 +52,11 @@ export function WithdrawSubjectDialog({
         {admission && (
           <div className="space-y-4 py-2">
             <Alert variant="warning" alignTop>
-              Sessions it already holds are not revoked. To allow it again,
-              allow it with an agent as before.
+              Sessions it already holds are not revoked. To let it back in,
+              allow access for it again with an agent.
             </Alert>
             <TypeToConfirmField
-              id="withdraw-subject-confirm"
+              id="remove-subject-confirm"
               label="Type the machine's subject to confirm"
               expected={expected}
               value={typed}
@@ -80,7 +80,7 @@ export function WithdrawSubjectDialog({
             }}
           >
             <Button.Text>
-              {isPending ? "Withdrawing…" : "Withdraw machine"}
+              {isPending ? "Removing…" : "Remove machine"}
             </Button.Text>
           </Button>
         </Dialog.Footer>
