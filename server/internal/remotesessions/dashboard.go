@@ -41,6 +41,9 @@ const (
 	serverIdentityClientModeExisting = "existing"
 	serverIdentityClientModeManual   = "manual"
 
+	// serverIdentityRegistrationMethodDCR makes auto mode skip CIMD.
+	serverIdentityRegistrationMethodDCR = "dcr"
+
 	serverIdentityStatusRegistered = "registered"
 	serverIdentityStatusLinked     = "linked"
 )
@@ -55,6 +58,9 @@ type serverIdentityRequest struct {
 	existingClientID    uuid.UUID
 	clientMode          string
 	clientConfiguration *gen.ServerIdentityClientConfiguration
+	// registrationMethod is "dcr" when auto mode must skip CIMD; otherwise it
+	// is empty or "cimd", both of which prefer CIMD.
+	registrationMethod string
 }
 
 func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload *gen.CommitServerIdentityConfigurationPayload) (*gen.CommitServerIdentityConfigurationResult, error) {
@@ -225,7 +231,7 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 			Audience:                r.clientConfiguration.Audience,
 			TokenEndpointAuthMethod: r.clientConfiguration.TokenEndpointAuthMethod,
 			RequireClientSecret:     false,
-			AllowCIMD:               true,
+			AllowCIMD:               r.registrationMethod != serverIdentityRegistrationMethodDCR,
 		})
 	}
 	return IdentityPlan{
@@ -340,6 +346,7 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 		existingClientID:    uuid.Nil,
 		clientMode:          payload.ClientMode,
 		clientConfiguration: payload.ClientConfiguration,
+		registrationMethod:  conv.PtrValOr(payload.RegistrationMethod, ""),
 	}
 	var err error
 	req.mcpServerID, err = uuid.Parse(payload.McpServerID)
@@ -360,6 +367,9 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 		if err != nil {
 			return serverIdentityRequest{}, fmt.Errorf("parse provider_id: %w", err)
 		}
+	}
+	if req.registrationMethod != "" && payload.ClientMode != serverIdentityClientModeAuto {
+		return serverIdentityRequest{}, errors.New("registration_method is only accepted in auto client mode")
 	}
 	switch payload.ClientMode {
 	case serverIdentityClientModeExisting:

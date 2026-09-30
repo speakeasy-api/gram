@@ -382,17 +382,18 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		scanToolName = descriptor.URN.Name
 	}
 	decision := s.scanEvaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
-		Surface:        mcpriskscan.SurfaceInstances,
-		Method:         mcpriskscan.MethodToolsCall,
-		OrganizationID: descriptor.OrganizationID,
-		ProjectID:      descriptor.ProjectID,
-		ServerID:       "",
-		MetaServerID:   "",
-		ToolsetID:      scanToolsetID,
-		ToolName:       scanToolName,
-		ResourceURI:    "",
-		PromptName:     "",
-		ChatID:         chatID,
+		Surface:         mcpriskscan.SurfaceInstances,
+		Method:          mcpriskscan.MethodToolsCall,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        "",
+		MetaServerID:    "",
+		ToolsetID:       scanToolsetID,
+		ToolName:        scanToolName,
+		ResourceURI:     "",
+		PromptName:      "",
+		ChatID:          chatID,
+		ToolAnnotations: nil,
 	}, mcpriskscan.BorrowPayload(requestBodyBytes)))
 	if decision.Denied() {
 		return oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)

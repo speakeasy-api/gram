@@ -66,12 +66,12 @@ func TestRefreshOutcomeForError(t *testing.T) {
 		},
 		{
 			name: "configuration error before the POST",
-			err:  newTokenRefreshError("the identity provider has no token endpoint configured", nil),
+			err:  newTokenRefreshError("the identity provider has no token endpoint configured", nil, refreshRemedyAdministrator),
 			want: remotesessionmetrics.RefreshOutcomeInternalError,
 		},
 		{
 			name: "lost compare-and-swap after the POST",
-			err:  newTokenRefreshError("the session was rotated by another request", errRefreshNotApplied),
+			err:  newTokenRefreshError("the session was rotated by another request", errRefreshNotApplied, refreshRemedyRetry),
 			want: remotesessionmetrics.RefreshOutcomeInternalError,
 		},
 		{
@@ -156,7 +156,7 @@ func TestRefreshOutcomeForError(t *testing.T) {
 		},
 		{
 			name: "2xx fallback with no status code",
-			err:  newTokenRefreshError("the identity provider returned no access token", nil),
+			err:  newTokenRefreshError("the identity provider returned no access token", nil, refreshRemedyAdministrator),
 			want: remotesessionmetrics.RefreshOutcomeInternalError,
 		},
 		{

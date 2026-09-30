@@ -31,6 +31,24 @@ export type StepAffordances = Partial<
   >
 >;
 
+/** Steps whose details must be followed in order; every other list is a set. */
+const ORDERED_DETAIL_KEYS: ReadonlySet<IdentityProviderConnectionChecklistItemKey> =
+  new Set(["public_key_auth"]);
+
+function DetailList({
+  ordered,
+  children,
+}: {
+  ordered: boolean;
+  children: ReactNode;
+}): JSX.Element {
+  return ordered ? (
+    <ol className="list-decimal space-y-1 pl-5">{children}</ol>
+  ) : (
+    <ul className="list-disc space-y-1 pl-5">{children}</ul>
+  );
+}
+
 function Step({
   item,
   index,
@@ -76,7 +94,7 @@ function Step({
             {item.description}
           </Text>
           {item.details.length > 0 && (
-            <ol className="list-decimal space-y-1 pl-5">
+            <DetailList ordered={ORDERED_DETAIL_KEYS.has(item.key)}>
               {item.details.map((detail) => (
                 <li key={detail}>
                   <Text muted small>
@@ -84,7 +102,7 @@ function Step({
                   </Text>
                 </li>
               ))}
-            </ol>
+            </DetailList>
           )}
         </div>
         {affordance}
@@ -116,7 +134,9 @@ function GroupSection({
       >
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-eyebrow">{group.title}</span>
+            <span className="text-eyebrow text-default font-semibold">
+              {group.title}
+            </span>
             <Text muted small>
               {summary}
             </Text>

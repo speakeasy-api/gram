@@ -131,10 +131,29 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 // this toolset but the subject has no usable token." Callers (the MCP
 // runtime) surface this as a fresh auth challenge so the user can
 // re-link upstream.
+//
+// ErrRemoteSessionUnavailable and ErrRemoteSessionMisconfigured refine it for
+// failures re-linking cannot repair, and both wrap it: a caller that only asks
+// whether a usable token exists reads them as absent, while one that must pick
+// a remedy matches them first.
 var (
 	ErrNoValidToken                 = errors.New("remotesessions: no valid token for subject")
 	ErrNoRemoteSessionClientBinding = errors.New("remotesessions: no client binding for remote issuer")
 	ErrInvalidAuthorizationRequest  = errors.New("remotesessions: invalid authorization request")
+
+	// ErrRemoteSessionUnavailable means a required upstream token could not be
+	// refreshed for a reason that clears on its own: the upstream token
+	// endpoint answered 5xx or 429, could not be reached, or the attempt lost
+	// to a concurrent rotation. The same request is expected to succeed later.
+	ErrRemoteSessionUnavailable = fmt.Errorf("%w: upstream token endpoint temporarily unavailable", ErrNoValidToken)
+
+	// ErrRemoteSessionMisconfigured means a required upstream token could not
+	// be refreshed because the issuer or client configuration is broken: the
+	// upstream refused the client's request, no usable token endpoint is
+	// configured, or the client credentials or signing key cannot be used.
+	// Re-linking goes through the same configuration, so only an
+	// administrator can repair it.
+	ErrRemoteSessionMisconfigured = fmt.Errorf("%w: remote session client misconfigured", ErrNoValidToken)
 )
 
 // ResolvedAuthorization is the ephemeral result of resolving one reviewed
@@ -165,7 +184,7 @@ const remoteSessionLastUsedCutoff = 5 * time.Minute
 // signal; the caller decides whether absence is a challenge or a no-op.
 //
 // Returns a non-nil error only for unexpected failures (database
-// errors). "No token available" is not an error.
+// errors). "No token available" is not an error, whatever its cause.
 //
 // The (subject, remote_session_client_id) pair is uniqueness-enforced
 // by a partial index — at most one active row exists per binding, so
@@ -177,6 +196,9 @@ func (m *ChallengeManager) ResolveAccessToken(
 	resource string,
 ) (string, error) {
 	resolved, err := m.resolveUpstreamToken(ctx, clientID, subject, resource)
+	if errors.Is(err, ErrNoValidToken) {
+		return "", nil
+	}
 	return resolved.Token, err
 }
 
@@ -239,13 +261,18 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		}
 		// validateAndRefresh errors only when a refresh was required (the
 		// stored access token is past its deadline) and could not be
-		// completed — the upstream rejected the refresh token, or the stored
-		// token could not be decrypted. That is a broken link needing a
-		// re-connect, distinct from "never linked" (the pgx.ErrNoRows case
-		// above). Both collapse to the same empty-token signal downstream and
-		// then to a byte-identical 401, so log the reason here instead of
-		// discarding it silently.
+		// completed. The specific upstream answer is logged here because
+		// callers only see its remedy: a failure only re-linking repairs
+		// collapses to the same empty-token signal as "never linked" (the
+		// pgx.ErrNoRows case above), while one that clears on its own or
+		// needs an administrator comes back as its refined ErrNoValidToken.
 		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
+		switch {
+		case errors.Is(err, ErrRemoteSessionUnavailable):
+			return zero, ErrRemoteSessionUnavailable
+		case errors.Is(err, ErrRemoteSessionMisconfigured):
+			return zero, ErrRemoteSessionMisconfigured
+		}
 		return zero, nil
 	}
 
@@ -271,7 +298,8 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 //
 // ErrNoRemoteSessionClientBinding means the reviewed issuer is not configured
 // for this user-session issuer. ErrNoValidToken means the binding exists but the
-// subject has no usable authorization.
+// subject has no usable authorization; a failed refresh may return one of its
+// refinements, ErrRemoteSessionUnavailable or ErrRemoteSessionMisconfigured.
 func (m *ChallengeManager) ResolveAuthorization(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -366,6 +394,13 @@ type UpstreamToken struct {
 //     MCP runtime surfaces this as a re-auth challenge so the user can
 //     re-link the missing upstream via {routeBase}/{slug}/connect — the
 //     "any attached remote session missing or invalid" rule from AIS-136.
+//     When a client fails to refresh and no client needs re-linking, the
+//     error is that client's refined ErrRemoteSessionMisconfigured or
+//     ErrRemoteSessionUnavailable, so the caller can name a remedy the user
+//     can act on. Re-linking outranks both because the user can take it
+//     themselves. Resolution stops at the first failed refresh and judges
+//     the remaining clients from stored state, so a request with several
+//     unreachable upstreams waits on one refresh rather than all of them.
 //
 // Current intent (all-or-nothing): resolution fails if ANY attached upstream
 // is missing or invalid, even when the request only needs a different one.
@@ -449,7 +484,7 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 	}
 
 	tokens := make(map[uuid.UUID]UpstreamToken, len(clients))
-	for _, c := range clients {
+	for i, c := range clients {
 		// The grant-time metadata (the recorded RFC 8707 resource) comes from
 		// the same row load that produced the token, so a disconnect+reconnect
 		// between two reads can never pair an old token with a new row's
@@ -457,18 +492,127 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 		// No endpoint-level fallback: a refresh of a legacy NULL-resource row
 		// derives the client's own resource in RefreshNow.
 		resolved, err := m.resolveCallerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, "")
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrNoValidToken):
+			if skipUnusable {
+				continue
+			}
+			// A refined failure can still be outranked by a later client that
+			// needs re-linking. Resolving the rest could cost one failing
+			// upstream refresh each, so their stored state decides instead.
+			reconnect, rerr := m.storedGrantsNeedReconnect(ctx, projectID, organizationID, userSessionIssuerID, clients[i+1:], subject)
+			if rerr != nil {
+				return nil, rerr
+			}
+			if reconnect {
+				return nil, ErrNoValidToken
+			}
+			return nil, err
+		case err != nil:
 			return nil, fmt.Errorf("resolve access token: %w", err)
-		}
-		if resolved.Token == "" {
+		case resolved.Token == "":
 			if skipUnusable {
 				continue
 			}
 			return nil, ErrNoValidToken
+		default:
+			tokens[c.RemoteSessionIssuerID] = resolved
 		}
-		tokens[c.RemoteSessionIssuerID] = resolved
 	}
 	return tokens, nil
+}
+
+// RemoteSessionsNeedReconnect reports whether any remote session subject must
+// hold under the user-session issuer is missing or can no longer be renewed,
+// judged from stored state alone, including token expiry and readability. It never
+// contacts an upstream, so a grant that would fail its next refresh reads as
+// renewable until that refresh has run and cleared it.
+//
+// It agrees with ResolveAccessTokens on every case that resolution reports as
+// plain ErrNoValidToken once any refresh has been attempted, which is what
+// lets a caller refuse to extend a session the MCP runtime keeps rejecting
+// without adding upstream latency or side effects of its own.
+func (m *ChallengeManager) RemoteSessionsNeedReconnect(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+) (bool, error) {
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	if err != nil {
+		return false, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	return m.storedGrantsNeedReconnect(ctx, projectID, organizationID, userSessionIssuerID, clients, subject)
+}
+
+// storedGrantsNeedReconnect reports whether the stored credential the caller
+// would resolve for any of clients needs re-linking. It selects the credential
+// source exactly as resolveCallerUpstreamToken does and applies
+// validateAndRefresh's reconnect conditions without refreshing.
+func (m *ChallengeManager) storedGrantsNeedReconnect(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
+	subject urn.SessionSubject,
+) (bool, error) {
+	principalID, attached, err := remoteSessionCallerPrincipal(ctx, subject)
+	if err != nil {
+		return false, err
+	}
+	q := remotesessions_repo.New(m.db)
+	now := time.Now()
+	for _, c := range clients {
+		var sess remotesessions_repo.RemoteSession
+		if attached {
+			sess, err = q.GetPrincipalRemoteSessionBinding(ctx, remotesessions_repo.GetPrincipalRemoteSessionBindingParams{
+				ProjectID:             projectID,
+				OrganizationID:        organizationID,
+				PrincipalID:           principalID,
+				UserSessionIssuerID:   userSessionIssuerID,
+				RemoteSessionClientID: c.ClientID,
+			})
+		} else {
+			sess, err = q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+				SubjectUrn:            subject,
+				RemoteSessionClientID: c.ClientID,
+			})
+		}
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return true, nil
+		case err != nil:
+			return false, fmt.Errorf("get remote_session for reconnect check: %w", err)
+		}
+		if attached && sess.SubjectUrn.Kind != urn.SessionSubjectKindUser {
+			return true, nil
+		}
+		if accessTokenUsable(sess, now) {
+			// Resolution forwards this token without attempting a refresh, so
+			// an unreadable value needs reconnecting even with a refresh grant.
+			plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
+			if err != nil || plain == "" {
+				return true, nil
+			}
+			continue
+		}
+		if hasRefreshToken(sess) && refreshTokenUsable(sess, now) {
+			if plain, err := m.enc.Decrypt(sess.RefreshTokenEncrypted.String); err == nil && plain != "" {
+				continue
+			}
+		}
+		// A failed early refresh still forwards the access token until its
+		// actual deadline. Do not force reconnect during that grace window.
+		if accessTokenLive(sess, now) {
+			if plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted); err == nil && plain != "" {
+				continue
+			}
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 // validateAndRefresh returns the upstream access token for sess, refreshing
@@ -604,25 +748,28 @@ func (s *RefreshService) refreshSessionTokens(
 	var noToken tokenResponse
 
 	if !client.TokenEndpoint.Valid || client.TokenEndpoint.String == "" {
-		return zero, noToken, newTokenRefreshError("the identity provider has no token endpoint configured", nil)
+		return zero, noToken, newTokenRefreshError("the identity provider has no token endpoint configured", nil, refreshRemedyAdministrator)
+	}
+	if !urls.IsAbsoluteHTTPSOrLoopback(client.TokenEndpoint.String) {
+		return zero, noToken, newTokenRefreshError("the identity provider's token endpoint is not an https URL; check the issuer's configuration", nil, refreshRemedyAdministrator)
 	}
 
 	refreshToken, err := s.enc.Decrypt(sess.RefreshTokenEncrypted.String)
 	if err != nil {
-		return zero, noToken, newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", err)
+		return zero, noToken, newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", err, refreshRemedyReconnect)
 	}
 
 	var clientSecret string
 	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		clientSecret, err = s.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if err != nil {
-			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err)
+			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err, refreshRemedyAdministrator)
 		}
 	}
 
 	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
 	if err != nil {
-		return zero, noToken, newTokenRefreshError("the client's authentication configuration is invalid; check the issuer's configuration", err)
+		return zero, noToken, newTokenRefreshError("the client's authentication configuration is invalid; check the issuer's configuration", err, refreshRemedyAdministrator)
 	}
 	assertionAudience, err := ResolveTokenEndpointAuthAudience(
 		client.TokenEndpointAuthAudienceFormat.String,
@@ -630,7 +777,7 @@ func (s *RefreshService) refreshSessionTokens(
 		client.TokenEndpoint.String,
 	)
 	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
-		return zero, noToken, newTokenRefreshError("the client's assertion audience is invalid; check the issuer's configuration", err)
+		return zero, noToken, newTokenRefreshError("the client's assertion audience is invalid; check the issuer's configuration", err, refreshRemedyAdministrator)
 	}
 
 	form := url.Values{}
@@ -733,10 +880,24 @@ func (s *RefreshService) refreshSessionTokens(
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return zero, noToken, newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied)
+			return zero, noToken, newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied, refreshRemedyRetry)
 		}
 		return zero, noToken, fmt.Errorf("persist refreshed session: %w", err)
 	}
+
+	// Whether the provider rotates refresh tokens, and how long it says they
+	// live, is what tells an upstream expiry policy apart from an upstream
+	// revocation when a later refresh fails with invalid_grant.
+	refreshedAttrs := []any{
+		attr.SlogRemoteSessionID(sess.ID.String()),
+		attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+		attr.SlogOAuthIssuer(client.IssuerUrl),
+		attr.SlogOAuthRefreshTokenRotated(refreshRotated),
+	}
+	if refreshTimeoutReported {
+		refreshedAttrs = append(refreshedAttrs, attr.SlogOAuthRefreshTokenLifetime(refreshTimeout))
+	}
+	s.logger.InfoContext(ctx, "upstream remote session tokens refreshed", refreshedAttrs...)
 
 	return updated, tok, nil
 }
@@ -869,12 +1030,15 @@ func (s *RefreshService) postRefreshGrant(
 
 	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, clientAuth)
 	if err != nil {
+		if clientAssertionUnconfigured(err) {
+			return zero, newTokenRefreshError("the client's assertion signing key is not configured; check the issuer's configuration", err, refreshRemedyAdministrator)
+		}
 		return zero, fmt.Errorf("new refresh request: %w", err)
 	}
 
 	doer, err := upstreamHTTPDoer(noRedirectClient(s.policy.PooledClient()), s.tunnels, client.TunneledMcpServerID)
 	if err != nil {
-		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err)
+		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err, refreshRemedyRetry)
 	}
 
 	resp, err := doer.Do(req)
@@ -899,7 +1063,7 @@ func (s *RefreshService) postRefreshGrant(
 		if refreshErr, ok := newTokenRefreshErrorFromSuccessBody(resp.StatusCode, resp.Status, body); ok {
 			return zero, refreshErr
 		}
-		return zero, newTokenRefreshError("the identity provider returned no access token", nil)
+		return zero, newTokenRefreshError("the identity provider returned no access token", nil, refreshRemedyAdministrator)
 	}
 	return tok, nil
 }

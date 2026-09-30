@@ -63,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -346,6 +347,13 @@ type mcpInputs struct {
 	// a different member's toolset slug — keying by slug would never find the
 	// record the handshake wrote.
 	clientInfoScope string
+	// toolsetID is the described toolset's id when the builder loaded its
+	// row, so describing the server needs no second lookup by slug. Invalid
+	// for internal callers, which carry only the slug and never handshake.
+	toolsetID uuid.NullUUID
+	// toolsetIsPublic is the described toolset's own mcp_is_public flag,
+	// loaded with toolsetID. Nil reads as private.
+	toolsetIsPublic *bool
 	// tags is the parsed ?tags= filter. When non-empty, tools/list and
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
@@ -404,6 +412,7 @@ func NewService(
 	tunnelRoutes route.Store,
 	tunnelForwardToken string,
 	tunnelGatewayCIDRs []string,
+	callerAssertions *mcpauthz.Issuer,
 	redisClient *redis.Client,
 	tunnelPublicConfig TunnelPublicConfig,
 	metaRuntimeConfig MetaRuntimeConfig,
@@ -527,7 +536,7 @@ func NewService(
 		autoVerifications:    newAutoVerifications(),
 		remoteSessionRecheck: newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
 		remoteProxyManager:   remoteProxyManager,
-		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
 		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
@@ -1107,7 +1116,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		callerToolSelection = gateToolSelection
 	}
 
-	isHostedToolsCall := req.Method == "tools/call" && cfg.mcpServerID != nil
+	isHostedToolsCall := req.Method == mcpversions.MethodToolsCall && cfg.mcpServerID != nil
 	resolvePendingIssuerGate := func() error {
 		if pendingIssuerGate == nil {
 			return nil
@@ -1265,7 +1274,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
-	if req.Method == "initialize" {
+	if initializeNegotiable(&req, protocolVersion) {
 		w.Header().Set("Mcp-Session-Id", sessionID)
 	}
 
@@ -1313,6 +1322,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		metaMcpServerID:          "",
 		clientInfoScope:          "",
 		skipProxyTools:           false,
+		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		toolsetIsPublic:          new(toolset.McpIsPublic),
 		tags:                     tags,
 		protocolVersion:          protocolVersion,
 		identityCoverageRecorded: hostedCoverageRecorded,
@@ -1681,30 +1692,37 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		}()
 	}
 
+	if !methodAvailable(req, payload.protocolVersion, mcpversions.SupportedHostedToolset()) {
+		return nil, unavailableMethod(req)
+	}
+
 	switch req.Method {
-	case "ping":
+	case mcpversions.MethodPing:
 		return handlePing(ctx, s.logger, req.ID, serverInfoHostedToolset)
-	case "initialize":
-		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo, s.sessionClientInfo)
-	case "notifications/initialized", "notifications/cancelled":
+	case mcpversions.MethodServerDiscover:
+		description := describeHostedServer(ctx, s.logger, s.mcpMetadataRepo, payload)
+		return handleServerDiscover(ctx, s.logger, req.ID, description, mcpversions.SupportedHostedToolset())
+	case mcpversions.MethodInitialize:
+		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.mcpMetadataRepo, s.sessionClientInfo)
+	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
-	case "tools/list":
+	case mcpversions.MethodToolsList:
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
-	case "tools/call":
+	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
 		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
-	case "prompts/list":
+	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
-	case "prompts/get":
+	case mcpversions.MethodPromptsGet:
 		return handlePromptsGet(ctx, s.logger, s.db, payload, req, s.scanEvaluator)
-	case "resources/list":
+	case mcpversions.MethodResourcesList:
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
-	case "resources/templates/list":
+	case mcpversions.MethodResourcesTemplatesList:
 		return handleResourcesTemplatesList(ctx, s.logger, req)
-	case "resources/read":
+	case mcpversions.MethodResourcesRead:
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
 	default:
-		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
+		return nil, unavailableMethod(req)
 	}
 }
 
@@ -1861,7 +1879,7 @@ func (s *Service) HandleToolsList(
 	req := &rawRequest{
 		JSONRPC: "2.0",
 		ID:      mcpjsonrpc.NumberID(1),
-		Method:  "tools/list",
+		Method:  mcpversions.MethodToolsList,
 		Params:  json.RawMessage("{}"),
 	}
 
@@ -1933,7 +1951,7 @@ func (s *Service) HandleToolsCall(
 	req := &rawRequest{
 		JSONRPC: "2.0",
 		ID:      mcpjsonrpc.NumberID(1),
-		Method:  "tools/call",
+		Method:  mcpversions.MethodToolsCall,
 		Params:  params,
 	}
 

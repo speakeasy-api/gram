@@ -60,11 +60,15 @@ type windowSpec struct {
 // Per-tool window policies. A summary may look back a month; a row-level
 // drill-down may not.
 var (
-	overviewWindowSpec    = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastMonth}
-	diagnosticsWindowSpec = windowSpec{Fallback: DiagnosticWindowLastHour, Max: DiagnosticWindowLastDay}
-	drilldownWindowSpec   = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastDay}
-	metricsWindowSpec     = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastWeek}
-	eventFeedWindowSpec   = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastWeek}
+	overviewWindowSpec = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastMonth}
+	// The usage summary defaults to a week, as the managed
+	// platform_get_tool_usage_summary tool does, so both surfaces answer an
+	// unqualified "how much of our usage" for the same interval.
+	usageSummaryWindowSpec = windowSpec{Fallback: DiagnosticWindowLastWeek, Max: DiagnosticWindowLastMonth}
+	diagnosticsWindowSpec  = windowSpec{Fallback: DiagnosticWindowLastHour, Max: DiagnosticWindowLastDay}
+	drilldownWindowSpec    = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastDay}
+	metricsWindowSpec      = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastWeek}
+	eventFeedWindowSpec    = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastWeek}
 )
 
 // ErrDiagnosticWindowInvalid is returned for a window outside the closed set.

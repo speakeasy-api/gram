@@ -81,9 +81,91 @@ type DistributeSkillToolInput struct {
 	Assistant   string `json:"assistant,omitempty" jsonschema:"exact existing assistant in the project, by ID or name; exactly one of plugin or assistant is required"`
 }
 
+type ListSkillDistributionsToolInput struct {
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug whose skill distributions to list"`
+	SkillID     string `json:"skill_id,omitempty" jsonschema:"optional skill ID returned by list_skills; omit to list every distributed skill in the project"`
+	Plugin      string `json:"plugin,omitempty" jsonschema:"optional exact existing plugin in the project, by ID, slug, or name; a name matching more than one plugin is refused as ambiguous_target"`
+	Cursor      string `json:"cursor,omitempty" jsonschema:"pagination cursor returned by a previous list_skill_distributions call"`
+	Limit       int    `json:"limit,omitempty" jsonschema:"maximum distributions to return; defaults to 20 and is capped at 50"`
+}
+
+type UndistributeSkillToolInput struct {
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns both the skill and the target"`
+	SkillID        string `json:"skill_id" jsonschema:"skill ID returned by list_skills or list_skill_distributions"`
+	Plugin         string `json:"plugin,omitempty" jsonschema:"exact existing plugin in the project, by ID, slug, or name; exactly one of plugin or assistant is required and there is no implicit default"`
+	Assistant      string `json:"assistant,omitempty" jsonschema:"exact existing assistant in the project, by ID or name; exactly one of plugin or assistant is required"`
+	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms taking this skill away from this exact plugin or assistant"`
+	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key, at most 128 characters; reuse only to retry this exact revocation"`
+}
+
+type ListSkillInsightsToolInput struct {
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug whose skills to rank"`
+	Window      string `json:"window,omitempty" jsonschema:"how far back to look: 1h, 24h, 7d, or 30d (default and maximum)"`
+	SortBy      string `json:"sort_by,omitempty" jsonschema:"order the skills by estimated_minutes_saved (default), efficacy, activations, or session_cost"`
+	Limit       int    `json:"limit,omitempty" jsonschema:"how many skills to return; defaults to 10 and is capped at 20"`
+}
+
+type CompareSkillVersionsToolInput struct {
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
+	SkillID     string `json:"skill_id" jsonschema:"the skill whose versions to compare, by ID as returned by list_skills"`
+	Window      string `json:"window,omitempty" jsonschema:"how far back to look: 1h, 24h, 7d, or 30d (default and maximum)"`
+}
+
 type skillsRefusalResult struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// skillInsightsToolMeta is shared by the live insight tools and their stubs, so
+// a tool keeps one audience and authority whichever one a deployment serves.
+// Session cost is organization spend, so like query_skill_usage these are
+// administrator reads even though the skills they name are member-readable.
+var skillInsightsToolMeta = ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
+
+// Ranking a project's skills and comparing one skill's versions are two
+// questions with two answers, so they are two tools with fixed shapes rather
+// than one tool whose result changes with its arguments.
+func registerSkillInsightsTools(reg *Registrar, skills *SkillsService) {
+	if !skills.insightsValid() {
+		for _, tool := range []struct {
+			name        string
+			title       string
+			description string
+		}{
+			{"list_skill_insights", "Skill Insights", "See which of a project's skills are paying off. This is not switched on for your organization yet."},
+			{"compare_skill_versions", "Compare Skill Versions", "See whether a newer version of a skill is doing better than the ones before it. This is not switched on for your organization yet."},
+		} {
+			addTool(reg, &mcp.Tool{
+				Name:        tool.name,
+				Title:       tool.title,
+				Description: tool.description,
+				Annotations: readOnlyAnnotations(),
+			}, skillInsightsToolMeta, unavailableTool("skill_insights"))
+		}
+		return
+	}
+
+	addTool(reg, &mcp.Tool{
+		Name:        "list_skill_insights",
+		Title:       "Skill Insights",
+		Description: "See which of a project's skills are paying off. For each skill: how often it was used, how many sessions used it, what those sessions cost, and, for sessions that were scored, how well it did and how much time it saved. Covers the last 30 days unless you ask for a shorter window, and orders by time saved unless you ask for another order. Two things to know when reading the numbers: a session's whole cost counts against every skill used in that session, so costs do not add up across skills; and scores come from a sample of sessions, so a skill with no scores is unmeasured rather than bad. To see how one skill's versions compare with each other, use compare_skill_versions.",
+		Annotations: readOnlyAnnotations(),
+	}, skillInsightsToolMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillInsightsToolInput) (*mcp.CallToolResult, ListSkillInsightsOutput, error) {
+		return skillsToolCall(ctx, func(principal Principal) (ListSkillInsightsOutput, error) {
+			return skills.ListSkillInsights(ctx, principal, ListSkillInsightsInput(input))
+		})
+	})
+
+	addTool(reg, &mcp.Tool{
+		Name:        "compare_skill_versions",
+		Title:       "Compare Skill Versions",
+		Description: "See whether a newer version of one skill is doing better than the versions before it. Name the skill and get the same numbers list_skill_insights gives — uses, sessions, cost, score, time saved — broken down per version, newest first, including versions nobody used. Covers the last 30 days unless you ask for a shorter window. A session's whole cost counts against every version used in that session, so costs do not add up across versions, and scores come from a sample of sessions, so a version with no scores is unmeasured rather than bad.",
+		Annotations: readOnlyAnnotations(),
+	}, skillInsightsToolMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input CompareSkillVersionsToolInput) (*mcp.CallToolResult, CompareSkillVersionsOutput, error) {
+		return skillsToolCall(ctx, func(principal Principal) (CompareSkillVersionsOutput, error) {
+			return skills.CompareSkillVersions(ctx, principal, CompareSkillVersionsInput(input))
+		})
+	})
 }
 
 func registerSkillsTools(reg *Registrar, skills *SkillsService) {
@@ -192,6 +274,38 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 			return skills.DistributeSkill(ctx, principal, DistributeSkillInput(input))
 		})
 	})
+
+	addTool(reg, &mcp.Tool{
+		Name:        "list_skill_distributions",
+		Title:       "List Where Skills Are Distributed",
+		Description: "List which plugins carry which skills in a named project — the active distributions, oldest first — with the version each one resolves to and whether it follows the skill's latest version or is pinned. Narrow it to one skill, one plugin, or both. Constraints: this lists plugin distributions; whether an assistant carries a skill is reported per skill by get_skill. Name a plugin exactly — a name matching nothing is refused as not_found and one matching more than one plugin as ambiguous_target.",
+		Annotations: readOnlyAnnotations(),
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillDistributionsToolInput) (*mcp.CallToolResult, ListSkillDistributionsOutput, error) {
+		return skillsToolCall(ctx, func(principal Principal) (ListSkillDistributionsOutput, error) {
+			return skills.ListSkillDistributions(ctx, principal, ListSkillDistributionsInput(input))
+		})
+	})
+
+	addTool(reg, &mcp.Tool{
+		Name:        "undistribute_skill",
+		Title:       "Take a Skill Back from a Plugin or Assistant",
+		Description: "Take a skill back from one plugin or one assistant in the same project, undoing distribute_skill, so agents there stop loading it. The skill and its versions stay; only that one distribution ends. Tell the user which plugin or assistant loses the skill, ask them to confirm out loud, then call this with confirmed: true. Constraints: name the target exactly — a name matching nothing is refused as not_found and a name matching more than one target as ambiguous_target, with no fallback to the default plugin. A distribution that is already gone is a no-op, so a retry with the same idempotency_key is safe.",
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UndistributeSkillToolInput) (*mcp.CallToolResult, UndistributeSkillOutput, error) {
+		if !input.Confirmed {
+			return skillsRefusal("confirmation_required", "Tell the user which plugin or assistant will stop carrying this skill, ask them to explicitly confirm it, then call this tool again with confirmed: true."), UndistributeSkillOutput{}, nil
+		}
+		return skillsToolCall(ctx, func(principal Principal) (UndistributeSkillOutput, error) {
+			return skills.UndistributeSkill(ctx, principal, UndistributeSkillInput{
+				ProjectSlug:    input.ProjectSlug,
+				SkillID:        input.SkillID,
+				Plugin:         input.Plugin,
+				Assistant:      input.Assistant,
+				IdempotencyKey: input.IdempotencyKey,
+			})
+		})
+	})
+
+	registerSkillInsightsTools(reg, skills)
 }
 
 // registerUnavailableSkillsTools declares the same tools the live registration
@@ -215,6 +329,8 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 		{"add_skill_version", "Add Skill Version", "Change what a skill tells an agent, by recording a new version. This is not switched on for your organization yet.", false, ExternalAuthorizationMember},
 		{"update_skill_metadata", "Rename a Skill", "Rename a skill, or change how it is described. This is not switched on for your organization yet.", false, ExternalAuthorizationMember},
 		{"distribute_skill", "Give a Skill to a Plugin or Assistant", "Give a skill to one plugin or assistant. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin},
+		{"list_skill_distributions", "List Where Skills Are Distributed", "List which plugins carry which skills in a project. This is not switched on for your organization yet.", true, ExternalAuthorizationMember},
+		{"undistribute_skill", "Take a Skill Back from a Plugin or Assistant", "Take a skill back from one plugin or assistant. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin},
 	} {
 		manifest := &mcp.Tool{
 			Name:        tool.name,
@@ -233,6 +349,7 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 		}
 		addTool(reg, manifest, ToolMeta{Authorization: tool.authority, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("skills"))
 	}
+	registerSkillInsightsTools(reg, nil)
 }
 
 // skillsToolCall runs one skill call and turns a refusal into a structured
@@ -260,7 +377,7 @@ func skillsToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrSkillsUnavailable):
 		result = skillsRefusalResult{Code: unavailableCode, Message: "Skills are not switched on for your organization yet."}
 	case errors.Is(err, ErrSkillTargetNotFound):
-		result = skillsRefusalResult{Code: "not_found", Message: "No plugin or assistant in this project has that exact name. Name one of the targets returned by create_skill or add_skill_version; nothing is picked by default."}
+		result = skillsRefusalResult{Code: "not_found", Message: "No plugin or assistant in this project has that exact name. Name one of the targets returned by create_skill or add_skill_version, or a plugin returned by list_skill_distributions; nothing is picked by default."}
 	case errors.Is(err, ErrSkillTargetAmbiguous):
 		result = skillsRefusalResult{Code: "ambiguous_target", Message: "More than one plugin or assistant in this project has that name. Name it by its ID instead."}
 	case errors.Is(err, ErrSkillContentTooLarge):
@@ -275,9 +392,15 @@ func skillsToolResult(err error) (*mcp.CallToolResult, bool) {
 		}
 		result = skillsRefusalResult{Code: code, Message: message}
 	}
-	content, marshalErr := json.Marshal(result)
-	if marshalErr != nil {
-		return nil, false
+	return skillsRefusal(result.Code, result.Message), true
+}
+
+// skillsRefusal is the wire shape of every skills refusal: a structured error
+// result rather than a transport error, so the code and reason reach the model.
+func skillsRefusal(code, message string) *mcp.CallToolResult {
+	content, err := json.Marshal(skillsRefusalResult{Code: code, Message: message})
+	if err != nil {
+		content = []byte(`{"code":"` + code + `"}`)
 	}
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}
 }

@@ -7,6 +7,9 @@ import type { RiskMCPServerScope } from "@gram/client/models/components/riskmcps
 type PolicyScopeMode = "everywhere" | "mcp";
 export type ToolAnnotation = RiskMCPScopeToolAnnotations;
 
+// Mirrors AllToolsWildcard in server/internal/risk/policycore/types.go.
+export const ALL_TOOLS_WILDCARD = "*";
+
 export interface PolicyMCPScopeValue {
   mode: PolicyScopeMode;
   allServers: boolean;

@@ -114,8 +114,8 @@ type ResolvedMcpEndpoint struct {
 	useAuthenticationHost bool
 
 	// UpstreamResource is the RFC 8707 resource indicator for the
-	// endpoint's upstream — the remote backend URL for remote-backed
-	// servers, empty otherwise.
+	// endpoint's upstream: the remote backend URL or the tunneled backend
+	// resource identifier. Tunneled identifiers retain their saved spelling.
 	UpstreamResource string
 
 	// UserSessionIssuerID is the user_session_issuer the endpoint is

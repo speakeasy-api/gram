@@ -13,6 +13,7 @@ import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import type { RiskMCPServerScope } from "@gram/client/models/components/riskmcpserverscope.js";
 import {
+  ALL_TOOLS_WILDCARD,
   type PolicyMCPScopeValue,
   type ToolAnnotation,
 } from "./policy-mcp-scope";
@@ -21,6 +22,7 @@ import { buildListMcpServerToolMetadataQuery } from "@gram/client/react-query/li
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
+import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskListMcpPlatformToolsets.js";
 import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, Info, Loader2, Network, Server, X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -36,7 +38,7 @@ type PickerServer = {
   id: string;
   name: string;
   slug?: string;
-  kind: "server" | "gateway";
+  kind: "server" | "gateway" | "platform";
   memberCount?: number;
   tools: PickerTool[];
   toolsLoading: boolean;
@@ -45,6 +47,7 @@ type PickerServer = {
 type ServerSelection =
   | { kind: "off" }
   | { kind: "rule"; derived: boolean }
+  | { kind: "wildcard" }
   | { kind: "custom"; tools: string[] };
 
 const TOOL_ANNOTATIONS: Array<{
@@ -86,6 +89,11 @@ export function PolicyMCPScopePicker({
   const toolsetsQuery = useListToolsets({ gramProject }, undefined, {
     throwOnError: false,
   });
+  const platformToolsetsQuery = useRiskListMcpPlatformToolsets(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
   const concreteServers = serversQuery.data?.mcpServers ?? [];
   const remoteServers = concreteServers.filter(
     (server) => !server.toolsetId && !!server.remoteMcpServerId,
@@ -140,6 +148,23 @@ export function PolicyMCPScopePicker({
         toolsLoading: metadataQuery?.isLoading ?? false,
       };
     }),
+    ...(platformToolsetsQuery.data?.toolsets ?? []).map(
+      (toolset): PickerServer => ({
+        id: toolset.id,
+        name: toolset.name,
+        slug: toolset.slug,
+        kind: "platform",
+        tools: toolset.tools
+          .map((tool) => ({
+            name: tool.name,
+            annotations: annotationNames(
+              tool.annotations as AnnotationFields | undefined,
+            ),
+          }))
+          .sort((left, right) => left.name.localeCompare(right.name)),
+        toolsLoading: false,
+      }),
+    ),
     ...(gatewaysQuery.data?.metaMcpServers ?? []).map(
       (gateway): PickerServer => ({
         id: gateway.id,
@@ -159,7 +184,7 @@ export function PolicyMCPScopePicker({
   );
   const firstSelected = pickerServers.find((server) => {
     if (storedByID.has(server.id)) return true;
-    return value.allServers && server.kind === "server";
+    return value.allServers && server.kind !== "gateway";
   });
   const focusedServer =
     pickerServers.find((server) => server.id === focusedServerID) ??
@@ -181,17 +206,33 @@ export function PolicyMCPScopePicker({
   const loading =
     serversQuery.isLoading ||
     gatewaysQuery.isLoading ||
-    toolsetsQuery.isLoading;
+    toolsetsQuery.isLoading ||
+    platformToolsetsQuery.isLoading;
   const failed =
-    serversQuery.isError || gatewaysQuery.isError || toolsetsQuery.isError;
+    serversQuery.isError ||
+    gatewaysQuery.isError ||
+    toolsetsQuery.isError ||
+    platformToolsetsQuery.isError;
 
   const selectionFor = (server: PickerServer): ServerSelection => {
     const stored = storedByID.get(server.id);
     if (stored?.tools !== undefined) {
+      // An empty tools list means "every tool on this server", the same as
+      // never picking one — not "no tools". The server normalizes it the
+      // same way on save, but persists it as the single-element sentinel
+      // list `["*"]` (length 1, not 0) — see AllToolsWildcard in
+      // server/internal/risk/policycore/types.go — so both representations
+      // must be recognized here.
+      if (
+        stored.tools.length === 0 ||
+        (stored.tools.length === 1 && stored.tools[0] === ALL_TOOLS_WILDCARD)
+      ) {
+        return { kind: "wildcard" };
+      }
       return { kind: "custom", tools: stored.tools };
     }
     if (stored) return { kind: "rule", derived: false };
-    if (value.allServers && server.kind === "server") {
+    if (value.allServers && server.kind !== "gateway") {
       return { kind: "rule", derived: true };
     }
     return { kind: "off" };
@@ -211,7 +252,12 @@ export function PolicyMCPScopePicker({
     onChange({ ...value, servers });
   };
   const removeServer = (server: PickerServer) => {
-    if (value.allServers && server.kind === "server") {
+    // Deselecting must not lose the pane: without this, focus falls back to
+    // whichever server happens to be first in the list once this one drops
+    // out of storedByID, stranding the user on an unrelated server's (often
+    // empty) tool list instead of the one they just deselected.
+    setFocusedServerID(server.id);
+    if (value.allServers && server.kind !== "gateway") {
       const customByID = new Map(
         value.servers
           .filter((entry) => entry.tools !== undefined)
@@ -223,8 +269,11 @@ export function PolicyMCPScopePicker({
             candidate.id === entry.mcpServerId && candidate.kind === "gateway",
         ),
       );
-      const materialized = concreteServers
-        .filter((candidate) => candidate.id !== server.id)
+      const materialized = pickerServers
+        .filter(
+          (candidate) =>
+            candidate.kind !== "gateway" && candidate.id !== server.id,
+        )
         .map(
           (candidate) =>
             customByID.get(candidate.id) ?? { mcpServerId: candidate.id },
@@ -239,13 +288,15 @@ export function PolicyMCPScopePicker({
     replaceServer(server.id, null);
   };
   const selectRule = (server: PickerServer) => {
-    if (value.allServers && server.kind === "server") {
+    setFocusedServerID(server.id);
+    if (value.allServers && server.kind !== "gateway") {
       replaceServer(server.id, null);
       return;
     }
     replaceServer(server.id, { mcpServerId: server.id });
   };
   const toggleServer = (server: PickerServer) => {
+    setFocusedServerID(server.id);
     const selection = selectionFor(server);
     if (selection.kind === "off") selectRule(server);
     else removeServer(server);
@@ -264,20 +315,39 @@ export function PolicyMCPScopePicker({
     onChange({ ...value, allServers: false, servers: [] });
   };
   const toggleTool = (server: PickerServer, toolName: string) => {
+    setFocusedServerID(server.id);
     const selection = selectionFor(server);
     const ruleSelection = ruleTools(server);
     const current =
       selection.kind === "custom"
         ? selection.tools
-        : selection.kind === "rule"
-          ? ruleSelection
-          : [];
+        : selection.kind === "wildcard"
+          ? server.tools.map((tool) => tool.name)
+          : selection.kind === "rule"
+            ? ruleSelection
+            : [];
     const next = current.includes(toolName)
       ? current.filter((name) => name !== toolName)
       : [...current, toolName];
     next.sort();
     if (next.length === 0) {
-      removeServer(server);
+      if (
+        (selection.kind === "custom" || selection.kind === "wildcard") &&
+        value.toolAnnotations.length === 0
+      ) {
+        // Unchecking the last tool of an explicit selection means "every tool
+        // on this server", not "no tools" — keep the server in scope as a
+        // wildcard. A rule-derived selection (kind: "rule") must NOT take this
+        // path: it can be narrowed by the policy's top-level ToolAnnotations,
+        // and wildcarding here would silently widen past that rule. When a
+        // top-level rule IS set, the server can't wildcard past it either —
+        // NormalizeMCPScope rejects an empty tool list in that case — so
+        // fall through to dropping the server rather than saving a payload
+        // the backend will reject.
+        replaceServer(server.id, { mcpServerId: server.id, tools: [] });
+      } else {
+        removeServer(server);
+      }
     } else if (
       next.length === ruleSelection.length &&
       next.every((name, index) => name === ruleSelection[index])
@@ -294,6 +364,7 @@ export function PolicyMCPScopePicker({
   const toolsInScope = pickerServers.reduce((total, server) => {
     const selection = selectionFor(server);
     if (selection.kind === "custom") return total + selection.tools.length;
+    if (selection.kind === "wildcard") return total + server.tools.length;
     if (selection.kind === "rule") return total + ruleTools(server).length;
     return total;
   }, 0);
@@ -495,7 +566,7 @@ export function PolicyMCPScopePicker({
                       All MCP servers
                     </span>
                     <span className="text-muted-foreground block text-xs">
-                      Including servers added later
+                      Including Platform MCP and servers added later
                     </span>
                   </span>
                 </label>
@@ -523,11 +594,13 @@ export function PolicyMCPScopePicker({
                           : "ALL"
                       : selection.kind === "off"
                         ? `0/${server.tools.length}`
-                        : selection.kind === "custom"
-                          ? `${selection.tools.length}/${server.tools.length}`
-                          : value.toolAnnotations.length === 0
-                            ? "ALL"
-                            : `${ruleTools(server).length}/${server.tools.length}`;
+                        : selection.kind === "wildcard"
+                          ? "ALL"
+                          : selection.kind === "custom"
+                            ? `${selection.tools.length}/${server.tools.length}`
+                            : value.toolAnnotations.length === 0
+                              ? "ALL"
+                              : `${ruleTools(server).length}/${server.tools.length}`;
                   return (
                     <div
                       key={server.id}
@@ -660,16 +733,23 @@ function FocusedServerPane({
 }): JSX.Element {
   const selected = selection.kind !== "off";
   const custom = selection.kind === "custom";
-  const selectedTools = custom ? selection.tools : ruleTools;
+  const wildcard = selection.kind === "wildcard";
+  const selectedTools = custom
+    ? selection.tools
+    : wildcard
+      ? server.tools.map((tool) => tool.name)
+      : ruleTools;
   const followingAnnotationRule =
     selection.kind === "rule" && toolAnnotations.length > 0;
   const note = !selected
     ? "Not in scope"
     : custom
       ? `Custom · ${selectedTools.length} of ${server.tools.length}`
-      : toolAnnotations.length === 0
-        ? "All tools, including ones added later"
-        : `Following the tool rule · ${selectedTools.length} of ${server.tools.length}`;
+      : wildcard
+        ? "All tools, unconditionally — including ones added later"
+        : toolAnnotations.length === 0
+          ? "All tools, including ones added later"
+          : `Following the tool rule · ${selectedTools.length} of ${server.tools.length}`;
 
   return (
     <div className="space-y-4">
@@ -756,7 +836,7 @@ function FocusedServerPane({
             <span className="text-muted-foreground ml-auto text-xs">
               {note}
             </span>
-            {custom ? (
+            {custom || wildcard ? (
               <button
                 type="button"
                 onClick={onUseRule}
@@ -792,6 +872,7 @@ function FocusedServerPane({
                     checked={checked}
                     className={cn(
                       !custom &&
+                        !wildcard &&
                         checked &&
                         "data-[state=checked]:border-muted-foreground data-[state=checked]:bg-muted-foreground",
                     )}

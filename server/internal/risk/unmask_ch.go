@@ -15,12 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// unmaskRiskResultFromClickHouse serves risk.unmaskResult when the listing is
-// flagged onto ClickHouse: listed ids may only exist there, and ClickHouse
-// never stores the raw match. The plaintext is reconstructed from the original
-// chat data per the row's surface metadata (see RevealMatcher); a
-// reconstruction that does not line up with the recorded match length is
-// refused rather than served.
+// unmaskRiskResultFromClickHouse serves risk.unmaskResult from ClickHouse, the
+// store the listing serves ids from, which never stores the raw match. The
+// plaintext is reconstructed from the original chat data per the row's
+// surface metadata (see RevealMatcher); a reconstruction that does not line
+// up with the recorded match length is refused rather than served.
 func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *contextvalues.AuthContext, id uuid.UUID) (*gen.RiskUnmaskResultResult, error) {
 	projectID := *authCtx.ProjectID
 
@@ -36,14 +35,27 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 		return nil, oops.E(oops.CodeNotFound, nil, "risk result not found")
 	}
 
+	// A deleted policy's rows linger in ClickHouse until TTL; they must not
+	// be revealable.
+	policyID, err := uuid.Parse(row.RiskPolicyID)
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "risk result not found")
+	}
+	visible, err := s.visiblePolicyIDs(ctx, projectID, uuid.NullUUID{UUID: policyID, Valid: true})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy").LogError(ctx, s.logger)
+	}
+	if len(visible) == 0 {
+		return nil, oops.E(oops.CodeNotFound, nil, "risk result not found")
+	}
+
 	reveal := NewRevealMatcher(s.logger, s.repo, s.assetStorage)
 	anchor := reveal.LoadAnchor(ctx, projectID, row)
 
-	// The chat:read gate is identical to the Postgres path: the resolved chat
-	// is the ingest-stamped id, falling back to the anchored Postgres row's
-	// chat. When neither resolves (attribution never resolved and the anchor is
-	// gone) the check runs against the nil UUID — mirroring the Postgres path's
-	// NULL chat_id — and only a wildcard chat:read grant passes. A stamped id
+	// The chat:read gate runs on the ingest-stamped chat id, falling back to
+	// the anchored Postgres row's chat. When neither resolves (attribution
+	// never resolved and the anchor is gone) the check runs against the nil
+	// UUID, so only a wildcard chat:read grant passes. A stamped id
 	// that disagrees with the anchor's chat is refused outright: serving the
 	// anchor's content under the stamped chat's grant would hand a caller
 	// another chat's transcript.

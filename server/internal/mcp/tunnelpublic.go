@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -430,7 +431,16 @@ func (s *Service) serveTunneledPublicInit(
 		reserved = true
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, organizationID, mcpServer, "", "", nil)
+	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
+		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
+		ProjectID:          endpoint.ProjectID,
+		OrganizationID:     organizationID,
+		MCPServer:          mcpServer,
+		ResourceIdentifier: "",
+		UpstreamAuth:       "",
+		WWWAuthenticate:    "",
+		Selection:          nil,
+	})
 	if err != nil {
 		if reserved {
 			s.rollbackReservation(ctx, logger, tunnelID, mcpServerID, sid)
@@ -575,7 +585,7 @@ func peekIsInitialize(r *http.Request) bool {
 	if err := json.Unmarshal(body, &probe); err != nil {
 		return false
 	}
-	return probe.Method == "initialize"
+	return probe.Method == mcpversions.MethodInitialize
 }
 
 // isValidBackendSessionID enforces the MCP spec's constraint that a session

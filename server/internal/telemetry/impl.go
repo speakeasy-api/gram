@@ -2555,14 +2555,25 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	eg, egCtx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
-		var fetchErr error
+		hostedMCPMatchers, mcpServerMatchers, fetchErr := LoadToolUsageMatchers(egCtx, s.db, *authCtx.ProjectID)
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error listing MCP servers for project overview")
+		}
+		metaMCPMatchers, fetchErr := LoadMetaMCPMatchers(egCtx, s.db, *authCtx.ProjectID)
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error listing gateways for project overview")
+		}
+
 		clickHouseResult, fetchErr = overview.FetchClickHouse(egCtx, s.chRepo, overview.Params{
-			ProjectID:       projectID,
-			TimeStart:       timeStart,
-			TimeEnd:         timeEnd,
-			ComparisonStart: comparisonStart,
-			ComparisonEnd:   comparisonEnd,
-			SessionMode:     sessionMode,
+			ProjectID:         projectID,
+			TimeStart:         timeStart,
+			TimeEnd:           timeEnd,
+			ComparisonStart:   comparisonStart,
+			ComparisonEnd:     comparisonEnd,
+			SessionMode:       sessionMode,
+			HostedMCPMatchers: hostedMCPMatchers,
+			MCPServerMatchers: mcpServerMatchers,
+			MetaMCPMatchers:   metaMCPMatchers,
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving project overview ClickHouse data")
@@ -2654,7 +2665,6 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	// Resolve active counts and top lists now that every query has returned.
-	activeServersCount := int64(clickHouseResult.ActiveCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
 	var activeUsersCount int64
 	var topUsers []*telem_gen.TopUser
 	var llmClientBreakdown []*telem_gen.LLMClientUsage
@@ -2674,8 +2684,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		overrideMap[override.RawServerName] = override.DisplayName
 	}
 
-	// Apply overrides to top servers
+	// Apply overrides before trimming so alternate reported names that fold to
+	// one server do not leave the ranked list artificially short.
 	topServersWithOverrides := applyServerNameOverrides(clickHouseResult.TopServers, overrideMap)
+	activeServersCount := int64(clickHouseResult.ActiveCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
+	if len(topServersWithOverrides) > 10 {
+		topServersWithOverrides = topServersWithOverrides[:10]
+	}
 
 	// Convert to API types - build summaries with nested fields
 	return &telem_gen.GetProjectOverviewResult{
@@ -4074,6 +4089,7 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 
 		serverMatchers = append(serverMatchers, repo.MCPServerMatcher{
 			SourceID:    sourceID,
+			MCPServerID: server.ID.String(),
 			TargetType:  targetType,
 			TargetID:    targetID,
 			TargetLabel: targetLabel,
@@ -4576,10 +4592,6 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 // GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
 // This is used by the chat service to enrich chat overview data with metrics from ClickHouse.
 func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, chatIDs []string, eventTimeFrom time.Time) (map[string]repo.ChatMetricsRow, error) {
-	if s.chRepo == nil {
-		return make(map[string]repo.ChatMetricsRow), nil
-	}
-
 	result, err := s.chRepo.GetChatMetricsByIDs(ctx, repo.GetChatMetricsByIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       chatIDs,
@@ -4594,13 +4606,6 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 // GetChatMetricsSummaryByIDs retrieves range-bounded token and cost totals for
 // a set of chats.
 func (s *Service) GetChatMetricsSummaryByIDs(ctx context.Context, params repo.GetChatMetricsSummaryByIDsParams) (repo.ChatMetricsSummary, error) {
-	if s.chRepo == nil {
-		return repo.ChatMetricsSummary{
-			TotalTokens: 0,
-			TotalCost:   0,
-		}, nil
-	}
-
 	result, err := s.chRepo.GetChatMetricsSummaryByIDs(ctx, params)
 	if err != nil {
 		return repo.ChatMetricsSummary{}, fmt.Errorf("get chat metrics summary by ids: %w", err)
@@ -4612,10 +4617,6 @@ func (s *Service) GetChatMetricsSummaryByIDs(ctx context.Context, params repo.Ge
 // analysis verdict per chat for one judge (e.g. work units). This is used by
 // the chat service to enrich chat responses from ClickHouse.
 func (s *Service) GetChatAnalysisVerdictsByChatIDs(ctx context.Context, organizationID string, projectID string, judge string, chatIDs []string) (map[string]repo.ChatAnalysisVerdict, error) {
-	if s.chRepo == nil {
-		return make(map[string]repo.ChatAnalysisVerdict), nil
-	}
-
 	result, err := s.chRepo.GetChatAnalysisVerdictsByChatIDs(ctx, repo.GetChatAnalysisVerdictsByChatIDsParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
@@ -4632,10 +4633,6 @@ func (s *Service) GetChatAnalysisVerdictsByChatIDs(ctx context.Context, organiza
 // verdict per chat for one judge across a scoring-time window, oldest first.
 // This is used by the chat service to build work-units trend aggregates.
 func (s *Service) ListChatAnalysisVerdicts(ctx context.Context, arg repo.ListChatAnalysisVerdictsParams) ([]repo.ChatAnalysisVerdict, error) {
-	if s.chRepo == nil {
-		return nil, nil
-	}
-
 	result, err := s.chRepo.ListChatAnalysisVerdicts(ctx, arg)
 	if err != nil {
 		return nil, fmt.Errorf("list chat analysis verdicts: %w", err)
@@ -4646,14 +4643,6 @@ func (s *Service) ListChatAnalysisVerdicts(ctx context.Context, arg repo.ListCha
 // GetClaudeTurnUsageByChatIDs retrieves per-turn Claude Code usage for specific chat IDs.
 // This is used by the chat service to enrich chat detail responses from ClickHouse.
 func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string, eventTimeFrom time.Time) (map[string][]repo.ClaudeTurnUsageRow, error) {
-	if s.chRepo == nil {
-		usageByChatID := make(map[string][]repo.ClaudeTurnUsageRow, len(chatIDs))
-		for _, chatID := range chatIDs {
-			usageByChatID[chatID] = []repo.ClaudeTurnUsageRow{}
-		}
-		return usageByChatID, nil
-	}
-
 	result, err := s.chRepo.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       chatIDs,
@@ -4668,14 +4657,6 @@ func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID str
 // GetClaudeToolUsageByChatIDs retrieves per-tool Claude Code input/result byte sizes for specific chat IDs.
 // This is used by the chat service to enrich chat detail rows from ClickHouse.
 func (s *Service) GetClaudeToolUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string, eventTimeFrom time.Time) (map[string][]repo.ClaudeToolUsageRow, error) {
-	if s.chRepo == nil {
-		usageByChatID := make(map[string][]repo.ClaudeToolUsageRow, len(chatIDs))
-		for _, chatID := range chatIDs {
-			usageByChatID[chatID] = []repo.ClaudeToolUsageRow{}
-		}
-		return usageByChatID, nil
-	}
-
 	result, err := s.chRepo.GetClaudeToolUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       chatIDs,

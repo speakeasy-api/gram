@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Ban, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { AGENT_PLATFORMS } from "../setup-data";
+import { AGENT_PLATFORMS, platformSteps } from "../setup-data";
 import type { PlatformSetupStatus } from "../types";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 import {
@@ -19,6 +19,12 @@ interface PlatformSetupFlowProps {
    * its marketplace section is done rather than handing out empty URLs.
    */
   heldBack?: string;
+  /**
+   * Like `heldBack`, but only for the org rollout: shown in place of the
+   * steps after "yes" to the plan check. The per-user path for personal plans
+   * doesn't read the repo through GitHub, so it isn't held back.
+   */
+  orgHeldBack?: string;
   apiKeys?: PlatformApiKeys;
 }
 
@@ -31,16 +37,19 @@ export function PlatformSetupFlow({
   status,
   onStatusChange,
   heldBack,
+  orgHeldBack,
   apiKeys: sharedApiKeys,
 }: PlatformSetupFlowProps): JSX.Element | null {
   const platform = AGENT_PLATFORMS.find((p) => p.id === platformId);
   const localApiKeys = usePlatformApiKeys();
   const apiKeys = sharedApiKeys ?? localApiKeys;
-  // A platform whose first step asks whether the org qualifies (Claude Code's
-  // plan check) shows nothing further until that is answered.
+  // A platform whose first step asks for the plan (the plan check)
+  // shows nothing further until that is answered; "no" swaps in the per-user
+  // steps for personal plans.
   const [eligible, setEligible] = useState<boolean | null>(null);
   const gate = platform?.setupSteps[0]?.eligibility;
-  const gated = !!gate && eligible !== true;
+  const unanswered = !!gate && eligible === null;
+  const orgBlocked = !!orgHeldBack && eligible !== false && !unanswered;
 
   // Mint the key the snippets need as soon as the flow is readable, and only
   // once — a failed mint leaves neither a key nor a pending flag, so a bare
@@ -48,20 +57,24 @@ export function PlatformSetupFlow({
   const { ensure } = apiKeys;
   const requestedKey = useRef(false);
   useEffect(() => {
-    if (!platform || heldBack || gated) return;
+    if (!platform || heldBack || unanswered || orgBlocked) return;
+    // Personal download steps provision their own key in the ZIP endpoint.
+    if (!platformSteps(platform, eligible).some((step) => step.requiresApiKey))
+      return;
     if (requestedKey.current) return;
     requestedKey.current = true;
     ensure(platform);
-  }, [platform, heldBack, gated, ensure]);
+  }, [platform, eligible, heldBack, unanswered, orgBlocked, ensure]);
 
   if (!platform) return null;
   if (heldBack) {
     return <p className="text-muted-foreground text-sm">{heldBack}</p>;
   }
 
-  const visibleSteps = gated
-    ? platform.setupSteps.slice(0, 1)
-    : platform.setupSteps;
+  const steps = platformSteps(platform, eligible);
+  // Held back or unanswered, only the plan check (if any) shows.
+  const visibleSteps =
+    unanswered || orgBlocked ? steps.slice(0, gate ? 1 : 0) : steps;
 
   return (
     <div className="space-y-8">
@@ -74,28 +87,19 @@ export function PlatformSetupFlow({
           apiKeyPending={apiKeys.pending[platform.id]}
           apiKeyError={apiKeys.errors[platform.id]}
           onRetryApiKey={() => ensure(platform)}
+          eligibleAnswer={eligible}
           onEligibilityAnswer={(answer) => {
             setEligible(answer);
-            onStatusChange(answer ? "not_started" : "blocked");
+            onStatusChange("not_started");
           }}
         />
       ))}
 
-      {eligible === false && gate ? (
-        <div className="border-destructive/20 bg-destructive/5 flex items-start gap-3 border p-4">
-          <Ban className="text-destructive mt-0.5 h-4 w-4 flex-shrink-0" />
-          <div>
-            <p className="text-foreground text-sm font-medium">
-              {gate.blockedTitle}
-            </p>
-            <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-              {gate.blockedDescription}
-            </p>
-          </div>
-        </div>
+      {orgBlocked ? (
+        <p className="text-muted-foreground text-sm">{orgHeldBack}</p>
       ) : null}
 
-      {gated ? null : status === "complete" ? (
+      {unanswered || orgBlocked ? null : status === "complete" ? (
         <div className="border-border bg-secondary/20 flex items-center justify-between border p-4">
           <p className="text-foreground flex items-center gap-2 text-sm">
             <Check className="text-default-success h-4 w-4" strokeWidth={3} />

@@ -384,7 +384,17 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 		return grantCheckEvaluation{}, fmt.Errorf("evaluate exclusion expression: %w", err)
 	}
 	if !result.Satisfied {
-		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: result.Reason == GrantExpressionReasonExclusionMatched}, nil
+		if result.Reason != GrantExpressionReasonExclusionMatched {
+			return grantCheckEvaluation{Grant: nil, Check: nil, Denied: false}, nil
+		}
+		overrideGrant, overrideCheck, err := directOverride(grants, check)
+		if err != nil {
+			return grantCheckEvaluation{}, fmt.Errorf("evaluate direct grant override: %w", err)
+		}
+		if overrideGrant != nil {
+			return grantCheckEvaluation{Grant: overrideGrant, Check: overrideCheck, Denied: false}, nil
+		}
+		return grantCheckEvaluation{Grant: nil, Check: nil, Denied: true}, nil
 	}
 
 	return grantCheckEvaluation{Grant: grant, Check: matchedCheck, Denied: false}, nil

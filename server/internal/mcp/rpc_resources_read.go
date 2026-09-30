@@ -209,17 +209,18 @@ func handleResourcesRead(
 		serverID = payload.mcpServerID.String()
 	}
 	decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
-		Surface:        mcpriskscan.SurfaceHostedMCP,
-		Method:         mcpriskscan.MethodResourcesRead,
-		OrganizationID: descriptor.OrganizationID,
-		ProjectID:      descriptor.ProjectID,
-		ServerID:       serverID,
-		MetaServerID:   payload.metaMcpServerID,
-		ToolsetID:      toolset.ID,
-		ToolName:       "",
-		ResourceURI:    descriptor.URI,
-		PromptName:     "",
-		ChatID:         payload.chatID,
+		Surface:         mcpriskscan.SurfaceHostedMCP,
+		Method:          mcpriskscan.MethodResourcesRead,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        serverID,
+		MetaServerID:    payload.metaMcpServerID,
+		ToolsetID:       toolset.ID,
+		ToolName:        "",
+		ResourceURI:     descriptor.URI,
+		PromptName:      "",
+		ChatID:          payload.chatID,
+		ToolAnnotations: nil,
 	}, mcpriskscan.BorrowPayload(nil)))
 	if decision.Denied() {
 		return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)

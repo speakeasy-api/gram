@@ -30,9 +30,9 @@ export function identityModeCards(upstreamName: string): IdentityModeCard[] {
     },
     {
       value: "agent",
-      title: "Agent Identity",
+      title: "Service Account",
       description:
-        "Every caller acts as one service account. Manage what it may do in the control plane.",
+        "Every caller shares one identity. Manage what it may do in the control plane.",
       icon: <Bot aria-hidden="true" className="size-4" />,
     },
     {

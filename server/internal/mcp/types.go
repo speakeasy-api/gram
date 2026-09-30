@@ -112,6 +112,8 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		// which would attribute an agent-workflow call to that client.
 		clientInfoScope:          internalClientInfoScope,
 		skipProxyTools:           false,
+		toolsetID:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		toolsetIsPublic:          nil,
 		tags:                     nil,
 		protocolVersion:          mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
 		identityCoverageRecorded: false,

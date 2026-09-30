@@ -300,6 +300,7 @@ var OrganizationDefaultFeatures = []Feature{
 	FeatureLogs,
 	FeatureToolIOLogs,
 	FeatureSessionCapture,
+	FeatureHooksFailOpen,
 }
 
 // SeedOrganizationDefaultsTx enables baseline entitlements for a newly

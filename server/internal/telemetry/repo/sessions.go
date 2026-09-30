@@ -11,6 +11,8 @@ import (
 )
 
 const (
+	// Transcript observations prove session activity without asserting model usage.
+	sessionTranscriptRowPredicate = "(gram_urn = 'chat:transcript:observed')"
 	// sessionClaudeOTELRowPredicate anchors Claude provenance on the OTEL log
 	// stream URN stamped at ingest. Claude usage and tool calls are derived
 	// exclusively from these rows; Claude hook rows and claude-code:usage
@@ -119,7 +121,7 @@ const (
 	// sessionSourceRowPredicate admits every row class the session list derives
 	// from, matching the aggregate MV's WHERE clause so the two views cover the
 	// same sessions.
-	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionHookTurnUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
+	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionHookTurnUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + " OR " + sessionTranscriptRowPredicate + ")"
 
 	// Token/cost measures are source-aware: Claude api_request rows carry usage
 	// on flat attributes (input_tokens, cost_usd, …), Codex response.completed
@@ -176,7 +178,7 @@ const (
 	// but carry no stable turn id, so they fall back to the row id (count-per-row,
 	// same degradation as the tool-call dedup). LiteLLM uses call ID, response ID,
 	// then row ID. Generic rows key off gen_ai.response.id.
-	sessionMessageIDExpr = "multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
+	sessionMessageIDExpr = "multiIf(" + sessionTranscriptRowPredicate + ", toString(attributes.gram.chat.message.id), " + sessionClaudeAPIRequestPredicate + ", " +
 		"toString(attributes.prompt.id), " +
 		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id), " +
 		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id), " +

@@ -27,6 +27,21 @@ type ToolAnnotationsResolver interface {
 	ToolAnnotations(ctx context.Context, mcpServerID, projectID uuid.UUID, toolName string) (*gentypes.ToolAnnotations, error)
 }
 
+// MCPTarget identifies one concrete policy-evaluation subject.
+type MCPTarget struct {
+	// ServerID is the persisted server ID or stable Platform MCP toolset ID.
+	ServerID uuid.UUID
+
+	// ToolName is empty when matching only at the server level.
+	ToolName string
+
+	// ToolAnnotations carries code-owned annotations when no database resolver applies.
+	ToolAnnotations *gentypes.ToolAnnotations
+
+	// PlatformToolset bypasses persisted server ownership and gateway lookup.
+	PlatformToolset bool
+}
+
 // Core provides transport-neutral policy reads and projections. Authorization
 // remains the responsibility of the calling service.
 type Core struct {
@@ -83,14 +98,14 @@ func (c *Core) List(ctx context.Context, organizationID string, projectID uuid.U
 	return policies, nil
 }
 
-// ListEnabledForMCPServer returns enabled MCP-scoped policies that apply to one
-// MCP server and, when provided, one tool. Policies without an MCP scope are
-// excluded. Gateway membership is resolved on every call.
-func (c *Core) ListEnabledForMCPServer(
+// ListEnabledForMCP returns enabled MCP-scoped policies that apply to one
+// concrete MCP target. Policies without an MCP scope are excluded. Gateway
+// membership is resolved on every persisted-server call.
+func (c *Core) ListEnabledForMCP(
 	ctx context.Context,
 	organizationID string,
-	projectID, serverID uuid.UUID,
-	toolName string,
+	projectID uuid.UUID,
+	target MCPTarget,
 ) ([]Policy, error) {
 	rows, err := c.queries.ListEnabledRiskPoliciesByProject(ctx, projectID)
 	if err != nil {
@@ -114,10 +129,10 @@ func (c *Core) ListEnabledForMCPServer(
 	}
 
 	var gatewayIDs []uuid.UUID
-	if serverID != uuid.Nil {
+	if target.ServerID != uuid.Nil && !target.PlatformToolset {
 		ownedIDs, err := c.queries.ListRiskPolicyMCPScopeServerIDs(ctx, repo.ListRiskPolicyMCPScopeServerIDsParams{
 			ProjectID:    projectID,
-			McpServerIds: []uuid.UUID{serverID},
+			McpServerIds: []uuid.UUID{target.ServerID},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("validate MCP server project: %w", err)
@@ -128,16 +143,16 @@ func (c *Core) ListEnabledForMCPServer(
 
 		gatewayIDs, err = c.queries.ListMetaMCPServerIDsContainingMCPServer(ctx, repo.ListMetaMCPServerIDsContainingMCPServerParams{
 			ProjectID:   projectID,
-			McpServerID: serverID,
+			McpServerID: target.ServerID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("list MCP server gateways: %w", err)
 		}
 	}
 
-	var annotations *gentypes.ToolAnnotations
-	if needsAnnotations && toolName != "" && c.toolAnnotations != nil {
-		annotations, err = c.toolAnnotations.ToolAnnotations(ctx, serverID, projectID, toolName)
+	annotations := target.ToolAnnotations
+	if annotations == nil && !target.PlatformToolset && needsAnnotations && target.ToolName != "" && c.toolAnnotations != nil {
+		annotations, err = c.toolAnnotations.ToolAnnotations(ctx, target.ServerID, projectID, target.ToolName)
 		if err != nil {
 			return nil, fmt.Errorf("resolve MCP tool annotations: %w", err)
 		}
@@ -146,7 +161,7 @@ func (c *Core) ListEnabledForMCPServer(
 	matchedRows := make([]repo.RiskPolicy, 0, len(scopedRows))
 	policyIDs := make([]string, 0, len(scopedRows))
 	for i, row := range scopedRows {
-		if !scopes[i].Applies(serverID, toolName, annotations, gatewayIDs) {
+		if !scopes[i].Applies(target.ServerID, target.ToolName, annotations, gatewayIDs) {
 			continue
 		}
 		matchedRows = append(matchedRows, row)

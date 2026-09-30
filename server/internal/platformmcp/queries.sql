@@ -2826,9 +2826,8 @@ LIMIT @row_limit;
 
 -- name: ListRiskFindingSpansForRecall :many
 -- Findings that drive inline masking of the recall digest. Message-anchored
--- rows only (the digest does not render content parts), with the canonical
--- suppression filters from risk's ListRiskResultsByChatFound: found, not
--- excluded, not swept as false positive, policy still enabled and not deleted.
+-- rows only (the digest does not render content parts): found, not excluded,
+-- not swept as false positive, policy still enabled and not deleted.
 -- Latest generation only, matching the transcript read: findings on
 -- superseded generations mask nothing the digest renders, so loading them
 -- would only let long, repeatedly compacted sessions inflate the scan.
@@ -3152,6 +3151,39 @@ WHERE project.id = @project_id
   AND project.deleted IS FALSE
   AND ((@target_kind::text = 'mcp_server' AND server.id IS NOT NULL)
     OR (@target_kind::text = 'gateway' AND gateway.id IS NOT NULL));
+
+-- name: GetPlatformMCPNetworkIngressEntitlement :one
+-- Mirrors the uncached product feature check so a status read reflects the
+-- live private-network entitlement.
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_features feature
+    WHERE feature.organization_id = @organization_id
+      AND feature.feature_name = @feature_name
+      AND feature.deleted IS FALSE
+) AS entitled;
+
+-- name: GetPlatformMCPActiveNetworkIngress :one
+-- The organization's active private network ingress. Deliberately omits
+-- provider credentials, provider resources, and attestor identities.
+SELECT
+    ingress.provider,
+    ingress.hostname,
+    ingress.endpoint_namespace_kind,
+    ingress.custom_domain_id,
+    ingress.enabled,
+    ingress.identity_required,
+    (ingress.credentials_encrypted IS NOT NULL)::boolean AS credentials_configured,
+    ingress.status,
+    ingress.dns_name,
+    ingress.last_error,
+    ingress.health_checked_at,
+    ingress.connected_since
+FROM network_ingresses ingress
+WHERE ingress.organization_id = @organization_id
+  AND ingress.deleted IS FALSE
+ORDER BY ingress.id
+LIMIT 1;
 
 -- name: GetPlatformMCPPluginInventoryItem :one
 SELECT

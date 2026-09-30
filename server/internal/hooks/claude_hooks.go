@@ -1466,11 +1466,8 @@ func (s *Service) recordShadowMCPBlockFinding(
 	}
 
 	// Use UUIDv7 so the row sorts in insertion order alongside scanner
-	// findings: ListRiskResultsByProjectFound paginates with ORDER BY id
-	// DESC, which only behaves as "most recent first" when every inserted
-	// id is time-ordered. uuid.New() (v4) is random and would interleave
-	// hook-time block rows at arbitrary positions in the Recent Findings
-	// table.
+	// findings: finding listings break ties on id DESC, which only reads as
+	// "most recent first" when every inserted id is time-ordered.
 	resultID, err := uuid.NewV7()
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",

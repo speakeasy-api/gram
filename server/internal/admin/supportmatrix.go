@@ -133,59 +133,68 @@ func validateSupportDraft(draft *gen.SupportDraft, catalog *gen.SupportMatrix) e
 func (s *Service) UpdateSupportMatrix(ctx context.Context, payload *gen.UpdateSupportMatrixPayload) (*gen.SupportMatrix, error) {
 	var result *gen.SupportMatrix
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		q := repo.New(tx)
-		if err := q.LockSupportMatrix(ctx); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "lock support matrix")
-		}
-		current, err := readSupportMatrix(ctx, q)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "read support matrix")
-		}
-		if payload.Revision != current.Revision {
-			return oops.E(oops.CodeConflict, nil, "Support matrix changed. Reload the matrix before saving again.")
-		}
-		if err := validateSupportDraft(payload.Draft, current); err != nil {
-			return err
-		}
-		for key, mapping := range payload.Draft.Mappings {
-			previous := current.Draft.Mappings[key]
-			if reflect.DeepEqual(mapping, previous) {
-				continue
-			}
-			method, platform, _ := strings.Cut(key, "/")
-			id, err := q.UpsertSupportMapping(ctx, repo.UpsertSupportMappingParams{MethodSlug: method, PlatformSlug: platform, Applicability: mapping.Applicability, Conditions: mapping.Conditions})
-			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "save support mapping")
-			}
-			for capability, fact := range mapping.Facts {
-				if previous != nil && reflect.DeepEqual(fact, previous.Facts[capability]) {
-					continue
-				}
-				err = q.UpsertSupportCoverage(ctx, repo.UpsertSupportCoverageParams{MappingID: id, CapabilitySlug: capability, Status: fact.Status, Notes: fact.Note, NeedsVerification: fact.Verify})
-				if err != nil {
-					return oops.E(oops.CodeUnexpected, err, "save support coverage")
-				}
-			}
-		}
-		for method, facts := range payload.Draft.References {
-			for capability, fact := range facts {
-				if reflect.DeepEqual(fact, current.Draft.References[method][capability]) {
-					continue
-				}
-				err = q.UpsertSupportReference(ctx, repo.UpsertSupportReferenceParams{MethodSlug: method, CapabilitySlug: capability, Status: fact.Status, Notes: fact.Note, NeedsVerification: fact.Verify})
-				if err != nil {
-					return oops.E(oops.CodeUnexpected, err, "save support reference")
-				}
-			}
-		}
-		result, err = readSupportMatrix(ctx, q)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "read saved support matrix")
-		}
-		return nil
+		var err error
+		result, err = UpdateSupportMatrixTx(ctx, tx, payload)
+		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("save support matrix transaction: %w", err)
+	}
+	return result, nil
+}
+
+// UpdateSupportMatrixTx locks the matrix, rejects a stale revision, validates
+// the draft and saves changed entries inside the caller's transaction. The
+// caller owns commit.
+func UpdateSupportMatrixTx(ctx context.Context, tx pgx.Tx, payload *gen.UpdateSupportMatrixPayload) (*gen.SupportMatrix, error) {
+	q := repo.New(tx)
+	if err := q.LockSupportMatrix(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock support matrix")
+	}
+	current, err := readSupportMatrix(ctx, q)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read support matrix")
+	}
+	if payload.Revision != current.Revision {
+		return nil, oops.E(oops.CodeConflict, nil, "Support matrix changed. Reload the matrix before saving again.")
+	}
+	if err := validateSupportDraft(payload.Draft, current); err != nil {
+		return nil, err
+	}
+	for key, mapping := range payload.Draft.Mappings {
+		previous := current.Draft.Mappings[key]
+		if reflect.DeepEqual(mapping, previous) {
+			continue
+		}
+		method, platform, _ := strings.Cut(key, "/")
+		id, err := q.UpsertSupportMapping(ctx, repo.UpsertSupportMappingParams{MethodSlug: method, PlatformSlug: platform, Applicability: mapping.Applicability, Conditions: mapping.Conditions})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "save support mapping")
+		}
+		for capability, fact := range mapping.Facts {
+			if previous != nil && reflect.DeepEqual(fact, previous.Facts[capability]) {
+				continue
+			}
+			err = q.UpsertSupportCoverage(ctx, repo.UpsertSupportCoverageParams{MappingID: id, CapabilitySlug: capability, Status: fact.Status, Notes: fact.Note, NeedsVerification: fact.Verify})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "save support coverage")
+			}
+		}
+	}
+	for method, facts := range payload.Draft.References {
+		for capability, fact := range facts {
+			if reflect.DeepEqual(fact, current.Draft.References[method][capability]) {
+				continue
+			}
+			err = q.UpsertSupportReference(ctx, repo.UpsertSupportReferenceParams{MethodSlug: method, CapabilitySlug: capability, Status: fact.Status, Notes: fact.Note, NeedsVerification: fact.Verify})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "save support reference")
+			}
+		}
+	}
+	result, err := readSupportMatrix(ctx, q)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read saved support matrix")
 	}
 	return result, nil
 }

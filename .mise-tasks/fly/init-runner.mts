@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Create a fly.io app to host Gram Functions runner images"
 //MISE hide=true

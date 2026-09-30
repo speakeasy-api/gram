@@ -16,6 +16,8 @@ function signal(overrides: Partial<RiskSignal>): RiskSignal {
     description: "",
     detectionSources: [],
     apps: [],
+    mcpServerIds: [],
+    toolNames: [],
     severity: "high",
     riskScore: 7.5,
     findings: 10,
@@ -29,6 +31,20 @@ function signal(overrides: Partial<RiskSignal>): RiskSignal {
     ...overrides,
   };
 }
+
+describe("groupSignals by server", () => {
+  it("files a signal under every server it was seen on, unattributed last", () => {
+    const a = signal({ key: "a", mcpServerIds: ["srv-1", "srv-2"] });
+    const b = signal({ key: "b", mcpServerIds: [] });
+    const c = signal({ key: "c", mcpServerIds: ["srv-2"] });
+    const groups = groupSignals([a, b, c], "server");
+    expect(groups.map((g) => [g.key, g.signals.map((s) => s.key)])).toEqual([
+      ["srv-1", ["a"]],
+      ["srv-2", ["a", "c"]],
+      ["", ["b"]],
+    ]);
+  });
+});
 
 describe("trendPercent", () => {
   it("computes within-window growth from segment means", () => {

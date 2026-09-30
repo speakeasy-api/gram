@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -65,10 +66,11 @@ const consentUpstreamTimeout = 20 * time.Second
 // families. Extend deliberately; every addition widens what a pre-mint
 // credential can reach.
 var consentAllowedMethods = map[string]bool{
-	"initialize":                true,
-	"notifications/initialized": true,
-	"ping":                      true,
-	"tools/list":                true,
+	mcpversions.MethodServerDiscover:           true,
+	mcpversions.MethodInitialize:               true,
+	mcpversions.MethodNotificationsInitialized: true,
+	mcpversions.MethodPing:                     true,
+	mcpversions.MethodToolsList:                true,
 }
 
 // HandleConsentMCP serves `POST|DELETE /mcp/{mcpSlug}/connect/mcp`.
@@ -221,7 +223,11 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 	}
 
 	switch req.Method {
-	case "initialize":
+	case mcpversions.MethodInitialize:
+		protocolVersion, ok := consentProtocolVersion(req.Params)
+		if !ok {
+			return writeConsentJSONRPCError(w, req.ID, proxy.RejectCodeMethodNotFound, "method is not available on the consent transport")
+		}
 		sessionID := uuid.NewString()
 		draft.McpSessionID = sessionID
 		if err := s.consentToolInventoryCache.Store(ctx, draft); err != nil {
@@ -229,16 +235,16 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 		}
 		w.Header().Set(proxy.McpSessionIDHeader, sessionID)
 		return writeConsentJSONRPCResult(w, req.ID, map[string]any{
-			"protocolVersion": consentProtocolVersion(req.Params),
+			"protocolVersion": protocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      serverInfoHostedToolset,
 		}, nil)
-	case "notifications/initialized":
+	case mcpversions.MethodNotificationsInitialized:
 		w.WriteHeader(http.StatusAccepted)
 		return nil
-	case "ping":
+	case mcpversions.MethodPing:
 		return writeConsentJSONRPCResult(w, req.ID, map[string]any{}, nil)
-	case "tools/list":
+	case mcpversions.MethodToolsList:
 		toolset, terr := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
 			ID:        endpoint.ToolsetID.UUID,
 			ProjectID: endpoint.ProjectID,
@@ -336,6 +342,12 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
+		if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
+			return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+		}
+		if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+			return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
+		}
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
 			return oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools").LogWarn(ctx, logger)
 		}
@@ -359,6 +371,14 @@ func (s *Service) serveConsentProxiedMCP(
 		if _, ok := contextvalues.GetAuthContext(ctx); !ok {
 			return oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
 		}
+	}
+	// Discovery identity belongs to the user who authenticated this challenge.
+	ctx = mcpidentity.WithoutIdentity(ctx)
+	if subject.Kind == urn.SessionSubjectKindUser &&
+		challengeState.AuthorizerImpersonated != nil && !*challengeState.AuthorizerImpersonated &&
+		challengeState.AuthorizerUserID != "" && subject.ID == challengeState.AuthorizerUserID &&
+		challengeState.Federation == nil && !challengeState.CreatedAt.IsZero() && !challengeState.CreatedAt.After(time.Now().Add(time.Minute)) {
+		ctx = s.identityValidator.StampConsentDiscovery(ctx, subject.ID, challengeState.CreatedAt.Add(challengeState.TTL()))
 	}
 	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, serverRow)
 	if err != nil {
@@ -387,7 +407,16 @@ func (s *Service) serveConsentProxiedMCP(
 		// One state-derived affinity key pins the whole consent session
 		// (initialize, list pages, DELETE) to a single gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("consent", challengeState.ID)
-		p, err = s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, endpoint.OrganizationID, serverRow, upstreamToken, "", nil)
+		p, err = s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
+			ClientAffinityKey:  affinity,
+			ProjectID:          endpoint.ProjectID,
+			OrganizationID:     endpoint.OrganizationID,
+			MCPServer:          serverRow,
+			ResourceIdentifier: endpoint.UpstreamResource,
+			UpstreamAuth:       upstreamToken,
+			WWWAuthenticate:    "",
+			Selection:          nil,
+		})
 		if err != nil {
 			return err
 		}
@@ -582,8 +611,9 @@ func decodeConsentJSONRPCRequest(w http.ResponseWriter, r *http.Request) (*conse
 
 // consentProtocolVersion negotiates the local toolset server's revision with
 // the consent island. Remote and tunneled backends bypass this function so the
-// island and upstream server negotiate directly.
-func consentProtocolVersion(params json.RawMessage) string {
+// island and upstream server negotiate directly. It reports false when the
+// consent surface supports no revision that defines initialize.
+func consentProtocolVersion(params json.RawMessage) (string, bool) {
 	var decoded struct {
 		ProtocolVersion string `json:"protocolVersion"`
 	}

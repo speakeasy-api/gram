@@ -1005,6 +1005,10 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
 		Description("Selector constraints. Null means unrestricted.")
 	})
+
+	Attribute("direct_selectors", ArrayOf(SelectorModel), func() {
+		Description("The subset of this scope's selectors granted to the calling user by name rather than through a role or everyone. For allow scopes it holds only selectors naming a concrete resource, which outrank blocks inherited from roles or everyone on that resource. For blocked scopes it holds the caller's own blocks, which always apply. Omitted when empty.")
+	})
 })
 
 var RoleModel = Type("Role", func() {
@@ -1168,14 +1172,15 @@ var ListAudienceOptionsResult = Type("ListAudienceOptionsResult", func() {
 })
 
 var MemberModel = Type("AccessMember", func() {
-	Required("id", "principal_urn", "name", "email", "role_ids", "joined_at")
+	Required("id", "principal_urn", "name", "email", "role_ids", "directory_role_ids", "joined_at")
 
 	Attribute("id", String, "User ID.")
 	Attribute("principal_urn", String, "Canonical principal URN for this member.")
 	Attribute("name", String, "Display name.")
 	Attribute("email", String, "Email address.")
 	Attribute("photo_url", String, "Avatar URL.")
-	Attribute("role_ids", ArrayOf(String), "All role IDs assigned to this member.")
+	Attribute("role_ids", ArrayOf(String), "Role IDs assigned directly to this member.")
+	Attribute("directory_role_ids", ArrayOf(String), "Role IDs this member holds through directory role mappings. They follow the member's directory groups and attributes, so updating the member's roles does not change them.")
 	Attribute("joined_at", String, func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
