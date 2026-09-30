@@ -301,6 +301,25 @@ func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, 
 	return i, err
 }
 
+const adminGetIssuerFixture = `-- name: AdminGetIssuerFixture :one
+SELECT id, issuer
+FROM remote_session_issuers
+WHERE id = $1
+`
+
+type AdminGetIssuerFixtureRow struct {
+	ID     uuid.UUID
+	Issuer string
+}
+
+// Test fixture: an issuer row as the Okta connection references it.
+func (q *Queries) AdminGetIssuerFixture(ctx context.Context, id uuid.UUID) (AdminGetIssuerFixtureRow, error) {
+	row := q.db.QueryRow(ctx, adminGetIssuerFixture, id)
+	var i AdminGetIssuerFixtureRow
+	err := row.Scan(&i.ID, &i.Issuer)
+	return i, err
+}
+
 const adminGetOrganization = `-- name: AdminGetOrganization :one
 SELECT
     om.id,
@@ -528,6 +547,58 @@ func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (
 		&i.AssistantCount,
 	)
 	return i, err
+}
+
+const adminListObservedOktaApplicationNames = `-- name: AdminListObservedOktaApplicationNames :many
+SELECT
+    a.name,
+    COUNT(DISTINCT a.organization_id)::integer AS organizations,
+    (ARRAY(SELECT DISTINCT l.label FROM okta_applications AS l
+        WHERE l.name = a.name AND l.removed_at IS NULL
+        ORDER BY l.label LIMIT 8))::text[] AS labels,
+    (ARRAY(SELECT DISTINCT m.sign_on_mode FROM okta_applications AS m
+        WHERE m.name = a.name AND m.removed_at IS NULL
+        ORDER BY m.sign_on_mode))::text[] AS sign_on_modes
+FROM okta_applications AS a
+WHERE a.removed_at IS NULL
+  AND a.status = 'ACTIVE'
+GROUP BY a.name
+ORDER BY organizations DESC, a.name
+`
+
+type AdminListObservedOktaApplicationNamesRow struct {
+	Name          string
+	Organizations int32
+	Labels        []string
+	SignOnModes   []string
+}
+
+// Staff-only, deliberately cross-tenant: the OIN key is public catalog data
+// and only counts and labels leave here, never organization ids. Labels are
+// admin-editable per tenant and are used for matching, capped per name.
+func (q *Queries) AdminListObservedOktaApplicationNames(ctx context.Context) ([]AdminListObservedOktaApplicationNamesRow, error) {
+	rows, err := q.db.Query(ctx, adminListObservedOktaApplicationNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListObservedOktaApplicationNamesRow
+	for rows.Next() {
+		var i AdminListObservedOktaApplicationNamesRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.Organizations,
+			&i.Labels,
+			&i.SignOnModes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const adminListOrganizationMembers = `-- name: AdminListOrganizationMembers :many
@@ -1021,6 +1092,83 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 			&i.UpdatedAt,
 			&i.McpServerCount,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListRegistryEntryFacts = `-- name: AdminListRegistryEntryFacts :many
+SELECT
+    id AS registry_entry_id,
+    data
+FROM mcp_registry_entries
+ORDER BY (data #>> '{server,name}') COLLATE "C"
+`
+
+type AdminListRegistryEntryFactsRow struct {
+	RegistryEntryID uuid.UUID
+	Data            []byte
+}
+
+// The fields the Okta matcher reads, for every entry.
+func (q *Queries) AdminListRegistryEntryFacts(ctx context.Context) ([]AdminListRegistryEntryFactsRow, error) {
+	rows, err := q.db.Query(ctx, adminListRegistryEntryFacts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListRegistryEntryFactsRow
+	for rows.Next() {
+		var i AdminListRegistryEntryFactsRow
+		if err := rows.Scan(&i.RegistryEntryID, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListRegistryOktaMappings = `-- name: AdminListRegistryOktaMappings :many
+SELECT
+    e.id AS registry_entry_id,
+    (e.data #>> '{server,name}')::text AS entry_name,
+    (n.value #>> '{}')::text AS oin_name
+FROM mcp_registry_entries AS e
+CROSS JOIN LATERAL jsonb_array_elements(
+    CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
+        THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
+        ELSE '[]'::jsonb
+    END
+) AS n(value)
+WHERE jsonb_typeof(n.value) = 'string'
+`
+
+type AdminListRegistryOktaMappingsRow struct {
+	RegistryEntryID uuid.UUID
+	EntryName       string
+	OinName         string
+}
+
+// Every OIN name a catalog entry claims, published or not, so a candidate
+// already taken can say by whom.
+func (q *Queries) AdminListRegistryOktaMappings(ctx context.Context) ([]AdminListRegistryOktaMappingsRow, error) {
+	rows, err := q.db.Query(ctx, adminListRegistryOktaMappings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListRegistryOktaMappingsRow
+	for rows.Next() {
+		var i AdminListRegistryOktaMappingsRow
+		if err := rows.Scan(&i.RegistryEntryID, &i.EntryName, &i.OinName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

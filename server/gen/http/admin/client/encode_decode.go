@@ -14322,6 +14322,471 @@ func DecodeGetSupportCoverageResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildGetRegistryOktaCandidatesRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "getRegistryOktaCandidates" endpoint
+func (c *Client) BuildGetRegistryOktaCandidatesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRegistryOktaCandidatesAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getRegistryOktaCandidates", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRegistryOktaCandidatesRequest returns an encoder for requests sent
+// to the admin getRegistryOktaCandidates server.
+func EncodeGetRegistryOktaCandidatesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetRegistryOktaCandidatesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getRegistryOktaCandidates", "*admin.GetRegistryOktaCandidatesPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetRegistryOktaCandidatesResponse returns a decoder for responses
+// returned by the admin getRegistryOktaCandidates endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetRegistryOktaCandidatesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRegistryOktaCandidatesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRegistryOktaCandidatesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			res := NewGetRegistryOktaCandidatesAdminRegistryOktaCandidatesOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRegistryOktaCandidatesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRegistryOktaCandidatesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRegistryOktaCandidatesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRegistryOktaCandidatesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRegistryOktaCandidatesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRegistryOktaCandidatesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRegistryOktaCandidatesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRegistryOktaCandidatesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+				}
+				err = ValidateGetRegistryOktaCandidatesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+				}
+				return nil, NewGetRegistryOktaCandidatesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRegistryOktaCandidatesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+				}
+				err = ValidateGetRegistryOktaCandidatesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+				}
+				return nil, NewGetRegistryOktaCandidatesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getRegistryOktaCandidates", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRegistryOktaCandidatesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryOktaCandidates", err)
+			}
+			err = ValidateGetRegistryOktaCandidatesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryOktaCandidates", err)
+			}
+			return nil, NewGetRegistryOktaCandidatesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getRegistryOktaCandidates", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListRegistryOktaUnmappedRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "listRegistryOktaUnmapped"
+// endpoint
+func (c *Client) BuildListRegistryOktaUnmappedRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListRegistryOktaUnmappedAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listRegistryOktaUnmapped", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListRegistryOktaUnmappedRequest returns an encoder for requests sent
+// to the admin listRegistryOktaUnmapped server.
+func EncodeListRegistryOktaUnmappedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListRegistryOktaUnmappedPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listRegistryOktaUnmapped", "*admin.ListRegistryOktaUnmappedPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListRegistryOktaUnmappedResponse returns a decoder for responses
+// returned by the admin listRegistryOktaUnmapped endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListRegistryOktaUnmappedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListRegistryOktaUnmappedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListRegistryOktaUnmappedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			res := NewListRegistryOktaUnmappedAdminRegistryOktaUnmappedOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListRegistryOktaUnmappedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListRegistryOktaUnmappedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListRegistryOktaUnmappedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListRegistryOktaUnmappedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListRegistryOktaUnmappedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListRegistryOktaUnmappedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListRegistryOktaUnmappedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListRegistryOktaUnmappedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+				}
+				err = ValidateListRegistryOktaUnmappedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+				}
+				return nil, NewListRegistryOktaUnmappedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListRegistryOktaUnmappedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+				}
+				err = ValidateListRegistryOktaUnmappedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+				}
+				return nil, NewListRegistryOktaUnmappedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listRegistryOktaUnmapped", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListRegistryOktaUnmappedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listRegistryOktaUnmapped", err)
+			}
+			err = ValidateListRegistryOktaUnmappedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listRegistryOktaUnmapped", err)
+			}
+			return nil, NewListRegistryOktaUnmappedGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listRegistryOktaUnmapped", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRegistryEntriesRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "listRegistryEntries"
 // endpoint
@@ -16750,6 +17215,43 @@ func unmarshalSupportCoverageUnmappedResponseBodyToAdminSupportCoverageUnmapped(
 	res := &admin.SupportCoverageUnmapped{
 		HookSource: *v.HookSource,
 		Sessions:   *v.Sessions,
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryOktaCandidateResponseBodyToAdminAdminRegistryOktaCandidate
+// builds a value of type *admin.AdminRegistryOktaCandidate from a value of
+// type *AdminRegistryOktaCandidateResponseBody.
+func unmarshalAdminRegistryOktaCandidateResponseBodyToAdminAdminRegistryOktaCandidate(v *AdminRegistryOktaCandidateResponseBody) *admin.AdminRegistryOktaCandidate {
+	res := &admin.AdminRegistryOktaCandidate{
+		OinName:       *v.OinName,
+		Organizations: *v.Organizations,
+		Reason:        *v.Reason,
+		MappedBy:      v.MappedBy,
+	}
+	res.SignOnModes = make([]string, len(v.SignOnModes))
+	for i, val := range v.SignOnModes {
+		res.SignOnModes[i] = val
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryOktaUnmappedNameResponseBodyToAdminAdminRegistryOktaUnmappedName
+// builds a value of type *admin.AdminRegistryOktaUnmappedName from a value of
+// type *AdminRegistryOktaUnmappedNameResponseBody.
+func unmarshalAdminRegistryOktaUnmappedNameResponseBodyToAdminAdminRegistryOktaUnmappedName(v *AdminRegistryOktaUnmappedNameResponseBody) *admin.AdminRegistryOktaUnmappedName {
+	res := &admin.AdminRegistryOktaUnmappedName{
+		OinName:            *v.OinName,
+		Organizations:      *v.Organizations,
+		SuggestedEntryID:   v.SuggestedEntryID,
+		SuggestedEntryName: v.SuggestedEntryName,
+		Reason:             v.Reason,
+	}
+	res.SignOnModes = make([]string, len(v.SignOnModes))
+	for i, val := range v.SignOnModes {
+		res.SignOnModes[i] = val
 	}
 
 	return res

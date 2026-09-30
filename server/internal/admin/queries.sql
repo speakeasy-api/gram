@@ -757,3 +757,52 @@ ORDER BY lower(o.name), o.slug, o.id LIMIT @page_limit::int OFFSET @page_offset:
 -- name: AdminCountUserOrganizations :one
 SELECT (SELECT count(*) FROM organization_user_relationships m WHERE m.user_id = u.id AND m.deleted IS FALSE) AS total
 FROM users u WHERE u.id = @user_id::text AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL;
+
+-- name: AdminListObservedOktaApplicationNames :many
+-- Staff-only, deliberately cross-tenant: the OIN key is public catalog data
+-- and only counts and labels leave here, never organization ids. Labels are
+-- admin-editable per tenant and are used for matching, capped per name.
+SELECT
+    a.name,
+    COUNT(DISTINCT a.organization_id)::integer AS organizations,
+    (ARRAY(SELECT DISTINCT l.label FROM okta_applications AS l
+        WHERE l.name = a.name AND l.removed_at IS NULL
+        ORDER BY l.label LIMIT 8))::text[] AS labels,
+    (ARRAY(SELECT DISTINCT m.sign_on_mode FROM okta_applications AS m
+        WHERE m.name = a.name AND m.removed_at IS NULL
+        ORDER BY m.sign_on_mode))::text[] AS sign_on_modes
+FROM okta_applications AS a
+WHERE a.removed_at IS NULL
+  AND a.status = 'ACTIVE'
+GROUP BY a.name
+ORDER BY organizations DESC, a.name;
+
+-- name: AdminListRegistryOktaMappings :many
+-- Every OIN name a catalog entry claims, published or not, so a candidate
+-- already taken can say by whom.
+SELECT
+    e.id AS registry_entry_id,
+    (e.data #>> '{server,name}')::text AS entry_name,
+    (n.value #>> '{}')::text AS oin_name
+FROM mcp_registry_entries AS e
+CROSS JOIN LATERAL jsonb_array_elements(
+    CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
+        THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
+        ELSE '[]'::jsonb
+    END
+) AS n(value)
+WHERE jsonb_typeof(n.value) = 'string';
+
+-- name: AdminListRegistryEntryFacts :many
+-- The fields the Okta matcher reads, for every entry.
+SELECT
+    id AS registry_entry_id,
+    data
+FROM mcp_registry_entries
+ORDER BY (data #>> '{server,name}') COLLATE "C";
+
+-- Test fixture: an issuer row as the Okta connection references it.
+-- name: AdminGetIssuerFixture :one
+SELECT id, issuer
+FROM remote_session_issuers
+WHERE id = @id;

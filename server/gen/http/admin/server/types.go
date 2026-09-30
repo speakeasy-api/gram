@@ -1731,6 +1731,20 @@ type GetSupportCoverageResponseBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 }
 
+// GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
+// "getRegistryOktaCandidates" endpoint HTTP response body.
+type GetRegistryOktaCandidatesResponseBody struct {
+	// Strongest reason first, then by organizations.
+	Candidates []*AdminRegistryOktaCandidateResponseBody `form:"candidates" json:"candidates" xml:"candidates"`
+}
+
+// ListRegistryOktaUnmappedResponseBody is the type of the "admin" service
+// "listRegistryOktaUnmapped" endpoint HTTP response body.
+type ListRegistryOktaUnmappedResponseBody struct {
+	// By organizations, most first. Okta's own applications are left out.
+	Names []*AdminRegistryOktaUnmappedNameResponseBody `form:"names" json:"names" xml:"names"`
+}
+
 // ListRegistryEntriesResponseBody is the type of the "admin" service
 // "listRegistryEntries" endpoint HTTP response body.
 type ListRegistryEntriesResponseBody struct {
@@ -13193,6 +13207,386 @@ type GetSupportCoverageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetRegistryOktaCandidatesUnauthorizedResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetRegistryOktaCandidatesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryOktaCandidatesForbiddenResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "forbidden" error.
+type GetRegistryOktaCandidatesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryOktaCandidatesBadRequestResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "bad_request" error.
+type GetRegistryOktaCandidatesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryOktaCandidatesNotFoundResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "not_found" error.
+type GetRegistryOktaCandidatesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryOktaCandidatesConflictResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "conflict" error.
+type GetRegistryOktaCandidatesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryOktaCandidatesUnsupportedMediaResponseBody is the type of the
+// "admin" service "getRegistryOktaCandidates" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetRegistryOktaCandidatesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryOktaCandidatesInvalidResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "invalid" error.
+type GetRegistryOktaCandidatesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryOktaCandidatesInvariantViolationResponseBody is the type of the
+// "admin" service "getRegistryOktaCandidates" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetRegistryOktaCandidatesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryOktaCandidatesUnexpectedResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "unexpected" error.
+type GetRegistryOktaCandidatesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRegistryOktaCandidatesGatewayErrorResponseBody is the type of the "admin"
+// service "getRegistryOktaCandidates" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetRegistryOktaCandidatesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryOktaUnmappedUnauthorizedResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListRegistryOktaUnmappedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryOktaUnmappedForbiddenResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "forbidden" error.
+type ListRegistryOktaUnmappedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryOktaUnmappedBadRequestResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "bad_request" error.
+type ListRegistryOktaUnmappedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryOktaUnmappedNotFoundResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "not_found" error.
+type ListRegistryOktaUnmappedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryOktaUnmappedConflictResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "conflict" error.
+type ListRegistryOktaUnmappedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryOktaUnmappedUnsupportedMediaResponseBody is the type of the
+// "admin" service "listRegistryOktaUnmapped" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListRegistryOktaUnmappedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryOktaUnmappedInvalidResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "invalid" error.
+type ListRegistryOktaUnmappedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryOktaUnmappedInvariantViolationResponseBody is the type of the
+// "admin" service "listRegistryOktaUnmapped" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListRegistryOktaUnmappedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryOktaUnmappedUnexpectedResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "unexpected" error.
+type ListRegistryOktaUnmappedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListRegistryOktaUnmappedGatewayErrorResponseBody is the type of the "admin"
+// service "listRegistryOktaUnmapped" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListRegistryOktaUnmappedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListRegistryEntriesUnauthorizedResponseBody is the type of the "admin"
 // service "listRegistryEntries" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -15045,6 +15439,34 @@ type SupportCoverageUnmappedResponseBody struct {
 	Sessions int64 `form:"sessions" json:"sessions" xml:"sessions"`
 }
 
+// AdminRegistryOktaCandidateResponseBody is used to define fields on response
+// body types.
+type AdminRegistryOktaCandidateResponseBody struct {
+	// Okta application name, the OIN key.
+	OinName string `form:"oin_name" json:"oin_name" xml:"oin_name"`
+	// How many organizations have the application.
+	Organizations int `form:"organizations" json:"organizations" xml:"organizations"`
+	// Sign-on modes seen for the application.
+	SignOnModes []string `form:"sign_on_modes" json:"sign_on_modes" xml:"sign_on_modes"`
+	// domain: the vendor token matches a remote or website host; title: it matches
+	// the entry title; label: a tenant's label equals the entry title.
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// Name of the entry that already claims this key, when one does.
+	MappedBy *string `form:"mapped_by,omitempty" json:"mapped_by,omitempty" xml:"mapped_by,omitempty"`
+}
+
+// AdminRegistryOktaUnmappedNameResponseBody is used to define fields on
+// response body types.
+type AdminRegistryOktaUnmappedNameResponseBody struct {
+	OinName       string   `form:"oin_name" json:"oin_name" xml:"oin_name"`
+	Organizations int      `form:"organizations" json:"organizations" xml:"organizations"`
+	SignOnModes   []string `form:"sign_on_modes" json:"sign_on_modes" xml:"sign_on_modes"`
+	// The entry the heuristic would map it to, when one matches.
+	SuggestedEntryID   *string `form:"suggested_entry_id,omitempty" json:"suggested_entry_id,omitempty" xml:"suggested_entry_id,omitempty"`
+	SuggestedEntryName *string `form:"suggested_entry_name,omitempty" json:"suggested_entry_name,omitempty" xml:"suggested_entry_name,omitempty"`
+	Reason             *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
 // AdminRegistrySummaryResponseBody is used to define fields on response body
 // types.
 type AdminRegistrySummaryResponseBody struct {
@@ -16532,6 +16954,45 @@ func NewGetSupportCoverageResponseBody(res *admin.SupportCoverageResult) *GetSup
 		}
 	} else {
 		body.Unmapped = []*SupportCoverageUnmappedResponseBody{}
+	}
+	return body
+}
+
+// NewGetRegistryOktaCandidatesResponseBody builds the HTTP response body from
+// the result of the "getRegistryOktaCandidates" endpoint of the "admin"
+// service.
+func NewGetRegistryOktaCandidatesResponseBody(res *admin.AdminRegistryOktaCandidates) *GetRegistryOktaCandidatesResponseBody {
+	body := &GetRegistryOktaCandidatesResponseBody{}
+	if res.Candidates != nil {
+		body.Candidates = make([]*AdminRegistryOktaCandidateResponseBody, len(res.Candidates))
+		for i, val := range res.Candidates {
+			if val == nil {
+				body.Candidates[i] = nil
+				continue
+			}
+			body.Candidates[i] = marshalAdminAdminRegistryOktaCandidateToAdminRegistryOktaCandidateResponseBody(val)
+		}
+	} else {
+		body.Candidates = []*AdminRegistryOktaCandidateResponseBody{}
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedResponseBody builds the HTTP response body from
+// the result of the "listRegistryOktaUnmapped" endpoint of the "admin" service.
+func NewListRegistryOktaUnmappedResponseBody(res *admin.AdminRegistryOktaUnmapped) *ListRegistryOktaUnmappedResponseBody {
+	body := &ListRegistryOktaUnmappedResponseBody{}
+	if res.Names != nil {
+		body.Names = make([]*AdminRegistryOktaUnmappedNameResponseBody, len(res.Names))
+		for i, val := range res.Names {
+			if val == nil {
+				body.Names[i] = nil
+				continue
+			}
+			body.Names[i] = marshalAdminAdminRegistryOktaUnmappedNameToAdminRegistryOktaUnmappedNameResponseBody(val)
+		}
+	} else {
+		body.Names = []*AdminRegistryOktaUnmappedNameResponseBody{}
 	}
 	return body
 }
@@ -25579,6 +26040,306 @@ func NewGetSupportCoverageGatewayErrorResponseBody(res *goa.ServiceError) *GetSu
 	return body
 }
 
+// NewGetRegistryOktaCandidatesUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getRegistryOktaCandidates" endpoint of
+// the "admin" service.
+func NewGetRegistryOktaCandidatesUnauthorizedResponseBody(res *goa.ServiceError) *GetRegistryOktaCandidatesUnauthorizedResponseBody {
+	body := &GetRegistryOktaCandidatesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryOktaCandidatesForbiddenResponseBody builds the HTTP response
+// body from the result of the "getRegistryOktaCandidates" endpoint of the
+// "admin" service.
+func NewGetRegistryOktaCandidatesForbiddenResponseBody(res *goa.ServiceError) *GetRegistryOktaCandidatesForbiddenResponseBody {
+	body := &GetRegistryOktaCandidatesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryOktaCandidatesBadRequestResponseBody builds the HTTP response
+// body from the result of the "getRegistryOktaCandidates" endpoint of the
+// "admin" service.
+func NewGetRegistryOktaCandidatesBadRequestResponseBody(res *goa.ServiceError) *GetRegistryOktaCandidatesBadRequestResponseBody {
+	body := &GetRegistryOktaCandidatesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryOktaCandidatesNotFoundResponseBody builds the HTTP response
+// body from the result of the "getRegistryOktaCandidates" endpoint of the
+// "admin" service.
+func NewGetRegistryOktaCandidatesNotFoundResponseBody(res *goa.ServiceError) *GetRegistryOktaCandidatesNotFoundResponseBody {
+	body := &GetRegistryOktaCandidatesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryOktaCandidatesConflictResponseBody builds the HTTP response
+// body from the result of the "getRegistryOktaCandidates" endpoint of the
+// "admin" service.
+func NewGetRegistryOktaCandidatesConflictResponseBody(res *goa.ServiceError) *GetRegistryOktaCandidatesConflictResponseBody {
+	body := &GetRegistryOktaCandidatesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryOktaCandidatesUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getRegistryOktaCandidates" endpoint of
+// the "admin" service.
+func NewGetRegistryOktaCandidatesUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRegistryOktaCandidatesUnsupportedMediaResponseBody {
+	body := &GetRegistryOktaCandidatesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryOktaCandidatesInvalidResponseBody builds the HTTP response
+// body from the result of the "getRegistryOktaCandidates" endpoint of the
+// "admin" service.
+func NewGetRegistryOktaCandidatesInvalidResponseBody(res *goa.ServiceError) *GetRegistryOktaCandidatesInvalidResponseBody {
+	body := &GetRegistryOktaCandidatesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryOktaCandidatesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getRegistryOktaCandidates" endpoint of
+// the "admin" service.
+func NewGetRegistryOktaCandidatesInvariantViolationResponseBody(res *goa.ServiceError) *GetRegistryOktaCandidatesInvariantViolationResponseBody {
+	body := &GetRegistryOktaCandidatesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryOktaCandidatesUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getRegistryOktaCandidates" endpoint of the
+// "admin" service.
+func NewGetRegistryOktaCandidatesUnexpectedResponseBody(res *goa.ServiceError) *GetRegistryOktaCandidatesUnexpectedResponseBody {
+	body := &GetRegistryOktaCandidatesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRegistryOktaCandidatesGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getRegistryOktaCandidates" endpoint of
+// the "admin" service.
+func NewGetRegistryOktaCandidatesGatewayErrorResponseBody(res *goa.ServiceError) *GetRegistryOktaCandidatesGatewayErrorResponseBody {
+	body := &GetRegistryOktaCandidatesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listRegistryOktaUnmapped" endpoint of the
+// "admin" service.
+func NewListRegistryOktaUnmappedUnauthorizedResponseBody(res *goa.ServiceError) *ListRegistryOktaUnmappedUnauthorizedResponseBody {
+	body := &ListRegistryOktaUnmappedUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedForbiddenResponseBody builds the HTTP response
+// body from the result of the "listRegistryOktaUnmapped" endpoint of the
+// "admin" service.
+func NewListRegistryOktaUnmappedForbiddenResponseBody(res *goa.ServiceError) *ListRegistryOktaUnmappedForbiddenResponseBody {
+	body := &ListRegistryOktaUnmappedForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedBadRequestResponseBody builds the HTTP response
+// body from the result of the "listRegistryOktaUnmapped" endpoint of the
+// "admin" service.
+func NewListRegistryOktaUnmappedBadRequestResponseBody(res *goa.ServiceError) *ListRegistryOktaUnmappedBadRequestResponseBody {
+	body := &ListRegistryOktaUnmappedBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedNotFoundResponseBody builds the HTTP response
+// body from the result of the "listRegistryOktaUnmapped" endpoint of the
+// "admin" service.
+func NewListRegistryOktaUnmappedNotFoundResponseBody(res *goa.ServiceError) *ListRegistryOktaUnmappedNotFoundResponseBody {
+	body := &ListRegistryOktaUnmappedNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedConflictResponseBody builds the HTTP response
+// body from the result of the "listRegistryOktaUnmapped" endpoint of the
+// "admin" service.
+func NewListRegistryOktaUnmappedConflictResponseBody(res *goa.ServiceError) *ListRegistryOktaUnmappedConflictResponseBody {
+	body := &ListRegistryOktaUnmappedConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listRegistryOktaUnmapped" endpoint of
+// the "admin" service.
+func NewListRegistryOktaUnmappedUnsupportedMediaResponseBody(res *goa.ServiceError) *ListRegistryOktaUnmappedUnsupportedMediaResponseBody {
+	body := &ListRegistryOktaUnmappedUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedInvalidResponseBody builds the HTTP response body
+// from the result of the "listRegistryOktaUnmapped" endpoint of the "admin"
+// service.
+func NewListRegistryOktaUnmappedInvalidResponseBody(res *goa.ServiceError) *ListRegistryOktaUnmappedInvalidResponseBody {
+	body := &ListRegistryOktaUnmappedInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listRegistryOktaUnmapped" endpoint of
+// the "admin" service.
+func NewListRegistryOktaUnmappedInvariantViolationResponseBody(res *goa.ServiceError) *ListRegistryOktaUnmappedInvariantViolationResponseBody {
+	body := &ListRegistryOktaUnmappedInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listRegistryOktaUnmapped" endpoint of the
+// "admin" service.
+func NewListRegistryOktaUnmappedUnexpectedResponseBody(res *goa.ServiceError) *ListRegistryOktaUnmappedUnexpectedResponseBody {
+	body := &ListRegistryOktaUnmappedUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListRegistryOktaUnmappedGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listRegistryOktaUnmapped" endpoint of the
+// "admin" service.
+func NewListRegistryOktaUnmappedGatewayErrorResponseBody(res *goa.ServiceError) *ListRegistryOktaUnmappedGatewayErrorResponseBody {
+	body := &ListRegistryOktaUnmappedGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListRegistryEntriesUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listRegistryEntries" endpoint of the "admin" service.
 func NewListRegistryEntriesUnauthorizedResponseBody(res *goa.ServiceError) *ListRegistryEntriesUnauthorizedResponseBody {
@@ -27444,6 +28205,25 @@ func NewGetSupportCoveragePayload(organizationID string, windowDays int, adminSe
 	v := &admin.GetSupportCoveragePayload{}
 	v.OrganizationID = organizationID
 	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetRegistryOktaCandidatesPayload builds a admin service
+// getRegistryOktaCandidates endpoint payload.
+func NewGetRegistryOktaCandidatesPayload(id string, adminSessionToken *string) *admin.GetRegistryOktaCandidatesPayload {
+	v := &admin.GetRegistryOktaCandidatesPayload{}
+	v.ID = id
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewListRegistryOktaUnmappedPayload builds a admin service
+// listRegistryOktaUnmapped endpoint payload.
+func NewListRegistryOktaUnmappedPayload(adminSessionToken *string) *admin.ListRegistryOktaUnmappedPayload {
+	v := &admin.ListRegistryOktaUnmappedPayload{}
 	v.AdminSessionToken = adminSessionToken
 
 	return v

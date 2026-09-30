@@ -46,6 +46,18 @@ vi.mock(
     }),
   }),
 );
+vi.mock(
+  "@gram/admin-client/react-query/adminGetRegistryOktaCandidates.core",
+  () => ({
+    buildAdminGetRegistryOktaCandidatesQuery: (
+      _client: unknown,
+      request: { id: string },
+    ) => ({
+      queryKey: ["okta-candidates", request.id],
+      queryFn: async () => ({ candidates: [] }),
+    }),
+  }),
+);
 import { RegistryEntrySheet } from "./RegistryEntrySheet";
 
 const id = "00000000-0000-4000-8000-000000000001";

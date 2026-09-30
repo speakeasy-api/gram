@@ -252,6 +252,14 @@ type Client struct {
 	// getSupportCoverage endpoint.
 	GetSupportCoverageDoer goahttp.Doer
 
+	// GetRegistryOktaCandidates Doer is the HTTP client used to make requests to
+	// the getRegistryOktaCandidates endpoint.
+	GetRegistryOktaCandidatesDoer goahttp.Doer
+
+	// ListRegistryOktaUnmapped Doer is the HTTP client used to make requests to
+	// the listRegistryOktaUnmapped endpoint.
+	ListRegistryOktaUnmappedDoer goahttp.Doer
+
 	// ListRegistryEntries Doer is the HTTP client used to make requests to the
 	// listRegistryEntries endpoint.
 	ListRegistryEntriesDoer goahttp.Doer
@@ -359,6 +367,8 @@ func NewClient(
 		GetSupportMatrixDoer:                      doer,
 		UpdateSupportMatrixDoer:                   doer,
 		GetSupportCoverageDoer:                    doer,
+		GetRegistryOktaCandidatesDoer:             doer,
+		ListRegistryOktaUnmappedDoer:              doer,
 		ListRegistryEntriesDoer:                   doer,
 		GetRegistryEntryDoer:                      doer,
 		CreateRegistryEntryDoer:                   doer,
@@ -1790,6 +1800,54 @@ func (c *Client) GetSupportCoverage() goa.Endpoint {
 		resp, err := c.GetSupportCoverageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getSupportCoverage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRegistryOktaCandidates returns an endpoint that makes HTTP requests to
+// the admin service getRegistryOktaCandidates server.
+func (c *Client) GetRegistryOktaCandidates() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRegistryOktaCandidatesRequest(c.encoder)
+		decodeResponse = DecodeGetRegistryOktaCandidatesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRegistryOktaCandidatesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRegistryOktaCandidatesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getRegistryOktaCandidates", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRegistryOktaUnmapped returns an endpoint that makes HTTP requests to the
+// admin service listRegistryOktaUnmapped server.
+func (c *Client) ListRegistryOktaUnmapped() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRegistryOktaUnmappedRequest(c.encoder)
+		decodeResponse = DecodeListRegistryOktaUnmappedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRegistryOktaUnmappedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRegistryOktaUnmappedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listRegistryOktaUnmapped", err)
 		}
 		return decodeResponse(resp)
 	}

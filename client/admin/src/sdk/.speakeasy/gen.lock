@@ -57,6 +57,7 @@ trackedFiles:
   src/funcs/adminGetPaygBillingSummary.ts: {}
   src/funcs/adminGetProject.ts: {}
   src/funcs/adminGetRegistryEntry.ts: {}
+  src/funcs/adminGetRegistryOktaCandidates.ts: {}
   src/funcs/adminGetSession.ts: {}
   src/funcs/adminGetSpendBreakdown.ts: {}
   src/funcs/adminGetStripeCustomer.ts: {}
@@ -72,6 +73,7 @@ trackedFiles:
   src/funcs/adminListOrganizations.ts: {}
   src/funcs/adminListProjectMcpServers.ts: {}
   src/funcs/adminListRegistryEntries.ts: {}
+  src/funcs/adminListRegistryOktaUnmapped.ts: {}
   src/funcs/adminListUserOrganizations.ts: {}
   src/funcs/adminListUsers.ts: {}
   src/funcs/adminLogout.ts: {}
@@ -139,6 +141,10 @@ trackedFiles:
   src/models/components/adminprojectdetail.ts: {}
   src/models/components/adminregistryentry.ts: {}
   src/models/components/adminregistryissue.ts: {}
+  src/models/components/adminregistryoktacandidate.ts: {}
+  src/models/components/adminregistryoktacandidates.ts: {}
+  src/models/components/adminregistryoktaunmapped.ts: {}
+  src/models/components/adminregistryoktaunmappedname.ts: {}
   src/models/components/adminregistrypage.ts: {}
   src/models/components/adminregistrysummary.ts: {}
   src/models/components/adminsession.ts: {}
@@ -226,6 +232,7 @@ trackedFiles:
   src/models/operations/admingetpaygbillingsummary.ts: {}
   src/models/operations/admingetproject.ts: {}
   src/models/operations/admingetregistryentry.ts: {}
+  src/models/operations/admingetregistryoktacandidates.ts: {}
   src/models/operations/admingetspendbreakdown.ts: {}
   src/models/operations/admingetstripecustomer.ts: {}
   src/models/operations/admingetstripesubscription.ts: {}
@@ -279,6 +286,8 @@ trackedFiles:
   src/react-query/adminGetProject.ts: {}
   src/react-query/adminGetRegistryEntry.core.ts: {}
   src/react-query/adminGetRegistryEntry.ts: {}
+  src/react-query/adminGetRegistryOktaCandidates.core.ts: {}
+  src/react-query/adminGetRegistryOktaCandidates.ts: {}
   src/react-query/adminGetSession.core.ts: {}
   src/react-query/adminGetSession.ts: {}
   src/react-query/adminGetSpendBreakdown.core.ts: {}
@@ -309,6 +318,8 @@ trackedFiles:
   src/react-query/adminListProjectMcpServers.ts: {}
   src/react-query/adminListRegistryEntries.core.ts: {}
   src/react-query/adminListRegistryEntries.ts: {}
+  src/react-query/adminListRegistryOktaUnmapped.core.ts: {}
+  src/react-query/adminListRegistryOktaUnmapped.ts: {}
   src/react-query/adminListUserOrganizations.core.ts: {}
   src/react-query/adminListUserOrganizations.ts: {}
   src/react-query/adminListUsers.core.ts: {}
@@ -722,6 +733,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetRegistryOktaCandidates:
+    speakeasy-default-admin-get-registry-okta-candidates:
+      parameters:
+        query:
+          id: "bda14fdd-2193-435b-91e6-7eeb66b521a2"
+      responses:
+        "200":
+          application/json: {"candidates": [{"oin_name": "<value>", "organizations": 823725, "reason": "title", "sign_on_modes": ["<value 1>"]}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetSession:
     speakeasy-default-admin-get-session:
       responses:
@@ -908,6 +931,15 @@ examples:
       responses:
         "200":
           application/json: {"entries": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminListRegistryOktaUnmapped:
+    speakeasy-default-admin-list-registry-okta-unmapped:
+      responses:
+        "200":
+          application/json: {"names": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
