@@ -1427,25 +1427,23 @@ pubsub:
           string message_id = 6;
           MessageRole message_role = 7;
           string sensor_id = 8;
-          string sensor_slug = 19;
-          string message_created_at = 9;
-          string evaluated_at = 10;
-          reserved 11;
-          reserved input_hash;
+          string sensor_slug = 9;
+          string message_created_at = 10;
+          string evaluated_at = 11;
           string definition_hash = 12;
           string configured_model = 13;
           repeated string models = 14;
           string compiler_version = 15;
-          Actor actor = 20;
-          string billing_user_id = 21;
-          string source = 22;
-          Account account = 23;
-          string assistant_id = 24;
-          bool replayed = 25;
+          Actor actor = 16;
+          string billing_user_id = 17;
+          string source = 18;
+          Account account = 19;
+          string assistant_id = 20;
+          bool replayed = 21;
           oneof result {
-            MultiLabel multi_label = 16;
-            Choice choice = 17;
-            Score score = 18;
+            MultiLabel multi_label = 22;
+            Choice choice = 23;
+            Score score = 24;
           }
         }
       type: PROTOCOL_BUFFER

@@ -109,11 +109,9 @@ message Reading {
   // Gram sensor UUID; stable across display-name, slug and definition edits.
   string sensor_id = 8;
   // Always populated with the sensor slug observed during evaluation.
-  string sensor_slug = 19;
-  string message_created_at = 9; // UTC RFC3339Nano source time.
-  string evaluated_at = 10; // UTC RFC3339Nano completion time.
-  reserved 11;
-  reserved input_hash;
+  string sensor_slug = 9;
+  string message_created_at = 10; // UTC RFC3339Nano source time.
+  string evaluated_at = 11; // UTC RFC3339Nano completion time.
   // Hash of mode, instructions and ordered signal IDs/criteria. Excludes display
   // names, slugs and actor/account attribution. Traceability metadata, not an
   // immutable configuration revision or part of reading identity.
@@ -127,27 +125,27 @@ message Reading {
   // Version of the sigint and classifier compilation logic used for this attempt.
   string compiler_version = 15;
   // Identity associated with the source message, preserved as observed at ingestion.
-  Actor actor = 20;
+  Actor actor = 16;
   // Gram user ID to which the ingestion producer explicitly allocates usage,
   // using the same attribution as agent-session storage metering. May differ
   // from actor.user_id or exist without an actor (e.g. generated compaction
   // messages allocated to the chat owner). Interpret with organization_id.
   // This is usage attribution, not proof that a charge occurred. Absence means
   // unassigned; consumers must not fall back to actor or an account owner.
-  string billing_user_id = 21;
+  string billing_user_id = 17;
   // Canonical ingestion source; namespaces the external actor identity.
-  string source = 22;
+  string source = 18;
   // Source-session AI account context, preserved from the ingestion snapshot.
-  Account account = 23;
+  Account account = 19;
   // Gram assistant UUID associated with the workload, supplied by the producer.
   // Identifies an assistant resource, not a human user or provider account.
-  string assistant_id = 24;
+  string assistant_id = 20;
   // Historical ingestion marker, not Pub/Sub redelivery.
-  bool replayed = 25;
+  bool replayed = 21;
   oneof result {
-    MultiLabel multi_label = 16;
-    Choice choice = 17;
-    Score score = 18;
+    MultiLabel multi_label = 22;
+    Choice choice = 23;
+    Score score = 24;
   }
 
   option (gcp.pubsub.v1.topic) = {
