@@ -21,6 +21,7 @@ import { Link, Outlet } from "react-router";
 import { useOrgRoutes } from "@/routes";
 import { toast } from "sonner";
 import { issuerMatches } from "./search";
+import { TokenEndpointPicker } from "./TokenEndpointPicker";
 import {
   RegisterIssuerSheet,
   type RegisterIssuerValues,
@@ -118,7 +119,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
           justify="space-between"
           align="center"
           gap={4}
-          className="mb-6"
+          className="mb-6 flex-wrap"
         >
           <SegmentedControl
             value={view}
@@ -128,11 +129,13 @@ function WorkloadIssuersCatalogue(): JSX.Element {
               { value: "custom", label: `Custom (${issuers.length})` },
             ]}
           />
-          <Text muted small className="min-w-0 text-right">
-            {view === "custom"
-              ? "Added by hand, with values from the platform's own console."
-              : "Platforms Gram knows how to federate with, ready to trust without looking anything up."}
-          </Text>
+          {view === "custom" ? (
+            <Text muted small className="min-w-0 text-right">
+              Added by hand, with values from the platform&apos;s own console.
+            </Text>
+          ) : (
+            <TokenEndpointPicker />
+          )}
         </Stack>
 
         {view === "custom" ? (

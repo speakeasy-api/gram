@@ -31,6 +31,10 @@ vi.mock("@/components/page-templates", () => ({
     </>
   ),
 }));
+// Covered by its own tests; stubbed so these stay about where it appears.
+vi.mock("./TokenEndpointPicker", () => ({
+  TokenEndpointPicker: () => <div data-testid="token-endpoint" />,
+}));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     workloadIssuers: {
@@ -201,4 +205,33 @@ it("opens on the catalog, which is empty until presets exist", () => {
   // connecting, so presets are the first thing shown.
   expect(screen.getByText("No catalog platforms yet")).toBeTruthy();
   expect(screen.queryAllByRole("link")).toHaveLength(0);
+});
+
+it("shows the token endpoint beside the catalog in place of its helper text", () => {
+  renderPageOnCatalog();
+
+  expect(screen.getByTestId("token-endpoint")).toBeTruthy();
+  expect(
+    screen.queryByText(/Platforms Gram knows how to federate with/),
+  ).toBeNull();
+});
+
+it("keeps the custom tab's own helper text", () => {
+  renderPage();
+
+  expect(
+    screen.getByText(
+      "Added by hand, with values from the platform's own console.",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByTestId("token-endpoint")).toBeNull();
+});
+
+it("shows the token endpoint in the register pane", async () => {
+  renderPageOnCatalog();
+
+  fireEvent.click(screen.getByRole("button", { name: "Register new access" }));
+
+  expect(await screen.findByText("Point the platform at Gram")).toBeTruthy();
+  expect(screen.getAllByTestId("token-endpoint")).toHaveLength(2);
 });

@@ -3,69 +3,15 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Label } from "@/components/ui/Label";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
-import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import type {
-  NotReadyReason,
-  WorkloadConnectionEndpoint,
-} from "@gram/client/models/components/workloadconnectionendpoint.js";
-import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
+import type { WorkloadConnectionEndpoint } from "@gram/client/models/components/workloadconnectionendpoint.js";
 import { useWorkloadConnectionDetails } from "@gram/client/react-query/workloadConnectionDetails.js";
-import { type ReactNode, useMemo, useState } from "react";
-
-const NOT_READY_MESSAGES: Record<NotReadyReason, string> = {
-  not_publicly_reachable:
-    "This MCP server can't be reached publicly: it is disabled, or reachable only through a private network. A platform's token exchange will fail.",
-  no_authorization_server:
-    "Gram isn't this MCP server's authorization server, because the server isn't protected by Gram sign-in. There is no token endpoint to exchange at until it is.",
-  workload_grant_unavailable:
-    "This MCP server's authorization server doesn't advertise the jwt-bearer grant, so it accepts no workload identity tokens. Every exchange will fail, whatever the platform is configured with.",
-  agent_rollout_disabled:
-    "Agent authorization isn't enabled for this organization, and the token endpoint refuses workload identity tokens without it. The values below are correct, but every exchange will fail until it is enabled.",
-};
-
-// The reasons after which there is no token endpoint worth copying.
-const NO_VALUES: ReadonlySet<NotReadyReason> = new Set<NotReadyReason>([
-  "not_publicly_reachable",
-  "no_authorization_server",
-]);
-
-type ServerGroup = {
-  projectId: string;
-  projectName: string;
-  servers: McpServer[];
-};
-
-// The connection details read requires mcp:read on the server, written against
-// its toolset when it is toolset-backed, so only those servers are offered.
-function canReadServer(
-  grants: Parameters<typeof hasScopeInGrants>[0],
-  server: McpServer,
-): boolean {
-  return hasScopeInGrants(
-    grants,
-    "mcp:read",
-    server.toolsetId ?? server.id,
-    server.projectId,
-  );
-}
-
-function serverLabel(server: McpServer): string {
-  return server.name || server.slug || server.id;
-}
+import { type ReactNode, useState } from "react";
+import { NO_VALUES, NOT_READY_MESSAGES } from "./connectionReadiness";
+import { McpServerSelect } from "./McpServerSelect";
+import { readableSelection, useReadableMcpServers } from "./readableMcpServers";
 
 function ConnectionValue({
   label,
@@ -199,45 +145,13 @@ function ConnectionDetails({
  * which derives it the same way the MCP server's discovery document does.
  */
 export function ConnectPlatformSection(): JSX.Element {
-  const organization = useOrganization();
-  const { grants, isLoading: grantsLoading } = useRBAC();
-  const servers = useListMcpServersForOrg(undefined, undefined, {
-    throwOnError: false,
-  });
+  const servers = useReadableMcpServers();
   const [selected, setSelected] = useState("");
-
-  const allServers = servers.data?.mcpServers ?? [];
-  const groups = useMemo((): ServerGroup[] => {
-    const projectNames = new Map(
-      organization.projects.map((project) => [project.id, project.name]),
-    );
-    const byProject = new Map<string, ServerGroup>();
-    for (const server of servers.data?.mcpServers ?? []) {
-      if (!canReadServer(grants, server)) continue;
-      let group = byProject.get(server.projectId);
-      if (!group) {
-        group = {
-          projectId: server.projectId,
-          projectName: projectNames.get(server.projectId) ?? "Unknown project",
-          servers: [],
-        };
-        byProject.set(server.projectId, group);
-      }
-      group.servers.push(server);
-    }
-    return [...byProject.values()];
-  }, [grants, organization.projects, servers.data]);
-
-  // A selection only counts while the server is still in the readable list, so
-  // losing access to it hides its values rather than leaving them on screen.
-  const current = groups.some((group) =>
-    group.servers.some((server) => server.id === selected),
-  )
-    ? selected
-    : "";
+  const { groups } = servers;
+  const current = readableSelection(groups, selected);
 
   let body: ReactNode;
-  if (servers.isPending || grantsLoading) {
+  if (servers.isPending) {
     body = <SkeletonTable />;
   } else if (servers.isError) {
     body = (
@@ -246,17 +160,13 @@ export function ConnectPlatformSection(): JSX.Element {
         heading="Couldn't load MCP servers"
         description="The MCP server list failed to load. Try again in a moment."
         action={
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void servers.refetch()}
-          >
+          <Button size="sm" variant="secondary" onClick={servers.refetch}>
             <Button.Text>Try again</Button.Text>
           </Button>
         }
       />
     );
-  } else if (allServers.length === 0) {
+  } else if (servers.total === 0) {
     body = (
       <InlineEmptyState
         icon="server"
@@ -277,23 +187,13 @@ export function ConnectPlatformSection(): JSX.Element {
       <Stack gap={6}>
         <Stack gap={2} className="max-w-md">
           <Label htmlFor="connect-mcp-server">MCP server</Label>
-          <Select value={current} onValueChange={setSelected}>
-            <SelectTrigger id="connect-mcp-server" className="w-full">
-              <SelectValue placeholder="Select an MCP server" />
-            </SelectTrigger>
-            <SelectContent>
-              {groups.map((group) => (
-                <SelectGroup key={group.projectId}>
-                  <SelectLabel>{group.projectName}</SelectLabel>
-                  {group.servers.map((server) => (
-                    <SelectItem key={server.id} value={server.id}>
-                      {serverLabel(server)}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              ))}
-            </SelectContent>
-          </Select>
+          <McpServerSelect
+            id="connect-mcp-server"
+            groups={groups}
+            value={current}
+            onChange={setSelected}
+            className="w-full"
+          />
         </Stack>
         {current !== "" && <ConnectionDetails mcpServerId={current} />}
       </Stack>
