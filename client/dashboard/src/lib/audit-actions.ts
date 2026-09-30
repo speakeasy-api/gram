@@ -416,9 +416,9 @@ export function staticActionPhrase(action: AuditAction): string {
     case "okta-resource-connection:reset":
       return "reset the Cross App Access connection for";
     case "okta-server-suggestion:dismiss":
-      return "dismissed the suggested MCP server";
+      return "dismissed a suggestion for";
     case "okta-server-suggestion:restore":
-      return "restored the suggested MCP server";
+      return "restored a suggestion for";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":
