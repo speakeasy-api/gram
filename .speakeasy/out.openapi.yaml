@@ -89342,7 +89342,7 @@ components:
           description: The resource app's Cross App Access issuer URL as configured in the identity provider; the audience of the identity assertion. Present once confirmed.
         broken_reason:
           type: string
-          description: 'Present when state is broken. audience_mismatch: the confirmed audience is not the server''s authorization server issuer, which Speakeasy requests, so the exchange cannot succeed unless an exchange has already been verified; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app''s client authentication; downstream_rejected: the identity provider issued the assertion but the server''s authorization server refused it.'
+          description: 'Present when state is broken. audience_mismatch: the confirmed audience is not the server''s authorization server issuer, which Speakeasy requests; shown even after a successful exchange, since the recorded confirmation is wrong; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app''s client authentication; downstream_rejected: the identity provider issued the assertion but the server''s authorization server refused it.'
           enum:
             - audience_mismatch
             - scope_not_allowed

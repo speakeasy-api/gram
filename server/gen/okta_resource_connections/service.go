@@ -140,11 +140,11 @@ type OktaResourceConnectionServer struct {
 	// identity assertion grant.
 	NotApplicableReason *string
 	// Present when state is broken. audience_mismatch: the confirmed audience is
-	// not the server's authorization server issuer, which Speakeasy requests, so
-	// the exchange cannot succeed unless an exchange has already been verified;
-	// scope_not_allowed: the connection does not allow the requested scopes;
-	// client_auth_failed: the identity provider rejected the agent app's client
-	// authentication; downstream_rejected: the identity provider issued the
+	// not the server's authorization server issuer, which Speakeasy requests;
+	// shown even after a successful exchange, since the recorded confirmation is
+	// wrong; scope_not_allowed: the connection does not allow the requested
+	// scopes; client_auth_failed: the identity provider rejected the agent app's
+	// client authentication; downstream_rejected: the identity provider issued the
 	// assertion but the server's authorization server refused it.
 	BrokenReason *string
 	// What the latest identity chaining exchange since confirmation showed.

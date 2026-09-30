@@ -111,7 +111,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
 	}
 	chainer := identitychaining.New(d.Logger, d.DB, d.Encryption, d.Challenges, delegation, assertionKeys, cacheImpl)
-	chainer.SetObserver(oktaresourceconnections.NewObserver(d.Logger, d.DB, d.Audit))
+	chainer.SetObserver(oktaresourceconnections.NewObserver(d.Logger, d.Meter, d.DB, d.Audit))
 	service.SetIdentityChainer(chainer)
 	return service, nil
 }

@@ -22,7 +22,7 @@ import (
 
 func newObserver(t *testing.T, si *instance) *oktaresourceconnections.Observer {
 	t.Helper()
-	return oktaresourceconnections.NewObserver(testenv.NewLogger(t), si.conn, audit.NewLogger())
+	return oktaresourceconnections.NewObserver(testenv.NewLogger(t), testenv.NewMeterProvider(t), si.conn, audit.NewLogger())
 }
 
 // confirmedUpstream is a capable server confirmed with an audience matching
@@ -163,7 +163,7 @@ func TestObserveAttempt_AuditsTransitionsAsTheSystem(t *testing.T) {
 	require.Equal(t, "verified", after["state"])
 	require.Equal(t, oktaresourceconnections.ObserverActorDisplayName, record.ActorDisplay)
 
-	// The same result advances the timestamp without another audit entry.
+	// The same result within the refresh window is neither rewritten nor audited.
 	again := obs
 	again.StartedAt = obs.StartedAt.Add(time.Minute)
 	require.NoError(t, observer.ObserveAttempt(ctx, again))
@@ -173,11 +173,11 @@ func TestObserveAttempt_AuditsTransitionsAsTheSystem(t *testing.T) {
 	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.WithinDuration(t, again.StartedAt, rows[0].OktaResourceConnection.ObservedAt.Time, time.Millisecond)
+	require.WithinDuration(t, obs.StartedAt, rows[0].OktaResourceConnection.ObservedAt.Time, time.Millisecond)
 
-	// A later failure replaces verified and is audited.
+	// A connection-level failure after the refresh window replaces verified and is audited.
 	missing := obs
-	missing.StartedAt = obs.StartedAt.Add(2 * time.Minute)
+	missing.StartedAt = obs.StartedAt.Add(6 * time.Minute)
 	missing.Outcome = failure(identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, false)
 	require.NoError(t, observer.ObserveAttempt(ctx, missing))
 	count, err = audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionObserve)
@@ -221,7 +221,7 @@ func TestObserveAttempt_MismatchedAudienceDoesNotRecordMissingConnection(t *test
 	require.Nil(t, row.ObservedAt)
 }
 
-func TestObserveAttempt_DefinitiveFailureReplacesVerified(t *testing.T) {
+func TestObserveAttempt_PossiblyPerUserFailureHoldsVerified(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		name    string
@@ -239,9 +239,14 @@ func TestObserveAttempt_DefinitiveFailureReplacesVerified(t *testing.T) {
 			f, obs := confirmedUpstream(t, ctx, si, "Failure")
 			require.NoError(t, observer.ObserveAttempt(ctx, obs))
 
+			// One user's failure does not flip a connection another user just used.
 			rejected := obs
-			rejected.StartedAt = obs.StartedAt.Add(time.Second)
+			rejected.StartedAt = obs.StartedAt.Add(time.Hour)
 			rejected.Outcome = tt.outcome
+			require.NoError(t, observer.ObserveAttempt(ctx, rejected))
+			require.Equal(t, "verified", observedRow(t, ctx, si, f.serverID).State)
+
+			rejected.StartedAt = obs.StartedAt.Add(25 * time.Hour)
 			require.NoError(t, observer.ObserveAttempt(ctx, rejected))
 			row := observedRow(t, ctx, si, f.serverID)
 			require.Equal(t, "broken", row.State)
@@ -295,7 +300,7 @@ func TestObserveAttempt_RefreshesAnUnchangedResultWithoutAuditing(t *testing.T) 
 	require.NoError(t, observer.ObserveAttempt(ctx, obs))
 
 	later := obs
-	later.StartedAt = obs.StartedAt.Add(2 * time.Minute)
+	later.StartedAt = obs.StartedAt.Add(6 * time.Minute)
 	require.NoError(t, observer.ObserveAttempt(ctx, later))
 	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
 	require.NoError(t, err)
