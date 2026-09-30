@@ -426,9 +426,12 @@ export function useUserIdentityDraft({
 
   // Nothing matched and nothing was advertised: the upstream could not tell us
   // where its users sign in, so the chooser opens empty.
+  // Not claimed while our own lookup failed: that alert already explains the
+  // missing provider, and the upstream may be fine.
   const providerUnreachable =
     enabled &&
     !configured &&
+    !providerLoadFailed &&
     !matchedIssuer &&
     !linkedIssuerId &&
     !discovered &&

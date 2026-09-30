@@ -601,6 +601,22 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBeDefined();
   });
 
+  it("does not call the upstream unreachable when our own lookup failed", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "unavailable",
+      metadata: null,
+    });
+    mocks.hostIssuers.mockImplementation(() => "error");
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(
+      screen.getByText(/Couldn.t load this server.s identity providers/),
+    ).toBeDefined();
+    expect(screen.queryByText(/Couldn.t reach the upstream/)).toBeNull();
+  });
+
   it("offers the discovered provider as one that will be created", () => {
     mocks.protectedResourceMetadata.mockReturnValue({
       status: "available",
