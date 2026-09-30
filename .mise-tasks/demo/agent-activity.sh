@@ -398,7 +398,7 @@ run_turn() {
 
 curl -sf -o /dev/null -X POST "$collector_logs_endpoint" \
   -H 'Content-Type: application/json' -d '{"resourceLogs":[]}' 2>/dev/null ||
-  fail "no OTLP collector on ${collector_logs_endpoint} — run \`mise run infra:start\` first"
+  fail "no OTLP collector on ${collector_logs_endpoint} — run \`mise run infra:lgtm\` first"
 
 # That collector is one container shared by every worktree, and it keeps the
 # forwarding endpoint of whichever worktree started it. A run from a different
@@ -408,7 +408,7 @@ lgtm_container=$(docker compose -f compose.shared.yml -p gram-shared ps -q lgtm 
 if [ -n "$lgtm_container" ]; then
   forwarding_to=$(docker inspect "$lgtm_container" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | sed -n 's/^GRAM_DEMO_OTLP_LOGS_ENDPOINT=//p' | head -1)
   if [ -n "$forwarding_to" ] && [ "$forwarding_to" != "${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-}" ]; then
-    fail "the shared collector forwards to ${forwarding_to}, which is not this worktree's ${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-<unset>}. It keeps the endpoint of whichever worktree started it — restart it from here with \`mise run infra:start\`."
+    fail "the shared collector forwards to ${forwarding_to}, which is not this worktree's ${GRAM_DEMO_OTLP_LOGS_ENDPOINT:-<unset>}. It keeps the endpoint of whichever worktree started it — restart it from here with \`mise run infra:lgtm\`."
   fi
 fi
 

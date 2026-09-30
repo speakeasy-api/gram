@@ -13,7 +13,7 @@ every worktree's gram-server / gram-worker
                                                   └→ Prometheus (metrics)
 ```
 
-**It is shared across every worktree**, declared in `compose.shared.yml` under the fixed project `gram-shared` — not in the per-worktree `compose.yml`. One copy serves the whole machine, so its ports are the same everywhere and are never remapped. `mise run infra:start` asserts it (idempotently) from whichever worktree runs first.
+**It is shared across every worktree**, declared in `compose.shared.yml` under the `lgtm` Compose profile and the fixed project `gram-shared` — not in the per-worktree `compose.yml`. One copy serves the whole machine, so its ports are the same everywhere and are never remapped. It is opt-in: `mise run infra:start` does not start it. Run `mise run infra:lgtm` (or `mise run infra:start --lgtm`) when you need traces or metrics. `mise run open:grafana` starts it if it is not already up.
 
 Logs and profiles are not wired into it — application logs go to stdout, so reach for `pitchfork logs` instead.
 

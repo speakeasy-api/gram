@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+
 #MISE description="Start up databases, caches and so on"
+#USAGE flag "--lgtm" help="Also start the optional shared LGTM observability stack"
 
 # Warn when a cached image's architecture differs from the Docker host's.
 # `compose up` never re-pulls a tag that already exists locally, so an image
@@ -103,10 +105,23 @@ docker compose up -d --wait --wait-timeout 30 gram-temporal || exit 1
 docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 \
   pubsub-emulator || exit 1
 
-# LGTM is shared too, but not a synchronous startup dependency. A transient
-# image pull must not take down this worktree's databases, so warn and continue.
-docker compose -f compose.shared.yml -p gram-shared up -d lgtm \
-  || echo "⚠️  Optional shared LGTM service failed to start; continuing without local observability." >&2
+# LGTM is a large, rarely used image behind a Compose profile. Default boot
+# skips it. Honor the flag and COMPOSE_PROFILES so a developer who already
+# opted in keeps that choice across `infra:start`.
+want_lgtm=false
+if [ "${usage_lgtm:-false}" = "true" ]; then
+  want_lgtm=true
+fi
+case ",${COMPOSE_PROFILES:-}," in
+  *,lgtm,*) want_lgtm=true ;;
+esac
+
+# LGTM is not a synchronous startup dependency. A transient image pull must
+# not take down this worktree's databases, so warn and continue.
+if $want_lgtm; then
+  mise run infra:lgtm \
+    || echo "⚠️  Optional shared LGTM stack failed to start; continuing with degraded observability." >&2
+fi
 
 # Maximum time (seconds) to wait for a service to accept queries before giving
 # up. Bounded so headless callers (e.g. `./zero --agent`) fail fast instead of
