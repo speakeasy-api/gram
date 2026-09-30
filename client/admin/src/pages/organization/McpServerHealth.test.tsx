@@ -358,6 +358,34 @@ describe("McpServerHealth", () => {
     ).toBeTruthy();
   });
 
+  it("says a shared issuer's counts cover every project using it", async () => {
+    respond = (windowDays) => ({
+      ...withIssuer(windowDays),
+      user_session_issuer: { ...ISSUER, attachment_scope: "organization" },
+    });
+    await open();
+    await screen.findByRole("heading", { name: "crm" });
+
+    expect(card("People signed in").textContent).toContain(
+      "Counts cover every project using this issuer",
+    );
+    expect(
+      screen.getByRole("region", { name: "User session issuer" }).textContent,
+    ).toContain("Counts cover every project using this issuer");
+  });
+
+  it("keeps a project issuer's counts unqualified and captions linked accounts", async () => {
+    await open();
+    await screen.findByRole("heading", { name: "crm" });
+
+    expect(screen.queryByText(/every project using this issuer/)).toBe(null);
+    expect(
+      within(
+        screen.getByRole("region", { name: "Remote session clients" }),
+      ).getByText("Counted for this client across every issuer it serves."),
+    ).toBeTruthy();
+  });
+
   it("names a legacy auth mode when there is no issuer", async () => {
     respond = (windowDays) => ({
       server: { ...SERVER, source: "toolset_only", visibility: "public" },

@@ -281,17 +281,30 @@ function WindowPicker({
   );
 }
 
+// Sessions belong to the issuer, so an issuer attached above the project
+// counts every project that uses it.
+const SHARED_ISSUER_NOTE = "Counts cover every project using this issuer";
+
+function sharedIssuerNote(
+  issuer: AdminMcpServerHealthUserSessionIssuer,
+): string | undefined {
+  return issuer.attachmentScope === "project" ? undefined : SHARED_ISSUER_NOTE;
+}
+
 function StatCard({
   label,
   value,
   badge,
   detail,
+  note,
   muted = false,
 }: {
   label: string;
   value: ReactNode;
   badge?: ReactNode;
   detail: string;
+  // A caveat on what the figures cover, below the detail.
+  note?: string;
   muted?: boolean;
 }): JSX.Element {
   return (
@@ -313,6 +326,7 @@ function StatCard({
         {badge}
       </div>
       <span className={cn(MUTED, "text-[0.8125rem]")}>{detail}</span>
+      {note && <span className={cn(MUTED, "text-xs")}>{note}</span>}
     </div>
   );
 }
@@ -381,6 +395,7 @@ function PeopleCard({
         </>
       }
       detail={`${sessions.distinctSubjectsInWindow} in window · ${sessions.live === 1 ? "1 live session" : `${sessions.live} live sessions`}`}
+      note={sharedIssuerNote(issuer)}
     />
   );
 }
@@ -864,6 +879,11 @@ function IssuerPanel({
           )}
         </KeyValue>
       </KeyValues>
+      {sharedIssuerNote(issuer) && (
+        <p className={cn(MUTED, "border-t px-5 py-3 text-xs")}>
+          {sharedIssuerNote(issuer)}
+        </p>
+      )}
     </section>
   );
 }
@@ -1104,7 +1124,14 @@ function RemoteClient({
         </KeyValues>
       </div>
       <div className="flex flex-col gap-2.5 border-t px-5 py-4 lg:border-t-0">
-        <ColumnTitle>Linked accounts</ColumnTitle>
+        <div className="flex flex-col gap-1">
+          <ColumnTitle>Linked accounts</ColumnTitle>
+          {/* Stats are keyed on the client, and a client can serve more than
+              one issuer, so these are never this issuer's alone. */}
+          <span className={cn(MUTED, "text-xs")}>
+            Counted for this client across every issuer it serves.
+          </span>
+        </div>
         <KeyValues className={CLIENT_KV}>
           <KeyValue label="Linked people">{sessions.linkedSubjects}</KeyValue>
           <KeyValue label="Reauthorizations">
