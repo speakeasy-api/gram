@@ -735,12 +735,15 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid upstream_host")
 	}
+	// Goa validates the enum; empty means every tier.
+	tier := conv.PtrValOr(payload.Tier, "")
 
 	rows, err := repo.New(s.db).ListRemoteSessionIssuersByProjectID(ctx, repo.ListRemoteSessionIssuersByProjectIDParams{
 		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-		IncludeOrganizational: true,
-		IncludeGlobal:         true,
+		IncludeProject:        tier == "" || tier == "project",
+		IncludeOrganizational: tier == "" || tier == "organization",
+		IncludeGlobal:         tier == "" || tier == "platform",
 		Search:                containsPattern(conv.PtrValOr(payload.Search, "")),
 		Hosts:                 hosts,
 		Cursor:                cursor,

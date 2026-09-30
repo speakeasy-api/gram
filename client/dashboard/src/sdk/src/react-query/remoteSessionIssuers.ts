@@ -30,6 +30,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListRemoteSessionIssuersRequest,
   ListRemoteSessionIssuersSecurity,
+  QueryParamTier,
 } from "../models/operations/listremotesessionissuers.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -77,7 +78,7 @@ export type RemoteSessionIssuersQueryError =
  * listRemoteSessionIssuers remoteSessionIssuers
  *
  * @remarks
- * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.
+ * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.
  */
 export function useRemoteSessionIssuers(
   request?: ListRemoteSessionIssuersRequest | undefined,
@@ -106,7 +107,7 @@ export function useRemoteSessionIssuers(
  * listRemoteSessionIssuers remoteSessionIssuers
  *
  * @remarks
- * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.
+ * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.
  */
 export function useRemoteSessionIssuersSuspense(
   request?: ListRemoteSessionIssuersRequest | undefined,
@@ -135,7 +136,7 @@ export function useRemoteSessionIssuersSuspense(
  * listRemoteSessionIssuers remoteSessionIssuers
  *
  * @remarks
- * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.
+ * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.
  */
 export function useRemoteSessionIssuersInfinite(
   request?: ListRemoteSessionIssuersRequest | undefined,
@@ -178,7 +179,7 @@ export function useRemoteSessionIssuersInfinite(
  * listRemoteSessionIssuers remoteSessionIssuers
  *
  * @remarks
- * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.
+ * List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.
  */
 export function useRemoteSessionIssuersInfiniteSuspense(
   request?: ListRemoteSessionIssuersRequest | undefined,
@@ -225,6 +226,7 @@ export function setRemoteSessionIssuersData(
       limit?: number | undefined;
       search?: string | undefined;
       upstreamHost?: string | undefined;
+      tier?: QueryParamTier | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -245,6 +247,7 @@ export function invalidateRemoteSessionIssuers(
       limit?: number | undefined;
       search?: string | undefined;
       upstreamHost?: string | undefined;
+      tier?: QueryParamTier | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

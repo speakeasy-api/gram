@@ -4166,12 +4166,13 @@ func NewUpdateRemoteSessionIssuerPayload(body *UpdateRemoteSessionIssuerRequestB
 
 // NewListRemoteSessionIssuersPayload builds a remoteSessionIssuers service
 // listRemoteSessionIssuers endpoint payload.
-func NewListRemoteSessionIssuersPayload(cursor *string, limit *int, search *string, upstreamHost *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.ListRemoteSessionIssuersPayload {
+func NewListRemoteSessionIssuersPayload(cursor *string, limit *int, search *string, upstreamHost *string, tier *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.ListRemoteSessionIssuersPayload {
 	v := &remotesessionissuers.ListRemoteSessionIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
 	v.Search = search
 	v.UpstreamHost = upstreamHost
+	v.Tier = tier
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

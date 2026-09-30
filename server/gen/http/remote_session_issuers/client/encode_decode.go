@@ -1049,6 +1049,9 @@ func EncodeListRemoteSessionIssuersRequest(encoder func(*http.Request) goahttp.E
 		if p.UpstreamHost != nil {
 			values.Add("upstream_host", *p.UpstreamHost)
 		}
+		if p.Tier != nil {
+			values.Add("tier", *p.Tier)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

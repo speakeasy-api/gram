@@ -6324,8 +6324,9 @@ SELECT
 FROM remote_session_issuers AS i
 LEFT JOIN projects AS p ON p.id = i.project_id
 WHERE (
-    i.organization_id = $1
-    OR ($2::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
+    ($2::boolean AND i.project_id IS NULL AND i.organization_id = $1)
+    OR ($3::boolean AND i.project_id IS NOT NULL AND i.organization_id = $1)
+    OR ($4::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
   )
   AND i.deleted IS FALSE
   -- An issuer whose only live clients were left behind by tombstoned identity
@@ -6354,16 +6355,18 @@ WHERE (
         AND ipc.deleted IS NOT TRUE
     )
   )
-  AND ($3::uuid IS NULL OR i.id < $3::uuid)
+  AND ($5::uuid IS NULL OR i.id < $5::uuid)
 ORDER BY i.id DESC
-LIMIT $4
+LIMIT $6
 `
 
 type ListOrganizationRemoteSessionIssuersParams struct {
-	OrganizationID pgtype.Text
-	IncludeGlobal  bool
-	Cursor         uuid.NullUUID
-	LimitValue     int32
+	OrganizationID         pgtype.Text
+	IncludeOrganizational  bool
+	IncludeProjectSpecific bool
+	IncludeGlobal          bool
+	Cursor                 uuid.NullUUID
+	LimitValue             int32
 }
 
 type ListOrganizationRemoteSessionIssuersRow struct {
@@ -6378,10 +6381,12 @@ type ListOrganizationRemoteSessionIssuersRow struct {
 // project-specific rows); client/session queries reach the org through their
 // issuer, the sole cross-tenant guard since these endpoints carry no project
 // header.
-// All issuers in the org (organizational and project-specific) and — when the
-// caller opts in with include_global — platform issuers from the shared
-// catalog, each with its associated non-deleted client count and, for
-// project-specific issuers, the owning project name.
+// Issuers in the org — organizational (include_organizational) and
+// project-specific (include_project_specific) — and platform issuers from the
+// shared catalog (include_global), each tier gated by its own boolean, each row
+// with its associated non-deleted client count and, for project-specific
+// issuers, the owning project name. A caller listing one tier turns the other
+// two off, so a large catalog cannot fill a page meant for the org's own.
 //
 // client_count mirrors the ORG REACHABILITY predicate used by the client
 // queries: (i.organization_id = @org OR c.organization_id = @org). For an
@@ -6398,6 +6403,8 @@ type ListOrganizationRemoteSessionIssuersRow struct {
 func (q *Queries) ListOrganizationRemoteSessionIssuers(ctx context.Context, arg ListOrganizationRemoteSessionIssuersParams) ([]ListOrganizationRemoteSessionIssuersRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationRemoteSessionIssuers,
 		arg.OrganizationID,
+		arg.IncludeOrganizational,
+		arg.IncludeProjectSpecific,
 		arg.IncludeGlobal,
 		arg.Cursor,
 		arg.LimitValue,
@@ -7537,31 +7544,32 @@ const listRemoteSessionIssuersByProjectID = `-- name: ListRemoteSessionIssuersBy
 SELECT id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE (
-    project_id = $1
-    OR ($2::boolean AND project_id IS NULL AND organization_id = $3)
-    OR ($4::boolean AND project_id IS NULL AND organization_id IS NULL)
+    ($1::boolean AND project_id = $2)
+    OR ($3::boolean AND project_id IS NULL AND organization_id = $4)
+    OR ($5::boolean AND project_id IS NULL AND organization_id IS NULL)
   )
   AND deleted IS FALSE
   AND (
-    $5::text IS NULL
-    OR name ILIKE $5::text
-    OR slug ILIKE $5::text
-    OR issuer ILIKE $5::text
+    $6::text IS NULL
+    OR name ILIKE $6::text
+    OR slug ILIKE $6::text
+    OR issuer ILIKE $6::text
   )
   AND (
-    COALESCE(cardinality($6::text[]), 0) = 0
+    COALESCE(cardinality($7::text[]), 0) = 0
     OR regexp_replace(
       lower(substring(issuer FROM '^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]+)')),
       ':(443|80)$',
       ''
-    ) = ANY($6::text[])
+    ) = ANY($7::text[])
   )
-  AND ($7::uuid IS NULL OR id < $7::uuid)
+  AND ($8::uuid IS NULL OR id < $8::uuid)
 ORDER BY id DESC
-LIMIT $8
+LIMIT $9
 `
 
 type ListRemoteSessionIssuersByProjectIDParams struct {
+	IncludeProject        bool
 	ProjectID             uuid.NullUUID
 	IncludeOrganizational bool
 	OrganizationID        pgtype.Text
@@ -7573,10 +7581,13 @@ type ListRemoteSessionIssuersByProjectIDParams struct {
 }
 
 // Lists the project's own issuers plus each inherited tier the caller opts in
-// to, gated by its own boolean: include_organizational for organization-level
-// issuers inherited from the project's org, include_global for platform issuers
-// from the shared catalog. Both default off; organization_id is always passed
-// (the arm is off when include_organizational is false regardless of its value).
+// to, each arm gated by its own boolean: include_project for the project's own
+// issuers, include_organizational for organization-level issuers inherited from
+// the project's org, include_global for platform issuers from the shared
+// catalog. A caller listing one tier turns the other two off, which is how a
+// tier's page stays its own however large another tier grows. organization_id
+// is always passed (the arm is off when include_organizational is false
+// regardless of its value).
 //
 // Slugs are unique per (project_id, slug) and, separately, across the global
 // partition; the organization tier has no slug uniqueness constraint at all. So
@@ -7597,6 +7608,7 @@ type ListRemoteSessionIssuersByProjectIDParams struct {
 //     reports URL.host. An empty or NULL set applies no filter.
 func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg ListRemoteSessionIssuersByProjectIDParams) ([]RemoteSessionIssuer, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionIssuersByProjectID,
+		arg.IncludeProject,
 		arg.ProjectID,
 		arg.IncludeOrganizational,
 		arg.OrganizationID,

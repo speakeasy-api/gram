@@ -36,7 +36,7 @@ type Service interface {
 	UpdateRemoteSessionIssuer(context.Context, *UpdateRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// List the remote_session_issuers the caller's project can use: its own, plus
 	// those inherited from its organization and from the platform catalog. Newest
-	// first; the search and upstream_host filters narrow the listing without
+	// first; the search, upstream_host and tier filters narrow the listing without
 	// changing its order or cursor.
 	ListRemoteSessionIssuers(context.Context, *ListRemoteSessionIssuersPayload) (res *ListRemoteSessionIssuersResult, err error)
 	// Get a remote_session_issuer by id, by slug, or by upstream issuer URL.
@@ -262,7 +262,11 @@ type ListRemoteSessionIssuersPayload struct {
 	// mcp.linear.app): those whose issuer URL host equals it or is one of its
 	// parent domains (linear.app). Host only, optionally with a port; no scheme or
 	// path.
-	UpstreamHost     *string
+	UpstreamHost *string
+	// Only issuers from one tier: the project's own (project), inherited from its
+	// organization (organization), or from the platform catalog (platform).
+	// Omitted lists all three.
+	Tier             *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

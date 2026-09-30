@@ -10,16 +10,19 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { queryKeyRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import {
   invalidateAllRemoteSessionIssuers,
   useRemoteSessionIssuers,
+  useRemoteSessionIssuersInfinite,
 } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   invalidateAllRemoteSessionsCount,
   useRemoteSessionsCount,
 } from "@gram/client/react-query/remoteSessionsCount.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   preferredScopes,
@@ -51,9 +54,16 @@ export type ProviderOption = {
   match: boolean;
 };
 
-type ProviderGroup = {
+export type ProviderGroup = {
   tier: ProviderTier;
   options: ProviderOption[];
+  /** The tier's first page is still loading. */
+  isLoading: boolean;
+  isError: boolean;
+  /** More of this tier (for the current search) lies past what has loaded. */
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMore: () => void;
 };
 
 export type ClientOption = {
@@ -184,6 +194,46 @@ async function protectedResourceScopes(
   }
 }
 
+type ProviderTierQuery = {
+  issuers: RemoteSessionIssuer[];
+  isLoading: boolean;
+  isError: boolean;
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMore: () => void;
+};
+
+// One tier of the provider menu, searched and paged on the server.
+function useProviderTier(
+  tier: "project" | "organization" | "platform",
+  search: string,
+  enabled: boolean,
+): ProviderTierQuery {
+  const query = useRemoteSessionIssuersInfinite(
+    { tier, search: search || undefined },
+    undefined,
+    { enabled, throwOnError: false },
+  );
+  const { fetchNextPage } = query;
+  const issuers = useMemo(
+    () => query.data?.pages.flatMap((page) => page.result.items) ?? [],
+    [query.data],
+  );
+  const loadMore = useCallback(() => void fetchNextPage(), [fetchNextPage]);
+  const { isLoading, isError, hasNextPage, isFetchingNextPage } = query;
+  return useMemo(
+    () => ({
+      issuers,
+      isLoading,
+      isError,
+      hasMore: !!hasNextPage,
+      loadingMore: isFetchingNextPage,
+      loadMore,
+    }),
+    [issuers, isLoading, isError, hasNextPage, isFetchingNextPage, loadMore],
+  );
+}
+
 // Issuers whose host is `host` or one of its parent domains, from every tier
 // the project can see. Off for an empty host.
 function useIssuersForHost(
@@ -235,6 +285,9 @@ const TIER_BY_SCOPE = {
 /** Everything the User Identity row renders and everything it can change. */
 export type UserIdentityDraft = {
   providerGroups: ProviderGroup[];
+  /** Text the provider menu searches on the server; "" lists every tier. */
+  providerSearch: string;
+  setProviderSearch: (search: string) => void;
   selected: ProviderOption | null;
   selectProvider: (id: string | null) => void;
   /** The upstream advertised no provider and none matched. */
@@ -305,7 +358,6 @@ export function useUserIdentityDraft({
   mcpServerId,
   remoteMcpServerId,
   upstreamUrl,
-  issuers: listedIssuers,
   linkedClients,
   configured,
   enabled,
@@ -313,7 +365,6 @@ export function useUserIdentityDraft({
   mcpServerId: string;
   remoteMcpServerId: string;
   upstreamUrl: string | undefined;
-  issuers: RemoteSessionIssuer[];
   linkedClients: RemoteSessionClient[];
   configured: boolean;
   enabled: boolean;
@@ -335,20 +386,39 @@ export function useUserIdentityDraft({
     kind: "idle",
   });
 
-  // The linked provider is resolved by id and merged in, never looked for in
-  // the listing alone: the listing is paginated across the project, its
-  // organization and the platform catalog, so a linked issuer can sit past
-  // any page and the server would render with no provider selected.
+  // The menu lists each tier on its own, searched and paged on the server:
+  // the platform catalog is far larger than any page, and a single mixed
+  // listing lets it crowd the project's own providers out entirely.
+  const [providerSearch, setProviderSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(providerSearch.trim(), 250);
+  const platformTier = useProviderTier("platform", debouncedSearch, enabled);
+  const organizationTier = useProviderTier(
+    "organization",
+    debouncedSearch,
+    enabled,
+  );
+  const projectTier = useProviderTier("project", debouncedSearch, enabled);
+
+  // The linked and picked providers are resolved by id and merged in, never
+  // looked for in the menu's pages alone: a search or a short page can leave
+  // either out, and the server would then render with no provider selected.
   const linkedIssuerId = linkedClients[0]?.remoteSessionIssuerId;
-  const linkedIssuerIds = useMemo(
-    () => (linkedIssuerId ? [linkedIssuerId] : []),
-    [linkedIssuerId],
+  const pickedIssuerId =
+    providerPick && providerPick !== DISCOVERED_PROVIDER_ID
+      ? providerPick
+      : undefined;
+  const resolvedIssuerIds = useMemo(
+    () =>
+      [...new Set([linkedIssuerId, pickedIssuerId])].filter(
+        (id): id is string => !!id,
+      ),
+    [linkedIssuerId, pickedIssuerId],
   );
   const {
     items: linkedIssuers,
     isLoading: linkedIssuerLoading,
     isError: linkedIssuerError,
-  } = useRemoteSessionIssuersByIds(linkedIssuerIds, { enabled });
+  } = useRemoteSessionIssuersByIds(resolvedIssuerIds, { enabled });
 
   // The provider this server's upstream points at, found on the server: the
   // same-site rule (the upstream's host or a parent domain of it) runs over
@@ -380,11 +450,15 @@ export function useUserIdentityDraft({
   );
   const discoveredIsKnown = !!knownDiscoveredIssuer;
 
-  // Every issuer the chooser may need to name: the listed page, plus the
-  // linked and matched ones resolved above, which may sit past that page.
+  // Every issuer the chooser may need to name: the loaded menu pages, plus
+  // the linked, picked and matched ones resolved above, which may sit past
+  // them.
   const issuers = useMemo(() => {
-    const merged = new Map(listedIssuers.map((issuer) => [issuer.id, issuer]));
+    const merged = new Map<string, RemoteSessionIssuer>();
     for (const issuer of [
+      ...platformTier.issuers,
+      ...organizationTier.issuers,
+      ...projectTier.issuers,
       ...linkedIssuers,
       ...(matchedIssuer ? [matchedIssuer] : []),
       ...(knownDiscoveredIssuer ? [knownDiscoveredIssuer] : []),
@@ -392,7 +466,14 @@ export function useUserIdentityDraft({
       if (!merged.has(issuer.id)) merged.set(issuer.id, issuer);
     }
     return [...merged.values()];
-  }, [listedIssuers, linkedIssuers, matchedIssuer, knownDiscoveredIssuer]);
+  }, [
+    platformTier.issuers,
+    organizationTier.issuers,
+    projectTier.issuers,
+    linkedIssuers,
+    matchedIssuer,
+    knownDiscoveredIssuer,
+  ]);
 
   // A lookup that failed is not an answer: offering a provider as new, or
   // picking none, on a failed lookup could duplicate or hide one the project
@@ -455,31 +536,65 @@ export function useUserIdentityDraft({
       }
     : selectedDiscovered;
 
+  const searching = debouncedSearch !== "";
   const providerGroups = useMemo<ProviderGroup[]>(() => {
-    const groups = new Map<ProviderTier, ProviderOption[]>(
-      TIER_ORDER.map((tier) => [tier, []]),
-    );
-    for (const issuer of issuers) {
-      const tier = TIER_BY_SCOPE[remoteSessionScopeTier(issuer)];
-      groups.get(tier)?.push({
+    // While searching, a tier shows only its search results. Otherwise the
+    // matched provider, the one in use, the existing one the upstream
+    // advertises, and a discovered one to create are always offered, whether
+    // or not the tier's loaded pages reach them.
+    const pinned = searching
+      ? []
+      : [matchedIssuer, selectedIssuer, knownDiscoveredIssuer].filter(
+          (issuer): issuer is RemoteSessionIssuer => !!issuer,
+        );
+    const tierQueries = {
+      Platform: platformTier,
+      Organization: organizationTier,
+      Project: projectTier,
+    } satisfies Record<ProviderTier, ProviderTierQuery>;
+    return TIER_ORDER.map((tier) => {
+      const query = tierQueries[tier];
+      const byId = new Map(query.issuers.map((issuer) => [issuer.id, issuer]));
+      for (const issuer of pinned) {
+        if (TIER_BY_SCOPE[remoteSessionScopeTier(issuer)] === tier) {
+          byId.set(issuer.id, issuer);
+        }
+      }
+      const options: ProviderOption[] = [...byId.values()].map((issuer) => ({
         id: issuer.id,
         name: issuerDisplayName(issuer),
         url: displayUrl(issuer.issuer),
         isNew: false,
         match: issuer.id === matchedIssuer?.id,
-      });
-    }
-    if (discovered) groups.get("Project")?.push(discovered);
-    return TIER_ORDER.map((tier) => ({
-      tier,
-      // URL matches first, then alphabetical, so the provider this server
-      // actually points at is never buried in a long platform list.
-      options: [...(groups.get(tier) ?? [])].sort(
-        (a, b) =>
-          Number(b.match) - Number(a.match) || a.name.localeCompare(b.name),
-      ),
-    }));
-  }, [issuers, matchedIssuer, discovered]);
+      }));
+      if (tier === "Project" && discovered && !searching) {
+        options.push(discovered);
+      }
+      return {
+        tier,
+        // URL matches first, then alphabetical, so the provider this server
+        // actually points at is never buried in a long platform list.
+        options: options.sort(
+          (a, b) =>
+            Number(b.match) - Number(a.match) || a.name.localeCompare(b.name),
+        ),
+        isLoading: query.isLoading,
+        isError: query.isError,
+        hasMore: query.hasMore,
+        loadingMore: query.loadingMore,
+        loadMore: query.loadMore,
+      };
+    });
+  }, [
+    searching,
+    matchedIssuer,
+    selectedIssuer,
+    knownDiscoveredIssuer,
+    discovered,
+    platformTier,
+    organizationTier,
+    projectTier,
+  ]);
 
   // Existing clients live on the provider; a provider that does not exist yet
   // has none to offer.
@@ -588,6 +703,15 @@ export function useUserIdentityDraft({
   // A client belongs to exactly one provider, so choosing a provider clears
   // the client choice and any outcome from the previous one.
   const selectProvider = (id: string | null): void => {
+    // Seed the by-id lookup with the record the menu already holds, so the
+    // pick stays named once the menu's search moves on.
+    const picked = issuers.find((issuer) => issuer.id === id);
+    if (picked) {
+      queryClient.setQueryData(
+        queryKeyRemoteSessionIssuer({ id: picked.id }),
+        picked,
+      );
+    }
     setProviderPick(id);
     resetChoice();
   };
@@ -767,6 +891,8 @@ export function useUserIdentityDraft({
 
   return {
     providerGroups,
+    providerSearch,
+    setProviderSearch,
     selected,
     selectProvider,
     providerUnreachable,

@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   issuers: vi.fn(),
   issuersByIds: vi.fn(),
   hostIssuers: vi.fn(),
+  tierSearch: vi.fn(),
+  tierHasMore: vi.fn(),
+  tierLoadMore: vi.fn(),
   source: vi.fn(),
   rbac: vi.fn(),
   hasScope: vi.fn(),
@@ -123,6 +126,44 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
       return issuerHost === host || host.endsWith(`.${issuerHost}`);
     });
     return { data: { result: { items } }, isLoading: false };
+  },
+  // Stands in for the server's tier and search filters over the listing.
+  useRemoteSessionIssuersInfinite: (request: {
+    tier: "project" | "organization" | "platform";
+    search?: string;
+  }) => {
+    mocks.tierSearch(request.tier, request.search);
+    const items = (
+      (mocks.issuers().data?.result.items ?? []) as Array<{
+        projectId?: string;
+        organizationId?: string;
+        name?: string;
+        slug: string;
+        issuer: string;
+      }>
+    ).filter((issuer) => {
+      const tier = issuer.projectId
+        ? "project"
+        : issuer.organizationId
+          ? "organization"
+          : "platform";
+      const q = request.search?.toLowerCase();
+      return (
+        tier === request.tier &&
+        (!q ||
+          [issuer.name ?? "", issuer.slug, issuer.issuer].some((field) =>
+            field.toLowerCase().includes(q),
+          ))
+      );
+    });
+    return {
+      data: { pages: [{ result: { items } }] },
+      isLoading: false,
+      isError: false,
+      hasNextPage: !!mocks.tierHasMore(request.tier),
+      isFetchingNextPage: false,
+      fetchNextPage: () => mocks.tierLoadMore(request.tier),
+    };
   },
   invalidateAllRemoteSessionIssuers: vi.fn(),
 }));
@@ -273,6 +314,7 @@ beforeEach(() => {
   mocks.issuers.mockReturnValue({ data: { result: { items: [] } } });
   // No host override: host lookups filter the listing above.
   mocks.hostIssuers.mockImplementation(() => undefined);
+  mocks.tierHasMore.mockImplementation(() => false);
   // By default a lookup by id finds whatever the listing holds.
   mocks.issuersByIds.mockImplementation((ids: string[]) => ({
     items: (
@@ -501,6 +543,54 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("searches each provider tier on the server from the menu", async () => {
+    const catalog = Array.from({ length: 3 }, (_, index) => ({
+      id: `platform-${index}`,
+      name: `Catalog ${index}`,
+      issuer: `https://catalog-${index}.example.test`,
+      slug: `catalog-${index}`,
+    }));
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            ...catalog,
+            {
+              id: "provider-own",
+              name: "Own provider",
+              issuer: "https://own.example.test",
+              slug: "own",
+              projectId: "project-1",
+            },
+          ],
+        },
+      },
+    });
+    mocks.tierHasMore.mockImplementation((tier: string) => tier === "platform");
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByLabelText("Identity provider"));
+
+    // Every tier is its own query, so the catalog cannot crowd out the
+    // project's own provider, and a tier with more pages offers them.
+    expect(screen.getByText("Own provider")).toBeDefined();
+    expect(screen.getByText("Catalog 0")).toBeDefined();
+    fireEvent.click(screen.getByText("More platform providers"));
+    expect(mocks.tierLoadMore).toHaveBeenCalledWith("platform");
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search identity providers…"),
+      { target: { value: "own" } },
+    );
+    await waitFor(() =>
+      expect(mocks.tierSearch).toHaveBeenCalledWith("platform", "own"),
+    );
+    expect(mocks.tierSearch).toHaveBeenCalledWith("project", "own");
+    await waitFor(() => expect(screen.queryByText("Catalog 0")).toBeNull());
+    expect(screen.getByText("Own provider")).toBeDefined();
   });
 
   it("holds the provider control while discovery is still running", () => {

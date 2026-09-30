@@ -15,12 +15,18 @@ import (
 
 func listProjectIssuerIDs(t *testing.T, ctx context.Context, ti *testInstance, search, upstreamHost *string) map[string]bool {
 	t.Helper()
+	return listProjectIssuerIDsInTier(t, ctx, ti, search, upstreamHost, nil)
+}
+
+func listProjectIssuerIDsInTier(t *testing.T, ctx context.Context, ti *testInstance, search, upstreamHost, tier *string) map[string]bool {
+	t.Helper()
 	limit := 100
 	result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 		Cursor:           nil,
 		Limit:            &limit,
 		Search:           search,
 		UpstreamHost:     upstreamHost,
+		Tier:             tier,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -113,9 +119,37 @@ func TestListRemoteSessionIssuers_RejectsUpstreamHostWithScheme(t *testing.T) {
 		Limit:            nil,
 		Search:           nil,
 		UpstreamHost:     new("https://mcp.linear.app"),
+		Tier:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestListRemoteSessionIssuers_TierListsOneTierOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	project := testProjectID(t, ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	noOrg := pgtype.Text{String: "", Valid: false}
+
+	own := seedRemoteIssuerWithURL(t, ctx, ti.conn, project, noOrg, "tier-project", "https://project.example.test")
+	org := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true}, "tier-org", "https://org.example.test")
+	platform := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, noOrg, "tier-platform", "https://platform.example.test")
+
+	for tier, want := range map[string]uuid.UUID{"project": own, "organization": org, "platform": platform} {
+		ids := listProjectIssuerIDsInTier(t, ctx, ti, nil, nil, new(tier))
+		require.True(t, ids[want.String()], "%s tier lists its own issuer", tier)
+		for _, other := range []uuid.UUID{own, org, platform} {
+			if other != want {
+				require.False(t, ids[other.String()], "%s tier excludes other tiers", tier)
+			}
+		}
+	}
+
+	all := listProjectIssuerIDs(t, ctx, ti, nil, nil)
+	require.True(t, all[own.String()] && all[org.String()] && all[platform.String()], "no tier lists all three")
 }

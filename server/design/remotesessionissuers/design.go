@@ -120,7 +120,7 @@ var _ = Service("remoteSessionIssuers", func() {
 	})
 
 	Method("listRemoteSessionIssuers", func() {
-		Description("List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search and upstream_host filters narrow the listing without changing its order or cursor.")
+		Description("List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.")
 
 		Payload(func() {
 			Attribute("cursor", String, "Pagination cursor.")
@@ -130,6 +130,9 @@ var _ = Service("remoteSessionIssuers", func() {
 			})
 			Attribute("upstream_host", String, "Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.", func() {
 				MaxLength(260)
+			})
+			Attribute("tier", String, "Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.", func() {
+				Enum("project", "organization", "platform")
 			})
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -144,6 +147,7 @@ var _ = Service("remoteSessionIssuers", func() {
 			Param("limit")
 			Param("search")
 			Param("upstream_host")
+			Param("tier")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -297,6 +301,9 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Payload(func() {
 			Attribute("cursor", String, "Pagination cursor.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Attribute("tier", String, "Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.", func() {
+				Enum("organization", "project", "platform")
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 		})
@@ -307,6 +314,7 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 			GET("/rpc/organizationRemoteSessionIssuers.list")
 			Param("cursor")
 			Param("limit")
+			Param("tier")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			Response(StatusOK)
