@@ -352,3 +352,25 @@ it("labels committed-query placeholders and traverses first/final page boundarie
   expect(screen.queryByText("New final")).toBeNull();
   expect(previous().disabled).toBe(true);
 });
+
+it("renders an invalid last login without an ISO tooltip", async () => {
+  mocks.listUsers.mockResolvedValueOnce({
+    users: [
+      {
+        id: "invalid-date",
+        display_name: "Invalid date",
+        email: "invalid@example.test",
+        last_login: "not-a-date",
+        organizations: [],
+        organization_count: 0,
+      },
+    ],
+    total: 1,
+    page: 1,
+    limit: 50,
+  });
+  await renderRouteTree(routeTree, { initialPath: "/users" });
+  const row = (await screen.findByText("Invalid date")).closest("tr");
+  expect(row?.querySelector("time")?.hasAttribute("title")).toBe(false);
+  expect(row?.querySelector("time")?.textContent).toBe("-");
+});

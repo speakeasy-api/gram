@@ -12,9 +12,9 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  AdminListUsersResult,
-  AdminListUsersResult$inboundSchema,
-} from "../models/components/adminlistusersresult.js";
+  AdminListUserOrganizationsResult,
+  AdminListUserOrganizationsResult$inboundSchema,
+} from "../models/components/adminlistuserorganizationsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -30,25 +30,25 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  AdminListUsersRequest,
-  AdminListUsersRequest$outboundSchema,
-} from "../models/operations/adminlistusers.js";
+  AdminListUserOrganizationsRequest,
+  AdminListUserOrganizationsRequest$outboundSchema,
+} from "../models/operations/adminlistuserorganizations.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listUsers admin
+ * listUserOrganizations admin
  *
  * @remarks
  * Staff-only active user discovery.
  */
-export function adminAdminListUsers(
+export function adminListUserOrganizations(
   client: GramCore,
-  request?: AdminListUsersRequest | undefined,
+  request: AdminListUserOrganizationsRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    AdminListUsersResult,
+    AdminListUserOrganizationsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -69,12 +69,12 @@ export function adminAdminListUsers(
 
 async function $do(
   client: GramCore,
-  request?: AdminListUsersRequest | undefined,
+  request: AdminListUserOrganizationsRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      AdminListUsersResult,
+      AdminListUserOrganizationsResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -90,7 +90,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(z.optional(AdminListUsersRequest$outboundSchema), value),
+    (value) => z.parse(AdminListUserOrganizationsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -99,12 +99,12 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/admin/users.list")();
+  const path = pathToFunc("/admin/users.organizations.list")();
 
   const query = encodeFormQuery({
-    "limit": payload?.limit,
-    "page": payload?.page,
-    "q": payload?.q,
+    "limit": payload.limit,
+    "page": payload.page,
+    "user_id": payload.user_id,
   });
 
   const headers = new Headers(compactMap({
@@ -114,7 +114,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminListUsers",
+    operationID: "adminListUserOrganizations",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,
@@ -158,7 +158,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    AdminListUsersResult,
+    AdminListUserOrganizationsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -169,7 +169,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, AdminListUsersResult$inboundSchema),
+    M.json(200, AdminListUserOrganizationsResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

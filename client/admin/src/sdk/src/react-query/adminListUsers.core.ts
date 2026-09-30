@@ -8,22 +8,22 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminAdminListUsers } from "../funcs/adminAdminListUsers.js";
+import { adminListUsers } from "../funcs/adminListUsers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
 import { AdminListUsersRequest } from "../models/operations/adminlistusers.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AdminAdminListUsersQueryData = AdminListUsersResult;
+export type AdminListUsersQueryData = AdminListUsersResult;
 
-export function prefetchAdminAdminListUsers(
+export function prefetchAdminListUsers(
   queryClient: QueryClient,
   client$: GramCore,
   request?: AdminListUsersRequest | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAdminAdminListUsersQuery(
+    ...buildAdminListUsersQuery(
       client$,
       request,
       options,
@@ -31,25 +31,23 @@ export function prefetchAdminAdminListUsers(
   });
 }
 
-export function buildAdminAdminListUsersQuery(
+export function buildAdminListUsersQuery(
   client$: GramCore,
   request?: AdminListUsersRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<AdminAdminListUsersQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<AdminListUsersQueryData>;
 } {
   return {
-    queryKey: queryKeyAdminAdminListUsers({
+    queryKey: queryKeyAdminListUsers({
       q: request?.q,
       page: request?.page,
       limit: request?.limit,
     }),
-    queryFn: async function adminAdminListUsersQueryFn(
+    queryFn: async function adminListUsersQueryFn(
       ctx,
-    ): Promise<AdminAdminListUsersQueryData> {
+    ): Promise<AdminListUsersQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -61,7 +59,7 @@ export function buildAdminAdminListUsersQuery(
         signal: sig,
       };
 
-      return unwrapAsync(adminAdminListUsers(
+      return unwrapAsync(adminListUsers(
         client$,
         request,
         mergedOptions,
@@ -70,12 +68,12 @@ export function buildAdminAdminListUsersQuery(
   };
 }
 
-export function queryKeyAdminAdminListUsers(
+export function queryKeyAdminListUsers(
   parameters: {
     q?: string | undefined;
     page?: number | undefined;
     limit?: number | undefined;
   },
 ): QueryKey {
-  return ["@gram/admin-client", "admin", "adminListUsers", parameters];
+  return ["@gram/admin-client", "admin", "listUsers", parameters];
 }

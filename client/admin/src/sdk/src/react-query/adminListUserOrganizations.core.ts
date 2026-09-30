@@ -8,23 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminAdminListUserOrganizations } from "../funcs/adminAdminListUserOrganizations.js";
+import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
 import { AdminListUserOrganizationsRequest } from "../models/operations/adminlistuserorganizations.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AdminAdminListUserOrganizationsQueryData =
+export type AdminListUserOrganizationsQueryData =
   AdminListUserOrganizationsResult;
 
-export function prefetchAdminAdminListUserOrganizations(
+export function prefetchAdminListUserOrganizations(
   queryClient: QueryClient,
   client$: GramCore,
   request: AdminListUserOrganizationsRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAdminAdminListUserOrganizationsQuery(
+    ...buildAdminListUserOrganizationsQuery(
       client$,
       request,
       options,
@@ -32,7 +32,7 @@ export function prefetchAdminAdminListUserOrganizations(
   });
 }
 
-export function buildAdminAdminListUserOrganizationsQuery(
+export function buildAdminListUserOrganizationsQuery(
   client$: GramCore,
   request: AdminListUserOrganizationsRequest,
   options?: RequestOptions,
@@ -40,17 +40,17 @@ export function buildAdminAdminListUserOrganizationsQuery(
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<AdminAdminListUserOrganizationsQueryData>;
+  ) => Promise<AdminListUserOrganizationsQueryData>;
 } {
   return {
-    queryKey: queryKeyAdminAdminListUserOrganizations({
+    queryKey: queryKeyAdminListUserOrganizations({
       userId: request.userId,
       page: request.page,
       limit: request.limit,
     }),
-    queryFn: async function adminAdminListUserOrganizationsQueryFn(
+    queryFn: async function adminListUserOrganizationsQueryFn(
       ctx,
-    ): Promise<AdminAdminListUserOrganizationsQueryData> {
+    ): Promise<AdminListUserOrganizationsQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -62,7 +62,7 @@ export function buildAdminAdminListUserOrganizationsQuery(
         signal: sig,
       };
 
-      return unwrapAsync(adminAdminListUserOrganizations(
+      return unwrapAsync(adminListUserOrganizations(
         client$,
         request,
         mergedOptions,
@@ -71,17 +71,12 @@ export function buildAdminAdminListUserOrganizationsQuery(
   };
 }
 
-export function queryKeyAdminAdminListUserOrganizations(
+export function queryKeyAdminListUserOrganizations(
   parameters: {
     userId: string;
     page?: number | undefined;
     limit?: number | undefined;
   },
 ): QueryKey {
-  return [
-    "@gram/admin-client",
-    "admin",
-    "adminListUserOrganizations",
-    parameters,
-  ];
+  return ["@gram/admin-client", "admin", "listUserOrganizations", parameters];
 }

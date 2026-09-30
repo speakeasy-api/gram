@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AdminAdminListUserOrganizationsQueryData,
-  buildAdminAdminListUserOrganizationsQuery,
-  prefetchAdminAdminListUserOrganizations,
-  queryKeyAdminAdminListUserOrganizations,
-} from "./adminAdminListUserOrganizations.core.js";
+  AdminListUserOrganizationsQueryData,
+  buildAdminListUserOrganizationsQuery,
+  prefetchAdminListUserOrganizations,
+  queryKeyAdminListUserOrganizations,
+} from "./adminListUserOrganizations.core.js";
 export {
-  type AdminAdminListUserOrganizationsQueryData,
-  buildAdminAdminListUserOrganizationsQuery,
-  prefetchAdminAdminListUserOrganizations,
-  queryKeyAdminAdminListUserOrganizations,
+  type AdminListUserOrganizationsQueryData,
+  buildAdminListUserOrganizationsQuery,
+  prefetchAdminListUserOrganizations,
+  queryKeyAdminListUserOrganizations,
 };
 
-export type AdminAdminListUserOrganizationsQueryError =
+export type AdminListUserOrganizationsQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -58,19 +58,19 @@ export type AdminAdminListUserOrganizationsQueryError =
  * @remarks
  * Staff-only active user discovery.
  */
-export function useAdminAdminListUserOrganizations(
+export function useAdminListUserOrganizations(
   request: AdminListUserOrganizationsRequest,
   options?: QueryHookOptions<
-    AdminAdminListUserOrganizationsQueryData,
-    AdminAdminListUserOrganizationsQueryError
+    AdminListUserOrganizationsQueryData,
+    AdminListUserOrganizationsQueryError
   >,
 ): UseQueryResult<
-  AdminAdminListUserOrganizationsQueryData,
-  AdminAdminListUserOrganizationsQueryError
+  AdminListUserOrganizationsQueryData,
+  AdminListUserOrganizationsQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminAdminListUserOrganizationsQuery(
+    ...buildAdminListUserOrganizationsQuery(
       client,
       request,
       options,
@@ -85,19 +85,19 @@ export function useAdminAdminListUserOrganizations(
  * @remarks
  * Staff-only active user discovery.
  */
-export function useAdminAdminListUserOrganizationsSuspense(
+export function useAdminListUserOrganizationsSuspense(
   request: AdminListUserOrganizationsRequest,
   options?: SuspenseQueryHookOptions<
-    AdminAdminListUserOrganizationsQueryData,
-    AdminAdminListUserOrganizationsQueryError
+    AdminListUserOrganizationsQueryData,
+    AdminListUserOrganizationsQueryError
   >,
 ): UseSuspenseQueryResult<
-  AdminAdminListUserOrganizationsQueryData,
-  AdminAdminListUserOrganizationsQueryError
+  AdminListUserOrganizationsQueryData,
+  AdminListUserOrganizationsQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminAdminListUserOrganizationsQuery(
+    ...buildAdminListUserOrganizationsQuery(
       client,
       request,
       options,
@@ -106,7 +106,7 @@ export function useAdminAdminListUserOrganizationsSuspense(
   });
 }
 
-export function setAdminAdminListUserOrganizationsData(
+export function setAdminListUserOrganizationsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -115,17 +115,14 @@ export function setAdminAdminListUserOrganizationsData(
       limit?: number | undefined;
     },
   ],
-  data: AdminAdminListUserOrganizationsQueryData,
-): AdminAdminListUserOrganizationsQueryData | undefined {
-  const key = queryKeyAdminAdminListUserOrganizations(...queryKeyBase);
+  data: AdminListUserOrganizationsQueryData,
+): AdminListUserOrganizationsQueryData | undefined {
+  const key = queryKeyAdminListUserOrganizations(...queryKeyBase);
 
-  return client.setQueryData<AdminAdminListUserOrganizationsQueryData>(
-    key,
-    data,
-  );
+  return client.setQueryData<AdminListUserOrganizationsQueryData>(key, data);
 }
 
-export function invalidateAdminAdminListUserOrganizations(
+export function invalidateAdminListUserOrganizations(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -141,18 +138,18 @@ export function invalidateAdminAdminListUserOrganizations(
     queryKey: [
       "@gram/admin-client",
       "admin",
-      "adminListUserOrganizations",
+      "listUserOrganizations",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllAdminAdminListUserOrganizations(
+export function invalidateAllAdminListUserOrganizations(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "adminListUserOrganizations"],
+    queryKey: ["@gram/admin-client", "admin", "listUserOrganizations"],
   });
 }

@@ -38,7 +38,11 @@ export const USER_COLUMNS = column.columns([
       row.original.last_login ? (
         <time
           dateTime={row.original.last_login}
-          title={new Date(row.original.last_login).toISOString()}
+          title={
+            Number.isNaN(Date.parse(row.original.last_login))
+              ? undefined
+              : new Date(row.original.last_login).toISOString()
+          }
         >
           {fmtDateShort(row.original.last_login)}
         </time>

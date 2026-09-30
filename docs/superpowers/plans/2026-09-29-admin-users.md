@@ -37,6 +37,20 @@
 
 Org overflow is the small implementation elaboration needed to satisfy **both** bounded responses and access to every target. Preserve all existing organization-page behavior.
 
+## MCP decision and security-policy review
+
+- **Outcome / target:** intentionally omit customer Platform MCP changes for the global active-user directory and an exact user's cross-organization memberships. This is not a resource inside the customer's organization or selected project.
+- **Actor:** authenticated staff operators, via the standalone Admin dashboard or staff Admin MCP. Neither external customer OAuth principals nor managed-assistant identities gain this capability.
+- **Existing-tool comparison:** customer Platform MCP's `list_organization_events` reads events within its authorized organization; it is neither a global user directory nor a cross-tenant membership lookup. Staff Admin MCP's existing organization discovery does not discover users. The PR adds staff `find_users` and `list_user_organizations` using the same admin service and bounded safe projections, rather than expanding customer tools or shipped customer skills.
+- **Rationale:** customer membership/project authority cannot authorize cross-tenant discovery. No customer tool contract or workflow changes, so existing customer tools and shipped skills remain unchanged.
+- **Success evidence:** `server/internal/admin/listusers_test.go` covers unauthenticated/nonstaff HTTP rejection and data/search behavior; `server/internal/adminmcp/tool_users_test.go` covers exact IDs, output bounds and safe errors; `runtime_test.go` covers live staff revocation, read-scope loss and customer-audience rejection for the new tools. Browser acceptance remains blocked, not passed; performance is deferred to GRW-216.
+
+### Global reads: authorization boundary and unresolved policy exception
+
+The approved product scope is a staff-only **global** directory. Tenant filtering would silently change that scope and hide users without organizations. HTTP endpoints inherit Admin security and run `Service.APIKeyAuth` / `Verifier.Authorize` (or the already-verified admin middleware path). Admin MCP separately authenticates a staff-audience token, performs live staff verification, and requires `admin:read` on invocation. Names, emails and user IDs are selectors, never authorization. Customer Platform MCP does not expose these reads. Existing admin organization discovery is also global; that precedent explains the architecture but does not grant a policy exception.
+
+`cubic.yaml`'s security rule requires SQLc queries to be organization/project scoped, and `REVIEW.md` says every query MUST be project-scoped. Neither text documents an exception for this staff directory. Consequently review comment **4139169937 remains blocked pending explicit human security-policy approval/clarification before shipping**. No exception is asserted, no review safeguard is bypassed, and no tenant predicate has been invented to conceal the conflict. The authorization tests are evidence of the existing boundary, not evidence of policy approval.
+
 ## File/dependency map
 
 1. Grammar: `server/internal/admin/usersearch.go`, `usersearch_test.go`, `testdata/user_search.json`; `client/admin/src/lib/userSearch.ts`, `userSearch.test.ts`.

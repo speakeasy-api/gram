@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AdminAdminListUsersQueryData,
-  buildAdminAdminListUsersQuery,
-  prefetchAdminAdminListUsers,
-  queryKeyAdminAdminListUsers,
-} from "./adminAdminListUsers.core.js";
+  AdminListUsersQueryData,
+  buildAdminListUsersQuery,
+  prefetchAdminListUsers,
+  queryKeyAdminListUsers,
+} from "./adminListUsers.core.js";
 export {
-  type AdminAdminListUsersQueryData,
-  buildAdminAdminListUsersQuery,
-  prefetchAdminAdminListUsers,
-  queryKeyAdminAdminListUsers,
+  type AdminListUsersQueryData,
+  buildAdminListUsersQuery,
+  prefetchAdminListUsers,
+  queryKeyAdminListUsers,
 };
 
-export type AdminAdminListUsersQueryError =
+export type AdminListUsersQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -58,16 +58,13 @@ export type AdminAdminListUsersQueryError =
  * @remarks
  * Staff-only active user discovery.
  */
-export function useAdminAdminListUsers(
+export function useAdminListUsers(
   request?: AdminListUsersRequest | undefined,
-  options?: QueryHookOptions<
-    AdminAdminListUsersQueryData,
-    AdminAdminListUsersQueryError
-  >,
-): UseQueryResult<AdminAdminListUsersQueryData, AdminAdminListUsersQueryError> {
+  options?: QueryHookOptions<AdminListUsersQueryData, AdminListUsersQueryError>,
+): UseQueryResult<AdminListUsersQueryData, AdminListUsersQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminAdminListUsersQuery(
+    ...buildAdminListUsersQuery(
       client,
       request,
       options,
@@ -82,19 +79,16 @@ export function useAdminAdminListUsers(
  * @remarks
  * Staff-only active user discovery.
  */
-export function useAdminAdminListUsersSuspense(
+export function useAdminListUsersSuspense(
   request?: AdminListUsersRequest | undefined,
   options?: SuspenseQueryHookOptions<
-    AdminAdminListUsersQueryData,
-    AdminAdminListUsersQueryError
+    AdminListUsersQueryData,
+    AdminListUsersQueryError
   >,
-): UseSuspenseQueryResult<
-  AdminAdminListUsersQueryData,
-  AdminAdminListUsersQueryError
-> {
+): UseSuspenseQueryResult<AdminListUsersQueryData, AdminListUsersQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminAdminListUsersQuery(
+    ...buildAdminListUsersQuery(
       client,
       request,
       options,
@@ -103,7 +97,7 @@ export function useAdminAdminListUsersSuspense(
   });
 }
 
-export function setAdminAdminListUsersData(
+export function setAdminListUsersData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -112,14 +106,14 @@ export function setAdminAdminListUsersData(
       limit?: number | undefined;
     },
   ],
-  data: AdminAdminListUsersQueryData,
-): AdminAdminListUsersQueryData | undefined {
-  const key = queryKeyAdminAdminListUsers(...queryKeyBase);
+  data: AdminListUsersQueryData,
+): AdminListUsersQueryData | undefined {
+  const key = queryKeyAdminListUsers(...queryKeyBase);
 
-  return client.setQueryData<AdminAdminListUsersQueryData>(key, data);
+  return client.setQueryData<AdminListUsersQueryData>(key, data);
 }
 
-export function invalidateAdminAdminListUsers(
+export function invalidateAdminListUsers(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -132,21 +126,16 @@ export function invalidateAdminAdminListUsers(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: [
-      "@gram/admin-client",
-      "admin",
-      "adminListUsers",
-      ...queryKeyBase,
-    ],
+    queryKey: ["@gram/admin-client", "admin", "listUsers", ...queryKeyBase],
   });
 }
 
-export function invalidateAllAdminAdminListUsers(
+export function invalidateAllAdminListUsers(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "adminListUsers"],
+    queryKey: ["@gram/admin-client", "admin", "listUsers"],
   });
 }

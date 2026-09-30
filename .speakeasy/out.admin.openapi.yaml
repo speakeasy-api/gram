@@ -5270,6 +5270,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listUsers
   /admin/users.organizations.list:
     get:
       tags:
@@ -5360,6 +5361,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listUserOrganizations
 components:
   schemas:
     AdminBulkUpdateAccountTypeResult:

@@ -32,8 +32,6 @@ trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
-  src/funcs/adminAdminListUserOrganizations.ts: {}
-  src/funcs/adminAdminListUsers.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
   src/funcs/adminChangeTrialEndDate.ts: {}
@@ -73,6 +71,8 @@ trackedFiles:
   src/funcs/adminListOrganizations.ts: {}
   src/funcs/adminListProjectMcpServers.ts: {}
   src/funcs/adminListRegistryEntries.ts: {}
+  src/funcs/adminListUserOrganizations.ts: {}
+  src/funcs/adminListUsers.ts: {}
   src/funcs/adminLogout.ts: {}
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
@@ -239,10 +239,6 @@ trackedFiles:
   src/models/operations/adminserveimage.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
-  src/react-query/adminAdminListUserOrganizations.core.ts: {}
-  src/react-query/adminAdminListUserOrganizations.ts: {}
-  src/react-query/adminAdminListUsers.core.ts: {}
-  src/react-query/adminAdminListUsers.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminChangeTrialEndDate.ts: {}
@@ -306,6 +302,10 @@ trackedFiles:
   src/react-query/adminListProjectMcpServers.ts: {}
   src/react-query/adminListRegistryEntries.core.ts: {}
   src/react-query/adminListRegistryEntries.ts: {}
+  src/react-query/adminListUserOrganizations.core.ts: {}
+  src/react-query/adminListUserOrganizations.ts: {}
+  src/react-query/adminListUsers.core.ts: {}
+  src/react-query/adminListUsers.ts: {}
   src/react-query/adminLogout.ts: {}
   src/react-query/adminMarkEnterpriseTrialConverted.ts: {}
   src/react-query/adminMigrateToGlobalIssuer.ts: {}
