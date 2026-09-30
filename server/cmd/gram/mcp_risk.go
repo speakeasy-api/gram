@@ -44,7 +44,8 @@ func newRiskEnforcementDispatcher(
 	redisClient *redis.Client,
 	broker pubSubBroker,
 	features feature.Provider,
-) (*enforcereply.Dispatcher, func(context.Context) error) {
+) (risk.EnforcementDispatcher, func(context.Context) error) {
+	// Failures return an untyped nil so the scanner's nil check sees no dispatcher.
 	inbox, err := enforcereply.New(ctx, logger, tracerProvider, meterProvider, enforcereply.Config{
 		RedisOptions: *redisClient.Options(),
 		ReplicaID:    "",
