@@ -1,37 +1,15 @@
+#!/usr/bin/env bash
+# Cursor Cloud start: core infra + login-path daemons only.
+# Do not run `./zero --agent` here — that pulls optional images and starts
+# every pitchfork daemon, which fills a 21GB VM.
 set -euo pipefail
-unset DOCKER_HOST || true
 export PATH="$HOME/.local/bin:$PATH"
 cd /workspace
 
-if ! docker info >/dev/null 2>&1; then
-  if [ -S /var/run/docker.sock ]; then
-    sudo chmod 666 /var/run/docker.sock || true
-  fi
-fi
-if ! docker info >/dev/null 2>&1; then
-  sudo mkdir -p /etc/docker
-  printf '%s\n' '{' '  "storage-driver": "fuse-overlayfs",' '  "iptables": true' '}' | sudo tee /etc/docker/daemon.json >/dev/null
-  if [ -x /usr/sbin/iptables-legacy ]; then
-    sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
-    sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
-  fi
-  sudo setsid dockerd >/tmp/dockerd.log 2>&1 < /dev/null &
-  ready=0
-  for _ in $(seq 1 60); do
-    if docker info >/dev/null 2>&1; then
-      ready=1
-      break
-    fi
-    sleep 1
-  done
-  sudo chmod 666 /var/run/docker.sock || true
-  if [ "$ready" != 1 ]; then
-    echo "dockerd failed to start" >&2
-    tail -n 80 /tmp/dockerd.log >&2 || true
-    exit 1
-  fi
-fi
+# shellcheck source=.cursor/ensure-dockerd.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ensure-dockerd.sh"
 
+ensure_dockerd
 eval "$(mise activate bash)"
 
 if [ -z "${ATLAS_TOKEN:-}" ]; then
@@ -41,19 +19,32 @@ fi
 atlas login --token "${ATLAS_TOKEN}"
 atlas whoami >/dev/null
 
-if [ ! -f mise.local.toml ] || ! grep -q 'USE_RECOMMENDED_SKILLS' mise.local.toml; then
+if [ ! -f mise.local.toml ]; then
+  printf '%s\n' '# Local mise configuration' '' '[tools]' '' '[env]' >mise.local.toml
+fi
+if ! grep -q 'USE_RECOMMENDED_SKILLS' mise.local.toml; then
   mise set --file mise.local.toml USE_RECOMMENDED_SKILLS=false
 fi
 
-set +e
-setsid env INFRA_READINESS_TIMEOUT=300 ./zero --agent >/tmp/zero-agent.log 2>&1
-zero_exit=$?
-set -e
-if [ "$zero_exit" -ne 0 ]; then
-  echo "./zero --agent failed with exit ${zero_exit}" >&2
-  tail -n 80 /tmp/zero-agent.log >&2 || true
-  exit "$zero_exit"
-fi
+# Idempotent: install already wrote these into the snapshot.
+mise run zero:devidp
+mise run zero:encryption
+mise run zero:tunnel-identity
+mise run zero:tls
+
+# Core containers only. LGTM stays down unless a later command opts in
+# with `mise run infra:lgtm`.
+INFRA_READINESS_TIMEOUT="${INFRA_READINESS_TIMEOUT:-300}" mise run infra:start
+
+mise run zero:migrations
+mise run db:migrate
+mise run clickhouse:migrate
+mise run seed
+
+# Login path only. Worker/streams/admin/assistant-runtime stay off so the
+# disk and CPU budget goes to the dashboard.
+pitchfork supervisor start
+pitchfork start dev-idp server dashboard
 
 eval "$(mise activate bash)"
 pitchfork list --json --project --status failed --status errored | jq -e 'length == 0'
