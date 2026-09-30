@@ -206,9 +206,17 @@ beforeEach(() => {
             "the stack does not support: Set up Anthropic observability (needs Anthropic in the stack)",
           );
         }
+        // Mirrors the server: a customer already on its copy of the template
+        // keeps it, and only a template it does not walk yet is copied.
+        const current = playbooks.find((p) => p.id === assignedId);
+        const walksTemplate =
+          !!current?.organization_id &&
+          current.name === playbook.name &&
+          current.steps.map((s) => s.slug).join() ===
+            playbook.steps.map((s) => s.slug).join();
         if (playbook.organization_id) {
           assignedId = playbook.id;
-        } else {
+        } else if (!walksTemplate) {
           // A use case's playbook is a template: the customer gets a copy.
           const copy: Playbook = {
             ...structuredClone(playbook),

@@ -611,13 +611,15 @@ func CheckOrganizationOnboardingPlaybook(ctx context.Context, db repo.DBTX, orga
 }
 
 // OrganizationWalksOnboardingPlaybook reports whether the organization's
-// current playbook already is the candidate: the same playbook, or its own
-// copy of that shared playbook, which carries the template's name and steps.
+// current playbook already is the candidate: the same custom playbook, or its
+// own copy of that shared playbook, which carries the template's name and
+// steps. An organization pointed straight at a template does not walk it: an
+// assignment gives it the copy the template's later edits cannot reach.
 func OrganizationWalksOnboardingPlaybook(current, candidate *admingen.AdminOnboardingPlaybook) bool {
 	if current == nil || candidate == nil {
 		return false
 	}
-	if current.ID == candidate.ID {
+	if current.ID == candidate.ID && current.OrganizationID != nil {
 		return true
 	}
 	if current.OrganizationID == nil || candidate.OrganizationID != nil || current.Name != candidate.Name || len(current.Steps) != len(candidate.Steps) {
@@ -750,6 +752,11 @@ func AssignOrganizationOnboardingPlaybookTx(ctx context.Context, tx pgx.Tx, logg
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, fmt.Errorf("lock onboarding playbook organization: %w", err)
+	}
+	// Playbook edits hold this lock too, so the template is read and copied
+	// as one version, never a name from before an edit with steps from after.
+	if err := queries.LockOnboardingPlaybooks(ctx); err != nil {
+		return nil, fmt.Errorf("lock onboarding playbooks: %w", err)
 	}
 	before, err := LoadOrganizationOnboardingPlaybook(ctx, tx, organizationID)
 	if err != nil {

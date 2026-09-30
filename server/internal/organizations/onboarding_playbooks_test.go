@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	admingen "github.com/speakeasy-api/gram/server/gen/admin"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
@@ -293,6 +294,20 @@ func TestOnboardingPlaybookAssignmentFollowsTheStack(t *testing.T) {
 	listed, err = ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 	require.Nil(t, setupTask(listed.Tasks, "identity-provider"), "the copy still decides the board")
+}
+
+func TestOrganizationWalksOnboardingPlaybookOnlyThroughItsOwnCopy(t *testing.T) {
+	t.Parallel()
+
+	org := "org_test"
+	steps := []*admingen.AdminOnboardingPlaybookStep{{Slug: "enable-logging", Title: "Enable logging"}}
+	template := &admingen.AdminOnboardingPlaybook{ID: "pb-template", UseCaseID: conv.PtrEmpty("uc-1"), UseCaseSlug: conv.PtrEmpty("observability"), UseCaseName: conv.PtrEmpty("Observability"), OrganizationID: nil, OrganizationName: nil, Name: "Anthropic first", Description: "", IsDefault: true, Steps: steps}
+	copied := &admingen.AdminOnboardingPlaybook{ID: "pb-copy", UseCaseID: nil, UseCaseSlug: nil, UseCaseName: nil, OrganizationID: &org, OrganizationName: conv.PtrEmpty("Test"), Name: "Anthropic first", Description: "", IsDefault: false, Steps: steps}
+
+	require.True(t, organizations.OrganizationWalksOnboardingPlaybook(copied, template), "the organization's copy of the template")
+	require.True(t, organizations.OrganizationWalksOnboardingPlaybook(copied, copied), "its own custom playbook")
+	require.False(t, organizations.OrganizationWalksOnboardingPlaybook(template, template), "pointed straight at a template, it still needs its copy")
+	require.False(t, organizations.OrganizationWalksOnboardingPlaybook(nil, template))
 }
 
 func TestOnboardingPlaybookApplicabilityJudgesAMethodOnItsOwnVendor(t *testing.T) {
