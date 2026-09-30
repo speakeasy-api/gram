@@ -72,7 +72,13 @@ describe("Users directory", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Search users" }), {
       target: { value: "wrong:value" },
     });
-    expect(screen.getByText(/Showing last valid results/)).toBeTruthy();
+    expect(screen.queryByText(/Showing last valid results/)).toBeNull();
+    expect(screen.getByText("person@example.test")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("region", { name: "Users table" })
+        .getAttribute("aria-busy"),
+    ).toBe("true");
     expect(
       (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
         .disabled,
@@ -316,8 +322,10 @@ it("labels committed-query placeholders and traverses first/final page boundarie
     expect.any(AbortSignal),
   );
   expect(
-    screen.getByText("Showing last valid results for old (page 2)."),
-  ).toBeTruthy();
+    screen
+      .getByRole("region", { name: "Users table" })
+      .getAttribute("aria-busy"),
+  ).toBe("true");
   expect(screen.getByText("Old result")).toBeTruthy();
   expect(screen.queryByText("New first")).toBeNull();
   expect(previous().disabled).toBe(true);
@@ -330,7 +338,11 @@ it("labels committed-query placeholders and traverses first/final page boundarie
   vi.useRealTimers();
   await screen.findByText("New first");
   expect(screen.queryByText("Old result")).toBeNull();
-  expect(screen.queryByText(/Showing last valid results/)).toBeNull();
+  expect(
+    screen
+      .getByRole("region", { name: "Users table" })
+      .getAttribute("aria-busy"),
+  ).toBeNull();
   expect(previous().disabled).toBe(true);
   expect(next().disabled).toBe(false);
 
