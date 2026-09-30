@@ -76,6 +76,10 @@ const CARD_HEAD =
 const MUTED = "text-muted-foreground";
 const MONO = "font-mono text-xs";
 const CARD_TITLE = "text-[0.9375rem] font-semibold";
+// A dot grid behind the chart, drawn in the muted foreground so it holds in
+// both schemes.
+const PLOT =
+  "bg-card bg-[radial-gradient(color-mix(in_oklab,var(--muted-foreground)_35%,transparent)_1px,transparent_1.2px)] [background-size:12px_12px]";
 
 export function McpServerHealthRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
@@ -526,28 +530,40 @@ function ToolCallsChart({
             Each square is {perSquare === 1 ? "1 call" : `${perSquare} calls`}
           </span>
         </div>
-        {total === 0 ? (
-          <p className={cn(MUTED, "bg-muted/30 rounded-md px-4 py-6 text-sm")}>
-            No calls reached the server directly in this window.
-          </p>
-        ) : (
-          <div
-            role="img"
-            aria-label={`Tool calls per ${unit}, ${rangeLabel(range)}. ${summary}`}
-            className="bg-muted/30 flex items-end justify-between gap-1 overflow-x-auto rounded-md px-4 pt-6 pb-3"
-          >
-            {points.map((point, index) => (
-              <BucketColumn
-                key={point.bucketStart.toISOString()}
-                point={point}
-                perSquare={perSquare}
-                label={index % labelEvery === 0}
-                weekly={weekly}
-                spike={point === worst}
-              />
-            ))}
-          </div>
-        )}
+        {/* One plot for every state, so the page below it never moves:
+            columns are a fixed height whatever the busiest bucket holds, and
+            an empty window lays its message over the same empty plot. */}
+        <div
+          role="img"
+          aria-label={`Tool calls per ${unit}, ${rangeLabel(range)}. ${summary}`}
+          className={cn(
+            PLOT,
+            "relative flex items-end justify-between gap-1 overflow-x-auto rounded-md border px-4 pt-6 pb-3",
+          )}
+        >
+          {points.map((point, index) => (
+            <BucketColumn
+              key={point.bucketStart.toISOString()}
+              point={point}
+              perSquare={perSquare}
+              label={index % labelEvery === 0}
+              weekly={weekly}
+              spike={point === worst}
+            />
+          ))}
+          {total === 0 && (
+            <p
+              className={cn(
+                MUTED,
+                "absolute inset-0 flex items-center justify-center text-sm",
+              )}
+            >
+              <span className="bg-card rounded-md px-2 py-1">
+                No calls reached the server directly in this window.
+              </span>
+            </p>
+          )}
+        </div>
       </div>
       <p className={cn(MUTED, "border-t px-5 pt-2.5 pb-3.5 text-xs")}>
         The chart counts calls that reach the server directly. The Tool calls
@@ -617,14 +633,16 @@ function BucketColumn({
         <span
           className={cn(
             MUTED,
-            "absolute -top-[18px] text-[0.6875rem] whitespace-nowrap",
+            "bg-card absolute -top-[18px] px-0.5 text-[0.6875rem] whitespace-nowrap",
           )}
         >
           {point.failed} of {point.total}
         </span>
       )}
       {/* wrap-reverse fills from the bottom, so the red squares come first. */}
-      <div className="flex w-5 flex-wrap-reverse gap-0.5">
+      {/* Tall enough for the most squares a column can hold (twelve rows),
+          filled from the bottom. */}
+      <div className="flex h-[130px] w-5 flex-wrap-reverse content-start gap-0.5">
         {Array.from({ length: squares.failed }, (_, k) => (
           <Square key={`f${k}`} />
         ))}
@@ -636,7 +654,8 @@ function BucketColumn({
         <span
           className={cn(
             MUTED,
-            "text-[0.6875rem] whitespace-nowrap tabular-nums",
+            // Backed, so the dot grid does not run through the date.
+            "bg-card text-[0.6875rem] whitespace-nowrap tabular-nums",
             !label && "invisible",
           )}
         >

@@ -350,7 +350,12 @@ describe("McpServerHealth", () => {
     await screen.findByText(
       "No calls reached the server directly in this window.",
     );
-    expect(screen.queryByRole("img", { name: /Tool calls per/ })).toBe(null);
+    // The plot stays, so the page below does not move.
+    expect(
+      screen.getByRole("img", {
+        name: /Tool calls per day.*0 calls, none failed/,
+      }),
+    ).toBeTruthy();
   });
 
   it("names a legacy auth mode when there is no issuer", async () => {
