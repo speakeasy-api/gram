@@ -642,7 +642,8 @@ type AdminMcpServerHealthUserSessionIssuer struct {
 }
 
 // User sessions the issuer has minted. A refresh replaces a session row, so
-// last_issued_at includes refreshes.
+// last_issued_at includes refreshes. For an organization- or global-attached
+// issuer the counts span every project using the issuer.
 type AdminMcpServerHealthUserSessions struct {
 	// Distinct users that ever received a session from the issuer.
 	DistinctSubjectsEver int64

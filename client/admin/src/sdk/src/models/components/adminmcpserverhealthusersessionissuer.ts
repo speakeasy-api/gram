@@ -116,7 +116,7 @@ export type AdminMcpServerHealthUserSessionIssuer = {
    */
   sessionDurationHours: number;
   /**
-   * User sessions the issuer has minted. A refresh replaces a session row, so last_issued_at includes refreshes.
+   * User sessions the issuer has minted. A refresh replaces a session row, so last_issued_at includes refreshes. For an organization- or global-attached issuer the counts span every project using the issuer.
    */
   sessions: AdminMcpServerHealthUserSessions;
   /**

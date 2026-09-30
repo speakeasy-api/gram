@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * User sessions the issuer has minted. A refresh replaces a session row, so last_issued_at includes refreshes.
+ * User sessions the issuer has minted. A refresh replaces a session row, so last_issued_at includes refreshes. For an organization- or global-attached issuer the counts span every project using the issuer.
  */
 export type AdminMcpServerHealthUserSessions = {
   /**

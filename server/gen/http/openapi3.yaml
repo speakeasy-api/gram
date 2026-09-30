@@ -82794,7 +82794,7 @@ components:
                     type: integer
                     description: Sessions whose refresh deadline has not passed.
                     format: int64
-            description: User sessions the issuer has minted. A refresh replaces a session row, so last_issued_at includes refreshes.
+            description: User sessions the issuer has minted. A refresh replaces a session row, so last_issued_at includes refreshes. For an organization- or global-attached issuer the counts span every project using the issuer.
             required:
                 - distinct_subjects_ever
                 - distinct_subjects_in_window

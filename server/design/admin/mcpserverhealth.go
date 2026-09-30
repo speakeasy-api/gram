@@ -49,7 +49,7 @@ var AdminMcpServerHealthServerRef = Type("AdminMcpServerHealthServerRef", func()
 })
 
 var AdminMcpServerHealthUserSessions = Type("AdminMcpServerHealthUserSessions", func() {
-	Description("User sessions the issuer has minted. A refresh replaces a session row, so last_issued_at includes refreshes.")
+	Description("User sessions the issuer has minted. A refresh replaces a session row, so last_issued_at includes refreshes. For an organization- or global-attached issuer the counts span every project using the issuer.")
 	Required("distinct_subjects_ever", "distinct_subjects_in_window", "live")
 
 	Attribute("distinct_subjects_ever", Int64, "Distinct users that ever received a session from the issuer.")
