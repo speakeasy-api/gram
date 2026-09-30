@@ -1349,7 +1349,7 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        -- only mark, and the view turns it into FirstPartyClientName. Real
        -- refresh hashes are base64url and cannot contain ':', so the prefix
        -- cannot match one of those.
-       COALESCE(s.refresh_token_hash LIKE 'dashboard-mint:%', false) AS dashboard_mint,
+       COALESCE(s.refresh_token_hash LIKE 'dashboard-mint:%', false)::boolean AS dashboard_mint,
        c.client_id_metadata_uri AS client_id_metadata_uri,
        c.token_endpoint_auth_method AS client_token_endpoint_auth_method,
        -- Whether the client stores a secret, never the hash itself: the
