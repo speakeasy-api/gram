@@ -1,23 +1,38 @@
-#!/usr/bin/env bash
-# Cursor Cloud start: core infra + login-path daemons only.
-# Do not run `./zero --agent` here — that pulls optional images and starts
-# every pitchfork daemon, which fills a 21GB VM.
 set -euo pipefail
+unset DOCKER_HOST || true
 export PATH="$HOME/.local/bin:$PATH"
 cd /workspace
 
-# shellcheck source=.cursor/ensure-dockerd.sh
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ensure-dockerd.sh"
+if ! docker info >/dev/null 2>&1; then
+  if [ -S /var/run/docker.sock ]; then
+    sudo chmod 666 /var/run/docker.sock || true
+  fi
+fi
+if ! docker info >/dev/null 2>&1; then
+  sudo mkdir -p /etc/docker
+  printf '%s\n' '{' '  "storage-driver": "fuse-overlayfs",' '  "iptables": true' '}' | sudo tee /etc/docker/daemon.json >/dev/null
+  if [ -x /usr/sbin/iptables-legacy ]; then
+    sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
+    sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+  fi
+  sudo setsid dockerd >/tmp/dockerd.log 2>&1 < /dev/null &
+  ready=0
+  for _ in $(seq 1 60); do
+    if docker info >/dev/null 2>&1; then
+      ready=1
+      break
+    fi
+    sleep 1
+  done
+  sudo chmod 666 /var/run/docker.sock || true
+  if [ "$ready" != 1 ]; then
+    echo "dockerd failed to start" >&2
+    tail -n 80 /tmp/dockerd.log >&2 || true
+    exit 1
+  fi
+fi
 
-ensure_dockerd
 eval "$(mise activate bash)"
-
-# Core images only. Presidio is an opt-in profile and must not be pulled
-# onto a 21GB VM. The shared OTLP sink is tiny and is the default listener
-# for local exporters. Install cannot start dockerd, so this is the first
-# chance to cache the images for infra:start.
-docker compose pull
-docker compose -f compose.shared.yml -p gram-shared pull pubsub-emulator otlp-sink
 
 if [ -z "${ATLAS_TOKEN:-}" ]; then
   echo "ATLAS_TOKEN is required to log in to Atlas Pro" >&2
@@ -25,33 +40,3 @@ if [ -z "${ATLAS_TOKEN:-}" ]; then
 fi
 atlas login --token "${ATLAS_TOKEN}"
 atlas whoami >/dev/null
-
-if [ ! -f mise.local.toml ]; then
-  printf '%s\n' '# Local mise configuration' '' '[tools]' '' '[env]' >mise.local.toml
-fi
-if ! grep -q 'USE_RECOMMENDED_SKILLS' mise.local.toml; then
-  mise set --file mise.local.toml USE_RECOMMENDED_SKILLS=false
-fi
-
-# Idempotent: install already wrote these into the snapshot.
-mise run zero:devidp
-mise run zero:encryption
-mise run zero:tunnel-identity
-mise run zero:tls
-
-# Core containers only. The OTLP sink starts with infra:start so
-# exporters have a listener.
-INFRA_READINESS_TIMEOUT="${INFRA_READINESS_TIMEOUT:-300}" mise run infra:start
-
-mise run zero:migrations
-mise run db:migrate
-mise run clickhouse:migrate
-mise run seed
-
-# Login path only. Worker/streams/admin/assistant-runtime stay off so the
-# disk and CPU budget goes to the dashboard.
-pitchfork supervisor start
-pitchfork start dev-idp server dashboard
-
-eval "$(mise activate bash)"
-pitchfork list --json --project --status failed --status errored | jq -e 'length == 0'
