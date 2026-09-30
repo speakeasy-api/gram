@@ -59,8 +59,9 @@ type testInstance struct {
 	userID    string
 }
 
-// newTestService builds the service against a cloned database and an auth
-// context with a project selected and admin grants.
+// newTestService builds the service against a cloned database and a dashboard
+// session context with admin grants. The context also carries a project, which
+// a session never selects in production; resolve must ignore it.
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -135,6 +136,22 @@ func withoutProject(t *testing.T, ctx context.Context) context.Context {
 	orgOnly.ProjectSlug = nil
 
 	return contextvalues.SetAuthContext(ctx, &orgOnly)
+}
+
+// asAPIKey returns ctx as a legacy API key arrives: the key names the project
+// already on the context, and only a key reaches the project tier. A legacy key
+// skips RBAC enforcement, so scope tests stay on the session context.
+func asAPIKey(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	keyed := *authCtx
+	keyed.APIKeyID = uuid.NewString()
+
+	return contextvalues.WithLegacyAPIKeyAuthorization(ctx, &keyed)
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

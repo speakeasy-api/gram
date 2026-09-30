@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
@@ -26,7 +27,7 @@ const (
 func registerProjectGitHub(t *testing.T, ctx context.Context, ti *testInstance) *types.WorkloadIssuer {
 	t.Helper()
 
-	policy, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+	policy, err := ti.service.RegisterIssuer(asAPIKey(t, ctx), &gen.RegisterIssuerPayload{
 		SessionToken:           nil,
 		ApikeyToken:            nil,
 		ProjectSlugInput:       nil,
@@ -86,7 +87,7 @@ func TestRegisterIssuer_WithoutAProjectWritesTheOrganizationTier(t *testing.T) {
 
 	// Organization-tier rows are visible to every project, so a caller that does
 	// select one sees the same issuer.
-	fromProject, err := ti.service.List(ctx, &gen.ListPayload{
+	fromProject, err := ti.service.List(asAPIKey(t, ctx), &gen.ListPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -253,4 +254,86 @@ func TestWithdrawSubject_WithoutAProjectWithdrawsTheOrganizationTier(t *testing.
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
 	require.NoError(t, err)
 	require.False(t, record.ProjectID.Valid)
+}
+
+func TestList_SessionCarryingAProjectReadsTheOrganizationTierAlone(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID, "the session context must carry a project for this test to mean anything")
+	require.True(t, contextvalues.HasValidatedGramSession(ctx))
+
+	registerAnthropic(t, ctx, ti, true)
+	registerProjectGitHub(t, ctx, ti)
+
+	policy, err := ti.service.List(ctx, &gen.ListPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	issuer := onlyIssuer(t, policy)
+	require.Equal(t, anthropicIssuer, issuer.Issuer)
+	require.Empty(t, issuer.ProjectID)
+}
+
+func TestRegisterIssuer_SessionCarryingAProjectCannotWriteTheProjectTier(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "GitHub Actions",
+		Issuer:                 githubIssuer,
+		JwksURI:                githubJWKS,
+		Description:            nil,
+		AllowWildcardAdmission: new(true),
+		Tags:                   nil,
+		ProjectScoped:          true,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	issuer := onlyIssuer(t, registerAnthropic(t, ctx, ti, true))
+	require.Empty(t, issuer.ProjectID)
+}
+
+func TestUpdateIssuer_SessionCarryingAProjectCannotReachTheProjectTier(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	issuer := registerProjectGitHub(t, ctx, ti)
+
+	payload := updatePayload(issuer.ID)
+	payload.Name = new("Renamed")
+	_, err := ti.service.UpdateIssuer(ctx, payload)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestList_APIKeyWithAProjectReadsBothTiers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	registerAnthropic(t, ctx, ti, true)
+	registerProjectGitHub(t, ctx, ti)
+
+	policy, err := ti.service.List(asAPIKey(t, ctx), &gen.ListPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	tiers := make(map[string]string, len(policy.Issuers))
+	for _, issuer := range policy.Issuers {
+		tiers[issuer.Issuer] = issuer.ProjectID
+	}
+	require.Equal(t, map[string]string{
+		anthropicIssuer: "",
+		githubIssuer:    ti.projectID.String(),
+	}, tiers)
 }
