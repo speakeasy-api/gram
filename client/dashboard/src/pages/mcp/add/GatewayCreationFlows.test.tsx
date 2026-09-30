@@ -307,7 +307,7 @@ it("disables direct connections only in gateway context", () => {
 it("saves an unproxied server without verifying connectivity", async () => {
   state.flow.gatewayId = null;
   state.verifyResult.mockReturnValue(undefined);
-  render(<CreateRemoteMcp />);
+  const view = render(<CreateRemoteMcp />);
   fireEvent.change(screen.getByLabelText("MCP server URL"), {
     target: { value: "https://example.com/mcp" },
   });
@@ -315,6 +315,9 @@ it("saves an unproxied server without verifying connectivity", async () => {
   fireEvent.click(
     screen.getByRole("radio", { name: /Clients connect directly/ }),
   );
+  state.verifyResult.mockReturnValue({ verified: true });
+  view.rerender(<CreateRemoteMcp />);
+  expect(screen.queryByRole("button", { name: "Re-verify" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() =>
     expect(state.create).toHaveBeenCalledWith({

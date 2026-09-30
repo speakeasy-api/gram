@@ -92,7 +92,8 @@ function CreateRemoteMcpForm() {
   // Unproxied servers are often only reachable from the customer's network,
   // so our infrastructure failing to reach one says nothing about whether it
   // works. Verification only gates saving when we sit in the request path.
-  const requiresVerification = mode === "proxied";
+  // Gateway members are always proxied, whatever the Connection choice says.
+  const requiresVerification = mode === "proxied" || !!flow.gatewayId;
   const readyToSave = isVerified || !requiresVerification;
   const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
     issuerQuery.organizationIssuers,
