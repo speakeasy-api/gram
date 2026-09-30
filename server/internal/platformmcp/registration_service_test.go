@@ -194,7 +194,12 @@ func TestRegistrationServiceRejectsUnreviewedCandidateAfterMutationGate(t *testi
 
 	require.ErrorIs(t, err, ErrCatalogRejected)
 	require.Equal(t, 1, gate.calls)
-	require.Zero(t, store.resolveCalls)
+	// Retained replay admission first resolves the authorized project and reads
+	// any prior receipt; rejected new candidates must never mutate persistence.
+	require.Equal(t, 1, store.resolveCalls)
+	require.Zero(t, store.beginCalls)
+	require.Zero(t, store.convergeCalls)
+	require.Zero(t, store.completeCalls)
 }
 
 func TestRegistrationServiceRejectsIneligibleTargetBeforeReceipt(t *testing.T) {
@@ -652,4 +657,41 @@ func TestRegistrationServiceReturnsCatalogInspectionErrors(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, upstreamErr)
+}
+
+func TestRegistrationRetainsAcceptedCatalogIdentity(t *testing.T) {
+	for _, status := range []string{receiptStatusPending, receiptStatusSucceeded} {
+		t.Run(status, func(t *testing.T) {
+			id := uuid.New()
+			receipt := OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: id, Valid: true}, Status: status, Replayed: true}
+			store := &retainedReceiptStore{recordingRegistrationStore: recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}, converged: receipt, completed: receipt}, receipt: receipt}
+			details := CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http", remoteURL: "https://provider.test/mcp"}
+			service := newRegistrationService(retainedTestCatalog{testCatalog: testCatalog{err: ErrCatalogRejected}, details: details}, &testRegistrationGate{enabled: true}, store)
+			_, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{ProjectSlug: "project", ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "accepted"})
+			require.NoError(t, err)
+			require.Zero(t, store.beginCalls)
+		})
+	}
+}
+
+type retainedReceiptStore struct {
+	recordingRegistrationStore
+	receipt OperationReceipt
+}
+
+func (s *retainedReceiptStore) FindReceipt(context.Context, Principal, ResolvedProject, CatalogRegistrationRequest, time.Time) (OperationReceipt, bool, error) {
+	return s.receipt, true, nil
+}
+
+type retainedTestCatalog struct {
+	testCatalog
+	details CatalogDetails
+}
+
+func (c retainedTestCatalog) InspectIdentity(context.Context, string, string) (CatalogDetails, error) {
+	return c.details, nil
+}
+
+func (s *recordingRegistrationStore) FindReceipt(context.Context, Principal, ResolvedProject, CatalogRegistrationRequest, time.Time) (OperationReceipt, bool, error) {
+	return OperationReceipt{}, false, nil
 }
