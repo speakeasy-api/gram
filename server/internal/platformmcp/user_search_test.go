@@ -251,11 +251,17 @@ func TestNormalizeUserSearch_AppliesDefaultsAndCaps(t *testing.T) {
 func TestSearchUsers_MasksIdentitiesAndMintsProjectReferences(t *testing.T) {
 	t.Parallel()
 
-	reader := &recordingUserSearchReader{rows: []telemetryrepo.UserSummary{
+	rows := []telemetryrepo.UserSummary{
 		userSummaryRow("pat.rivera@example.com", "pat.rivera@example.com", 4, 2),
 		userSummaryRow("user-orphan", "", 3, 0),
 		userSummaryRow("quinn.patel@example.com", "quinn.patel@example.com", 0, 0),
-	}}
+	}
+	// Distinct last-seen times, so the projected timestamps below pin each
+	// person's own boundary rather than one value the whole fixture shares.
+	for i := range rows {
+		rows[i].LastSeenUnixNano = userSearchTestNow.Add(-time.Hour - time.Duration(i)*time.Minute).UnixNano()
+	}
+	reader := &recordingUserSearchReader{rows: rows}
 	auditor := &recordingUserSearchAuditor{}
 	service := newUserSearchService(t, reader, auditor, stubIdentityGate{org: "organization-1"})
 	principal := testPrincipal()
@@ -286,6 +292,9 @@ func TestSearchUsers_MasksIdentitiesAndMintsProjectReferences(t *testing.T) {
 	require.Equal(t, "none_observed", output.Users[1].Errors)
 	require.Equal(t, "observed", output.Users[2].Activity)
 	require.Equal(t, userSearchTestNow.Add(-time.Hour).Format(time.RFC3339), output.Users[0].LastSeenAt)
+	require.Equal(t, userSearchTestNow.Add(-time.Hour-time.Minute).Format(time.RFC3339), output.Users[1].LastSeenAt)
+	require.Equal(t, userSearchTestNow.Add(-time.Hour-2*time.Minute).Format(time.RFC3339), output.Users[2].LastSeenAt,
+		"each person's last-seen is projected from their own row")
 
 	// The raw identities never leave the service in any form.
 	encoded, err := json.Marshal(output)
@@ -342,8 +351,14 @@ func TestSearchUsers_CursorResumesOnlyTheQueryThatMintedIt(t *testing.T) {
 	t.Parallel()
 
 	rows := make([]telemetryrepo.UserSummary, 0, 3)
-	for _, key := range []string{"pat.a@example.com", "pat.b@example.com", "pat.c@example.com"} {
-		rows = append(rows, userSummaryRow(key, key, 1, 0))
+	// Distinct, descending last-seen times, the order the repository returns
+	// them in. Only then is rows[1] identifiably the last person page 1 serves,
+	// and only then can an assertion about the sealed boundary distinguish it
+	// from any other row's timestamp.
+	for i, key := range []string{"pat.a@example.com", "pat.b@example.com", "pat.c@example.com"} {
+		row := userSummaryRow(key, key, 1, 0)
+		row.LastSeenUnixNano = userSearchTestNow.Add(-time.Hour - time.Duration(i)*time.Minute).UnixNano()
+		rows = append(rows, row)
 	}
 	reader := &recordingUserSearchReader{rows: rows}
 	service := newUserSearchService(t, reader, &recordingUserSearchAuditor{}, nil)
@@ -361,8 +376,13 @@ func TestSearchUsers_CursorResumesOnlyTheQueryThatMintedIt(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reader.searchParams, 2)
 	require.Equal(t, "pat.b@example.com", reader.searchParams[1].Cursor)
+	// Guards the assertion that follows: were the fixture to share one
+	// last_seen across its rows again, that assertion would hold for any row's
+	// timestamp and pin nothing.
+	require.NotEqual(t, rows[0].LastSeenUnixNano, rows[1].LastSeenUnixNano, "the fixture's boundaries must be distinguishable")
+	require.NotEqual(t, rows[2].LastSeenUnixNano, rows[1].LastSeenUnixNano, "the fixture's boundaries must be distinguishable")
 	require.Equal(t, rows[1].LastSeenUnixNano, reader.searchParams[1].CursorLastSeenUnixNano,
-		"the boundary the page displayed travels inside the cursor, so the repository never re-derives it from rows this search excludes")
+		"the boundary the last served person was displayed at travels inside the cursor, so the repository never re-derives it from rows this search excludes")
 
 	// The same position replayed against a different query, window, or user
 	// type is a different page of a different question.
