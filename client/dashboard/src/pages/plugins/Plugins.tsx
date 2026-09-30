@@ -739,7 +739,10 @@ function ObservabilityPluginCard({
           {observabilityInstallHint(enabled, isConnected)}
         </Text>
         {enabled ? (
-          <div className="flex items-center gap-1">
+          // The icon-only MoreActions trigger carries mx-[-4px] to sit flush
+          // with a container edge, which here eats the gap against Install and
+          // leaves the two hit boxes touching. gap-3 nets the usual 8px.
+          <div className="flex items-center gap-3">
             <MoreActions
               triggerAriaLabel="Observability plugin actions"
               triggerDisabled={!canRotateCredential}
