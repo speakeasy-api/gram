@@ -27,9 +27,7 @@ var AdminMcpServerHealthServer = Type("AdminMcpServerHealthServer", func() {
 
 var AdminMcpServerHealthCorrelation = Type("AdminMcpServerHealthCorrelation", func() {
 	Description("The identities telemetry is matched on for this server.")
-	Required("url_slug")
-
-	Attribute("url_slug", String, "The slug in the server's /mcp/<slug> URL, matched against hook-observed calls.")
+	Attribute("url_slug", String, "The slug in the server's /mcp/<slug> URL, matched against hook-observed calls. Absent when the server has no slug.")
 	Attribute("mcp_server_id", String, "The mcp_servers row ID stamped on proxied calls. Absent for toolset-only servers.")
 	Attribute("toolset_slug", String, "The toolset slug stamped on hosted calls. Absent when the server has no toolset or several live servers share it.")
 })

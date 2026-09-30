@@ -18332,8 +18332,8 @@ type AdminMcpServerHealthServerResponseBody struct {
 // response body types.
 type AdminMcpServerHealthCorrelationResponseBody struct {
 	// The slug in the server's /mcp/<slug> URL, matched against hook-observed
-	// calls.
-	URLSlug string `form:"url_slug" json:"url_slug" xml:"url_slug"`
+	// calls. Absent when the server has no slug.
+	URLSlug *string `form:"url_slug,omitempty" json:"url_slug,omitempty" xml:"url_slug,omitempty"`
 	// The mcp_servers row ID stamped on proxied calls. Absent for toolset-only
 	// servers.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`

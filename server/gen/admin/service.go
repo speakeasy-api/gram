@@ -465,8 +465,8 @@ type AdminMcpServerHealth struct {
 // The identities telemetry is matched on for this server.
 type AdminMcpServerHealthCorrelation struct {
 	// The slug in the server's /mcp/<slug> URL, matched against hook-observed
-	// calls.
-	URLSlug string
+	// calls. Absent when the server has no slug.
+	URLSlug *string
 	// The mcp_servers row ID stamped on proxied calls. Absent for toolset-only
 	// servers.
 	McpServerID *string

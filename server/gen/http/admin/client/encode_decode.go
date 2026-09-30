@@ -20494,7 +20494,7 @@ func unmarshalAdminMcpServerHealthServerResponseBodyToAdminAdminMcpServerHealthS
 // of type *AdminMcpServerHealthCorrelationResponseBody.
 func unmarshalAdminMcpServerHealthCorrelationResponseBodyToAdminAdminMcpServerHealthCorrelation(v *AdminMcpServerHealthCorrelationResponseBody) *admin.AdminMcpServerHealthCorrelation {
 	res := &admin.AdminMcpServerHealthCorrelation{
-		URLSlug:     *v.URLSlug,
+		URLSlug:     v.URLSlug,
 		McpServerID: v.McpServerID,
 		ToolsetSlug: v.ToolsetSlug,
 	}

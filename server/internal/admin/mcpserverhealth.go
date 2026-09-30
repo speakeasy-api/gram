@@ -122,7 +122,7 @@ func (s *Service) DescribeMcpServerHealth(ctx context.Context, payload *gen.Desc
 		ProjectID:   projectID.String(),
 		MCPServerID: conv.PtrValOr(result.Correlation.McpServerID, ""),
 		ToolsetSlug: conv.PtrValOr(result.Correlation.ToolsetSlug, ""),
-		URLSlug:     result.Correlation.URLSlug,
+		URLSlug:     conv.PtrValOr(result.Correlation.URLSlug, ""),
 	}
 	toolCalls, err := s.readToolCalls(ctx, target, payload.WindowDays, from, now, bucket)
 	if err != nil {
@@ -153,7 +153,7 @@ func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Querie
 	}
 
 	correlation := &gen.AdminMcpServerHealthCorrelation{
-		URLSlug:     server.UrlSlug,
+		URLSlug:     conv.PtrEmpty(server.UrlSlug),
 		McpServerID: nil,
 		ToolsetSlug: nil,
 	}

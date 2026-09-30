@@ -82395,10 +82395,8 @@ components:
                     description: The toolset slug stamped on hosted calls. Absent when the server has no toolset or several live servers share it.
                 url_slug:
                     type: string
-                    description: The slug in the server's /mcp/<slug> URL, matched against hook-observed calls.
+                    description: The slug in the server's /mcp/<slug> URL, matched against hook-observed calls. Absent when the server has no slug.
             description: The identities telemetry is matched on for this server.
-            required:
-                - url_slug
         AdminMcpServerHealthOutcomes:
             type: object
             properties:

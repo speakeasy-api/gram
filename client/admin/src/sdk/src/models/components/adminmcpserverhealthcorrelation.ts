@@ -21,9 +21,9 @@ export type AdminMcpServerHealthCorrelation = {
    */
   toolsetSlug?: string | undefined;
   /**
-   * The slug in the server's /mcp/<slug> URL, matched against hook-observed calls.
+   * The slug in the server's /mcp/<slug> URL, matched against hook-observed calls. Absent when the server has no slug.
    */
-  urlSlug: string;
+  urlSlug?: string | undefined;
 };
 
 /** @internal */
@@ -34,7 +34,7 @@ export const AdminMcpServerHealthCorrelation$inboundSchema: z.ZodMiniType<
   z.object({
     mcp_server_id: z.optional(z.string()),
     toolset_slug: z.optional(z.string()),
-    url_slug: z.string(),
+    url_slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -18344,7 +18344,7 @@ type AdminMcpServerHealthServerResponseBody struct {
 // response body types.
 type AdminMcpServerHealthCorrelationResponseBody struct {
 	// The slug in the server's /mcp/<slug> URL, matched against hook-observed
-	// calls.
+	// calls. Absent when the server has no slug.
 	URLSlug *string `form:"url_slug,omitempty" json:"url_slug,omitempty" xml:"url_slug,omitempty"`
 	// The mcp_servers row ID stamped on proxied calls. Absent for toolset-only
 	// servers.
@@ -35379,11 +35379,6 @@ func ValidateDescribeMcpServerHealthResponseBody(body *DescribeMcpServerHealthRe
 	}
 	if body.Server != nil {
 		if err2 := ValidateAdminMcpServerHealthServerResponseBody(body.Server); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	if body.Correlation != nil {
-		if err2 := ValidateAdminMcpServerHealthCorrelationResponseBody(body.Correlation); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -57231,15 +57226,6 @@ func ValidateAdminMcpServerHealthServerResponseBody(body *AdminMcpServerHealthSe
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	return
-}
-
-// ValidateAdminMcpServerHealthCorrelationResponseBody runs the validations
-// defined on AdminMcpServerHealthCorrelationResponseBody
-func ValidateAdminMcpServerHealthCorrelationResponseBody(body *AdminMcpServerHealthCorrelationResponseBody) (err error) {
-	if body.URLSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("url_slug", "body"))
 	}
 	return
 }

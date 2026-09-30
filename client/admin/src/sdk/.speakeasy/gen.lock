@@ -627,7 +627,7 @@ examples:
           window_days: 14
       responses:
         "200":
-          application/json: {"correlation": {"url_slug": "<value>"}, "server": {"created_at": "2026-12-13T15:06:49.015Z", "id": "<id>", "name": "<value>", "source": "unproxied", "visibility": "public"}, "tool_calls": {"type": "logging:enabled"}}
+          application/json: {"correlation": {}, "server": {"created_at": "2026-12-13T15:06:49.015Z", "id": "<id>", "name": "<value>", "source": "unproxied", "visibility": "public"}, "tool_calls": {"type": "logging:enabled"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

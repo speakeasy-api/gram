@@ -107,17 +107,18 @@ func (f healthFixture) seedUserSessionIssuer(t *testing.T, slug string) uuid.UUI
 }
 
 // seedServerWithIssuer is a toolset-backed mcp_servers row that authenticates
-// through the given issuer.
+// through the given issuer. uuid.Nil leaves it without one, and an empty slug
+// leaves it without a slug.
 func (f healthFixture) seedServerWithIssuer(t *testing.T, toolsetID, issuerID uuid.UUID, slug string) uuid.UUID {
 	t.Helper()
 
 	srv, err := mcpserversRepo.New(f.conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
 		ID:                    uuid.New(),
 		ProjectID:             f.projectID,
-		Name:                  pgtype.Text{String: slug, Valid: true},
-		Slug:                  pgtype.Text{String: slug, Valid: true},
+		Name:                  conv.ToPGTextEmpty(slug),
+		Slug:                  conv.ToPGTextEmpty(slug),
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserSessionIssuerID:   uuid.NullUUID{UUID: issuerID, Valid: true},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: issuerID, Valid: issuerID != uuid.Nil},
 		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ToolsetID:             uuid.NullUUID{UUID: toolsetID, Valid: true},
@@ -330,7 +331,7 @@ func TestDescribeMcpServerHealth_IssuerWithTwoClients(t *testing.T) {
 	require.Equal(t, serverID.String(), got.Server.ID)
 	require.Equal(t, "toolset", got.Server.Source)
 	require.Equal(t, "private", got.Server.Visibility)
-	require.Equal(t, "served", got.Correlation.URLSlug)
+	require.Equal(t, "served", *got.Correlation.URLSlug)
 	require.Equal(t, serverID.String(), *got.Correlation.McpServerID)
 	require.Equal(t, "backing", *got.Correlation.ToolsetSlug)
 	require.Nil(t, got.LegacyAuth, "an issuer is in force")
@@ -573,4 +574,27 @@ func TestDescribeMcpServerHealth_UnknownValidationStatusFailsClosed(t *testing.T
 
 	_, err := f.describe(t, serverID, 14)
 	requireHealthCode(t, err, oops.CodeUnexpected)
+}
+
+func TestDescribeMcpServerHealth_OmitsURLSlugWhenServerHasNone(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	toolset, err := toolsetsRepo.New(f.conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID:         f.orgID,
+		ProjectID:              f.projectID,
+		Name:                   "unslugged",
+		Slug:                   "unslugged",
+		Description:            pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                pgtype.Text{String: "", Valid: false},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+	serverID := f.seedServerWithIssuer(t, toolset.ID, uuid.Nil, "")
+
+	got, err := f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.Nil(t, got.Correlation.URLSlug)
+	require.Empty(t, f.reader.targets[0].URLSlug)
 }
