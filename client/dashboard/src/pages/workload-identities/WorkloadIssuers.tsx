@@ -109,6 +109,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
     <>
       <ResourceListPage
         title="Access Hub"
+        stage="preview"
         description="Let agents on other platforms (CI jobs, cloud services, AI agents) sign in to Gram without a stored secret."
         primaryAction={registerButton}
       >
