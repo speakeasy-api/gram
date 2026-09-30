@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/admin"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -292,4 +293,64 @@ func TestOnboardingPlaybookAssignmentFollowsTheStack(t *testing.T) {
 	listed, err = ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 	require.Nil(t, setupTask(listed.Tasks, "identity-provider"), "the copy still decides the board")
+}
+
+func TestOnboardingPlaybookApplicabilityJudgesAMethodOnItsOwnVendor(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	seedOnboardingCatalog(t, ti)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test")
+	// The Cursor API is not applicable on any Cursor platform.
+	for _, platform := range []string{"cursor-ide", "cursor-cli", "cursor-cloud"} {
+		_, err := adminrepo.New(ti.conn).UpsertSupportMapping(ctx, adminrepo.UpsertSupportMappingParams{Applicability: "na", Conditions: "", MethodSlug: "cursor-api", PlatformSlug: platform})
+		require.NoError(t, err)
+	}
+	// OpenCode joins the stack. Its platform has no entry for the Cursor API,
+	// which must not count in the Cursor API's favour.
+	_, err := organizations.SaveOnboardingStack(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, organizations.OnboardingStackInput{Vendors: []organizations.OnboardingStackVendorInput{{Vendor: "Cursor", PlanSlug: conv.PtrEmpty("cursor-teams")}, {Vendor: "OpenCode", PlanSlug: nil}}, MdmVendor: "none", MdmVendorName: nil}, actor, nil)
+	require.NoError(t, err)
+	// Configure integrations lists the Anthropic, Cursor and OpenAI APIs; only
+	// Cursor is in the stack, and its API is ruled out on Cursor's platforms.
+	_, err = organizations.CreateOnboardingPlaybook(ctx, ti.conn, organizations.OnboardingPlaybookInput{
+		UseCaseID: nil, OrganizationID: &ac.ActiveOrganizationID, Name: "Integrations", Description: "", IsDefault: false, StepSlugs: []string{"additional-agent-config"},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "Configure integrations")
+}
+
+func TestOnboardingPlaybookSkipsAStepThisBuildDoesNotKnow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	seedOnboardingCatalog(t, ti)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test")
+	custom, err := organizations.CreateOnboardingPlaybook(ctx, ti.conn, organizations.OnboardingPlaybookInput{
+		UseCaseID: nil, OrganizationID: &ac.ActiveOrganizationID, Name: "Ours", Description: "", IsDefault: false, StepSlugs: []string{"identity-provider"},
+	})
+	require.NoError(t, err)
+	customID := mustUUID(t, custom.ID)
+	// A newer build mirrored a step this one does not know and put it in the
+	// playbook, as happens during a rollout.
+	queries := orgrepo.New(ti.conn)
+	_, err = queries.UpsertOnboardingStep(ctx, orgrepo.UpsertOnboardingStepParams{Slug: "future-step", Title: "Future step", Description: "", Completion: "manual", HiddenByDefault: false, SortOrder: 99})
+	require.NoError(t, err)
+	_, err = queries.InsertOnboardingPlaybookStep(ctx, orgrepo.InsertOnboardingPlaybookStepParams{PlaybookID: customID, Slug: "future-step", Position: 1})
+	require.NoError(t, err)
+
+	assigned, err := organizations.AssignOrganizationOnboardingPlaybook(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, &customID, actor, nil)
+	require.NoError(t, err)
+	slugs := make([]string, 0, len(assigned.Applicability))
+	for _, step := range assigned.Applicability {
+		slugs = append(slugs, step.Slug)
+	}
+	require.Equal(t, []string{"identity-provider"}, slugs, "the unknown step is skipped, not judged")
+	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, setupTask(listed.Tasks, "identity-provider"))
+	require.Nil(t, setupTask(listed.Tasks, "future-step"))
 }

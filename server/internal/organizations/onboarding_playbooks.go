@@ -550,6 +550,11 @@ func stepApplicability(ctx context.Context, queries *repo.Queries, organizationI
 			continue
 		}
 		card := setupTaskDefinitionForKey(slug)
+		if card == nil {
+			// A step this build does not know, mirrored by a newer one during a
+			// rollout: skipped here, the way the wizard skips it.
+			continue
+		}
 		v := cardVerdicts[slug]
 		result = append(result, &admingen.AdminOnboardingStepApplicability{Slug: slug, Title: card.Title, Applies: v.applies, Reason: v.reason})
 	}
