@@ -14,6 +14,7 @@ import (
 
 const (
 	ActionWorkloadIssuerCreate Action = "workload-issuer:create"
+	ActionWorkloadIssuerUpdate Action = "workload-issuer:update"
 	ActionWorkloadIssuerDelete Action = "workload-issuer:delete"
 )
 
@@ -75,6 +76,58 @@ func (l *Logger) LogWorkloadIssuerCreate(ctx context.Context, dbtx repo.DBTX, ev
 
 		Metadata:       nil,
 		BeforeSnapshot: nil,
+		AfterSnapshot:  after,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.WorkloadIssuerV1})
+}
+
+type LogWorkloadIssuerUpdateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	IssuerURN  urn.WorkloadIssuer
+	IssuerName string
+
+	IssuerSnapshotBefore *WorkloadIssuerSnapshot
+	IssuerSnapshotAfter  *WorkloadIssuerSnapshot
+}
+
+func (l *Logger) LogWorkloadIssuerUpdate(ctx context.Context, dbtx repo.DBTX, event LogWorkloadIssuerUpdateEvent) error {
+	action := ActionWorkloadIssuerUpdate
+
+	before, err := marshalAuditPayload(event.IssuerSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	after, err := marshalAuditPayload(event.IssuerSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      event.ProjectID,
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.IssuerURN.ID.String(),
+		SubjectType:        string(subjectTypeWorkloadIssuer),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.IssuerName),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		Metadata:       nil,
+		BeforeSnapshot: before,
 		AfterSnapshot:  after,
 	}
 

@@ -112,6 +112,13 @@ vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({
     isPending: false,
   }),
 }));
+const updateIssuer = vi.fn();
+vi.mock("@gram/client/react-query/updateWorkloadIssuer.js", () => ({
+  useUpdateWorkloadIssuerMutation: () => ({
+    mutate: updateIssuer,
+    isPending: false,
+  }),
+}));
 vi.mock("@gram/client/react-query/withdrawWorkloadIssuer.js", () => ({
   useWithdrawWorkloadIssuerMutation: () => ({
     mutate: vi.fn(),
@@ -127,6 +134,7 @@ vi.mock("@gram/client/react-query/withdrawWorkloadSubject.js", () => ({
 
 beforeEach(() => {
   admissions = [];
+  updateIssuer.mockReset();
 });
 afterEach(cleanup);
 
@@ -230,4 +238,60 @@ it("puts stop trusting in its own section below the machines", () => {
 
   fireEvent.click(screen.getByRole("button", { name: "Stop trusting" }));
   expect(screen.getByText("Stop trusting this platform?")).toBeTruthy();
+});
+
+it("opens the edit sheet prefilled, with the issuer URL read-only", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+  expect(screen.getByText("Edit platform")).toBeTruthy();
+  expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+    "Example CI",
+  );
+  expect(
+    (screen.getByLabelText("Description") as HTMLTextAreaElement).value,
+  ).toBe("Deploy jobs for the main repository");
+  expect((screen.getByLabelText("JWKS URI") as HTMLInputElement).value).toBe(
+    "https://ci-identity.example.com/jwks",
+  );
+
+  const issuerUrl = screen.getByLabelText("Issuer") as HTMLInputElement;
+  expect(issuerUrl.value).toBe("https://ci-identity.example.com");
+  expect(issuerUrl.readOnly).toBe(true);
+});
+
+it("saves nothing until a field changes", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+  const save = screen.getByRole("button", {
+    name: "Save changes",
+  }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+});
+
+it("sends only the fields the edit changed", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "  Example deploys  " },
+  });
+  fireEvent.change(screen.getByLabelText("Description"), {
+    target: { value: "" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateIssuer).toHaveBeenCalledTimes(1);
+  expect(updateIssuer).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadIssuerForm: {
+        id: ISSUER_ID,
+        name: "Example deploys",
+        description: "",
+      },
+    },
+  });
 });

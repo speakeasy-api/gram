@@ -27,6 +27,11 @@ type Service interface {
 	// Returns the whole policy, so a caller replaces its view rather than merging
 	// into it.
 	RegisterIssuer(context.Context, *RegisterIssuerPayload) (res *WorkloadIdentityPolicy, err error)
+	// Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields
+	// are left unchanged. The issuer URL and the wildcard admission setting are
+	// fixed at registration. Requires workload:write. Returns the whole policy, so
+	// a caller replaces its view rather than merging into it.
+	UpdateIssuer(context.Context, *UpdateIssuerPayload) (res *WorkloadIdentityPolicy, err error)
 	// Stop trusting an issuer. Every subject admitted under it is withdrawn in the
 	// same transaction, so no admission can outlive the issuer it names. Requires
 	// workload:write.
@@ -61,7 +66,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"list", "registerIssuer", "withdrawIssuer", "admitSubject", "withdrawSubject"}
+var MethodNames = [6]string{"list", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "withdrawSubject"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -131,6 +136,28 @@ type RegisterIssuerPayload struct {
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
 	ProjectScoped bool
+}
+
+// UpdateIssuerPayload is the payload type of the workloadIdentities service
+// updateIssuer method.
+type UpdateIssuerPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The workload issuer id.
+	ID string
+	// The label an operator works with. Unique within its tier.
+	Name *string
+	// Where the issuer publishes the keys its assertions are signed with. Must be
+	// an https URL on a fully qualified domain name.
+	JwksURI *string
+	// What the platform is and what runs on it, in the operator's words. Trimmed
+	// on write; blank clears it. At most 500 characters after trimming.
+	Description *string
+	// Replaces the issuer's tags; an empty list clears them. Trimmed and
+	// de-duplicated on write, then limited to 40 tags of at most 64 characters
+	// each.
+	Tags []string
 }
 
 // WithdrawIssuerPayload is the payload type of the workloadIdentities service

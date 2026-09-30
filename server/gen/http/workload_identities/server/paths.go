@@ -17,6 +17,11 @@ func RegisterIssuerWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.registerIssuer"
 }
 
+// UpdateIssuerWorkloadIdentitiesPath returns the URL path to the workloadIdentities service updateIssuer HTTP endpoint.
+func UpdateIssuerWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.updateIssuer"
+}
+
 // WithdrawIssuerWorkloadIdentitiesPath returns the URL path to the workloadIdentities service withdrawIssuer HTTP endpoint.
 func WithdrawIssuerWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.withdrawIssuer"

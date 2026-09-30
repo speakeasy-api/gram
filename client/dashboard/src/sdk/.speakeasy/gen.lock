@@ -769,6 +769,7 @@ trackedFiles:
   src/funcs/workloadIdentitiesAdmitSubject.ts: {}
   src/funcs/workloadIdentitiesList.ts: {}
   src/funcs/workloadIdentitiesRegisterIssuer.ts: {}
+  src/funcs/workloadIdentitiesUpdateIssuer.ts: {}
   src/funcs/workloadIdentitiesWithdrawIssuer.ts: {}
   src/funcs/workloadIdentitiesWithdrawSubject.ts: {}
   src/hooks/hooks.ts: {}
@@ -1848,6 +1849,7 @@ trackedFiles:
   src/models/components/updatetriggerinstanceform.ts: {}
   src/models/components/updatetunneledmcpserverform.ts: {}
   src/models/components/updateusersessionissuerform.ts: {}
+  src/models/components/updateworkloadissuerform.ts: {}
   src/models/components/uploadchatattachmentresult.ts: {}
   src/models/components/uploadfunctionsresult.ts: {}
   src/models/components/uploadimageresult.ts: {}
@@ -2611,6 +2613,7 @@ trackedFiles:
   src/models/operations/updatetriggerinstance.ts: {}
   src/models/operations/updatetunneledmcpserver.ts: {}
   src/models/operations/updateusersessionissuer.ts: {}
+  src/models/operations/updateworkloadissuer.ts: {}
   src/models/operations/uploadchatattachment.ts: {}
   src/models/operations/uploadfunctions.ts: {}
   src/models/operations/uploadimage.ts: {}
@@ -3653,6 +3656,7 @@ trackedFiles:
   src/react-query/updateTrigger.ts: {}
   src/react-query/updateTunneledMcpServer.ts: {}
   src/react-query/updateUserSessionIssuer.ts: {}
+  src/react-query/updateWorkloadIssuer.ts: {}
   src/react-query/uploadChatAttachment.ts: {}
   src/react-query/uploadFunctions.ts: {}
   src/react-query/uploadImage.ts: {}
@@ -12330,6 +12334,17 @@ examples:
       responses:
         "200":
           application/json: {"authn_challenge_mode": "<value>", "client_id_metadata_admission_mode": "open", "created_at": "2024-11-25T09:16:20.983Z", "id": "ae2557ad-d034-4496-9cc1-323f5e93e0d3", "organization_id": "<id>", "project_id": "c159fbc4-0e4f-4bee-a37b-46aba130899e", "session_duration_hours": 654564, "slug": "<value>", "updated_at": "2025-06-11T18:23:27.676Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateWorkloadIssuer:
+    speakeasy-default-update-workload-issuer:
+      requestBody:
+        application/json: {"id": "59fe3ec7-33f6-48fc-9d36-7c3e31122287"}
+      responses:
+        "200":
+          application/json: {"admissions": [], "issuers": [{"allow_wildcard_admission": false, "created_at": "2024-11-19T20:12:14.378Z", "description": "barring eek dampen", "id": "5b893d0e-f5b7-4389-83f3-9db4a472304b", "issuer": "mastercard", "jwks_uri": "https://utter-airman.org", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "tags": [], "updated_at": "2024-05-15T18:17:39.606Z"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

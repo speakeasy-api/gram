@@ -270,6 +270,51 @@ func normalizeTags(tags []string) ([]string, error) {
 	return normalized, nil
 }
 
+// validateJWKSURI applies the rules a JWKS URI is held to wherever one is
+// written. It is the only field the verification path reads, so an http
+// spelling would put key retrieval on the network in the clear.
+func validateJWKSURI(raw string) error {
+	if _, err := issuerurl.ParseHTTPSOnly(raw); err != nil {
+		return oops.E(oops.CodeInvalid, err, "jwks_uri must be an https URL")
+	}
+	return requireTrustDomain(raw, "jwks_uri")
+}
+
+// normalizeIssuerName trims a name and refuses one that is blank after it.
+func normalizeIssuerName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return "", oops.E(oops.CodeInvalid, nil, "name must not be blank")
+	}
+	return name, nil
+}
+
+// normalizeIssuerDescription trims a description and checks it as it will be
+// stored. An empty result is stored as none.
+func normalizeIssuerDescription(raw string) (string, error) {
+	description := strings.TrimSpace(raw)
+	if utf8.RuneCountInString(description) > maxIssuerDescriptionLen {
+		return "", oops.E(oops.CodeInvalid, nil, "description must be at most %d characters", maxIssuerDescriptionLen)
+	}
+	if strings.ContainsRune(description, 0) {
+		return "", oops.E(oops.CodeInvalid, nil, "description must not contain a NUL character")
+	}
+	return description, nil
+}
+
+// issuerSnapshot is the audited state of an issuer row.
+func issuerSnapshot(row repo.WorkloadIssuer) *audit.WorkloadIssuerSnapshot {
+	return &audit.WorkloadIssuerSnapshot{
+		Name:                   row.Name,
+		Issuer:                 row.Issuer,
+		JwksURI:                row.JwksUri,
+		Description:            conv.FromPGTextOrEmpty[string](row.Description),
+		Tags:                   conv.DefaultSlice(row.Tags, []string{}),
+		AllowWildcardAdmission: row.AllowWildcardAdmission,
+		Tier:                   tier(row.ProjectID),
+	}
+}
+
 func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
 	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
 	if err != nil {
@@ -287,28 +332,21 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 	if _, err := issuerurl.ParseHTTPSOnly(payload.Issuer); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "issuer must be an https URL with no query or fragment")
 	}
-	if _, err := issuerurl.ParseHTTPSOnly(payload.JwksURI); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "jwks_uri must be an https URL")
-	}
 	if err := requireTrustDomain(payload.Issuer, "issuer"); err != nil {
 		return nil, err
 	}
-	if err := requireTrustDomain(payload.JwksURI, "jwks_uri"); err != nil {
+	if err := validateJWKSURI(payload.JwksURI); err != nil {
 		return nil, err
 	}
 
-	name := strings.TrimSpace(payload.Name)
-	if name == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "name must not be blank")
+	name, err := normalizeIssuerName(payload.Name)
+	if err != nil {
+		return nil, err
 	}
 
-	// Checked after trimming, as it is stored.
-	description := strings.TrimSpace(conv.PtrValOr(payload.Description, ""))
-	if utf8.RuneCountInString(description) > maxIssuerDescriptionLen {
-		return nil, oops.E(oops.CodeInvalid, nil, "description must be at most %d characters", maxIssuerDescriptionLen)
-	}
-	if strings.ContainsRune(description, 0) {
-		return nil, oops.E(oops.CodeInvalid, nil, "description must not contain a NUL character")
+	description, err := normalizeIssuerDescription(conv.PtrValOr(payload.Description, ""))
+	if err != nil {
+		return nil, err
 	}
 
 	// Defaulted here rather than in the design: a Goa default on a bool makes the
@@ -335,7 +373,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		OrganizationID:         t.organizationID,
 		ProjectID:              projectID,
 		Name:                   name,
-		Description:            conv.PtrToPGTextTrimmed(payload.Description),
+		Description:            conv.ToPGTextEmpty(description),
 		Tags:                   tags,
 		Issuer:                 strings.TrimSpace(payload.Issuer),
 		JwksUri:                strings.TrimSpace(payload.JwksURI),
@@ -349,24 +387,155 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 	}
 
 	if err := s.audit.LogWorkloadIssuerCreate(ctx, dbtx, audit.LogWorkloadIssuerCreateEvent{
-		OrganizationID:   t.organizationID,
-		ProjectID:        projectID,
-		Actor:            t.actor,
-		ActorDisplayName: t.actorEmail,
-		ActorSlug:        nil,
-		IssuerURN:        urn.NewWorkloadIssuer(row.ID),
-		IssuerName:       row.Name,
-		IssuerSnapshotAfter: &audit.WorkloadIssuerSnapshot{
-			Name:                   row.Name,
-			Issuer:                 row.Issuer,
-			JwksURI:                row.JwksUri,
-			Description:            conv.FromPGTextOrEmpty[string](row.Description),
-			Tags:                   conv.DefaultSlice(row.Tags, []string{}),
-			AllowWildcardAdmission: row.AllowWildcardAdmission,
-			Tier:                   tier(projectID),
-		},
+		OrganizationID:      t.organizationID,
+		ProjectID:           projectID,
+		Actor:               t.actor,
+		ActorDisplayName:    t.actorEmail,
+		ActorSlug:           nil,
+		IssuerURN:           urn.NewWorkloadIssuer(row.ID),
+		IssuerName:          row.Name,
+		IssuerSnapshotAfter: issuerSnapshot(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer registration").LogError(ctx, s.logger)
+	}
+
+	policy, err := s.loadPolicy(ctx, dbtx, t)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, s.logger)
+	}
+
+	return policy, nil
+}
+
+func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "id is not a valid uuid")
+	}
+
+	// Every supplied field is validated before any row is read, so a bad edit is
+	// refused the same way whether or not the issuer exists.
+	var name *string
+	if payload.Name != nil {
+		normalized, err := normalizeIssuerName(*payload.Name)
+		if err != nil {
+			return nil, err
+		}
+		name = &normalized
+	}
+
+	var jwksURI *string
+	if payload.JwksURI != nil {
+		if err := validateJWKSURI(*payload.JwksURI); err != nil {
+			return nil, err
+		}
+		trimmed := strings.TrimSpace(*payload.JwksURI)
+		jwksURI = &trimmed
+	}
+
+	var description *string
+	if payload.Description != nil {
+		normalized, err := normalizeIssuerDescription(*payload.Description)
+		if err != nil {
+			return nil, err
+		}
+		description = &normalized
+	}
+
+	// A nil slice is an omitted field; an empty one clears the tags.
+	var tags []string
+	if payload.Tags != nil {
+		tags, err = normalizeTags(payload.Tags)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error starting transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	q := repo.New(dbtx)
+
+	// Locked before the read, so the fields this edit leaves alone are merged
+	// from the row as it stands rather than one a concurrent edit has replaced.
+	if _, err := q.LockWorkloadIssuerForWrite(ctx, repo.LockWorkloadIssuerForWriteParams{
+		OrganizationID: t.organizationID,
+		ID:             id,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "workload issuer not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
+	}
+
+	// Tenancy-scoped, so a sibling project's issuer is a not-found here even
+	// though the organization-wide lock above resolved it.
+	existing, err := q.GetWorkloadIssuer(ctx, repo.GetWorkloadIssuerParams{
+		OrganizationID: t.organizationID,
+		ProjectID:      t.projectID,
+		ID:             id,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "workload issuer not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading workload issuer").LogError(ctx, s.logger)
+	}
+
+	params := repo.UpdateWorkloadIssuerParams{
+		Name:           existing.Name,
+		Description:    existing.Description,
+		Tags:           conv.DefaultSlice(existing.Tags, []string{}),
+		JwksUri:        existing.JwksUri,
+		OrganizationID: t.organizationID,
+		ProjectID:      t.projectID,
+		ID:             id,
+	}
+	if name != nil {
+		params.Name = *name
+	}
+	if description != nil {
+		params.Description = conv.ToPGTextEmpty(*description)
+	}
+	if tags != nil {
+		params.Tags = tags
+	}
+	if jwksURI != nil {
+		params.JwksUri = *jwksURI
+	}
+
+	row, err := q.UpdateWorkloadIssuer(ctx, params)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, oops.E(oops.CodeConflict, err, "an issuer named %q already exists at this tier", params.Name)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating workload issuer").LogError(ctx, s.logger)
+	}
+
+	if err := s.audit.LogWorkloadIssuerUpdate(ctx, dbtx, audit.LogWorkloadIssuerUpdateEvent{
+		OrganizationID:       t.organizationID,
+		ProjectID:            row.ProjectID,
+		Actor:                t.actor,
+		ActorDisplayName:     t.actorEmail,
+		ActorSlug:            nil,
+		IssuerURN:            urn.NewWorkloadIssuer(row.ID),
+		IssuerName:           row.Name,
+		IssuerSnapshotBefore: issuerSnapshot(existing),
+		IssuerSnapshotAfter:  issuerSnapshot(row),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer update").LogError(ctx, s.logger)
 	}
 
 	policy, err := s.loadPolicy(ctx, dbtx, t)
@@ -489,22 +658,14 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 	}
 
 	if err := s.audit.LogWorkloadIssuerDelete(ctx, dbtx, audit.LogWorkloadIssuerDeleteEvent{
-		OrganizationID:   t.organizationID,
-		ProjectID:        deleted.ProjectID,
-		Actor:            t.actor,
-		ActorDisplayName: t.actorEmail,
-		ActorSlug:        nil,
-		IssuerURN:        urn.NewWorkloadIssuer(deleted.ID),
-		IssuerName:       deleted.Name,
-		IssuerSnapshotBefore: &audit.WorkloadIssuerSnapshot{
-			Name:                   deleted.Name,
-			Issuer:                 deleted.Issuer,
-			JwksURI:                deleted.JwksUri,
-			Description:            conv.FromPGTextOrEmpty[string](deleted.Description),
-			Tags:                   conv.DefaultSlice(deleted.Tags, []string{}),
-			AllowWildcardAdmission: deleted.AllowWildcardAdmission,
-			Tier:                   tier(deleted.ProjectID),
-		},
+		OrganizationID:       t.organizationID,
+		ProjectID:            deleted.ProjectID,
+		Actor:                t.actor,
+		ActorDisplayName:     t.actorEmail,
+		ActorSlug:            nil,
+		IssuerURN:            urn.NewWorkloadIssuer(deleted.ID),
+		IssuerName:           deleted.Name,
+		IssuerSnapshotBefore: issuerSnapshot(deleted),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer withdrawal").LogError(ctx, s.logger)
 	}

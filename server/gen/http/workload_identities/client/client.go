@@ -24,6 +24,10 @@ type Client struct {
 	// registerIssuer endpoint.
 	RegisterIssuerDoer goahttp.Doer
 
+	// UpdateIssuer Doer is the HTTP client used to make requests to the
+	// updateIssuer endpoint.
+	UpdateIssuerDoer goahttp.Doer
+
 	// WithdrawIssuer Doer is the HTTP client used to make requests to the
 	// withdrawIssuer endpoint.
 	WithdrawIssuerDoer goahttp.Doer
@@ -59,6 +63,7 @@ func NewClient(
 	return &Client{
 		ListDoer:            doer,
 		RegisterIssuerDoer:  doer,
+		UpdateIssuerDoer:    doer,
 		WithdrawIssuerDoer:  doer,
 		AdmitSubjectDoer:    doer,
 		WithdrawSubjectDoer: doer,
@@ -113,6 +118,30 @@ func (c *Client) RegisterIssuer() goa.Endpoint {
 		resp, err := c.RegisterIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "registerIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateIssuer returns an endpoint that makes HTTP requests to the
+// workloadIdentities service updateIssuer server.
+func (c *Client) UpdateIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateIssuerRequest(c.encoder)
+		decodeResponse = DecodeUpdateIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "updateIssuer", err)
 		}
 		return decodeResponse(resp)
 	}

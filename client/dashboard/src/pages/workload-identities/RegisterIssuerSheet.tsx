@@ -14,6 +14,7 @@ import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
 import { TextArea } from "@/components/ui/Textarea";
 import { useEffect, useState } from "react";
+import { issuerValuesDiffer } from "./issuerEdit";
 import { httpsUrlProblem } from "./issuerUrl";
 import { tagsProblem } from "./tagLimits";
 
@@ -30,6 +31,12 @@ interface RegisterIssuerSheetProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: RegisterIssuerValues) => void;
   isPending: boolean;
+  /**
+   * A registered issuer's current values. When set, the sheet edits that
+   * issuer: the form opens prefilled and the issuer URL is read-only, because
+   * the server fixes it at registration.
+   */
+  initial?: RegisterIssuerValues;
 }
 
 const EMPTY: RegisterIssuerValues = {
@@ -61,27 +68,54 @@ function descriptionProblem(description: string): string | null {
   return null;
 }
 
+function submitLabel(isEditing: boolean, isPending: boolean): string {
+  if (isEditing) {
+    return isPending ? "Saving…" : "Save changes";
+  }
+  return isPending ? "Registering…" : "Register";
+}
+
+function IssuerUrlHint({ isEditing }: { isEditing: boolean }): JSX.Element {
+  if (isEditing) {
+    return (
+      <Text muted small>
+        Fixed at registration. To trust a different issuer, register it as a new
+        platform.
+      </Text>
+    );
+  }
+  return (
+    <Text muted small>
+      The value an assertion&apos;s <code>iss</code> claim must carry. An https
+      URL on a fully qualified domain, with no query or fragment.
+    </Text>
+  );
+}
+
 export function RegisterIssuerSheet({
   open,
   onOpenChange,
   onSubmit,
   isPending,
+  initial,
 }: RegisterIssuerSheetProps): JSX.Element {
-  const [values, setValues] = useState<RegisterIssuerValues>(EMPTY);
+  const isEditing = initial !== undefined;
+  const resetTo = initial ?? EMPTY;
+  const [values, setValues] = useState<RegisterIssuerValues>(resetTo);
 
-  // A successful registration closes the sheet through the parent's own state,
-  // which never reaches handleOpenChange — so without this the next registration
-  // opens prefilled with the previous issuer. The sheet stays mounted, so there
-  // is no unmount to do it for us.
+  // A successful submit closes the sheet through the parent's own state, which
+  // never reaches handleOpenChange — so without this the next registration opens
+  // prefilled with the previous issuer, and the next edit with values that were
+  // never saved. The sheet stays mounted, so there is no unmount to do it for us.
   useEffect(() => {
     if (!open) {
-      setValues(EMPTY);
+      setValues(initial ?? EMPTY);
     }
-  }, [open]);
+  }, [open, initial]);
 
   const handleOpenChange = (next: boolean) => {
     if (!next) {
-      setValues(EMPTY);
+      setValues(resetTo);
     }
     onOpenChange(next);
   };
@@ -93,7 +127,11 @@ export function RegisterIssuerSheet({
 
   const nameError = nameProblem(values.name);
 
+  const hasChanges =
+    initial === undefined || issuerValuesDiffer(initial, values);
+
   const canSubmit =
+    hasChanges &&
     values.name.trim().length > 0 &&
     nameError === null &&
     values.issuer.trim().length > 0 &&
@@ -117,13 +155,12 @@ export function RegisterIssuerSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            Register new access
+            {isEditing ? "Edit platform" : "Register new access"}
           </SheetTitle>
           <SheetDescription>
-            Both values come from the platform issuing your machines&apos;
-            tokens. Gram trims surrounding spaces and otherwise stores them
-            exactly as entered, because an assertion is matched against the
-            spelling you register.
+            {isEditing
+              ? "The issuer URL is fixed once a platform is registered. Changing the JWKS URI changes which keys Gram accepts assertions from."
+              : "Both values come from the platform issuing your machines' tokens. Gram trims surrounding spaces and otherwise stores them exactly as entered, because an assertion is matched against the spelling you register."}
           </SheetDescription>
         </SheetHeader>
 
@@ -197,6 +234,7 @@ export function RegisterIssuerSheet({
                 id="workload-issuer-url"
                 value={values.issuer}
                 placeholder="https://identity.example.com"
+                readOnly={isEditing}
                 aria-invalid={issuerProblem !== null}
                 aria-describedby={
                   issuerProblem !== null
@@ -215,11 +253,7 @@ export function RegisterIssuerSheet({
                   {issuerProblem}
                 </Text>
               ) : (
-                <Text muted small>
-                  The value an assertion&apos;s <code>iss</code> claim must
-                  carry. An https URL on a fully qualified domain, with no query
-                  or fragment.
-                </Text>
+                <IssuerUrlHint isEditing={isEditing} />
               )}
             </Stack>
 
@@ -298,9 +332,7 @@ export function RegisterIssuerSheet({
               variant="primary"
               disabled={!canSubmit || isPending}
             >
-              <Button.Text>
-                {isPending ? "Registering…" : "Register"}
-              </Button.Text>
+              <Button.Text>{submitLabel(isEditing, isPending)}</Button.Text>
             </Button>
           </SheetFooter>
         </form>
