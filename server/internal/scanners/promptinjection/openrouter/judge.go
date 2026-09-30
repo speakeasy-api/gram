@@ -565,7 +565,11 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload 
 	// reason rather than the body. Recorded either way: truncated calls are
 	// what size the cap.
 	truncated := response.FinishReason != nil && *response.FinishReason == gramopenrouter.FinishReasonLength
-	c.metrics.RecordCompletionTokens(ctx, req.OrgID, c.model, c.reasoning, response.Usage.CompletionTokens, truncated)
+	// An omitted usage payload is indistinguishable from zero tokens, and a
+	// zero sample would make the cap look safer to tighten than it is.
+	if response.Usage.HasSignal() {
+		c.metrics.RecordCompletionTokens(ctx, req.OrgID, c.model, c.reasoning, response.Usage.CompletionTokens, truncated)
+	}
 	if truncated {
 		return Verdict{}, fmt.Errorf("%w: completion hit the %d-token cap", errTruncatedVerdict, MaxVerdictTokens)
 	}

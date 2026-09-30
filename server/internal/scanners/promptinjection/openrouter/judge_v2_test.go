@@ -407,6 +407,32 @@ func TestClassifyRecordsCompletionTokensWhenTruncated(t *testing.T) {
 	require.True(t, metricAttrs(points[0].Attributes)["truncated"].AsBool())
 }
 
+// TestClassifySkipsCompletionTokensWithoutUsage keeps an omitted usage payload
+// out of the histogram: a zero sample would make the cap look safer to tighten
+// than the observed data supports.
+func TestClassifySkipsCompletionTokensWithoutUsage(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
+
+	client := &fakeCompletionClient{responder: func(string) string { return safeVerdictJSON }}
+	engine := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), meterProvider, client, testJudgeLimiter(t))
+
+	results, err := engine.Classify(t.Context(), req("hello"))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelSafe, results[0].Label, "a missing usage payload is not a judge failure")
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			require.NotEqual(t, meterTypedCompletionTokens, m.Name)
+		}
+	}
+}
+
 func histogramPoints(t *testing.T, collected metricdata.ResourceMetrics, name string) []metricdata.HistogramDataPoint[int64] {
 	t.Helper()
 	for _, scope := range collected.ScopeMetrics {
