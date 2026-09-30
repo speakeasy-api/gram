@@ -91,7 +91,7 @@ function tokenEndpointNote(endpoint: WorkloadConnectionEndpoint): string {
   return "On the MCP server's own host. Platforms that require a token endpoint separate from the API host need the server's sign-in moved to Gram's authentication host.";
 }
 
-export function ConnectionEndpoint({
+function ConnectionEndpoint({
   endpoint,
 }: {
   endpoint: WorkloadConnectionEndpoint;
