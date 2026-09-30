@@ -56,13 +56,14 @@ const (
 )
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
-	repo   *repo.Queries
+	tracer     trace.Tracer
+	logger     *slog.Logger
+	db         *pgxpool.Pool
+	auth       *auth.Auth
+	authz      *authz.Engine
+	audit      *audit.Logger
+	repo       *repo.Queries
+	federation FederationResolver
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -75,16 +76,18 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	federation FederationResolver,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("workloadpolicy.api"))
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/workloadpolicy"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		audit:  auditLogger,
-		repo:   repo.New(db),
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/workloadpolicy"),
+		logger:     logger,
+		db:         db,
+		auth:       auth.New(logger, db, sessions, authzEngine),
+		authz:      authzEngine,
+		audit:      auditLogger,
+		repo:       repo.New(db),
+		federation: federation,
 	}
 }
 

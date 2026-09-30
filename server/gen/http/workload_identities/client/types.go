@@ -170,6 +170,18 @@ type WithdrawSubjectResponseBody struct {
 	Admissions []*WorkloadAdmissionResponseBody `form:"admissions,omitempty" json:"admissions,omitempty" xml:"admissions,omitempty"`
 }
 
+// ConnectionDetailsResponseBody is the type of the "workloadIdentities"
+// service "connectionDetails" endpoint HTTP response body.
+type ConnectionDetailsResponseBody struct {
+	// The MCP server id.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The MCP server's display name; empty when it has none.
+	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
+	// The server's addresses, platform-host addresses first. Empty when the server
+	// has no address.
+	Endpoints []*WorkloadConnectionEndpointResponseBody `form:"endpoints,omitempty" json:"endpoints,omitempty" xml:"endpoints,omitempty"`
+}
+
 // ListUnauthorizedResponseBody is the type of the "workloadIdentities" service
 // "list" endpoint HTTP response body for the "unauthorized" error.
 type ListUnauthorizedResponseBody struct {
@@ -1479,6 +1491,196 @@ type WithdrawSubjectGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ConnectionDetailsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "unauthorized" error.
+type ConnectionDetailsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ConnectionDetailsForbiddenResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "forbidden" error.
+type ConnectionDetailsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ConnectionDetailsBadRequestResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "bad_request" error.
+type ConnectionDetailsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ConnectionDetailsNotFoundResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "not_found" error.
+type ConnectionDetailsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ConnectionDetailsConflictResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "conflict" error.
+type ConnectionDetailsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ConnectionDetailsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ConnectionDetailsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ConnectionDetailsInvalidResponseBody is the type of the "workloadIdentities"
+// service "connectionDetails" endpoint HTTP response body for the "invalid"
+// error.
+type ConnectionDetailsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ConnectionDetailsInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ConnectionDetailsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ConnectionDetailsUnexpectedResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "unexpected" error.
+type ConnectionDetailsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ConnectionDetailsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "gateway_error" error.
+type ConnectionDetailsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // WorkloadIssuerResponseBody is used to define fields on response body types.
 type WorkloadIssuerResponseBody struct {
 	// The workload issuer id.
@@ -1540,6 +1742,42 @@ type WorkloadAdmissionResponseBody struct {
 	WildcardActive *bool   `form:"wildcard_active,omitempty" json:"wildcard_active,omitempty" xml:"wildcard_active,omitempty"`
 	CreatedAt      *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt      *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// WorkloadConnectionEndpointResponseBody is used to define fields on response
+// body types.
+type WorkloadConnectionEndpointResponseBody struct {
+	// The MCP server URL: the resource the exchanged session is for.
+	ResourceURL *string `form:"resource_url,omitempty" json:"resource_url,omitempty" xml:"resource_url,omitempty"`
+	// The host of resource_url, which a platform lists among the API hosts its
+	// token may be sent to.
+	APIHost *string `form:"api_host,omitempty" json:"api_host,omitempty" xml:"api_host,omitempty"`
+	// The authorization server's issuer identifier. An assertion's aud must be
+	// exactly this or token_endpoint. Empty when Gram is not this address's
+	// authorization server.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Where the platform sends its assertion. Empty when Gram is not this
+	// address's authorization server.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Whether token_endpoint is on Gram's dedicated authentication host, a
+	// different host from api_host.
+	OnAuthenticationHost *bool `form:"on_authentication_host,omitempty" json:"on_authentication_host,omitempty" xml:"on_authentication_host,omitempty"`
+	// grant_types_supported as the authorization server metadata lists it. Empty
+	// when Gram is not this address's authorization server.
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Whether the metadata lists the jwt-bearer grant because the clientless
+	// workload assertion exchange is available here.
+	WorkloadGrantAdvertised *bool `form:"workload_grant_advertised,omitempty" json:"workload_grant_advertised,omitempty" xml:"workload_grant_advertised,omitempty"`
+	// Whether nothing Gram knows of stops an exchange at this address. The
+	// platform's own configuration and the trust policy are not checked.
+	Ready *bool `form:"ready,omitempty" json:"ready,omitempty" xml:"ready,omitempty"`
+	// Why an exchange here cannot succeed; absent when ready.
+	// not_publicly_reachable: the address does not resolve publicly (disabled, or
+	// private network only). no_authorization_server: the server is not gated on a
+	// Gram user session issuer. workload_grant_unavailable: the metadata does not
+	// advertise the workload grant. agent_rollout_disabled: the organization is
+	// outside the agent authorization rollout the token endpoint requires.
+	NotReadyReason *string `form:"not_ready_reason,omitempty" json:"not_ready_reason,omitempty" xml:"not_ready_reason,omitempty"`
 }
 
 // NewRegisterIssuerRequestBody builds the HTTP request body from the payload
@@ -2853,6 +3091,176 @@ func NewWithdrawSubjectGatewayError(body *WithdrawSubjectGatewayErrorResponseBod
 	return v
 }
 
+// NewConnectionDetailsWorkloadConnectionDetailsOK builds a
+// "workloadIdentities" service "connectionDetails" endpoint result from a HTTP
+// "OK" response.
+func NewConnectionDetailsWorkloadConnectionDetailsOK(body *ConnectionDetailsResponseBody) *workloadidentities.WorkloadConnectionDetails {
+	v := &workloadidentities.WorkloadConnectionDetails{
+		McpServerID:   *body.McpServerID,
+		McpServerName: *body.McpServerName,
+	}
+	v.Endpoints = make([]*workloadidentities.WorkloadConnectionEndpoint, len(body.Endpoints))
+	for i, val := range body.Endpoints {
+		if val == nil {
+			v.Endpoints[i] = nil
+			continue
+		}
+		v.Endpoints[i] = unmarshalWorkloadConnectionEndpointResponseBodyToWorkloadidentitiesWorkloadConnectionEndpoint(val)
+	}
+
+	return v
+}
+
+// NewConnectionDetailsUnauthorized builds a workloadIdentities service
+// connectionDetails endpoint unauthorized error.
+func NewConnectionDetailsUnauthorized(body *ConnectionDetailsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewConnectionDetailsForbidden builds a workloadIdentities service
+// connectionDetails endpoint forbidden error.
+func NewConnectionDetailsForbidden(body *ConnectionDetailsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewConnectionDetailsBadRequest builds a workloadIdentities service
+// connectionDetails endpoint bad_request error.
+func NewConnectionDetailsBadRequest(body *ConnectionDetailsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewConnectionDetailsNotFound builds a workloadIdentities service
+// connectionDetails endpoint not_found error.
+func NewConnectionDetailsNotFound(body *ConnectionDetailsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewConnectionDetailsConflict builds a workloadIdentities service
+// connectionDetails endpoint conflict error.
+func NewConnectionDetailsConflict(body *ConnectionDetailsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewConnectionDetailsUnsupportedMedia builds a workloadIdentities service
+// connectionDetails endpoint unsupported_media error.
+func NewConnectionDetailsUnsupportedMedia(body *ConnectionDetailsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewConnectionDetailsInvalid builds a workloadIdentities service
+// connectionDetails endpoint invalid error.
+func NewConnectionDetailsInvalid(body *ConnectionDetailsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewConnectionDetailsInvariantViolation builds a workloadIdentities service
+// connectionDetails endpoint invariant_violation error.
+func NewConnectionDetailsInvariantViolation(body *ConnectionDetailsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewConnectionDetailsUnexpected builds a workloadIdentities service
+// connectionDetails endpoint unexpected error.
+func NewConnectionDetailsUnexpected(body *ConnectionDetailsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewConnectionDetailsGatewayError builds a workloadIdentities service
+// connectionDetails endpoint gateway_error error.
+func NewConnectionDetailsGatewayError(body *ConnectionDetailsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListResponseBody runs the validations defined on ListResponseBody
 func ValidateListResponseBody(body *ListResponseBody) (err error) {
 	if body.Issuers == nil {
@@ -3027,6 +3435,31 @@ func ValidateWithdrawSubjectResponseBody(body *WithdrawSubjectResponseBody) (err
 	for _, e := range body.Admissions {
 		if e != nil {
 			if err2 := ValidateWorkloadAdmissionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateConnectionDetailsResponseBody runs the validations defined on
+// ConnectionDetailsResponseBody
+func ValidateConnectionDetailsResponseBody(body *ConnectionDetailsResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_name", "body"))
+	}
+	if body.Endpoints == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("endpoints", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	for _, e := range body.Endpoints {
+		if e != nil {
+			if err2 := ValidateWorkloadConnectionEndpointResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4714,6 +5147,246 @@ func ValidateWithdrawSubjectGatewayErrorResponseBody(body *WithdrawSubjectGatewa
 	return
 }
 
+// ValidateConnectionDetailsUnauthorizedResponseBody runs the validations
+// defined on connectionDetails_unauthorized_response_body
+func ValidateConnectionDetailsUnauthorizedResponseBody(body *ConnectionDetailsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateConnectionDetailsForbiddenResponseBody runs the validations defined
+// on connectionDetails_forbidden_response_body
+func ValidateConnectionDetailsForbiddenResponseBody(body *ConnectionDetailsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateConnectionDetailsBadRequestResponseBody runs the validations defined
+// on connectionDetails_bad_request_response_body
+func ValidateConnectionDetailsBadRequestResponseBody(body *ConnectionDetailsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateConnectionDetailsNotFoundResponseBody runs the validations defined
+// on connectionDetails_not_found_response_body
+func ValidateConnectionDetailsNotFoundResponseBody(body *ConnectionDetailsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateConnectionDetailsConflictResponseBody runs the validations defined
+// on connectionDetails_conflict_response_body
+func ValidateConnectionDetailsConflictResponseBody(body *ConnectionDetailsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateConnectionDetailsUnsupportedMediaResponseBody runs the validations
+// defined on connectionDetails_unsupported_media_response_body
+func ValidateConnectionDetailsUnsupportedMediaResponseBody(body *ConnectionDetailsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateConnectionDetailsInvalidResponseBody runs the validations defined on
+// connectionDetails_invalid_response_body
+func ValidateConnectionDetailsInvalidResponseBody(body *ConnectionDetailsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateConnectionDetailsInvariantViolationResponseBody runs the validations
+// defined on connectionDetails_invariant_violation_response_body
+func ValidateConnectionDetailsInvariantViolationResponseBody(body *ConnectionDetailsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateConnectionDetailsUnexpectedResponseBody runs the validations defined
+// on connectionDetails_unexpected_response_body
+func ValidateConnectionDetailsUnexpectedResponseBody(body *ConnectionDetailsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateConnectionDetailsGatewayErrorResponseBody runs the validations
+// defined on connectionDetails_gateway_error_response_body
+func ValidateConnectionDetailsGatewayErrorResponseBody(body *ConnectionDetailsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateWorkloadIssuerResponseBody runs the validations defined on
 // WorkloadIssuerResponseBody
 func ValidateWorkloadIssuerResponseBody(body *WorkloadIssuerResponseBody) (err error) {
@@ -4829,6 +5502,41 @@ func ValidateWorkloadAdmissionResponseBody(body *WorkloadAdmissionResponseBody) 
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateWorkloadConnectionEndpointResponseBody runs the validations defined
+// on WorkloadConnectionEndpointResponseBody
+func ValidateWorkloadConnectionEndpointResponseBody(body *WorkloadConnectionEndpointResponseBody) (err error) {
+	if body.ResourceURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_url", "body"))
+	}
+	if body.APIHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("api_host", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.TokenEndpoint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("token_endpoint", "body"))
+	}
+	if body.OnAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("on_authentication_host", "body"))
+	}
+	if body.GrantTypesSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("grant_types_supported", "body"))
+	}
+	if body.WorkloadGrantAdvertised == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workload_grant_advertised", "body"))
+	}
+	if body.Ready == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ready", "body"))
+	}
+	if body.NotReadyReason != nil {
+		if !(*body.NotReadyReason == "not_publicly_reachable" || *body.NotReadyReason == "no_authorization_server" || *body.NotReadyReason == "workload_grant_unavailable" || *body.NotReadyReason == "agent_rollout_disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.not_ready_reason", *body.NotReadyReason, []any{"not_publicly_reachable", "no_authorization_server", "workload_grant_unavailable", "agent_rollout_disabled"}))
+		}
 	}
 	return
 }

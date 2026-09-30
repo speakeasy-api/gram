@@ -52,6 +52,14 @@ type Service interface {
 	// Withdraw an admitted subject and its agent assignment, stopping it
 	// authenticating. Requires workload:write.
 	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WorkloadIdentityPolicy, err error)
+	// Read the values an external platform must be configured with to exchange its
+	// workload identity tokens at an MCP server: for each of the server's
+	// addresses, the token endpoint, the authorization server's issuer identifier,
+	// and the resource URL, as the address's authorization server metadata serves
+	// them, plus whether an exchange there can succeed. Requires workload:read and
+	// mcp:read on the server. A caller that names a project can read only that
+	// project's servers.
+	ConnectionDetails(context.Context, *ConnectionDetailsPayload) (res *WorkloadConnectionDetails, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -74,7 +82,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"list", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject"}
+var MethodNames = [8]string{"list", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject", "connectionDetails"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -106,6 +114,16 @@ type AdmitSubjectPayload struct {
 	// organization. Requires a caller that names a project; a dashboard session
 	// does not. Defaults to false.
 	ProjectScoped bool
+}
+
+// ConnectionDetailsPayload is the payload type of the workloadIdentities
+// service connectionDetails method.
+type ConnectionDetailsPayload struct {
+	// The MCP server the platform will call.
+	McpServerID      string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // ListPayload is the payload type of the workloadIdentities service list
@@ -208,6 +226,56 @@ type WithdrawSubjectPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// WorkloadConnectionDetails is the result type of the workloadIdentities
+// service connectionDetails method.
+type WorkloadConnectionDetails struct {
+	// The MCP server id.
+	McpServerID string
+	// The MCP server's display name; empty when it has none.
+	McpServerName string
+	// The server's addresses, platform-host addresses first. Empty when the server
+	// has no address.
+	Endpoints []*WorkloadConnectionEndpoint
+}
+
+// One address of an MCP server, with the values a federating platform is
+// configured with. Issuer and token endpoint are the ones the address's
+// authorization server metadata serves, so a client that discovers them reads
+// the same values.
+type WorkloadConnectionEndpoint struct {
+	// The MCP server URL: the resource the exchanged session is for.
+	ResourceURL string
+	// The host of resource_url, which a platform lists among the API hosts its
+	// token may be sent to.
+	APIHost string
+	// The authorization server's issuer identifier. An assertion's aud must be
+	// exactly this or token_endpoint. Empty when Gram is not this address's
+	// authorization server.
+	Issuer string
+	// Where the platform sends its assertion. Empty when Gram is not this
+	// address's authorization server.
+	TokenEndpoint string
+	// Whether token_endpoint is on Gram's dedicated authentication host, a
+	// different host from api_host.
+	OnAuthenticationHost bool
+	// grant_types_supported as the authorization server metadata lists it. Empty
+	// when Gram is not this address's authorization server.
+	GrantTypesSupported []string
+	// Whether the metadata lists the jwt-bearer grant because the clientless
+	// workload assertion exchange is available here.
+	WorkloadGrantAdvertised bool
+	// Whether nothing Gram knows of stops an exchange at this address. The
+	// platform's own configuration and the trust policy are not checked.
+	Ready bool
+	// Why an exchange here cannot succeed; absent when ready.
+	// not_publicly_reachable: the address does not resolve publicly (disabled, or
+	// private network only). no_authorization_server: the server is not gated on a
+	// Gram user session issuer. workload_grant_unavailable: the metadata does not
+	// advertise the workload grant. agent_rollout_disabled: the organization is
+	// outside the agent authorization rollout the token endpoint requires.
+	NotReadyReason *string
 }
 
 // WorkloadIdentityPolicy is the result type of the workloadIdentities service

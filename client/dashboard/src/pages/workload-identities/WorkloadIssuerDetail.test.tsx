@@ -43,6 +43,10 @@ vi.mock("@/components/page-templates", async (importOriginal) => ({
     </>
   ),
 }));
+// Covered by its own tests; stubbed so these stay about the platform's machines.
+vi.mock("./ConnectPlatformSection", () => ({
+  ConnectPlatformSection: () => <div data-testid="connect-platform" />,
+}));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     workloadIssuers: { href: () => "/access-hub" },

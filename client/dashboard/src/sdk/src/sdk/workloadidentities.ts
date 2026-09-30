@@ -3,6 +3,7 @@
  */
 
 import { workloadIdentitiesAdmitSubject } from "../funcs/workloadIdentitiesAdmitSubject.js";
+import { workloadIdentitiesConnectionDetails } from "../funcs/workloadIdentitiesConnectionDetails.js";
 import { workloadIdentitiesList } from "../funcs/workloadIdentitiesList.js";
 import { workloadIdentitiesRegisterIssuer } from "../funcs/workloadIdentitiesRegisterIssuer.js";
 import { workloadIdentitiesUpdateIssuer } from "../funcs/workloadIdentitiesUpdateIssuer.js";
@@ -10,11 +11,16 @@ import { workloadIdentitiesUpdateSubject } from "../funcs/workloadIdentitiesUpda
 import { workloadIdentitiesWithdrawIssuer } from "../funcs/workloadIdentitiesWithdrawIssuer.js";
 import { workloadIdentitiesWithdrawSubject } from "../funcs/workloadIdentitiesWithdrawSubject.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { WorkloadConnectionDetails } from "../models/components/workloadconnectiondetails.js";
 import { WorkloadIdentityPolicy } from "../models/components/workloadidentitypolicy.js";
 import {
   AdmitWorkloadSubjectRequest,
   AdmitWorkloadSubjectSecurity,
 } from "../models/operations/admitworkloadsubject.js";
+import {
+  GetWorkloadConnectionDetailsRequest,
+  GetWorkloadConnectionDetailsSecurity,
+} from "../models/operations/getworkloadconnectiondetails.js";
 import {
   ListWorkloadIdentitiesRequest,
   ListWorkloadIdentitiesSecurity,
@@ -54,6 +60,25 @@ export class WorkloadIdentities extends ClientSDK {
     options?: RequestOptions,
   ): Promise<WorkloadIdentityPolicy> {
     return unwrapAsync(workloadIdentitiesAdmitSubject(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * connectionDetails workloadIdentities
+   *
+   * @remarks
+   * Read the values an external platform must be configured with to exchange its workload identity tokens at an MCP server: for each of the server's addresses, the token endpoint, the authorization server's issuer identifier, and the resource URL, as the address's authorization server metadata serves them, plus whether an exchange there can succeed. Requires workload:read and mcp:read on the server. A caller that names a project can read only that project's servers.
+   */
+  async connectionDetails(
+    request: GetWorkloadConnectionDetailsRequest,
+    security?: GetWorkloadConnectionDetailsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadConnectionDetails> {
+    return unwrapAsync(workloadIdentitiesConnectionDetails(
       this,
       request,
       security,
