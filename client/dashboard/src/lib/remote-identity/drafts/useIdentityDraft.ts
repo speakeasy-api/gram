@@ -24,6 +24,7 @@ import {
 } from "../model/clientConfiguration";
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
 import { useProtectedResourceMetadata } from "../queries/useProtectedResourceMetadata";
+import { useRemoteSessionIssuersByIds } from "../queries/useRemoteSessionIssuersByIds";
 
 /**
  * The provider the upstream advertises but Speakeasy has no record of yet.
@@ -282,7 +283,7 @@ export function useUserIdentityDraft({
   mcpServerId,
   remoteMcpServerId,
   upstreamUrl,
-  issuers,
+  issuers: listedIssuers,
   linkedClients,
   configured,
   enabled,
@@ -312,6 +313,25 @@ export function useUserIdentityDraft({
     kind: "idle",
   });
 
+  // The linked provider is resolved by id and merged in, never looked for in
+  // the listing alone: the listing is paginated across the project, its
+  // organization and the platform catalog, so a linked issuer can sit past
+  // any page and the server would render with no provider selected.
+  const linkedIssuerId = linkedClients[0]?.remoteSessionIssuerId;
+  const linkedIssuerIds = useMemo(
+    () => (linkedIssuerId ? [linkedIssuerId] : []),
+    [linkedIssuerId],
+  );
+  const { items: linkedIssuers, isLoading: linkedIssuerLoading } =
+    useRemoteSessionIssuersByIds(linkedIssuerIds, { enabled });
+  const issuers = useMemo(() => {
+    const listedIds = new Set(listedIssuers.map((issuer) => issuer.id));
+    return [
+      ...listedIssuers,
+      ...linkedIssuers.filter((issuer) => !listedIds.has(issuer.id)),
+    ];
+  }, [listedIssuers, linkedIssuers]);
+
   // Only probe for a provider to create when none of the existing ones match;
   // a configured server already has its answer.
   const upstreamHost = hostOf(upstreamUrl);
@@ -320,7 +340,6 @@ export function useUserIdentityDraft({
       issuers.find((issuer) => sameSite(hostOf(issuer.issuer), upstreamHost)),
     [issuers, upstreamHost],
   );
-  const linkedIssuerId = linkedClients[0]?.remoteSessionIssuerId;
   const prm = useProtectedResourceMetadata(
     remoteMcpServerId,
     enabled && !configured && !matchedIssuer && !linkedIssuerId,
@@ -689,7 +708,7 @@ export function useUserIdentityDraft({
     selected,
     selectProvider,
     providerUnreachable,
-    providerLoading: prm.status === "loading",
+    providerLoading: prm.status === "loading" || linkedIssuerLoading,
 
     clientsLoading,
     capabilitiesLoading,

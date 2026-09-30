@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   clients: vi.fn(),
   siblings: vi.fn(),
   issuers: vi.fn(),
+  issuersByIds: vi.fn(),
   source: vi.fn(),
   rbac: vi.fn(),
   hasScope: vi.fn(),
@@ -132,6 +133,10 @@ vi.mock("@gram/client/react-query/remoteSessionsCount.js", () => ({
 
 vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
   useAllRemoteSessionClients: () => mocks.clients(),
+}));
+
+vi.mock("@/lib/remote-identity/queries/useRemoteSessionIssuersByIds", () => ({
+  useRemoteSessionIssuersByIds: (ids: string[]) => mocks.issuersByIds(ids),
 }));
 
 vi.mock("@/lib/remote-identity/queries/useUpstreamProbe", () => ({
@@ -249,6 +254,14 @@ beforeEach(() => {
     isError: false,
   });
   mocks.issuers.mockReturnValue({ data: { result: { items: [] } } });
+  // By default a lookup by id finds whatever the listing holds.
+  mocks.issuersByIds.mockImplementation((ids: string[]) => ({
+    items: (
+      (mocks.issuers().data?.result.items ?? []) as Array<{ id: string }>
+    ).filter((issuer) => ids.includes(issuer.id)),
+    isLoading: false,
+    isError: false,
+  }));
   mocks.sessions.mockReturnValue({ data: { subjects: 1 } });
   mocks.protectedResourceMetadata.mockReturnValue({
     status: "idle",
@@ -640,6 +653,41 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     expect(save().disabled).toBe(true);
     expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("shows the linked provider when the issuer listing does not contain it", () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-far",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    // The listing is empty, standing in for a linked issuer pushed past the
+    // first page by the platform catalog; only the lookup by id finds it.
+    mocks.issuersByIds.mockReturnValue({
+      items: [
+        {
+          id: "provider-far",
+          name: "Far provider",
+          issuer: "https://id.example",
+          slug: "far",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    renderIdentity();
+
+    expect(mocks.issuersByIds).toHaveBeenCalledWith(["provider-far"]);
+    expect(screen.getByText("Far provider")).toBeDefined();
   });
 
   it("holds a mode change as a draft until Save", async () => {
