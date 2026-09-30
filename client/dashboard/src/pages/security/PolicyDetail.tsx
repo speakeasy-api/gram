@@ -93,6 +93,10 @@ import {
   readPolicyDraft,
 } from "./policy-draft";
 import {
+  parsePolicyNewPrefill,
+  type PolicyNewPrefill,
+} from "./policy-new-prefill";
+import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
@@ -133,7 +137,6 @@ import {
   useTogglePolicyEnabled,
 } from "./use-toggle-policy-enabled";
 import {
-  AVAILABLE_CATEGORIES,
   FLAG_ONLY_CATEGORIES,
   SCOPE_EXEMPT_CEL_EXAMPLES,
   SCOPE_INCLUDE_CEL_EXAMPLES,
@@ -353,10 +356,12 @@ function PolicyNewContent(): JSX.Element {
   const [category] = useQueryState("category");
   const location = useLocation();
   const draft = readPolicyDraft(location.state);
-  const initialCategories =
-    category && AVAILABLE_CATEGORIES.has(category as RuleCategory)
-      ? new Set<RuleCategory>([category as RuleCategory])
-      : undefined;
+  // Read once: the editor seeds its state on mount and owns it from there.
+  const [prefill] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (category && !params.has("category")) params.set("category", category);
+    return parsePolicyNewPrefill(params);
+  });
   if (kind === "standard") {
     return (
       <Page>
@@ -366,7 +371,7 @@ function PolicyNewContent(): JSX.Element {
         <Page.Body>
           <StandardPolicyEditor
             policy={null}
-            initialCategories={initialCategories}
+            prefill={prefill}
             draft={draft?.policyType === "standard" ? draft : null}
           />
         </Page.Body>
@@ -2136,7 +2141,7 @@ function SensitivitySection({
   );
 }
 
-function ActionStep({
+export function ActionStep({
   action,
   setAction,
   audienceType,
@@ -3676,11 +3681,12 @@ function ReviewAgreementControl({
 
 export function StandardPolicyEditor({
   policy,
-  initialCategories,
+  prefill,
   draft = null,
 }: {
   policy: RiskPolicy | null;
-  initialCategories?: ReadonlySet<RuleCategory>;
+  /** Starting values for a new policy; ignored when editing one. */
+  prefill?: PolicyNewPrefill;
   draft?: PolicyDraft | null;
 }): JSX.Element {
   const routes = useRoutes();
@@ -3731,8 +3737,11 @@ export function StandardPolicyEditor({
   }, [policy, mode]);
 
   // ── Local form state, seeded from the policy (edit), a draft from the
-  // intent screen, or defaults (create). ──
-  const [name, setName] = useState(policy?.name ?? draft?.name ?? "");
+  // intent screen, or prefill and defaults (create). ──
+  const seed = policy ? undefined : prefill;
+  const [name, setName] = useState(
+    policy?.name ?? draft?.name ?? seed?.name ?? "",
+  );
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
   >(
@@ -3741,7 +3750,7 @@ export function StandardPolicyEditor({
         orig?.categories ??
           (draft
             ? policyToCategories(draft.sources, draft.presidioEntities, mode)
-            : initialCategories),
+            : seed?.categories),
       ),
   );
   // The flag behind `mode` resolves asynchronously, so the seed above may
@@ -3758,13 +3767,20 @@ export function StandardPolicyEditor({
     Map<string, ScopeOverride>
   >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
   const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(() =>
-    policyMCPScopeValue(policy?.mcpScope),
+    seed && seed.mcpServerIds.length > 0
+      ? {
+          mode: "mcp",
+          allServers: false,
+          toolAnnotations: [],
+          servers: seed.mcpServerIds.map((mcpServerId) => ({ mcpServerId })),
+        }
+      : policyMCPScopeValue(policy?.mcpScope),
   );
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(() => new Set(policy?.customRuleIds ?? []));
   const [action, setAction] = useState<PolicyAction>(
-    (policy?.action as PolicyAction) ?? draft?.action ?? "flag",
+    (policy?.action as PolicyAction) ?? draft?.action ?? seed?.action ?? "flag",
   );
   // Under block_all the URL set holds allowed servers; under allow_all it
   // holds blocked servers. The disposition is immutable after create, so the
@@ -3805,7 +3821,9 @@ export function StandardPolicyEditor({
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
   const [detectionExpanded, setDetectionExpanded] = useState(true);
-  const [score, setScore] = useState(policy?.score ?? draft?.score ?? 5);
+  const [score, setScore] = useState(
+    policy?.score ?? draft?.score ?? seed?.score ?? 5,
+  );
   const [presidioThreshold, setPresidioThreshold] = useState<number>(
     policy?.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
   );
