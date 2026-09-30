@@ -8,7 +8,6 @@ import {
 import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMemo, useState, type ReactNode } from "react";
 import { InlineEmptyState } from "@/components/inline-empty-state";
@@ -153,46 +152,29 @@ function StandardAuthenticationSectionBody({
     enabled: issuerConfigured,
   });
 
-  // listRemoteSessionIssuers returns this project's own issuers, inherited
-  // organization-level ones (same org), and inherited platform issuers from the
-  // shared catalog, so the selectable list spans all three tiers. A client can
-  // be attached to any of them; only project-owned issuer metadata is editable
-  // here.
-  //
-  // Pinned to the maximum page size so a large platform catalog does not push
-  // this project's own issuers out of the picker.
-  const { data: issuersResult } = useRemoteSessionIssuers({ limit: 100 });
-  const allIssuers = useMemo(
-    () => issuersResult?.result.items ?? [],
-    [issuersResult],
-  );
-
   const { items: allClients, isLoading: isLoadingClients } =
     useAllRemoteSessionClients(
       { userSessionIssuerId },
       { enabled: issuerConfigured },
     );
 
-  const associatedIssuerIds = useMemo(
-    () => new Set(allClients.map((client) => client.remoteSessionIssuerId)),
+  const attachedIssuerIds = useMemo(
+    () => [
+      ...new Set(allClients.map((client) => client.remoteSessionIssuerId)),
+    ],
     [allClients],
   );
 
-  // Resolved by id, never by filtering the listing above: an attached issuer
+  // Resolved by id, never by filtering the issuer listing: an attached issuer
   // can fall past any listing page, and filtering would then render a working
   // server as having no provider.
   const {
     items: associatedIssuers,
     isLoading: isLoadingAssociatedIssuers,
     isError: isAssociatedIssuersError,
-  } = useRemoteSessionIssuersByIds([...associatedIssuerIds], {
+  } = useRemoteSessionIssuersByIds(attachedIssuerIds, {
     enabled: issuerConfigured,
   });
-
-  const selectableIssuers = useMemo<RemoteSessionIssuer[]>(
-    () => allIssuers.filter((issuer) => !associatedIssuerIds.has(issuer.id)),
-    [allIssuers, associatedIssuerIds],
-  );
 
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -269,7 +251,7 @@ function StandardAuthenticationSectionBody({
         onOpenChange={setSheetOpen}
         target={target}
         userSessionIssuer={userSessionIssuer ?? null}
-        selectableIssuers={selectableIssuers}
+        excludedIssuerIds={attachedIssuerIds}
       />
 
       {deleteTarget && userSessionIssuerId && (
