@@ -258,6 +258,13 @@ export function UserIdentityRow({
         ) : null}
       </div>
 
+      {draft.providerLoadFailed ? (
+        <Alert variant="error" dismissible={false}>
+          Couldn&apos;t load this server&apos;s identity providers. Refresh the
+          page to try again.
+        </Alert>
+      ) : null}
+
       {draft.providerUnreachable ? (
         <Alert variant="warning" dismissible={false}>
           Couldn&apos;t reach the upstream&apos;s identity provider. Check the

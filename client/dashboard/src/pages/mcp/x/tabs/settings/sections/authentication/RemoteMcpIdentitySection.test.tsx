@@ -112,6 +112,7 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
     const host = request?.upstreamHost;
     if (!host) return listed;
     const hostItems = mocks.hostIssuers(host);
+    if (hostItems === "error") return { data: undefined, isError: true };
     if (hostItems) return { data: { result: { items: hostItems } } };
     // Stands in for the server's upstream_host filter: the issuer's host is
     // the given host or one of its parent domains.
@@ -270,6 +271,8 @@ beforeEach(() => {
     isError: false,
   });
   mocks.issuers.mockReturnValue({ data: { result: { items: [] } } });
+  // No host override: host lookups filter the listing above.
+  mocks.hostIssuers.mockImplementation(() => undefined);
   // By default a lookup by id finds whatever the listing holds.
   mocks.issuersByIds.mockImplementation((ids: string[]) => ({
     items: (
@@ -576,6 +579,26 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
 
     expect(screen.queryByText("Will be created")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Identity provider"));
+    expect(screen.getByText("Known provider")).toBeDefined();
+  });
+
+  it("does not offer to create a provider when the known-provider lookup fails", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: ["https://auth.example.test"] },
+    });
+    mocks.hostIssuers.mockImplementation((host: string) =>
+      host === "auth.example.test" ? "error" : undefined,
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Will be created")).toBeNull();
+    expect(
+      screen.getByText(/Couldn.t load this server.s identity providers/),
+    ).toBeDefined();
   });
 
   it("offers the discovered provider as one that will be created", () => {

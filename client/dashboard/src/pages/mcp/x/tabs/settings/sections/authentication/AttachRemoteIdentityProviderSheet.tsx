@@ -1,5 +1,6 @@
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Combobox } from "@/components/ui/Combobox";
+import { FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -28,7 +29,10 @@ import {
   proxyRegisterUpstreamClient,
   registrationProvenance,
 } from "@/lib/proxyRegisterUpstreamClient";
-import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
+import {
+  deriveRemoteSessionIssuerNameFromUrl,
+  remoteSessionScopeTier,
+} from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { CreateRemoteSessionIssuerForm } from "@gram/client/models/components/createremotesessionissuerform.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
@@ -81,6 +85,14 @@ import {
 type Mode = "select" | "new";
 
 const NO_EXCLUDED_ISSUERS: readonly string[] = [];
+// The listing's server-side page ceiling (constants.MaxPageLimit).
+const MAX_ISSUER_PAGE = 100;
+
+const ISSUER_TIER_LABEL = {
+  project: "This project",
+  organization: "Organization",
+  platform: "Platform catalog",
+} as const satisfies Record<ReturnType<typeof remoteSessionScopeTier>, string>;
 
 export function AttachRemoteIdentityProviderSheet({
   open,
@@ -118,22 +130,25 @@ export function AttachRemoteIdentityProviderSheet({
   const projectSlug = useProjectSlugForRequests();
 
   // Whether "Select existing" has anything to offer. One more row than there
-  // are exclusions is enough to know: if every row of that page is excluded,
-  // the project sees no issuer beyond them. Fetched while closed too, so the
-  // answer is ready when the sheet opens rather than flipping its mode (and
-  // resetting the form) a moment later.
+  // are exclusions is enough to know: if every row of that page is excluded
+  // and no page follows, the project sees no issuer beyond them. The server
+  // caps the page, so a following page also counts as something to offer.
+  // Fetched while closed too, so the answer is ready when the sheet opens
+  // rather than flipping its mode (and resetting the form) a moment later.
   const excludedIds = useMemo(
     () => new Set(excludedIssuerIds),
     [excludedIssuerIds],
   );
   const { data: probePage } = useRemoteSessionIssuers(
-    { limit: excludedIds.size + 1 },
+    { limit: Math.min(excludedIds.size + 1, MAX_ISSUER_PAGE) },
     undefined,
     { throwOnError: false },
   );
-  const hasSelectable = (probePage?.result.items ?? []).some(
-    (issuer) => !excludedIds.has(issuer.id),
-  );
+  const hasSelectable =
+    !!probePage?.result.nextCursor ||
+    (probePage?.result.items ?? []).some(
+      (issuer) => !excludedIds.has(issuer.id),
+    );
   const [mode, setMode] = useState<Mode>(
     initialIssuerUrl || !hasSelectable ? "new" : "select",
   );
@@ -226,11 +241,11 @@ export function AttachRemoteIdentityProviderSheet({
   // need it to know whether the picked issuer supports DCR/CIMD and to pull its
   // registration_endpoint at submit time. Fetched by id: the picker pages and
   // searches the listing, so the pick may not be in any page it has loaded.
-  const { data: pickedIssuer } = useRemoteSessionIssuer(
-    { id: selectedIssuerId },
-    undefined,
-    { enabled: mode === "select" && !!selectedIssuerId, throwOnError: false },
-  );
+  const { data: pickedIssuer, isError: pickedIssuerError } =
+    useRemoteSessionIssuer({ id: selectedIssuerId }, undefined, {
+      enabled: mode === "select" && !!selectedIssuerId,
+      throwOnError: false,
+    });
   const selectedIssuer =
     mode === "select" && pickedIssuer?.id === selectedIssuerId
       ? pickedIssuer
@@ -616,7 +631,9 @@ export function AttachRemoteIdentityProviderSheet({
     // Issuer must be resolvable: an existing pick, or a complete new-issuer
     // form.
     if (mode === "select") {
-      if (!selectedIssuerId) return false;
+      // Held until the pick's record loads: submit needs its registration
+      // metadata, and a failed lookup must not attach without it.
+      if (!selectedIssuer) return false;
     } else if (!slug.trim() || !issuerUrl.trim()) {
       return false;
     }
@@ -628,7 +645,7 @@ export function AttachRemoteIdentityProviderSheet({
     return true;
   }, [
     mode,
-    selectedIssuerId,
+    selectedIssuer,
     slug,
     issuerUrl,
     effectiveClientMode,
@@ -723,6 +740,7 @@ export function AttachRemoteIdentityProviderSheet({
                 excludedIssuerIds={excludedIds}
                 selectedIssuerId={selectedIssuerId}
                 selectedIssuer={selectedIssuer}
+                pickFailed={pickedIssuerError}
                 onChange={setSelectedIssuerId}
               />
             ) : (
@@ -940,11 +958,13 @@ function SelectExistingFields({
   excludedIssuerIds,
   selectedIssuerId,
   selectedIssuer,
+  pickFailed,
   onChange,
 }: {
   excludedIssuerIds: ReadonlySet<string>;
   selectedIssuerId: string;
   selectedIssuer: RemoteSessionIssuer | undefined;
+  pickFailed: boolean;
   onChange: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
@@ -968,6 +988,9 @@ function SelectExistingFields({
         .map((issuer) => ({
           value: issuer.id,
           label: issuerOptionLabel(issuer),
+          // Tiers can hold records with the same name and URL; the tier is
+          // what tells them apart.
+          description: ISSUER_TIER_LABEL[remoteSessionScopeTier(issuer)],
         })),
     [data, excludedIssuerIds],
   );
@@ -1005,10 +1028,17 @@ function SelectExistingFields({
           ? issuerOptionLabel(selectedIssuer)
           : "Choose an identity provider…"}
       </Combobox>
-      <Text muted small>
-        Pick an identity provider this project already has: its own, its
-        organization&apos;s, or one from the platform catalog.
-      </Text>
+      {pickFailed ? (
+        <FieldError>
+          Failed to load this identity provider. Pick it again, or refresh the
+          page.
+        </FieldError>
+      ) : (
+        <Text muted small>
+          Pick an identity provider this project already has: its own, its
+          organization&apos;s, or one from the platform catalog.
+        </Text>
+      )}
     </Stack>
   );
 }

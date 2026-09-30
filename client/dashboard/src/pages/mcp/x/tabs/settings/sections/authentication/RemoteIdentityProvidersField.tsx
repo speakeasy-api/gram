@@ -24,8 +24,9 @@ export function RemoteIdentityProvidersField({
 }: {
   associatedIssuers: RemoteSessionIssuer[];
   isLoading: boolean;
-  /** An attached provider failed to load. Rendered as an error rather than
-   * the empty state, which would tell the user nothing is connected. */
+  /** An attached provider failed to load. Never rendered as the empty state,
+   * which would tell the user nothing is connected; providers that did load
+   * keep their rows. */
   isError?: boolean;
   /** Gateways bind a provider per member; remote/tunneled servers have one
    * upstream, so only their empty state may offer an attach. */
@@ -48,6 +49,12 @@ export function RemoteIdentityProvidersField({
     </RequireScope>
   );
 
+  const loadError = (
+    <FieldError>
+      Failed to load the connected services. Refresh the page to try again.
+    </FieldError>
+  );
+
   let providerControls: ReactNode;
   if (isLoading) {
     providerControls = (
@@ -55,12 +62,8 @@ export function RemoteIdentityProvidersField({
         Loading…
       </Text>
     );
-  } else if (isError) {
-    providerControls = (
-      <FieldError>
-        Failed to load the connected services. Refresh the page to try again.
-      </FieldError>
-    );
+  } else if (associatedIssuers.length === 0 && isError) {
+    providerControls = loadError;
   } else if (associatedIssuers.length === 0) {
     // The button is the empty state: "None yet." beside it says nothing the
     // absent list does not already say.
@@ -84,6 +87,7 @@ export function RemoteIdentityProvidersField({
             readOnly={readOnly}
           />
         ))}
+        {isError && loadError}
         {allowAdditionalProviders && !readOnly && addButton}
       </div>
     );

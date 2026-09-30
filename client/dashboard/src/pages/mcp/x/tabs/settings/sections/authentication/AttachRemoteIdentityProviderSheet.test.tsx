@@ -225,9 +225,19 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       screen.getByText("Catalog provider — https://catalog.example.test"),
     );
 
-    // The trigger shows the pick, resolved by id rather than from the page.
+    // The trigger shows the pick, resolved by id rather than from the page:
+    // it stays even once no loaded page contains it.
     await waitFor(() =>
       expect(mocks.issuerById).toHaveBeenCalledWith(catalog.id),
+    );
+    mocks.issuersPage.mockReturnValue([]);
+    fireEvent.click(screen.getAllByRole("combobox")[0] as HTMLElement);
+    fireEvent.change(
+      screen.getByPlaceholderText("Search identity providers…"),
+      { target: { value: "nothing" } },
+    );
+    await waitFor(() =>
+      expect(mocks.issuersSearch).toHaveBeenLastCalledWith("nothing"),
     );
     expect(screen.getAllByRole("combobox")[0]?.textContent).toContain(
       "Catalog provider — https://catalog.example.test",

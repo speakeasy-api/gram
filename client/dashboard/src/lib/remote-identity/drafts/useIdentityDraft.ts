@@ -189,7 +189,7 @@ async function protectedResourceScopes(
 function useIssuersForHost(
   host: string,
   enabled: boolean,
-): { issuers: RemoteSessionIssuer[]; isLoading: boolean } {
+): { issuers: RemoteSessionIssuer[]; isLoading: boolean; isError: boolean } {
   const query = useRemoteSessionIssuers({ upstreamHost: host }, undefined, {
     enabled: enabled && host !== "",
     throwOnError: false,
@@ -197,6 +197,7 @@ function useIssuersForHost(
   return {
     issuers: query.data?.result.items ?? [],
     isLoading: query.isLoading,
+    isError: query.isError,
   };
 }
 
@@ -239,6 +240,8 @@ export type UserIdentityDraft = {
   /** The upstream advertised no provider and none matched. */
   providerUnreachable: boolean;
   providerLoading: boolean;
+  /** A provider lookup failed, so the choices may be incomplete. */
+  providerLoadFailed: boolean;
 
   clientsLoading: boolean;
   /** A discovered provider's capabilities are still being read. */
@@ -341,8 +344,11 @@ export function useUserIdentityDraft({
     () => (linkedIssuerId ? [linkedIssuerId] : []),
     [linkedIssuerId],
   );
-  const { items: linkedIssuers, isLoading: linkedIssuerLoading } =
-    useRemoteSessionIssuersByIds(linkedIssuerIds, { enabled });
+  const {
+    items: linkedIssuers,
+    isLoading: linkedIssuerLoading,
+    isError: linkedIssuerError,
+  } = useRemoteSessionIssuersByIds(linkedIssuerIds, { enabled });
 
   // The provider this server's upstream points at, found on the server: the
   // same-site rule (the upstream's host or a parent domain of it) runs over
@@ -388,9 +394,18 @@ export function useUserIdentityDraft({
     return [...merged.values()];
   }, [listedIssuers, linkedIssuers, matchedIssuer, knownDiscoveredIssuer]);
 
+  // A lookup that failed is not an answer: offering a provider as new, or
+  // picking none, on a failed lookup could duplicate or hide one the project
+  // already has. The row reports the failure and Save stays off instead.
+  const providerLoadFailed =
+    linkedIssuerError || hostMatchQuery.isError || discoveredQuery.isError;
+
   const discovered = useMemo<ProviderOption | null>(
     () =>
-      discoveredIssuerUrl && !discoveredQuery.isLoading && !discoveredIsKnown
+      discoveredIssuerUrl &&
+      !discoveredQuery.isLoading &&
+      !discoveredQuery.isError &&
+      !discoveredIsKnown
         ? {
             id: DISCOVERED_PROVIDER_ID,
             name:
@@ -401,7 +416,12 @@ export function useUserIdentityDraft({
             match: true,
           }
         : null,
-    [discoveredIssuerUrl, discoveredQuery.isLoading, discoveredIsKnown],
+    [
+      discoveredIssuerUrl,
+      discoveredQuery.isLoading,
+      discoveredQuery.isError,
+      discoveredIsKnown,
+    ],
   );
 
   // Nothing matched and nothing was advertised: the upstream could not tell us
@@ -733,6 +753,7 @@ export function useUserIdentityDraft({
   const canSave =
     !!selected &&
     !connected &&
+    !providerLoadFailed &&
     !capabilitiesLoading &&
     // Saving before the client list lands would miss an existing client and
     // register a duplicate in its place.
@@ -751,6 +772,7 @@ export function useUserIdentityDraft({
       linkedIssuerLoading ||
       hostMatchQuery.isLoading ||
       discoveredQuery.isLoading,
+    providerLoadFailed,
 
     clientsLoading,
     capabilitiesLoading,

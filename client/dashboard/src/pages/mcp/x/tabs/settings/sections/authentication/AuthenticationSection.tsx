@@ -152,11 +152,14 @@ function StandardAuthenticationSectionBody({
     enabled: issuerConfigured,
   });
 
-  const { items: allClients, isLoading: isLoadingClients } =
-    useAllRemoteSessionClients(
-      { userSessionIssuerId },
-      { enabled: issuerConfigured },
-    );
+  const {
+    items: allClients,
+    isLoading: isLoadingClients,
+    isError: isClientsError,
+  } = useAllRemoteSessionClients(
+    { userSessionIssuerId },
+    { enabled: issuerConfigured },
+  );
 
   const attachedIssuerIds = useMemo(
     () => [
@@ -220,7 +223,7 @@ function StandardAuthenticationSectionBody({
           allowAdditionalProviders={!!target.multipleProviders}
           projectId={target.projectId}
           isLoading={isLoadingClients || isLoadingAssociatedIssuers}
-          isError={isAssociatedIssuersError}
+          isError={isClientsError || isAssociatedIssuersError}
           onAdd={() => setSheetOpen(true)}
           onEdit={handleEdit}
           onDelete={handleDelete}
