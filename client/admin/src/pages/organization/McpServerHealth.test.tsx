@@ -231,6 +231,10 @@ describe("McpServerHealth", () => {
       screen.getByRole("heading", { name: "Tool calls per day" }),
     ).toBeTruthy();
     expect(screen.getByText(/Failed means status 400 or above/)).toBeTruthy();
+    // The chart and the card count different calls, and the page says so.
+    expect(
+      screen.getByText(/The chart counts calls that reach the server directly/),
+    ).toBeTruthy();
 
     const clients = screen.getByRole("region", {
       name: "Remote session clients",

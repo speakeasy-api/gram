@@ -210,24 +210,24 @@ export function toolCallTailUrl(urlSlug: string): string {
   return datadogQuery("/logs/livetail", { query: toolCallTailQuery(urlSlug) });
 }
 
+// Empty when there is neither a slug nor an issuer to search by.
 export function loginChallengeQuery(
-  urlSlug: string,
+  urlSlug: string | undefined,
   issuers: string[],
 ): string {
   const terms = [
-    `@gram.toolset.mcp_slug:${urlSlug}`,
+    ...(urlSlug ? [`@gram.toolset.mcp_slug:${urlSlug}`] : []),
     ...[...new Set(issuers)].map((issuer) => `@gram.oauth.issuer:"${issuer}"`),
   ];
   return terms.join(" OR ");
 }
 
 export function loginChallengeUrl(
-  urlSlug: string,
-  issuers: string[],
+  query: string,
   range: { from: Date; to: Date },
 ): string {
   return datadogQuery("/logs", {
-    query: loginChallengeQuery(urlSlug, issuers),
+    query,
     from_ts: String(range.from.getTime()),
     to_ts: String(range.to.getTime()),
     live: "false",

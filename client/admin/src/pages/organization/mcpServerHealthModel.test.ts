@@ -121,6 +121,13 @@ describe("Datadog links", () => {
     );
   });
 
+  it("searches login logs by issuer alone when there is no slug", () => {
+    expect(loginChallengeQuery(undefined, ["https://login.example.test"])).toBe(
+      '@gram.oauth.issuer:"https://login.example.test"',
+    );
+    expect(loginChallengeQuery(undefined, [])).toBe("");
+  });
+
   it("searches login logs by slug or any issuer over the window", () => {
     expect(
       loginChallengeQuery("crm", [
@@ -133,7 +140,9 @@ describe("Datadog links", () => {
 
     const from = new Date("2026-09-15T00:00:00Z");
     const to = new Date("2026-09-29T00:00:00Z");
-    const url = new URL(loginChallengeUrl("crm", [], { from, to }));
+    const url = new URL(
+      loginChallengeUrl(loginChallengeQuery("crm", []), { from, to }),
+    );
     expect(url.pathname).toBe("/logs");
     expect(url.searchParams.get("query")).toBe("@gram.toolset.mcp_slug:crm");
     expect(url.searchParams.get("from_ts")).toBe(String(from.getTime()));

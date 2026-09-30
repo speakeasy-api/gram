@@ -542,8 +542,11 @@ function ToolCallsChart({
         </div>
       </div>
       <p className={cn(MUTED, "border-t px-5 pt-2.5 pb-3.5 text-xs")}>
-        Failed means status 400 or above. A single failed call still fills a red
-        square. Tool errors returned inside a 200 response count as OK.
+        The chart counts calls that reach the server directly. The Tool calls
+        total above also counts calls reported by client hooks, so it can be
+        higher. Failed means status 400 or above. A single failed call still
+        fills a red square. Tool errors returned inside a 200 response count as
+        OK.
       </p>
       <PromptBlock
         prompt={platformMcpPrompt({
@@ -861,11 +864,14 @@ function LogsCard({
   range,
   className,
 }: {
-  urlSlug: string;
+  // Absent when the server has no slug: then there is no endpoint to tail,
+  // and the login logs are found by issuer alone.
+  urlSlug: string | undefined;
   issuers: string[];
   range: { from: Date; to: Date };
   className?: string;
 }): JSX.Element {
+  const loginQuery = loginChallengeQuery(urlSlug, issuers);
   return (
     <section className={cn(CARD, className)} aria-labelledby="logs">
       <div className={CARD_HEAD}>
@@ -877,18 +883,27 @@ function LogsCard({
         </span>
       </div>
       <div>
-        <LogLink
-          href={toolCallTailUrl(urlSlug)}
-          title="Tool call tail"
-          description="Datadog live tail of every request to this server's MCP endpoint. Works with logging off."
-          query={toolCallTailQuery(urlSlug)}
-        />
-        <LogLink
-          href={loginChallengeUrl(urlSlug, issuers, range)}
-          title="Login challenge logs"
-          description="OAuth flow, issuer gate and token exchange logs for this server's sign-ins"
-          query={loginChallengeQuery(urlSlug, issuers)}
-        />
+        {urlSlug && (
+          <LogLink
+            href={toolCallTailUrl(urlSlug)}
+            title="Tool call tail"
+            description="Datadog live tail of every request to this server's MCP endpoint. Works with logging off."
+            query={toolCallTailQuery(urlSlug)}
+          />
+        )}
+        {loginQuery && (
+          <LogLink
+            href={loginChallengeUrl(loginQuery, range)}
+            title="Login challenge logs"
+            description="OAuth flow, issuer gate and token exchange logs for this server's sign-ins"
+            query={loginQuery}
+          />
+        )}
+        {!urlSlug && !loginQuery && (
+          <p className={cn(MUTED, "px-5 py-3.5 text-sm")}>
+            This server has no URL slug or upstream issuer to filter logs by.
+          </p>
+        )}
       </div>
     </section>
   );
