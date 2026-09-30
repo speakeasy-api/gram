@@ -1026,8 +1026,7 @@ func (s *Service) rotateRefreshToken(
 				if errors.As(admissionErr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
 					return true, admissionErr
 				}
-				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
-				return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
+				return true, s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token request rejected", "agent_admission_denied", "agent authorization is no longer valid; reauthorize", logger)
 			}
 			admittedAgentSessionID = refreshSession.ID
 		}
@@ -1036,8 +1035,7 @@ func (s *Service) rotateRefreshToken(
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) &&
 		s.userRefreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn) {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required")
-		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, remoteSessionReconnectDescription)
+		return true, s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token request rejected", "upstream_reconnect_required", remoteSessionReconnectDescription, logger)
 	}
 
 	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{
@@ -1163,12 +1161,10 @@ func (s *Service) rotateRefreshToken(
 	// cross-endpoint policies before consuming the refresh transaction.
 	oldSelection, perr := toolfilter.ParseSessionSelection(oldSession.ToolSelection)
 	if perr != nil {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_malformed")
-		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is malformed; reauthorize")
+		return true, s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token request rejected", "tool_selection_malformed", "session tool selection is malformed; reauthorize", logger)
 	}
 	if oldSelection != nil && oldSelection.Resource != endpointToolSelectionResource(endpoint) {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_resource_mismatch")
-		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
+		return true, s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token request rejected", "tool_selection_resource_mismatch", "session tool selection is bound to a different MCP endpoint; reauthorize", logger)
 	}
 	if oldSession.SubjectUrn.Kind == urn.SessionSubjectKindAgent {
 		var admissionErr error
@@ -1181,8 +1177,7 @@ func (s *Service) rotateRefreshToken(
 			}
 		}
 		if admissionErr != nil {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
-			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
+			return true, s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token request rejected", "agent_admission_denied", "agent authorization is no longer valid; reauthorize", logger)
 		}
 		ctx = admittedAgentContext
 	}
@@ -1348,26 +1343,26 @@ func (s *Service) writeRefreshTokenReplayHop(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_payload_invalid")
 		return oops.E(oops.CodeUnexpected, nil, "refresh token replay response is missing subject").LogError(ctx, logger)
 	}
-	// Every rotation and revocation of the successor pushes its jti here, so
-	// a replay never hands out a pair the runtime would already refuse. A
-	// later rotation left its own replay under the successor's refresh token;
-	// follow it so a window that slept through several rotations still lands
-	// on the live pair.
+	// Publication precedes the best-effort JTI revocation write. Follow an
+	// already-published rotation even if that write is delayed or failed.
+	// A missing next replay is distinct from an unavailable replay cache.
+	nextKey := refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(payload.Response.RefreshToken))
+	next, nextErr := s.userSessionRefreshReplayCache.Get(ctx, nextKey)
+	if nextErr == nil {
+		if hops >= refreshTokenReplayMaxHops {
+			return s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token replay rejected", "refresh_token_replay_hop_limit", "refresh token replay chain is too long; reauthorize", logger)
+		}
+		return s.writeRefreshTokenReplayHop(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, nextKey, next, hops+1, logger)
+	}
+	if !errors.Is(nextErr, redisCache.ErrCacheMiss) {
+		return oops.E(oops.CodeUnexpected, nextErr, "read chained refresh token replay").LogError(ctx, logger)
+	}
+	// Only a terminal successor can be served, and it must not be revoked.
 	revoked, err := s.chatSessionsManager.IsTokenRevoked(ctx, payload.JTI)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check refreshed session revocation").LogError(ctx, logger)
 	}
 	if revoked {
-		if hops < refreshTokenReplayMaxHops {
-			nextKey := refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(payload.Response.RefreshToken))
-			next, nextErr := s.userSessionRefreshReplayCache.Get(ctx, nextKey)
-			if nextErr == nil {
-				return s.writeRefreshTokenReplayHop(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, nextKey, next, hops+1, logger)
-			}
-			if !errors.Is(nextErr, redisCache.ErrCacheMiss) {
-				logger.WarnContext(ctx, "failed to read chained refresh token replay", attr.SlogError(nextErr))
-			}
-		}
 		return s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token replay rejected", "refresh_token_revoked", "refreshed session is no longer active", logger)
 	}
 	if payload.Subject.Kind == urn.SessionSubjectKindAgent {

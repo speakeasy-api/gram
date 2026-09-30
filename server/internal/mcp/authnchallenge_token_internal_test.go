@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -29,7 +30,7 @@ import (
 func TestWriteRefreshTokenReplayRejectsDifferentCacheKey(t *testing.T) {
 	t.Parallel()
 
-	service, endpoint, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	service, endpoint, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	err := service.writeRefreshTokenReplay(
@@ -50,7 +51,7 @@ func TestWriteRefreshTokenReplayRejectsDifferentCacheKey(t *testing.T) {
 func TestWriteRefreshTokenReplayRejectsExpiredCredentials(t *testing.T) {
 	t.Parallel()
 
-	service, endpoint, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(-time.Second))
+	service, endpoint, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(-time.Second))
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	var logs bytes.Buffer
@@ -77,7 +78,7 @@ func TestWriteRefreshTokenReplayRecomputesRemainingLifetimes(t *testing.T) {
 	t.Parallel()
 
 	expiresAt := time.Now().Add(10 * time.Minute)
-	service, endpoint, clientRow, replay := newRefreshTokenReplayTestFixture(t, expiresAt)
+	service, endpoint, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, expiresAt)
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	err := service.writeRefreshTokenReplay(
@@ -95,7 +96,7 @@ func TestWriteRefreshTokenReplayRecomputesRemainingLifetimes(t *testing.T) {
 func TestWriteRefreshTokenReplayFailurePrecedesClientBinding(t *testing.T) {
 	t.Parallel()
 
-	service, endpoint, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	service, endpoint, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
 	plaintext, err := service.enc.Decrypt(replay.Ciphertext)
 	require.NoError(t, err)
 	var payload userSessionRefreshReplayPayload
@@ -123,7 +124,7 @@ func TestWriteRefreshTokenReplayFailurePrecedesClientBinding(t *testing.T) {
 func TestStoreRefreshTokenReplayFailureDoesNotOverwriteSuccess(t *testing.T) {
 	t.Parallel()
 
-	service, _, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	service, _, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
 	require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), replay))
 
 	stored := service.storeRefreshTokenReplayFailure(
@@ -146,7 +147,7 @@ func TestStoreRefreshTokenReplayFailureDoesNotOverwriteSuccess(t *testing.T) {
 func TestWriteRefreshTokenReplayRecordsServedEvent(t *testing.T) {
 	t.Parallel()
 
-	service, endpoint, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	service, endpoint, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	var logs bytes.Buffer
@@ -171,7 +172,7 @@ func TestWriteRefreshTokenReplayRecordsServedEvent(t *testing.T) {
 func newRefreshTokenReplayTestFixture(
 	t *testing.T,
 	expiresAt time.Time,
-) (*Service, *ResolvedMcpEndpoint, *usersessions_repo.UserSessionClient, userSessionRefreshReplay) {
+) (*Service, *ResolvedMcpEndpoint, *usersessions_repo.UserSessionClient, userSessionRefreshReplay, *miniredis.Miniredis) {
 	t.Helper()
 
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
@@ -223,12 +224,12 @@ func newRefreshTokenReplayTestFixture(
 	service.enc = enc
 	service.metrics = &mcpmetrics.Metrics{}
 	service.userSessionSigner = sessiontokens.NewSigner("test-jwt-secret")
-	newRefreshTokenReplayRedis(t, service)
+	mr := newRefreshTokenReplayRedis(t, service)
 	return service, endpoint, &clientRow, userSessionRefreshReplay{
 		Key:        payload.ReplayKey,
 		Ciphertext: ciphertext,
 		ExpiresAt:  expiresAt,
-	}
+	}, mr
 }
 
 // newRefreshTokenReplayRedis backs the replay cache and the revocation cache
@@ -267,7 +268,7 @@ func decodeRefreshTokenReplay(t *testing.T, service *Service, replay userSession
 func TestWriteRefreshTokenReplayFollowsLaterRotation(t *testing.T) {
 	t.Parallel()
 
-	service, endpoint, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	service, endpoint, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
 	first := decodeRefreshTokenReplay(t, service, replay)
 
 	// The successor was rotated again: its jti is revoked and its own replay
@@ -297,7 +298,7 @@ func TestWriteRefreshTokenReplayFollowsLaterRotation(t *testing.T) {
 func TestWriteRefreshTokenReplayRejectsRevokedSuccessor(t *testing.T) {
 	t.Parallel()
 
-	service, endpoint, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	service, endpoint, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
 	first := decodeRefreshTokenReplay(t, service, replay)
 	require.NoError(t, service.chatSessionsManager.RevokeToken(t.Context(), first.JTI))
 
@@ -332,8 +333,7 @@ func TestUserSessionRefreshReplayTTL(t *testing.T) {
 func TestStoreRefreshTokenReplayKeepsSuccessorUntilAccessExpiry(t *testing.T) {
 	t.Parallel()
 
-	service, _, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
-	mr := newRefreshTokenReplayRedis(t, service)
+	service, _, clientRow, replay, mr := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
 	payload := decodeRefreshTokenReplay(t, service, replay)
 
 	require.True(t, service.storeRefreshTokenReplayFailure(
@@ -352,4 +352,80 @@ func TestStoreRefreshTokenReplayKeepsSuccessorUntilAccessExpiry(t *testing.T) {
 	require.Len(t, keys, 1)
 	require.Greater(t, mr.TTL(keys[0]), refreshTokenReplayGracePeriod)
 	require.LessOrEqual(t, mr.TTL(keys[0]), time.Hour)
+}
+
+func TestWriteRefreshTokenReplayFollowsPublishedRotationAfterRevocationFailure(t *testing.T) {
+	t.Parallel()
+	service, endpoint, clientRow, replay, mr := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	first := decodeRefreshTokenReplay(t, service, replay)
+	second := first
+	second.JTI = strings.Repeat("b", 43)
+	second.ReplayKey = refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(first.Response.RefreshToken))
+	second.Response.RefreshToken = "refresh-token-2"
+	second.Response.AccessToken = "access-token-2"
+	require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), encodeRefreshTokenReplay(t, service, second)))
+	mr.SetError("ERR injected revocation failure")
+	require.Error(t, service.chatSessionsManager.RevokeToken(t.Context(), first.JTI))
+	mr.SetError("")
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
+	require.NoError(t, service.writeRefreshTokenReplay(t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none", replay.Key, replay, testenv.NewLogger(t)))
+	require.Equal(t, http.StatusOK, w.Code)
+	var response tokenResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Equal(t, second.Response.RefreshToken, response.RefreshToken)
+	require.Equal(t, second.Response.AccessToken, response.AccessToken)
+}
+
+func TestWriteRefreshTokenReplayNextLookupFailureIsRetryable(t *testing.T) {
+	t.Parallel()
+	service, endpoint, clientRow, replay, mr := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	first := decodeRefreshTokenReplay(t, service, replay)
+	second := first
+	second.JTI = strings.Repeat("b", 43)
+	second.ReplayKey = refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(first.Response.RefreshToken))
+	second.Response.RefreshToken = "refresh-token-2"
+	require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), encodeRefreshTokenReplay(t, service, second)))
+	require.NoError(t, service.chatSessionsManager.RevokeToken(t.Context(), first.JTI))
+	mr.SetError("ERR injected lookup failure")
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
+	err := service.writeRefreshTokenReplay(t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none", replay.Key, replay, testenv.NewLogger(t))
+	require.ErrorContains(t, err, "read chained refresh token replay")
+	require.Empty(t, w.Body.String(), "must not write a terminal invalid_grant")
+	mr.SetError("")
+	require.NoError(t, service.writeRefreshTokenReplay(t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none", replay.Key, replay, testenv.NewLogger(t)))
+	require.Equal(t, http.StatusOK, w.Code)
+	var response tokenResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Equal(t, second.Response.RefreshToken, response.RefreshToken)
+}
+
+func TestWriteRefreshTokenReplayHopBound(t *testing.T) {
+	t.Parallel()
+	for _, follows := range []int{refreshTokenReplayMaxHops, refreshTokenReplayMaxHops + 1} {
+		t.Run(fmt.Sprintf("follows_%d", follows), func(t *testing.T) {
+			t.Parallel()
+			service, endpoint, clientRow, replay, _ := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+			payload := decodeRefreshTokenReplay(t, service, replay)
+			for i := range follows {
+				payload.ReplayKey = refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(payload.Response.RefreshToken))
+				payload.JTI = fmt.Sprintf("jti-%d", i)
+				payload.Response.RefreshToken = fmt.Sprintf("refresh-%d", i)
+				require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), encodeRefreshTokenReplay(t, service, payload)))
+			}
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
+			require.NoError(t, service.writeRefreshTokenReplay(t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none", replay.Key, replay, testenv.NewLogger(t)))
+			if follows > refreshTokenReplayMaxHops {
+				require.Equal(t, http.StatusBadRequest, w.Code)
+				require.Contains(t, w.Body.String(), "refresh token replay chain is too long")
+			} else {
+				require.Equal(t, http.StatusOK, w.Code)
+				var response tokenResponse
+				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+				require.Equal(t, payload.Response.RefreshToken, response.RefreshToken)
+			}
+		})
+	}
 }

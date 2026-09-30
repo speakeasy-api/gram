@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
@@ -94,6 +95,7 @@ func TestNewMetrics_CreatesOAuthFlowCounters(t *testing.T) {
 	require.NotNil(t, m.oauthFlowFailedCounter)
 	require.NotNil(t, m.oauthFlowDeclinedCounter)
 	require.NotNil(t, m.oauthRefreshTokenReplayServedCounter)
+	require.NotNil(t, m.oauthRefreshTokenRejectedCounter)
 }
 
 func TestMetrics_RecordOAuthFlowStarted(t *testing.T) {
@@ -149,7 +151,54 @@ func TestMetrics_RecordOAuthRefreshTokenReplayServed(t *testing.T) {
 	m := NewMetrics(meter, testenv.NewLogger(t))
 
 	m.RecordOAuthRefreshTokenReplayServed(t.Context(), "issuer-1", "mcp-slug-1")
-	m.RecordOAuthRefreshTokenRejected(t.Context(), "issuer-1", "mcp-slug-1", "refresh_token_unknown_or_already_used")
+}
+
+func TestMetrics_RecordOAuthRefreshTokenRejected(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	m := NewMetrics(provider.Meter("test"), testenv.NewLogger(t))
+
+	// Repeated rejections aggregate, while each reason, issuer and endpoint
+	// retains its own series.
+	cases := []struct {
+		issuer string
+		slug   string
+		reason string
+		count  int64
+	}{
+		{"issuer-1", "mcp-slug-1", "refresh_token_unknown_or_already_used", 2},
+		{"issuer-1", "mcp-slug-1", "refresh_token_expired", 1},
+		{"issuer-2", "mcp-slug-1", "refresh_token_expired", 1},
+		{"issuer-1", "mcp-slug-2", "refresh_token_expired", 1},
+	}
+	expected := make(map[attribute.Distinct]int64, len(cases))
+	for _, tc := range cases {
+		for range tc.count {
+			m.RecordOAuthRefreshTokenRejected(t.Context(), tc.issuer, tc.slug, tc.reason)
+		}
+		attrs := attribute.NewSet(
+			attr.UserSessionIssuerID(tc.issuer),
+			attr.ToolsetMCPSlug(tc.slug),
+			attr.OAuthFailureReason(tc.reason),
+		)
+		expected[attrs.Equivalent()] = tc.count
+	}
+
+	got := collectMetric(t, reader, "oauth.refresh_token.rejected")
+	require.Equal(t, "{rejection}", got.Unit)
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "rejected instrument must be an int64 counter")
+	require.True(t, sum.IsMonotonic)
+	require.Equal(t, metricdata.CumulativeTemporality, sum.Temporality)
+	require.Len(t, sum.DataPoints, len(expected))
+	actual := make(map[attribute.Distinct]int64, len(sum.DataPoints))
+	for _, point := range sum.DataPoints {
+		actual[point.Attributes.Equivalent()] = point.Value
+	}
+	require.Equal(t, expected, actual, "rejection counts must match the exact issuer, MCP slug and failure reason attributes")
 }
 
 func TestMetrics_RecordOAuthFlow_NilCountersDoNotPanic(t *testing.T) {
