@@ -526,14 +526,11 @@ describe("NetworkAccessSection", () => {
     "allows private choices for %s when staff enabled Tailscale",
     (tier) => {
       testState.productTier = tier;
-      render(
-        <NetworkAccessSection
-          mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
-          endpoints={endpoints}
-        />,
+      const { unmount } = render(
+        <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
       );
       expect(screen.queryByText(/available on the Enterprise plan/)).toBeNull();
-      expect(screen.queryByText(/no longer enabled/)).toBeNull();
+      expect(screen.queryByText(/not enabled/)).toBeNull();
       expect(
         screen.getByText("Changes apply to new connections."),
       ).toBeTruthy();
@@ -545,6 +542,18 @@ describe("NetworkAccessSection", () => {
           .getByRole("option", { name: /Public and private/ })
           .hasAttribute("data-disabled"),
       ).toBe(false);
+      unmount();
+
+      render(
+        <NetworkAccessSection
+          mcpServer={{ ...baseServer, networkAccessMode: "private_only" }}
+          endpoints={endpoints}
+        />,
+      );
+      expect(screen.queryByText(/no longer enabled/)).toBeNull();
+      expect(
+        screen.getByText("Changes apply to new connections."),
+      ).toBeTruthy();
     },
   );
 
