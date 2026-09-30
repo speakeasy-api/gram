@@ -99,6 +99,7 @@ type LiveOrgAdminAuthorizer struct {
 	db           *pgxpool.Pool
 	engine       *authz.Engine
 	dashboardURL *url.URL
+	serverURL    *url.URL
 }
 
 func jwtAuthenticationStoreError(err error) error {
@@ -109,13 +110,23 @@ func jwtAuthenticationStoreError(err error) error {
 }
 
 func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgAdminAuthorizer {
-	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil}
+	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil, serverURL: nil}
 }
 
 func (a *LiveOrgAdminAuthorizer) WithDashboardURL(dashboardURL *url.URL) *LiveOrgAdminAuthorizer {
 	if a != nil && validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
 		a.dashboardURL = &copyURL
+	}
+	return a
+}
+
+// WithServerURL sets the configured server URL, which tells an extra platform
+// host apart from the canonical one when building request-access links.
+func (a *LiveOrgAdminAuthorizer) WithServerURL(serverURL *url.URL) *LiveOrgAdminAuthorizer {
+	if a != nil && serverURL != nil && serverURL.Host != "" {
+		copyURL := *serverURL
+		a.serverURL = &copyURL
 	}
 	return a
 }
