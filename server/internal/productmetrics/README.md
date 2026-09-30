@@ -5,6 +5,9 @@ billing attribution and existing raw agent metrics. Producers register code-owne
 definitions before publishing. No customer API, dashboard, exporter or production
 producer is supplied here.
 
+A **contribution** is one producer-owned measurement that adds to an aggregate:
+a Counter delta increment or a single Histogram observation.
+
 ## Contract
 
 - Counter inputs are nonnegative monotonic **delta increments**. Histogram inputs
@@ -30,7 +33,10 @@ producer is supplied here.
 - Contribution IDs identify **observations**, not series. Allocate distinct IDs
   for distinct measurements, even if values and timestamps coincide. Retry with
   the same ID and unchanged payload. Identity is scoped by tenant and instrumentation
-  scope. Best-effort batch suppression is not an exactly-once guarantee.
+  scope, including its version. Producers must preserve the ID, event timestamp
+  and payload across retries and reprocessing, and minimize duplicate publication:
+  live rollups remain duplicate-inclusive. Best-effort batch suppression is not an
+  exactly-once guarantee.
 - Await the publisher result. Product transaction/outbox integration stays with
   each producer; a database commit and direct Pub/Sub publish are not atomic.
 
