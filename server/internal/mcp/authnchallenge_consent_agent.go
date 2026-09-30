@@ -133,6 +133,15 @@ func consentAgentAuthorizationError(err error, message string) *oops.ShareableEr
 	return oops.E(code, err, "%s", message)
 }
 
+// Final approval has already consumed the single-use challenge. A dependency
+// failure cannot be retried on that page; the client must start a new flow.
+func consumedConsentAgentAuthorizationError(err error) *oops.ShareableError {
+	if errors.Is(err, errConsentAgentDenied) {
+		return consentAgentAuthorizationError(err, "selected agent is not eligible")
+	}
+	return oops.E(oops.CodeUnavailable, err, "Agent authorization could not be completed. Restart authorization from your client.")
+}
+
 func (s *Service) loadConsentHuman(ctx context.Context, state AuthnChallengeState, target AgentAuthorizationTarget) (consentHumanAuthorization, error) {
 	if state.Subject == nil || state.Subject.Kind != urn.SessionSubjectKindUser || state.Subject.ID == "" || state.AuthorizerUserID == "" || state.AuthorizerUserID != state.Subject.ID {
 		return consentHumanAuthorization{}, fmt.Errorf("%w: agent authorization requires an authenticated human", errConsentAgentDenied)

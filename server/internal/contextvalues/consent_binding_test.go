@@ -87,3 +87,31 @@ func TestConsentBindingRejectsConflictingAuthProvenance(t *testing.T) {
 		require.False(t, ok)
 	})
 }
+
+func TestConsentBindingRejectsAPIKeyAuthorizationWithoutPublicFields(t *testing.T) {
+	t.Parallel()
+	ctx := WithConsentBindingAuthorization(t.Context(), "human", "org", uuid.New(), uuid.New(), uuid.New())
+	auth, _ := GetAuthContext(ctx)
+	principalModeOnly := *auth
+	principalModeOnly.apiKeyAuthorizationMode = APIKeyAuthorizationModePrincipal
+	for name, alternate := range map[string]context.Context{
+		"legacy helper":        WithLegacyAPIKeyAuthorization(ctx, auth),
+		"principal helper":     WithPrincipalAPIKeyAuthorization(ctx, auth, urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID), PrincipalCredential{}),
+		"principal mode alone": SetAuthContext(ctx, &principalModeOnly),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			copied, ok := GetAuthContext(alternate)
+			require.True(t, ok)
+			require.Same(t, auth.consentBinding, copied.consentBinding)
+			require.Empty(t, copied.APIKeyID)
+			require.Empty(t, copied.APIKeyName)
+			require.Empty(t, copied.APIKeyScopes)
+			require.False(t, copied.OrgWidePluginHooksKey)
+			_, ok = APIKeyAuthorization(alternate)
+			require.True(t, ok)
+			_, ok = GetConsentBindingAuthorization(alternate)
+			require.False(t, ok)
+		})
+	}
+}

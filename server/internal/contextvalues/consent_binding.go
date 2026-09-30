@@ -42,6 +42,9 @@ func GetConsentBindingAuthorization(ctx context.Context) (ConsentBindingAuthoriz
 	if auth.SessionID != nil || HasValidatedGramSession(ctx) || auth.APIKeyID != "" || auth.APIKeyName != "" || len(auth.APIKeyScopes) != 0 || auth.OrgWidePluginHooksKey || IsSupportSession(ctx) || IsLegacyImpersonatedSession(ctx) {
 		return zero, false
 	}
+	if _, ok := APIKeyAuthorization(ctx); ok {
+		return zero, false
+	}
 	if _, ok := PrincipalCredentialAuthorization(ctx); ok {
 		return zero, false
 	}

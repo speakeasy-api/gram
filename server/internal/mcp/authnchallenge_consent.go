@@ -923,7 +923,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		agentAuthorization, ferr = s.authorizeConsentAgent(ctx, challengeState, finalEndpoint, selectedAgentID)
 		if ferr != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
-			return consentAgentAuthorizationError(ferr, "selected agent is not eligible").LogWarn(ctx, logger)
+			return consumedConsentAgentAuthorizationError(ferr).LogWarn(ctx, logger)
 		}
 	}
 

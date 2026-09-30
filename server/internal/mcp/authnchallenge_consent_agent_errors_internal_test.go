@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -39,4 +40,33 @@ func TestConsentHumanDenialAndDependencyFailureRemainDistinct(t *testing.T) {
 	require.ErrorIs(t, err, errConsentAgentDenied)
 	// Classification survives wrapping through authorizeConsentAgent callers.
 	require.Equal(t, oops.CodeForbidden, consentAgentAuthorizationError(fmt.Errorf("authorize: %w", err), "selected agent is not eligible").Code)
+}
+
+func TestConsumedConsentAgentFailureRequiresRestartWithoutRestoringChallenge(t *testing.T) {
+	t.Parallel()
+	service := browserTestService(t)
+	pool, err := pgxpool.New(t.Context(), "postgres://localhost/unused")
+	require.NoError(t, err)
+	pool.Close()
+	service.db = pool
+	endpoint := &ResolvedMcpEndpoint{OrganizationID: "organization", ProjectID: uuid.New(), UserSessionIssuerID: uuid.New(), ToolsetID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	target, ok := agentAuthorizationTarget(endpoint)
+	require.True(t, ok)
+	subject := urn.NewUserSubject("human")
+	state := AuthnChallengeState{ID: uuid.NewString(), Subject: &subject, AuthorizerUserID: subject.ID, AuthorizerImpersonated: new(bool), AgentAuthorizationTarget: target}
+	require.NoError(t, service.authnChallengeCache.Store(t.Context(), state))
+	state, err = service.authnChallengeCache.GetAndDelete(t.Context(), state.CacheKey())
+	require.NoError(t, err)
+	// Exercise the final authorization/error seam after the same atomic consume
+	// used by approval; no cache restoration occurs when its database fails.
+	_, err = service.authorizeConsentAgent(t.Context(), state, endpoint, uuid.NewString())
+	require.Error(t, err)
+	failure := consumedConsentAgentAuthorizationError(err)
+	require.Equal(t, http.StatusServiceUnavailable, failure.HTTPStatus(t.Context()))
+	require.EqualError(t, failure, "Agent authorization could not be completed. Restart authorization from your client.")
+	_, err = service.authnChallengeCache.Get(t.Context(), state.CacheKey())
+	require.ErrorContains(t, err, "no cache entry for key")
+	denied := consumedConsentAgentAuthorizationError(fmt.Errorf("authorize: %w", errConsentAgentDenied))
+	require.Equal(t, http.StatusForbidden, denied.HTTPStatus(t.Context()))
+	require.EqualError(t, denied, "selected agent is not eligible")
 }
