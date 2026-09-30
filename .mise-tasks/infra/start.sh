@@ -81,26 +81,12 @@ if [ -n "$host_arch" ]; then
 fi
 
 # This worktree's own stack, first — with --remove-orphans. Pre-existing
-# worktrees can still run Pub/Sub or Presidio containers that
-# compose.yml no longer declares. Removing this worktree's copies before
+# worktrees can still run Pub/Sub containers that compose.yml no longer
+# declares. Removing this worktree's copies before
 # asserting the shared services frees fixed ports in the main tree and removes
 # obsolete remapped copies elsewhere. Profile-gated services (litellm,
 # local-registry) remain declared in compose.yml and are not treated as orphans.
 docker compose up -d --remove-orphans || exit 1
-
-# One-time migration: free host port 5050 for the shared analyzer. Before the
-# shared stack existed, the main tree ran its own gram-presidio bound to 5050
-# under its own compose project (the main tree never remaps PRESIDIO_PORT). The
-# --remove-orphans above only touches THIS worktree's project, so that stale
-# container would keep 5050 and block the shared `up` below. Remove ONLY the
-# non-`gram-shared` container that actually holds 5050 — scoping by the port
-# keeps this from touching a sibling worktree's still-in-use analyzer bound to
-# its own remapped port, which the sibling's app is still pointed at until it
-# runs `git:worksync`. Idempotent: once migrated there is nothing to remove.
-docker ps -a --filter "label=com.docker.compose.service=gram-presidio" --filter "publish=5050" \
-  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
-  | awk '$1 != "gram-shared" { print $2 }' \
-  | xargs -r docker rm -f > /dev/null 2>&1 || true
 
 # One-time migration: the main tree previously bound its per-worktree Pub/Sub
 # emulator to the shared port. Remove only a non-shared emulator actually
@@ -117,42 +103,10 @@ docker compose up -d --wait --wait-timeout 30 gram-temporal || exit 1
 docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 \
   pubsub-emulator || exit 1
 
-# Presidio and LGTM are shared too, but neither is a synchronous startup
-# dependency. A transient image pull or cold model must not take down this
-# worktree's databases, so warn and continue.
-docker compose -f compose.shared.yml -p gram-shared up -d gram-presidio lgtm \
-  || echo "⚠️  Optional shared Presidio/LGTM services failed to start; continuing with degraded PII scanning or observability." >&2
-
-# Best-effort readiness for the shared analyzer. `up -d` returns once the
-# container is created, not once its ~1 GB spaCy model has loaded, so poll the
-# container's own healthcheck to keep infra:start's success signal honest. This
-# is deliberately NON-fatal and NOT a hard gate: nothing in the startup path
-# consumes Presidio synchronously (only background Temporal risk activities do,
-# and they already tolerate/retry an unavailable analyzer), so a cold model load
-# must not block the rest of the stack. Since Presidio is a long-lived shared
-# singleton, this returns instantly on every run after the first. Override the
-# bound with PRESIDIO_READINESS_TIMEOUT; <=0 or a non-integer skips the wait.
-PRESIDIO_READINESS_TIMEOUT="${PRESIDIO_READINESS_TIMEOUT:-90}"
-# Normalize to a plain decimal int before any arithmetic: a leading-zero
-# override (e.g. "08") would otherwise be misread as octal — "08"/"09" error and
-# "010" means 8 — so validate the digits, then re-base with 10# (matching
-# INFRA_READINESS_TIMEOUT below). A non-integer becomes 0, which skips the wait.
-if [[ "$PRESIDIO_READINESS_TIMEOUT" =~ ^[0-9]+$ ]]; then
-  PRESIDIO_READINESS_TIMEOUT=$((10#$PRESIDIO_READINESS_TIMEOUT))
-else
-  PRESIDIO_READINESS_TIMEOUT=0
-fi
-presidio_cid="$(docker compose -f compose.shared.yml -p gram-shared ps -q gram-presidio 2>/dev/null)"
-if [[ -n "$presidio_cid" && "$PRESIDIO_READINESS_TIMEOUT" -gt 0 ]]; then
-  presidio_deadline=$((SECONDS + PRESIDIO_READINESS_TIMEOUT))
-  until [ "$(docker inspect -f '{{.State.Health.Status}}' "$presidio_cid" 2>/dev/null)" = "healthy" ]; do
-    if ((SECONDS >= presidio_deadline)); then
-      echo "⚠️  Shared Presidio analyzer not healthy after ${PRESIDIO_READINESS_TIMEOUT}s; continuing (PII scanning catches up once it is ready)." >&2
-      break
-    fi
-    sleep 2
-  done
-fi
+# LGTM is shared too, but not a synchronous startup dependency. A transient
+# image pull must not take down this worktree's databases, so warn and continue.
+docker compose -f compose.shared.yml -p gram-shared up -d lgtm \
+  || echo "⚠️  Optional shared LGTM service failed to start; continuing without local observability." >&2
 
 # Maximum time (seconds) to wait for a service to accept queries before giving
 # up. Bounded so headless callers (e.g. `./zero --agent`) fail fast instead of

@@ -143,12 +143,11 @@ if grep -E '^PUBSUB_EMULATOR_HOST[[:space:]]*=' mise.local.toml \
   echo "✅ Reset auto-generated Pub/Sub emulator endpoint to the shared default."
 fi
 
-# Presidio moved to the shared stack (compose.shared.yml) and must use the
-# default port so every worktree reaches the single shared copy. A pre-existing
-# worktree may still carry the old auto-generated remap for it, which we reset
-# to the mise.toml defaults here — but only when we can prove it was machine
-# generated, so a worktree that never remapped (or was hand-edited) is left
-# entirely alone.
+# Local dev no longer runs a Presidio HTTP analyzer: pystreams scans in
+# process. A pre-existing worktree may still carry the old auto-generated remap
+# for it, which would point the server and worker at a dead analyzer, so remove
+# it here, but only when we can prove it was machine generated, so a worktree
+# that deliberately pins its own analyzer is left entirely alone.
 #
 # The proof is the `{{env.PRESIDIO_PORT}}` template in PRESIDIO_ANALYZER_URL:
 # `zero:remap-ports` is the only thing that writes that literal
@@ -167,7 +166,7 @@ if grep -E '^PRESIDIO_ANALYZER_URL[[:space:]]*=' mise.local.toml \
       mise unset --file mise.local.toml "$key"
     fi
   done
-  echo "✅ Reset auto-generated PRESIDIO_PORT / PRESIDIO_ANALYZER_URL to the shared defaults."
+  echo "✅ Removed auto-generated PRESIDIO_PORT / PRESIDIO_ANALYZER_URL."
 fi
 
 # The LGTM observability stack moved to the shared stack for the same reason,

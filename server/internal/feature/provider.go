@@ -29,10 +29,15 @@ type Provider interface {
 
 type InMemory sync.Map
 
-func (imp *InMemory) IsFlagEnabled(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (bool, error) {
-	key := distinctID + ":" + string(flag)
+// AnyDistinctID sets an InMemory boolean flag for every distinct ID that has
+// no entry of its own.
+const AnyDistinctID = "*"
 
-	val, ok := (*sync.Map)(imp).Load(key)
+func (imp *InMemory) IsFlagEnabled(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (bool, error) {
+	val, ok := (*sync.Map)(imp).Load(distinctID + ":" + string(flag))
+	if !ok {
+		val, ok = (*sync.Map)(imp).Load(AnyDistinctID + ":" + string(flag))
+	}
 	if !ok {
 		return false, nil
 	}

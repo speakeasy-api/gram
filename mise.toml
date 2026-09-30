@@ -116,12 +116,6 @@ TEMPORAL_TASK_QUEUE = "main"
 ##     "<namespace>.<account>.tmprl.cloud:7233".
 TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 
-##############################
-## Presidio configuration   ##
-##############################
-PRESIDIO_PORT = "5050"
-PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
-
 ## Fine-tuned risk LLM analyzer (OpenAI-compatible chat endpoint, URL includes
 ## /v1). An empty URL disables it; real values belong in mise.local.toml.
 ## Runbook: server/internal/scanners/llmanalyzer/README.md (Local development).
