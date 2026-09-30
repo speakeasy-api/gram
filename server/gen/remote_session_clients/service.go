@@ -65,6 +65,9 @@ type Service interface {
 	DetachKeySet(context.Context, *DetachKeySetPayload) (res *types.RemoteSessionClient, err error)
 	// List remote_session_clients in the caller's project.
 	ListRemoteSessionClients(context.Context, *ListRemoteSessionClientsPayload) (res *ListRemoteSessionClientsResult, err error)
+	// Get the redirect URI a remote_session_client created now in the caller's
+	// project registers with its upstream provider.
+	GetNewClientCallbackURL(context.Context, *GetNewClientCallbackURLPayload) (res *NewClientCallbackURLResult, err error)
 	// Get a remote_session_client by id.
 	GetRemoteSessionClient(context.Context, *GetRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
 	// Soft-delete a remote_session_client. Cascades to remote_sessions rows
@@ -92,7 +95,7 @@ const ServiceName = "remoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"prepareEMA", "readEMA", "unlinkEMA", "createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "attachKeySet", "detachKeySet", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+var MethodNames = [14]string{"prepareEMA", "readEMA", "unlinkEMA", "createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "attachKeySet", "detachKeySet", "listRemoteSessionClients", "getNewClientCallbackUrl", "getRemoteSessionClient", "deleteRemoteSessionClient"}
 
 // AttachKeySetPayload is the payload type of the remoteSessionClients service
 // attachKeySet method.
@@ -207,6 +210,14 @@ type DetachUserSessionIssuerPayload struct {
 	UserSessionIssuerID string
 }
 
+// GetNewClientCallbackURLPayload is the payload type of the
+// remoteSessionClients service getNewClientCallbackUrl method.
+type GetNewClientCallbackURLPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // GetRemoteSessionClientPayload is the payload type of the
 // remoteSessionClients service getRemoteSessionClient method.
 type GetRemoteSessionClientPayload struct {
@@ -263,6 +274,13 @@ type ListRemoteSessionClientsResult struct {
 	Items []*types.RemoteSessionClient
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// NewClientCallbackURLResult is the result type of the remoteSessionClients
+// service getNewClientCallbackUrl method.
+type NewClientCallbackURLResult struct {
+	// The redirect URI to register on the upstream provider's OAuth app.
+	CallbackURL string
 }
 
 // PrepareEMAPayload is the payload type of the remoteSessionClients service

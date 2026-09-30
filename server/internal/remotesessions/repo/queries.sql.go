@@ -1406,7 +1406,8 @@ INSERT INTO remote_session_clients (
     audience,
     legacy_callback_url,
     json_web_key_set_id,
-    identity_provider_connection_id
+    identity_provider_connection_id,
+    callback_base_url
 )
 VALUES (
     $1,
@@ -1422,7 +1423,8 @@ VALUES (
     $11,
     $12,
     $13,
-    $14
+    $14,
+    $15
 )
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
@@ -1442,6 +1444,7 @@ type CreateRemoteSessionClientParams struct {
 	LegacyCallbackUrl               bool
 	JsonWebKeySetID                 uuid.NullUUID
 	IdentityProviderConnectionID    uuid.NullUUID
+	CallbackBaseUrl                 pgtype.Text
 }
 
 // Remote session clients — credentials Gram uses when acting as an OAuth
@@ -1463,6 +1466,7 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.LegacyCallbackUrl,
 		arg.JsonWebKeySetID,
 		arg.IdentityProviderConnectionID,
+		arg.CallbackBaseUrl,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -1510,7 +1514,8 @@ INSERT INTO remote_session_clients (
     client_id_issued_at,
     token_endpoint_auth_method,
     scope,
-    audience
+    audience,
+    callback_base_url
 )
 VALUES (
     $1,
@@ -1522,7 +1527,8 @@ VALUES (
     $6,
     'none',
     $7::text[],
-    $8
+    $8,
+    $9
 )
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
@@ -1536,6 +1542,7 @@ type CreateRemoteSessionClientCIMDParams struct {
 	ClientIDIssuedAt      pgtype.Timestamptz
 	Scope                 []string
 	Audience              pgtype.Text
+	CallbackBaseUrl       pgtype.Text
 }
 
 // Create a client directly in Client ID Metadata Document (CIMD) mode. The
@@ -1553,6 +1560,7 @@ func (q *Queries) CreateRemoteSessionClientCIMD(ctx context.Context, arg CreateR
 		arg.ClientIDIssuedAt,
 		arg.Scope,
 		arg.Audience,
+		arg.CallbackBaseUrl,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -4052,7 +4060,8 @@ SELECT
     c.grant_types,
     COALESCE(c.token_endpoint_auth_method, 'none')::text AS token_endpoint_auth_method,
     CASE WHEN s.id IS NULL THEN false ELSE true END AS has_json_web_key_set,
-    c.scope
+    c.scope,
+    c.callback_base_url
 FROM remote_session_clients AS c
 LEFT JOIN json_web_key_sets AS s
   ON s.organization_id = c.organization_id
@@ -4070,6 +4079,7 @@ type GetRemoteSessionClientForClientMetadataDocumentRow struct {
 	TokenEndpointAuthMethod string
 	HasJsonWebKeySet        bool
 	Scope                   []string
+	CallbackBaseUrl         pgtype.Text
 }
 
 // Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
@@ -4088,6 +4098,7 @@ func (q *Queries) GetRemoteSessionClientForClientMetadataDocument(ctx context.Co
 		&i.TokenEndpointAuthMethod,
 		&i.HasJsonWebKeySet,
 		&i.Scope,
+		&i.CallbackBaseUrl,
 	)
 	return i, err
 }
@@ -7156,6 +7167,7 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.callback_base_url                    AS callback_base_url,
     c.resource_identifier                  AS resource_identifier,
     c.resource_name                        AS resource_name,
     c.resource_documentation               AS resource_documentation,
@@ -7229,6 +7241,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ClientScope                                []string
 	ClientAudience                             pgtype.Text
 	LegacyCallbackUrl                          bool
+	CallbackBaseUrl                            pgtype.Text
 	ResourceIdentifier                         pgtype.Text
 	ResourceName                               pgtype.Text
 	ResourceDocumentation                      pgtype.Text
@@ -7287,6 +7300,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.ClientScope,
 			&i.ClientAudience,
 			&i.LegacyCallbackUrl,
+			&i.CallbackBaseUrl,
 			&i.ResourceIdentifier,
 			&i.ResourceName,
 			&i.ResourceDocumentation,

@@ -86,6 +86,9 @@ type platformMCPConfig struct {
 	PublicationRequests    plugins.PublicationRequests
 	TemporalEnv            *tenv.Environment
 	Skills                 platformmcp.SkillsManagement
+	// CallbackOrigin is the origin of the redirect_uri a remote session client
+	// created now registers. The setup guides show that URL.
+	CallbackOrigin *url.URL
 	// SkillInsights is the ClickHouse read behind the skill insight tools.
 	// Startup always supplies it; a nil reader keeps the tools registered as
 	// stubs rather than answering with empty insights.
@@ -527,9 +530,9 @@ func attachShadowAI(reader *platformmcp.PostgresReader, config platformMCPConfig
 // corpus that silently lost a provider looks exactly like one that never
 // covered it, and the model would be left to invent the steps.
 func platformMCPSetupResources(config platformMCPConfig) ([]platformmcp.SetupResource, error) {
-	// The one redirect_uri for every provider and slug, derived the same way
+	// The redirect_uri a newly created client registers, derived the same way
 	// externalmcp, remotesessions, and the dashboard derive it.
-	callbackURL := config.ServerURL.JoinPath("mcp", "remote_login_callback").String()
+	callbackURL := remotesessions.RemoteLoginCallbackURL(config.CallbackOrigin)
 	resources, err := setupcorpus.Build(setupcorpus.Options{OAuthCallbackURL: callbackURL})
 	if err != nil {
 		return nil, fmt.Errorf("build platform mcp setup corpus: %w", err)

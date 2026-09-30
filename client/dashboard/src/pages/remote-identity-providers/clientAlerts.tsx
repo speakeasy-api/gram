@@ -6,10 +6,7 @@ import { remoteSessionScopeTier } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useState } from "react";
 import { Link } from "react-router";
-import {
-  legacyCallbackURL,
-  remoteLoginCallbackURL,
-} from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import { legacyCallbackURL } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 // IssuerScopeOverrideAlert warns beside a client's scope field that the parent
@@ -79,12 +76,16 @@ function EditScopeOverrideHint({
 // with the identity provider.
 export function LegacyCallbackAlert({
   legacyCallbackUrl,
+  callbackUrl,
   onMigrate,
   isMigrating = false,
   canMigrate,
   className,
 }: {
   legacyCallbackUrl: boolean;
+  // callbackUrl is the client's current redirect URI, as the server reports
+  // it. The legacy URL shares its origin.
+  callbackUrl: string | undefined;
   onMigrate: () => void;
   isMigrating?: boolean;
   // False when the caller lacks the permission the save needs, so the button
@@ -95,19 +96,19 @@ export function LegacyCallbackAlert({
   const isPlatformAdmin = useIsPlatformAdmin();
   const [confirming, setConfirming] = useState(false);
 
-  if (!legacyCallbackUrl || !isPlatformAdmin) return null;
+  if (!legacyCallbackUrl || !isPlatformAdmin || !callbackUrl) return null;
 
-  const current = remoteLoginCallbackURL();
+  const current = callbackUrl;
 
   return (
     <Alert variant="warning" dismissible={false} alignTop className={className}>
       <div className="flex flex-col items-start gap-3">
         <span>
           This app was registered with the{" "}
-          <span className="font-mono">{legacyCallbackURL()}</span> URL. New apps
-          use <span className="font-mono">{current}</span>. This app runs in
-          compatibility mode with the URL. Register the new URL in order to
-          migrate it.
+          <span className="font-mono">{legacyCallbackURL(current)}</span> URL.
+          New apps use <span className="font-mono">{current}</span>. This app
+          runs in compatibility mode with the URL. Register the new URL in order
+          to migrate it.
         </span>
         {canMigrate && (
           <Button
