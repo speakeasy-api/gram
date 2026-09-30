@@ -582,6 +582,31 @@ WHERE om.id = sqlc.arg('id')::text
 ORDER BY (om.id = sqlc.arg('id')::text) DESC
 LIMIT 1;
 
+-- name: AdminAcquireStripeSubscriptionLock :exec
+-- Serializes assignments of the same Stripe subscription across organizations.
+SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg('stripe_subscription_id')::text, 0));
+
+-- name: AdminSetStripeSubscription :one
+UPDATE billing_metadata
+SET
+    stripe_subscription_id = sqlc.arg('stripe_subscription_id')::text,
+    stripe_billing_cycle_anchor = sqlc.arg('stripe_billing_cycle_anchor')::timestamptz,
+    billing_cycle_anchor_day = sqlc.arg('billing_cycle_anchor_day')::integer,
+    updated_at = clock_timestamp()
+FROM organization_metadata
+WHERE billing_metadata.organization_id = organization_metadata.id
+  AND billing_metadata.organization_id = sqlc.arg('organization_id')::text
+  AND billing_metadata.stripe_customer_id = sqlc.arg('stripe_customer_id')::text
+  AND billing_metadata.stripe_subscription_id IS NULL
+  AND organization_metadata.gram_account_type = 'payg'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM billing_metadata AS other
+    WHERE other.stripe_subscription_id = sqlc.arg('stripe_subscription_id')::text
+      AND other.organization_id <> billing_metadata.organization_id
+  )
+RETURNING billing_metadata.organization_id;
+
 -- name: AdminSetStripeCustomer :one
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (sqlc.arg('organization_id')::text, sqlc.arg('stripe_customer_id')::text)

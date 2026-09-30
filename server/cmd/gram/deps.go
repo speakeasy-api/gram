@@ -1146,6 +1146,7 @@ func newTriggersApp(
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
 	siteURL *url.URL,
+	platformHosts map[string]string,
 	slackClient *slack_client.SlackClient,
 	cacheImpl cache.Cache,
 ) *bgtriggers.App {
@@ -1179,6 +1180,7 @@ func newTriggersApp(
 		auditLogger,
 		serverURL,
 		siteURL,
+		platformHosts,
 		slackClient,
 		cacheImpl,
 		bgtriggers.NewNoopDispatcher(logger),

@@ -223,6 +223,15 @@ var AdminStripeCustomer = Type("AdminStripeCustomer", func() {
 	Attribute("livemode", Boolean)
 })
 
+var AdminStripeSubscriptionCandidate = Type("AdminStripeSubscriptionCandidate", func() {
+	Description("Live Stripe subscription details shown before recording the subscription on a PAYG organization.")
+	Required("id", "customer_id", "status")
+
+	Attribute("id", String, "Stripe subscription ID returned by Stripe.")
+	Attribute("customer_id", String, "Stripe customer that owns the subscription.")
+	Attribute("status", String, "Stripe subscription status.")
+})
+
 var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
 	Attribute("status", String, func() {
 		Enum("incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused")
@@ -1237,5 +1246,50 @@ var _ = Service("admin", func() {
 	supportMatrixMethods()
 	supportCoverageMethods()
 	registryDesign()
+
+	Method("getStripeSubscriptionCandidate", func() {
+		Description("Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_subscription_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_subscription_id", String, func() {
+				Pattern(`^sub_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+		})
+		Result(AdminStripeSubscriptionCandidate)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.stripeSubscriptionCandidate")
+			Param("organization_id")
+			Param("stripe_subscription_id")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetStripeSubscriptionCandidate")
+	})
+
+	Method("setStripeSubscription", func() {
+		Description("Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_subscription_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_subscription_id", String, func() {
+				Pattern(`^sub_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+			Meta("openapi:typename", "SetStripeSubscriptionRequestBody")
+		})
+		Result(AdminOrganization)
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/organization.setStripeSubscription")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminSetStripeSubscription")
+	})
 
 })

@@ -147,12 +147,12 @@
             " Connection state is unknown. Retry to reload the current state.";
           access.appendChild(message);
           if (error.status === 401 || error.status === 403) {
-            var login = document.createElement("p");
-            login.setAttribute("data-agent-access-login", "");
-            login.className = "text-muted-foreground text-xs";
-            login.textContent =
-              "Sign in to Gram as the authorizing user in this organization, then retry.";
-            access.appendChild(login);
+            var unavailable = document.createElement("p");
+            unavailable.setAttribute("data-agent-access-unavailable", "");
+            unavailable.className = "text-muted-foreground text-xs";
+            unavailable.textContent =
+              "This agent is not available for authorization by the signed-in user. Select another identity or restart authorization.";
+            access.appendChild(unavailable);
           }
           var retry = document.createElement("button");
           retry.type = "button";

@@ -2148,3 +2148,69 @@ func BuildSetRegistryEntryPublishedPayload(adminSetRegistryEntryPublishedBody st
 
 	return v, nil
 }
+
+// BuildGetStripeSubscriptionCandidatePayload builds the payload for the admin
+// getStripeSubscriptionCandidate endpoint from CLI flags.
+func BuildGetStripeSubscriptionCandidatePayload(adminGetStripeSubscriptionCandidateOrganizationID string, adminGetStripeSubscriptionCandidateStripeSubscriptionID string, adminGetStripeSubscriptionCandidateAdminSessionToken string) (*admin.GetStripeSubscriptionCandidatePayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetStripeSubscriptionCandidateOrganizationID
+	}
+	var stripeSubscriptionID string
+	{
+		stripeSubscriptionID = adminGetStripeSubscriptionCandidateStripeSubscriptionID
+		err = goa.MergeErrors(err, goa.ValidatePattern("stripe_subscription_id", stripeSubscriptionID, "^sub_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(stripeSubscriptionID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("stripe_subscription_id", stripeSubscriptionID, utf8.RuneCountInString(stripeSubscriptionID), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetStripeSubscriptionCandidateAdminSessionToken != "" {
+			adminSessionToken = &adminGetStripeSubscriptionCandidateAdminSessionToken
+		}
+	}
+	v := &admin.GetStripeSubscriptionCandidatePayload{}
+	v.OrganizationID = organizationID
+	v.StripeSubscriptionID = stripeSubscriptionID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetStripeSubscriptionPayload builds the payload for the admin
+// setStripeSubscription endpoint from CLI flags.
+func BuildSetStripeSubscriptionPayload(adminSetStripeSubscriptionBody string, adminSetStripeSubscriptionAdminSessionToken string) (*admin.SetStripeSubscriptionPayload, error) {
+	var err error
+	var body SetStripeSubscriptionRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetStripeSubscriptionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"stripe_subscription_id\": \"aaa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_subscription_id", body.StripeSubscriptionID, "^sub_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(body.StripeSubscriptionID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_subscription_id", body.StripeSubscriptionID, utf8.RuneCountInString(body.StripeSubscriptionID), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetStripeSubscriptionAdminSessionToken != "" {
+			adminSessionToken = &adminSetStripeSubscriptionAdminSessionToken
+		}
+	}
+	v := &admin.SetStripeSubscriptionPayload{
+		OrganizationID:       body.OrganizationID,
+		StripeSubscriptionID: body.StripeSubscriptionID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

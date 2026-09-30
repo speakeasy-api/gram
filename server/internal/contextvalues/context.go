@@ -53,6 +53,7 @@ type AuthContext struct {
 	principalCredential       *PrincipalCredential
 	principalCredentialOwner  string
 	gramSessionValidated      bool
+	consentBinding            *ConsentBindingAuthorization
 	supportSessionValidated   bool
 	legacySessionImpersonated bool
 }

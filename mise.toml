@@ -60,6 +60,9 @@ pitchfork = "2.22.0"
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
 [env]
+# Share Go compilation caches across worktrees, including nested tool builds.
+GOFLAGS = "-trimpath"
+
 ###########################
 ## Runtime configuration ##
 ###########################

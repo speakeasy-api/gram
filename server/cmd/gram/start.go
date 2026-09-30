@@ -1086,7 +1086,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, slackClient, cache.NewRedisCacheAdapter(redisClient))
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cache.NewRedisCacheAdapter(redisClient))
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 

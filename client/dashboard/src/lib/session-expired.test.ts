@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-async function loadModule(pathname: string, search = "", sessionStatus = 401) {
+async function loadModule(
+  pathname: string,
+  search = "",
+  sessionStatus = 401,
+  hash = "",
+) {
   vi.resetModules();
   const assign = vi.fn();
   const fetch = vi.fn().mockResolvedValue({ status: sessionStatus });
@@ -19,7 +24,7 @@ async function loadModule(pathname: string, search = "", sessionStatus = 401) {
   vi.stubGlobal("fetch", fetch);
   vi.stubGlobal("window", {
     localStorage,
-    location: { origin: "https://app.example", pathname, search, assign },
+    location: { origin: "https://app.example", pathname, search, hash, assign },
     sessionStorage,
   });
   const mod = await import("./session-expired");
@@ -78,6 +83,21 @@ describe("redirectToLoginOnUnauthorized", () => {
     expect(sessionStorage.clear).toHaveBeenCalledOnce();
     expect(assign).toHaveBeenCalledWith(
       `/login?redirect=${encodeURIComponent("/acme/projects/default/insights?range=7d")}`,
+    );
+  });
+
+  it("keeps a portable destination's hash through the login bounce", async () => {
+    const { assign, redirectToLoginOnUnauthorized } = await loadModule(
+      "/@self/audit-logs",
+      "?range=7d",
+      401,
+      "#top",
+    );
+
+    await redirectToLoginOnUnauthorized();
+
+    expect(assign).toHaveBeenCalledWith(
+      `/login?redirect=${encodeURIComponent("/@self/audit-logs?range=7d#top")}`,
     );
   });
 

@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AGENT_PLATFORMS } from "../setup-data";
+import { getAgentPlatforms } from "../setup-data";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 
 const mocks = vi.hoisted(() => ({
@@ -30,9 +30,9 @@ vi.mock("@/routes", () => ({
   }),
 }));
 
-const step = AGENT_PLATFORMS.find(
-  ({ id }) => id === "claude-cowork",
-)!.setupSteps.find(({ title }) => title === "Enable OTEL export")!;
+const step = getAgentPlatforms("https://app.getgram.ai")
+  .find(({ id }) => id === "claude-cowork")!
+  .setupSteps.find(({ title }) => title === "Enable OTEL export")!;
 const writeText = vi.fn<(value: string) => Promise<void>>();
 const retry = vi.fn<() => void>();
 function body(
@@ -189,11 +189,11 @@ describe("inline setup identifiers", () => {
     "renders the resolved plugin %s inline without a copyable code block",
     (pluginName) => {
       mocks.pluginName = pluginName;
-      const requiredStep = AGENT_PLATFORMS.find(
-        ({ id }) => id === "claude-cowork",
-      )!.setupSteps.find(
-        ({ title }) => title === "Mark the observability plugin as Required",
-      )!;
+      const requiredStep = getAgentPlatforms("https://app.getgram.ai")
+        .find(({ id }) => id === "claude-cowork")!
+        .setupSteps.find(
+          ({ title }) => title === "Mark the observability plugin as Required",
+        )!;
       const { container } = render(
         <PlatformSetupStepBody
           step={requiredStep}

@@ -90,6 +90,11 @@ type UpdateClientRequestBody struct {
 	// Replace the upstream OAuth audience sent for this client. Omit to leave
 	// unchanged.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Platform admins only. Set true to run the client in compatibility mode with
+	// the legacy callback URL, or false to migrate it to the current callback URL
+	// once that URL is registered with the identity provider. Omit to leave
+	// unchanged.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
 }
 
 // AttachClientKeySetRequestBody is the type of the
@@ -177,9 +182,13 @@ type GetClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool   `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	CreatedAt         *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetClientDelegationStatusResponseBody is the type of the
@@ -270,9 +279,13 @@ type CreateClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool   `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	CreatedAt         *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateCimdClientResponseBody is the type of the
@@ -323,9 +336,13 @@ type CreateCimdClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool   `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	CreatedAt         *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateClientResponseBody is the type of the
@@ -376,9 +393,13 @@ type UpdateClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool   `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	CreatedAt         *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // AttachClientKeySetResponseBody is the type of the
@@ -429,9 +450,13 @@ type AttachClientKeySetResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool   `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	CreatedAt         *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // DetachClientKeySetResponseBody is the type of the
@@ -482,9 +507,13 @@ type DetachClientKeySetResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool   `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	CreatedAt         *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // RotateClientResponseBody is the type of the
@@ -535,9 +564,13 @@ type RotateClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool   `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	CreatedAt         *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListClientsUnauthorizedResponseBody is the type of the
@@ -3107,9 +3140,13 @@ type RemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL *bool   `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	CreatedAt         *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt         *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // DelegationStatusCountResponseBody is used to define fields on response body
@@ -3209,6 +3246,7 @@ func NewUpdateClientRequestBody(p *organizationremotesessionclients.UpdateClient
 		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
 		Audience:                        p.Audience,
+		LegacyCallbackURL:               p.LegacyCallbackURL,
 	}
 	if p.Scope != nil {
 		body.Scope = make([]string, len(p.Scope))
@@ -3438,6 +3476,7 @@ func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.Remot
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -4165,6 +4204,7 @@ func NewCreateClientRemoteSessionClientOK(body *CreateClientResponseBody) *types
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -4356,6 +4396,7 @@ func NewCreateCimdClientRemoteSessionClientOK(body *CreateCimdClientResponseBody
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -4549,6 +4590,7 @@ func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -4740,6 +4782,7 @@ func NewAttachClientKeySetRemoteSessionClientOK(body *AttachClientKeySetResponse
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -4949,6 +4992,7 @@ func NewDetachClientKeySetRemoteSessionClientOK(body *DetachClientKeySetResponse
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -5158,6 +5202,7 @@ func NewRotateClientRemoteSessionClientOK(body *RotateClientResponseBody) *types
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               *body.LegacyCallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
@@ -5678,6 +5723,9 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5824,6 +5872,9 @@ func ValidateCreateClientResponseBody(body *CreateClientResponseBody) (err error
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5890,6 +5941,9 @@ func ValidateCreateCimdClientResponseBody(body *CreateCimdClientResponseBody) (e
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -5958,6 +6012,9 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -6024,6 +6081,9 @@ func ValidateAttachClientKeySetResponseBody(body *AttachClientKeySetResponseBody
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -6092,6 +6152,9 @@ func ValidateDetachClientKeySetResponseBody(body *DetachClientKeySetResponseBody
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -6158,6 +6221,9 @@ func ValidateRotateClientResponseBody(body *RotateClientResponseBody) (err error
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -9419,6 +9485,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.LegacyCallbackURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

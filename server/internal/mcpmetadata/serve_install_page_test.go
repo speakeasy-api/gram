@@ -1589,6 +1589,74 @@ func TestServeInstallPage_McpServer_RemoteBacked_PrivateRedirectsToLogin(t *test
 	assert.Contains(t, rr.Header().Get("Location"), "/login")
 }
 
+// TestServeInstallPage_PrivateLoginRedirectStaysOnPlatformHost asserts that
+// the login redirect for a private install page keeps the visitor on the
+// platform host the request arrived on, where their host-only session cookie
+// lives, and brings them back to the install page afterwards.
+func TestServeInstallPage_PrivateLoginRedirectStaysOnPlatformHost(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	remoteServer := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcp_repo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://upstream.example.com/mcp",
+	})
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+	endpointSlug := "remote-mcp-host-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:                "Remote MCP Host",
+		visibility:          mcpservers.VisibilityPrivate,
+		endpointSlug:        endpointSlug,
+		remoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+	})
+
+	serverBase := ti.serverURL.String()
+	for _, tc := range []struct {
+		name     string
+		origin   string
+		wantBase string
+	}{
+		{name: "no origin", origin: "", wantBase: serverBase},
+		{name: "server host", origin: serverBase, wantBase: serverBase},
+		{name: "extra platform host", origin: "https://ai.example.test", wantBase: "https://ai.example.test"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, path := range []string{
+				"/mcp/" + endpointSlug + "/install?tag=docs",
+				"/mcp/" + endpointSlug + "/install?network=private",
+			} {
+				reqCtx := context.Background()
+				if tc.origin != "" {
+					reqCtx = requestorigin.WithContext(reqCtx, requestorigin.Origin{
+						Surface: requestorigin.SurfacePlatform, BaseURL: tc.origin,
+						OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil,
+					})
+				}
+				rctx := chi.NewRouteContext()
+				rctx.URLParams.Add("mcpSlug", endpointSlug)
+				req := httptest.NewRequest("GET", path, nil)
+				req = req.WithContext(context.WithValue(reqCtx, chi.RouteCtxKey, rctx))
+
+				rr := httptest.NewRecorder()
+				require.NoError(t, ti.service.ServeInstallPage(rr, req))
+				require.Equal(t, http.StatusFound, rr.Code, path)
+				loginURL, err := url.Parse(rr.Header().Get("Location"))
+				require.NoError(t, err)
+				require.Equal(t, tc.wantBase+"/login", loginURL.Scheme+"://"+loginURL.Host+loginURL.Path, path)
+				require.Equal(t, path, loginURL.Query().Get("redirect"), "the return target must be the relative install page path")
+			}
+		})
+	}
+}
+
 // TestServeInstallPage_McpServer_ToolsetBacked_BridgesToToolsetRendering
 // confirms that a toolset-backed mcp_server, when reached through the
 // mcp_endpoints resolution path, renders via the existing toolset-flavored

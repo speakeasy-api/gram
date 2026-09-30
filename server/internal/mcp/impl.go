@@ -84,6 +84,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -549,7 +550,19 @@ func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverN
 		return ""
 	}
 
-	return mcpaccess.RequestAccessURL(s.siteURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
+	// Link to the platform host the request arrived on: session cookies are
+	// host-only, so a user on an extra platform host would otherwise land on
+	// the canonical host logged out.
+	dashboardURL := s.siteURL
+	if s.serverURL != nil {
+		if base := requestorigin.PlatformHostBaseURL(ctx, s.serverURL.String(), ""); base != "" {
+			if u, err := url.Parse(base); err == nil {
+				dashboardURL = u
+			}
+		}
+	}
+
+	return mcpaccess.RequestAccessURL(dashboardURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
 		Scope:        "mcp:connect",
 		ResourceID:   serverID,
 		ResourceName: serverName,

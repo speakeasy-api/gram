@@ -148,9 +148,12 @@ type App struct {
 	temporalEnv    *tenv.Environment
 	serverURL      *url.URL
 	siteURL        *url.URL
-	dispatchers    map[string]Dispatcher
-	audit          *audit.Logger
-	slackClient    *slackclient.SlackClient
+	// platformHosts are the extra first-party hosts (keys of
+	// customdomains.ParsePlatformHosts) that also serve the dashboard.
+	platformHosts map[string]string
+	dispatchers   map[string]Dispatcher
+	audit         *audit.Logger
+	slackClient   *slackclient.SlackClient
 
 	slackBotIdentities cache.TypedCacheObject[slackBotIdentity]
 }
@@ -200,6 +203,7 @@ func NewApp(
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
 	siteURL *url.URL,
+	platformHosts map[string]string,
 	slackClient *slackclient.SlackClient,
 	cacheImpl cache.Cache,
 	dispatchers ...Dispatcher,
@@ -220,6 +224,7 @@ func NewApp(
 		temporalEnv:    temporalEnv,
 		serverURL:      serverURL,
 		siteURL:        siteURL,
+		platformHosts:  platformHosts,
 		dispatchers:    dispatcherMap,
 		audit:          auditLogger,
 		slackClient:    slackClient,

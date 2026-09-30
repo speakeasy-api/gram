@@ -17,6 +17,7 @@ import { pluginsListDistributionPlugins } from "../funcs/pluginsListDistribution
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
 import { pluginsRemovePluginServer } from "../funcs/pluginsRemovePluginServer.js";
+import { pluginsRotateObservabilityCredential } from "../funcs/pluginsRotateObservabilityCredential.js";
 import { pluginsSetPluginAssignments } from "../funcs/pluginsSetPluginAssignments.js";
 import { pluginsUpdateMarketplaceSettings } from "../funcs/pluginsUpdateMarketplaceSettings.js";
 import { pluginsUpdatePlugin } from "../funcs/pluginsUpdatePlugin.js";
@@ -31,6 +32,7 @@ import { Plugin } from "../models/components/plugin.js";
 import { PluginServer } from "../models/components/pluginserver.js";
 import { PublishPluginsResult } from "../models/components/publishpluginsresult.js";
 import { PublishStatusResult } from "../models/components/publishstatusresult.js";
+import { RotateObservabilityCredentialResult } from "../models/components/rotateobservabilitycredentialresult.js";
 import { SetPluginAssignmentsResponseBody } from "../models/components/setpluginassignmentsresponsebody.js";
 import { UpdateMarketplaceSettingsResult } from "../models/components/updatemarketplacesettingsresult.js";
 import {
@@ -96,6 +98,10 @@ import {
   RemovePluginServerRequest,
   RemovePluginServerSecurity,
 } from "../models/operations/removepluginserver.js";
+import {
+  RotateObservabilityCredentialRequest,
+  RotateObservabilityCredentialSecurity,
+} from "../models/operations/rotateobservabilitycredential.js";
 import {
   SetPluginAssignmentsRequest,
   SetPluginAssignmentsSecurity,
@@ -393,6 +399,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(pluginsRemovePluginServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * rotateObservabilityCredential plugins
+   *
+   * @remarks
+   * Rotate the observability plugin's hooks-scoped ingest credential. Mints a replacement key, republishes the marketplace when possible so installs pick it up, and either revokes previous plugin hooks keys immediately or keeps them valid for a grace window.
+   */
+  async rotateObservabilityCredential(
+    request: RotateObservabilityCredentialRequest,
+    security?: RotateObservabilityCredentialSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RotateObservabilityCredentialResult> {
+    return unwrapAsync(pluginsRotateObservabilityCredential(
       this,
       request,
       security,
