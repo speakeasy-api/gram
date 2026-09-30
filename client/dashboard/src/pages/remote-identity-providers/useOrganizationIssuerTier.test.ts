@@ -19,24 +19,38 @@ function page(id: string) {
   return { result: { items: [{ issuer: { id }, clientCount: 0 }] } };
 }
 
-it("walks every page of a drained tier", () => {
-  mocks.query.mockReturnValue({
-    data: { pages: [page("a")] },
+it("walks a drained tier to its last page, then settles", () => {
+  // Mirrors react-query: a fetch goes in flight, then its page lands. The
+  // third page is the last.
+  const pages = [page("a")];
+  let inFlight = false;
+  mocks.fetchNextPage.mockImplementation(() => {
+    inFlight = true;
+  });
+  mocks.query.mockImplementation(() => ({
+    data: { pages: [...pages] },
     isLoading: false,
     isError: false,
-    hasNextPage: true,
-    isFetchingNextPage: false,
+    hasNextPage: pages.length < 3,
+    isFetchingNextPage: inFlight,
     isFetchNextPageError: false,
     fetchNextPage: mocks.fetchNextPage,
-  });
+  }));
 
-  const { result } = renderHook(() =>
+  const { result, rerender } = renderHook(() =>
     useOrganizationIssuerTier("organization", { drain: true }),
   );
+  while (inFlight || result.current.isLoading) {
+    expect(mocks.fetchNextPage.mock.calls.length).toBeLessThan(5);
+    rerender(); // the fetch is in flight
+    pages.push(page(`p${pages.length}`));
+    inFlight = false;
+    rerender(); // its page has landed
+  }
 
-  expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
-  // Not settled until the last page lands.
-  expect(result.current.isLoading).toBe(true);
+  expect(mocks.fetchNextPage).toHaveBeenCalledTimes(2);
+  expect(result.current.items).toHaveLength(3);
+  expect(result.current.hasMore).toBe(false);
 });
 
 it("stops draining at a failed page and reports it", () => {
