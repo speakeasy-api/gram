@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/Label";
 import { Link as ExternalLink } from "@/components/ui/Link";
 import { Text } from "@/components/ui/Text";
 import { useAgentToken } from "@/hooks/useAgentToken";
+import { agentEgressHosts } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { useQuery } from "@tanstack/react-query";
 import React, { useId, useState } from "react";
@@ -319,12 +320,12 @@ export function RemoteNetworkAccessStep(): React.JSX.Element {
         <strong className="text-foreground">
           Also include default list of common package managers
         </strong>{" "}
-        so GCS and package registries remain available, and add this host on its
-        own line:
+        so GCS and package registries remain available, and add each host below
+        on its own line:
       </Text>
-      <CodeBlock language="text">app.getgram.ai</CodeBlock>
+      <CodeBlock language="text">{agentEgressHosts().join("\n")}</CodeBlock>
       <Text small muted>
-        Without this host the agent cannot fetch policy or send hook events.
+        Without these hosts the agent cannot fetch policy or send hook events.
       </Text>
     </div>
   );
