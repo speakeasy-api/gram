@@ -32,6 +32,11 @@ func AdmitSubjectWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.admitSubject"
 }
 
+// UpdateSubjectWorkloadIdentitiesPath returns the URL path to the workloadIdentities service updateSubject HTTP endpoint.
+func UpdateSubjectWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.updateSubject"
+}
+
 // WithdrawSubjectWorkloadIdentitiesPath returns the URL path to the workloadIdentities service withdrawSubject HTTP endpoint.
 func WithdrawSubjectWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.withdrawSubject"

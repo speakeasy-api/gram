@@ -119,6 +119,13 @@ vi.mock("@gram/client/react-query/updateWorkloadIssuer.js", () => ({
     isPending: false,
   }),
 }));
+const updateSubject = vi.fn();
+vi.mock("@gram/client/react-query/updateWorkloadSubject.js", () => ({
+  useUpdateWorkloadSubjectMutation: () => ({
+    mutate: updateSubject,
+    isPending: false,
+  }),
+}));
 vi.mock("@gram/client/react-query/withdrawWorkloadIssuer.js", () => ({
   useWithdrawWorkloadIssuerMutation: () => ({
     mutate: vi.fn(),
@@ -135,6 +142,7 @@ vi.mock("@gram/client/react-query/withdrawWorkloadSubject.js", () => ({
 beforeEach(() => {
   admissions = [];
   updateIssuer.mockReset();
+  updateSubject.mockReset();
 });
 afterEach(cleanup);
 
@@ -294,4 +302,121 @@ it("sends only the fields the edit changed", () => {
       },
     },
   });
+});
+
+// The machine row's Edit, told apart from the platform's own Edit in the header.
+function editMachineButton(): HTMLElement {
+  const header = screen.getByTestId("actions");
+  const button = screen
+    .getAllByRole("button", { name: "Edit" })
+    .find((candidate) => !header.contains(candidate));
+  if (button === undefined) {
+    throw new Error("no Edit button on the machine row");
+  }
+  return button;
+}
+
+it("opens the machine edit sheet prefilled, with the subject read-only", () => {
+  admissions = [admission(1, ["production"])];
+  renderPage();
+
+  fireEvent.click(editMachineButton());
+
+  expect(screen.getByText("Edit access")).toBeTruthy();
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-01");
+  // Once in the machine's row and once in the sheet's tag field.
+  expect(screen.getAllByText("production")).toHaveLength(2);
+
+  const subject = screen.getByLabelText("Subject") as HTMLInputElement;
+  expect(subject.value).toBe("repo:example/machine-01");
+  expect(subject.readOnly).toBe(true);
+});
+
+it("saves no machine edit until a field changes", () => {
+  admissions = [admission(1)];
+  renderPage();
+
+  fireEvent.click(editMachineButton());
+
+  const save = screen.getByRole("button", {
+    name: "Save changes",
+  }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+  expect(save.disabled).toBe(false);
+});
+
+it("sends only the machine fields the edit changed", () => {
+  admissions = [admission(1)];
+  renderPage();
+
+  fireEvent.click(editMachineButton());
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "  Release bot  " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledTimes(1);
+  expect(updateSubject).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: "admission-1",
+        name: "Release bot",
+      },
+    },
+  });
+});
+
+it("keeps the wildcard caution on a wildcard machine being edited", () => {
+  admissions = [
+    {
+      ...admission(1),
+      subject: "repo:example/*",
+      matchKind: "wildcard",
+      wildcardActive: false,
+    },
+  ];
+  renderPage();
+
+  fireEvent.click(editMachineButton());
+
+  expect(
+    screen.getByText("This rule admits more than one identity"),
+  ).toBeTruthy();
+  // The subject is fixed, so the inactive-wildcard refusal meant for a new rule
+  // does not block saving the label.
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Every repository" },
+  });
+  expect(
+    (screen.getByRole("button", { name: "Save changes" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(false);
+});
+
+it("opens each machine's own values when editing one after another", () => {
+  admissions = [admission(1), admission(2)];
+  renderPage();
+
+  const machineEdits = screen
+    .getAllByRole("button", { name: "Edit" })
+    .filter((button) => !screen.getByTestId("actions").contains(button));
+  expect(machineEdits).toHaveLength(2);
+  const [first, second] = machineEdits as [HTMLElement, HTMLElement];
+
+  fireEvent.click(first);
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-01");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+  fireEvent.click(second);
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-02");
 });

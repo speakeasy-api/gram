@@ -24,6 +24,7 @@ import {
 import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitWorkloadSubject.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
 import { useUpdateWorkloadIssuerMutation } from "@gram/client/react-query/updateWorkloadIssuer.js";
+import { useUpdateWorkloadSubjectMutation } from "@gram/client/react-query/updateWorkloadSubject.js";
 import { useWithdrawWorkloadIssuerMutation } from "@gram/client/react-query/withdrawWorkloadIssuer.js";
 import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/withdrawWorkloadSubject.js";
 import { WithdrawIssuerDialog } from "./WithdrawIssuerDialog";
@@ -34,8 +35,10 @@ import {
   type RegisterIssuerValues,
 } from "./RegisterIssuerSheet";
 import { changedIssuerFields } from "./issuerEdit";
+import { changedAdmissionFields } from "./admissionEdit";
 import {
   AdmitSubjectSheet,
+  type AdmitSubjectInitialValues,
   type AdmitSubjectValues,
 } from "./AdmitSubjectSheet";
 import { useQueryClient } from "@tanstack/react-query";
@@ -79,6 +82,18 @@ function IssuerIdentifiers({
   );
 }
 
+function admissionInitialValues(
+  admission: WorkloadAdmission,
+): AdmitSubjectInitialValues {
+  return {
+    subject: admission.subject,
+    name: admission.name,
+    tags: admission.tags,
+    agentId: admission.agentId,
+    agentName: admission.agentName,
+  };
+}
+
 /**
  * One issuer, and the subjects admitted under it.
  *
@@ -104,6 +119,11 @@ function IssuerDetail(): JSX.Element {
   const [editOpen, setEditOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [removing, setRemoving] = useState<WorkloadAdmission | null>(null);
+  // Held apart from the open flag so the sheet keeps the machine it is editing
+  // while it animates closed.
+  const [editingAdmission, setEditingAdmission] =
+    useState<WorkloadAdmission | null>(null);
+  const [editAdmissionOpen, setEditAdmissionOpen] = useState(false);
   const { data, isPending, isError, refetch } = useWorkloadIdentities({});
   // throwOnError because the whole agents service 404s where the agent
   // management rollout is off, and the global query policy suppresses only 401
@@ -127,6 +147,13 @@ function IssuerDetail(): JSX.Element {
         tags: issuer.tags,
       },
     [issuer],
+  );
+
+  // Memoized so the edit sheet resets only when the machine being edited
+  // changes, not on every render.
+  const admissionEditValues = useMemo(
+    () => editingAdmission && admissionInitialValues(editingAdmission),
+    [editingAdmission],
   );
 
   const admissions = useMemo(
@@ -201,6 +228,21 @@ function IssuerDetail(): JSX.Element {
         error instanceof Error
           ? error.message
           : "Failed to update the platform",
+      );
+    },
+  });
+
+  const updateSubject = useUpdateWorkloadSubjectMutation({
+    onSuccess: async () => {
+      await invalidateAllWorkloadIdentities(queryClient, {
+        refetchType: "all",
+      });
+      setEditAdmissionOpen(false);
+      toast.success("Access updated");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update access",
       );
     },
   });
@@ -323,18 +365,32 @@ function IssuerDetail(): JSX.Element {
     {
       key: "actions",
       header: "",
-      width: "120px",
+      width: "180px",
       render: (admission) => (
-        <RequireScope scope="workload:write" level="component">
-          <Button
-            size="sm"
-            variant="tertiary"
-            disabled={withdrawSubject.isPending}
-            onClick={() => setRemoving(admission)}
-          >
-            <Button.Text>Remove</Button.Text>
-          </Button>
-        </RequireScope>
+        <Stack direction="horizontal" gap={1}>
+          <RequireScope scope="workload:write" level="component">
+            <Button
+              size="sm"
+              variant="tertiary"
+              onClick={() => {
+                setEditingAdmission(admission);
+                setEditAdmissionOpen(true);
+              }}
+            >
+              <Button.Text>Edit</Button.Text>
+            </Button>
+          </RequireScope>
+          <RequireScope scope="workload:write" level="component">
+            <Button
+              size="sm"
+              variant="tertiary"
+              disabled={withdrawSubject.isPending}
+              onClick={() => setRemoving(admission)}
+            >
+              <Button.Text>Remove</Button.Text>
+            </Button>
+          </RequireScope>
+        </Stack>
       ),
     },
   ];
@@ -456,6 +512,18 @@ function IssuerDetail(): JSX.Element {
     });
   };
 
+  const handleEditAdmission = (values: AdmitSubjectValues) => {
+    if (editingAdmission === null || admissionEditValues === null) return;
+    updateSubject.mutate({
+      request: {
+        updateWorkloadSubjectForm: {
+          id: editingAdmission.id,
+          ...changedAdmissionFields(admissionEditValues, values),
+        },
+      },
+    });
+  };
+
   const handleAllow = (values: AdmitSubjectValues) => {
     const label = values.name.trim();
     admitSubject.mutate({
@@ -533,6 +601,22 @@ function IssuerDetail(): JSX.Element {
           isPending={admitSubject.isPending}
           issuer={issuer}
           agents={agents}
+        />
+      )}
+
+      {issuer && admissionEditValues && (
+        <AdmitSubjectSheet
+          // Remounted per machine: opening a different machine's edit changes
+          // the values in the same render as it opens the sheet, which the
+          // sheet's reset-on-close never sees.
+          key={editingAdmission?.id}
+          open={editAdmissionOpen}
+          onOpenChange={setEditAdmissionOpen}
+          onSubmit={handleEditAdmission}
+          isPending={updateSubject.isPending}
+          issuer={issuer}
+          agents={agents}
+          initial={admissionEditValues}
         />
       )}
     </ResourceListPage>

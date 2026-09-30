@@ -770,6 +770,7 @@ trackedFiles:
   src/funcs/workloadIdentitiesList.ts: {}
   src/funcs/workloadIdentitiesRegisterIssuer.ts: {}
   src/funcs/workloadIdentitiesUpdateIssuer.ts: {}
+  src/funcs/workloadIdentitiesUpdateSubject.ts: {}
   src/funcs/workloadIdentitiesWithdrawIssuer.ts: {}
   src/funcs/workloadIdentitiesWithdrawSubject.ts: {}
   src/hooks/hooks.ts: {}
@@ -1850,6 +1851,7 @@ trackedFiles:
   src/models/components/updatetunneledmcpserverform.ts: {}
   src/models/components/updateusersessionissuerform.ts: {}
   src/models/components/updateworkloadissuerform.ts: {}
+  src/models/components/updateworkloadsubjectform.ts: {}
   src/models/components/uploadchatattachmentresult.ts: {}
   src/models/components/uploadfunctionsresult.ts: {}
   src/models/components/uploadimageresult.ts: {}
@@ -2614,6 +2616,7 @@ trackedFiles:
   src/models/operations/updatetunneledmcpserver.ts: {}
   src/models/operations/updateusersessionissuer.ts: {}
   src/models/operations/updateworkloadissuer.ts: {}
+  src/models/operations/updateworkloadsubject.ts: {}
   src/models/operations/uploadchatattachment.ts: {}
   src/models/operations/uploadfunctions.ts: {}
   src/models/operations/uploadimage.ts: {}
@@ -3657,6 +3660,7 @@ trackedFiles:
   src/react-query/updateTunneledMcpServer.ts: {}
   src/react-query/updateUserSessionIssuer.ts: {}
   src/react-query/updateWorkloadIssuer.ts: {}
+  src/react-query/updateWorkloadSubject.ts: {}
   src/react-query/uploadChatAttachment.ts: {}
   src/react-query/uploadFunctions.ts: {}
   src/react-query/uploadImage.ts: {}
@@ -12345,6 +12349,17 @@ examples:
       responses:
         "200":
           application/json: {"admissions": [], "issuers": [{"allow_wildcard_admission": false, "created_at": "2024-11-19T20:12:14.378Z", "description": "barring eek dampen", "id": "5b893d0e-f5b7-4389-83f3-9db4a472304b", "issuer": "mastercard", "jwks_uri": "https://utter-airman.org", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "tags": [], "updated_at": "2024-05-15T18:17:39.606Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateWorkloadSubject:
+    speakeasy-default-update-workload-subject:
+      requestBody:
+        application/json: {"id": "a5aa099c-7fde-41ed-bb62-fc68426cf392"}
+      responses:
+        "200":
+          application/json: {"admissions": [], "issuers": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

@@ -291,6 +291,60 @@ func BuildAdmitSubjectPayload(workloadIdentitiesAdmitSubjectBody string, workloa
 	return v, nil
 }
 
+// BuildUpdateSubjectPayload builds the payload for the workloadIdentities
+// updateSubject endpoint from CLI flags.
+func BuildUpdateSubjectPayload(workloadIdentitiesUpdateSubjectBody string, workloadIdentitiesUpdateSubjectSessionToken string, workloadIdentitiesUpdateSubjectApikeyToken string, workloadIdentitiesUpdateSubjectProjectSlugInput string) (*workloadidentities.UpdateSubjectPayload, error) {
+	var err error
+	var body UpdateSubjectRequestBody
+	{
+		err = json.Unmarshal([]byte(workloadIdentitiesUpdateSubjectBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.AgentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesUpdateSubjectSessionToken != "" {
+			sessionToken = &workloadIdentitiesUpdateSubjectSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesUpdateSubjectApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesUpdateSubjectApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesUpdateSubjectProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesUpdateSubjectProjectSlugInput
+		}
+	}
+	v := &workloadidentities.UpdateSubjectPayload{
+		ID:      body.ID,
+		Name:    body.Name,
+		AgentID: body.AgentID,
+	}
+	if body.Tags != nil {
+		v.Tags = make([]string, len(body.Tags))
+		for i, val := range body.Tags {
+			v.Tags[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildWithdrawSubjectPayload builds the payload for the workloadIdentities
 // withdrawSubject endpoint from CLI flags.
 func BuildWithdrawSubjectPayload(workloadIdentitiesWithdrawSubjectID string, workloadIdentitiesWithdrawSubjectSessionToken string, workloadIdentitiesWithdrawSubjectApikeyToken string, workloadIdentitiesWithdrawSubjectProjectSlugInput string) (*workloadidentities.WithdrawSubjectPayload, error) {

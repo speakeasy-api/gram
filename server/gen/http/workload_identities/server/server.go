@@ -24,6 +24,7 @@ type Server struct {
 	UpdateIssuer    http.Handler
 	WithdrawIssuer  http.Handler
 	AdmitSubject    http.Handler
+	UpdateSubject   http.Handler
 	WithdrawSubject http.Handler
 }
 
@@ -59,6 +60,7 @@ func New(
 			{"UpdateIssuer", "POST", "/rpc/workloadIdentities.updateIssuer"},
 			{"WithdrawIssuer", "DELETE", "/rpc/workloadIdentities.withdrawIssuer"},
 			{"AdmitSubject", "POST", "/rpc/workloadIdentities.admitSubject"},
+			{"UpdateSubject", "POST", "/rpc/workloadIdentities.updateSubject"},
 			{"WithdrawSubject", "DELETE", "/rpc/workloadIdentities.withdrawSubject"},
 		},
 		List:            NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
@@ -66,6 +68,7 @@ func New(
 		UpdateIssuer:    NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
 		WithdrawIssuer:  NewWithdrawIssuerHandler(e.WithdrawIssuer, mux, decoder, encoder, errhandler, formatter),
 		AdmitSubject:    NewAdmitSubjectHandler(e.AdmitSubject, mux, decoder, encoder, errhandler, formatter),
+		UpdateSubject:   NewUpdateSubjectHandler(e.UpdateSubject, mux, decoder, encoder, errhandler, formatter),
 		WithdrawSubject: NewWithdrawSubjectHandler(e.WithdrawSubject, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -80,6 +83,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateIssuer = m(s.UpdateIssuer)
 	s.WithdrawIssuer = m(s.WithdrawIssuer)
 	s.AdmitSubject = m(s.AdmitSubject)
+	s.UpdateSubject = m(s.UpdateSubject)
 	s.WithdrawSubject = m(s.WithdrawSubject)
 }
 
@@ -93,6 +97,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateIssuerHandler(mux, h.UpdateIssuer)
 	MountWithdrawIssuerHandler(mux, h.WithdrawIssuer)
 	MountAdmitSubjectHandler(mux, h.AdmitSubject)
+	MountUpdateSubjectHandler(mux, h.UpdateSubject)
 	MountWithdrawSubjectHandler(mux, h.WithdrawSubject)
 }
 
@@ -343,6 +348,59 @@ func NewAdmitSubjectHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "admitSubject")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateSubjectHandler configures the mux to serve the
+// "workloadIdentities" service "updateSubject" endpoint.
+func MountUpdateSubjectHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/workloadIdentities.updateSubject", f)
+}
+
+// NewUpdateSubjectHandler creates a HTTP handler which loads the HTTP request
+// and calls the "workloadIdentities" service "updateSubject" endpoint.
+func NewUpdateSubjectHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateSubjectRequest(mux, decoder)
+		encodeResponse = EncodeUpdateSubjectResponse(encoder)
+		encodeError    = EncodeUpdateSubjectError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateSubject")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
 		payload, err := decodeRequest(r)
 		if err != nil {
