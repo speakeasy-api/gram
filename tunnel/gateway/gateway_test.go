@@ -354,6 +354,9 @@ func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 	req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
 	req.Header.Set(wire.HeaderTunnelRequireActive, "1")
 	req.Header.Set(wire.HeaderTunnelAgentSession, "session-a")
+	for _, header := range []string{wire.HeaderControlToken, wire.HeaderCapabilities, wire.HeaderTargetDisplay} {
+		req.Header.Set(header, "private")
+	}
 
 	gw.ForwardHandler().ServeHTTP(rec, req)
 
@@ -363,6 +366,9 @@ func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelID))
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelForwardToken))
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelRequireActive))
+	for _, header := range []string{wire.HeaderControlToken, wire.HeaderCapabilities, wire.HeaderTargetDisplay} {
+		require.Empty(t, forwarded.Get(header))
+	}
 }
 
 func TestForwardHandlerRejectsSensitiveRequestAfterTunnelRevocation(t *testing.T) {
@@ -440,4 +446,17 @@ func TestRegistryAddRejectsAfterDrainBegins(t *testing.T) {
 	require.Nil(t, remove)
 	require.True(t, session.IsClosed())
 	require.Zero(t, reg.activeSessions())
+}
+
+func TestForwardHandlerRejectsDiagnosticControlPaths(t *testing.T) {
+	t.Parallel()
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	for _, path := range []string{wire.ControlStatusPath, wire.ControlPathPrefix + "other"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+		req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+		rec := httptest.NewRecorder()
+		gw.ForwardHandler().ServeHTTP(rec, req)
+		require.Equal(t, http.StatusNotFound, rec.Code)
+	}
 }

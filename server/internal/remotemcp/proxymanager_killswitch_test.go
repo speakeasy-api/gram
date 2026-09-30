@@ -1,8 +1,11 @@
 package remotemcp
 
 import (
+	"context"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -114,4 +117,32 @@ func toolsCallInterceptorNames(p *proxy.Proxy) []string {
 		names = append(names, interceptor.Name())
 	}
 	return names
+}
+
+func TestProxyManagerAttachesTunnelMetricsOnlyToTunnelTargets(t *testing.T) {
+	t.Parallel()
+	logger := testenv.NewLogger(t)
+	manager := NewProxyManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	manager.TunnelMetrics = metrics.New()
+	source, server := uuid.NewString(), uuid.NewString()
+	build := func(source string) *proxy.Proxy {
+		return manager.BuildTarget(logger, proxy.ServerIdentity{TunneledMCPServerID: source, McpServerID: server}, "https://example.com/mcp", nil, mcpservers.VisibilityPrivate, "example-org", "example-project", "", "", nil)
+	}
+	require.Nil(t, build("").RequestObserver)
+	observed := build(source)
+	require.NotNil(t, observed.RequestObserver)
+	observed.RequestObserver("tools/list", "claude", "attempt", time.Second)
+	var rows []metrics.Snapshot
+	manager.TunnelMetrics.Flush(t.Context(), func(_ context.Context, s metrics.Snapshot) error {
+		if s.Kind == "requests" {
+			rows = append(rows, s)
+		}
+		return nil
+	})
+	require.Len(t, rows, 1)
+	require.Equal(t, source, rows[0].SourceID)
+	require.Equal(t, server, rows[0].ServerID)
+	require.Equal(t, "tools/list", rows[0].Method)
+	require.Equal(t, "claude", rows[0].ClientFamily)
+	require.EqualValues(t, 1, rows[0].Attempts)
 }

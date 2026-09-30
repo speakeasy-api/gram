@@ -488,3 +488,7 @@ Open Amara Okafor's identity and select Accounts & devices. Work identities shou
 Repeat in the seeded local organization. An employee can read their own mapped accounts and sees contact-admin guidance, without a link to the members table. Another employee's profile must not request these accounts. Verify the empty state for a person without mappings and retry after a failed read. Following Open in Slack members must not create a mapping or change its revision. Seed data demonstrates navigation and retained mappings; live OAuth requires the configured Slack app.
 
 In shared Explore Demo, verify the mapping dialog shows its read-only notice and disables Personnel selection and Confirm. Verify Sync members is disabled. In the retargeted local organization, personnel changes remain available.
+
+## Tunnel observability
+
+With `gram-tunnel-observability` enabled, open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, one MCP server is linked, and the current agent count is zero. Check 1 hour / 24 hours / 7 days and the activity data table. The synthetic source must not initiate any network connection.

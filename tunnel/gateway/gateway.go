@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/yamux"
 
 	"github.com/speakeasy-api/gram/tunnel/jwks"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
@@ -48,8 +49,10 @@ type Config struct {
 	MaxStreamsPerTunnel int
 	// MaxSessions bounds live agent sessions; connects beyond it shed with 503
 	// so load moves to sibling gateway pods via agent retry.
-	MaxSessions  int
-	ForwardToken string
+	MaxSessions        int
+	ForwardToken       string
+	DiagnosticsEnabled bool
+	Metrics            *metrics.Collector
 
 	// AuthzPublicKeys contains only SPKI public PEM keys published for caller assertions.
 	AuthzPublicKeys string
@@ -59,13 +62,14 @@ type Config struct {
 
 // Gateway owns live agent yamux sessions and maps internal forwards to substreams.
 type Gateway struct {
-	cfg        Config
-	keys       KeyResolver
-	reg        *registry
-	reconciler *routeReconciler
-	logger     *slog.Logger
-	publicKeys *jwks.Set
-	drain      sync.Once
+	cfg             Config
+	keys            KeyResolver
+	reg             *registry
+	reconciler      *routeReconciler
+	logger          *slog.Logger
+	publicKeys      *jwks.Set
+	drain           sync.Once
+	diagnosticSlots chan struct{}
 }
 
 func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) (*Gateway, error) {
@@ -88,13 +92,14 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 	}
 	reg := newRegistry()
 	return &Gateway{
-		cfg:        cfg,
-		keys:       keys,
-		reg:        reg,
-		reconciler: newRouteReconciler(reg, keys, routes, cfg.AdvertiseAddr, logger, cfg.routeRefreshInterval),
-		logger:     logger,
-		publicKeys: publicKeys,
-		drain:      sync.Once{},
+		cfg:             cfg,
+		keys:            keys,
+		reg:             reg,
+		reconciler:      newRouteReconciler(reg, keys, routes, cfg.AdvertiseAddr, logger, cfg.routeRefreshInterval),
+		logger:          logger,
+		publicKeys:      publicKeys,
+		drain:           sync.Once{},
+		diagnosticSlots: make(chan struct{}, 32),
 	}, nil
 }
 
@@ -255,6 +260,18 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := uuid.NewString()
 	now := time.Now().UTC()
+	controlToken := r.Header.Get(wire.HeaderControlToken)
+	supported := wire.SupportsDiagnostics(r.Header.Get(wire.HeaderCapabilities), controlToken)
+	diagnostics := &route.Diagnostics{State: "unsupported"}
+	targetDisplay := ""
+	if supported {
+		state := "disabled"
+		if g.cfg.DiagnosticsEnabled {
+			state = "pending"
+		}
+		diagnostics = &route.Diagnostics{State: state}
+		targetDisplay = wire.TargetDisplay(r.Header.Get(wire.HeaderTargetDisplay))
+	}
 	remove := g.reg.add(tunnelID, sessionID, presentedKeyHash, session, g.newSessionProxy(tunnelID, session), route.Connection{
 		GatewaySessionID:       sessionID,
 		ServiceVersion:         serviceVersion,
@@ -265,6 +282,8 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		ActiveSubstreams:       0,
 		ActiveConsumerSessions: 0,
 		Metadata:               metadata,
+		TargetDisplay:          targetDisplay,
+		Diagnostics:            diagnostics,
 	})
 	if remove == nil {
 		g.logger.InfoContext(r.Context(), "tunnel connect rejected",
@@ -276,10 +295,15 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		slog.String("tunnel_id", tunnelID), slog.String("session_id", sessionID),
 		slog.String("agent_version", agentVersion), slog.Int("active", g.reg.activeSessions()))
 
+	g.recordMetrics(tunnelID, 1)
 	go g.sayHello(session, tunnelID, sessionID)
+	if supported && g.cfg.DiagnosticsEnabled {
+		go g.pollDiagnostics(session, tunnelID, sessionID, controlToken)
+	}
 
 	<-session.CloseChan()
 	remove()
+	g.recordMetrics(tunnelID, 0)
 	g.reconciler.nudge(tunnelID)
 	g.logger.InfoContext(context.Background(), "tunnel disconnected",
 		slog.String("tunnel_id", tunnelID), slog.String("session_id", sessionID),
@@ -353,6 +377,14 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	r.Header.Del(wire.HeaderTunnelForwardToken)
 	requireActive := r.Header.Get(wire.HeaderTunnelRequireActive) == "1"
 	r.Header.Del(wire.HeaderTunnelRequireActive)
+
+	r.Header.Del(wire.HeaderControlToken)
+	r.Header.Del(wire.HeaderCapabilities)
+	r.Header.Del(wire.HeaderTargetDisplay)
+	if strings.HasPrefix(r.URL.Path, wire.ControlPathPrefix) {
+		http.NotFound(w, r)
+		return
+	}
 
 	// Forwarding is internal-only; gram-server supplies the tunnel ID header.
 	tunnelID := r.Header.Get(wire.HeaderTunnelID)

@@ -151,6 +151,10 @@ on the client's pages and the compatibility-mode switch on its Settings tab;
 everyone else sees neither. The Settings tab also warns that the client's scopes
 have no effect. Browser verification: `[~]`.
 
+## Tunnel source observability
+
+The Private inventory tunnel source has one linked private MCP server and deterministic 24-hour request/connection history with a recent gap. It has no connected agent. Live HTTP progress is never seeded as fresh evidence. Open its Overview with `gram-tunnel-observability` enabled and verify charts, the gap, and the no-agent diagnostic state.
+
 ## Local only (RunLocalFixtures, never the demo org)
 
 These come from `server/internal/demoseed/local.go` after the seed, so they are
@@ -245,3 +249,5 @@ With `org:admin`, the Slack workspaces tab shows Acme Engineering and Acme Opera
 Enter through `/explore-demo` using an ordinary browser session, then open Amara Okafor → Accounts & devices. The visitor does not need a demo organization membership. Support impersonation is refused. Work identities shows three Slack memberships across Acme Engineering and Acme Operations, including a deactivated guest membership marked Needs review. Each has its Slack ID, workspace and stale snapshot timestamp. For admins, Open in Slack members opens the member table filtered to that workspace and Slack ID. Jonas Lindqvist has no mapped Slack accounts. A member viewing their own stable Gram ID sees contact-admin guidance and no link; a member viewing someone else gets no Slack panel or personal-mapping request. These are synthetic retained directory observations and admin mappings, without live Slack OAuth credentials or invocation protection.
 
 Shared Explore Demo is read-only for Slack connections, syncing and mappings. The retargeted local organization remains writable.
+
+Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, linked count, and no-agent state.

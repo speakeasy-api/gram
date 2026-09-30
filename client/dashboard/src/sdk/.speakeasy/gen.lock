@@ -712,6 +712,7 @@ trackedFiles:
   src/funcs/tunneledMcpCreateServer.ts: {}
   src/funcs/tunneledMcpDeleteServer.ts: {}
   src/funcs/tunneledMcpGetServer.ts: {}
+  src/funcs/tunneledMcpGetServerMetrics.ts: {}
   src/funcs/tunneledMcpListServerConnections.ts: {}
   src/funcs/tunneledMcpListServers.ts: {}
   src/funcs/tunneledMcpRotateServerKey.ts: {}
@@ -1790,9 +1791,15 @@ trackedFiles:
   src/models/components/tumdetailstotals.ts: {}
   src/models/components/tumperiod.ts: {}
   src/models/components/tumperiodday.ts: {}
+  src/models/components/tunnelclientcount.ts: {}
+  src/models/components/tunneldiagnostics.ts: {}
+  src/models/components/tunneldiagnosticstep.ts: {}
   src/models/components/tunneledmcpconnection.ts: {}
   src/models/components/tunneledmcpserver.ts: {}
   src/models/components/tunneledmcpserverconnections.ts: {}
+  src/models/components/tunnelhttpprogress.ts: {}
+  src/models/components/tunnelmetricpoint.ts: {}
+  src/models/components/tunnelmetrics.ts: {}
   src/models/components/undistributeskillrequestbody.ts: {}
   src/models/components/unknownskillactivation.ts: {}
   src/models/components/unlinkemarequestbody.ts: {}
@@ -2232,6 +2239,7 @@ trackedFiles:
   src/models/operations/gettoolusageusertimeseries.ts: {}
   src/models/operations/gettriggerinstance.ts: {}
   src/models/operations/gettunneledmcpserver.ts: {}
+  src/models/operations/gettunneledmcpservermetrics.ts: {}
   src/models/operations/getunproxiedmcpserver.ts: {}
   src/models/operations/getunproxiedmcpserverclientusage.ts: {}
   src/models/operations/getunproxiedmcpservertoolusage.ts: {}
@@ -3024,6 +3032,8 @@ trackedFiles:
   src/react-query/getToolsetEnvironment.ts: {}
   src/react-query/getTunneledMcpServer.core.ts: {}
   src/react-query/getTunneledMcpServer.ts: {}
+  src/react-query/getTunneledMcpServerMetrics.core.ts: {}
+  src/react-query/getTunneledMcpServerMetrics.ts: {}
   src/react-query/getUnproxiedMcpServer.core.ts: {}
   src/react-query/getUnproxiedMcpServer.ts: {}
   src/react-query/getUnproxiedMcpServerClientUsage.core.ts: {}
@@ -7721,6 +7731,19 @@ examples:
       responses:
         "200":
           application/json: {"active_connection_count": 391492, "active_consumer_session_count": 232927, "allow_public": true, "connection_status": "inactive", "created_at": "2025-07-31T14:10:01.737Z", "effective_public_request_burst": 130993, "effective_public_request_rate_per_second": 871968, "id": "af931b3e-297a-4d3c-8822-405f67a3e831", "key_prefix": "<value>", "name": "<value>", "project_id": "5a9bc58c-5585-415f-9c1f-27ef24b485ac", "status": "created", "updated_at": "2026-01-15T22:46:21.316Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getTunneledMcpServerMetrics:
+    speakeasy-default-get-tunneled-mcp-server-metrics:
+      parameters:
+        query:
+          id: "5330015d-e5be-4777-8735-66402ef1a629"
+          window: "day"
+      responses:
+        "200":
+          application/json: {"active_servers": 633723, "bucket_seconds": 5222, "clients": [], "observed_at": "2026-09-14T17:56:20.787Z", "points": [], "state": "unavailable"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
