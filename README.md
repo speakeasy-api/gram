@@ -1,19 +1,19 @@
 <p align="center">
-  <a href="https://www.speakeasy.com/product/gram" target="_blank">
-    <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/speakeasy-icon.png" alt="Gram by Speakeasy" width="140">
+  <a href="https://www.speakeasy.com/product/ai-control-plane" target="_blank">
+    <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/speakeasy-icon.png" alt="Speakeasy Control Plane" width="140">
   </a>
 </p>
 
-<h3 align="center">Speakeasy AI Control Plane</h3>
+<h3 align="center">Speakeasy Control Plane</h3>
 
 <p align="center">
   <strong>Securely scale AI usage across your organization. Built for humans and agents.</strong>
   <br />
-  <a href="https://www.speakeasy.com/"><strong>Learn more »</strong></a>
+  <a href="https://www.speakeasy.com/product/ai-control-plane"><strong>Learn more »</strong></a>
 </p>
 
 <p align="center">
-  <a href="https://www.getgram.ai/docs/introduction"><strong>Documentation</strong></a> ·
+  <a href="https://www.speakeasy.com/docs/ai-control-plane"><strong>Documentation</strong></a> ·
   <a href="#running-locally"><strong>Running locally</strong></a> ·
   <a href="#tech-stack"><strong>Tech Stack</strong></a> ·
   <a href="./CONTRIBUTING.md"><strong>Contributing</strong></a> ·
@@ -23,9 +23,11 @@
 
 # Introduction
 
-Gram is the open source stack behind Speakeasy's AI control plane. Secure and centrally manage MCPs, Skills, and Assistants your whole company to access, with fine-grained permissions, threat detection, and full observability of token use and costs. Every tool call, permission change, and access event logged and searchable. SOC 2 Type II and ISO 27001 certified.
+Speakeasy Control Plane helps your organization connect, secure, and manage MCPs, Skills, and Assistants. It provides fine-grained permissions, threat detection, and visibility into token use and costs. Tool calls, permission changes, and access events are logged and searchable. The platform is SOC 2 Type II and ISO 27001 certified.
 
-To get started on the hosted platform you can [Sign up](https://app.getgram.ai/), or check out the [Quickstart guide](https://www.getgram.ai/docs/introduction).
+**Naming note:** The product is now called Speakeasy Control Plane. It was previously called Gram, and this GitHub repository has not yet been renamed (`speakeasy-api/gram`).
+
+To get started on the hosted platform, [sign up](https://app.getgram.ai/) or read the [getting started guide](https://www.speakeasy.com/docs/ai-control-plane/getting-started).
 
 ### Supports popular AI providers
 
@@ -65,7 +67,7 @@ Centralise distribution of MCPs, Skills, Plugins and Assistants to your team bas
 
 - Chat with us: [Join our slack](https://join.slack.com/t/speakeasy-dev/shared_invite/zt-3hudfoj4y-9EPqMmHIFhNiTtannqiV3Q) for support and discussions or email us at [support@speakeasy.com](mailto:support@speakeasy.com).
 - Contribute feature requests or report issues [on our roadmap](https://roadmap.speakeasy.com/).
-- Documentation for the platform is available [here](https://www.speakeasy.com/docs/mcp).
+- Read the [Speakeasy Control Plane documentation](https://www.speakeasy.com/docs/ai-control-plane).
 
 ## Running locally
 
@@ -108,7 +110,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and detailed cont
 ## Contributors
 
 <a href="https://github.com/speakeasy-api/gram/graphs/contributors">
-  <img alt="Gram contributors" src="https://contrib.rocks/image?repo=speakeasy-api/gram" />
+  <img alt="Speakeasy Control Plane contributors" src="https://contrib.rocks/image?repo=speakeasy-api/gram" />
 </a>
 
 <hr />
