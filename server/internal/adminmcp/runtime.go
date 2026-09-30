@@ -110,7 +110,11 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	onboardingReader, _ := reader.(OnboardingReader)
 	projectMCPReader, _ := reader.(ProjectMCPServerReader)
 	billingDiagnosticsReader, _ := reader.(BillingDiagnosticsReader)
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil)
+	organizationStatsReader, _ := reader.(OrganizationStatsReader)
+	organizationMemberReader, _ := reader.(OrganizationMemberReader)
+	billingDetailReader, _ := reader.(BillingDetailReader)
+	registryReader, _ := reader.(RegistryReader)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil)
 	registerOrganizationTools(server, reader)
 	registerUserTools(server, userReader)
 	registerProjectTools(server, reader, projectReader)
@@ -122,6 +126,9 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	registerSupportMatrixTools(server, matrixReader)
 	registerDiagnosticTools(server, reader, projectReader, onboardingReader, projectMCPReader)
 	registerBillingDiagnosticTools(server, reader, billingDiagnosticsReader)
+	registerOrganizationDetailTools(server, reader, organizationStatsReader, organizationMemberReader)
+	registerBillingDetailTools(server, reader, billingDetailReader)
+	registerRegistryTools(server, registryReader)
 	return &Runtime{authenticator: authenticator, server: server, resourceURL: resourceURL}
 }
 

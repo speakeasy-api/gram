@@ -532,6 +532,32 @@ WHERE our.organization_id = @organization_id
 ORDER BY u.email ASC
 LIMIT 200;
 
+-- name: AdminListOrganizationMembersPage :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_login,
+    u.created_at,
+    u.updated_at
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id > @after_user_id::text
+ORDER BY u.id ASC
+LIMIT @page_limit;
+
+-- name: AdminGetOrganizationMemberCursor :one
+SELECT u.id
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id = @user_id;
+
 -- name: AdminGetOrganization :one
 -- Resolving a slug is opt-in because every admin write is keyed on id alone.
 -- Both columns are bare TEXT, so one organization's slug can equal another's
