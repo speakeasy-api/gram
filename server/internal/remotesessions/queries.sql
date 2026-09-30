@@ -2502,10 +2502,12 @@ ORDER BY (user_session_issuer_id = @user_session_issuer_id::uuid) DESC, custom_d
 -- header.
 
 -- name: ListOrganizationRemoteSessionIssuers :many
--- All issuers in the org (organizational and project-specific) and — when the
--- caller opts in with include_global — platform issuers from the shared
--- catalog, each with its associated non-deleted client count and, for
--- project-specific issuers, the owning project name.
+-- Issuers in the org — organizational (include_organizational) and
+-- project-specific (include_project_specific) — and platform issuers from the
+-- shared catalog (include_global), each tier gated by its own boolean, each row
+-- with its associated non-deleted client count and, for project-specific
+-- issuers, the owning project name. A caller listing one tier turns the other
+-- two off, so a large catalog cannot fill a page meant for the org's own.
 --
 -- client_count mirrors the ORG REACHABILITY predicate used by the client
 -- queries: (i.organization_id = @org OR c.organization_id = @org). For an
@@ -2532,7 +2534,8 @@ SELECT
 FROM remote_session_issuers AS i
 LEFT JOIN projects AS p ON p.id = i.project_id
 WHERE (
-    i.organization_id = @organization_id
+    (@include_organizational::boolean AND i.project_id IS NULL AND i.organization_id = @organization_id)
+    OR (@include_project_specific::boolean AND i.project_id IS NOT NULL AND i.organization_id = @organization_id)
     OR (@include_global::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
   )
   AND i.deleted IS FALSE

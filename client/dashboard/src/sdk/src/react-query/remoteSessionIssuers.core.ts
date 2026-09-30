@@ -15,7 +15,7 @@ import {
   ListRemoteSessionIssuersRequest,
   ListRemoteSessionIssuersResponse,
   ListRemoteSessionIssuersSecurity,
-  Tier,
+  QueryParamTier,
 } from "../models/operations/listremotesessionissuers.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -175,7 +175,7 @@ export function queryKeyRemoteSessionIssuers(
     limit?: number | undefined;
     search?: string | undefined;
     upstreamHost?: string | undefined;
-    tier?: Tier | undefined;
+    tier?: QueryParamTier | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;
@@ -190,7 +190,7 @@ export function queryKeyRemoteSessionIssuersInfinite(
     limit?: number | undefined;
     search?: string | undefined;
     upstreamHost?: string | undefined;
-    tier?: Tier | undefined;
+    tier?: QueryParamTier | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

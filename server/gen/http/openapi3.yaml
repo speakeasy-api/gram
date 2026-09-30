@@ -41048,6 +41048,17 @@ paths:
                     format: int64
                     type: integer
                 - allowEmptyValue: true
+                  description: 'Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.'
+                  in: query
+                  name: tier
+                  schema:
+                    description: 'Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.'
+                    enum:
+                        - organization
+                        - project
+                        - platform
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session

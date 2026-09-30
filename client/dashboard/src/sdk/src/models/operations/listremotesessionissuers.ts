@@ -31,7 +31,7 @@ export type ListRemoteSessionIssuersSecurity = {
 /**
  * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
  */
-export const Tier = {
+export const QueryParamTier = {
   Project: "project",
   Organization: "organization",
   Platform: "platform",
@@ -39,7 +39,7 @@ export const Tier = {
 /**
  * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
  */
-export type Tier = ClosedEnum<typeof Tier>;
+export type QueryParamTier = ClosedEnum<typeof QueryParamTier>;
 
 export type ListRemoteSessionIssuersRequest = {
   /**
@@ -61,7 +61,7 @@ export type ListRemoteSessionIssuersRequest = {
   /**
    * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
    */
-  tier?: Tier | undefined;
+  tier?: QueryParamTier | undefined;
   /**
    * Session header
    */
@@ -188,7 +188,9 @@ export function listRemoteSessionIssuersSecurityToJSON(
 }
 
 /** @internal */
-export const Tier$outboundSchema: z.ZodMiniEnum<typeof Tier> = z.enum(Tier);
+export const QueryParamTier$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamTier
+> = z.enum(QueryParamTier);
 
 /** @internal */
 export type ListRemoteSessionIssuersRequest$Outbound = {
@@ -212,7 +214,7 @@ export const ListRemoteSessionIssuersRequest$outboundSchema: z.ZodMiniType<
     limit: z.optional(z.int()),
     search: z.optional(z.string()),
     upstreamHost: z.optional(z.string()),
-    tier: z.optional(Tier$outboundSchema),
+    tier: z.optional(QueryParamTier$outboundSchema),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),

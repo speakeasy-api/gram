@@ -2641,6 +2641,7 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersListIssuersFlags            = flag.NewFlagSet("list-issuers", flag.ExitOnError)
 		organizationRemoteSessionIssuersListIssuersCursorFlag       = organizationRemoteSessionIssuersListIssuersFlags.String("cursor", "", "")
 		organizationRemoteSessionIssuersListIssuersLimitFlag        = organizationRemoteSessionIssuersListIssuersFlags.String("limit", "", "")
+		organizationRemoteSessionIssuersListIssuersTierFlag         = organizationRemoteSessionIssuersListIssuersFlags.String("tier", "", "")
 		organizationRemoteSessionIssuersListIssuersSessionTokenFlag = organizationRemoteSessionIssuersListIssuersFlags.String("session-token", "", "")
 		organizationRemoteSessionIssuersListIssuersApikeyTokenFlag  = organizationRemoteSessionIssuersListIssuersFlags.String("apikey-token", "", "")
 
@@ -10244,7 +10245,7 @@ func ParseEndpoint(
 				data, err = organizationremotesessionissuersc.BuildCreateIssuerPayload(*organizationRemoteSessionIssuersCreateIssuerBodyFlag, *organizationRemoteSessionIssuersCreateIssuerSessionTokenFlag, *organizationRemoteSessionIssuersCreateIssuerApikeyTokenFlag)
 			case "list-issuers":
 				endpoint = c.ListIssuers()
-				data, err = organizationremotesessionissuersc.BuildListIssuersPayload(*organizationRemoteSessionIssuersListIssuersCursorFlag, *organizationRemoteSessionIssuersListIssuersLimitFlag, *organizationRemoteSessionIssuersListIssuersSessionTokenFlag, *organizationRemoteSessionIssuersListIssuersApikeyTokenFlag)
+				data, err = organizationremotesessionissuersc.BuildListIssuersPayload(*organizationRemoteSessionIssuersListIssuersCursorFlag, *organizationRemoteSessionIssuersListIssuersLimitFlag, *organizationRemoteSessionIssuersListIssuersTierFlag, *organizationRemoteSessionIssuersListIssuersSessionTokenFlag, *organizationRemoteSessionIssuersListIssuersApikeyTokenFlag)
 			case "get-issuer":
 				endpoint = c.GetIssuer()
 				data, err = organizationremotesessionissuersc.BuildGetIssuerPayload(*organizationRemoteSessionIssuersGetIssuerIDFlag, *organizationRemoteSessionIssuersGetIssuerSessionTokenFlag, *organizationRemoteSessionIssuersGetIssuerApikeyTokenFlag)
@@ -22491,6 +22492,7 @@ func organizationRemoteSessionIssuersListIssuersUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers list-issuers", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -tier STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprintln(os.Stderr)
@@ -22502,12 +22504,13 @@ func organizationRemoteSessionIssuersListIssuersUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -tier STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers list-issuers --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers list-issuers --cursor \"abc123\" --limit 1 --tier \"project\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersGetIssuerUsage() {

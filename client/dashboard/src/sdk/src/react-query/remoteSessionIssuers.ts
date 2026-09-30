@@ -30,7 +30,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListRemoteSessionIssuersRequest,
   ListRemoteSessionIssuersSecurity,
-  Tier,
+  QueryParamTier,
 } from "../models/operations/listremotesessionissuers.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -226,7 +226,7 @@ export function setRemoteSessionIssuersData(
       limit?: number | undefined;
       search?: string | undefined;
       upstreamHost?: string | undefined;
-      tier?: Tier | undefined;
+      tier?: QueryParamTier | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -247,7 +247,7 @@ export function invalidateRemoteSessionIssuers(
       limit?: number | undefined;
       search?: string | undefined;
       upstreamHost?: string | undefined;
-      tier?: Tier | undefined;
+      tier?: QueryParamTier | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

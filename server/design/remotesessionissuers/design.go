@@ -301,6 +301,9 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Payload(func() {
 			Attribute("cursor", String, "Pagination cursor.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Attribute("tier", String, "Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.", func() {
+				Enum("organization", "project", "platform")
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 		})
@@ -311,6 +314,7 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 			GET("/rpc/organizationRemoteSessionIssuers.list")
 			Param("cursor")
 			Param("limit")
+			Param("tier")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			Response(StatusOK)

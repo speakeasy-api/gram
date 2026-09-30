@@ -6324,8 +6324,9 @@ SELECT
 FROM remote_session_issuers AS i
 LEFT JOIN projects AS p ON p.id = i.project_id
 WHERE (
-    i.organization_id = $1
-    OR ($2::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
+    ($2::boolean AND i.project_id IS NULL AND i.organization_id = $1)
+    OR ($3::boolean AND i.project_id IS NOT NULL AND i.organization_id = $1)
+    OR ($4::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
   )
   AND i.deleted IS FALSE
   -- An issuer whose only live clients were left behind by tombstoned identity
@@ -6354,16 +6355,18 @@ WHERE (
         AND ipc.deleted IS NOT TRUE
     )
   )
-  AND ($3::uuid IS NULL OR i.id < $3::uuid)
+  AND ($5::uuid IS NULL OR i.id < $5::uuid)
 ORDER BY i.id DESC
-LIMIT $4
+LIMIT $6
 `
 
 type ListOrganizationRemoteSessionIssuersParams struct {
-	OrganizationID pgtype.Text
-	IncludeGlobal  bool
-	Cursor         uuid.NullUUID
-	LimitValue     int32
+	OrganizationID         pgtype.Text
+	IncludeOrganizational  bool
+	IncludeProjectSpecific bool
+	IncludeGlobal          bool
+	Cursor                 uuid.NullUUID
+	LimitValue             int32
 }
 
 type ListOrganizationRemoteSessionIssuersRow struct {
@@ -6378,10 +6381,12 @@ type ListOrganizationRemoteSessionIssuersRow struct {
 // project-specific rows); client/session queries reach the org through their
 // issuer, the sole cross-tenant guard since these endpoints carry no project
 // header.
-// All issuers in the org (organizational and project-specific) and — when the
-// caller opts in with include_global — platform issuers from the shared
-// catalog, each with its associated non-deleted client count and, for
-// project-specific issuers, the owning project name.
+// Issuers in the org — organizational (include_organizational) and
+// project-specific (include_project_specific) — and platform issuers from the
+// shared catalog (include_global), each tier gated by its own boolean, each row
+// with its associated non-deleted client count and, for project-specific
+// issuers, the owning project name. A caller listing one tier turns the other
+// two off, so a large catalog cannot fill a page meant for the org's own.
 //
 // client_count mirrors the ORG REACHABILITY predicate used by the client
 // queries: (i.organization_id = @org OR c.organization_id = @org). For an
@@ -6398,6 +6403,8 @@ type ListOrganizationRemoteSessionIssuersRow struct {
 func (q *Queries) ListOrganizationRemoteSessionIssuers(ctx context.Context, arg ListOrganizationRemoteSessionIssuersParams) ([]ListOrganizationRemoteSessionIssuersRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationRemoteSessionIssuers,
 		arg.OrganizationID,
+		arg.IncludeOrganizational,
+		arg.IncludeProjectSpecific,
 		arg.IncludeGlobal,
 		arg.Cursor,
 		arg.LimitValue,
