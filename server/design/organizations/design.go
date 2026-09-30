@@ -551,10 +551,12 @@ var SetupTask = Type("SetupTask", func() {
 	Attribute("assignee", SetupTaskAssignee, "Current resolved user or email assignee.")
 	Attribute("blocked_by", ArrayOf(String), "Incomplete prerequisite task keys.")
 	Attribute("hidden", Boolean, "Whether a platform administrator hid the task.")
-	Required("key", "title", "description", "status", "completed_by_fact", "blocked_by", "hidden")
+	Attribute("parent_key", String, "Key of the group this card sits under. Absent for a top-level card or a group.")
+	Attribute("group", Boolean, "True for a group that nests cards. A group has no card of its own: it is hidden when every card under it is, done when every visible card is, and cannot be assigned or marked by hand.")
+	Required("key", "title", "description", "status", "completed_by_fact", "blocked_by", "hidden", "group")
 })
 
 var ListSetupTasksResult = Type("ListSetupTasksResult", func() {
-	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order.")
+	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order. A group precedes the cards under it.")
 	Required("tasks")
 })

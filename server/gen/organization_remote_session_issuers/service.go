@@ -288,7 +288,10 @@ type ListIssuersPayload struct {
 	// Pagination cursor.
 	Cursor *string
 	// Page size (default 50, max 100).
-	Limit        *int
+	Limit *int
+	// Only issuers from one tier: organizational (organization), project-specific
+	// (project), or from the platform catalog (platform). Omitted lists all three.
+	Tier         *string
 	SessionToken *string
 	ApikeyToken  *string
 }

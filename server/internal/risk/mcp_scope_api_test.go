@@ -2,6 +2,7 @@ package risk_test
 
 import (
 	"context"
+	"io"
 	"slices"
 	"testing"
 
@@ -13,8 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 func TestRiskPolicyMCPScopeRoundTripsAndFiltersEnabledPolicies(t *testing.T) {
@@ -107,6 +110,85 @@ func TestRiskPolicyMCPScopeRoundTripsAndFiltersEnabledPolicies(t *testing.T) {
 	require.NotNil(t, allPolicy)
 }
 
+type scopedPlatformExecutor struct{}
+
+func (scopedPlatformExecutor) Descriptor() platformtools.ToolDescriptor {
+	return platformtools.ToolDescriptor{
+		SourceSlug:  "risk-test",
+		HandlerName: "danger",
+		Name:        "danger",
+		InputSchema: []byte(`{"type":"object"}`),
+		Annotations: &types.ToolAnnotations{
+			ReadOnlyHint:    new(false),
+			DestructiveHint: new(true),
+		},
+	}
+}
+
+func (scopedPlatformExecutor) Call(context.Context, toolconfig.ToolCallEnv, io.Reader, io.Writer) error {
+	return nil
+}
+
+func TestRiskPolicyPlatformMCPScopeValidatesListsAndMatches(t *testing.T) {
+	t.Parallel()
+
+	const slug = platformtools.ManagedAssistantPlatformToolsetSlug
+	toolset := platformtools.NewManagedAssistantToolset(platformtools.ExternalTool{Executor: scopedPlatformExecutor{}})
+	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
+		instance.platformToolsets = map[string]platformtools.Toolset{slug: toolset}
+	})
+	platformID := platformtools.PlatformToolsetID(slug)
+
+	directPolicy := createMCPScopedPolicy(t, ctx, ti, "Platform danger", true, &types.RiskMCPScope{
+		Servers: []*types.RiskMCPServerScope{{
+			McpServerID: platformID.String(),
+			Tools:       []string{"danger"},
+		}},
+	})
+	createMCPScopedPolicy(t, ctx, ti, "All destructive tools", true, &types.RiskMCPScope{
+		AllServers:      true,
+		ToolAnnotations: []string{"destructiveHint"},
+		Servers:         []*types.RiskMCPServerScope{},
+	})
+	createMCPScopedPolicy(t, ctx, ti, "All read-only tools", true, &types.RiskMCPScope{
+		AllServers:      true,
+		ToolAnnotations: []string{"readOnlyHint"},
+		Servers:         []*types.RiskMCPServerScope{},
+	})
+
+	roundTrip, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: directPolicy.ID})
+	require.NoError(t, err)
+	require.Equal(t, directPolicy.McpScope, roundTrip.McpScope)
+
+	matched, err := ti.service.ListRiskPoliciesForMcpServer(ctx, &gen.ListRiskPoliciesForMcpServerPayload{
+		McpServerID: platformID.String(),
+		ToolName:    new("danger"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"All destructive tools", "Platform danger"}, sortedPolicyNames(matched.Policies))
+
+	catalog, err := ti.service.ListMCPPlatformToolsets(ctx, &gen.ListMCPPlatformToolsetsPayload{})
+	require.NoError(t, err)
+	require.Len(t, catalog.Toolsets, 1)
+	require.Equal(t, platformID.String(), catalog.Toolsets[0].ID)
+	require.Equal(t, slug, catalog.Toolsets[0].Slug)
+	require.Equal(t, "Gram managed assistant tools", catalog.Toolsets[0].Name)
+	require.Len(t, catalog.Toolsets[0].Tools, 1)
+	require.Equal(t, "danger", catalog.Toolsets[0].Tools[0].Name)
+	require.NotNil(t, catalog.Toolsets[0].Tools[0].Annotations)
+	require.True(t, *catalog.Toolsets[0].Tools[0].Annotations.DestructiveHint)
+
+	_, err = ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    new("Unknown platform"),
+		Sources: []string{"destructive_tool"},
+		Action:  "flag",
+		McpScope: &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+			McpServerID: uuid.NewString(),
+		}}},
+	})
+	require.ErrorContains(t, err, "does not belong to the project")
+}
+
 func TestRiskPolicyMCPScopeRejectsAccountIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -140,6 +222,68 @@ func TestRiskPolicyMCPScopeRejectsAccountIdentity(t *testing.T) {
 		McpScope: scope,
 	})
 	require.ErrorContains(t, err, `source "account_identity" cannot be used by an MCP-scoped policy`)
+}
+func TestRiskPolicyMCPScopeAllowsOnlyFlagAndBlockActions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	scope := &types.RiskMCPScope{
+		AllServers: true,
+		Servers:    []*types.RiskMCPServerScope{},
+	}
+
+	for _, action := range []string{"warn", "quarantine"} {
+		name := "Scoped " + action
+		_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+			Name:     &name,
+			Sources:  []string{"gitleaks"},
+			Action:   action,
+			McpScope: scope,
+		})
+		require.ErrorContains(t, err, `action "`+action+`" cannot be used by an MCP-scoped policy`)
+	}
+
+	for _, action := range []string{"flag", "block"} {
+		name := "Scoped " + action
+		_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+			Name:     &name,
+			Sources:  []string{"gitleaks"},
+			Action:   action,
+			McpScope: scope,
+		})
+		require.NoError(t, err)
+	}
+
+	name := "Unscoped warn"
+	unscopedWarn, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    &name,
+		Sources: []string{"gitleaks"},
+		Action:  "warn",
+	})
+	require.NoError(t, err)
+
+	name = "Scoped action update"
+	scopedFlag, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:     &name,
+		Sources:  []string{"gitleaks"},
+		Action:   "flag",
+		McpScope: scope,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:     scopedFlag.ID,
+		Name:   scopedFlag.Name,
+		Action: new("warn"),
+	})
+	require.ErrorContains(t, err, `action "warn" cannot be used by an MCP-scoped policy`)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:       unscopedWarn.ID,
+		Name:     unscopedWarn.Name,
+		McpScope: scope,
+	})
+	require.ErrorContains(t, err, `action "warn" cannot be used by an MCP-scoped policy`)
 }
 
 func createMCPScopedPolicy(

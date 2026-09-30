@@ -214,6 +214,7 @@ describe("AppSidebar", () => {
         label: "Account Management",
         links: [
           { label: "Organizations", href: "/organizations" },
+          { label: "Users", href: "/users" },
           { label: "Projects", href: "/projects" },
           { label: "S-token Calculator", href: "/stoken-calculator" },
         ],
@@ -223,6 +224,7 @@ describe("AppSidebar", () => {
         links: [
           { label: "MCP Registry", href: "/registry" },
           { label: "Support matrix", href: "/integration-coverage" },
+          { label: "Steps", href: "/onboarding-steps" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
           { label: "Admin MCP", href: "/mcp-setup" },
           {
@@ -260,25 +262,27 @@ describe("AppSidebar", () => {
     expect(isActive("Projects")).toBe(true);
   });
 
-  it("renders the record nav inside a record", async () => {
-    await renderRouteTree(routeTree, {
-      initialPath: `/organizations/${ORG.slug}`,
-    });
+  it.each(["", "/projects", `/projects/${PROJECT.slug}`, "/members"])(
+    "renders only record navigation inside a record at %s",
+    async (path) => {
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}${path}`,
+      });
 
-    expect(
-      await screen.findByRole("link", { name: "All organizations" }),
-    ).toBeTruthy();
-    // The record nav replaces the global one, but still offers setup.
-    expect(hrefs()).not.toContain("/projects");
-    expect(hrefs()).toContain("/mcp-setup");
-
-    const demoLink = screen.getByRole("link", { name: "Demo organization" });
-    expect(demoLink.getAttribute("href")).toBe(
-      "https://app.getgram.ai/explore-demo",
-    );
-    expect(demoLink.getAttribute("target")).toBe("_blank");
-    expect(demoLink.getAttribute("rel")).toBe("noopener noreferrer");
-  });
+      expect(
+        await screen.findByRole("link", { name: "All organizations" }),
+      ).toBeTruthy();
+      // Only the app home and back link leave the organization scope.
+      expect(
+        hrefs().every(
+          (href) =>
+            href === "/" ||
+            href === "/organizations" ||
+            href?.startsWith(`/organizations/${ORG.slug}`),
+        ),
+      ).toBe(true);
+    },
+  );
 
   it("falls back to the global nav when the record fails to load", async () => {
     mocks.getOrganization.mockRejectedValue(

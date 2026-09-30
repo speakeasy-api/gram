@@ -78,22 +78,6 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
--- Onboarding state is organization-scoped, independent of any project.
--- Unlike retained records, this state has no lifetime beyond its owning organization.
-CREATE TABLE IF NOT EXISTS organization_onboarding (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  preset TEXT,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT organization_onboarding_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_onboarding_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_onboarding_organization_id_key
-ON organization_onboarding (organization_id);
-
 -- One enterprise-trial lifecycle per organization. Lifecycle operations update
 -- the row in place. Unrelated to organization_metadata.free_trial_*, another
 -- concept.
@@ -3104,6 +3088,11 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- with nothing to show. The issuer URL is the machine-readable identity.
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
 
+  -- What the platform is and what runs on it, in the operator's words. Optional
+  -- and shown in place of the issuer URL wherever the issuer is listed, since a
+  -- URL alone rarely tells an administrator which platform they are looking at.
+  description TEXT CHECK (CHAR_LENGTH(description) <= 500),
+
   -- Free-form labels for filtering a long list, following the convention the
   -- skills and memories tables already use. Flat strings, not key/value pairs.
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
@@ -3118,25 +3107,31 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   jwks_uri TEXT NOT NULL,
 
   -- Whether this issuer's admissions and agent assignments may match a subject
-  -- by a trailing wildcard rather than in full. Off unless an operator turns it
-  -- on when the issuer is created.
+  -- by a trailing wildcard rather than in full. On by default, and not asked for
+  -- when an issuer is registered.
   --
-  -- The gate lives here, not on the admission, because whether a wildcard can
-  -- ever be safe is a property of the platform rather than of one row. It is
-  -- sound only where the varying part of sub is minted by the issuer and cannot
-  -- be forged by the caller: Claude Tag's agent id, or a SPIFFE path assigned by
-  -- a registration entry. It is unsound where the caller controls that part
-  -- (GitHub Actions puts the git ref in sub, so `repo:org/repo:*` admits every
-  -- branch and so everyone who can open a pull request) and meaningless where
-  -- sub is an opaque identifier (Entra's GUID, Google's numeric id), because a
-  -- leading portion of those is a truncation that collides with unrelated
-  -- principals.
+  -- Revised 2026-09-25. This began as a setup-time gate, on the reasoning that
+  -- whether a wildcard is sound is a property of the platform: it holds only
+  -- where the varying part of sub is assigned by the issuer and cannot be chosen
+  -- by the caller. That reasoning is unchanged and still worth knowing — a CI
+  -- provider that puts the git ref in sub turns `repo:org/repo:*` into "anyone
+  -- who can push a branch", and for an opaque sub a leading portion is a
+  -- truncation that collides with unrelated principals.
   --
-  -- A per-admission confirmation cannot make that judgement: it asks whoever is
-  -- admitting a subject to re-derive their platform's sub semantics every time.
-  -- Recorded once here, an issuer whose subjects are opaque or caller-influenced
-  -- simply cannot carry a wildcard rule, whatever a later operator ticks.
-  allow_wildcard_admission boolean NOT NULL DEFAULT false,
+  -- What changed is who should answer it and when. Asking at registration put a
+  -- question in front of an operator before they had a rule in mind, about a
+  -- platform whose sub semantics they may not know, and the answer is theirs to
+  -- make about their own system rather than ours to withhold. The dialog now
+  -- states the consequence at the point a wildcard is actually written — which
+  -- subjects it admits, and which agent they would inherit — where it is
+  -- concrete and actionable instead of abstract.
+  --
+  -- The column stays because it does a second job the gate obscured: it is
+  -- checked on every lookup, not at write time, so clearing it makes every
+  -- wildcard rule under that issuer inert immediately, with nothing withdrawn.
+  -- That is an incident control, not a configuration step, and it is deliberately
+  -- absent from the registration UI.
+  allow_wildcard_admission boolean NOT NULL DEFAULT true,
 
   -- The last discovery document captured for this issuer, verbatim. The typed
   -- columns above model only what Gram acts on; the rest of a document is kept
@@ -3269,6 +3264,10 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   -- admit-from-a-rejected-attempt flow, whose point is that nobody transcribes
   -- a subject by hand.
   name TEXT CHECK (name IS NULL OR name <> ''),
+
+  -- Free-form labels for finding a machine in a long admitted set, following
+  -- the same convention and limits as workload_issuers.tags.
+  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -5541,6 +5540,7 @@ CREATE TABLE IF NOT EXISTS mcp_registry_entries (
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   data jsonb NOT NULL,
   published boolean NOT NULL DEFAULT true,
+  published_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -7225,6 +7225,23 @@ ON risk_results (chat_message_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_chat_content_part_idx
 ON risk_results (chat_content_part_id);
+
+-- Encrypted raw matches for MCP findings, retained with ClickHouse findings.
+CREATE TABLE IF NOT EXISTS risk_finding_evidence (
+  finding_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  match_encrypted TEXT NOT NULL,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  expires_at timestamptz NOT NULL,
+
+  CONSTRAINT risk_finding_evidence_pkey PRIMARY KEY (organization_id, project_id, finding_id),
+  CONSTRAINT risk_finding_evidence_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS risk_finding_evidence_expires_at_idx
+ON risk_finding_evidence (expires_at, organization_id, project_id, finding_id);
 
 -- risk_policy_eval_reviews is the durable "regression set" for a prompt-based
 -- risk policy: a reviewer's ground-truth verdict on whether a given chat session
@@ -9833,6 +9850,24 @@ CREATE TABLE IF NOT EXISTS support_matrix_platforms (
 COMMENT ON TABLE support_matrix_platforms IS 'Global admin support catalog of upstream product surfaces, independent of customer installations.';
 CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_platforms_slug_key ON support_matrix_platforms (slug);
 
+-- Plans a vendor sells, as the support matrix names them. Seeded from the
+-- catalog beside the platforms; an organization's stack records the plan it
+-- is on with each vendor.
+CREATE TABLE IF NOT EXISTS support_matrix_plans (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL,
+  vendor TEXT NOT NULL,
+  name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT support_matrix_plans_pkey PRIMARY KEY (id)
+);
+COMMENT ON TABLE support_matrix_plans IS 'Plans each vendor sells, as the support matrix names them; an organization declares the one it is on per vendor.';
+CREATE UNIQUE INDEX IF NOT EXISTS support_matrix_plans_slug_key ON support_matrix_plans (slug);
+CREATE INDEX IF NOT EXISTS support_matrix_plans_vendor_idx ON support_matrix_plans (vendor);
+
 CREATE TABLE IF NOT EXISTS support_matrix_integration_methods (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   slug TEXT NOT NULL,
@@ -9934,6 +9969,155 @@ COMMENT ON COLUMN support_matrix_method_platforms.operating_systems IS 'NULL mea
 COMMENT ON COLUMN support_matrix_method_platforms.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
 COMMENT ON COLUMN support_matrix_coverage.operating_systems IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.';
 COMMENT ON COLUMN support_matrix_coverage.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
+
+-- Onboarding steps are defined in application code and mirrored here so
+-- playbooks can reference them. Staff read them in the admin dashboard but
+-- never edit them: a step is a code integration. parent_step_id nests a step
+-- one level under a group; a group has no card of its own and is done when
+-- every child is.
+CREATE TABLE IF NOT EXISTS onboarding_steps (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  parent_step_id uuid,
+  -- How the step completes: manual, fact or children. Values live in
+  -- application code.
+  completion TEXT NOT NULL DEFAULT 'manual',
+  hidden_by_default BOOLEAN NOT NULL DEFAULT true,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT onboarding_steps_pkey PRIMARY KEY (id),
+  CONSTRAINT onboarding_steps_parent_step_id_fkey FOREIGN KEY (parent_step_id) REFERENCES onboarding_steps (id) ON DELETE SET NULL
+);
+COMMENT ON TABLE onboarding_steps IS 'Onboarding steps mirrored from application code; deleted_at marks a step the code no longer defines.';
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_steps_slug_key ON onboarding_steps (slug);
+CREATE INDEX IF NOT EXISTS onboarding_steps_parent_step_id_idx ON onboarding_steps (parent_step_id) WHERE parent_step_id IS NOT NULL;
+
+-- The support matrix integration methods a step configures. A step applies to
+-- an organization's stack when any of its methods does; a step with none,
+-- such as identity, always applies.
+CREATE TABLE IF NOT EXISTS onboarding_step_methods (
+  step_id uuid NOT NULL,
+  integration_method_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT onboarding_step_methods_pkey PRIMARY KEY (step_id, integration_method_id),
+  CONSTRAINT onboarding_step_methods_step_id_fkey FOREIGN KEY (step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_step_methods_integration_method_id_fkey FOREIGN KEY (integration_method_id) REFERENCES support_matrix_integration_methods (id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS onboarding_step_methods_integration_method_id_idx ON onboarding_step_methods (integration_method_id);
+
+-- Prerequisites: step_id cannot start until requires_step_id is done. Edges
+-- never cross a group's own line: a step neither requires its parent nor a
+-- child of its own, and never itself.
+CREATE TABLE IF NOT EXISTS onboarding_step_dependencies (
+  step_id uuid NOT NULL,
+  requires_step_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT onboarding_step_dependencies_pkey PRIMARY KEY (step_id, requires_step_id),
+  CONSTRAINT onboarding_step_dependencies_step_id_check CHECK (step_id <> requires_step_id),
+  CONSTRAINT onboarding_step_dependencies_step_id_fkey FOREIGN KEY (step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_step_dependencies_requires_step_id_fkey FOREIGN KEY (requires_step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS onboarding_step_dependencies_requires_step_id_idx ON onboarding_step_dependencies (requires_step_id);
+
+-- Use cases are the outcomes staff define for onboarding. They are created in
+-- the admin dashboard; nothing seeds them. The onboarding survey names one by
+-- slug and the organization starts from its default playbook.
+CREATE TABLE IF NOT EXISTS onboarding_use_cases (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT onboarding_use_cases_pkey PRIMARY KEY (id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_use_cases_slug_key ON onboarding_use_cases (slug) WHERE deleted_at IS NULL;
+
+-- A playbook is the ordered top-level steps that achieve an outcome. It belongs
+-- to a use case (shared; one per use case is marked is_default) or to one
+-- organization (custom, written for it), never both.
+CREATE TABLE IF NOT EXISTS onboarding_playbooks (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  use_case_id uuid,
+  organization_id TEXT,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  is_default BOOLEAN NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  CONSTRAINT onboarding_playbooks_pkey PRIMARY KEY (id),
+  CONSTRAINT onboarding_playbooks_use_case_id_fkey FOREIGN KEY (use_case_id) REFERENCES onboarding_use_cases (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_playbooks_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_playbooks_owner_check CHECK ((use_case_id IS NULL) <> (organization_id IS NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_playbooks_default_key ON onboarding_playbooks (use_case_id) WHERE is_default AND organization_id IS NULL AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS onboarding_playbooks_use_case_id_idx ON onboarding_playbooks (use_case_id);
+CREATE INDEX IF NOT EXISTS onboarding_playbooks_organization_id_idx ON onboarding_playbooks (organization_id) WHERE organization_id IS NOT NULL;
+
+-- The top-level steps of a playbook in walking order. Cards under a group
+-- come with the group and are never listed on their own.
+CREATE TABLE IF NOT EXISTS onboarding_playbook_steps (
+  playbook_id uuid NOT NULL,
+  step_id uuid NOT NULL,
+  position INTEGER NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT onboarding_playbook_steps_pkey PRIMARY KEY (playbook_id, step_id),
+  CONSTRAINT onboarding_playbook_steps_playbook_id_fkey FOREIGN KEY (playbook_id) REFERENCES onboarding_playbooks (id) ON DELETE CASCADE,
+  CONSTRAINT onboarding_playbook_steps_step_id_fkey FOREIGN KEY (step_id) REFERENCES onboarding_steps (id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS onboarding_playbook_steps_position_key ON onboarding_playbook_steps (playbook_id, position);
+CREATE INDEX IF NOT EXISTS onboarding_playbook_steps_step_id_idx ON onboarding_playbook_steps (step_id);
+
+-- Onboarding state is organization-scoped, independent of any project.
+-- Unlike retained records, this state has no lifetime beyond its owning organization.
+CREATE TABLE IF NOT EXISTS organization_onboarding (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  preset TEXT,
+  -- Device management the organization uses: jamf, intune, iru, other or
+  -- none. NULL until staff record the stack. Values live in application code.
+  mdm_vendor TEXT,
+  -- The software's name when mdm_vendor is other, kept for our records only.
+  mdm_vendor_name TEXT,
+  -- The playbook the organization walks. NULL until staff assign one, in
+  -- which case the setup task selection decides what the wizard shows.
+  playbook_id uuid,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_onboarding_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_onboarding_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT organization_onboarding_playbook_id_fkey FOREIGN KEY (playbook_id) REFERENCES onboarding_playbooks (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_onboarding_organization_id_key
+ON organization_onboarding (organization_id);
+CREATE INDEX IF NOT EXISTS organization_onboarding_playbook_id_idx ON organization_onboarding (playbook_id) WHERE playbook_id IS NOT NULL;
+
+-- The AI vendors an organization uses, each with the plan it is on. Vendors
+-- and plans come from the support matrix catalog, and every product of a
+-- vendor is implied. plan_id is NULL for a vendor that sells no plans.
+CREATE TABLE IF NOT EXISTS organization_onboarding_vendors (
+  organization_id TEXT NOT NULL,
+  vendor TEXT NOT NULL,
+  plan_id uuid,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT organization_onboarding_vendors_pkey PRIMARY KEY (organization_id, vendor),
+  CONSTRAINT organization_onboarding_vendors_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_onboarding (organization_id) ON DELETE CASCADE,
+  CONSTRAINT organization_onboarding_vendors_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES support_matrix_plans (id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS organization_onboarding_vendors_plan_id_idx ON organization_onboarding_vendors (plan_id) WHERE plan_id IS NOT NULL;
 -- Queries are Explore's one server-side object: a named, saved question
 -- against a catalog dataset, kept with the builder state it was built with.
 -- Columns are what the server reasons about (scope, listing, impact checks);

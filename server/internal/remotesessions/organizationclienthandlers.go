@@ -571,6 +571,10 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
+	if payload.LegacyCallbackURL != nil && !authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "changing a client's legacy callback mode requires a platform admin").LogError(ctx, logger)
+	}
+
 	// Encrypt a rotated client secret before it touches the database; an absent
 	// secret leaves the stored ciphertext untouched (narg NULL → COALESCE keeps).
 	var clientSecretEncrypted pgtype.Text
@@ -653,6 +657,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:               conv.PtrToPGBool(payload.LegacyCallbackURL),
 		ID:                              clientID,
 		OrganizationID:                  conv.ToPGText(authCtx.ActiveOrganizationID),
 	})

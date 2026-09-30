@@ -96,6 +96,10 @@ func registerDiagnosticTools(server *mcp.Server, organizations OrganizationReade
 			if task == nil || len(task.Key) > 128 {
 				return nil, OrganizationOnboardingOutput{}, errDiagnosticsUnavailable
 			}
+			// A group's visibility follows its cards; only cards are selectable.
+			if task.Group {
+				continue
+			}
 			output.Tasks = append(output.Tasks, OnboardingTask{Key: task.Key, Hidden: task.Hidden})
 		}
 		for _, preset := range result.Presets {

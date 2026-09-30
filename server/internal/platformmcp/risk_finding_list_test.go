@@ -11,65 +11,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-const (
-	findingListSecret = "sk-live-EXAMPLE-SECRET-VALUE-0123456789"
-	findingListEmail  = "reporter@example.invalid"
-)
-
-type findingListPostgres struct {
-	policies    []riskrepo.ListRiskFindingPoliciesRow
-	projectRows []riskrepo.ListRiskResultsByProjectFoundRow
-	chatRows    []riskrepo.ListRiskResultsByChatFoundRow
-	groupRows   []riskrepo.ListRiskResultsGroupedByChatRow
-	ruleRows    []riskrepo.ListRiskRulesByCategoryRow
-	err         error
-
-	policyCalls   int
-	projectParams []riskrepo.ListRiskResultsByProjectFoundParams
-	chatParams    []riskrepo.ListRiskResultsByChatFoundParams
-	groupParams   []riskrepo.ListRiskResultsGroupedByChatParams
-	ruleParams    []riskrepo.ListRiskRulesByCategoryParams
-}
-
-func (s *findingListPostgres) ListRiskFindingPolicies(context.Context, riskrepo.ListRiskFindingPoliciesParams) ([]riskrepo.ListRiskFindingPoliciesRow, error) {
-	s.policyCalls++
-	return s.policies, nil
-}
-
-func (s *findingListPostgres) ListRiskResultsByProjectFound(_ context.Context, p riskrepo.ListRiskResultsByProjectFoundParams) ([]riskrepo.ListRiskResultsByProjectFoundRow, error) {
-	s.projectParams = append(s.projectParams, p)
-	return s.projectRows, s.err
-}
-
-func (s *findingListPostgres) ListRiskResultsByChatFound(_ context.Context, p riskrepo.ListRiskResultsByChatFoundParams) ([]riskrepo.ListRiskResultsByChatFoundRow, error) {
-	s.chatParams = append(s.chatParams, p)
-	return s.chatRows, s.err
-}
-
-func (s *findingListPostgres) ListRiskResultsGroupedByChat(_ context.Context, p riskrepo.ListRiskResultsGroupedByChatParams) ([]riskrepo.ListRiskResultsGroupedByChatRow, error) {
-	s.groupParams = append(s.groupParams, p)
-	return s.groupRows, s.err
-}
-
-func (s *findingListPostgres) ListRiskRulesByCategory(_ context.Context, p riskrepo.ListRiskRulesByCategoryParams) ([]riskrepo.ListRiskRulesByCategoryRow, error) {
-	s.ruleParams = append(s.ruleParams, p)
-	return s.ruleRows, s.err
-}
-
-func (s *findingListPostgres) calls() int {
-	return len(s.projectParams) + len(s.chatParams) + len(s.groupParams) + len(s.ruleParams)
-}
+const findingListEmail = "reporter@example.invalid"
 
 type findingListClickHouse struct {
 	rows      []chrepo.RiskFindingListRow
@@ -111,53 +61,55 @@ func (s *findingListClickHouse) calls() int {
 }
 
 type findingListFixture struct {
-	service    *RiskFindingListService
-	project    ResolvedProject
-	postgres   *findingListPostgres
-	clickhouse *findingListClickHouse
-	flags      *riskMutationFlagProvider
-	// enabled, disabled and foreign policies, in that order.
+	service      *RiskFindingListService
+	project      ResolvedProject
+	policyReader *findingPolicies
+	clickhouse   *findingListClickHouse
+	// enabled, disabled, foreign and deleted policies, in that order.
 	policies []riskrepo.ListRiskFindingPoliciesRow
 }
 
-func pgText(value string) pgtype.Text {
-	return pgtype.Text{String: value, Valid: value != ""}
-}
-
-func pgTime(value time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: value, InfinityModifier: pgtype.Finite, Valid: true}
-}
-
-func newFindingListFixture(t *testing.T, evaluation feature.Evaluation) *findingListFixture {
+func newFindingListFixture(t *testing.T) *findingListFixture {
 	t.Helper()
 	project := ResolvedProject{ID: uuid.New(), Slug: "default", Name: "Project"}
 	policies := []riskrepo.ListRiskFindingPoliciesRow{
 		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Enabled: true, Score: 9.5},
 		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Enabled: false, Score: 7},
 		{ID: uuid.New(), ProjectID: uuid.New(), OrganizationID: "other", Enabled: true, Score: 10},
-	}
-	postgres := &findingListPostgres{policies: policies}
-	for i := range 3 {
-		at := riskAnalysisTestNow.Add(-time.Duration(i+1) * time.Hour)
-		postgres.projectRows = append(postgres.projectRows, riskrepo.ListRiskResultsByProjectFoundRow{
-			ID: uuid.New(), RiskPolicyID: policies[0].ID, RiskPolicyVersion: 3, ChatMessageID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
-			Source: "gitleaks", RuleID: pgText("secret.stripe"), Description: pgText("Stripe key in " + findingListSecret), Match: pgText(findingListSecret),
-			Confidence: pgtype.Float8{Float64: 0.9, Valid: true}, Tags: []string{"secrets"}, ChatID: uuid.New(), MessageCreatedAt: pgTime(at), ChatUserID: pgText(findingListEmail),
-		})
-		postgres.chatRows = append(postgres.chatRows, riskrepo.ListRiskResultsByChatFoundRow{
-			ID: uuid.New(), RiskPolicyID: policies[0].ID, RiskPolicyVersion: 3, Source: "presidio", RuleID: pgText("pii.email_address"), Match: pgText(findingListEmail),
-			Confidence: pgtype.Float8{Float64: 0.7, Valid: true}, Tags: []string{"pii"}, ChatID: uuid.New(), MessageCreatedAt: pgTime(at), ChatUserID: pgText(findingListEmail),
-		})
+		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Enabled: true, Deleted: true, Score: 10},
 	}
 	clickhouse := &findingListClickHouse{rows: []chrepo.RiskFindingListRow{
-		{ID: uuid.New(), MessageCreatedAt: riskAnalysisTestNow.Add(-time.Hour), ChatMessageID: uuid.NewString(), ChatID: uuid.NewString(), ExternalUserID: findingListEmail, RiskPolicyID: policies[0].ID.String(), RiskPolicyVersion: 2, RuleID: "secret.stripe", Source: "gitleaks", Confidence: 0.9, Tags: []string{"secrets"}, MatchRedacted: "sk-l*********************************89"},
+		{
+			ID:                 uuid.New(),
+			MessageCreatedAt:   riskAnalysisTestNow.Add(-time.Hour),
+			ChatMessageID:      uuid.NewString(),
+			ChatID:             uuid.NewString(),
+			UserID:             "user-internal",
+			ExternalUserID:     findingListEmail,
+			RiskPolicyID:       policies[0].ID.String(),
+			RiskPolicyVersion:  2,
+			RuleID:             "secret.stripe",
+			Source:             "gitleaks",
+			Confidence:         0.9,
+			Tags:               []string{"secrets"},
+			MatchRedacted:      "sk-l*********************************89",
+			ExecutionID:        uuid.NewString(),
+			MCPServerID:        uuid.NewString(),
+			ToolsetID:          uuid.NewString(),
+			ToolName:           "create_issue",
+			Phase:              "request",
+			MediationSurface:   "hosted_mcp",
+			MCPMethod:          "tools/call",
+			PrincipalKind:      "user_session",
+			IdentityStamped:    true,
+			EnforcementOutcome: "denied",
+		},
 		{ID: uuid.New(), MessageCreatedAt: riskAnalysisTestNow.Add(-2 * time.Hour), ChatID: uuid.NewString(), RiskPolicyID: policies[1].ID.String(), RuleID: "pii.email_address", Source: "presidio", Confidence: 0.6, Tags: nil, MatchRedacted: "<redacted len=24 sha=0123abcd>"},
 	}}
-	flags := &riskMutationFlagProvider{evaluation: evaluation}
-	codec, err := newRiskCursorCodec("test-key")
-	require.NoError(t, err)
-	service := &RiskFindingListService{projects: &findingProjects{project: project}, organizations: riskMutationOrganizationResolver{slug: "org"}, flags: flags, postgres: postgres, clickhouse: clickhouse, cursor: codec, now: func() time.Time { return riskAnalysisTestNow }}
-	return &findingListFixture{service: service, project: project, postgres: postgres, clickhouse: clickhouse, flags: flags, policies: policies}
+	policyReader := &findingPolicies{rows: policies}
+	codec := newRiskCursorCodec("test-key")
+	service := &RiskFindingListService{projects: &findingProjects{project: project}, policies: policyReader, clickhouse: clickhouse, cursor: codec, now: func() time.Time { return riskAnalysisTestNow }}
+	return &findingListFixture{service: service, project: project, policyReader: policyReader, clickhouse: clickhouse, policies: policies}
 }
 
 func TestRiskFindingListValidation(t *testing.T) {
@@ -168,8 +120,10 @@ func TestRiskFindingListValidation(t *testing.T) {
 		{To: "later"},
 		{From: riskAnalysisTestNow.Format(time.RFC3339), To: riskAnalysisTestNow.Add(-time.Hour).Format(time.RFC3339)},
 		{PolicyID: "not-a-uuid"},
+		{MCPServerID: "not-a-uuid"},
 		{ChatID: "not-a-uuid"},
 		{AssistantID: "not-a-uuid"},
+		{MCPServerID: "not-a-uuid"},
 		{AssistantID: uuid.NewString(), NonAssistant: true},
 		{Category: "unknown-category"},
 		{RuleID: strings.Repeat("r", 129)},
@@ -178,14 +132,14 @@ func TestRiskFindingListValidation(t *testing.T) {
 		{Limit: -1},
 		{ProjectID: uuid.NewString(), ProjectSlug: "default"},
 	} {
-		f := newFindingListFixture(t, feature.EvaluationDisabled)
+		f := newFindingListFixture(t)
 		_, err := f.service.List(t.Context(), testRiskPrincipal("user"), input)
 		require.ErrorIs(t, err, ErrRiskReadInvalid, "%+v", input)
-		require.Zero(t, f.postgres.calls(), "%+v", input)
+		require.Zero(t, f.policyReader.calls, "%+v", input)
 		require.Zero(t, f.clickhouse.calls(), "%+v", input)
 	}
 
-	f := newFindingListFixture(t, feature.EvaluationDisabled)
+	f := newFindingListFixture(t)
 	_, err := f.service.List(t.Context(), Principal{UserID: "user"}, ListRiskFindingPageInput{})
 	require.ErrorIs(t, err, ErrRiskReadInvalid)
 	_, err = f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{Cursor: "obsolete"})
@@ -206,88 +160,88 @@ func TestRiskFindingListValidation(t *testing.T) {
 		_, err = f.service.RuleBreakdown(t.Context(), testRiskPrincipal("user"), input)
 		require.ErrorIs(t, err, ErrRiskReadInvalid, "%+v", input)
 	}
-	require.Zero(t, f.postgres.calls())
+	require.Zero(t, f.policyReader.calls)
 	require.Zero(t, f.clickhouse.calls())
 
 	var nilService *RiskFindingListService
 	_, err = nilService.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})
 	require.ErrorIs(t, err, ErrUnavailable)
-	require.Nil(t, NewRiskFindingListService(nil, nil, nil, nil, "key"))
+	require.Panics(t, func() {
+		NewRiskFindingListService(nil, nil, "")
+	})
 }
 
-func TestRiskFindingListPostgresRedactsAndPaginates(t *testing.T) {
+func TestRiskFindingListDefaultIncludesDisabledExcludesDeleted(t *testing.T) {
 	t.Parallel()
 
-	f := newFindingListFixture(t, feature.EvaluationDisabled)
+	f := newFindingListFixture(t)
 	principal := testRiskPrincipal("user")
-	out, err := f.service.List(t.Context(), principal, ListRiskFindingPageInput{Limit: 2, Category: "secrets", RuleID: "secret", UserID: "reporter", UniqueMatch: true})
+	out, err := f.service.List(t.Context(), principal, ListRiskFindingPageInput{})
 	require.NoError(t, err)
+	require.Len(t, f.clickhouse.list, 1)
+	expected := []string{f.policies[0].ID.String(), f.policies[1].ID.String()}
+	slices.Sort(expected)
+	require.Equal(t, expected, f.clickhouse.list[0].PolicyIDs, "enabled and disabled policies are pushed down; foreign and deleted are not")
 	require.Len(t, out.Findings, 2)
+	require.Equal(t, f.policies[1].ID.String(), out.Findings[1].PolicyID)
+	require.Equal(t, "high", out.Findings[1].Severity, "a disabled policy's finding scores from that policy")
+	require.Equal(t, f.clickhouse.rows[0].MCPServerID, out.Findings[0].MCPServerID)
+	require.Equal(t, "create_issue", out.Findings[0].ToolName)
+	require.Equal(t, "denied", out.Findings[0].EnforcementOutcome)
+
+	// An explicit filter on a deleted policy short-circuits without a read.
+	empty, err := f.service.List(t.Context(), principal, ListRiskFindingPageInput{PolicyID: f.policies[3].ID.String()})
+	require.NoError(t, err)
+	require.Empty(t, empty.Findings)
+	require.Len(t, f.clickhouse.list, 1)
+}
+
+func TestRiskFindingListFiltersAndCursorBinding(t *testing.T) {
+	t.Parallel()
+
+	f := newFindingListFixture(t)
+	principal := testRiskPrincipal("user")
+	mcpServerID := uuid.New()
+	input := ListRiskFindingPageInput{Limit: 1, MCPServerID: strings.ToUpper(mcpServerID.String()), Category: "secrets", RuleID: "secret", UserID: "reporter", UniqueMatch: true, NonAssistant: true}
+	out, err := f.service.List(t.Context(), principal, input)
+	require.NoError(t, err)
+	require.Len(t, out.Findings, 1)
 	require.NotEmpty(t, out.NextCursor)
-	require.Zero(t, f.clickhouse.calls())
-	require.Equal(t, feature.FlagRiskListFromClickHouse, f.flags.flag)
+	require.Equal(t, riskFindingListLimitations, out.Limitations)
+	params := f.clickhouse.list[0]
+	require.Equal(t, mcpServerID.String(), params.MCPServerID)
+	require.Equal(t, "secrets", params.Category)
+	require.Equal(t, "secret", params.RuleIDSubstr)
+	require.Equal(t, "reporter", params.UserIDSubstr)
+	require.True(t, params.UniqueMatch)
+	require.True(t, params.NonAssistant)
+	require.Empty(t, params.ChatID)
 
 	encoded, err := json.Marshal(out)
 	require.NoError(t, err)
-	require.NotContains(t, string(encoded), findingListSecret)
-	require.NotContains(t, string(encoded), findingListEmail)
 	require.NotContains(t, string(encoded), "reporter")
 
-	first := out.Findings[0]
-	require.Equal(t, f.postgres.projectRows[0].ID.String(), first.ID)
-	require.Equal(t, risk.RedactMatchAll(findingListSecret, "<ORG_ID>"), first.MatchRedacted)
-	require.Equal(t, riskUserReference(f.service.cursor.key, "<ORG_ID>", findingListEmail), first.UserReference)
-	require.True(t, strings.HasPrefix(first.UserReference, "user:"))
-	require.Equal(t, "secrets", first.Category)
-	require.Equal(t, "critical", first.Severity)
-	require.InDelta(t, 9.5, first.Score, 0.001)
-	require.Equal(t, f.policies[0].ID.String(), first.PolicyID)
-	require.EqualValues(t, 3, first.PolicyVersion)
-	require.Equal(t, f.postgres.projectRows[0].ChatID.String(), first.ChatID)
-	require.Equal(t, f.postgres.projectRows[0].ChatMessageID.UUID.String(), first.ChatMessageID)
-	require.Equal(t, riskAnalysisTestNow.Add(-time.Hour).Format(time.RFC3339Nano), first.MessageCreatedAt)
-	require.Equal(t, []string{"secrets"}, first.Tags)
-	require.NotContains(t, string(encoded), "Stripe key", "scanner descriptions are withheld because they can quote scanned content")
-
-	require.Len(t, f.postgres.projectParams, 1)
-	params := f.postgres.projectParams[0]
-	require.Equal(t, f.project.ID, params.ProjectID)
-	require.Equal(t, "secrets", params.Category)
-	require.Equal(t, "secret", params.RuleID)
-	require.Equal(t, "reporter", params.UserID)
-	require.True(t, params.UniqueMatch)
-	require.False(t, params.PolicyID.Valid)
-	require.False(t, params.CursorID.Valid)
-	require.EqualValues(t, 3, params.PageLimit)
-
-	// The next page resumes strictly after the last returned row, not the
-	// extra row that signalled there was more.
-	f.postgres.projectRows = f.postgres.projectRows[2:]
-	next, err := f.service.List(t.Context(), principal, ListRiskFindingPageInput{Limit: 2, Category: "secrets", RuleID: "secret", UserID: "reporter", UniqueMatch: true, Cursor: out.NextCursor})
-	require.NoError(t, err)
-	require.Len(t, next.Findings, 1)
-	require.Empty(t, next.NextCursor)
-	params = f.postgres.projectParams[1]
-	require.Equal(t, out.Findings[1].ID, params.CursorID.UUID.String())
-	require.Equal(t, riskAnalysisTestNow.Add(-2*time.Hour), params.CursorMessageCreatedAt.Time)
-
 	// A cursor is bound to its filters, project and principal.
-	_, err = f.service.List(t.Context(), principal, ListRiskFindingPageInput{Limit: 2, Category: "pii", Cursor: out.NextCursor})
+	cursorInput := input
+	cursorInput.Cursor = out.NextCursor
+	_, err = f.service.List(t.Context(), principal, ListRiskFindingPageInput{Limit: 1, Category: "pii", Cursor: out.NextCursor})
 	require.ErrorIs(t, err, ErrRiskCursorInvalid)
-	_, err = f.service.List(t.Context(), testRiskPrincipal("other-user"), ListRiskFindingPageInput{Limit: 2, Category: "secrets", RuleID: "secret", UserID: "reporter", UniqueMatch: true, Cursor: out.NextCursor})
+	_, err = f.service.List(t.Context(), testRiskPrincipal("other-user"), cursorInput)
 	require.ErrorIs(t, err, ErrRiskCursorInvalid)
-	_, err = f.service.List(t.Context(), principal, ListRiskFindingPageInput{Limit: 2, Category: "secrets", RuleID: "secret", UserID: "reporter", UniqueMatch: true, Cursor: out.NextCursor + "x"})
+	tampered := cursorInput
+	tampered.Cursor += "x"
+	_, err = f.service.List(t.Context(), principal, tampered)
 	require.ErrorIs(t, err, ErrRiskCursorInvalid)
-	require.Len(t, f.postgres.projectParams, 2, "refused cursors must not reach storage")
+	require.Len(t, f.clickhouse.list, 1, "refused cursors must not reach storage")
 }
 
 func TestRiskFindingListLabelsAreBounded(t *testing.T) {
 	t.Parallel()
 
-	f := newFindingListFixture(t, feature.EvaluationDisabled)
-	f.postgres.projectRows = f.postgres.projectRows[:1]
-	f.postgres.projectRows[0].RuleID = pgText("rule\twith-control")
-	f.postgres.projectRows[0].Tags = []string{strings.Repeat("t", 500)}
+	f := newFindingListFixture(t)
+	f.clickhouse.rows = f.clickhouse.rows[:1]
+	f.clickhouse.rows[0].RuleID = "rule\twith-control"
+	f.clickhouse.rows[0].Tags = []string{strings.Repeat("t", 500)}
 	out, err := f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})
 	require.NoError(t, err)
 	require.Len(t, out.Findings, 1)
@@ -296,50 +250,17 @@ func TestRiskFindingListLabelsAreBounded(t *testing.T) {
 	require.Less(t, len(out.Findings[0].Tags[0]), 200)
 }
 
-func TestRiskFindingListPostgresChatScope(t *testing.T) {
+func TestRiskFindingListPushdownAndRedaction(t *testing.T) {
 	t.Parallel()
 
-	f := newFindingListFixture(t, feature.EvaluationDisabled)
-	chatID := uuid.New()
-	out, err := f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{ChatID: chatID.String(), Limit: 5})
-	require.NoError(t, err)
-	require.Len(t, out.Findings, 3)
-	require.Empty(t, out.NextCursor)
-	require.Len(t, f.postgres.chatParams, 1)
-	require.Equal(t, chatID, f.postgres.chatParams[0].ChatID)
-	require.EqualValues(t, 6, f.postgres.chatParams[0].PageLimit)
-	require.Empty(t, f.postgres.projectParams)
-	encoded, err := json.Marshal(out)
-	require.NoError(t, err)
-	require.NotContains(t, string(encoded), findingListEmail)
-	require.Equal(t, risk.RedactMatchAll(findingListEmail, "<ORG_ID>"), out.Findings[0].MatchRedacted)
-	require.Equal(t, "pii", out.Findings[0].Category)
-
-	for _, input := range []ListRiskFindingPageInput{
-		{ChatID: chatID.String(), RuleID: "secret"},
-		{ChatID: chatID.String(), Category: "pii"},
-		{ChatID: chatID.String(), UniqueMatch: true},
-		{ChatID: chatID.String(), From: riskAnalysisTestNow.Add(-time.Hour).Format(time.RFC3339)},
-	} {
-		_, err = f.service.List(t.Context(), testRiskPrincipal("user"), input)
-		require.ErrorIs(t, err, ErrRiskReadInvalid, "%+v", input)
-	}
-	require.Len(t, f.postgres.chatParams, 1)
-}
-
-func TestRiskFindingListClickHousePushdownAndRedaction(t *testing.T) {
-	t.Parallel()
-
-	f := newFindingListFixture(t, feature.EvaluationEnabled)
+	f := newFindingListFixture(t)
 	principal := testRiskPrincipal("user")
 	from := riskAnalysisTestNow.Add(-24 * time.Hour)
 	out, err := f.service.List(t.Context(), principal, ListRiskFindingPageInput{Limit: 1, From: from.Format(time.RFC3339), AssistantID: uuid.Nil.String()})
 	require.NoError(t, err)
-	require.Zero(t, f.postgres.calls())
-	require.Equal(t, 1, f.postgres.policyCalls)
+	require.Equal(t, 1, f.policyReader.calls)
 	require.Len(t, f.clickhouse.list, 1)
 	params := f.clickhouse.list[0]
-	require.Equal(t, []string{f.policies[0].ID.String()}, params.PolicyIDs, "default view pushes down only the project's enabled policies")
 	require.Equal(t, "<ORG_ID>", params.OrganizationID)
 	require.Equal(t, f.project.ID.String(), params.ProjectID)
 	require.NotNil(t, params.From)
@@ -358,11 +279,20 @@ func TestRiskFindingListClickHousePushdownAndRedaction(t *testing.T) {
 	first := out.Findings[0]
 	require.Equal(t, findingEvidence("sk-l*********************************89", "<ORG_ID>"), first.MatchRedacted)
 	require.True(t, canonicalFindingEvidence.MatchString(first.MatchRedacted), "a partial-mask display sample is re-redacted into the canonical marker")
+	require.Equal(t, f.clickhouse.rows[0].ID.String(), first.ID)
+	require.Equal(t, f.policies[0].ID.String(), first.PolicyID)
+	require.EqualValues(t, 2, first.PolicyVersion)
 	require.Equal(t, "secrets", first.Category)
 	require.Equal(t, "critical", first.Severity)
+	require.InDelta(t, 9.5, first.Score, 0.001)
 	require.Equal(t, f.clickhouse.rows[0].ChatID, first.ChatID)
+	require.Equal(t, f.clickhouse.rows[0].ChatMessageID, first.ChatMessageID)
+	require.Equal(t, riskAnalysisTestNow.Add(-time.Hour).Format(time.RFC3339Nano), first.MessageCreatedAt)
+	require.Equal(t, []string{"secrets"}, first.Tags)
 	require.Equal(t, riskUserReference(f.service.cursor.key, "<ORG_ID>", findingListEmail), first.UserReference)
+	require.True(t, strings.HasPrefix(first.UserReference, "user:"))
 
+	// The next page resumes strictly after the last returned row.
 	f.clickhouse.rows = f.clickhouse.rows[1:]
 	next, err := f.service.List(t.Context(), principal, ListRiskFindingPageInput{Limit: 1, From: from.Format(time.RFC3339), AssistantID: uuid.Nil.String(), Cursor: out.NextCursor})
 	require.NoError(t, err)
@@ -372,10 +302,8 @@ func TestRiskFindingListClickHousePushdownAndRedaction(t *testing.T) {
 	require.NotNil(t, params.CursorTime)
 	require.Equal(t, riskAnalysisTestNow.Add(-time.Hour), *params.CursorTime)
 	require.Equal(t, first.ID, params.CursorID.UUID.String())
-	// A canonical marker stored at ingest passes through unchanged; a disabled
-	// policy's findings still score from that policy.
+	// A canonical marker stored at ingest passes through unchanged.
 	require.Equal(t, "<redacted len=24 sha=0123abcd>", next.Findings[0].MatchRedacted)
-	require.Equal(t, "high", next.Findings[0].Severity)
 	require.Empty(t, next.Findings[0].UserReference)
 	require.Equal(t, []string{}, next.Findings[0].Tags)
 
@@ -389,7 +317,7 @@ func TestRiskFindingListClickHousePushdownAndRedaction(t *testing.T) {
 	require.Empty(t, empty.Findings)
 	require.Len(t, f.clickhouse.list, 3, "a foreign policy never reaches the store")
 
-	// Chat scoping combines with other filters on this store.
+	// Chat scoping combines with other filters.
 	chatID := uuid.NewString()
 	_, err = f.service.List(t.Context(), principal, ListRiskFindingPageInput{ChatID: chatID, RuleID: "secret"})
 	require.NoError(t, err)
@@ -402,48 +330,24 @@ func TestRiskFindingListClickHousePushdownAndRedaction(t *testing.T) {
 	require.NotContains(t, err.Error(), "private database detail")
 }
 
-func TestRiskFindingListStoreSelection(t *testing.T) {
+func TestRiskFindingListFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	f := newFindingListFixture(t, feature.EvaluationEnabled)
-	f.flags.err = errors.New("flag unavailable")
-	_, err := f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})
-	require.ErrorIs(t, err, ErrUnavailable)
-	require.Zero(t, f.postgres.calls())
-	require.Zero(t, f.clickhouse.calls())
-
-	f = newFindingListFixture(t, feature.EvaluationEnabled)
-	f.service.clickhouse = nil
-	_, err = f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})
-	require.NoError(t, err)
-	require.Len(t, f.postgres.projectParams, 1, "a deployment without ClickHouse serves Postgres regardless of the flag")
-
-	f = newFindingListFixture(t, feature.EvaluationIndeterminate)
-	_, err = f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})
-	require.NoError(t, err)
-	require.Len(t, f.postgres.projectParams, 1)
-	require.Zero(t, f.clickhouse.calls())
-
-	f = newFindingListFixture(t, feature.EvaluationEnabled)
-	f.service.organizations = riskMutationOrganizationResolver{err: errors.New("no slug")}
-	_, err = f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})
-	require.ErrorIs(t, err, ErrUnavailable)
-
-	f = newFindingListFixture(t, feature.EvaluationEnabled)
+	f := newFindingListFixture(t)
 	projects, ok := f.service.projects.(*findingProjects)
 	require.True(t, ok)
 	projects.err = ErrRiskReadNotFound
-	_, err = f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{ProjectSlug: "missing"})
+	_, err := f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{ProjectSlug: "missing"})
 	require.ErrorIs(t, err, ErrRiskReadNotFound)
-	require.Zero(t, f.postgres.policyCalls)
+	require.Zero(t, f.policyReader.calls)
 
-	f = newFindingListFixture(t, feature.EvaluationEnabled)
+	f = newFindingListFixture(t)
 	policy := f.policies[0]
-	f.postgres.policies = nil
+	f.policyReader.rows = nil
 	for range riskFindingPolicyLimit + 1 {
 		row := policy
 		row.ID = uuid.New()
-		f.postgres.policies = append(f.postgres.policies, row)
+		f.policyReader.rows = append(f.policyReader.rows, row)
 	}
 	_, err = f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{})
 	require.ErrorIs(t, err, ErrUnavailable)
@@ -453,72 +357,55 @@ func TestRiskFindingListStoreSelection(t *testing.T) {
 func TestRiskFindingsByChatPagination(t *testing.T) {
 	t.Parallel()
 
-	f := newFindingListFixture(t, feature.EvaluationDisabled)
+	f := newFindingListFixture(t)
 	principal := testRiskPrincipal("user")
 	chats := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
 	for i, id := range chats {
-		f.postgres.groupRows = append(f.postgres.groupRows, riskrepo.ListRiskResultsGroupedByChatRow{ChatID: id, ChatTitle: pgText("Quarterly numbers"), ChatUserID: pgText(findingListEmail), FindingsCount: int64(i + 1), LatestDetected: pgTime(riskAnalysisTestNow.Add(-time.Duration(i) * time.Hour))})
+		f.clickhouse.groups = append(f.clickhouse.groups, chrepo.RiskFindingChatGroup{ChatID: id.String(), ExternalUserID: findingListEmail, FindingsCount: uint64(i + 1), LatestDetected: riskAnalysisTestNow.Add(-time.Duration(i) * time.Hour)}) // #nosec G115 -- small test loop index.
 	}
 	out, err := f.service.ListByChat(t.Context(), principal, ListRiskFindingsByChatInput{Limit: 2})
 	require.NoError(t, err)
 	require.Len(t, out.Chats, 2)
 	require.NotEmpty(t, out.NextCursor)
-	require.Zero(t, f.postgres.policyCalls, "the Postgres grouped listing applies the enabled-policy join itself")
-	require.Len(t, f.postgres.groupParams, 1)
-	require.False(t, f.postgres.groupParams[0].Cursor.Valid)
-	require.EqualValues(t, 3, f.postgres.groupParams[0].PageLimit)
+	require.Len(t, f.clickhouse.groupBy, 1)
+	expected := []string{f.policies[0].ID.String(), f.policies[1].ID.String()}
+	slices.Sort(expected)
+	require.Equal(t, expected, f.clickhouse.groupBy[0].PolicyIDs, "every non-deleted policy, disabled included, is rolled up")
+	require.Empty(t, f.clickhouse.groupBy[0].CursorChatID)
+	require.EqualValues(t, 3, f.clickhouse.groupBy[0].Limit)
 	encoded, err := json.Marshal(out)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), findingListEmail)
-	require.NotContains(t, string(encoded), "Quarterly", "chat titles are user-authored and never leave the server")
 	require.Equal(t, chats[0].String(), out.Chats[0].ChatID)
 	require.Equal(t, riskUserReference(f.service.cursor.key, "<ORG_ID>", findingListEmail), out.Chats[0].UserReference)
 	require.EqualValues(t, 1, out.Chats[0].FindingsCount)
 	require.Equal(t, riskAnalysisTestNow.Format(time.RFC3339Nano), out.Chats[0].LatestDetectedAt)
 
-	// The Postgres grouped listing resumes at the extra row's chat id inclusive.
-	f.postgres.groupRows = f.postgres.groupRows[2:]
+	// The next page resumes at the extra row's chat id inclusive.
+	f.clickhouse.groups = f.clickhouse.groups[2:]
 	next, err := f.service.ListByChat(t.Context(), principal, ListRiskFindingsByChatInput{Limit: 2, Cursor: out.NextCursor})
 	require.NoError(t, err)
 	require.Len(t, next.Chats, 1)
 	require.Empty(t, next.NextCursor)
-	require.Equal(t, uuid.NullUUID{UUID: chats[2], Valid: true}, f.postgres.groupParams[1].Cursor)
+	require.Equal(t, chats[2].String(), f.clickhouse.groupBy[1].CursorChatID)
 	_, err = f.service.ListByChat(t.Context(), testRiskPrincipal("other-user"), ListRiskFindingsByChatInput{Limit: 2, Cursor: out.NextCursor})
 	require.ErrorIs(t, err, ErrRiskCursorInvalid)
 	_, err = f.service.List(t.Context(), principal, ListRiskFindingPageInput{Cursor: out.NextCursor})
 	require.ErrorIs(t, err, ErrRiskCursorInvalid, "a by-chat cursor is not a findings cursor")
 
-	// The ClickHouse rollup takes the same inclusive chat-id cursor and the
-	// enabled-policy pushdown.
-	f = newFindingListFixture(t, feature.EvaluationEnabled)
-	for i, id := range chats {
-		f.clickhouse.groups = append(f.clickhouse.groups, chrepo.RiskFindingChatGroup{ChatID: id.String(), ExternalUserID: findingListEmail, FindingsCount: uint64(i + 1), LatestDetected: riskAnalysisTestNow.Add(-time.Duration(i) * time.Hour)}) // #nosec G115 -- small test loop index.
-	}
-	out, err = f.service.ListByChat(t.Context(), principal, ListRiskFindingsByChatInput{Limit: 2})
-	require.NoError(t, err)
-	require.Len(t, out.Chats, 2)
-	require.Zero(t, f.postgres.calls())
-	require.Len(t, f.clickhouse.groupBy, 1)
-	require.Equal(t, []string{f.policies[0].ID.String()}, f.clickhouse.groupBy[0].PolicyIDs)
-	require.Empty(t, f.clickhouse.groupBy[0].CursorChatID)
-	require.EqualValues(t, 3, f.clickhouse.groupBy[0].Limit)
-	_, err = f.service.ListByChat(t.Context(), principal, ListRiskFindingsByChatInput{Limit: 2, Cursor: out.NextCursor})
-	require.NoError(t, err)
-	require.Equal(t, chats[2].String(), f.clickhouse.groupBy[1].CursorChatID)
-
-	f.postgres.policies = nil
+	f.policyReader.rows = nil
 	empty, err := f.service.ListByChat(t.Context(), principal, ListRiskFindingsByChatInput{})
 	require.NoError(t, err)
 	require.Empty(t, empty.Chats)
-	require.Len(t, f.clickhouse.groupBy, 2, "no enabled policy means nothing to roll up")
+	require.Len(t, f.clickhouse.groupBy, 2, "no visible policy means nothing to roll up")
 }
 
 func TestRiskRuleBreakdown(t *testing.T) {
 	t.Parallel()
 
-	f := newFindingListFixture(t, feature.EvaluationDisabled)
+	f := newFindingListFixture(t)
 	principal := testRiskPrincipal("user")
-	f.postgres.ruleRows = []riskrepo.ListRiskRulesByCategoryRow{{RuleID: "secret.stripe", Source: "gitleaks", Findings: 7}, {RuleID: "secret.aws", Source: "gitleaks", Findings: 3}}
+	f.clickhouse.rules = []chrepo.RiskOverviewRuleCount{{RuleID: "secret.stripe", Source: "gitleaks", Findings: 7}, {RuleID: "secret.aws", Source: "gitleaks", Findings: 3}}
 	out, err := f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "secrets"})
 	require.NoError(t, err)
 	require.Equal(t, "secrets", out.Category)
@@ -527,52 +414,37 @@ func TestRiskRuleBreakdown(t *testing.T) {
 	require.EqualValues(t, 10, out.Total)
 	require.False(t, out.Truncated)
 	require.Equal(t, []RiskRuleCount{{RuleID: "secret.stripe", Source: "gitleaks", Findings: 7}, {RuleID: "secret.aws", Source: "gitleaks", Findings: 3}}, out.Rules)
-	require.Zero(t, f.postgres.policyCalls, "the Postgres query joins risk_policies itself")
-	require.Len(t, f.postgres.ruleParams, 1)
-	require.Equal(t, "secrets", f.postgres.ruleParams[0].Category)
-	require.Equal(t, f.project.ID, f.postgres.ruleParams[0].ProjectID)
-	require.Equal(t, riskAnalysisTestNow, f.postgres.ruleParams[0].ToTime.Time)
-	require.Equal(t, pgtype.Int4{Int32: riskRuleBreakdownLimit + 1, Valid: true}, f.postgres.ruleParams[0].PageLimit, "one row past the bound detects truncation without an unbounded fetch")
-
-	f.postgres.ruleRows = nil
-	for i := range riskRuleBreakdownLimit + 1 {
-		f.postgres.ruleRows = append(f.postgres.ruleRows, riskrepo.ListRiskRulesByCategoryRow{RuleID: "rule-" + strconv.Itoa(i), Source: "gitleaks", Findings: 1})
-	}
-	out, err = f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "secrets"})
-	require.NoError(t, err)
-	require.True(t, out.Truncated)
-	require.Len(t, out.Rules, riskRuleBreakdownLimit)
-	require.EqualValues(t, riskRuleBreakdownLimit, out.Total)
+	require.Equal(t, 1, f.policyReader.calls)
+	require.Len(t, f.clickhouse.ruleCalls, 1)
+	call := f.clickhouse.ruleCalls[0]
+	require.Equal(t, "secrets", call.category)
+	require.EqualValues(t, riskRuleBreakdownLimit+1, call.limit, "one row past the bound detects truncation without an unbounded fetch")
+	require.Equal(t, f.project.ID.String(), call.params.ProjectID)
+	require.Equal(t, riskAnalysisTestNow, call.params.To)
+	expectedPolicies := []string{f.policies[0].ID.String(), f.policies[1].ID.String()}
+	slices.Sort(expectedPolicies)
+	require.Equal(t, expectedPolicies, call.policyIDs, "every non-deleted policy, disabled included, is pushed down; foreign and deleted ones are not")
 
 	explicit, err := f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "pii", From: riskAnalysisTestNow.Add(-31 * 24 * time.Hour).Format(time.RFC3339), To: riskAnalysisTestNow.Format(time.RFC3339)})
 	require.NoError(t, err)
 	require.Equal(t, riskAnalysisTestNow.Add(-31*24*time.Hour).Format(time.RFC3339Nano), explicit.From)
 
-	f = newFindingListFixture(t, feature.EvaluationEnabled)
+	f.clickhouse.rules = nil
 	for i := range riskRuleBreakdownLimit + 1 {
 		f.clickhouse.rules = append(f.clickhouse.rules, chrepo.RiskOverviewRuleCount{RuleID: "rule-" + strconv.Itoa(i), Source: "gitleaks", Findings: 2})
 	}
 	out, err = f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "secrets"})
 	require.NoError(t, err)
-	require.Zero(t, f.postgres.calls())
-	require.Equal(t, 1, f.postgres.policyCalls)
-	require.Len(t, f.clickhouse.ruleCalls, 1)
-	require.Equal(t, "secrets", f.clickhouse.ruleCalls[0].category)
-	require.EqualValues(t, riskRuleBreakdownLimit+1, f.clickhouse.ruleCalls[0].limit)
-	require.Equal(t, f.project.ID.String(), f.clickhouse.ruleCalls[0].params.ProjectID)
-	expectedPolicies := []string{f.policies[0].ID.String(), f.policies[1].ID.String()}
-	slices.Sort(expectedPolicies)
-	require.Equal(t, expectedPolicies, f.clickhouse.ruleCalls[0].policyIDs, "every non-deleted policy, disabled included, is pushed down; the foreign one is not")
 	require.True(t, out.Truncated)
 	require.Len(t, out.Rules, riskRuleBreakdownLimit)
 	require.EqualValues(t, 2*riskRuleBreakdownLimit, out.Total)
 
-	f.postgres.policies = nil
+	f.policyReader.rows = nil
 	empty, err := f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "secrets"})
 	require.NoError(t, err)
 	require.Empty(t, empty.Rules)
-	require.Len(t, f.clickhouse.ruleCalls, 1, "no visible policy means nothing to count")
-	f.postgres.policies = f.policies
+	require.Len(t, f.clickhouse.ruleCalls, 3, "no visible policy means nothing to count")
+	f.policyReader.rows = f.policies
 
 	f.clickhouse.err = errors.New("private database detail")
 	_, err = f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "secrets"})
@@ -583,7 +455,8 @@ func TestRiskRuleBreakdown(t *testing.T) {
 func TestRiskFindingListToolsMCPInProcess(t *testing.T) {
 	t.Parallel()
 
-	f := newFindingListFixture(t, feature.EvaluationDisabled)
+	f := newFindingListFixture(t)
+	f.clickhouse.rows = append(f.clickhouse.rows, f.clickhouse.rows[1])
 	server := mcp.NewServer(&mcp.Implementation{Name: "finding-list-test", Version: "1"}, nil)
 	reg := newRegistrar(server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
@@ -599,7 +472,10 @@ func TestRiskFindingListToolsMCPInProcess(t *testing.T) {
 		require.NotContains(t, descriptor.Description, "unavailable in this deployment")
 		require.Contains(t, string(descriptor.InputSchema), `"project_slug"`)
 	}
-	require.Contains(t, string(descriptorByName(t, reg, riskFindingListToolName).InputSchema), `"secrets"`, "categories are enumerated so the model picks a real key")
+	findingDescriptor := descriptorByName(t, reg, riskFindingListToolName)
+	require.Contains(t, string(findingDescriptor.InputSchema), `"secrets"`, "categories are enumerated so the model picks a real key")
+	require.Contains(t, string(findingDescriptor.InputSchema), `"mcp_server_id"`)
+	require.Contains(t, findingDescriptor.Description, "mediation_surface")
 	require.Contains(t, string(descriptorByName(t, reg, riskRuleBreakdownToolName).InputSchema), `"required":["category"]`)
 
 	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
@@ -624,7 +500,7 @@ func TestRiskFindingListToolsMCPInProcess(t *testing.T) {
 	require.False(t, result.IsError)
 	encoded, err := json.Marshal(result)
 	require.NoError(t, err)
-	require.NotContains(t, string(encoded), findingListSecret, "raw matched content never crosses the MCP boundary")
+	require.NotContains(t, string(encoded), "sk-l", "stored display samples never cross the MCP boundary")
 	require.NotContains(t, string(encoded), findingListEmail)
 	var out ListRiskFindingPageOutput
 	require.NoError(t, json.Unmarshal(must(json.Marshal(result.StructuredContent)), &out))
@@ -647,12 +523,12 @@ func TestRiskFindingListToolsMCPInProcess(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, result.IsError)
 
-	calls := f.postgres.calls()
+	calls := f.clickhouse.calls()
 	reg.withExternalAuthorizer(denyExternalCallAuthorizer{err: &ExternalAuthorizationError{RequiredScope: "org:admin", cause: ErrForbidden}})
 	result, err = session.CallTool(t.Context(), &mcp.CallToolParams{Name: riskFindingListToolName, Arguments: map[string]any{}})
 	require.NoError(t, err)
 	require.True(t, result.IsError)
-	require.Equal(t, calls, f.postgres.calls(), "authorization denial must not reach storage")
+	require.Equal(t, calls, f.clickhouse.calls(), "authorization denial must not reach storage")
 }
 
 func must(value []byte, err error) []byte {
@@ -693,7 +569,7 @@ func TestRiskFindingListToolsStub(t *testing.T) {
 func TestRiskFindingListReaderRequiresBudget(t *testing.T) {
 	t.Parallel()
 
-	f := newFindingListFixture(t, feature.EvaluationDisabled)
+	f := newFindingListFixture(t)
 	reader := (&PostgresReader{}).WithRiskFindingList(f.service, allowBudget())
 	limited, ok := reader.riskFindingList.(*budgetedRiskFindingList)
 	require.True(t, ok, "production reader must attach a metered service")
@@ -721,7 +597,7 @@ func TestRiskFindingListBudgetChargesBeforeEveryRead(t *testing.T) {
 	} {
 		connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: tc.allowed}, err: tc.err}
 		organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: tc.allowed}, err: tc.err}
-		f := newFindingListFixture(t, feature.EvaluationDisabled)
+		f := newFindingListFixture(t)
 		limited := &budgetedRiskFindingList{service: f.service, budget: OperationBudget{Connection: connection, Organization: organization}}
 		require.True(t, limited.valid())
 
@@ -733,13 +609,13 @@ func TestRiskFindingListBudgetChargesBeforeEveryRead(t *testing.T) {
 		require.ErrorIs(t, err, tc.wantErr, tc.name)
 		require.Len(t, connection.keys, 3, tc.name)
 		if tc.wantErr != nil {
-			require.Zero(t, f.postgres.calls(), tc.name)
+			require.Zero(t, f.policyReader.calls, tc.name)
 			continue
 		}
-		require.Equal(t, 3, f.postgres.calls(), tc.name)
+		require.Equal(t, 3, f.policyReader.calls, tc.name)
 	}
 
-	limited := &budgetedRiskFindingList{service: newFindingListFixture(t, feature.EvaluationDisabled).service, budget: OperationBudget{}}
+	limited := &budgetedRiskFindingList{service: newFindingListFixture(t).service, budget: OperationBudget{}}
 	require.False(t, limited.valid())
 	_, err := limited.List(t.Context(), principal, ListRiskFindingPageInput{})
 	require.ErrorIs(t, err, ErrOperationBudgetUnavailable)
@@ -748,9 +624,21 @@ func TestRiskFindingListBudgetChargesBeforeEveryRead(t *testing.T) {
 func TestRiskFindingListBudgetPreservesServiceError(t *testing.T) {
 	t.Parallel()
 
-	f := newFindingListFixture(t, feature.EvaluationDisabled)
+	f := newFindingListFixture(t)
 	limited := &budgetedRiskFindingList{service: f.service, budget: allowBudget()}
 	_, err := limited.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{Limit: 99})
 	require.ErrorIs(t, err, ErrRiskReadInvalid)
 	require.ErrorContains(t, err, "list risk finding page")
+}
+
+func TestRiskFindingListMCPServerFilter(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.NewString()
+
+	f := newFindingListFixture(t)
+	_, err := f.service.List(t.Context(), testRiskPrincipal("user"), ListRiskFindingPageInput{MCPServerID: strings.ToUpper(serverID)})
+	require.NoError(t, err)
+	require.Len(t, f.clickhouse.list, 1)
+	require.Equal(t, serverID, f.clickhouse.list[0].MCPServerID, "the analytics store filters on the canonical server id")
 }

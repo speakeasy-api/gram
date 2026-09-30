@@ -22,6 +22,7 @@ import { buildListMcpServerToolMetadataQuery } from "@gram/client/react-query/li
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
+import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskListMcpPlatformToolsets.js";
 import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, Info, Loader2, Network, Server, X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -37,7 +38,7 @@ type PickerServer = {
   id: string;
   name: string;
   slug?: string;
-  kind: "server" | "gateway";
+  kind: "server" | "gateway" | "platform";
   memberCount?: number;
   tools: PickerTool[];
   toolsLoading: boolean;
@@ -88,6 +89,11 @@ export function PolicyMCPScopePicker({
   const toolsetsQuery = useListToolsets({ gramProject }, undefined, {
     throwOnError: false,
   });
+  const platformToolsetsQuery = useRiskListMcpPlatformToolsets(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
   const concreteServers = serversQuery.data?.mcpServers ?? [];
   const remoteServers = concreteServers.filter(
     (server) => !server.toolsetId && !!server.remoteMcpServerId,
@@ -142,6 +148,23 @@ export function PolicyMCPScopePicker({
         toolsLoading: metadataQuery?.isLoading ?? false,
       };
     }),
+    ...(platformToolsetsQuery.data?.toolsets ?? []).map(
+      (toolset): PickerServer => ({
+        id: toolset.id,
+        name: toolset.name,
+        slug: toolset.slug,
+        kind: "platform",
+        tools: toolset.tools
+          .map((tool) => ({
+            name: tool.name,
+            annotations: annotationNames(
+              tool.annotations as AnnotationFields | undefined,
+            ),
+          }))
+          .sort((left, right) => left.name.localeCompare(right.name)),
+        toolsLoading: false,
+      }),
+    ),
     ...(gatewaysQuery.data?.metaMcpServers ?? []).map(
       (gateway): PickerServer => ({
         id: gateway.id,
@@ -161,7 +184,7 @@ export function PolicyMCPScopePicker({
   );
   const firstSelected = pickerServers.find((server) => {
     if (storedByID.has(server.id)) return true;
-    return value.allServers && server.kind === "server";
+    return value.allServers && server.kind !== "gateway";
   });
   const focusedServer =
     pickerServers.find((server) => server.id === focusedServerID) ??
@@ -183,9 +206,13 @@ export function PolicyMCPScopePicker({
   const loading =
     serversQuery.isLoading ||
     gatewaysQuery.isLoading ||
-    toolsetsQuery.isLoading;
+    toolsetsQuery.isLoading ||
+    platformToolsetsQuery.isLoading;
   const failed =
-    serversQuery.isError || gatewaysQuery.isError || toolsetsQuery.isError;
+    serversQuery.isError ||
+    gatewaysQuery.isError ||
+    toolsetsQuery.isError ||
+    platformToolsetsQuery.isError;
 
   const selectionFor = (server: PickerServer): ServerSelection => {
     const stored = storedByID.get(server.id);
@@ -205,7 +232,7 @@ export function PolicyMCPScopePicker({
       return { kind: "custom", tools: stored.tools };
     }
     if (stored) return { kind: "rule", derived: false };
-    if (value.allServers && server.kind === "server") {
+    if (value.allServers && server.kind !== "gateway") {
       return { kind: "rule", derived: true };
     }
     return { kind: "off" };
@@ -230,7 +257,7 @@ export function PolicyMCPScopePicker({
     // out of storedByID, stranding the user on an unrelated server's (often
     // empty) tool list instead of the one they just deselected.
     setFocusedServerID(server.id);
-    if (value.allServers && server.kind === "server") {
+    if (value.allServers && server.kind !== "gateway") {
       const customByID = new Map(
         value.servers
           .filter((entry) => entry.tools !== undefined)
@@ -242,8 +269,11 @@ export function PolicyMCPScopePicker({
             candidate.id === entry.mcpServerId && candidate.kind === "gateway",
         ),
       );
-      const materialized = concreteServers
-        .filter((candidate) => candidate.id !== server.id)
+      const materialized = pickerServers
+        .filter(
+          (candidate) =>
+            candidate.kind !== "gateway" && candidate.id !== server.id,
+        )
         .map(
           (candidate) =>
             customByID.get(candidate.id) ?? { mcpServerId: candidate.id },
@@ -259,7 +289,7 @@ export function PolicyMCPScopePicker({
   };
   const selectRule = (server: PickerServer) => {
     setFocusedServerID(server.id);
-    if (value.allServers && server.kind === "server") {
+    if (value.allServers && server.kind !== "gateway") {
       replaceServer(server.id, null);
       return;
     }
@@ -536,7 +566,7 @@ export function PolicyMCPScopePicker({
                       All MCP servers
                     </span>
                     <span className="text-muted-foreground block text-xs">
-                      Including servers added later
+                      Including Platform MCP and servers added later
                     </span>
                   </span>
                 </label>

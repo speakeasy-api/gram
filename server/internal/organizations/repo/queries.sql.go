@@ -310,6 +310,33 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 	return i, err
 }
 
+const deleteOnboardingStepDependencies = `-- name: DeleteOnboardingStepDependencies :exec
+DELETE FROM onboarding_step_dependencies WHERE step_id = $1
+`
+
+func (q *Queries) DeleteOnboardingStepDependencies(ctx context.Context, stepID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteOnboardingStepDependencies, stepID)
+	return err
+}
+
+const deleteOnboardingStepMethods = `-- name: DeleteOnboardingStepMethods :exec
+DELETE FROM onboarding_step_methods WHERE step_id = $1
+`
+
+func (q *Queries) DeleteOnboardingStepMethods(ctx context.Context, stepID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteOnboardingStepMethods, stepID)
+	return err
+}
+
+const deleteOrganizationOnboardingVendors = `-- name: DeleteOrganizationOnboardingVendors :exec
+DELETE FROM organization_onboarding_vendors WHERE organization_id = $1
+`
+
+func (q *Queries) DeleteOrganizationOnboardingVendors(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationOnboardingVendors, organizationID)
+	return err
+}
+
 const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()
@@ -620,6 +647,34 @@ func (q *Queries) GetOrganizationOnboardingSelection(ctx context.Context, organi
 	return items, nil
 }
 
+const getOrganizationOnboardingStack = `-- name: GetOrganizationOnboardingStack :one
+SELECT om.id, om.name, om.slug, onboarding.mdm_vendor, onboarding.mdm_vendor_name
+FROM organization_metadata om
+LEFT JOIN organization_onboarding onboarding ON onboarding.organization_id = om.id
+WHERE om.id = $1
+`
+
+type GetOrganizationOnboardingStackRow struct {
+	ID            string
+	Name          string
+	Slug          string
+	MdmVendor     pgtype.Text
+	MdmVendorName pgtype.Text
+}
+
+func (q *Queries) GetOrganizationOnboardingStack(ctx context.Context, organizationID string) (GetOrganizationOnboardingStackRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationOnboardingStack, organizationID)
+	var i GetOrganizationOnboardingStackRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.MdmVendor,
+		&i.MdmVendorName,
+	)
+	return i, err
+}
+
 const getOrganizationRelationshipForUser = `-- name: GetOrganizationRelationshipForUser :one
 SELECT id, organization_id, user_id, workos_user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships
@@ -921,6 +976,65 @@ func (q *Queries) HasPendingInvitationForEmail(ctx context.Context, email string
 	return exists, err
 }
 
+const insertOnboardingStepDependency = `-- name: InsertOnboardingStepDependency :exec
+INSERT INTO onboarding_step_dependencies (step_id, requires_step_id)
+SELECT $1, r.id
+FROM onboarding_steps r
+WHERE r.slug = $2
+ON CONFLICT DO NOTHING
+`
+
+type InsertOnboardingStepDependencyParams struct {
+	StepID       uuid.UUID
+	RequiresSlug string
+}
+
+func (q *Queries) InsertOnboardingStepDependency(ctx context.Context, arg InsertOnboardingStepDependencyParams) error {
+	_, err := q.db.Exec(ctx, insertOnboardingStepDependency, arg.StepID, arg.RequiresSlug)
+	return err
+}
+
+const insertOnboardingStepMethod = `-- name: InsertOnboardingStepMethod :execrows
+INSERT INTO onboarding_step_methods (step_id, integration_method_id)
+SELECT $1, m.id
+FROM support_matrix_integration_methods m
+WHERE m.slug = $2 AND m.deleted_at IS NULL
+ON CONFLICT DO NOTHING
+`
+
+type InsertOnboardingStepMethodParams struct {
+	StepID     uuid.UUID
+	MethodSlug string
+}
+
+func (q *Queries) InsertOnboardingStepMethod(ctx context.Context, arg InsertOnboardingStepMethodParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertOnboardingStepMethod, arg.StepID, arg.MethodSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertOrganizationOnboardingVendor = `-- name: InsertOrganizationOnboardingVendor :exec
+INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_id)
+VALUES (
+  $1,
+  $2,
+  (SELECT p.id FROM support_matrix_plans p WHERE p.slug = $3::text AND p.deleted_at IS NULL)
+)
+`
+
+type InsertOrganizationOnboardingVendorParams struct {
+	OrganizationID string
+	Vendor         string
+	PlanSlug       pgtype.Text
+}
+
+func (q *Queries) InsertOrganizationOnboardingVendor(ctx context.Context, arg InsertOrganizationOnboardingVendorParams) error {
+	_, err := q.db.Exec(ctx, insertOrganizationOnboardingVendor, arg.OrganizationID, arg.Vendor, arg.PlanSlug)
+	return err
+}
+
 const linkRelationshipsToUser = `-- name: LinkRelationshipsToUser :exec
 WITH pending_relationships AS (
     SELECT
@@ -1077,6 +1191,104 @@ func (q *Queries) ListActiveRoleAssignmentsByOrganization(ctx context.Context, o
 	for rows.Next() {
 		var i ListActiveRoleAssignmentsByOrganizationRow
 		if err := rows.Scan(&i.UserID, &i.RoleUrn, &i.RoleName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOnboardingSteps = `-- name: ListOnboardingSteps :many
+SELECT s.id, s.slug, s.title, s.description, s.completion, s.hidden_by_default, s.sort_order,
+  p.slug AS parent_slug,
+  (
+    SELECT coalesce(array_agg(m.slug ORDER BY m.sort_order, m.slug), '{}')::text[]
+    FROM onboarding_step_methods sm
+    JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
+    WHERE sm.step_id = s.id
+  ) AS method_slugs,
+  (
+    SELECT coalesce(array_agg(r.slug ORDER BY r.sort_order, r.slug), '{}')::text[]
+    FROM onboarding_step_dependencies d
+    JOIN onboarding_steps r ON r.id = d.requires_step_id AND r.deleted_at IS NULL
+    WHERE d.step_id = s.id
+  ) AS requires_slugs
+FROM onboarding_steps s
+LEFT JOIN onboarding_steps p ON p.id = s.parent_step_id AND p.deleted_at IS NULL
+WHERE s.deleted_at IS NULL
+ORDER BY s.sort_order, s.slug
+`
+
+type ListOnboardingStepsRow struct {
+	ID              uuid.UUID
+	Slug            string
+	Title           string
+	Description     string
+	Completion      string
+	HiddenByDefault bool
+	SortOrder       int32
+	ParentSlug      pgtype.Text
+	MethodSlugs     []string
+	RequiresSlugs   []string
+}
+
+func (q *Queries) ListOnboardingSteps(ctx context.Context) ([]ListOnboardingStepsRow, error) {
+	rows, err := q.db.Query(ctx, listOnboardingSteps)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOnboardingStepsRow
+	for rows.Next() {
+		var i ListOnboardingStepsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Title,
+			&i.Description,
+			&i.Completion,
+			&i.HiddenByDefault,
+			&i.SortOrder,
+			&i.ParentSlug,
+			&i.MethodSlugs,
+			&i.RequiresSlugs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationOnboardingVendors = `-- name: ListOrganizationOnboardingVendors :many
+SELECT v.vendor, p.slug AS plan_slug
+FROM organization_onboarding_vendors v
+LEFT JOIN support_matrix_plans p ON p.id = v.plan_id AND p.deleted_at IS NULL
+WHERE v.organization_id = $1
+ORDER BY v.vendor
+`
+
+type ListOrganizationOnboardingVendorsRow struct {
+	Vendor   string
+	PlanSlug pgtype.Text
+}
+
+func (q *Queries) ListOrganizationOnboardingVendors(ctx context.Context, organizationID string) ([]ListOrganizationOnboardingVendorsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationOnboardingVendors, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationOnboardingVendorsRow
+	for rows.Next() {
+		var i ListOrganizationOnboardingVendorsRow
+		if err := rows.Scan(&i.Vendor, &i.PlanSlug); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1322,6 +1534,80 @@ func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const listSupportMatrixPlansForOnboarding = `-- name: ListSupportMatrixPlansForOnboarding :many
+SELECT slug, vendor, name
+FROM support_matrix_plans
+WHERE deleted_at IS NULL
+ORDER BY sort_order, slug
+`
+
+type ListSupportMatrixPlansForOnboardingRow struct {
+	Slug   string
+	Vendor string
+	Name   string
+}
+
+func (q *Queries) ListSupportMatrixPlansForOnboarding(ctx context.Context) ([]ListSupportMatrixPlansForOnboardingRow, error) {
+	rows, err := q.db.Query(ctx, listSupportMatrixPlansForOnboarding)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSupportMatrixPlansForOnboardingRow
+	for rows.Next() {
+		var i ListSupportMatrixPlansForOnboardingRow
+		if err := rows.Scan(&i.Slug, &i.Vendor, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSupportMatrixPlatformsForOnboarding = `-- name: ListSupportMatrixPlatformsForOnboarding :many
+SELECT slug, name, vendor, family, surface
+FROM support_matrix_platforms
+WHERE deleted_at IS NULL
+ORDER BY sort_order, slug
+`
+
+type ListSupportMatrixPlatformsForOnboardingRow struct {
+	Slug    string
+	Name    string
+	Vendor  string
+	Family  string
+	Surface string
+}
+
+func (q *Queries) ListSupportMatrixPlatformsForOnboarding(ctx context.Context) ([]ListSupportMatrixPlatformsForOnboardingRow, error) {
+	rows, err := q.db.Query(ctx, listSupportMatrixPlatformsForOnboarding)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSupportMatrixPlatformsForOnboardingRow
+	for rows.Next() {
+		var i ListSupportMatrixPlatformsForOnboardingRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.Name,
+			&i.Vendor,
+			&i.Family,
+			&i.Surface,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockActiveOrganizationUser = `-- name: LockActiveOrganizationUser :one
 SELECT our.user_id
 FROM organization_user_relationships AS our
@@ -1343,6 +1629,15 @@ func (q *Queries) LockActiveOrganizationUser(ctx context.Context, arg LockActive
 	var user_id pgtype.Text
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const lockOnboardingSteps = `-- name: LockOnboardingSteps :exec
+SELECT pg_advisory_xact_lock(719438202)
+`
+
+func (q *Queries) LockOnboardingSteps(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockOnboardingSteps)
+	return err
 }
 
 const lockOrganizationForInviteAcceptance = `-- name: LockOrganizationForInviteAcceptance :one
@@ -1673,6 +1968,17 @@ func (q *Queries) RetireDuplicateLeftoverOrganizationRoleAssignments(ctx context
 	return err
 }
 
+const retireOnboardingStepsNotIn = `-- name: RetireOnboardingStepsNotIn :exec
+UPDATE onboarding_steps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE deleted_at IS NULL AND NOT (slug = ANY($1::text[]))
+`
+
+func (q *Queries) RetireOnboardingStepsNotIn(ctx context.Context, slugs []string) error {
+	_, err := q.db.Exec(ctx, retireOnboardingStepsNotIn, slugs)
+	return err
+}
+
 const revokeInvitation = `-- name: RevokeInvitation :exec
 UPDATE organization_invitations
 SET state = 'revoked',
@@ -1781,6 +2087,22 @@ func (q *Queries) SetAccountTypeIfUnchanged(ctx context.Context, arg SetAccountT
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const setOnboardingStepParent = `-- name: SetOnboardingStepParent :exec
+UPDATE onboarding_steps
+SET parent_step_id = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND parent_step_id IS DISTINCT FROM $1
+`
+
+type SetOnboardingStepParentParams struct {
+	ParentStepID uuid.NullUUID
+	ID           uuid.UUID
+}
+
+func (q *Queries) SetOnboardingStepParent(ctx context.Context, arg SetOnboardingStepParentParams) error {
+	_, err := q.db.Exec(ctx, setOnboardingStepParent, arg.ParentStepID, arg.ID)
+	return err
 }
 
 const setOrgWorkosID = `-- name: SetOrgWorkosID :one
@@ -2278,6 +2600,43 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 	return i, err
 }
 
+const upsertOnboardingStep = `-- name: UpsertOnboardingStep :one
+INSERT INTO onboarding_steps (slug, title, description, completion, hidden_by_default, sort_order)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (slug) DO UPDATE SET
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    completion = EXCLUDED.completion,
+    hidden_by_default = EXCLUDED.hidden_by_default,
+    sort_order = EXCLUDED.sort_order,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING id
+`
+
+type UpsertOnboardingStepParams struct {
+	Slug            string
+	Title           string
+	Description     string
+	Completion      string
+	HiddenByDefault bool
+	SortOrder       int32
+}
+
+func (q *Queries) UpsertOnboardingStep(ctx context.Context, arg UpsertOnboardingStepParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertOnboardingStep,
+		arg.Slug,
+		arg.Title,
+		arg.Description,
+		arg.Completion,
+		arg.HiddenByDefault,
+		arg.SortOrder,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one
 INSERT INTO organization_metadata (
     id,
@@ -2426,6 +2785,26 @@ func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const upsertOrganizationOnboardingStack = `-- name: UpsertOrganizationOnboardingStack :exec
+INSERT INTO organization_onboarding (organization_id, mdm_vendor, mdm_vendor_name)
+VALUES ($1::text, $2, $3)
+ON CONFLICT (organization_id) DO UPDATE SET
+    mdm_vendor = EXCLUDED.mdm_vendor,
+    mdm_vendor_name = EXCLUDED.mdm_vendor_name,
+    updated_at = clock_timestamp()
+`
+
+type UpsertOrganizationOnboardingStackParams struct {
+	OrganizationID string
+	MdmVendor      pgtype.Text
+	MdmVendorName  pgtype.Text
+}
+
+func (q *Queries) UpsertOrganizationOnboardingStack(ctx context.Context, arg UpsertOrganizationOnboardingStackParams) error {
+	_, err := q.db.Exec(ctx, upsertOrganizationOnboardingStack, arg.OrganizationID, arg.MdmVendor, arg.MdmVendorName)
+	return err
 }
 
 const upsertOrganizationSetupTask = `-- name: UpsertOrganizationSetupTask :one

@@ -92,10 +92,9 @@ type Reconcile struct {
 	logger *slog.Logger
 	tracer trace.Tracer
 	db     *pgxpool.Pool
-	// ch is nil when the worker has no ClickHouse connection; the ClickHouse
-	// phases are then skipped with a loud log (the convention for CH-less
-	// workers — the Postgres phases still run).
-	ch *chrepo.Queries
+	ch     *chrepo.Queries
+	// disableRiskRetroReconcile explicitly disables the ClickHouse phases.
+	disableRiskRetroReconcile bool
 	// fingerprinter matches exact-value exclusions against the tenant
 	// fingerprints stored on ClickHouse rows. A zero value disables the
 	// ClickHouse exact-match apply (loud log) — Postgres still covers it.
@@ -109,7 +108,7 @@ type Reconcile struct {
 	chSkipped metric.Int64Counter
 }
 
-func NewReconcile(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, ch *chrepo.Queries, fingerprinter risk.Fingerprinter, assetStorage blobio.Reader) *Reconcile {
+func NewReconcile(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, ch *chrepo.Queries, fingerprinter risk.Fingerprinter, assetStorage blobio.Reader, disableRiskRetroReconcile bool) *Reconcile {
 	logger = logger.With(attr.SlogComponent("risk-exclusion-reconcile"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion")
 
@@ -131,14 +130,15 @@ func NewReconcile(logger *slog.Logger, tracerProvider trace.TracerProvider, mete
 	}
 
 	return &Reconcile{
-		logger:        logger,
-		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"),
-		db:            db,
-		ch:            ch,
-		fingerprinter: fingerprinter,
-		assetStorage:  assetStorage,
-		chRows:        chRows,
-		chSkipped:     chSkipped,
+		logger:                    logger,
+		tracer:                    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"),
+		db:                        db,
+		ch:                        ch,
+		disableRiskRetroReconcile: disableRiskRetroReconcile,
+		fingerprinter:             fingerprinter,
+		assetStorage:              assetStorage,
+		chRows:                    chRows,
+		chSkipped:                 chSkipped,
 	}
 }
 
@@ -217,10 +217,10 @@ func (a *Reconcile) Do(ctx context.Context, args ReconcileArgs) (err error) {
 	// affected row's latest version; statements are idempotent set operations
 	// (the predicates select only rows whose latest state differs), so resume
 	// is at day granularity with no intra-day cursor.
-	if a.ch == nil {
-		a.logger.WarnContext(ctx, "clickhouse unavailable; retroactive exclusion reconcile skipped for clickhouse",
+	if a.disableRiskRetroReconcile {
+		a.logger.WarnContext(ctx, "retroactive exclusion reconcile disabled for clickhouse",
 			attr.SlogRiskExclusionID(args.ExclusionID.String()))
-		a.addSkip(ctx, "no_clickhouse")
+		a.addSkip(ctx, "disabled")
 		return nil
 	}
 
@@ -591,22 +591,25 @@ func (a *Reconcile) forEachRegexCandidate(
 			activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phase, Cursor: uuid.UUID{}, Day: dayKey})
 
 			row := &chrepo.RiskFindingUnmaskRow{
-				ID:             c.ID,
-				CreatedAt:      time.Time{},
-				ChatMessageID:  c.ChatMessageID,
-				ContentPartID:  c.ContentPartID,
-				ChatID:         c.ChatID,
-				Source:         c.Source,
-				RuleID:         c.RuleID,
-				StartPos:       c.StartPos,
-				EndPos:         c.EndPos,
-				MatchLen:       c.MatchLen,
-				MatchRedacted:  c.MatchRedacted,
-				Surface:        c.Surface,
-				Field:          c.Field,
-				Path:           c.Path,
-				ToolCallID:     c.ToolCallID,
-				OrganizationID: run.organizationID,
+				ID:               c.ID,
+				CreatedAt:        time.Time{},
+				ChatMessageID:    c.ChatMessageID,
+				ContentPartID:    c.ContentPartID,
+				ChatID:           c.ChatID,
+				Source:           c.Source,
+				RuleID:           c.RuleID,
+				StartPos:         c.StartPos,
+				EndPos:           c.EndPos,
+				MatchLen:         c.MatchLen,
+				MatchRedacted:    c.MatchRedacted,
+				Surface:          c.Surface,
+				MediationSurface: "",
+				Field:            c.Field,
+				Path:             c.Path,
+				ToolCallID:       c.ToolCallID,
+				OrganizationID:   run.organizationID,
+				// Reconstruction never reads the policy; visibility is the reveal endpoint's concern.
+				RiskPolicyID: "",
 			}
 
 			anchorKey := c.ChatMessageID + "\x00" + c.ContentPartID

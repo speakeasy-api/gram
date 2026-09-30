@@ -421,12 +421,12 @@ func (s *Service) ListDismissedRiskResults(ctx context.Context, payload *gen.Lis
 	for _, row := range rows {
 		listRows = append(listRows, row.RiskFindingListRow)
 	}
-	titles, blocks := s.listDisplayEnrichment(ctx, projectID, listRows)
+	titles, blocks, userEmails := s.listDisplayEnrichment(ctx, authCtx.ActiveOrganizationID, projectID, listRows)
 
 	results := make([]*types.RiskResult, 0, len(rows))
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
-		result := chListRowToResult(row.RiskFindingListRow, titles, blocks)
+		result := chListRowToResult(row.RiskFindingListRow, titles, blocks, userEmails)
 		suppressedAt := row.SuppressedAt.UTC().Format(time.RFC3339)
 		result.SuppressedAt = &suppressedAt
 		// FalsePositiveAt is the deprecated mirror of SuppressedAt, kept

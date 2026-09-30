@@ -58,6 +58,9 @@ var audienceLevelScopes = map[string]authz.Scope{
 // connect or manage leaves the page readable, so neither needs a guard.
 var audienceLockoutLevels = []string{audienceLevelBlockedView}
 
+// The levels whose scope keeps this page readable: manage implies view.
+var audienceViewLevels = []string{audienceLevelView, audienceLevelManage}
+
 // Every block level. Blocking the administrator role is guarded at all three:
 // the caller guard above only protects whoever is writing, and an administrator
 // is not usually the one restricting a server. Blocking the role that exists to
@@ -74,7 +77,7 @@ var audienceBlockLevels = []string{
 var agentAudienceLevels = []string{audienceLevelUse, audienceLevelView, audienceLevelManage, audienceLevelBlocked, audienceLevelBlockedView, audienceLevelBlockedManage}
 
 // Widest first: a principal holding several scopes is reported at its highest
-// level, and a block outranks every grant.
+// level, and its own block outranks its own grants.
 var audienceLevelOrder = []string{
 	audienceLevelBlocked,
 	audienceLevelBlockedView,
@@ -256,7 +259,11 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	// Lockout guardrail: a block on view subtracts the read that renders this
 	// page, so writing one against an audience the caller is part of would
 	// take away their own ability to undo it. Blocks on connect and manage
-	// leave the page readable, so neither needs a guard.
+	// leave the page readable, so neither needs a guard. A caller who keeps
+	// their own view or manage rule on this resource is not locked out by a
+	// role or everyone block, because a direct grant naming the resource
+	// outranks both for the page's server-level read, even when narrowed;
+	// their own block still applies.
 	if slices.ContainsFunc(audienceLockoutLevels, func(level string) bool {
 		return len(principalsByLevel[level]) > 0
 	}) {
@@ -264,15 +271,25 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve caller principals").LogError(ctx, s.logger)
 		}
+		callerURN := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID).String()
+		keepsOwnView := slices.ContainsFunc(audienceViewLevels, func(level string) bool {
+			return slices.ContainsFunc(principalsByLevel[level], func(entry authz.PrincipalSelectors) bool {
+				return entry.Principal.String() == callerURN
+			})
+		})
 		held := make(map[string]struct{}, len(callerPrincipals))
 		for _, principal := range callerPrincipals {
 			held[principal.String()] = struct{}{}
 		}
 		for _, level := range audienceLockoutLevels {
 			for _, entry := range principalsByLevel[level] {
-				if _, ok := held[entry.Principal.String()]; ok {
-					return nil, oops.E(oops.CodeInvalid, nil, "you cannot block your own access to this resource")
+				if _, ok := held[entry.Principal.String()]; !ok {
+					continue
 				}
+				if keepsOwnView && entry.Principal.String() != callerURN {
+					continue
+				}
+				return nil, oops.E(oops.CodeInvalid, nil, "you cannot block your own access to this resource")
 			}
 		}
 	}
@@ -569,10 +586,11 @@ func audienceSelectors(scope authz.Scope, resourceID string, tools, dispositions
 
 // rejectAdminRoleBlocks refuses a save that would block the administrator role
 // on this resource. Restricting a server to one team is normally written as
-// "everyone else: no access", which stores a block — and a block outranks every
-// grant, so naming the administrator role there locks every administrator out
-// of the page that could undo it. Roles other than admin are left alone: taking
-// a team off a server is the point of this surface.
+// "everyone else: no access", which stores a block — and a role block outranks
+// every grant except one made to a person by name for this resource, so naming
+// the administrator role there locks administrators out of the page that could
+// undo it. Roles other than admin are left alone: taking a team off a server is
+// the point of this surface.
 func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID string, principalsByLevel map[string][]authz.PrincipalSelectors) error {
 	blocked := make(map[string]struct{})
 	for _, level := range audienceBlockLevels {

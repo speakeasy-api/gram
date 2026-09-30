@@ -1,6 +1,7 @@
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
+  coversTool,
   isUnnarrowed,
   narrowingLabel,
   type AudienceLevel,
@@ -19,6 +20,11 @@ import {
  * picking one contributing rule — the nearest, the first, the row's own —
  * gives an answer that is right only by luck. What the line reads, what its
  * menu offers, and what a click writes all come from the same resolution.
+ *
+ * One precedence rule shapes that resolution. A person's own rule naming this
+ * server outranks a block reaching them through a role or everyone, as far as
+ * that rule reaches; their own blocks always apply. An agent's rules never
+ * outrank such a block. Mirrors server/internal/authz/precedence.go.
  */
 
 /** The scopes a row shows, weakest first. */
@@ -62,23 +68,11 @@ function blockedScope(level: AudienceLevel): ScopeKey | null {
   return SCOPE_ROWS.find((row) => BLOCK_LEVEL[row.key] === level)?.key ?? null;
 }
 
-/** Whether a rule names this tool, by name or by annotation. */
-function covers(
-  entry: { tools?: string[]; dispositions?: string[] },
-  tool: ToolSelectionTool,
-): boolean {
-  if (isUnnarrowed(entry)) return true;
-  const tools = new Set(entry.tools ?? []);
-  const dispositions = new Set<string>(entry.dispositions ?? []);
-  return (
-    tools.has(tool.name) ||
-    tool.annotations.some((annotation) => dispositions.has(annotation))
-  );
-}
-
 /** Everything that decides one scope for one principal. */
 export interface ScopeCell {
   scope: ScopeKey;
+  /** The principal this line belongs to. */
+  principalUrn: string;
   /**
    * Every rule granting this scope to this principal: its own, the ones
    * covering every server, and the ones belonging to a role it is in. A
@@ -87,6 +81,12 @@ export interface ScopeCell {
   grants: ResourceAudienceEntry[];
   /** Every block taking this scope away from this principal. */
   blocks: ResourceAudienceEntry[];
+  /**
+   * This person's own rules naming this server that grant this scope. They
+   * outrank blocks reaching the person through a role or everyone. Always
+   * empty for anyone but a person.
+   */
+  direct: ResourceAudienceEntry[];
   /** This row's own rule naming this server, the one this page rewrites. */
   own?: ResourceAudienceEntry;
   /** This row's own block naming this server, the one this page can lift. */
@@ -120,6 +120,52 @@ function reaches(entry: ResourceAudienceEntry, row: AccessRow): boolean {
   return (entry.memberIds ?? []).includes(userId);
 }
 
+function emptyCell(scope: ScopeKey, principalUrn: string): ScopeCell {
+  return { scope, principalUrn, grants: [], blocks: [], direct: [] };
+}
+
+/**
+ * Whether this row's own rules naming the server outrank blocks that reach it
+ * through a role or everyone. Only a person's do. A role or everyone is itself
+ * what such a block is written against, and an agent's owner can write its
+ * rules without being an administrator.
+ */
+export function outranksInheritedBlocks(row: AccessRow): boolean {
+  return row.kind === "user";
+}
+
+/** Whether a block reaches this line through a role or everyone. */
+function isInherited(cell: ScopeCell, block: ResourceAudienceEntry): boolean {
+  return block.principalUrn !== cell.principalUrn;
+}
+
+/**
+ * Whether a block takes this tool away. The line's own blocks always do. A
+ * block reaching it through a role or everyone does not where the line's own
+ * rule naming this server covers the tool.
+ */
+function blockCovers(
+  cell: ScopeCell,
+  block: ResourceAudienceEntry,
+  tool: ToolSelectionTool,
+): boolean {
+  if (!coversTool(block, tool)) return false;
+  if (!isInherited(cell, block)) return true;
+  return !cell.direct.some((grant) => coversTool(grant, tool));
+}
+
+/**
+ * The blocks still standing once this line's own rules have had their say: a
+ * block reaching it through a role or everyone is set aside entirely when the
+ * line's own rule opens the whole server.
+ */
+function standingBlocks(cell: ScopeCell): ResourceAudienceEntry[] {
+  const outranked = cell.direct.some(isUnnarrowed);
+  return cell.blocks.filter(
+    (block) => !(outranked && isInherited(cell, block)),
+  );
+}
+
 /**
  * Group the rules deciding access to one server into a row per principal. The
  * API returns one entry per principal and level, widest principal first, and
@@ -137,9 +183,9 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
         displayName: entry.displayName,
         description: entry.description,
         cells: {
-          use: { scope: "use", grants: [], blocks: [] },
-          view: { scope: "view", grants: [], blocks: [] },
-          manage: { scope: "manage", grants: [], blocks: [] },
+          use: emptyCell("use", entry.principalUrn),
+          view: emptyCell("view", entry.principalUrn),
+          manage: emptyCell("manage", entry.principalUrn),
         },
         memberIds: [],
         inheritedOnly: true,
@@ -170,15 +216,61 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
       }
 
       const level = entry.level as ScopeKey;
+      const direct =
+        own && entry.appliesTo === "resource" && outranksInheritedBlocks(row);
       for (const { key } of SCOPE_ROWS) {
-        if (SATISFIED_BY[key].includes(level))
-          row.cells[key].grants.push(entry);
+        if (!SATISFIED_BY[key].includes(level)) continue;
+        row.cells[key].grants.push(entry);
+        if (direct) row.cells[key].direct.push(entry);
       }
       if (own && entry.appliesTo === "resource") row.cells[level].own = entry;
     }
   }
 
   return [...rows.values()];
+}
+
+/**
+ * The people who keep access to this server after `group` is blocked on it:
+ * those it reaches whose own rule naming this server is in force, since it
+ * outranks a block written against a role or everyone. A rule their own block
+ * already cancels keeps nothing.
+ */
+/**
+ * Whether this line's own rules naming the server still reach something past
+ * its own blocks. Blocks from a role or everyone do not count: the rules
+ * outrank them. Without a catalogue, only an unnarrowed own block is known to
+ * cancel them.
+ */
+function keepsThroughOwnRules(
+  cell: ScopeCell,
+  catalog: ToolSelectionTool[],
+): boolean {
+  if (cell.direct.length === 0) return false;
+  const ownBlocks = cell.blocks.filter((block) => !isInherited(cell, block));
+  if (catalog.length === 0) return !ownBlocks.some(isUnnarrowed);
+  return catalog.some(
+    (tool) =>
+      cell.direct.some((grant) => coversTool(grant, tool)) &&
+      !ownBlocks.some((block) => coversTool(block, tool)),
+  );
+}
+
+export function keptIndividually(
+  group: AccessRow,
+  rows: AccessRow[],
+  /** The server's tools, so a narrowed rule its own block cancels keeps nothing. */
+  catalog: ToolSelectionTool[] = [],
+): AccessRow[] {
+  return rows.filter((row) => {
+    if (row === group || !outranksInheritedBlocks(row)) return false;
+    const keeps = SCOPE_ROWS.some(({ key }) =>
+      keepsThroughOwnRules(row.cells[key], catalog),
+    );
+    if (!keeps) return false;
+    if (group.kind === "everyone") return true;
+    return group.memberIds.includes(row.principalUrn.replace(/^user:/, ""));
+  });
 }
 
 /**
@@ -192,8 +284,10 @@ export function reachableTools(
 ): string[] | null {
   if (catalog.length === 0 || cell.grants.length === 0) return null;
   return catalog
-    .filter((tool) => cell.grants.some((grant) => covers(grant, tool)))
-    .filter((tool) => !cell.blocks.some((block) => covers(block, tool)))
+    .filter((tool) => cell.grants.some((grant) => coversTool(grant, tool)))
+    .filter(
+      (tool) => !cell.blocks.some((block) => blockCovers(cell, block, tool)),
+    )
     .map((tool) => tool.name);
 }
 
@@ -221,12 +315,16 @@ export interface ScopeState {
    * "via itself", which says nothing.
    */
   note?: string;
-  /** True when a block this row cannot lift caps how far the line reaches. */
+  /**
+   * True when a block this row can neither lift nor outrank caps how far the
+   * line reaches. A person's own rule here outranks a block from a role or
+   * everyone, so such a block never caps a person's row.
+   */
   capped?: boolean;
 }
 
 /** Grants on this line other than the rule this page owns for this row. */
-export function foreignGrants(
+function foreignGrants(
   row: AccessRow,
   scope: ScopeKey,
 ): ResourceAudienceEntry[] {
@@ -234,14 +332,75 @@ export function foreignGrants(
   return cell.grants.filter((grant) => grant !== cell.own);
 }
 
-/** The blocks on this line that this page cannot lift from this row. */
+/**
+ * The grants other than this row's own rule for the line that still open it.
+ * An unnarrowed block from a role or everyone cancels them, except the row's
+ * other own rules naming this server, which outrank it.
+ */
+export function effectiveForeignGrants(
+  row: AccessRow,
+  scope: ScopeKey,
+): ResourceAudienceEntry[] {
+  const cell = row.cells[scope];
+  const cancelled = cell.blocks.some(
+    (block) => isInherited(cell, block) && isUnnarrowed(block),
+  );
+  return foreignGrants(row, scope).filter(
+    (grant) => !cancelled || cell.direct.includes(grant),
+  );
+}
+
+/**
+ * Whether something other than this row's own rule opens the whole line: an
+ * unnarrowed grant no block reaching the row through a role or everyone trims.
+ * A person's own rules naming this server are never trimmed by such
+ * a block.
+ */
+export function openedElsewhere(row: AccessRow, scope: ScopeKey): boolean {
+  const cell = row.cells[scope];
+  const inherited = cell.blocks.some((block) => isInherited(cell, block));
+  return effectiveForeignGrants(row, scope).some(
+    (grant) =>
+      isUnnarrowed(grant) && (!inherited || cell.direct.includes(grant)),
+  );
+}
+
+/** The standing blocks on this line that this page cannot lift from this row. */
 function foreignBlocks(
   row: AccessRow,
   cell: ScopeCell,
 ): ResourceAudienceEntry[] {
-  return cell.blocks.filter(
+  return standingBlocks(cell).filter(
     (block) =>
       block.principalUrn !== row.principalUrn || block.appliesTo !== "resource",
+  );
+}
+
+/**
+ * The foreign blocks this row cannot get past by writing its own rule here: a
+ * person outranks blocks from a role or everyone, so only their own
+ * rules covering every server remain.
+ */
+export function cappingBlocks(
+  row: AccessRow,
+  cell: ScopeCell,
+): ResourceAudienceEntry[] {
+  const foreign = foreignBlocks(row, cell);
+  if (!outranksInheritedBlocks(row)) return foreign;
+  return foreign.filter((block) => !isInherited(cell, block));
+}
+
+/**
+ * Whether nothing on this line is reachable. With a catalogue the answer is
+ * exact; without one, only an unnarrowed block the line's own rules do not
+ * outrank is known to close it.
+ */
+function isClosed(cell: ScopeCell, reachable: string[] | null): boolean {
+  if (reachable) return reachable.length === 0;
+  return standingBlocks(cell).some(
+    (block) =>
+      isUnnarrowed(block) &&
+      (!isInherited(cell, block) || cell.direct.length === 0),
   );
 }
 
@@ -252,11 +411,7 @@ export function scopeState(
 ): ScopeState {
   const cell = row.cells[scope];
   const reachable = reachableTools(cell, catalog);
-  // With a catalogue the answer is exact; without one, only an unnarrowed
-  // block is known to close the line.
-  const closed = reachable
-    ? reachable.length === 0
-    : cell.blocks.some(isUnnarrowed);
+  const closed = isClosed(cell, reachable);
 
   if (cell.grants.length === 0 || closed) {
     // A block this row cannot lift is why the line is closed, and it is not
@@ -272,9 +427,9 @@ export function scopeState(
       via: cancellingSelf ? undefined : cancelling?.displayName,
       viaPrincipalUrn: cancellingSelf ? undefined : cancelling?.principalUrn,
       note: cancellingSelf ? sourceNote(cancelling) : undefined,
-      // Any block this row cannot lift caps it, whether it closed the line
-      // outright or trimmed the last tool away.
-      capped: foreign.length > 0,
+      // Any block this row can neither lift nor outrank caps it, whether it
+      // closed the line outright or trimmed the last tool away.
+      capped: cappingBlocks(row, cell).length > 0,
     };
   }
 
@@ -291,13 +446,13 @@ export function scopeState(
   return {
     value: scope === "use" ? connectLabel(cell, catalog, reachable) : "Allowed",
     granted: true,
-    subtracts: foreign.length > 0,
+    subtracts: effectiveForeignGrants(row, scope).length > 0,
     canRevoke: true,
     via: cell.own || grantingSelf ? undefined : granting?.displayName,
     viaPrincipalUrn:
       cell.own || grantingSelf ? undefined : granting?.principalUrn,
     note: cell.own || !grantingSelf ? undefined : sourceNote(granting),
-    capped: foreignBlocks(row, cell).length > 0,
+    capped: cappingBlocks(row, cell).length > 0,
   };
 }
 
@@ -329,21 +484,29 @@ function connectLabel(
   }
 
   // Without a catalogue there is nothing to count against, so the rules and
-  // the blocks trimming them are all there is to say.
-  const base = cell.grants.some(isUnnarrowed)
+  // the blocks trimming them are all there is to say. When a block from a
+  // role or everyone closes the server, only this line's own rules reach past
+  // it, so they are the whole answer and that block is not a trim.
+  const standing = standingBlocks(cell);
+  const closedByInherited =
+    cell.direct.length > 0 &&
+    standing.some((block) => isInherited(cell, block) && isUnnarrowed(block));
+  const reaching = closedByInherited ? cell.direct : cell.grants;
+  const blocks = closedByInherited
+    ? standing.filter((block) => !isInherited(cell, block))
+    : standing;
+  const base = reaching.some(isUnnarrowed)
     ? "All tools"
     : capitalize(
         narrowingLabel({
-          tools: cell.grants.flatMap((grant) => grant.tools ?? []),
-          dispositions: cell.grants.flatMap(
-            (grant) => grant.dispositions ?? [],
-          ),
+          tools: reaching.flatMap((grant) => grant.tools ?? []),
+          dispositions: reaching.flatMap((grant) => grant.dispositions ?? []),
         }),
       );
-  if (cell.blocks.length === 0) return base;
+  if (blocks.length === 0) return base;
   return `${base} except ${narrowingLabel({
-    tools: cell.blocks.flatMap((block) => block.tools ?? []),
-    dispositions: cell.blocks.flatMap((block) => block.dispositions ?? []),
+    tools: blocks.flatMap((block) => block.tools ?? []),
+    dispositions: blocks.flatMap((block) => block.dispositions ?? []),
   })}`;
 }
 
@@ -402,6 +565,6 @@ export function complementTools(
   selection: { tools: string[]; dispositions: string[] },
 ): string[] {
   return catalog
-    .filter((tool) => !covers(selection, tool))
+    .filter((tool) => !coversTool(selection, tool))
     .map((tool) => tool.name);
 }

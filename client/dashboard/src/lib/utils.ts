@@ -50,13 +50,54 @@ export function getApiBaseURL(): string {
   return import.meta.env.DEV ? window.location.origin : getServerURL();
 }
 
-// tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label
-// keeps the wildcard cert valid), tunnel.<host> otherwise.
-export function tunnelGatewayURL(): string {
-  const server = new URL(getServerURL());
-  const host =
-    server.host === "app.getgram.ai"
-      ? "tunnel.speakeasy.com"
+// Hosts serving the production dashboard. Compared exactly: a substring check
+// would also match dev.ai.speakeasy.com and preview hosts.
+const PROD_HOSTS = new Set(["app.getgram.ai", "ai.speakeasy.com"]);
+
+export function isProdHost(serverURL: string): boolean {
+  return PROD_HOSTS.has(new URL(serverURL).hostname);
+}
+
+// Hosts serving the dev dashboard, compared exactly like PROD_HOSTS.
+const DEV_HOSTS = new Set(["dev.getgram.ai", "dev.ai.speakeasy.com"]);
+
+// Each environment's configured server host. Published plugins and the device
+// daemon send to it whichever of that environment's hosts an admin configured
+// them from.
+const CANONICAL_PROD_HOST = "app.getgram.ai";
+const CANONICAL_DEV_HOST = "dev.getgram.ai";
+
+// Every first-party host that serves the same product as serverURL's host:
+// all of that environment's hosts on a prod or dev host, otherwise just it.
+export function firstPartyHosts(serverURL = getServerURL()): string[] {
+  const host = new URL(serverURL, window.location.origin).hostname;
+  if (PROD_HOSTS.has(host)) return [...PROD_HOSTS];
+  if (DEV_HOSTS.has(host)) return [...DEV_HOSTS];
+  return [host];
+}
+
+// Hosts an agent sandbox must allow to reach Speakeasy: the current host, plus
+// its environment's canonical host when different, because plugin hooks and
+// the daemon still send there.
+export function agentEgressHosts(serverURL = getServerURL()): string[] {
+  const host = new URL(serverURL, window.location.origin).hostname;
+  const canonical = PROD_HOSTS.has(host)
+    ? CANONICAL_PROD_HOST
+    : DEV_HOSTS.has(host)
+      ? CANONICAL_DEV_HOST
+      : host;
+  return canonical === host ? [host] : [host, canonical];
+}
+
+// tunnel.speakeasy.com on every prod host, tunnel.dev.getgram.ai on every dev
+// host, tunnel-pr-N.<env> in previews (single label keeps the wildcard cert
+// valid), tunnel.<host> otherwise.
+export function tunnelGatewayURL(serverURL = getServerURL()): string {
+  const server = new URL(serverURL);
+  const host = PROD_HOSTS.has(server.hostname)
+    ? "tunnel.speakeasy.com"
+    : DEV_HOSTS.has(server.hostname)
+      ? "tunnel.dev.getgram.ai"
       : /^pr-\d+\./.test(server.host)
         ? `tunnel-${server.host}`
         : `tunnel.${server.host}`;
@@ -251,9 +292,11 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export function getCustomDomainCNAME(): string {
+export function getCustomDomainCNAME(serverURL = getServerURL()): string {
   try {
-    const url = new URL(getServerURL());
+    if (isProdHost(serverURL)) return "cname.getgram.ai.";
+    const url = new URL(serverURL);
+    if (DEV_HOSTS.has(url.hostname)) return "cname.dev.getgram.ai.";
     const parts = url.hostname.split(".");
     if (parts.length > 2) {
       parts[0] = parts[0] === "app" ? "cname" : `cname.${parts[0]}`;

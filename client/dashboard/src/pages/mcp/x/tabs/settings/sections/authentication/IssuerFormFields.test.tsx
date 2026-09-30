@@ -2,7 +2,7 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } fr
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ClientCredentialsFields } from "./IssuerFormFields";
+import { ClientCredentialsFields, OverridesFields } from "./IssuerFormFields";
 
 vi.stubGlobal("__GRAM_SERVER_URL__", "https://gram.example.com");
 
@@ -40,5 +40,31 @@ describe("ClientCredentialsFields", () => {
     renderFields(AuthMethod.ClientSecretBasic);
 
     expect(screen.getByText("Client Secret (optional)")).toBeTruthy();
+  });
+});
+
+describe("OverridesFields", () => {
+  function renderOverrides(scopeOverride: string): void {
+    render(
+      <OverridesFields
+        scopeOverride={scopeOverride}
+        audienceOverride=""
+        onScopeOverrideChange={vi.fn<(value: string) => void>()}
+        onAudienceOverrideChange={vi.fn<(value: string) => void>()}
+        scopeWarning={<div>scope override warning</div>}
+      />,
+    );
+  }
+
+  it("hides the scope warning while the scope field is empty", () => {
+    renderOverrides("  ");
+
+    expect(screen.queryByText("scope override warning")).toBeNull();
+  });
+
+  it("shows the scope warning once the scope field has text", () => {
+    renderOverrides("openid");
+
+    expect(screen.getByText("scope override warning")).toBeTruthy();
   });
 });

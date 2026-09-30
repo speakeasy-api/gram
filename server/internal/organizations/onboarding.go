@@ -79,13 +79,33 @@ func LoadOnboardingConfiguration(ctx context.Context, db repo.DBTX, organization
 			hidden[row.TaskKey.String] = row.HiddenAt.Valid
 		}
 	}
-	tasks := make([]*gen.AdminOnboardingTask, 0, len(setupTaskCatalog))
+	tasks := make([]*gen.AdminOnboardingTask, 0, len(setupTaskCatalog)+len(setupTaskGroups))
+	placed := make(map[string]bool, len(setupTaskGroups))
 	for _, task := range setupTaskCatalog {
 		value, exists := hidden[task.Key]
 		if !exists {
 			value = task.HiddenByDefault
 		}
-		tasks = append(tasks, &gen.AdminOnboardingTask{Key: task.Key, Title: task.Title, Description: task.Description, Hidden: value})
+		if task.Parent != "" && !placed[task.Parent] {
+			placed[task.Parent] = true
+			group := setupTaskGroupForKey(task.Parent)
+			// A group is hidden when every card under it is; it is derived,
+			// never saved, so it is filled in once its cards are known.
+			tasks = append(tasks, &gen.AdminOnboardingTask{Key: group.Key, Title: group.Title, Description: group.Description, Hidden: true, ParentKey: nil, Group: true})
+		}
+		tasks = append(tasks, &gen.AdminOnboardingTask{Key: task.Key, Title: task.Title, Description: task.Description, Hidden: value, ParentKey: conv.PtrEmpty(task.Parent), Group: false})
+	}
+	for _, task := range tasks {
+		if task.Group {
+			continue
+		}
+		if parent := conv.PtrValOr(task.ParentKey, ""); parent != "" && !task.Hidden {
+			for _, candidate := range tasks {
+				if candidate.Group && candidate.Key == parent {
+					candidate.Hidden = false
+				}
+			}
+		}
 	}
 	return &gen.AdminOnboardingConfiguration{OrganizationID: organizationID, Preset: conv.FromPGText[string](rows[0].OnboardingPreset), Tasks: tasks, Presets: adminOnboardingPresets()}, nil
 }
@@ -146,6 +166,10 @@ func SaveOnboardingConfigurationTx(ctx context.Context, tx pgx.Tx, logger *audit
 		return nil, err
 	}
 	for _, task := range before.Tasks {
+		// Groups derive visibility from their cards and have no row of their own.
+		if task.Group {
+			continue
+		}
 		hidden := !slices.Contains(visibleTaskKeys, task.Key)
 		if err := queries.SetOrganizationSetupTaskVisibility(ctx, repo.SetOrganizationSetupTaskVisibilityParams{OrganizationID: organizationID, TaskKey: task.Key, Hidden: hidden}); err != nil {
 			return nil, fmt.Errorf("save onboarding task visibility: %w", err)
@@ -156,6 +180,10 @@ func SaveOnboardingConfigurationTx(ctx context.Context, tx pgx.Tx, logger *audit
 		return nil, err
 	}
 	for _, task := range beforeTasks {
+		// A group's visibility follows its cards, so only the cards are audited.
+		if task.Group {
+			continue
+		}
 		next := setupTaskByKey(afterTasks, task.Key)
 		if task.Hidden == next.Hidden {
 			continue
@@ -190,9 +218,11 @@ func SaveOnboardingConfigurationTx(ctx context.Context, tx pgx.Tx, logger *audit
 func onboardingSnapshot(config *gen.AdminOnboardingConfiguration) *audit.OrganizationOnboardingSnapshot {
 	keys := make([]string, 0, len(config.Tasks))
 	for _, task := range config.Tasks {
-		if !task.Hidden {
-			keys = append(keys, task.Key)
+		// Groups are derived from their cards, so the snapshot lists cards only.
+		if task.Group || task.Hidden {
+			continue
 		}
+		keys = append(keys, task.Key)
 	}
 	return &audit.OrganizationOnboardingSnapshot{Preset: config.Preset, VisibleTaskKeys: keys}
 }

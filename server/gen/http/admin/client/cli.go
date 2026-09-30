@@ -565,6 +565,132 @@ func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizat
 	return v, nil
 }
 
+// BuildListUsersPayload builds the payload for the admin listUsers endpoint
+// from CLI flags.
+func BuildListUsersPayload(adminListUsersQ string, adminListUsersPage string, adminListUsersLimit string, adminListUsersAdminSessionToken string) (*admin.ListUsersPayload, error) {
+	var err error
+	var q *string
+	{
+		if adminListUsersQ != "" {
+			q = &adminListUsersQ
+		}
+	}
+	var page *int
+	{
+		if adminListUsersPage != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListUsersPage, 10, strconv.IntSize)
+			val := int(v)
+			page = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for page, must be INT")
+			}
+			if *page < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("page", *page, 1, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit *int
+	{
+		if adminListUsersLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListUsersLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListUsersAdminSessionToken != "" {
+			adminSessionToken = &adminListUsersAdminSessionToken
+		}
+	}
+	v := &admin.ListUsersPayload{}
+	v.Q = q
+	v.Page = page
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListUserOrganizationsPayload builds the payload for the admin
+// listUserOrganizations endpoint from CLI flags.
+func BuildListUserOrganizationsPayload(adminListUserOrganizationsUserID string, adminListUserOrganizationsPage string, adminListUserOrganizationsLimit string, adminListUserOrganizationsAdminSessionToken string) (*admin.ListUserOrganizationsPayload, error) {
+	var err error
+	var userID string
+	{
+		userID = adminListUserOrganizationsUserID
+	}
+	var page *int
+	{
+		if adminListUserOrganizationsPage != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListUserOrganizationsPage, 10, strconv.IntSize)
+			val := int(v)
+			page = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for page, must be INT")
+			}
+			if *page < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("page", *page, 1, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit *int
+	{
+		if adminListUserOrganizationsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListUserOrganizationsLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListUserOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminListUserOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.ListUserOrganizationsPayload{}
+	v.UserID = userID
+	v.Page = page
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
 func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
@@ -2143,6 +2269,167 @@ func BuildSetRegistryEntryPublishedPayload(adminSetRegistryEntryPublishedBody st
 		ID:        body.ID,
 		UpdatedAt: body.UpdatedAt,
 		Published: body.Published,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListOnboardingStepsPayload builds the payload for the admin
+// listOnboardingSteps endpoint from CLI flags.
+func BuildListOnboardingStepsPayload(adminListOnboardingStepsAdminSessionToken string) (*admin.ListOnboardingStepsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListOnboardingStepsAdminSessionToken != "" {
+			adminSessionToken = &adminListOnboardingStepsAdminSessionToken
+		}
+	}
+	v := &admin.ListOnboardingStepsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetOnboardingStackOptionsPayload builds the payload for the admin
+// getOnboardingStackOptions endpoint from CLI flags.
+func BuildGetOnboardingStackOptionsPayload(adminGetOnboardingStackOptionsAdminSessionToken string) (*admin.GetOnboardingStackOptionsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetOnboardingStackOptionsAdminSessionToken != "" {
+			adminSessionToken = &adminGetOnboardingStackOptionsAdminSessionToken
+		}
+	}
+	v := &admin.GetOnboardingStackOptionsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetOrganizationOnboardingStackPayload builds the payload for the admin
+// getOrganizationOnboardingStack endpoint from CLI flags.
+func BuildGetOrganizationOnboardingStackPayload(adminGetOrganizationOnboardingStackOrganizationID string, adminGetOrganizationOnboardingStackAdminSessionToken string) (*admin.GetOrganizationOnboardingStackPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetOrganizationOnboardingStackOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationOnboardingStackAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationOnboardingStackAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationOnboardingStackPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetOrganizationOnboardingStackPayload builds the payload for the admin
+// setOrganizationOnboardingStack endpoint from CLI flags.
+func BuildSetOrganizationOnboardingStackPayload(adminSetOrganizationOnboardingStackBody string, adminSetOrganizationOnboardingStackAdminSessionToken string) (*admin.SetOrganizationOnboardingStackPayload, error) {
+	var err error
+	var body SetOrganizationOnboardingStackRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetOrganizationOnboardingStackBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mdm_vendor\": \"abc123\",\n      \"mdm_vendor_name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"vendors\": [\n         {\n            \"plan_slug\": \"abc123\",\n            \"vendor\": \"abc123\"\n         }\n      ]\n   }'")
+		}
+		if body.Vendors == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("vendors", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetOrganizationOnboardingStackAdminSessionToken != "" {
+			adminSessionToken = &adminSetOrganizationOnboardingStackAdminSessionToken
+		}
+	}
+	v := &admin.SetOrganizationOnboardingStackPayload{
+		OrganizationID: body.OrganizationID,
+		MdmVendor:      body.MdmVendor,
+		MdmVendorName:  body.MdmVendorName,
+	}
+	if body.Vendors != nil {
+		v.Vendors = make([]*admin.AdminOnboardingStackVendor, len(body.Vendors))
+		for i, val := range body.Vendors {
+			if val == nil {
+				v.Vendors[i] = nil
+				continue
+			}
+			v.Vendors[i] = marshalAdminOnboardingStackVendorRequestBodyToAdminAdminOnboardingStackVendor(val)
+		}
+	} else {
+		v.Vendors = []*admin.AdminOnboardingStackVendor{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetStripeSubscriptionCandidatePayload builds the payload for the admin
+// getStripeSubscriptionCandidate endpoint from CLI flags.
+func BuildGetStripeSubscriptionCandidatePayload(adminGetStripeSubscriptionCandidateOrganizationID string, adminGetStripeSubscriptionCandidateStripeSubscriptionID string, adminGetStripeSubscriptionCandidateAdminSessionToken string) (*admin.GetStripeSubscriptionCandidatePayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetStripeSubscriptionCandidateOrganizationID
+	}
+	var stripeSubscriptionID string
+	{
+		stripeSubscriptionID = adminGetStripeSubscriptionCandidateStripeSubscriptionID
+		err = goa.MergeErrors(err, goa.ValidatePattern("stripe_subscription_id", stripeSubscriptionID, "^sub_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(stripeSubscriptionID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("stripe_subscription_id", stripeSubscriptionID, utf8.RuneCountInString(stripeSubscriptionID), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetStripeSubscriptionCandidateAdminSessionToken != "" {
+			adminSessionToken = &adminGetStripeSubscriptionCandidateAdminSessionToken
+		}
+	}
+	v := &admin.GetStripeSubscriptionCandidatePayload{}
+	v.OrganizationID = organizationID
+	v.StripeSubscriptionID = stripeSubscriptionID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetStripeSubscriptionPayload builds the payload for the admin
+// setStripeSubscription endpoint from CLI flags.
+func BuildSetStripeSubscriptionPayload(adminSetStripeSubscriptionBody string, adminSetStripeSubscriptionAdminSessionToken string) (*admin.SetStripeSubscriptionPayload, error) {
+	var err error
+	var body SetStripeSubscriptionRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetStripeSubscriptionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"stripe_subscription_id\": \"aaa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_subscription_id", body.StripeSubscriptionID, "^sub_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(body.StripeSubscriptionID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_subscription_id", body.StripeSubscriptionID, utf8.RuneCountInString(body.StripeSubscriptionID), 255, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetStripeSubscriptionAdminSessionToken != "" {
+			adminSessionToken = &adminSetStripeSubscriptionAdminSessionToken
+		}
+	}
+	v := &admin.SetStripeSubscriptionPayload{
+		OrganizationID:       body.OrganizationID,
+		StripeSubscriptionID: body.StripeSubscriptionID,
 	}
 	v.AdminSessionToken = adminSessionToken
 

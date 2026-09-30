@@ -33,6 +33,12 @@ const (
 	FailClosed FailMode = "closed"
 )
 
+const (
+	// mcpFindingEvidenceStoreTimeout bounds secondary evidence persistence
+	// without extending the policy evaluation deadline.
+	mcpFindingEvidenceStoreTimeout = time.Second
+)
+
 // PolicyConfig controls bounded MCP policy evaluation.
 type PolicyConfig struct {
 	// Deadline bounds lookup, block scanning, and each detached flag lane.
@@ -54,7 +60,7 @@ var DefaultPolicyConfig = PolicyConfig{
 
 // PolicyLookup resolves enabled policies for one concrete MCP subject.
 type PolicyLookup interface {
-	ListEnabledForMCPServer(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, toolName string) ([]policycore.Policy, error)
+	ListEnabledForMCP(ctx context.Context, organizationID string, projectID uuid.UUID, target policycore.MCPTarget) ([]policycore.Policy, error)
 }
 
 // PolicyDetector runs one policy through the shared synchronous detector set.
@@ -62,15 +68,31 @@ type PolicyDetector interface {
 	ScanMCPPolicy(ctx context.Context, policy policycore.Policy, request risk.MCPScanRequest) ([]scanners.Finding, error)
 }
 
+// MCPFindingEvidenceWriter stores raw matches for published findings.
+type MCPFindingEvidenceWriter interface {
+	Store(context.Context, risk.MCPFindingEvidenceBatch) error
+}
+
+// PolicyEvaluatorOption configures optional evaluator dependencies.
+type PolicyEvaluatorOption func(*policyEvaluator)
+
+// WithMCPFindingEvidenceWriter enables encrypted evidence persistence.
+func WithMCPFindingEvidenceWriter(writer MCPFindingEvidenceWriter) PolicyEvaluatorOption {
+	return func(evaluator *policyEvaluator) {
+		evaluator.evidenceWriter = writer
+	}
+}
+
 type policyEvaluator struct {
-	logger     *slog.Logger
-	lookup     PolicyLookup
-	detector   PolicyDetector
-	publisher  gcp.Publisher[*riskv1.Finding]
-	config     PolicyConfig
-	flagSlots  chan struct{}
-	flagScans  sync.WaitGroup
-	onFlagDrop func(context.Context, Event)
+	logger         *slog.Logger
+	lookup         PolicyLookup
+	detector       PolicyDetector
+	publisher      gcp.Publisher[*riskv1.Finding]
+	evidenceWriter MCPFindingEvidenceWriter
+	config         PolicyConfig
+	flagSlots      chan struct{}
+	flagScans      sync.WaitGroup
+	onFlagDrop     func(context.Context, Event)
 }
 
 // NewPolicyEvaluator creates an evaluator that enforces block policies inline
@@ -83,6 +105,7 @@ func NewPolicyEvaluator(
 	detector PolicyDetector,
 	publisher gcp.Publisher[*riskv1.Finding],
 	config PolicyConfig,
+	options ...PolicyEvaluatorOption,
 ) *Evaluator {
 	if config.Deadline <= 0 {
 		config.Deadline = DefaultPolicyConfig.Deadline
@@ -95,14 +118,18 @@ func NewPolicyEvaluator(
 	}
 	evaluator := newInstrumentedEvaluator(nil, tracerProvider, meterProvider, logger)
 	policy := &policyEvaluator{
-		logger:     logger,
-		lookup:     lookup,
-		detector:   detector,
-		publisher:  publisher,
-		config:     config,
-		flagSlots:  make(chan struct{}, config.FlagConcurrency),
-		flagScans:  sync.WaitGroup{},
-		onFlagDrop: nil,
+		logger:         logger,
+		lookup:         lookup,
+		detector:       detector,
+		publisher:      publisher,
+		evidenceWriter: nil,
+		config:         config,
+		flagSlots:      make(chan struct{}, config.FlagConcurrency),
+		flagScans:      sync.WaitGroup{},
+		onFlagDrop:     nil,
+	}
+	for _, option := range options {
+		option(policy)
 	}
 	policy.onFlagDrop = evaluator.metrics.recordFlagDrop
 	evaluator.policy = policy
@@ -125,7 +152,12 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 
 	scanCtx, cancel := context.WithTimeout(ctx, p.config.Deadline)
 	defer cancel()
-	policies, err := p.lookup.ListEnabledForMCPServer(scanCtx, event.OrganizationID, projectID, serverID, event.ToolName)
+	policies, err := p.lookup.ListEnabledForMCP(scanCtx, event.OrganizationID, projectID, policycore.MCPTarget{
+		ServerID:        serverID,
+		ToolName:        event.ToolName,
+		ToolAnnotations: event.ToolAnnotations,
+		PlatformToolset: event.Surface == SurfacePlatformMCP,
+	})
 	if err != nil {
 		return p.resolveIndeterminate(ctx, fmt.Errorf("list MCP policies: %w", err))
 	}
@@ -262,7 +294,7 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 		PrincipalKind:    &principalKind,
 		IdentityStamped:  &identityStamped,
 	}.Build()
-	_, _, err := scanners.PublishFindings(ctx, p.logger, p.publisher, scanners.FindingMetadata{
+	meta := scanners.FindingMetadata{
 		RequestID:         event.executionID,
 		ChatMessageID:     "",
 		ContentPartID:     "",
@@ -271,9 +303,33 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 		RiskPolicyID:      policy.ID.String(),
 		RiskPolicyVersion: policy.Version,
 		Shadow:            false,
-	}, findings, "MCP policy", scanners.WithFindingMCPContext(attribution, execution, outcome))
+	}
+	_, _, err := scanners.PublishFindings(ctx, p.logger, p.publisher, meta, findings, "MCP policy", scanners.WithFindingMCPContext(attribution, execution, outcome))
 	if err != nil {
 		p.logger.WarnContext(ctx, "failed to publish MCP policy findings", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
+	}
+	if p.evidenceWriter == nil {
+		return
+	}
+	projectID, err := uuid.Parse(event.ProjectID)
+	if err != nil {
+		p.logger.WarnContext(ctx, "failed to parse MCP finding evidence project id", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
+		return
+	}
+	ids := scanners.FindingIDs(meta, findings)
+	evidence := make([]risk.MCPFindingEvidence, 0, len(findings))
+	for i, finding := range findings {
+		evidence = append(evidence, risk.MCPFindingEvidence{ID: ids[i], Match: finding.Match})
+	}
+	storeCtx, cancel := context.WithTimeout(ctx, mcpFindingEvidenceStoreTimeout)
+	defer cancel()
+	if err := p.evidenceWriter.Store(storeCtx, risk.MCPFindingEvidenceBatch{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      projectID,
+		CreatedAt:      time.Now().UTC(),
+		Findings:       evidence,
+	}); err != nil {
+		p.logger.WarnContext(ctx, "failed to store MCP policy finding evidence", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
 	}
 }
 

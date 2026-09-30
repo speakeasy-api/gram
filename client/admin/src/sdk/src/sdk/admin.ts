@@ -19,10 +19,12 @@ import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIss
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
+import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStackOptions.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
 import { adminGetOrganizationOnboarding } from "../funcs/adminGetOrganizationOnboarding.js";
+import { adminGetOrganizationOnboardingStack } from "../funcs/adminGetOrganizationOnboardingStack.js";
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
@@ -31,16 +33,20 @@ import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
 import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.js";
+import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubscriptionCandidate.js";
 import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
+import { adminListOnboardingSteps } from "../funcs/adminListOnboardingSteps.js";
 import { adminListOrganizationActivity } from "../funcs/adminListOrganizationActivity.js";
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
+import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
+import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
@@ -53,8 +59,10 @@ import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyM
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetOrganizationOnboarding } from "../funcs/adminSetOrganizationOnboarding.js";
+import { adminSetOrganizationOnboardingStack } from "../funcs/adminSetOrganizationOnboardingStack.js";
 import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
+import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
 import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
@@ -71,8 +79,13 @@ import { AdminInferenceSpendMonth } from "../models/components/admininferencespe
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
+import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
+import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingConfiguration } from "../models/components/adminonboardingconfiguration.js";
+import { AdminOnboardingStack } from "../models/components/adminonboardingstack.js";
+import { AdminOnboardingStackOptions } from "../models/components/adminonboardingstackoptions.js";
+import { AdminOnboardingStepList } from "../models/components/adminonboardingsteplist.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
@@ -83,6 +96,7 @@ import { AdminSession } from "../models/components/adminsession.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
+import { AdminStripeSubscriptionCandidate } from "../models/components/adminstripesubscriptioncandidate.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
@@ -112,8 +126,10 @@ import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/set
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { SetOrganizationOnboardingRequestBody } from "../models/components/setorganizationonboardingrequestbody.js";
+import { SetOrganizationOnboardingStackRequestBody } from "../models/components/setorganizationonboardingstackrequestbody.js";
 import { SetRegistryEntryPublishedRequestBody } from "../models/components/setregistryentrypublishedrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
+import { SetStripeSubscriptionRequestBody } from "../models/components/setstripesubscriptionrequestbody.js";
 import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
 import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
 import { SupportMatrix } from "../models/components/supportmatrix.js";
@@ -133,12 +149,14 @@ import { AdminGetOrganizationRequest } from "../models/operations/admingetorgani
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
 import { AdminGetOrganizationOnboardingRequest } from "../models/operations/admingetorganizationonboarding.js";
+import { AdminGetOrganizationOnboardingStackRequest } from "../models/operations/admingetorganizationonboardingstack.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
 import { AdminGetRegistryEntryRequest } from "../models/operations/admingetregistryentry.js";
 import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
+import { AdminGetStripeSubscriptionCandidateRequest } from "../models/operations/admingetstripesubscriptioncandidate.js";
 import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
@@ -160,6 +178,8 @@ import {
 } from "../models/operations/adminlistorganizations.js";
 import { AdminListProjectMcpServersRequest } from "../models/operations/adminlistprojectmcpservers.js";
 import { AdminListRegistryEntriesRequest } from "../models/operations/adminlistregistryentries.js";
+import { AdminListUserOrganizationsRequest } from "../models/operations/adminlistuserorganizations.js";
+import { AdminListUsersRequest } from "../models/operations/adminlistusers.js";
 import {
   AdminServeImageRequest,
   AdminServeImageResponse,
@@ -209,6 +229,36 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(adminLogout(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * getOnboardingStackOptions admin
+   *
+   * @remarks
+   * Read the vendors, plans and platforms the stack form offers, from the support matrix catalog.
+   */
+  async getOnboardingStackOptions(
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingStackOptions> {
+    return unwrapAsync(adminGetOnboardingStackOptions(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * listOnboardingSteps admin
+   *
+   * @remarks
+   * Read the onboarding steps the code defines, mirrored into the database, with their groups, methods and prerequisites.
+   */
+  async listOnboardingSteps(
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingStepList> {
+    return unwrapAsync(adminListOnboardingSteps(
       this,
       options,
     ));
@@ -468,6 +518,40 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * getOrganizationOnboardingStack admin
+   *
+   * @remarks
+   * Read the stack staff recorded for an organization: its vendors with plans and its device management.
+   */
+  async getOrganizationOnboardingStack(
+    request: AdminGetOrganizationOnboardingStackRequest,
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingStack> {
+    return unwrapAsync(adminGetOrganizationOnboardingStack(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setOrganizationOnboardingStack admin
+   *
+   * @remarks
+   * Replace the stack recorded for an organization. Vendors and plans must come from the catalog; other needs a name and none clears it.
+   */
+  async setOrganizationOnboardingStack(
+    request: SetOrganizationOnboardingStackRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingStack> {
+    return unwrapAsync(adminSetOrganizationOnboardingStack(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getPaygBillingSummary admin
    *
    * @remarks
@@ -553,6 +637,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * setStripeSubscription admin
+   *
+   * @remarks
+   * Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.
+   */
+  async setStripeSubscription(
+    request: SetStripeSubscriptionRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminSetStripeSubscription(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getSpendBreakdown admin
    *
    * @remarks
@@ -597,6 +698,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminStripeSubscription> {
     return unwrapAsync(adminGetStripeSubscription(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getStripeSubscriptionCandidate admin
+   *
+   * @remarks
+   * Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.
+   */
+  async getStripeSubscriptionCandidate(
+    request: AdminGetStripeSubscriptionCandidateRequest,
+    options?: RequestOptions,
+  ): Promise<AdminStripeSubscriptionCandidate> {
+    return unwrapAsync(adminGetStripeSubscriptionCandidate(
       this,
       request,
       options,
@@ -1141,6 +1259,40 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminStartTrial(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listUsers admin
+   *
+   * @remarks
+   * Staff-only active user discovery.
+   */
+  async listUsers(
+    request?: AdminListUsersRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminListUsersResult> {
+    return unwrapAsync(adminListUsers(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listUserOrganizations admin
+   *
+   * @remarks
+   * Staff-only active user discovery.
+   */
+  async listUserOrganizations(
+    request: AdminListUserOrganizationsRequest,
+    options?: RequestOptions,
+  ): Promise<AdminListUserOrganizationsResult> {
+    return unwrapAsync(adminListUserOrganizations(
       this,
       request,
       options,

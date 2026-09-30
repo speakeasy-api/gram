@@ -47,15 +47,12 @@ type RiskFindingsService struct {
 }
 
 func NewRiskFindingsService(db *pgxpool.Pool, findings RiskFindingsReader, flags feature.Provider, organizations OrganizationSlugResolver, key string) *RiskFindingsService {
-	codec, err := newRiskCursorCodec(key)
-	if db == nil || findings == nil || organizations == nil || err != nil {
-		return nil
-	}
+	codec := newRiskCursorCodec(key)
 	return &RiskFindingsService{projects: postgresRiskProjectResolver{queries: platformrepo.New(db)}, organizations: organizations, flags: flags, policies: riskrepo.New(db), findings: findings, cursor: codec, now: time.Now}
 }
 
 func (s *RiskFindingsService) valid() bool {
-	return s != nil && s.projects != nil && s.organizations != nil && s.policies != nil && s.findings != nil && s.cursor != nil && s.now != nil
+	return s != nil
 }
 
 type ListRiskFindingsInput struct {
@@ -211,14 +208,12 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 	if err != nil || orgSlug == "" {
 		return zero, ErrUnavailable
 	}
-	for _, flag := range []feature.Flag{feature.FlagRiskWatchdog, feature.FlagRiskListFromClickHouse} {
-		evaluation, err := feature.EvaluateFlag(ctx, s.flags, flag, principal.OrganizationID, feature.OrgProjectGroups(orgSlug, project.Slug))
-		if err != nil {
-			return zero, fmt.Errorf("%w: evaluate findings capability", ErrUnavailable)
-		}
-		if evaluation != feature.EvaluationEnabled {
-			return zero, ErrRiskFeatureNotEnabled
-		}
+	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagRiskWatchdog, principal.OrganizationID, feature.OrgProjectGroups(orgSlug, project.Slug))
+	if err != nil {
+		return zero, fmt.Errorf("%w: evaluate findings capability", ErrUnavailable)
+	}
+	if evaluation != feature.EvaluationEnabled {
+		return zero, ErrRiskFeatureNotEnabled
 	}
 	params := chrepo.RiskSignalWindowParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), From: from, To: to}
 	policies, err := s.policies.ListRiskFindingPolicies(ctx, riskrepo.ListRiskFindingPoliciesParams{

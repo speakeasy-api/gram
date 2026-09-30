@@ -283,10 +283,13 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListRemoteSessionIssuersByProjectID :many
 -- Lists the project's own issuers plus each inherited tier the caller opts in
--- to, gated by its own boolean: include_organizational for organization-level
--- issuers inherited from the project's org, include_global for platform issuers
--- from the shared catalog. Both default off; organization_id is always passed
--- (the arm is off when include_organizational is false regardless of its value).
+-- to, each arm gated by its own boolean: include_project for the project's own
+-- issuers, include_organizational for organization-level issuers inherited from
+-- the project's org, include_global for platform issuers from the shared
+-- catalog. A caller listing one tier turns the other two off, which is how a
+-- tier's page stays its own however large another tier grows. organization_id
+-- is always passed (the arm is off when include_organizational is false
+-- regardless of its value).
 --
 -- Slugs are unique per (project_id, slug) and, separately, across the global
 -- partition; the organization tier has no slug uniqueness constraint at all. So
@@ -295,14 +298,38 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 -- issuer by slug must apply it explicitly rather than relying on row order,
 -- which is by descending uuidv7 (creation time) and therefore says nothing
 -- about tier.
+--
+-- Two optional filters narrow the listing without touching the keyset cursor,
+-- which stays on id alone:
+--   - search: a LIKE pattern the caller has already escaped and wrapped in
+--     wildcards, matched case-insensitively against name, slug and issuer.
+--   - hosts: issuers whose URL host is one of these. The caller expands an
+--     upstream host into itself plus its parent domains, so this is how an
+--     upstream at mcp.example.com finds the issuer at example.com. The host is
+--     lowercased and a trailing :443 or :80 dropped, matching how a browser
+--     reports URL.host. An empty or NULL set applies no filter.
 SELECT *
 FROM remote_session_issuers
 WHERE (
-    project_id = @project_id
+    (@include_project::boolean AND project_id = @project_id)
     OR (@include_organizational::boolean AND project_id IS NULL AND organization_id = @organization_id)
     OR (@include_global::boolean AND project_id IS NULL AND organization_id IS NULL)
   )
   AND deleted IS FALSE
+  AND (
+    sqlc.narg('search')::text IS NULL
+    OR name ILIKE sqlc.narg('search')::text
+    OR slug ILIKE sqlc.narg('search')::text
+    OR issuer ILIKE sqlc.narg('search')::text
+  )
+  AND (
+    COALESCE(cardinality(@hosts::text[]), 0) = 0
+    OR regexp_replace(
+      lower(substring(issuer FROM '^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]+)')),
+      ':(443|80)$',
+      ''
+    ) = ANY(@hosts::text[])
+  )
   AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
 ORDER BY id DESC
 LIMIT sqlc.arg('limit_value');
@@ -1153,6 +1180,7 @@ SET
     token_endpoint_auth_audience_format = COALESCE(sqlc.narg('token_endpoint_auth_audience_format'), token_endpoint_auth_audience_format),
     scope = COALESCE(sqlc.narg('scope')::text[], scope),
     audience = COALESCE(sqlc.narg('audience'), audience),
+    legacy_callback_url = COALESCE(sqlc.narg('legacy_callback_url'), legacy_callback_url),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -2474,10 +2502,12 @@ ORDER BY (user_session_issuer_id = @user_session_issuer_id::uuid) DESC, custom_d
 -- header.
 
 -- name: ListOrganizationRemoteSessionIssuers :many
--- All issuers in the org (organizational and project-specific) and — when the
--- caller opts in with include_global — platform issuers from the shared
--- catalog, each with its associated non-deleted client count and, for
--- project-specific issuers, the owning project name.
+-- Issuers in the org — organizational (include_organizational) and
+-- project-specific (include_project_specific) — and platform issuers from the
+-- shared catalog (include_global), each tier gated by its own boolean, each row
+-- with its associated non-deleted client count and, for project-specific
+-- issuers, the owning project name. A caller listing one tier turns the other
+-- two off, so a large catalog cannot fill a page meant for the org's own.
 --
 -- client_count mirrors the ORG REACHABILITY predicate used by the client
 -- queries: (i.organization_id = @org OR c.organization_id = @org). For an
@@ -2504,7 +2534,8 @@ SELECT
 FROM remote_session_issuers AS i
 LEFT JOIN projects AS p ON p.id = i.project_id
 WHERE (
-    i.organization_id = @organization_id
+    (@include_organizational::boolean AND i.project_id IS NULL AND i.organization_id = @organization_id)
+    OR (@include_project_specific::boolean AND i.project_id IS NOT NULL AND i.organization_id = @organization_id)
     OR (@include_global::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
   )
   AND i.deleted IS FALSE
@@ -2942,6 +2973,7 @@ SET
         WHEN sqlc.narg('audience')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('audience'), c.audience)
     END,
+    legacy_callback_url = COALESCE(sqlc.narg('legacy_callback_url'), c.legacy_callback_url),
     updated_at = clock_timestamp()
 FROM remote_session_issuers AS i
 WHERE c.id = @id
@@ -3610,6 +3642,7 @@ SET
         WHEN sqlc.narg('audience')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('audience'), audience)
     END,
+    legacy_callback_url = COALESCE(sqlc.narg('legacy_callback_url'), legacy_callback_url),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING *;

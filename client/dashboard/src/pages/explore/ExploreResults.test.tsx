@@ -210,6 +210,46 @@ describe("ExploreResults", () => {
     expect(screen.queryByTestId("chart")).toBeNull();
   });
 
+  it("ranks the summary as horizontal bars, largest first, by the ordered measure", () => {
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({
+          chartType: "ranked",
+          measures: [
+            { op: "count", field: "" },
+            { op: "sum", field: "duration_seconds" },
+          ],
+          orderBy: "sum_duration_seconds",
+        })}
+        chart={query()}
+        summary={loaded([
+          { user: "ann", count: 9, sum_duration_seconds: 10 },
+          { user: "bob", count: 1, sum_duration_seconds: 40 },
+        ])}
+      />,
+    );
+    expect(screen.getByText("Ranked by SUM(duration_seconds)")).toBeTruthy();
+    const labels = screen
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+    expect(labels).toEqual(["bob40", "ann10"]);
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("tables projected rows rather than ranking them when nothing is measured", () => {
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({ chartType: "ranked", measures: [] })}
+        chart={query()}
+        summary={loaded([{ user: "ann", time: "2026-09-14T10:15:30Z" }])}
+      />,
+    );
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.queryByRole("listitem")).toBeNull();
+  });
+
   it("tables projected rows, time first, when nothing is measured", () => {
     render(
       <ExploreResults

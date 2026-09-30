@@ -583,6 +583,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
+	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
@@ -718,6 +719,7 @@ func NewTemporalWorker(
 	// Killswitch expiry history and receipt retention
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
@@ -776,6 +778,41 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
+	// Schedules whose ID names the task queue: every worker owns its own copy.
+	if err := AddSlackDirectorySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add Slack directory sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddOktaApplicationSyncCoordinatorSchedule(ctx, env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(ctx, "failed to add okta application sync schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddTrustedDelegationCleanupSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
+	}
+
+	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
+	}
+
+	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
+	}
+
+	// Everything below is registered under a fixed ID and belongs to the
+	// shared queue. PR previews poll their own queue in the dev namespace; if
+	// they registered these, each preview would re-point dev's schedule at its
+	// own queue and dev's jobs would stop once that preview went away. Giving
+	// previews their own copies instead would still collide with dev, because
+	// the per-row workflows these sweeps start are keyed by database IDs and
+	// preview databases are clones of dev's.
+	if env.Queue() != sharedTaskQueue {
+		logger.InfoContext(ctx, "skipping fleet-wide schedules on non-shared task queue")
+		return
+	}
+
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add platform usage metrics schedule", attr.SlogError(err))
@@ -792,19 +829,9 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add openrouter daily spend schedule", attr.SlogError(err))
 	}
 
-	if err := AddSlackDirectorySweepSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add Slack directory sweep schedule", attr.SlogError(err))
-	}
-
 	if err := AddDeviceIntegrationSyncCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add device integration sync schedule", attr.SlogError(err))
-		}
-	}
-
-	if err := AddOktaApplicationSyncCoordinatorSchedule(ctx, env); err != nil {
-		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(ctx, "failed to add okta application sync schedule", attr.SlogError(err))
 		}
 	}
 
@@ -828,10 +855,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
 	}
 
-	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add assistant memories reaper schedule", attr.SlogError(err))
-	}
-
 	// One image recycle sweep per deployed runtime image: a new worker build
 	// carries a new image ref, so kicking on startup is the deploy signal.
 	// Best-effort — a failed kick just leaves runtimes to the lazy
@@ -844,8 +867,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
-	if err := AddTrustedDelegationCleanupSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
+	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant memories reaper schedule", attr.SlogError(err))
+	}
+
+	if err := AddMCPFindingEvidenceCleanupSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add MCP finding evidence cleanup schedule", attr.SlogError(err))
 	}
 
 	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {
@@ -866,14 +893,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddIdentityMapSyncSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add identity map sync schedule", attr.SlogError(err))
-	}
-
-	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
-	}
-
-	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddSpendRuleEvaluationSchedule(ctx, env); err != nil {

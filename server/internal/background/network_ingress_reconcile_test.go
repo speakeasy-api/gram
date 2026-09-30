@@ -105,6 +105,41 @@ func TestNetworkIngressWorkflowPassesTrustedScopeWithinActivityBudget(t *testing
 	require.Equal(t, 1, calls)
 }
 
+func TestNetworkIngressWorkflowKeepsRetryingPendingDeletion(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	calls := 0
+	env.RegisterActivityWithOptions(func(context.Context, NetworkIngressReconcileParams) (NetworkIngressReconcileResult, error) {
+		calls++
+		// The old policy stopped after five attempts. The test environment caps
+		// unlimited retries at ten, so eight failures prove the cap is gone.
+		if calls <= 8 {
+			return NetworkIngressReconcileResult{Requeue: false}, temporal.NewApplicationError("deletion_pending", "network_ingress")
+		}
+		return NetworkIngressReconcileResult{Requeue: false}, nil
+	}, activity.RegisterOptions{Name: NetworkIngressReconcileActivityName})
+	env.ExecuteWorkflow(NetworkIngressReconcileWorkflow, NetworkIngressReconcileParams{OrganizationID: "org_test", IngressID: uuid.New()})
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError(), "teardown that outlasts a short outage must still converge")
+	require.Equal(t, 9, calls)
+}
+
+func TestNetworkIngressWorkflowStopsOnRejectedProviderCredentials(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	calls := 0
+	env.RegisterActivityWithOptions(func(context.Context, NetworkIngressReconcileParams) (NetworkIngressReconcileResult, error) {
+		calls++
+		return NetworkIngressReconcileResult{Requeue: false}, temporal.NewNonRetryableApplicationError("provider_credentials_rejected", "network_ingress", nil)
+	}, activity.RegisterOptions{Name: NetworkIngressReconcileActivityName})
+	env.ExecuteWorkflow(NetworkIngressReconcileWorkflow, NetworkIngressReconcileParams{OrganizationID: "org_test", IngressID: uuid.New()})
+	require.True(t, env.IsWorkflowCompleted())
+	require.ErrorContains(t, env.GetWorkflowError(), "provider_credentials_rejected")
+	require.Equal(t, 1, calls)
+}
+
 func TestNetworkIngressWorkflowContinuesAsWrapperForChangedState(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite

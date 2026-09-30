@@ -160,14 +160,17 @@ func isKnownMCPToolAnnotation(annotation string) bool {
 	return slices.Contains(knownMCPToolAnnotations, annotation)
 }
 
-// ValidateMCPScopeOwnership requires every selected server or gateway to
-// belong to the policy's project.
-func ValidateMCPScopeOwnership(scope *MCPScope, projectServerIDs []uuid.UUID) error {
+// ValidateMCPScopeOwnership requires every selected target to belong to the
+// policy's project or the code-owned Platform MCP registry.
+func ValidateMCPScopeOwnership(scope *MCPScope, projectServerIDs, platformToolsetIDs []uuid.UUID) error {
 	if scope == nil {
 		return nil
 	}
-	owned := make(map[uuid.UUID]struct{}, len(projectServerIDs))
+	owned := make(map[uuid.UUID]struct{}, len(projectServerIDs)+len(platformToolsetIDs))
 	for _, id := range projectServerIDs {
+		owned[id] = struct{}{}
+	}
+	for _, id := range platformToolsetIDs {
 		owned[id] = struct{}{}
 	}
 	for _, server := range scope.Servers {
@@ -190,6 +193,18 @@ func ValidateMCPScopeSources(scope *MCPScope, sources []string) error {
 		}
 	}
 	return nil
+}
+
+// ValidateMCPScope applies the source and action constraints for policies
+// evaluated against individual MCP calls.
+func ValidateMCPScope(scope *MCPScope, sources []string, action string) error {
+	if err := ValidateMCPScopeSources(scope, sources); err != nil {
+		return err
+	}
+	if scope == nil || action == "flag" || action == "block" {
+		return nil
+	}
+	return fmt.Errorf("action %q cannot be used by an MCP-scoped policy; use flag or block", action)
 }
 
 func ValidateAction(action string) error {

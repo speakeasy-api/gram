@@ -732,37 +732,6 @@ WHERE id = @project_id
   AND deleted IS FALSE
 FOR UPDATE;
 
--- name: LockPlatformMCPProjectRegistrationQuota :exec
--- Serialize active-registration counting and desired-state creation for one
--- project. Callers acquire the receipt lock first, then this quota lock, then
--- the candidate-specific desired-state lock.
-SELECT pg_advisory_xact_lock(
-    hashtextextended(
-        jsonb_build_array('platform-mcp-registration-quota', @organization_id::text, @project_id::text)::text,
-        0
-    )
-);
-
--- name: CountActiveRegisteredPlatformMCPCatalogRegistrations :one
-SELECT COUNT(*)
-FROM platform_mcp_catalog_registrations
-WHERE organization_id = @organization_id
-  AND project_id = @project_id
-  AND status = 'registered'
-  AND deleted IS FALSE;
-
--- name: SoftDeletePendingPlatformMCPCatalogRegistration :exec
-UPDATE platform_mcp_catalog_registrations
-SET deleted_at = clock_timestamp()
-WHERE id = @registration_id
-  AND organization_id = @organization_id
-  AND project_id = @project_id
-  AND status = 'pending'
-  AND remote_mcp_server_id IS NULL
-  AND user_session_issuer_id IS NULL
-  AND mcp_server_id IS NULL
-  AND mcp_endpoint_id IS NULL;
-
 -- name: LockPlatformMCPCatalogRegistration :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
@@ -2059,8 +2028,7 @@ ORDER BY attachment.plugin_id NULLS FIRST, assignment.principal_urn NULLS FIRST;
 -- exact canonical matching in Go. Registration lifecycle changes do not erase
 -- durable provenance while the MCP and attachment remain live. Dashboard URL
 -- edits can preserve noncanonical spelling that SQL must not reinterpret.
--- Normal projects are capped at five registrations; 101 is a fail-closed
--- corruption guard rather than an application pagination boundary.
+-- Callers page by the last mcp_server_id they read.
 SELECT DISTINCT
     server.id AS mcp_server_id,
     remote.url AS remote_url
@@ -2093,8 +2061,9 @@ JOIN plugins AS plugin
 WHERE registration.organization_id = @organization_id
   AND registration.project_id = @project_id
   AND registration.catalog_provider = 'direct-remote-url-v1'
+  AND (sqlc.narg(after_mcp_server_id)::uuid IS NULL OR server.id > sqlc.narg(after_mcp_server_id)::uuid)
 ORDER BY server.id
-LIMIT 101;
+LIMIT @page_limit;
 
 -- name: ListDirectRemoteAdmissionMCPServersForRemote :many
 -- A remote URL edit affects every provenance-bound MCP server currently backed
@@ -2826,9 +2795,8 @@ LIMIT @row_limit;
 
 -- name: ListRiskFindingSpansForRecall :many
 -- Findings that drive inline masking of the recall digest. Message-anchored
--- rows only (the digest does not render content parts), with the canonical
--- suppression filters from risk's ListRiskResultsByChatFound: found, not
--- excluded, not swept as false positive, policy still enabled and not deleted.
+-- rows only (the digest does not render content parts): found, not excluded,
+-- not swept as false positive, policy still enabled and not deleted.
 -- Latest generation only, matching the transcript read: findings on
 -- superseded generations mask nothing the digest renders, so loading them
 -- would only let long, repeatedly compacted sessions inflate the scan.

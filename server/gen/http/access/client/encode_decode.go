@@ -7625,6 +7625,16 @@ func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantRes
 			res.Selectors[i] = unmarshalSelectorResponseBodyToAccessSelector(val)
 		}
 	}
+	if v.DirectSelectors != nil {
+		res.DirectSelectors = make([]*access.Selector, len(v.DirectSelectors))
+		for i, val := range v.DirectSelectors {
+			if val == nil {
+				res.DirectSelectors[i] = nil
+				continue
+			}
+			res.DirectSelectors[i] = unmarshalSelectorResponseBodyToAccessSelector(val)
+		}
+	}
 
 	return res
 }

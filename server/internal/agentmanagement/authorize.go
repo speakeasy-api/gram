@@ -28,8 +28,8 @@ const (
 	OwnedAgentTransfer  OwnerPredicate = "owned_agent_transfer"
 )
 
-// HumanContext is identity proven by an ordinary, nonsupport Gram session and
-// an active organization membership.
+// HumanContext is identity proven by an ordinary, nonsupport Gram session or
+// scoped OAuth consent and an active organization membership.
 type HumanContext struct {
 	Auth   *contextvalues.AuthContext
 	grants []authz.Grant
@@ -85,6 +85,9 @@ func ordinaryHumanAuth(ctx context.Context) (*contextvalues.AuthContext, error) 
 	if authCtx.APIKeyID != "" || authCtx.APIKeyName != "" || len(authCtx.APIKeyScopes) != 0 || authCtx.OrgWidePluginHooksKey {
 		return nil, oops.C(oops.CodeForbidden)
 	}
+	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
+		return nil, oops.C(oops.CodeForbidden)
+	}
 	if _, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
 		return nil, oops.C(oops.CodeForbidden)
 	}
@@ -112,6 +115,12 @@ func (a *Authorizer) requireHumanWithMemberships(ctx context.Context, dbtx repo.
 	if err != nil {
 		return HumanContext{}, err
 	}
+	return a.lockHumanMemberships(ctx, dbtx, authCtx, otherUserIDs...)
+}
+
+// Both validated dashboard sessions and scoped consent use the same live
+// membership locks and grants. Authentication stays at their separate entry points.
+func (a *Authorizer) lockHumanMemberships(ctx context.Context, dbtx repo.DBTX, authCtx *contextvalues.AuthContext, otherUserIDs ...string) (HumanContext, error) {
 	userIDs := append([]string{authCtx.UserID}, otherUserIDs...)
 	slices.Sort(userIDs)
 	for _, userID := range slices.Compact(userIDs) {
@@ -194,8 +203,14 @@ func (a *Authorizer) requireAgent(ctx context.Context, dbtx repo.DBTX, agentID u
 // membership locks. Ownership changes during acquisition fail closed rather than
 // acquiring another membership out of order. Owner-loss recovery uses
 // RequireTransfer instead, which does not require an active previous owner.
+// Scoped OAuth consent is accepted only for the selected agent and authorize
+// predicate; it cannot authenticate general dashboard management operations.
 func (a *Authorizer) RequireAgentOwnerForUpdate(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, predicate OwnerPredicate) (HumanContext, repo.Agent, error) {
 	authCtx, err := ordinaryHumanAuth(ctx)
+	if consent, ok := contextvalues.GetConsentBindingAuthorization(ctx); ok && predicate == OwnedAgentAuthorize && consent.AgentID == agentID {
+		authCtx, _ = contextvalues.GetAuthContext(ctx)
+		err = nil
+	}
 	if err != nil {
 		return HumanContext{}, repo.Agent{}, err
 	}
@@ -206,7 +221,7 @@ func (a *Authorizer) RequireAgentOwnerForUpdate(ctx context.Context, dbtx repo.D
 	if err != nil {
 		return HumanContext{}, repo.Agent{}, fmt.Errorf("observe selected agent owner: %w", err)
 	}
-	human, err := a.requireHumanWithMemberships(ctx, dbtx, observed.OwnerUserID)
+	human, err := a.lockHumanMemberships(ctx, dbtx, authCtx, observed.OwnerUserID)
 	if err != nil {
 		return HumanContext{}, repo.Agent{}, err
 	}

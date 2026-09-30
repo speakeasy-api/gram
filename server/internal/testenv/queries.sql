@@ -1081,6 +1081,13 @@ WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
 -- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
 
+-- name: SetAPIKeyExpiresAtFixture :exec
+-- Fast-forwards or rewinds an API key's expiry so tests can observe the
+-- authentication boundary a credential rotation's grace window creates.
+UPDATE api_keys
+SET expires_at = @expires_at
+WHERE key_hash = @key_hash;
+
 -- name: CountAssistantAttachments :one
 -- Count stored attachments, including those whose targets are soft-deleted.
 SELECT
@@ -1672,3 +1679,13 @@ AND p.proname IN ('validate_remote_session_ema_binding_scope', 'guard_remote_ses
 -- Test fixture: represent a binding created without application lifecycle defaults.
 UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
 WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id;
+
+-- name: SetUserLifecycleFixture :exec
+-- Test-only fixture: independently controls local/provider deletion and login
+-- timestamps, including restoring local state without clearing provider deletion.
+-- Users are global identities and have no project_id.
+UPDATE users
+SET deleted_at = sqlc.narg('deleted_at')::timestamptz,
+    workos_deleted_at = sqlc.narg('workos_deleted_at')::timestamptz,
+    last_login = sqlc.narg('last_login')::timestamptz
+WHERE id = @id;

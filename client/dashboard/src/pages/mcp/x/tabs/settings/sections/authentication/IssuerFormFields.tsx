@@ -9,7 +9,6 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
-import { getServerURL } from "@/lib/utils";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import {
   UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
@@ -22,18 +21,10 @@ import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
   isPrivateKeyJwtAuthMethod,
+  remoteLoginCallbackURL,
   type ClientType,
 } from "./issuerFormUtils";
-
-// remoteLoginCallbackURL is the single stable redirect_uri Gram uses for
-// every upstream OAuth provider, regardless of MCP server or slug (see
-// canonicalCallbackRouteBase in server/internal/remotesessions/challenge.go).
-// Manual clients need it registered on the upstream's app out-of-band; DCR
-// and CIMD clients send/publish it automatically, so this only surfaces
-// where the operator has to do that registration by hand.
-function remoteLoginCallbackURL(): string {
-  return `${getServerURL()}/mcp/remote_login_callback`;
-}
+import type { ReactNode } from "react";
 
 // RedirectURICallout shows the redirect_uri operators must register on the
 // upstream provider's OAuth app before typed-in client credentials will
@@ -458,17 +449,20 @@ export function ClientCredentialsFields({
 // OverridesFields renders the per-client OAuth dance overrides. Both fields
 // are optional and apply in both DCR and manual modes — they control what
 // Gram sends at authorize/token time, independent of how the client was
-// registered.
+// registered. scopeWarning renders under the scope input once it has text, for
+// callers whose issuer pins the requested scopes and so makes this field inert.
 export function OverridesFields({
   scopeOverride,
   audienceOverride,
   onScopeOverrideChange,
   onAudienceOverrideChange,
+  scopeWarning,
 }: {
   scopeOverride: string;
   audienceOverride: string;
   onScopeOverrideChange: (value: string) => void;
   onAudienceOverrideChange: (value: string) => void;
+  scopeWarning?: ReactNode;
 }): JSX.Element {
   return (
     <Stack gap={4} className="border-t pt-6">
@@ -486,6 +480,8 @@ export function OverridesFields({
           during the OAuth dance; otherwise it falls back to the issuer's
           scopes_supported.
         </Text>
+        {/* Only warn once there are client scopes to be overridden. */}
+        {scopeOverride.trim() && scopeWarning}
       </Stack>
 
       <Stack gap={2}>

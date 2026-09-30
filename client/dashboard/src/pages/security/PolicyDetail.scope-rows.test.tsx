@@ -23,6 +23,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   flagResult: vi.fn(),
+  step: "scope",
 }));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -62,7 +63,7 @@ vi.mock("@/routes", () => ({
 
 vi.mock("nuqs", () => ({
   useQueryState: (name: string) =>
-    name === "step" ? ["scope", vi.fn()] : [null, vi.fn()],
+    name === "step" ? [mocks.step, vi.fn()] : [null, vi.fn()],
 }));
 
 vi.mock("@/components/shadow-mcp/ShadowMCPPolicyServerSelector", () => ({
@@ -77,6 +78,31 @@ vi.mock("@gram/client/react-query/riskPoliciesUpdate.js", () => ({
   useRiskPoliciesUpdateMutation: () => ({ isPending: false, mutate: vi.fn() }),
 }));
 
+vi.mock("@gram/client/react-query/riskListMcpPlatformToolsets.js", () => ({
+  useRiskListMcpPlatformToolsets: () => ({
+    data: {
+      toolsets: [
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          name: "Gram assistant tools",
+          slug: "assistants",
+          tools: [
+            {
+              annotations: { destructiveHint: true },
+              name: "forgetMemory",
+            },
+            {
+              annotations: { readOnlyHint: true },
+              name: "recallMemory",
+            },
+          ],
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  }),
+}));
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: () => ({
     data: {
@@ -195,7 +221,9 @@ vi.mock("./use-cel-engine", () => ({
 }));
 
 vi.mock("./PolicyCenter", () => ({
-  ActionPicker: () => null,
+  ActionPicker: ({ formAction }: { formAction: string }) => (
+    <output data-testid="selected-policy-action">{formAction}</output>
+  ),
   CustomizeRulesSheet: () => null,
   PolicyAudiencePicker: () => null,
   RuleSelectList: () => null,
@@ -315,6 +343,7 @@ describe("StandardPolicyEditor scope rows", () => {
 
   beforeEach(() => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.step = "scope";
     vi.mocked(useSdkClient).mockReturnValue({
       access: { listShadowMCPInventory: vi.fn() },
     } as unknown as ReturnType<typeof useSdkClient>);
@@ -394,6 +423,22 @@ describe("StandardPolicyEditor scope rows", () => {
           .getAttribute("aria-checked"),
       ).toBe("true");
     });
+  });
+  it("coerces warn to block when switching to MCP scope", () => {
+    renderEditor(
+      policy({
+        action: "warn",
+        sources: ["gitleaks"],
+        mcpScope: undefined,
+      }),
+    );
+
+    mocks.step = "action";
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+
+    expect(screen.getByTestId("selected-policy-action").textContent).toBe(
+      "block",
+    );
   });
 
   it("renders one inspect row for every enabled detector", () => {
@@ -733,6 +778,47 @@ describe("PolicyMCPScopePicker all-server selection", () => {
           tools: ["listTickets"],
         },
       ],
+    });
+  });
+
+  it("selects individual Platform MCP tools", () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Gram assistant tools/ }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "recallMemory" }));
+
+    expect(
+      JSON.parse(screen.getByTestId("mcp-scope-payload").textContent ?? "null"),
+    ).toEqual({
+      allServers: false,
+      toolAnnotations: [],
+      servers: [
+        {
+          mcpServerId: "33333333-3333-4333-8333-333333333333",
+          tools: ["recallMemory"],
+        },
+      ],
+    });
+  });
+
+  it("includes Platform MCP toolsets in all-server selection", () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "All MCP servers" }));
+
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Gram assistant tools" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(
+      JSON.parse(screen.getByTestId("mcp-scope-payload").textContent ?? "null"),
+    ).toEqual({
+      allServers: true,
+      toolAnnotations: [],
+      servers: [],
     });
   });
 

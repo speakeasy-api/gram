@@ -69,6 +69,10 @@ type Service interface {
 	ListProjectMcpServers(context.Context, *ListProjectMcpServersPayload) (res *AdminListProjectMcpServersResult, err error)
 	// Lists activity belonging to an organization for admin operators.
 	ListOrganizationActivity(context.Context, *ListOrganizationActivityPayload) (res *AdminListOrganizationActivityResult, err error)
+	// Staff-only active user discovery.
+	ListUsers(context.Context, *ListUsersPayload) (res *AdminListUsersResult, err error)
+	// Staff-only active user discovery.
+	ListUserOrganizations(context.Context, *ListUserOrganizationsPayload) (res *AdminListUserOrganizationsResult, err error)
 	// Lists organizations for platform admin operations with optional search and
 	// filters. Defaults to created_at descending, with id ascending to break ties.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
@@ -225,6 +229,26 @@ type Service interface {
 	SaveRegistryEntry(context.Context, *SaveRegistryEntryPayload) (res *AdminRegistryEntry, err error)
 	// Staff-only registry administration.
 	SetRegistryEntryPublished(context.Context, *SetRegistryEntryPublishedPayload) (res *AdminRegistryEntry, err error)
+	// Read the onboarding steps the code defines, mirrored into the database, with
+	// their groups, methods and prerequisites.
+	ListOnboardingSteps(context.Context, *ListOnboardingStepsPayload) (res *AdminOnboardingStepList, err error)
+	// Read the vendors, plans and platforms the stack form offers, from the
+	// support matrix catalog.
+	GetOnboardingStackOptions(context.Context, *GetOnboardingStackOptionsPayload) (res *AdminOnboardingStackOptions, err error)
+	// Read the stack staff recorded for an organization: its vendors with plans
+	// and its device management.
+	GetOrganizationOnboardingStack(context.Context, *GetOrganizationOnboardingStackPayload) (res *AdminOnboardingStack, err error)
+	// Replace the stack recorded for an organization. Vendors and plans must come
+	// from the catalog; other needs a name and none clears it.
+	SetOrganizationOnboardingStack(context.Context, *SetOrganizationOnboardingStackPayload) (res *AdminOnboardingStack, err error)
+	// Returns live Stripe subscription details for confirmation before recording
+	// the subscription on a PAYG organization that has a customer and no
+	// subscription.
+	GetStripeSubscriptionCandidate(context.Context, *GetStripeSubscriptionCandidatePayload) (res *AdminStripeSubscriptionCandidate, err error)
+	// Records a Stripe subscription ID on a PAYG organization when its
+	// subscription ID is empty, after verifying the subscription belongs to the
+	// organization's Stripe customer.
+	SetStripeSubscription(context.Context, *SetStripeSubscriptionPayload) (res *AdminOrganization, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -247,7 +271,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [62]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished"}
+var MethodNames = [70]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "getStripeSubscriptionCandidate", "setStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -354,6 +378,24 @@ type AdminListProjectMcpServersResult struct {
 	McpServers []*AdminMcpServer
 }
 
+// AdminListUserOrganizationsResult is the result type of the admin service
+// listUserOrganizations method.
+type AdminListUserOrganizationsResult struct {
+	Organizations []*AdminUserOrganization
+	Total         int64
+	Page          int
+	Limit         int
+}
+
+// AdminListUsersResult is the result type of the admin service listUsers
+// method.
+type AdminListUsersResult struct {
+	Users []*AdminUser
+	Total int64
+	Page  int
+	Limit int
+}
+
 // MCP server surfaced to admin operators. Covers both server models:
 // mcp_servers rows and mcp_enabled toolsets that no mcp_servers row points at.
 type AdminMcpServer struct {
@@ -368,6 +410,11 @@ type AdminMcpServer struct {
 	// What backs the server. toolset_only is a toolset with no mcp_servers row.
 	Source    string
 	CreatedAt string
+}
+
+type AdminMdmVendorOption struct {
+	Slug string
+	Name string
 }
 
 type AdminMeterUsageBucket struct {
@@ -406,10 +453,74 @@ type AdminOnboardingConfiguration struct {
 	Presets []*AdminOnboardingPreset
 }
 
+type AdminOnboardingPlan struct {
+	Slug string
+	Name string
+}
+
+type AdminOnboardingPlatform struct {
+	Slug    string
+	Name    string
+	Family  string
+	Surface string
+}
+
 type AdminOnboardingPreset struct {
 	Key             string
 	Title           string
 	VisibleTaskKeys []string
+}
+
+// AdminOnboardingStack is the result type of the admin service
+// getOrganizationOnboardingStack method.
+type AdminOnboardingStack struct {
+	OrganizationID string
+	// The vendors the organization uses. Empty until staff record the stack.
+	Vendors []*AdminOnboardingStackVendor
+	// jamf, intune, iru, other or none. Absent until staff record the stack.
+	MdmVendor *string
+	// The software's name when mdm_vendor is other.
+	MdmVendorName *string
+}
+
+// AdminOnboardingStackOptions is the result type of the admin service
+// getOnboardingStackOptions method.
+type AdminOnboardingStackOptions struct {
+	// From the support matrix catalog, in catalog order.
+	Vendors []*AdminOnboardingVendorOption
+	// Device management software the form offers, ending with other.
+	MdmVendors []*AdminMdmVendorOption
+}
+
+type AdminOnboardingStackVendor struct {
+	Vendor string
+	// The plan the organization is on with this vendor. Absent for a vendor with
+	// no plans.
+	PlanSlug *string
+}
+
+type AdminOnboardingStep struct {
+	Slug        string
+	Title       string
+	Description string
+	// The group this card sits under. Absent for a top-level step.
+	ParentSlug *string
+	// How the step completes: manual, fact, or children for a group.
+	Completion string
+	// Whether an organization that never saved a selection sees the step.
+	HiddenByDefault bool
+	// Support matrix integration methods the step configures. Empty means the step
+	// applies to every stack.
+	MethodSlugs []string
+	// Slugs of the steps that must be done before this one.
+	Requires []string
+}
+
+// AdminOnboardingStepList is the result type of the admin service
+// listOnboardingSteps method.
+type AdminOnboardingStepList struct {
+	// Every step in wizard order; a group precedes its cards.
+	Steps []*AdminOnboardingStep
 }
 
 type AdminOnboardingTask struct {
@@ -417,6 +528,21 @@ type AdminOnboardingTask struct {
 	Title       string
 	Description string
 	Hidden      bool
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string
+	// True for a group that nests cards. Groups are not selectable: their
+	// visibility follows their cards.
+	Group bool
+}
+
+type AdminOnboardingVendorOption struct {
+	// Vendor name as the support matrix spells it.
+	Vendor string
+	// Plans the vendor sells. Empty for a vendor with no plans.
+	Plans []*AdminOnboardingPlan
+	// The vendor's products, all implied when the vendor is selected.
+	Platforms []*AdminOnboardingPlatform
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -637,6 +763,33 @@ type AdminStripeSubscription struct {
 	CancelAt           *string
 	CanceledAt         *string
 	PaymentFailed      bool
+}
+
+// AdminStripeSubscriptionCandidate is the result type of the admin service
+// getStripeSubscriptionCandidate method.
+type AdminStripeSubscriptionCandidate struct {
+	// Stripe subscription ID returned by Stripe.
+	ID string
+	// Stripe customer that owns the subscription.
+	CustomerID string
+	// Stripe subscription status.
+	Status string
+}
+
+type AdminUser struct {
+	ID                string
+	DisplayName       string
+	Email             string
+	LastLogin         *string
+	Organizations     []*AdminUserOrganization
+	OrganizationCount int64
+}
+
+type AdminUserOrganization struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt *string
 }
 
 type Asset struct {
@@ -951,6 +1104,12 @@ type GetMeterUsagePayload struct {
 	To *string
 }
 
+// GetOnboardingStackOptionsPayload is the payload type of the admin service
+// getOnboardingStackOptions method.
+type GetOnboardingStackOptionsPayload struct {
+	AdminSessionToken *string
+}
+
 // GetOrganizationChatAnalysisSettingsPayload is the payload type of the admin
 // service getOrganizationChatAnalysisSettings method.
 type GetOrganizationChatAnalysisSettingsPayload struct {
@@ -968,6 +1127,13 @@ type GetOrganizationFeaturesPayload struct {
 // GetOrganizationOnboardingPayload is the payload type of the admin service
 // getOrganizationOnboarding method.
 type GetOrganizationOnboardingPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetOrganizationOnboardingStackPayload is the payload type of the admin
+// service getOrganizationOnboardingStack method.
+type GetOrganizationOnboardingStackPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 }
@@ -1036,6 +1202,14 @@ type GetStripeCustomerPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 	StripeCustomerID  string
+}
+
+// GetStripeSubscriptionCandidatePayload is the payload type of the admin
+// service getStripeSubscriptionCandidate method.
+type GetStripeSubscriptionCandidatePayload struct {
+	AdminSessionToken    *string
+	OrganizationID       string
+	StripeSubscriptionID string
 }
 
 // GetStripeSubscriptionPayload is the payload type of the admin service
@@ -1184,6 +1358,12 @@ type ListIssuerConvergenceCandidatesResult struct {
 	NextCursor *string
 }
 
+// ListOnboardingStepsPayload is the payload type of the admin service
+// listOnboardingSteps method.
+type ListOnboardingStepsPayload struct {
+	AdminSessionToken *string
+}
+
 // ListOrganizationActivityPayload is the payload type of the admin service
 // listOrganizationActivity method.
 type ListOrganizationActivityPayload struct {
@@ -1295,6 +1475,23 @@ type ListRegistryEntriesPayload struct {
 	Cursor *string
 	// Page size; zero uses the server default of 25.
 	Limit *int32
+}
+
+// ListUserOrganizationsPayload is the payload type of the admin service
+// listUserOrganizations method.
+type ListUserOrganizationsPayload struct {
+	AdminSessionToken *string
+	UserID            string
+	Page              *int
+	Limit             *int
+}
+
+// ListUsersPayload is the payload type of the admin service listUsers method.
+type ListUsersPayload struct {
+	AdminSessionToken *string
+	Q                 *string
+	Page              *int
+	Limit             *int
 }
 
 // LoginPayload is the payload type of the admin service login method.
@@ -1526,6 +1723,19 @@ type SetOrganizationOnboardingPayload struct {
 	Preset *string
 }
 
+// SetOrganizationOnboardingStackPayload is the payload type of the admin
+// service setOrganizationOnboardingStack method.
+type SetOrganizationOnboardingStackPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	// Complete explicit list; an empty array records no vendors.
+	Vendors []*AdminOnboardingStackVendor
+	// jamf, intune, iru, other or none.
+	MdmVendor string
+	// Required when mdm_vendor is other, ignored otherwise.
+	MdmVendorName *string
+}
+
 // SetRegistryEntryPublishedPayload is the payload type of the admin service
 // setRegistryEntryPublished method.
 type SetRegistryEntryPublishedPayload struct {
@@ -1541,6 +1751,14 @@ type SetStripeCustomerPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 	StripeCustomerID  string
+}
+
+// SetStripeSubscriptionPayload is the payload type of the admin service
+// setStripeSubscription method.
+type SetStripeSubscriptionPayload struct {
+	AdminSessionToken    *string
+	OrganizationID       string
+	StripeSubscriptionID string
 }
 
 type SpendBucket struct {

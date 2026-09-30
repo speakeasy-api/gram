@@ -26,6 +26,7 @@ type Entry struct {
 	ID                   uuid.UUID
 	Data                 json.RawMessage
 	Published            bool
+	PublishedAt          time.Time
 	CreatedAt, UpdatedAt time.Time
 }
 
@@ -90,7 +91,7 @@ func entry(row repo.McpRegistryEntry, err error) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
-	return Entry{ID: row.ID, Data: row.Data, Published: row.Published, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}, nil
+	return Entry{ID: row.ID, Data: row.Data, Published: row.Published, PublishedAt: row.PublishedAt.Time, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}, nil
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (Entry, error) {

@@ -1,13 +1,13 @@
 import { CodeBlock } from "@/components/code";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Link as ExternalLink } from "@/components/ui/Link";
 import { Text } from "@/components/ui/Text";
 import { useAgentToken } from "@/hooks/useAgentToken";
+import { agentEgressHosts } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { useQuery } from "@tanstack/react-query";
 import React, { useId, useState } from "react";
@@ -103,8 +103,8 @@ function GenerateInlineButton({
   disabledReason?: string;
   existing: boolean;
 }) {
-  const label = existing ? "Rotate token" : "Generate token";
-  const pendingLabel = existing ? "Rotating…" : "Generating…";
+  const label = existing ? "Re-generate token" : "Generate token";
+  const pendingLabel = existing ? "Re-generating…" : "Generating…";
   return (
     <Button
       variant="secondary"
@@ -115,7 +115,7 @@ function GenerateInlineButton({
         disabled
           ? disabledReason
           : existing
-            ? "An agent token already exists — this rotates it and splices the new token into the setup script."
+            ? "Creates a new agent token and splices it into the setup script. Existing tokens keep working; revoke them under Settings → API Keys."
             : undefined
       }
       className="-my-1 inline-flex h-6 items-center px-2 py-0 align-middle text-xs"
@@ -138,7 +138,6 @@ function CloudSetupScript({
   const apiKeysHref = useOrgRoutes().apiKeys.href();
   const identityEmailId = useId();
   const [identityEmail, setIdentityEmail] = useState("");
-  const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
 
   const buildScript = (orgToken: string) =>
     buildCloudSetupCommand({
@@ -163,27 +162,19 @@ function CloudSetupScript({
     ? buildScript(generatedToken ?? CLOUD_ORG_TOKEN_SENTINEL)
     : "# Enter a reporting email above to generate the setup script.";
 
-  const handleGenerateOrRotate = () => {
-    if (hasExistingAgentKey) {
-      setRotateConfirmOpen(true);
-      return;
-    }
-    generate();
-  };
-
   const slots = generatedToken
     ? undefined
     : {
         [CLOUD_ORG_TOKEN_SENTINEL]: {
           node: (
             <GenerateInlineButton
-              onClick={handleGenerateOrRotate}
+              onClick={generate}
               pending={isPending}
               disabled={!canGenerate || !hasIdentityEmail}
               disabledReason={
-                hasIdentityEmail
-                  ? "Generating an agent token requires the org:admin role."
-                  : "Enter the reporting email before generating a token."
+                !hasIdentityEmail
+                  ? "Enter the reporting email before generating a token."
+                  : "Generating an agent token requires the org:admin role."
               }
               existing={hasExistingAgentKey}
             />
@@ -234,7 +225,7 @@ function CloudSetupScript({
       <Text small muted>
         Click{" "}
         <strong className="text-foreground">
-          {hasExistingAgentKey ? "Rotate token" : "Generate token"}
+          {hasExistingAgentKey ? "Re-generate token" : "Generate token"}
         </strong>{" "}
         to mint the <code>org_token</code>. Pin this version; auto-update is
         disabled because the VM lives minutes. Anyone who can use the
@@ -275,44 +266,6 @@ function CloudSetupScript({
           </AlertDescription>
         </Alert>
       )}
-
-      <Dialog open={rotateConfirmOpen} onOpenChange={setRotateConfirmOpen}>
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>Rotate device agent token?</Dialog.Title>
-            <Dialog.Description>
-              This expires the token currently stored in your Claude Code
-              environment.
-            </Dialog.Description>
-          </Dialog.Header>
-          <Alert variant="error">
-            <AlertTitle>Remote sessions will stop syncing policy</AlertTitle>
-            <AlertDescription>
-              Save the updated setup script in the shared environment. Anthropic
-              rebuilds the cached filesystem when the script changes, so
-              subsequent sessions pick up the new <code>org_token</code>. Until
-              then, policy will not sync.
-            </AlertDescription>
-          </Alert>
-          <Dialog.Footer>
-            <Button
-              variant="tertiary"
-              onClick={() => setRotateConfirmOpen(false)}
-            >
-              <Button.Text>Cancel</Button.Text>
-            </Button>
-            <Button
-              variant="destructive-primary"
-              onClick={() => {
-                setRotateConfirmOpen(false);
-                generate();
-              }}
-            >
-              <Button.Text>Rotate token</Button.Text>
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
     </div>
   );
 }
@@ -367,12 +320,12 @@ export function RemoteNetworkAccessStep(): React.JSX.Element {
         <strong className="text-foreground">
           Also include default list of common package managers
         </strong>{" "}
-        so GCS and package registries remain available, and add this host on its
-        own line:
+        so GCS and package registries remain available, and add each host below
+        on its own line:
       </Text>
-      <CodeBlock language="text">app.getgram.ai</CodeBlock>
+      <CodeBlock language="text">{agentEgressHosts().join("\n")}</CodeBlock>
       <Text small muted>
-        Without this host the agent cannot fetch policy or send hook events.
+        Without these hosts the agent cannot fetch policy or send hook events.
       </Text>
     </div>
   );

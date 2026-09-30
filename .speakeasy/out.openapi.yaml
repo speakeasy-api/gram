@@ -36159,6 +36159,17 @@ paths:
             format: int64
             type: integer
         - allowEmptyValue: true
+          description: 'Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.'
+          in: query
+          name: tier
+          schema:
+            description: 'Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.'
+            enum:
+              - organization
+              - project
+              - platform
+            type: string
+        - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
@@ -43618,6 +43629,108 @@ paths:
       x-speakeasy-name-override: removePluginServer
       x-speakeasy-react-hook:
         name: RemovePluginServer
+  /rpc/plugins.rotateObservabilityCredential:
+    post:
+      description: Rotate the observability plugin's hooks-scoped ingest credential. Mints a replacement key, republishes the marketplace when possible so installs pick it up, and either revokes previous plugin hooks keys immediately or keeps them valid for a grace window.
+      operationId: rotateObservabilityCredential
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateObservabilityCredentialRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotateObservabilityCredentialResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: rotateObservabilityCredential plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: rotateObservabilityCredential
+      x-speakeasy-react-hook:
+        name: RotateObservabilityCredential
   /rpc/plugins.setPluginAssignments:
     put:
       description: Replace all assignments for a plugin with the given list of principal URNs.
@@ -48598,7 +48711,7 @@ paths:
         name: RemoteSessionIssuerDuplicatePreflight
   /rpc/remoteSessionIssuers.list:
     get:
-      description: List remote_session_issuers in the caller's project.
+      description: 'List the remote_session_issuers the caller''s project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.'
       operationId: listRemoteSessionIssuers
       parameters:
         - allowEmptyValue: true
@@ -48616,6 +48729,33 @@ paths:
             description: Page size (default 50, max 100).
             format: int64
             type: integer
+        - allowEmptyValue: true
+          description: Only issuers whose name, slug or issuer URL contains this text, ignoring case.
+          in: query
+          name: search
+          schema:
+            description: Only issuers whose name, slug or issuer URL contains this text, ignoring case.
+            maxLength: 256
+            type: string
+        - allowEmptyValue: true
+          description: 'Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.'
+          in: query
+          name: upstream_host
+          schema:
+            description: 'Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.'
+            maxLength: 260
+            type: string
+        - allowEmptyValue: true
+          description: 'Only issuers from one tier: the project''s own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.'
+          in: query
+          name: tier
+          schema:
+            description: 'Only issuers from one tier: the project''s own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.'
+            enum:
+              - project
+              - organization
+              - platform
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -51332,6 +51472,122 @@ paths:
       x-speakeasy-react-hook:
         name: RiskGetCustomDetectionRule
         type: query
+  /rpc/risk.getMcpServerCounts:
+    get:
+      description: Get live finding counts per concrete MCP server over a window, largest first. Powers the MCP server filter pickers on Risk Events and Watchdog. Served from the ClickHouse findings store.
+      operationId: getRiskMcpServerCounts
+      parameters:
+        - allowEmptyValue: true
+          description: Inclusive start of the window. Defaults to 7 days before to.
+          in: query
+          name: from
+          schema:
+            description: Inclusive start of the window. Defaults to 7 days before to.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive end of the window. Defaults to now.
+          in: query
+          name: to
+          schema:
+            description: Exclusive end of the window. Defaults to now.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskMcpServerCountsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getRiskMcpServerCounts risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.signals
+      x-speakeasy-name-override: mcpServerCounts
+      x-speakeasy-react-hook:
+        name: RiskMcpServerCounts
   /rpc/risk.getOverview:
     get:
       description: Get risk overview metrics and trend data for the current project.
@@ -51896,6 +52152,14 @@ paths:
           schema:
             description: Exclusive end of the signals window. Defaults to now.
             format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Optional concrete MCP server ID. When set, every signal, KPI and exposure figure is computed from findings on that server only.
+          in: query
+          name: mcp_server_id
+          schema:
+            description: Optional concrete MCP server ID. When set, every signal, KPI and exposure figure is computed from findings on that server only.
+            format: uuid
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -52657,6 +52921,106 @@ paths:
       x-speakeasy-react-hook:
         name: RiskListExclusions
         type: query
+  /rpc/risk.listMCPPlatformToolsets:
+    get:
+      description: List code-owned Platform MCP toolsets available as risk policy scope targets.
+      operationId: listMCPPlatformToolsets
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMCPPlatformToolsetsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listMCPPlatformToolsets risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.policies
+      x-speakeasy-name-override: listMcpPlatformToolsets
+      x-speakeasy-react-hook:
+        name: RiskListMcpPlatformToolsets
   /rpc/risk.listPolicies:
     get:
       description: List all risk analysis policies for the current project.
@@ -54552,7 +54916,7 @@ paths:
         type: mutation
   /rpc/risk.unmaskResult:
     post:
-      description: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
+      description: Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.
       operationId: unmaskRiskResult
       parameters:
         - allowEmptyValue: true
@@ -74855,6 +75219,11 @@ components:
         subject:
           type: string
           description: The sub claim the issuer must assert, stored and compared exactly as supplied.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
       description: Form for admitting a workload subject and assigning its agent.
       required:
         - issuer
@@ -79102,7 +79471,7 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).'
+          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
           default: flag
           enum:
             - flag
@@ -86248,6 +86617,16 @@ components:
             $ref: '#/components/schemas/Key'
       required:
         - keys
+    ListMCPPlatformToolsetsResult:
+      type: object
+      properties:
+        toolsets:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskMCPPlatformToolset'
+          description: The available Platform MCP policy scope targets.
+      required:
+        - toolsets
     ListManagedDevicesResult:
       type: object
       properties:
@@ -86635,7 +87014,7 @@ components:
           description: The list of risk results with match content redacted to opaque fingerprints.
         total_count:
           type: integer
-          description: Total number of findings across all enabled policies.
+          description: Total number of findings matching the filters across all non-deleted policies.
           format: int64
       required:
         - results
@@ -86653,7 +87032,7 @@ components:
           description: The list of risk results.
         total_count:
           type: integer
-          description: Total number of findings across all enabled policies.
+          description: Total number of findings matching the filters across all non-deleted policies.
           format: int64
       required:
         - results
@@ -86661,6 +87040,11 @@ components:
     ListRoleGrant:
       type: object
       properties:
+        direct_selectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Selector'
+          description: The subset of this scope's selectors granted to the calling user by name rather than through a role or everyone. For allow scopes it holds only selectors naming a concrete resource, which outrank blocks inherited from roles or everyone on that resource. For blocked scopes it holds the caller's own blocks, which always apply. Omitted when empty.
         scope:
           type: string
           description: The scope slug this grant applies to.
@@ -86901,7 +87285,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SetupTask'
-          description: Setup tasks in catalog order.
+          description: Setup tasks in catalog order. A group precedes the cards under it.
       required:
         - tasks
     ListShadowMCPInventoryResult:
@@ -92099,8 +92483,10 @@ components:
       properties:
         allow_wildcard_admission:
           type: boolean
-          description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.
-          default: false
+          description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Checked when a wildcard rule is admitted and again on every lookup, so clearing it makes wildcard rules already written inert immediately.
+        description:
+          type: string
+          description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank is stored as none. At most 500 characters after trimming.
         issuer:
           type: string
           description: The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
@@ -92118,6 +92504,11 @@ components:
           type: boolean
           description: Register the issuer for the selected project alone rather than the whole organization. Defaults to false.
           default: false
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
       description: Form for trusting an external workload issuer.
       required:
         - name
@@ -92335,6 +92726,9 @@ components:
           type: string
           description: The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.
           format: uuid
+        legacy_callback_url:
+          type: boolean
+          description: Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.
         organization_id:
           type: string
           description: The owning organization id. Empty for legacy rows not yet backfilled and global clients.
@@ -92385,6 +92779,7 @@ components:
         - remote_session_issuer_id
         - user_session_issuer_ids
         - client_id
+        - legacy_callback_url
         - created_at
         - updated_at
         - grant_types
@@ -93609,6 +94004,39 @@ components:
           format: uuid
       required:
         - id
+    RiskMCPPlatformTool:
+      type: object
+      properties:
+        annotations:
+          $ref: '#/components/schemas/ToolAnnotations'
+        name:
+          type: string
+          description: The Platform MCP tool name.
+      required:
+        - name
+    RiskMCPPlatformToolset:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The stable policy-scope identity for this Platform MCP toolset.
+          format: uuid
+        name:
+          type: string
+          description: The display name for this Platform MCP toolset.
+        slug:
+          type: string
+          description: The reserved Platform MCP toolset slug.
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskMCPPlatformTool'
+          description: The code-owned tools in this Platform MCP toolset.
+      required:
+        - id
+        - slug
+        - name
+        - tools
     RiskMCPScope:
       type: object
       properties:
@@ -93647,6 +94075,29 @@ components:
           description: Custom tool names for this server. Omit to follow the policy tool rule; an empty list matches every tool on this server, unconditionally.
       required:
         - mcp_server_id
+    RiskMcpServerCount:
+      type: object
+      properties:
+        findings:
+          type: integer
+          description: Deduplicated live findings on this server in the window.
+          format: int64
+        mcp_server_id:
+          type: string
+          description: Concrete MCP server ID.
+      required:
+        - mcp_server_id
+        - findings
+    RiskMcpServerCountsResult:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskMcpServerCount'
+          description: Per-server finding counts, largest first. Servers with no findings are omitted.
+      required:
+        - servers
     RiskOverviewCategory:
       type: object
       properties:
@@ -93758,7 +94209,7 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).'
+          description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
           default: flag
           enum:
             - flag
@@ -94450,6 +94901,11 @@ components:
           type: string
           description: Event time of the latest finding in the window.
           format: date-time
+        mcp_server_ids:
+          type: array
+          items:
+            type: string
+          description: Concrete MCP server IDs the findings in this signal were observed on. Empty when no finding carries server attribution.
         previous_findings:
           type: integer
           description: Finding count in the equal-length window immediately before from.
@@ -94479,6 +94935,11 @@ components:
           type: integer
           description: Distinct teams with at least one finding in the window. Zero until team attribution is recorded on findings.
           format: int64
+        tool_names:
+          type: array
+          items:
+            type: string
+          description: Concrete tool names the findings in this signal were observed on. Empty when no finding carries tool attribution.
         top_users:
           type: array
           items:
@@ -94496,6 +94957,8 @@ components:
         - description
         - detection_sources
         - apps
+        - mcp_server_ids
+        - tool_names
         - severity
         - risk_score
         - findings
@@ -94643,9 +95106,16 @@ components:
         match:
           type: string
           description: The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).
+        reveal_state:
+          type: string
+          description: Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+          enum:
+            - available
+            - evidence_not_stored
       required:
         - id
         - match
+        - reveal_state
     RiskUserBreakdownResult:
       type: object
       properties:
@@ -94914,6 +95384,57 @@ components:
         - name
         - delegated_grants_version
         - requested_grants
+    RotateObservabilityCredentialRequestBody:
+      type: object
+      properties:
+        previous_key_fate:
+          type: string
+          description: What happens to existing observability plugin hooks keys after the replacement is minted.
+          enum:
+            - revoke_immediately
+            - grace
+      required:
+        - previous_key_fate
+    RotateObservabilityCredentialResult:
+      type: object
+      properties:
+        key:
+          type: string
+          description: The newly minted hooks-scoped API key. Returned only on this response.
+        key_prefix:
+          type: string
+          description: The recognizable prefix of the new key.
+        marketplace_republished:
+          type: boolean
+          description: Whether the published marketplace was updated with the new credential.
+        marketplace_update_deferred:
+          type: boolean
+          description: True when a marketplace exists but could not be updated yet (for example the organization is not approved for the latest hooks version, or GitHub publishing is unavailable). Existing marketplace installs keep the previous credential until the marketplace is republished.
+        previous_key_fate:
+          type: string
+          description: What happened to previous observability plugin hooks keys.
+          enum:
+            - revoke_immediately
+            - grace
+        previous_keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/RotatedObservabilityKey'
+          description: Previous observability plugin hooks keys that were revoked or scheduled to expire.
+        previous_keys_expire_at:
+          type: string
+          description: The latest deadline among previous keys when previous_key_fate is grace. Individual keys can expire earlier, so this is an upper bound rather than a shared deadline; per-key deadlines are on previous_keys.
+          format: date-time
+        previous_keys_retired:
+          type: boolean
+          description: Whether the chosen fate was applied to the previous keys. False means the replacement was created and published but retiring the previous keys failed, so they are still valid and the rotation should be retried.
+      required:
+        - key
+        - key_prefix
+        - previous_key_fate
+        - previous_keys
+        - previous_keys_retired
+        - marketplace_republished
     RotateTunneledMcpServerKeyForm:
       type: object
       properties:
@@ -94936,6 +95457,27 @@ components:
       required:
         - server
         - tunnel_key
+    RotatedObservabilityKey:
+      type: object
+      properties:
+        expires_at:
+          type: string
+          description: When this key stops authenticating. A key already inside a shorter grace window keeps its earlier deadline, so this can precede the rotation's own deadline. Absent when the key was revoked immediately.
+          format: date-time
+        id:
+          type: string
+          description: The API key ID.
+          format: uuid
+        key_prefix:
+          type: string
+          description: The recognizable prefix of the previous key.
+        name:
+          type: string
+          description: The API key name.
+      required:
+        - id
+        - name
+        - key_prefix
     SaveRiskEvalReviewRequestBody:
       type: object
       properties:
@@ -96378,12 +96920,18 @@ components:
         description:
           type: string
           description: Task description.
+        group:
+          type: boolean
+          description: 'True for a group that nests cards. A group has no card of its own: it is hidden when every card under it is, done when every visible card is, and cannot be assigned or marked by hand.'
         hidden:
           type: boolean
           description: Whether a platform administrator hid the task.
         key:
           type: string
           description: Stable code-owned task key.
+        parent_key:
+          type: string
+          description: Key of the group this card sits under. Absent for a top-level card or a group.
         status:
           type: string
           description: Effective task status.
@@ -96403,6 +96951,7 @@ components:
         - completed_by_fact
         - blocked_by
         - hidden
+        - group
     SetupTaskAssignee:
       type: object
       properties:
@@ -102154,6 +102703,9 @@ components:
           type: string
           description: The remote_session_client id.
           format: uuid
+        legacy_callback_url:
+          type: boolean
+          description: Platform admins only. Set true to run the client in compatibility mode with the legacy callback URL, or false to migrate it to the current callback URL once that URL is registered with the identity provider. Omit to leave unchanged.
         scope:
           type: array
           items:
@@ -102342,7 +102894,7 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).'
+          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.'
           enum:
             - flag
             - warn
@@ -104074,6 +104626,11 @@ components:
         subject:
           type: string
           description: The sub claim, exactly as stored.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for finding the admitted workload. Empty rather than absent where none are set.
         updated_at:
           type: string
           format: date-time
@@ -104095,6 +104652,7 @@ components:
         - subject
         - match_kind
         - name
+        - tags
         - agent_id
         - agent_name
         - wildcard_active
@@ -104126,6 +104684,9 @@ components:
         created_at:
           type: string
           format: date-time
+        description:
+          type: string
+          description: What the platform is and what runs on it. Empty rather than absent where none is set.
         id:
           type: string
           description: The workload issuer id.
@@ -104145,6 +104706,11 @@ components:
         project_id:
           type: string
           description: The owning project id; empty for an organization-tier issuer.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.
         updated_at:
           type: string
           format: date-time
@@ -104156,7 +104722,9 @@ components:
         - name
         - issuer
         - jwks_uri
+        - description
         - allow_wildcard_admission
+        - tags
         - created_at
         - updated_at
     KillswitchCapabilityKey: {type: string, enum: [mcp_tool_calls]}

@@ -3,14 +3,23 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AdminOnboardingTask = {
   description: string;
+  /**
+   * True for a group that nests cards. Groups are not selectable: their visibility follows their cards.
+   */
+  group: boolean;
   hidden: boolean;
   key: string;
+  /**
+   * Key of the group this card sits under. Absent for a top-level card or a group.
+   */
+  parentKey?: string | undefined;
   title: string;
 };
 
@@ -18,12 +27,21 @@ export type AdminOnboardingTask = {
 export const AdminOnboardingTask$inboundSchema: z.ZodMiniType<
   AdminOnboardingTask,
   unknown
-> = z.object({
-  description: z.string(),
-  hidden: z.boolean(),
-  key: z.string(),
-  title: z.string(),
-});
+> = z.pipe(
+  z.object({
+    description: z.string(),
+    group: z.boolean(),
+    hidden: z.boolean(),
+    key: z.string(),
+    parent_key: z.optional(z.string()),
+    title: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "parent_key": "parentKey",
+    });
+  }),
+);
 
 export function adminOnboardingTaskFromJSON(
   jsonString: string,

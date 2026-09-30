@@ -9,6 +9,10 @@ import { useCallback, useState } from "react";
 export const REVEAL_SCOPE: Scope = "chat:read";
 export const REVEAL_DENIED_REASON =
   "You need the chat:read scope to reveal flagged values.";
+// Shown wherever a finding's session transcript would open but the same scope
+// is missing, so the missing link or the sheet's 403 doesn't pass silently.
+export const TRANSCRIPT_DENIED_REASON =
+  "You don't have access to view session transcripts. Contact your admin to request the chat:read scope.";
 
 // The server redacts an absent match to this exact sentinel (no sha segment,
 // unlike a real fingerprint). A prompt-based policy finding records the judge's
@@ -41,20 +45,31 @@ export function isRedactionFingerprint(
 // reveal and caches the plaintext locally so re-toggling visibility (or a
 // second "reveal all" pass) never re-fetches or re-audits an already-seen
 // value. Each reveal is a real, audited server call — there is no client-side
-// stand-in for the plaintext until this resolves.
+// stand-in for the plaintext until this resolves. MCP findings recorded before
+// evidence storage existed resolve to evidenceNotStored instead.
 export function useUnmaskedMatch(resultId: string): {
   value: string | null;
   isLoading: boolean;
+  evidenceNotStored: boolean;
   reveal: () => void;
 } {
   const { mutate, isPending } = useRiskUnmaskResultMutation();
   const [value, setValue] = useState<string | null>(null);
+  const [evidenceNotStored, setEvidenceNotStored] = useState(false);
   const reveal = useCallback(() => {
-    if (value !== null || isPending) return;
+    if (value !== null || evidenceNotStored || isPending) return;
     mutate(
       { request: { riskIDRequestBody: { id: resultId } } },
-      { onSuccess: (res) => setValue(res.match) },
+      {
+        onSuccess: (res) => {
+          if (res.revealState === "evidence_not_stored") {
+            setEvidenceNotStored(true);
+            return;
+          }
+          setValue(res.match);
+        },
+      },
     );
-  }, [mutate, resultId, value, isPending]);
-  return { value, isLoading: isPending, reveal };
+  }, [mutate, resultId, value, evidenceNotStored, isPending]);
+  return { value, evidenceNotStored, isLoading: isPending, reveal };
 }

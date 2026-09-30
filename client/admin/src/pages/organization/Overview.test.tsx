@@ -34,6 +34,12 @@ vi.mock("sonner", () => ({
   toast: { success: mocks.toastSuccess },
 }));
 
+// The stack form has its own suite and reads through the SDK, which this suite
+// leaves unstubbed: unmocked it reaches the real fetch and waits on a socket.
+vi.mock("@/pages/organization/OnboardingStack", () => ({
+  OnboardingStack: () => <p>Stack form</p>,
+}));
+
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
   return {
@@ -179,6 +185,45 @@ describe("Overview", () => {
     expect(
       screen.queryByRole("button", { name: "Copy Stripe subscription ID" }),
     ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Set subscription ID" }),
+    ).toBeNull();
+  });
+
+  it("explains why a PAYG organization without a Stripe customer cannot record a subscription", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "payg",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const note = await screen.findByText(
+      /Set a Stripe customer ID before recording a subscription/,
+    );
+    expect(valueBeside("Stripe subscription ID").contains(note)).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: "Set subscription ID" }),
+    ).toBeNull();
+  });
+
+  it("lets a PAYG organization with a customer and no subscription record one", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      account_type: "payg",
+      stripe_customer_id: "cus_example",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Set subscription ID" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/Set a Stripe customer ID before recording/),
+    ).toBeNull();
   });
 
   it("links the WorkOS org ID to the WorkOS dashboard in a new tab", async () => {
@@ -216,6 +261,23 @@ describe("Overview", () => {
 
     await screen.findByRole("button", { name: "Copy WorkOS org ID" });
     expect(screen.queryByRole("link", { name: "Open in WorkOS" })).toBeNull();
+  });
+
+  it("holds the stack between the details and the danger zone", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Details" });
+    const stack = panelNamed("Stack");
+    expect(within(stack).getByText("Stack form")).toBeTruthy();
+    const order = screen
+      .getAllByRole("heading", { level: 5 })
+      .map((heading) => heading.textContent)
+      .filter((name) =>
+        ["Details", "Stack", "Danger zone"].includes(name ?? ""),
+      );
+    expect(order).toEqual(["Details", "Stack", "Danger zone"]);
   });
 
   it("marks an organization a platform admin created", async () => {

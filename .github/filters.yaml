@@ -140,6 +140,13 @@ webhooks-catalog:
 otel-collector:
   - "otel-collector/**"
 
+# Gates the automatic `preview` label in .github/workflows/pr.yaml.
+preview-ui:
+  - "client/admin/**/*.tsx"
+  - "client/dashboard/**/*.tsx"
+  - "client/admin/**/*.css"
+  - "client/dashboard/**/*.css"
+
 # Paths that were moved or retired. PRs must not add or modify files here —
 # stale generators, cherry-picks, or muscle memory can silently resurrect a
 # directory after it was relocated (e.g. client/sdk lived on for a year after

@@ -31,6 +31,26 @@ func TestEvaluateFlagInMemory(t *testing.T) {
 	require.Equal(t, feature.EvaluationIndeterminate, missing)
 }
 
+func TestInMemoryAnyDistinctIDFallback(t *testing.T) {
+	t.Parallel()
+
+	provider := &feature.InMemory{}
+	provider.SetFlag(testFeatureFlag, feature.AnyDistinctID, true)
+	provider.SetFlag(testFeatureFlag, "opted-out", false)
+
+	enabled, err := provider.IsFlagEnabled(t.Context(), testFeatureFlag, "anyone", nil)
+	require.NoError(t, err)
+	require.True(t, enabled)
+
+	evaluation, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "anyone", nil)
+	require.NoError(t, err)
+	require.Equal(t, feature.EvaluationEnabled, evaluation)
+
+	evaluation, err = feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "opted-out", nil)
+	require.NoError(t, err)
+	require.Equal(t, feature.EvaluationDisabled, evaluation)
+}
+
 func TestEvaluateFlagLegacyProviderIsIndeterminate(t *testing.T) {
 	t.Parallel()
 
