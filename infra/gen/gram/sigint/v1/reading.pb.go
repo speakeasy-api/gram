@@ -79,19 +79,19 @@ type Reading struct {
 	xxx_hidden_MessageId           *string                `protobuf:"bytes,6,opt,name=message_id,json=messageId"`
 	xxx_hidden_MessageRole         Reading_MessageRole    `protobuf:"varint,7,opt,name=message_role,json=messageRole,enum=gram.sigint.v1.Reading_MessageRole"`
 	xxx_hidden_SensorId            *string                `protobuf:"bytes,8,opt,name=sensor_id,json=sensorId"`
-	xxx_hidden_SensorSlug          *string                `protobuf:"bytes,19,opt,name=sensor_slug,json=sensorSlug"`
-	xxx_hidden_MessageCreatedAt    *string                `protobuf:"bytes,9,opt,name=message_created_at,json=messageCreatedAt"`
-	xxx_hidden_EvaluatedAt         *string                `protobuf:"bytes,10,opt,name=evaluated_at,json=evaluatedAt"`
+	xxx_hidden_SensorSlug          *string                `protobuf:"bytes,9,opt,name=sensor_slug,json=sensorSlug"`
+	xxx_hidden_MessageCreatedAt    *string                `protobuf:"bytes,10,opt,name=message_created_at,json=messageCreatedAt"`
+	xxx_hidden_EvaluatedAt         *string                `protobuf:"bytes,11,opt,name=evaluated_at,json=evaluatedAt"`
 	xxx_hidden_DefinitionHash      *string                `protobuf:"bytes,12,opt,name=definition_hash,json=definitionHash"`
 	xxx_hidden_ConfiguredModel     *string                `protobuf:"bytes,13,opt,name=configured_model,json=configuredModel"`
 	xxx_hidden_Models              []string               `protobuf:"bytes,14,rep,name=models"`
 	xxx_hidden_CompilerVersion     *string                `protobuf:"bytes,15,opt,name=compiler_version,json=compilerVersion"`
-	xxx_hidden_Actor               *Reading_Actor         `protobuf:"bytes,20,opt,name=actor"`
-	xxx_hidden_BillingUserId       *string                `protobuf:"bytes,21,opt,name=billing_user_id,json=billingUserId"`
-	xxx_hidden_Source              *string                `protobuf:"bytes,22,opt,name=source"`
-	xxx_hidden_Account             *Reading_Account       `protobuf:"bytes,23,opt,name=account"`
-	xxx_hidden_AssistantId         *string                `protobuf:"bytes,24,opt,name=assistant_id,json=assistantId"`
-	xxx_hidden_Replayed            bool                   `protobuf:"varint,25,opt,name=replayed"`
+	xxx_hidden_Actor               *Reading_Actor         `protobuf:"bytes,16,opt,name=actor"`
+	xxx_hidden_BillingUserId       *string                `protobuf:"bytes,17,opt,name=billing_user_id,json=billingUserId"`
+	xxx_hidden_Source              *string                `protobuf:"bytes,18,opt,name=source"`
+	xxx_hidden_Account             *Reading_Account       `protobuf:"bytes,19,opt,name=account"`
+	xxx_hidden_AssistantId         *string                `protobuf:"bytes,20,opt,name=assistant_id,json=assistantId"`
+	xxx_hidden_Replayed            bool                   `protobuf:"varint,21,opt,name=replayed"`
 	xxx_hidden_Result              isReading_Result       `protobuf_oneof:"result"`
 	XXX_raceDetectHookData         protoimpl.RaceDetectHookData
 	XXX_presence                   [1]uint32
@@ -766,9 +766,9 @@ func (x *Reading) ClearScore() {
 }
 
 const Reading_Result_not_set_case case_Reading_Result = 0
-const Reading_MultiLabel_case case_Reading_Result = 16
-const Reading_Choice_case case_Reading_Result = 17
-const Reading_Score_case case_Reading_Result = 18
+const Reading_MultiLabel_case case_Reading_Result = 22
+const Reading_Choice_case case_Reading_Result = 23
+const Reading_Score_case case_Reading_Result = 24
 
 func (x *Reading) WhichResult() case_Reading_Result {
 	if x == nil {
@@ -954,15 +954,15 @@ type isReading_Result interface {
 }
 
 type reading_MultiLabel_ struct {
-	MultiLabel *Reading_MultiLabel `protobuf:"bytes,16,opt,name=multi_label,json=multiLabel,oneof"`
+	MultiLabel *Reading_MultiLabel `protobuf:"bytes,22,opt,name=multi_label,json=multiLabel,oneof"`
 }
 
 type reading_Choice_ struct {
-	Choice *Reading_Choice `protobuf:"bytes,17,opt,name=choice,oneof"`
+	Choice *Reading_Choice `protobuf:"bytes,23,opt,name=choice,oneof"`
 }
 
 type reading_Score_ struct {
-	Score *Reading_Score `protobuf:"bytes,18,opt,name=score,oneof"`
+	Score *Reading_Score `protobuf:"bytes,24,opt,name=score,oneof"`
 }
 
 func (*reading_MultiLabel_) isReading_Result() {}
@@ -1785,7 +1785,7 @@ var File_gram_sigint_v1_reading_proto protoreflect.FileDescriptor
 
 const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x88\x0f\n" +
+	"\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf6\x0e\n" +
 	"\aReading\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
 	"\x15evaluation_attempt_id\x18\x02 \x01(\tR\x13evaluationAttemptId\x12'\n" +
@@ -1797,25 +1797,25 @@ const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"message_id\x18\x06 \x01(\tR\tmessageId\x12F\n" +
 	"\fmessage_role\x18\a \x01(\x0e2#.gram.sigint.v1.Reading.MessageRoleR\vmessageRole\x12\x1b\n" +
 	"\tsensor_id\x18\b \x01(\tR\bsensorId\x12\x1f\n" +
-	"\vsensor_slug\x18\x13 \x01(\tR\n" +
+	"\vsensor_slug\x18\t \x01(\tR\n" +
 	"sensorSlug\x12,\n" +
-	"\x12message_created_at\x18\t \x01(\tR\x10messageCreatedAt\x12!\n" +
-	"\fevaluated_at\x18\n" +
-	" \x01(\tR\vevaluatedAt\x12'\n" +
+	"\x12message_created_at\x18\n" +
+	" \x01(\tR\x10messageCreatedAt\x12!\n" +
+	"\fevaluated_at\x18\v \x01(\tR\vevaluatedAt\x12'\n" +
 	"\x0fdefinition_hash\x18\f \x01(\tR\x0edefinitionHash\x12)\n" +
 	"\x10configured_model\x18\r \x01(\tR\x0fconfiguredModel\x12\x16\n" +
 	"\x06models\x18\x0e \x03(\tR\x06models\x12)\n" +
 	"\x10compiler_version\x18\x0f \x01(\tR\x0fcompilerVersion\x123\n" +
-	"\x05actor\x18\x14 \x01(\v2\x1d.gram.sigint.v1.Reading.ActorR\x05actor\x12&\n" +
-	"\x0fbilling_user_id\x18\x15 \x01(\tR\rbillingUserId\x12\x16\n" +
-	"\x06source\x18\x16 \x01(\tR\x06source\x129\n" +
-	"\aaccount\x18\x17 \x01(\v2\x1f.gram.sigint.v1.Reading.AccountR\aaccount\x12!\n" +
-	"\fassistant_id\x18\x18 \x01(\tR\vassistantId\x12\x1a\n" +
-	"\breplayed\x18\x19 \x01(\bR\breplayed\x12E\n" +
-	"\vmulti_label\x18\x10 \x01(\v2\".gram.sigint.v1.Reading.MultiLabelH\x00R\n" +
+	"\x05actor\x18\x10 \x01(\v2\x1d.gram.sigint.v1.Reading.ActorR\x05actor\x12&\n" +
+	"\x0fbilling_user_id\x18\x11 \x01(\tR\rbillingUserId\x12\x16\n" +
+	"\x06source\x18\x12 \x01(\tR\x06source\x129\n" +
+	"\aaccount\x18\x13 \x01(\v2\x1f.gram.sigint.v1.Reading.AccountR\aaccount\x12!\n" +
+	"\fassistant_id\x18\x14 \x01(\tR\vassistantId\x12\x1a\n" +
+	"\breplayed\x18\x15 \x01(\bR\breplayed\x12E\n" +
+	"\vmulti_label\x18\x16 \x01(\v2\".gram.sigint.v1.Reading.MultiLabelH\x00R\n" +
 	"multiLabel\x128\n" +
-	"\x06choice\x18\x11 \x01(\v2\x1e.gram.sigint.v1.Reading.ChoiceH\x00R\x06choice\x125\n" +
-	"\x05score\x18\x12 \x01(\v2\x1d.gram.sigint.v1.Reading.ScoreH\x00R\x05score\x1ai\n" +
+	"\x06choice\x18\x17 \x01(\v2\x1e.gram.sigint.v1.Reading.ChoiceH\x00R\x06choice\x125\n" +
+	"\x05score\x18\x18 \x01(\v2\x1d.gram.sigint.v1.Reading.ScoreH\x00R\x05score\x1ai\n" +
 	"\x05Actor\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12(\n" +
 	"\x10external_user_id\x18\x02 \x01(\tR\x0eexternalUserId\x12\x1d\n" +
@@ -1851,8 +1851,7 @@ const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\x11MESSAGE_ROLE_USER\x10\x01\x12\x1a\n" +
 	"\x16MESSAGE_ROLE_ASSISTANT\x10\x02:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\x8c\x15B\b\n" +
-	"\x06resultJ\x04\b\v\x10\fR\n" +
-	"input_hashBAZ?github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1b\beditionsp\xe9\a"
+	"\x06resultBAZ?github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1b\beditionsp\xe9\a"
 
 var file_gram_sigint_v1_reading_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_gram_sigint_v1_reading_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
