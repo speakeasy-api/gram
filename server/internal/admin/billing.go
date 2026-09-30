@@ -393,9 +393,22 @@ func (s *Service) SetStripeSubscription(ctx context.Context, payload *gen.SetStr
 		return nil, oops.E(oops.CodeUnexpected, err, "lock Stripe subscription").LogError(ctx, s.logger)
 	}
 	// The advisory lock only serializes database assignments. Re-check the
-	// live Stripe subscription after acquiring it so a deletion in the
-	// meantime is not recorded.
-	organization, state, err = s.verifiedStripeSubscription(ctx, organization.ID, state.ID)
+	// organization on this transaction and the live Stripe subscription so
+	// a deletion in the meantime is not recorded.
+	organization, err = queries.AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        organization.ID,
+		AllowSlug: false,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read organization after locking Stripe subscription").LogError(ctx, s.logger)
+	}
+	if err := requirePaygSubscriptionAssignment(organization); err != nil {
+		return nil, err
+	}
+	state, err = s.liveStripeSubscriptionForOrganization(ctx, organization, state.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -437,17 +450,25 @@ func (s *Service) verifiedStripeSubscription(ctx context.Context, organizationID
 	if err != nil {
 		return repo.AdminGetOrganizationRow{}, nil, err
 	}
-	state, err := s.billing.GetStripeSubscriptionByID(ctx, subscriptionID)
+	state, err := s.liveStripeSubscriptionForOrganization(ctx, organization, subscriptionID)
 	if err != nil {
-		return repo.AdminGetOrganizationRow{}, nil, fmt.Errorf("get Stripe subscription: %w", err)
-	}
-	if state.CustomerID != organization.StripeCustomerID.String || state.ID != subscriptionID {
-		return repo.AdminGetOrganizationRow{}, nil, oops.E(oops.CodeConflict, nil, "Stripe subscription does not belong to the organization's Stripe customer")
-	}
-	if state.BillingCycleAnchor.IsZero() {
-		return repo.AdminGetOrganizationRow{}, nil, oops.E(oops.CodeConflict, nil, "Stripe subscription is missing a billing cycle anchor")
+		return repo.AdminGetOrganizationRow{}, nil, err
 	}
 	return organization, state, nil
+}
+
+func (s *Service) liveStripeSubscriptionForOrganization(ctx context.Context, organization repo.AdminGetOrganizationRow, subscriptionID string) (*stripeclient.SubscriptionState, error) {
+	state, err := s.billing.GetStripeSubscriptionByID(ctx, subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("get Stripe subscription: %w", err)
+	}
+	if state.CustomerID != organization.StripeCustomerID.String || state.ID != subscriptionID {
+		return nil, oops.E(oops.CodeConflict, nil, "Stripe subscription does not belong to the organization's Stripe customer")
+	}
+	if state.BillingCycleAnchor.IsZero() {
+		return nil, oops.E(oops.CodeConflict, nil, "Stripe subscription is missing a billing cycle anchor")
+	}
+	return state, nil
 }
 
 func (s *Service) paygSubscriptionAssignmentOrganization(ctx context.Context, organizationID string) (repo.AdminGetOrganizationRow, error) {
@@ -455,16 +476,23 @@ func (s *Service) paygSubscriptionAssignmentOrganization(ctx context.Context, or
 	if err != nil {
 		return repo.AdminGetOrganizationRow{}, err
 	}
-	if organization.AccountType != string(billing.TierPayg) {
-		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeConflict, nil, "subscription ID can only be set for a PAYG organization")
-	}
-	if !organization.StripeCustomerID.Valid || organization.StripeCustomerID.String == "" {
-		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeConflict, nil, "set a Stripe customer ID before setting a subscription ID")
-	}
-	if organization.StripeSubscriptionID.Valid && organization.StripeSubscriptionID.String != "" {
-		return repo.AdminGetOrganizationRow{}, oops.E(oops.CodeConflict, nil, "organization already has a Stripe subscription")
+	if err := requirePaygSubscriptionAssignment(organization); err != nil {
+		return repo.AdminGetOrganizationRow{}, err
 	}
 	return organization, nil
+}
+
+func requirePaygSubscriptionAssignment(organization repo.AdminGetOrganizationRow) error {
+	if organization.AccountType != string(billing.TierPayg) {
+		return oops.E(oops.CodeConflict, nil, "subscription ID can only be set for a PAYG organization")
+	}
+	if !organization.StripeCustomerID.Valid || organization.StripeCustomerID.String == "" {
+		return oops.E(oops.CodeConflict, nil, "set a Stripe customer ID before setting a subscription ID")
+	}
+	if organization.StripeSubscriptionID.Valid && organization.StripeSubscriptionID.String != "" {
+		return oops.E(oops.CodeConflict, nil, "organization already has a Stripe subscription")
+	}
+	return nil
 }
 
 func (s *Service) GetStripeSubscription(ctx context.Context, payload *gen.GetStripeSubscriptionPayload) (*gen.AdminStripeSubscription, error) {
