@@ -50,13 +50,26 @@ export function getApiBaseURL(): string {
   return import.meta.env.DEV ? window.location.origin : getServerURL();
 }
 
-// tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label
-// keeps the wildcard cert valid), tunnel.<host> otherwise.
-export function tunnelGatewayURL(): string {
-  const server = new URL(getServerURL());
-  const host =
-    server.host === "app.getgram.ai"
-      ? "tunnel.speakeasy.com"
+// Hosts serving the production dashboard. Compared exactly: a substring check
+// would also match dev.ai.speakeasy.com and preview hosts.
+const PROD_HOSTS = new Set(["app.getgram.ai", "ai.speakeasy.com"]);
+
+export function isProdHost(serverURL: string): boolean {
+  return PROD_HOSTS.has(new URL(serverURL).hostname);
+}
+
+// Hosts serving the dev dashboard, compared exactly like PROD_HOSTS.
+const DEV_HOSTS = new Set(["dev.getgram.ai", "dev.ai.speakeasy.com"]);
+
+// tunnel.speakeasy.com on every prod host, tunnel.dev.getgram.ai on every dev
+// host, tunnel-pr-N.<env> in previews (single label keeps the wildcard cert
+// valid), tunnel.<host> otherwise.
+export function tunnelGatewayURL(serverURL = getServerURL()): string {
+  const server = new URL(serverURL);
+  const host = PROD_HOSTS.has(server.hostname)
+    ? "tunnel.speakeasy.com"
+    : DEV_HOSTS.has(server.hostname)
+      ? "tunnel.dev.getgram.ai"
       : /^pr-\d+\./.test(server.host)
         ? `tunnel-${server.host}`
         : `tunnel.${server.host}`;
@@ -251,9 +264,11 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export function getCustomDomainCNAME(): string {
+export function getCustomDomainCNAME(serverURL = getServerURL()): string {
   try {
-    const url = new URL(getServerURL());
+    if (isProdHost(serverURL)) return "cname.getgram.ai.";
+    const url = new URL(serverURL);
+    if (DEV_HOSTS.has(url.hostname)) return "cname.dev.getgram.ai.";
     const parts = url.hostname.split(".");
     if (parts.length > 2) {
       parts[0] = parts[0] === "app" ? "cname" : `cname.${parts[0]}`;
