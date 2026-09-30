@@ -89155,6 +89155,9 @@ components:
         DistributionPlugin:
             type: object
             properties:
+                auto_created:
+                    type: boolean
+                    description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
                 description:
                     type: string
                 id:
@@ -89169,6 +89172,7 @@ components:
                 - id
                 - name
                 - is_default
+                - auto_created
         DomainDNSConfig:
             type: object
             properties:
@@ -99389,6 +99393,9 @@ components:
                     items:
                         $ref: '#/components/schemas/PluginAssignment'
                     description: Role/user assignments.
+                auto_created:
+                    type: boolean
+                    description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
                 created_at:
                     type: string
                     format: date-time
@@ -99428,6 +99435,7 @@ components:
                 - id
                 - name
                 - slug
+                - auto_created
                 - agent_plugins_v1_compatible
                 - created_at
                 - updated_at
