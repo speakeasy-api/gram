@@ -664,6 +664,7 @@ func TestRegistrationStoreRegistersManyServersInOneProject(t *testing.T) {
 	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 
+	registrationIDs := make(map[uuid.UUID]struct{})
 	for i := range 6 {
 		name := fmt.Sprintf("server-%d", i)
 		request := registrationRequest(project, name, name+"-key")
@@ -674,7 +675,9 @@ func TestRegistrationStoreRegistersManyServersInOneProject(t *testing.T) {
 		receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, request, receipt, "https://reviewed.example.test/"+name)
 		require.NoError(t, err)
 		require.Equal(t, receiptResultRegistered, receipt.ResultCode)
+		registrationIDs[receipt.RegistrationID.UUID] = struct{}{}
 	}
+	require.Len(t, registrationIDs, 6)
 }
 
 func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *testing.T) {

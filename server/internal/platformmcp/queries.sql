@@ -2028,8 +2028,7 @@ ORDER BY attachment.plugin_id NULLS FIRST, assignment.principal_urn NULLS FIRST;
 -- exact canonical matching in Go. Registration lifecycle changes do not erase
 -- durable provenance while the MCP and attachment remain live. Dashboard URL
 -- edits can preserve noncanonical spelling that SQL must not reinterpret.
--- Normal projects are capped at five registrations; 101 is a fail-closed
--- corruption guard rather than an application pagination boundary.
+-- Callers page by the last mcp_server_id they read.
 SELECT DISTINCT
     server.id AS mcp_server_id,
     remote.url AS remote_url
@@ -2062,8 +2061,9 @@ JOIN plugins AS plugin
 WHERE registration.organization_id = @organization_id
   AND registration.project_id = @project_id
   AND registration.catalog_provider = 'direct-remote-url-v1'
+  AND (sqlc.narg(after_mcp_server_id)::uuid IS NULL OR server.id > sqlc.narg(after_mcp_server_id)::uuid)
 ORDER BY server.id
-LIMIT 101;
+LIMIT @page_limit;
 
 -- name: ListDirectRemoteAdmissionMCPServersForRemote :many
 -- A remote URL edit affects every provenance-bound MCP server currently backed

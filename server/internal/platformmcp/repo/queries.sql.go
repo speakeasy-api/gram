@@ -4347,13 +4347,16 @@ JOIN plugins AS plugin
 WHERE registration.organization_id = $1
   AND registration.project_id = $2
   AND registration.catalog_provider = 'direct-remote-url-v1'
+  AND ($3::uuid IS NULL OR server.id > $3::uuid)
 ORDER BY server.id
-LIMIT 101
+LIMIT $4
 `
 
 type ListDirectRemoteAdmissionTargetCandidatesParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	AfterMcpServerID uuid.NullUUID
+	PageLimit        int32
 }
 
 type ListDirectRemoteAdmissionTargetCandidatesRow struct {
@@ -4365,10 +4368,14 @@ type ListDirectRemoteAdmissionTargetCandidatesRow struct {
 // exact canonical matching in Go. Registration lifecycle changes do not erase
 // durable provenance while the MCP and attachment remain live. Dashboard URL
 // edits can preserve noncanonical spelling that SQL must not reinterpret.
-// Normal projects are capped at five registrations; 101 is a fail-closed
-// corruption guard rather than an application pagination boundary.
+// Callers page by the last mcp_server_id they read.
 func (q *Queries) ListDirectRemoteAdmissionTargetCandidates(ctx context.Context, arg ListDirectRemoteAdmissionTargetCandidatesParams) ([]ListDirectRemoteAdmissionTargetCandidatesRow, error) {
-	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionTargetCandidates, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionTargetCandidates,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AfterMcpServerID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
