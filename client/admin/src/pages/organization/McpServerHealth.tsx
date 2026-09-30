@@ -484,7 +484,7 @@ function ToolCallsChart({
   const unit = weekly ? "week" : "day";
 
   const summary = worst
-    ? `${failed} of ${total} calls failed; the worst ${unit} was ${fmtBucketDay(worst.bucketStart)} with ${worst.failed} of ${worst.total}.`
+    ? `${failed} of ${total} calls failed; the worst ${unit} was ${bucketName(worst, weekly)} with ${worst.failed} of ${worst.total}.`
     : `${total} calls, none failed.`;
 
   return (
@@ -506,6 +506,7 @@ function ToolCallsChart({
             "flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.8125rem]",
           )}
         >
+          <span>Calls reaching the server</span>
           <span className="inline-flex items-center gap-1.5">
             <Square ok />
             OK{" "}
@@ -536,6 +537,7 @@ function ToolCallsChart({
               point={point}
               perSquare={perSquare}
               label={index % labelEvery === 0}
+              weekly={weekly}
               spike={point === worst}
             />
           ))}
@@ -552,9 +554,7 @@ function ToolCallsChart({
         prompt={platformMcpPrompt({
           ...prompt,
           range: rangeLabel(range),
-          worst:
-            worst &&
-            `${weekly ? "the week of " : ""}${fmtBucketDay(worst.bucketStart)}`,
+          worst: worst && bucketName(worst, weekly),
         })}
       />
     </section>
@@ -573,23 +573,36 @@ function Square({ ok = false }: { ok?: boolean }): JSX.Element {
   );
 }
 
+// Weekly buckets are aligned to the epoch, so they start on a Thursday, not a
+// Monday: the start date is named rather than implied.
+function bucketName(
+  point: AdminMcpServerHealthSeriesPoint,
+  weekly: boolean,
+): string {
+  const day = fmtBucketDay(point.bucketStart);
+  return weekly ? `the week of ${day}` : day;
+}
+
 function BucketColumn({
   point,
   perSquare,
   label,
+  weekly,
   spike,
 }: {
   point: AdminMcpServerHealthSeriesPoint;
   perSquare: number;
   label: boolean;
+  weekly: boolean;
   spike: boolean;
 }): JSX.Element {
   const squares = bucketSquares(point, perSquare);
   const day = fmtBucketDay(point.bucketStart);
   const share = point.total === 0 ? 0 : point.failed / point.total;
+  const name = weekly ? `Week of ${day}` : day;
   return (
     <div
-      title={`${day}: ${point.total - point.failed} OK, ${point.failed} failed (${fmtShare(share)})`}
+      title={`${name}: ${point.total - point.failed} OK, ${point.failed} failed (${fmtShare(share)})`}
       className="relative flex shrink-0 flex-col items-center gap-1.5"
     >
       {spike && (

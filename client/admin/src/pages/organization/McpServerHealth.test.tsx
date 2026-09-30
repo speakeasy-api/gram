@@ -305,6 +305,35 @@ describe("McpServerHealth", () => {
     );
   });
 
+  it("draws no validation badges for a client never validated", async () => {
+    respond = (windowDays) => {
+      const body = withIssuer(windowDays);
+      return {
+        ...body,
+        user_session_issuer: {
+          ...ISSUER,
+          remote_session_clients: [
+            {
+              ...CLIENT,
+              sessions: { ...CLIENT.sessions, validation_status_counts: {} },
+            },
+          ],
+        },
+      };
+    };
+    await open();
+    await screen.findByRole("heading", { name: "crm" });
+
+    const clients = screen.getByRole("region", {
+      name: "Remote session clients",
+    });
+    expect(within(clients).getByText("Not validated yet")).toBeTruthy();
+    expect(within(clients).queryByText(/\bvalid\b/)).toBe(null);
+    expect(card("Upstream accounts linked").textContent).not.toContain(
+      "invalid",
+    );
+  });
+
   it("names a legacy auth mode when there is no issuer", async () => {
     respond = (windowDays) => ({
       server: { ...SERVER, source: "toolset_only", visibility: "public" },
@@ -361,6 +390,10 @@ describe("McpServerHealth", () => {
     );
 
     await screen.findByRole("heading", { name: "Tool calls per week" });
+    // Weekly buckets name the week they start, whatever weekday that is.
+    expect(
+      screen.getByRole("img", { name: /the worst week was the week of Sep/ }),
+    ).toBeTruthy();
     expect(router.state.location.search).toEqual({
       project: PROJECT.id,
       window: 90,
