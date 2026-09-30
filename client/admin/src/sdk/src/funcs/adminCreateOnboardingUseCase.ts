@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery } from "../lib/encodings.js";
+import { encodeJSON } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -12,9 +12,13 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  AdminOnboardingConfiguration,
-  AdminOnboardingConfiguration$inboundSchema,
-} from "../models/components/adminonboardingconfiguration.js";
+  AdminOnboardingUseCase,
+  AdminOnboardingUseCase$inboundSchema,
+} from "../models/components/adminonboardingusecase.js";
+import {
+  CreateOnboardingUseCaseRequestBody,
+  CreateOnboardingUseCaseRequestBody$outboundSchema,
+} from "../models/components/createonboardingusecaserequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -29,23 +33,22 @@ import {
   ServiceError,
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
-import {
-  AdminGetOrganizationOnboardingRequest,
-  AdminGetOrganizationOnboardingRequest$outboundSchema,
-} from "../models/operations/admingetorganizationonboarding.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getOrganizationOnboarding admin
+ * createOnboardingUseCase admin
+ *
+ * @remarks
+ * Define a use case.
  */
-export function adminGetOrganizationOnboarding(
+export function adminCreateOnboardingUseCase(
   client: GramCore,
-  request: AdminGetOrganizationOnboardingRequest,
+  request: CreateOnboardingUseCaseRequestBody,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    AdminOnboardingConfiguration,
+    AdminOnboardingUseCase,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -66,12 +69,12 @@ export function adminGetOrganizationOnboarding(
 
 async function $do(
   client: GramCore,
-  request: AdminGetOrganizationOnboardingRequest,
+  request: CreateOnboardingUseCaseRequestBody,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      AdminOnboardingConfiguration,
+      AdminOnboardingUseCase,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -88,29 +91,26 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(AdminGetOrganizationOnboardingRequest$outboundSchema, value),
+      z.parse(CreateOnboardingUseCaseRequestBody$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload, { explode: true });
 
-  const path = pathToFunc("/admin/organization.onboarding")();
-
-  const query = encodeFormQuery({
-    "organization_id": payload.organization_id,
-  });
+  const path = pathToFunc("/admin/onboarding.useCases.create")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
   }));
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminGetOrganizationOnboarding",
+    operationID: "adminCreateOnboardingUseCase",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,
@@ -123,11 +123,10 @@ async function $do(
   };
 
   const requestRes = client._createRequest(context, {
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -154,7 +153,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    AdminOnboardingConfiguration,
+    AdminOnboardingUseCase,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -165,7 +164,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, AdminOnboardingConfiguration$inboundSchema),
+    M.json(200, AdminOnboardingUseCase$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

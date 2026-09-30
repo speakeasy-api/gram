@@ -12,13 +12,13 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  AdminOnboardingConfiguration,
-  AdminOnboardingConfiguration$inboundSchema,
-} from "../models/components/adminonboardingconfiguration.js";
+  AdminOnboardingPlaybook,
+  AdminOnboardingPlaybook$inboundSchema,
+} from "../models/components/adminonboardingplaybook.js";
 import {
-  SetOrganizationOnboardingRequestBody,
-  SetOrganizationOnboardingRequestBody$outboundSchema,
-} from "../models/components/setorganizationonboardingrequestbody.js";
+  CloneOnboardingPlaybookRequestBody,
+  CloneOnboardingPlaybookRequestBody$outboundSchema,
+} from "../models/components/cloneonboardingplaybookrequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -37,15 +37,18 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * setOrganizationOnboarding admin
+ * cloneOnboardingPlaybook admin
+ *
+ * @remarks
+ * Copy a playbook into a custom one for an organization, so staff can edit it for that organization alone.
  */
-export function adminSetOrganizationOnboarding(
+export function adminCloneOnboardingPlaybook(
   client: GramCore,
-  request: SetOrganizationOnboardingRequestBody,
+  request: CloneOnboardingPlaybookRequestBody,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    AdminOnboardingConfiguration,
+    AdminOnboardingPlaybook,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -66,12 +69,12 @@ export function adminSetOrganizationOnboarding(
 
 async function $do(
   client: GramCore,
-  request: SetOrganizationOnboardingRequestBody,
+  request: CloneOnboardingPlaybookRequestBody,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      AdminOnboardingConfiguration,
+      AdminOnboardingPlaybook,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -88,7 +91,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(SetOrganizationOnboardingRequestBody$outboundSchema, value),
+      z.parse(CloneOnboardingPlaybookRequestBody$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -97,7 +100,7 @@ async function $do(
   const payload = parsed.value;
   const body = encodeJSON("body", payload, { explode: true });
 
-  const path = pathToFunc("/admin/organization.onboarding")();
+  const path = pathToFunc("/admin/onboarding.playbooks.clone")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -107,7 +110,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminSetOrganizationOnboarding",
+    operationID: "adminCloneOnboardingPlaybook",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,
@@ -150,7 +153,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    AdminOnboardingConfiguration,
+    AdminOnboardingPlaybook,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -161,7 +164,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, AdminOnboardingConfiguration$inboundSchema),
+    M.json(200, AdminOnboardingPlaybook$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

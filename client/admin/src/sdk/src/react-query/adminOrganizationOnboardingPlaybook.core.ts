@@ -8,22 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminGetOrganizationOnboarding } from "../funcs/adminGetOrganizationOnboarding.js";
+import { adminGetOrganizationOnboardingPlaybook } from "../funcs/adminGetOrganizationOnboardingPlaybook.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { AdminOnboardingConfiguration } from "../models/components/adminonboardingconfiguration.js";
-import { AdminGetOrganizationOnboardingRequest } from "../models/operations/admingetorganizationonboarding.js";
+import { AdminOrganizationOnboardingPlaybook } from "../models/components/adminorganizationonboardingplaybook.js";
+import { AdminGetOrganizationOnboardingPlaybookRequest } from "../models/operations/admingetorganizationonboardingplaybook.js";
 import { unwrapAsync } from "../types/fp.js";
-export type AdminOrganizationOnboardingQueryData = AdminOnboardingConfiguration;
+export type AdminOrganizationOnboardingPlaybookQueryData =
+  AdminOrganizationOnboardingPlaybook;
 
-export function prefetchAdminOrganizationOnboarding(
+export function prefetchAdminOrganizationOnboardingPlaybook(
   queryClient: QueryClient,
   client$: GramCore,
-  request: AdminGetOrganizationOnboardingRequest,
+  request: AdminGetOrganizationOnboardingPlaybookRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildAdminOrganizationOnboardingQuery(
+    ...buildAdminOrganizationOnboardingPlaybookQuery(
       client$,
       request,
       options,
@@ -31,23 +32,23 @@ export function prefetchAdminOrganizationOnboarding(
   });
 }
 
-export function buildAdminOrganizationOnboardingQuery(
+export function buildAdminOrganizationOnboardingPlaybookQuery(
   client$: GramCore,
-  request: AdminGetOrganizationOnboardingRequest,
+  request: AdminGetOrganizationOnboardingPlaybookRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<AdminOrganizationOnboardingQueryData>;
+  ) => Promise<AdminOrganizationOnboardingPlaybookQueryData>;
 } {
   return {
-    queryKey: queryKeyAdminOrganizationOnboarding({
+    queryKey: queryKeyAdminOrganizationOnboardingPlaybook({
       organizationId: request.organizationId,
     }),
-    queryFn: async function adminOrganizationOnboardingQueryFn(
+    queryFn: async function adminOrganizationOnboardingPlaybookQueryFn(
       ctx,
-    ): Promise<AdminOrganizationOnboardingQueryData> {
+    ): Promise<AdminOrganizationOnboardingPlaybookQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -59,7 +60,7 @@ export function buildAdminOrganizationOnboardingQuery(
         signal: sig,
       };
 
-      return unwrapAsync(adminGetOrganizationOnboarding(
+      return unwrapAsync(adminGetOrganizationOnboardingPlaybook(
         client$,
         request,
         mergedOptions,
@@ -68,13 +69,13 @@ export function buildAdminOrganizationOnboardingQuery(
   };
 }
 
-export function queryKeyAdminOrganizationOnboarding(
+export function queryKeyAdminOrganizationOnboardingPlaybook(
   parameters: { organizationId: string },
 ): QueryKey {
   return [
     "@gram/admin-client",
     "admin",
-    "getOrganizationOnboarding",
+    "getOrganizationOnboardingPlaybook",
     parameters,
   ];
 }

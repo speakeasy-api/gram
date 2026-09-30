@@ -8,11 +8,11 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminSetOrganizationOnboarding } from "../funcs/adminSetOrganizationOnboarding.js";
+import { adminCreateOnboardingUseCase } from "../funcs/adminCreateOnboardingUseCase.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { AdminOnboardingConfiguration } from "../models/components/adminonboardingconfiguration.js";
-import { SetOrganizationOnboardingRequestBody } from "../models/components/setorganizationonboardingrequestbody.js";
+import { AdminOnboardingUseCase } from "../models/components/adminonboardingusecase.js";
+import { CreateOnboardingUseCaseRequestBody } from "../models/components/createonboardingusecaserequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,15 +28,14 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetAdminOrganizationOnboardingMutationVariables = {
-  request: SetOrganizationOnboardingRequestBody;
+export type CreateAdminOnboardingUseCaseMutationVariables = {
+  request: CreateOnboardingUseCaseRequestBody;
   options?: RequestOptions;
 };
 
-export type SetAdminOrganizationOnboardingMutationData =
-  AdminOnboardingConfiguration;
+export type CreateAdminOnboardingUseCaseMutationData = AdminOnboardingUseCase;
 
-export type SetAdminOrganizationOnboardingMutationError =
+export type CreateAdminOnboardingUseCaseMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -48,45 +47,48 @@ export type SetAdminOrganizationOnboardingMutationError =
   | SDKValidationError;
 
 /**
- * setOrganizationOnboarding admin
+ * createOnboardingUseCase admin
+ *
+ * @remarks
+ * Define a use case.
  */
-export function useSetAdminOrganizationOnboardingMutation(
+export function useCreateAdminOnboardingUseCaseMutation(
   options?: MutationHookOptions<
-    SetAdminOrganizationOnboardingMutationData,
-    SetAdminOrganizationOnboardingMutationError,
-    SetAdminOrganizationOnboardingMutationVariables
+    CreateAdminOnboardingUseCaseMutationData,
+    CreateAdminOnboardingUseCaseMutationError,
+    CreateAdminOnboardingUseCaseMutationVariables
   >,
 ): UseMutationResult<
-  SetAdminOrganizationOnboardingMutationData,
-  SetAdminOrganizationOnboardingMutationError,
-  SetAdminOrganizationOnboardingMutationVariables
+  CreateAdminOnboardingUseCaseMutationData,
+  CreateAdminOnboardingUseCaseMutationError,
+  CreateAdminOnboardingUseCaseMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetAdminOrganizationOnboardingMutation(client, options),
+    ...buildCreateAdminOnboardingUseCaseMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetAdminOrganizationOnboarding(): MutationKey {
-  return ["@gram/admin-client", "admin", "setOrganizationOnboarding"];
+export function mutationKeyCreateAdminOnboardingUseCase(): MutationKey {
+  return ["@gram/admin-client", "admin", "createOnboardingUseCase"];
 }
 
-export function buildSetAdminOrganizationOnboardingMutation(
+export function buildCreateAdminOnboardingUseCaseMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetAdminOrganizationOnboardingMutationVariables,
-  ) => Promise<SetAdminOrganizationOnboardingMutationData>;
+    variables: CreateAdminOnboardingUseCaseMutationVariables,
+  ) => Promise<CreateAdminOnboardingUseCaseMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetAdminOrganizationOnboarding(),
-    mutationFn: function setAdminOrganizationOnboardingMutationFn({
+    mutationKey: mutationKeyCreateAdminOnboardingUseCase(),
+    mutationFn: function createAdminOnboardingUseCaseMutationFn({
       request,
       options,
-    }): Promise<SetAdminOrganizationOnboardingMutationData> {
+    }): Promise<CreateAdminOnboardingUseCaseMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -99,7 +101,7 @@ export function buildSetAdminOrganizationOnboardingMutation(
           ),
         },
       };
-      return unwrapAsync(adminSetOrganizationOnboarding(
+      return unwrapAsync(adminCreateOnboardingUseCase(
         client$,
         request,
         mergedOptions,
