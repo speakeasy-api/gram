@@ -195,6 +195,18 @@ func ValidateMCPScopeSources(scope *MCPScope, sources []string) error {
 	return nil
 }
 
+// ValidateMCPScope applies the source and action constraints for policies
+// evaluated against individual MCP calls.
+func ValidateMCPScope(scope *MCPScope, sources []string, action string) error {
+	if err := ValidateMCPScopeSources(scope, sources); err != nil {
+		return err
+	}
+	if scope == nil || action == "flag" || action == "block" {
+		return nil
+	}
+	return fmt.Errorf("action %q cannot be used by an MCP-scoped policy; use flag or block", action)
+}
+
 func ValidateAction(action string) error {
 	switch action {
 	case "flag", "block", "warn", "quarantine":

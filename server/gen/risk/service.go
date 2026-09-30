@@ -372,7 +372,7 @@ type CreateRiskPolicyPayload struct {
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session).
+	// the hook session). MCP-scoped policies support flag and block only.
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -380,7 +380,8 @@ type CreateRiskPolicyPayload struct {
 	// server stores user:all.
 	AudiencePrincipalUrns []string
 	// Optional MCP server and tool restriction. Omit or send an empty server list
-	// to apply the policy to every MCP server.
+	// to apply the policy to every MCP server. When a non-empty scope is set, the
+	// action must be flag or block.
 	McpScope *types.RiskMCPScope
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
@@ -1681,7 +1682,7 @@ type UpdateRiskPolicyPayload struct {
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session).
+	// the hook session). MCP-scoped policies support flag and block only.
 	Action *string
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -1690,7 +1691,8 @@ type UpdateRiskPolicyPayload struct {
 	// principals.
 	AudiencePrincipalUrns []string
 	// Optional MCP server and tool restriction. Omit to preserve; send an empty
-	// server list to clear and apply the policy to every MCP server.
+	// server list to clear and apply the policy to every MCP server. When the
+	// resulting policy keeps an MCP scope, the action must be flag or block.
 	McpScope *types.RiskMCPScope
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
