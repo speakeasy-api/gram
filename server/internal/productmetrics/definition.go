@@ -96,6 +96,13 @@ func (r *Registry) RegisterDimensions(d Definition, rules ...AttributeRule) erro
 	seen := make(map[string]bool)
 	copyRules := make([]AttributeRule, len(rules))
 	for i, rule := range rules {
+		switch rule.Type {
+		case attribute.BOOL, attribute.INT64, attribute.FLOAT64, attribute.STRING, attribute.BOOLSLICE, attribute.INT64SLICE, attribute.FLOAT64SLICE, attribute.STRINGSLICE:
+		case attribute.INVALID, attribute.BYTESLICE, attribute.SLICE:
+			return fmt.Errorf("unsupported dimension type")
+		default:
+			return fmt.Errorf("unknown dimension type")
+		}
 		if rule.Namespace != "resource" && rule.Namespace != "scope" && rule.Namespace != "point" {
 			return fmt.Errorf("invalid dimension namespace")
 		}

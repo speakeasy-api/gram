@@ -14,6 +14,7 @@ func TestDimensionContract(t *testing.T) {
 	c.PointAttributes = []attribute.KeyValue{attribute.String("model", "small")}
 	r, err := NewRegistry(c.Definition)
 	require.NoError(t, err)
+	require.Error(t, r.RegisterDimensions(c.Definition, AttributeRule{Namespace: "point", Key: "payload", Type: attribute.BYTESLICE}))
 	require.NoError(t, r.RegisterDimensions(c.Definition, AttributeRule{Namespace: "point", Key: "model", Type: attribute.STRING, Values: []attribute.Value{attribute.StringValue("small")}}))
 	require.NoError(t, r.ValidateDimensions(c))
 	c.PointAttributes = []attribute.KeyValue{attribute.String("model", "unbounded")}
