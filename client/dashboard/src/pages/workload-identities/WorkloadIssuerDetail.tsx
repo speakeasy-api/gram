@@ -124,7 +124,7 @@ function IssuerDetail(): JSX.Element {
   const { page, pageRows, setPage } = usePagedRows({
     rows: visibleAdmissions,
     pageSize: MACHINES_PAGE_SIZE,
-    resetOn: [search],
+    resetOn: [issuerId, search],
   });
 
   const agents = useMemo(
