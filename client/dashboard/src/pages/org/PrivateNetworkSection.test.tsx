@@ -354,7 +354,7 @@ describe("PrivateNetworkSection", () => {
     expect(screen.getByText("Cleanup blocked")).toBeTruthy();
     expect(screen.queryByText("Cleaning up")).toBeNull();
     expect(
-      screen.getByText(/Tailscale rejected the OAuth client/),
+      screen.getByText(/Tailscale rejected the credentials saved/),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry cleanup" }));
     expect(state.deleteMutate).toHaveBeenCalledWith({

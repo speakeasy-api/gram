@@ -99,11 +99,11 @@ function PrivateNetworkCleanup({
         </div>
         {credentialsRejected ? (
           <Alert variant="error" dismissible={false}>
-            Tailscale rejected the OAuth client this connection uses, so Gram
-            can't remove its devices from your tailnet. Re-enable or restore
-            that OAuth client in the Tailscale admin console, then retry
-            cleanup. If the client was deleted, contact support to finish
-            cleanup.
+            Tailscale rejected the credentials saved for this connection, so
+            Gram can't remove its devices from your tailnet. If you disabled the
+            OAuth client or removed its scopes, restore them in the Tailscale
+            admin console, then retry cleanup. If the client or its secret was
+            deleted or regenerated, contact support to finish cleanup.
           </Alert>
         ) : (
           <Alert variant="info" dismissible={false}>

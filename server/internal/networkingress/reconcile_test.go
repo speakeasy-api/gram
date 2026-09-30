@@ -211,6 +211,16 @@ func TestNetworkIngressExecutorSurfacesRejectedCredentialsDuringCleanup(t *testi
 	result, err = ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
 	require.NoError(t, err)
 	require.Nil(t, result.Ingress.LastError, "progressing teardown clears the blocker")
+
+	deleteErr = fmt.Errorf("%w: Tailnet", k8s.ErrNetworkIngressProviderCredentialsRejected)
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	require.ErrorContains(t, err, "provider_credentials_rejected")
+	deleteErr = nil
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	require.NoError(t, err)
+	row, err := repo.New(ti.conn).GetNetworkIngressForReconcile(ctx, repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	require.False(t, row.LastError.Valid, "completed teardown clears the blocker")
 }
 
 func TestNetworkIngressExecutorGateClosesBeforeApply(t *testing.T) {

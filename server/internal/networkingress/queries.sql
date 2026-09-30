@@ -277,6 +277,7 @@ UPDATE network_ingresses
 SET
     credentials_encrypted = NULL,
     provider_resources = '{}'::jsonb,
+    last_error = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
