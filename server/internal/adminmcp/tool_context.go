@@ -53,7 +53,7 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 			workflows = append(workflows, "inspect global support matrix facts without operator notes")
 		}
 		if onboardingReadsAvailable {
-			workflows = append(workflows, "inspect organization onboarding task configuration")
+			workflows = append(workflows, "inspect the onboarding playbook assigned to an organization")
 		}
 		if projectMCPReadsAvailable {
 			workflows = append(workflows, "inspect project MCP server inventory without URLs")

@@ -122,10 +122,6 @@ type Service interface {
 	// Records that an organization's enterprise trial converted to a signed
 	// contract.
 	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *MarkEnterpriseTrialConvertedResult, err error)
-	// GetOrganizationOnboarding implements getOrganizationOnboarding.
-	GetOrganizationOnboarding(context.Context, *GetOrganizationOnboardingPayload) (res *AdminOnboardingConfiguration, err error)
-	// SetOrganizationOnboarding implements setOrganizationOnboarding.
-	SetOrganizationOnboarding(context.Context, *SetOrganizationOnboardingPayload) (res *AdminOnboardingConfiguration, err error)
 	// Create a global remote_session_issuer (project_id NULL, organization_id
 	// NULL). Requires platform admin.
 	CreateGlobalIssuer(context.Context, *CreateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
@@ -241,6 +237,38 @@ type Service interface {
 	// Replace the stack recorded for an organization. Vendors and plans must come
 	// from the catalog; other needs a name and none clears it.
 	SetOrganizationOnboardingStack(context.Context, *SetOrganizationOnboardingStackPayload) (res *AdminOnboardingStack, err error)
+	// Read the use cases staff defined, each with its default playbook.
+	ListOnboardingUseCases(context.Context, *ListOnboardingUseCasesPayload) (res *AdminOnboardingUseCaseList, err error)
+	// Define a use case.
+	CreateOnboardingUseCase(context.Context, *CreateOnboardingUseCasePayload) (res *AdminOnboardingUseCase, err error)
+	// Rename or describe a use case. The slug never changes.
+	UpdateOnboardingUseCase(context.Context, *UpdateOnboardingUseCasePayload) (res *AdminOnboardingUseCase, err error)
+	// Retire a use case and its playbooks. Organizations assigned one of them fall
+	// back to their setup task selection.
+	DeleteOnboardingUseCase(context.Context, *DeleteOnboardingUseCasePayload) (res *AdminOnboardingUseCaseList, err error)
+	// Read every playbook, or, when an organization is named, the shared ones and
+	// its own.
+	ListOnboardingPlaybooks(context.Context, *ListOnboardingPlaybooksPayload) (res *AdminOnboardingPlaybookList, err error)
+	// Create a playbook from top-level steps, for a use case or for one
+	// organization, not both. Every prerequisite of a step must be in the
+	// playbook, before it. Marking a default replaces the use case's previous
+	// default.
+	CreateOnboardingPlaybook(context.Context, *CreateOnboardingPlaybookPayload) (res *AdminOnboardingPlaybook, err error)
+	// Replace a playbook's name, description, default mark and steps. A custom
+	// playbook is also checked against its organization's stack.
+	UpdateOnboardingPlaybook(context.Context, *UpdateOnboardingPlaybookPayload) (res *AdminOnboardingPlaybook, err error)
+	// Retire a playbook. Organizations assigned it fall back to their setup task
+	// selection.
+	DeleteOnboardingPlaybook(context.Context, *DeleteOnboardingPlaybookPayload) (res *AdminOnboardingPlaybookList, err error)
+	// Copy a playbook into a custom one for an organization, so staff can edit it
+	// for that organization alone.
+	CloneOnboardingPlaybook(context.Context, *CloneOnboardingPlaybookPayload) (res *AdminOnboardingPlaybook, err error)
+	// Read the playbook assigned to an organization and how each of its steps
+	// fares against the recorded stack.
+	GetOrganizationOnboardingPlaybook(context.Context, *GetOrganizationOnboardingPlaybookPayload) (res *AdminOrganizationOnboardingPlaybook, err error)
+	// Assign a playbook to an organization, or clear it. Rejected when a step's
+	// methods do not apply to the recorded stack; the error names the steps.
+	AssignOrganizationOnboardingPlaybook(context.Context, *AssignOrganizationOnboardingPlaybookPayload) (res *AdminOrganizationOnboardingPlaybook, err error)
 	// Returns live Stripe subscription details for confirmation before recording
 	// the subscription on a PAYG organization that has a customer and no
 	// subscription.
@@ -271,7 +299,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [70]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "getStripeSubscriptionCandidate", "setStripeSubscription"}
+var MethodNames = [79]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -443,16 +471,6 @@ type AdminMeterUsageResponse struct {
 	MeasurementMethod string
 }
 
-// AdminOnboardingConfiguration is the result type of the admin service
-// getOrganizationOnboarding method.
-type AdminOnboardingConfiguration struct {
-	OrganizationID string
-	// Absent for legacy organizations.
-	Preset  *string
-	Tasks   []*AdminOnboardingTask
-	Presets []*AdminOnboardingPreset
-}
-
 type AdminOnboardingPlan struct {
 	Slug string
 	Name string
@@ -465,10 +483,36 @@ type AdminOnboardingPlatform struct {
 	Surface string
 }
 
-type AdminOnboardingPreset struct {
-	Key             string
-	Title           string
-	VisibleTaskKeys []string
+// AdminOnboardingPlaybook is the result type of the admin service
+// createOnboardingPlaybook method.
+type AdminOnboardingPlaybook struct {
+	ID string
+	// Set for a shared playbook: the use case it belongs to.
+	UseCaseID   *string
+	UseCaseSlug *string
+	UseCaseName *string
+	// Set for a custom playbook: the one organization it belongs to. A playbook
+	// has a use case or an organization, never both.
+	OrganizationID *string
+	// That organization's name.
+	OrganizationName *string
+	Name             string
+	Description      string
+	// The default playbook of its use case. Only a shared playbook can be one.
+	IsDefault bool
+	// Top-level steps in walking order; a group brings its cards.
+	Steps []*AdminOnboardingPlaybookStep
+}
+
+// AdminOnboardingPlaybookList is the result type of the admin service
+// listOnboardingPlaybooks method.
+type AdminOnboardingPlaybookList struct {
+	Playbooks []*AdminOnboardingPlaybook
+}
+
+type AdminOnboardingPlaybookStep struct {
+	Slug  string
+	Title string
 }
 
 // AdminOnboardingStack is the result type of the admin service
@@ -516,6 +560,15 @@ type AdminOnboardingStep struct {
 	Requires []string
 }
 
+type AdminOnboardingStepApplicability struct {
+	Slug  string
+	Title string
+	// Whether the recorded stack supports the step.
+	Applies bool
+	// Why not, when it does not.
+	Reason string
+}
+
 // AdminOnboardingStepList is the result type of the admin service
 // listOnboardingSteps method.
 type AdminOnboardingStepList struct {
@@ -523,17 +576,22 @@ type AdminOnboardingStepList struct {
 	Steps []*AdminOnboardingStep
 }
 
-type AdminOnboardingTask struct {
-	Key         string
-	Title       string
+// AdminOnboardingUseCase is the result type of the admin service
+// createOnboardingUseCase method.
+type AdminOnboardingUseCase struct {
+	ID string
+	// Stable name the onboarding survey uses.
+	Slug        string
+	Name        string
 	Description string
-	Hidden      bool
-	// Key of the group this card sits under. Absent for a top-level card or a
-	// group.
-	ParentKey *string
-	// True for a group that nests cards. Groups are not selectable: their
-	// visibility follows their cards.
-	Group bool
+	// The default playbook, once one is marked.
+	DefaultPlaybookID *string
+}
+
+// AdminOnboardingUseCaseList is the result type of the admin service
+// listOnboardingUseCases method.
+type AdminOnboardingUseCaseList struct {
+	UseCases []*AdminOnboardingUseCase
 }
 
 type AdminOnboardingVendorOption struct {
@@ -604,6 +662,16 @@ type AdminOrganizationMember struct {
 	LastLogin *string
 	CreatedAt string
 	UpdatedAt string
+}
+
+// AdminOrganizationOnboardingPlaybook is the result type of the admin service
+// getOrganizationOnboardingPlaybook method.
+type AdminOrganizationOnboardingPlaybook struct {
+	OrganizationID string
+	// The assigned playbook. Absent until staff assign one.
+	Playbook *AdminOnboardingPlaybook
+	// Each step of the assigned playbook against the recorded stack.
+	Applicability []*AdminOnboardingStepApplicability
 }
 
 // AdminOrganizationStats is the result type of the admin service
@@ -808,6 +876,15 @@ type Asset struct {
 	UpdatedAt string
 }
 
+// AssignOrganizationOnboardingPlaybookPayload is the payload type of the admin
+// service assignOrganizationOnboardingPlaybook method.
+type AssignOrganizationOnboardingPlaybookPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	// Omit to clear the assignment.
+	PlaybookID *string
+}
+
 type AuditLog struct {
 	ID               string
 	ProjectID        *string
@@ -884,6 +961,16 @@ type ChangeTrialEndDatePayload struct {
 	ID string
 	// New trial end date in UTC.
 	EndsAt string
+}
+
+// CloneOnboardingPlaybookPayload is the payload type of the admin service
+// cloneOnboardingPlaybook method.
+type CloneOnboardingPlaybookPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	PlaybookID        string
+	// Defaults to the source name.
+	Name *string
 }
 
 // CreateGlobalIssuerPayload is the payload type of the admin service
@@ -985,6 +1072,31 @@ type CreateGlobalIssuerPayload struct {
 	ResourceIndicatorSupported *bool
 }
 
+// CreateOnboardingPlaybookPayload is the payload type of the admin service
+// createOnboardingPlaybook method.
+type CreateOnboardingPlaybookPayload struct {
+	AdminSessionToken *string
+	// The use case a shared playbook belongs to.
+	UseCaseID *string
+	// The one organization a custom playbook belongs to.
+	OrganizationID *string
+	Name           string
+	Description    *string
+	IsDefault      *bool
+	// Top-level step slugs in walking order.
+	StepSlugs []string
+}
+
+// CreateOnboardingUseCasePayload is the payload type of the admin service
+// createOnboardingUseCase method.
+type CreateOnboardingUseCasePayload struct {
+	AdminSessionToken *string
+	// Lowercase letters, digits and dashes.
+	Slug        string
+	Name        string
+	Description *string
+}
+
 // CreateOrganizationPayload is the payload type of the admin service
 // createOrganization method.
 type CreateOrganizationPayload struct {
@@ -1012,6 +1124,20 @@ type DeleteGlobalIssuerPayload struct {
 	// The remote_session_issuer id.
 	ID                string
 	AdminSessionToken *string
+}
+
+// DeleteOnboardingPlaybookPayload is the payload type of the admin service
+// deleteOnboardingPlaybook method.
+type DeleteOnboardingPlaybookPayload struct {
+	AdminSessionToken *string
+	PlaybookID        string
+}
+
+// DeleteOnboardingUseCasePayload is the payload type of the admin service
+// deleteOnboardingUseCase method.
+type DeleteOnboardingUseCasePayload struct {
+	AdminSessionToken *string
+	UseCaseID         string
 }
 
 // DisableOrganizationPayload is the payload type of the admin service
@@ -1124,9 +1250,9 @@ type GetOrganizationFeaturesPayload struct {
 	OrganizationID    string
 }
 
-// GetOrganizationOnboardingPayload is the payload type of the admin service
-// getOrganizationOnboarding method.
-type GetOrganizationOnboardingPayload struct {
+// GetOrganizationOnboardingPlaybookPayload is the payload type of the admin
+// service getOrganizationOnboardingPlaybook method.
+type GetOrganizationOnboardingPlaybookPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 }
@@ -1358,9 +1484,22 @@ type ListIssuerConvergenceCandidatesResult struct {
 	NextCursor *string
 }
 
+// ListOnboardingPlaybooksPayload is the payload type of the admin service
+// listOnboardingPlaybooks method.
+type ListOnboardingPlaybooksPayload struct {
+	AdminSessionToken *string
+	OrganizationID    *string
+}
+
 // ListOnboardingStepsPayload is the payload type of the admin service
 // listOnboardingSteps method.
 type ListOnboardingStepsPayload struct {
+	AdminSessionToken *string
+}
+
+// ListOnboardingUseCasesPayload is the payload type of the admin service
+// listOnboardingUseCases method.
+type ListOnboardingUseCasesPayload struct {
 	AdminSessionToken *string
 }
 
@@ -1711,18 +1850,6 @@ type SetOrganizationFeaturePayload struct {
 	Enabled           bool
 }
 
-// SetOrganizationOnboardingPayload is the payload type of the admin service
-// setOrganizationOnboarding method.
-type SetOrganizationOnboardingPayload struct {
-	AdminSessionToken *string
-	OrganizationID    string
-	// Complete explicit selection; an empty array selects no tasks.
-	VisibleTaskKeys []string
-	// A key from presets. Omit to preserve the saved preset. Null/reset is not
-	// supported.
-	Preset *string
-}
-
 // SetOrganizationOnboardingStackPayload is the payload type of the admin
 // service setOrganizationOnboardingStack method.
 type SetOrganizationOnboardingStackPayload struct {
@@ -1985,6 +2112,26 @@ type UpdateGlobalIssuerPayload struct {
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
 	// field leaves the stored value unchanged.
 	ResourceIndicatorSupported *bool
+}
+
+// UpdateOnboardingPlaybookPayload is the payload type of the admin service
+// updateOnboardingPlaybook method.
+type UpdateOnboardingPlaybookPayload struct {
+	AdminSessionToken *string
+	PlaybookID        string
+	Name              string
+	Description       *string
+	IsDefault         *bool
+	StepSlugs         []string
+}
+
+// UpdateOnboardingUseCasePayload is the payload type of the admin service
+// updateOnboardingUseCase method.
+type UpdateOnboardingUseCasePayload struct {
+	AdminSessionToken *string
+	UseCaseID         string
+	Name              string
+	Description       *string
 }
 
 // UpdateOrganizationPayload is the payload type of the admin service

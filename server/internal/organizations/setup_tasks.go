@@ -89,7 +89,7 @@ var setupTaskGroups = []setupTaskGroup{
 //  1. Add an entry here, under a group if it belongs to one and next to that
 //     group's other cards. Only an optional card is HiddenByDefault.
 //  2. Add its content to SETUP_CARDS in client/dashboard/src/pages/setup/setup-cards.tsx.
-//  3. Add its key to any onboardingPresets entry that should show it.
+//  3. Add it to the playbooks that should walk it, from the admin dashboard.
 //  4. Optionally mark it done from organization facts in projectSetupTasks.
 //
 // Tests on both sides fail if the catalog, SETUP_CARDS, groups, and presets
@@ -346,6 +346,16 @@ func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationI
 	for _, row := range rows {
 		stateByKey[row.TaskKey] = row
 	}
+	// An assigned playbook decides what the wizard walks and in what order;
+	// without one, the saved visibility and the catalog defaults do.
+	playbookOrder, followPlaybook, err := assignedPlaybookOrder(ctx, repo, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	selected := make(map[string]bool, len(playbookOrder))
+	for _, key := range playbookOrder {
+		selected[key] = true
+	}
 	membersByID := make(map[string]orgrepo.ListOrganizationUsersRow, len(members))
 	membersByEmail := make(map[string]orgrepo.ListOrganizationUsersRow, len(members))
 	slices.SortFunc(members, func(a, b orgrepo.ListOrganizationUsersRow) int {
@@ -387,6 +397,9 @@ func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationI
 			hidden = state.HiddenAt.Valid
 			assignee = setupTaskAssigneeView(state, membersByID, membersByEmail)
 		}
+		if followPlaybook {
+			hidden = !selected[definition.Key]
+		}
 		completedByFact := definition.Completion == setupTaskCompletionFact && setupTaskFact(definition.Key, facts)
 		if completedByFact {
 			status = setupTaskStatusDone
@@ -404,7 +417,51 @@ func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationI
 		}
 	}
 
+	if followPlaybook {
+		tasks = inPlaybookOrder(tasks, playbookOrder)
+	}
 	return withSetupTaskGroups(tasks), nil
+}
+
+// assignedPlaybookOrder returns the cards of the organization's playbook in
+// walking order, and whether a playbook is assigned at all.
+func assignedPlaybookOrder(ctx context.Context, repo *orgrepo.Queries, organizationID string) ([]string, bool, error) {
+	assignment, err := repo.GetOrganizationOnboardingPlaybookID(ctx, organizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, oops.E(oops.CodeUnexpected, err, "load onboarding playbook assignment")
+	}
+	if !assignment.PlaybookID.Valid {
+		return nil, false, nil
+	}
+	topLevel, err := repo.ListOrganizationOnboardingPlaybookSteps(ctx, organizationID)
+	if err != nil {
+		return nil, false, oops.E(oops.CodeUnexpected, err, "list onboarding playbook steps")
+	}
+	if len(topLevel) == 0 {
+		// The playbook was retired: back to the saved selection.
+		return nil, false, nil
+	}
+	return playbookCards(topLevel), true, nil
+}
+
+// inPlaybookOrder puts the playbook's cards first, in its order, and the rest
+// after in catalog order.
+func inPlaybookOrder(cards []*gen.SetupTask, order []string) []*gen.SetupTask {
+	sorted := make([]*gen.SetupTask, 0, len(cards))
+	for _, key := range order {
+		if card := setupTaskByKey(cards, key); card != nil {
+			sorted = append(sorted, card)
+		}
+	}
+	for _, card := range cards {
+		if !slices.Contains(order, card.Key) {
+			sorted = append(sorted, card)
+		}
+	}
+	return sorted
 }
 
 // setupTaskFact reports whether organization facts complete a fact-completed
@@ -556,9 +613,9 @@ func setupTaskAuditSnapshot(task *gen.SetupTask) *audit.OrganizationSetupTaskSna
 	}
 }
 
-// SubmitOnboardingSurvey applies the default playbook for the survey's use
-// case through the same path staff use in the admin dashboard. Callers never
-// pick tasks.
+// SubmitOnboardingSurvey assigns the default playbook of the survey's use
+// case, checked against the recorded stack like any assignment. Callers
+// never pick steps.
 func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.SubmitOnboardingSurveyPayload) (*gen.ListSetupTasksResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -567,13 +624,23 @@ func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.Submi
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	preset := defaultPlaybookForUseCase(payload.UseCase)
-	if preset == nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "unknown onboarding use case").LogError(ctx, s.logger)
+	queries := orgrepo.New(s.db)
+	useCase, err := queries.GetOnboardingUseCaseBySlug(ctx, payload.UseCase)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "unknown onboarding use case").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load onboarding use case").LogError(ctx, s.logger)
 	}
-	presetKey := preset.Key
+	playbook, err := queries.GetOnboardingDefaultPlaybook(ctx, conv.ToNullUUID(useCase.ID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "use case %q has no default playbook yet", payload.UseCase).LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load default onboarding playbook").LogError(ctx, s.logger)
+	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
-	if _, err := SaveOnboardingConfiguration(ctx, s.db, s.audit, ac.ActiveOrganizationID, preset.TaskKeys, &presetKey, actor, ac.Email); err != nil {
+	if _, err := AssignOrganizationOnboardingPlaybook(ctx, s.db, s.audit, ac.ActiveOrganizationID, &playbook.ID, actor, ac.Email); err != nil {
 		return nil, fmt.Errorf("save onboarding survey result: %w", err)
 	}
 	return s.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: nil, SessionToken: payload.SessionToken})

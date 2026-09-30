@@ -1140,3 +1140,158 @@ SELECT slug, vendor, name
 FROM support_matrix_plans
 WHERE deleted_at IS NULL
 ORDER BY sort_order, slug;
+
+-- name: LockOnboardingPlaybooks :exec
+SELECT pg_advisory_xact_lock(719438203);
+
+-- name: ListOnboardingUseCases :many
+SELECT u.id, u.slug, u.name, u.description, u.sort_order,
+  d.id AS default_playbook_id
+FROM onboarding_use_cases u
+LEFT JOIN onboarding_playbooks d ON d.use_case_id = u.id AND d.is_default AND d.organization_id IS NULL AND d.deleted_at IS NULL
+WHERE u.deleted_at IS NULL
+ORDER BY u.sort_order, u.name, u.id;
+
+-- name: GetOnboardingUseCase :one
+SELECT id, slug, name, description, sort_order
+FROM onboarding_use_cases
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: GetOnboardingUseCaseBySlug :one
+SELECT id, slug, name, description, sort_order
+FROM onboarding_use_cases
+WHERE slug = @slug AND deleted_at IS NULL;
+
+-- name: CreateOnboardingUseCase :one
+INSERT INTO onboarding_use_cases (slug, name, description, sort_order)
+VALUES (@slug, @name, @description, (SELECT coalesce(max(sort_order), 0) + 1 FROM onboarding_use_cases))
+RETURNING id, slug, name, description, sort_order;
+
+-- name: UpdateOnboardingUseCase :one
+UPDATE onboarding_use_cases
+SET name = @name, description = @description, updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL
+RETURNING id, slug, name, description, sort_order;
+
+-- name: DeleteOnboardingUseCase :execrows
+UPDATE onboarding_use_cases
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: DeleteOnboardingPlaybooksOfUseCase :exec
+UPDATE onboarding_playbooks
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE use_case_id = @use_case_id AND deleted_at IS NULL;
+
+-- name: ListOnboardingPlaybooks :many
+-- Every playbook, or, for an organization, the use cases' and its own. A
+-- playbook belongs to a use case or to an organization, never both.
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name,
+  om.name AS organization_name
+FROM onboarding_playbooks p
+LEFT JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.deleted_at IS NULL
+  AND (p.use_case_id IS NULL OR u.id IS NOT NULL)
+  AND (
+    sqlc.narg(organization_id)::text IS NULL
+    OR p.organization_id IS NULL
+    OR p.organization_id = sqlc.narg(organization_id)::text
+  )
+ORDER BY p.organization_id NULLS FIRST, u.sort_order, u.name, om.name, p.is_default DESC, p.name, p.id;
+
+-- name: GetOnboardingPlaybook :one
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name,
+  om.name AS organization_name
+FROM onboarding_playbooks p
+LEFT JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+LEFT JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = @id AND p.deleted_at IS NULL
+  AND (p.use_case_id IS NULL OR u.id IS NOT NULL);
+
+-- name: GetOnboardingDefaultPlaybook :one
+SELECT p.id, p.use_case_id, p.organization_id, p.name, p.description, p.is_default,
+  u.slug AS use_case_slug, u.name AS use_case_name
+FROM onboarding_playbooks p
+JOIN onboarding_use_cases u ON u.id = p.use_case_id AND u.deleted_at IS NULL
+WHERE p.use_case_id = @use_case_id AND p.is_default AND p.organization_id IS NULL AND p.deleted_at IS NULL;
+
+-- name: ListOnboardingPlaybookSteps :many
+SELECT ps.playbook_id, s.slug, s.title, ps.position
+FROM onboarding_playbook_steps ps
+JOIN onboarding_steps s ON s.id = ps.step_id AND s.deleted_at IS NULL
+WHERE ps.playbook_id = ANY(@playbook_ids::uuid[])
+ORDER BY ps.playbook_id, ps.position, s.slug;
+
+-- name: CreateOnboardingPlaybook :one
+INSERT INTO onboarding_playbooks (use_case_id, organization_id, name, description, is_default)
+VALUES (sqlc.narg(use_case_id)::uuid, sqlc.narg(organization_id)::text, @name, @description, @is_default)
+RETURNING id, use_case_id, organization_id, name, description, is_default;
+
+-- name: UpdateOnboardingPlaybook :one
+UPDATE onboarding_playbooks
+SET name = @name, description = @description, is_default = @is_default, updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL
+RETURNING id, use_case_id, organization_id, name, description, is_default;
+
+-- name: ClearOnboardingDefaultPlaybook :exec
+UPDATE onboarding_playbooks
+SET is_default = false, updated_at = clock_timestamp()
+WHERE use_case_id = @use_case_id AND organization_id IS NULL AND is_default AND deleted_at IS NULL AND id <> @keep_id;
+
+-- name: DeleteOnboardingPlaybook :execrows
+UPDATE onboarding_playbooks
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND deleted_at IS NULL;
+
+-- name: DeleteOnboardingPlaybookSteps :exec
+DELETE FROM onboarding_playbook_steps WHERE playbook_id = @playbook_id;
+
+-- name: InsertOnboardingPlaybookStep :execrows
+INSERT INTO onboarding_playbook_steps (playbook_id, step_id, position)
+SELECT @playbook_id, s.id, @position
+FROM onboarding_steps s
+WHERE s.slug = @slug AND s.deleted_at IS NULL;
+
+-- name: GetOrganizationOnboardingPlaybookID :one
+SELECT om.id AS organization_id, o.playbook_id
+FROM organization_metadata om
+LEFT JOIN organization_onboarding o ON o.organization_id = om.id
+WHERE om.id = @organization_id;
+
+-- name: SetOrganizationOnboardingPlaybook :exec
+INSERT INTO organization_onboarding (organization_id, playbook_id)
+VALUES (@organization_id::text, sqlc.narg(playbook_id)::uuid)
+ON CONFLICT (organization_id) DO UPDATE SET
+    playbook_id = EXCLUDED.playbook_id,
+    updated_at = clock_timestamp();
+
+-- name: ListOrganizationOnboardingPlaybookSteps :many
+SELECT s.slug
+FROM organization_onboarding o
+JOIN onboarding_playbooks p ON p.id = o.playbook_id AND p.deleted_at IS NULL
+JOIN onboarding_playbook_steps ps ON ps.playbook_id = p.id
+JOIN onboarding_steps s ON s.id = ps.step_id AND s.deleted_at IS NULL
+WHERE o.organization_id = @organization_id
+ORDER BY ps.position, s.slug;
+
+-- name: ListOnboardingStepMethodApplicability :many
+SELECT s.slug AS step_slug, m.slug AS method_slug, m.vendor AS method_vendor,
+  -- Over the stack's platforms of the method's own vendor, or of every vendor
+  -- for a method that belongs to none, so an unrelated vendor in the stack
+  -- never changes the verdict. A platform the matrix does not map the method
+  -- to is unknown, which is not the same as not applicable.
+  coalesce((
+    SELECT bool_and(mp.platform_id IS NOT NULL AND mp.applicability = 'na')
+    FROM support_matrix_platforms p
+    LEFT JOIN support_matrix_method_platforms mp ON mp.platform_id = p.id AND mp.integration_method_id = m.id AND mp.deleted_at IS NULL
+    WHERE p.deleted_at IS NULL AND p.vendor = ANY(@vendors::text[])
+      AND (m.vendor IN ('Cross-platform', 'Others') OR p.vendor = m.vendor)
+  ), false)::boolean AS not_applicable_everywhere
+FROM onboarding_step_methods sm
+JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL
+JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
+WHERE s.slug = ANY(@step_slugs::text[])
+ORDER BY s.slug, m.sort_order, m.slug;

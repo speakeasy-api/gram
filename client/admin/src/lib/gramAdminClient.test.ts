@@ -13,7 +13,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 });
 
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
-import type { SetOrganizationOnboardingRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingrequestbody";
+import type { SetOrganizationOnboardingStackRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingstackrequestbody";
 import type { SetStripeSubscriptionRequestBody } from "@gram/admin-client/models/components/setstripesubscriptionrequestbody";
 import type { AdminGetStripeSubscriptionCandidateRequest } from "@gram/admin-client/models/operations/admingetstripesubscriptioncandidate";
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
@@ -46,13 +46,13 @@ describe("generated admin boundary", () => {
     expectTypeOf(boundary.setAdminOrganizationFeature).parameters.toEqualTypeOf<
       [request: SetOrganizationFeatureRequestBody]
     >();
-    expectTypeOf(boundary.organizationOnboardingQuery).parameters.toEqualTypeOf<
-      [organizationId: string]
-    >();
     expectTypeOf(
-      boundary.setAdminOrganizationOnboarding,
+      boundary.organizationOnboardingStackQuery,
+    ).parameters.toEqualTypeOf<[organizationId: string]>();
+    expectTypeOf(
+      boundary.setAdminOrganizationOnboardingStack,
     ).parameters.toEqualTypeOf<
-      [request: SetOrganizationOnboardingRequestBody]
+      [request: SetOrganizationOnboardingStackRequestBody]
     >();
     expectTypeOf(boundary.setStripeSubscription).parameters.toEqualTypeOf<
       [request: SetStripeSubscriptionRequestBody]
@@ -160,23 +160,8 @@ describe("generated admin boundary", () => {
   it("keeps onboarding reads and writes same-origin and maps the generated contract", async () => {
     const body = {
       organization_id: "org_explicit",
-      preset: "gateway",
-      tasks: [
-        {
-          key: "create-marketplace",
-          title: "Create marketplace",
-          description: "Publish marketplace",
-          hidden: false,
-          group: false,
-        },
-      ],
-      presets: [
-        {
-          key: "gateway",
-          title: "Gateway",
-          visible_task_keys: ["create-marketplace", "distribute-servers"],
-        },
-      ],
+      vendors: [{ vendor: "Anthropic", plan_slug: "anthropic-team" }],
+      mdm_vendor: "jamf",
     };
     const fetch = vi.fn().mockImplementation(() =>
       Promise.resolve(
@@ -188,20 +173,14 @@ describe("generated admin boundary", () => {
     );
     vi.stubGlobal("fetch", fetch);
     const controller = new AbortController();
-    const query = boundary.organizationOnboardingQuery("org_explicit");
+    const query = boundary.organizationOnboardingStackQuery("org_explicit");
     const config = await query.queryFn?.({
       signal: controller.signal,
     } as never);
     expect(config).toMatchObject({
       organizationId: "org_explicit",
-      preset: "gateway",
-      presets: [
-        {
-          key: "gateway",
-          title: "Gateway",
-          visibleTaskKeys: ["create-marketplace", "distribute-servers"],
-        },
-      ],
+      vendors: [{ vendor: "Anthropic", planSlug: "anthropic-team" }],
+      mdmVendor: "jamf",
     });
     const read = fetch.mock.calls[0]![0] as Request;
     expect(new URL(read.url).searchParams.get("organization_id")).toBe(
@@ -212,8 +191,8 @@ describe("generated admin boundary", () => {
 
     const request = {
       organizationId: "org_explicit",
-      visibleTaskKeys: ["create-marketplace"],
-      preset: "gateway",
+      vendors: [{ vendor: "Anthropic", planSlug: "anthropic-team" }],
+      mdmVendor: "jamf",
       serverURL: "http://untrusted.example.test",
       options: {
         serverURL: "http://untrusted.example.test",
@@ -221,18 +200,20 @@ describe("generated admin boundary", () => {
       },
     } as const;
     await expect(
-      boundary.setAdminOrganizationOnboarding(request as never),
+      boundary.setAdminOrganizationOnboardingStack(request as never),
     ).resolves.toEqual(config);
     const write = fetch.mock.calls[1]![0] as Request;
     expect(write.method).toBe("POST");
     expect(await write.json()).toEqual({
       organization_id: "org_explicit",
-      visible_task_keys: ["create-marketplace"],
-      preset: "gateway",
+      vendors: [{ vendor: "Anthropic", plan_slug: "anthropic-team" }],
+      mdm_vendor: "jamf",
     });
     for (const sent of [read, write]) {
       expect(new URL(sent.url).origin).toBe(window.location.origin);
-      expect(new URL(sent.url).pathname).toBe("/admin/organization.onboarding");
+      expect(new URL(sent.url).pathname).toBe(
+        "/admin/organization.onboardingStack",
+      );
       expect(sent.credentials).toBe("same-origin");
       expect(sent.headers.has("Authorization")).toBe(false);
       expect(sent.headers.has("Cookie")).toBe(false);

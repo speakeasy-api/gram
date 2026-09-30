@@ -225,9 +225,9 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 	auditLogger := audit.NewLogger()
 	store := oauth.Approval.store
 	tools := newWriteTools(store, writes, oauth.Resource(), map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.
-		OperationSetOrganizationFeature:    &featureWriter{store: store, mutator: productfeatures.NewMutator(features, auditLogger), writes: writes, baseURL: oauth.Resource()},
-		OperationSetOrganizationOnboarding: &onboardingWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
-		OperationExtendOrganizationTrial:   &trialWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
+		OperationSetOrganizationFeature:               &featureWriter{store: store, mutator: productfeatures.NewMutator(features, auditLogger), writes: writes, baseURL: oauth.Resource()},
+		OperationAssignOrganizationOnboardingPlaybook: &onboardingPlaybookWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
+		OperationExtendOrganizationTrial:              &trialWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
 	})
 	for _, op := range writes.EnabledOperations() {
 		if tools.writers[op] == nil {

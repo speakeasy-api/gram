@@ -1188,15 +1188,15 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
 	orgSlug := org.Slug
 
-	config, err := LoadOnboardingConfiguration(ctx, s.db, org.ID)
+	tasks, err := projectSetupTasks(ctx, orgrepo.New(s.db), org.ID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "setup callback: read onboarding configuration", attr.SlogError(err))
-		span.SetStatus(codes.Error, "read onboarding configuration failed")
+		s.logger.ErrorContext(ctx, "setup callback: project setup tasks", attr.SlogError(err))
+		span.SetStatus(codes.Error, "project setup tasks failed")
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	visible := make(map[string]bool, len(config.Tasks))
-	for _, task := range config.Tasks {
+	visible := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
 		visible[task.Key] = !task.Hidden
 	}
 	// All identity setup steps belong to the combined card. Refresh domains even

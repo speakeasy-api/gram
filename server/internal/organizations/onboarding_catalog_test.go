@@ -10,22 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Presets and the card catalog are edited by hand; this keeps them in step.
-func TestOnboardingPresetsUseCatalogTasks(t *testing.T) {
-	t.Parallel()
-
-	seen := map[string]bool{}
-	for _, preset := range onboardingPresets {
-		require.NotEmpty(t, preset.Key)
-		require.NotEmpty(t, preset.Title, preset.Key)
-		require.False(t, seen[preset.Key], "duplicate preset %q", preset.Key)
-		seen[preset.Key] = true
-		for _, key := range preset.TaskKeys {
-			require.NotNil(t, setupTaskDefinitionForKey(key), "preset %q names unknown task %q", preset.Key, key)
-		}
-	}
-}
-
 func TestSetupTaskCatalogKeysAreUniqueAndPrerequisitesExist(t *testing.T) {
 	t.Parallel()
 
@@ -53,12 +37,9 @@ func TestIdentitySetupUsesOneCombinedTask(t *testing.T) {
 	require.NotNil(t, identity)
 	require.Empty(t, identity.Prerequisites, "domain verification is a nested step, not a task dependency")
 	require.Equal(t, "identity-provider", setupTaskCatalog[0].Key)
-	security := onboardingPresetByKey("security")
-	require.NotNil(t, security)
-	require.Contains(t, security.TaskKeys, "identity-provider")
 	for _, retired := range []string{"domain-verification", "connect-idp", "directory-sync"} {
 		require.Nil(t, setupTaskDefinitionForKey(retired))
-		require.NotContains(t, security.TaskKeys, retired)
+		require.Nil(t, setupTaskGroupForKey(retired))
 	}
 }
 func TestSetupTaskCatalogGroupsAreWellFormed(t *testing.T) {
@@ -172,4 +153,21 @@ func TestOnboardingStepRecordsPlaceGroupsBeforeTheirCards(t *testing.T) {
 	// but LiteLLM is, so both groups are.
 	require.False(t, records[position["agent-observability"]].HiddenByDefault)
 	require.False(t, records[position["mcp-distribution"]].HiddenByDefault)
+}
+
+// The catalog is the wizard's fallback order, so a prerequisite must come
+// before every card that needs it.
+func TestSetupTaskCatalogListsPrerequisitesFirst(t *testing.T) {
+	t.Parallel()
+
+	position := make(map[string]int, len(setupTaskCatalog))
+	for index, card := range setupTaskCatalog {
+		position[card.Key] = index
+	}
+	for _, card := range setupTaskCatalog {
+		for _, prerequisite := range card.Prerequisites {
+			require.Contains(t, position, prerequisite, "card %q needs %q, which the catalog does not define", card.Key, prerequisite)
+			require.Less(t, position[prerequisite], position[card.Key], "card %q needs %q before it", card.Key, prerequisite)
+		}
+	}
 }

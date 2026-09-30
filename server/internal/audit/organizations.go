@@ -23,11 +23,15 @@ const (
 	ActionOrganizationHooksFailOpenEnabled  Action = "organization:hooks_fail_open_enabled"
 	ActionOrganizationHooksFailOpenDisabled Action = "organization:hooks_fail_open_disabled"
 
-	ActionOrganizationProductFeatureEnabled  Action = "organization:product_feature_enabled"
-	ActionOrganizationProductFeatureDisabled Action = "organization:product_feature_disabled"
-	ActionOrganizationSetupTaskUpdated       Action = "organization:setup_task_updated"
-	ActionOrganizationOnboardingUpdated      Action = "organization:onboarding_updated"
-	ActionOrganizationOnboardingStackUpdated Action = "organization:onboarding_stack_updated"
+	ActionOrganizationProductFeatureEnabled      Action = "organization:product_feature_enabled"
+	ActionOrganizationProductFeatureDisabled     Action = "organization:product_feature_disabled"
+	ActionOrganizationSetupTaskUpdated           Action = "organization:setup_task_updated"
+	ActionOrganizationOnboardingUpdated          Action = "organization:onboarding_updated"
+	ActionOrganizationOnboardingStackUpdated     Action = "organization:onboarding_stack_updated"
+	ActionOrganizationOnboardingPlaybookAssigned Action = "organization:onboarding_playbook_assigned"
+	// ActionOrganizationOnboardingPlaybookUnassigned records the assignment
+	// being cleared: the organization walks its saved selection again.
+	ActionOrganizationOnboardingPlaybookUnassigned Action = "organization:onboarding_playbook_unassigned"
 
 	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
 
@@ -59,34 +63,43 @@ type LogOrganizationSetupTaskUpdatedEvent struct {
 	SetupTaskSnapshotAfter  *OrganizationSetupTaskSnapshot
 }
 
-type OrganizationOnboardingSnapshot struct {
-	Preset          *string  `json:"preset"`
-	VisibleTaskKeys []string `json:"visible_task_keys"`
+// OrganizationOnboardingPlaybookSnapshot is the playbook an organization walks.
+type OrganizationOnboardingPlaybookSnapshot struct {
+	PlaybookID string   `json:"playbook_id"`
+	Name       string   `json:"name"`
+	UseCase    string   `json:"use_case,omitempty"`
+	StepSlugs  []string `json:"step_slugs"`
 }
 
-type LogOrganizationOnboardingUpdatedEvent struct {
-	OrganizationID           string
-	Actor                    urn.Principal
-	ActorDisplayName         *string
-	OrganizationName         string
-	OrganizationSlug         string
-	OnboardingSnapshotBefore *OrganizationOnboardingSnapshot
-	OnboardingSnapshotAfter  *OrganizationOnboardingSnapshot
+type LogOrganizationOnboardingPlaybookAssignedEvent struct {
+	OrganizationID   string
+	Actor            urn.Principal
+	ActorDisplayName *string
+	OrganizationName string
+	OrganizationSlug string
+	// PlaybookSnapshotBefore is nil when no playbook was assigned.
+	PlaybookSnapshotBefore *OrganizationOnboardingPlaybookSnapshot
+	// PlaybookSnapshotAfter is nil when the assignment was cleared.
+	PlaybookSnapshotAfter *OrganizationOnboardingPlaybookSnapshot
 }
 
-func (l *Logger) LogOrganizationOnboardingUpdated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationOnboardingUpdatedEvent) error {
-	before, err := marshalAuditPayload(event.OnboardingSnapshotBefore)
+func (l *Logger) LogOrganizationOnboardingPlaybookAssigned(ctx context.Context, dbtx repo.DBTX, event LogOrganizationOnboardingPlaybookAssignedEvent) error {
+	before, err := marshalAuditPayload(event.PlaybookSnapshotBefore)
 	if err != nil {
-		return fmt.Errorf("marshal onboarding before snapshot: %w", err)
+		return fmt.Errorf("marshal onboarding playbook before snapshot: %w", err)
 	}
-	after, err := marshalAuditPayload(event.OnboardingSnapshotAfter)
+	after, err := marshalAuditPayload(event.PlaybookSnapshotAfter)
 	if err != nil {
-		return fmt.Errorf("marshal onboarding after snapshot: %w", err)
+		return fmt.Errorf("marshal onboarding playbook after snapshot: %w", err)
+	}
+	action := ActionOrganizationOnboardingPlaybookAssigned
+	if event.PlaybookSnapshotAfter == nil {
+		action = ActionOrganizationOnboardingPlaybookUnassigned
 	}
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
-		Action: string(ActionOrganizationOnboardingUpdated), SubjectID: event.OrganizationID, SubjectType: "organization",
+		Action: string(action), SubjectID: event.OrganizationID, SubjectType: "organization",
 		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName), SubjectSlug: conv.ToPGTextEmpty(event.OrganizationSlug),
 		Metadata: nil, BeforeSnapshot: before, AfterSnapshot: after,
 	}
