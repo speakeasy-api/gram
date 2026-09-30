@@ -24,6 +24,26 @@ export function isBlockingShadowMCPPolicy(
   return enabled && isShadowMCPBlockConfiguration(sources, action);
 }
 
+/** Why an existing allow_all policy's Shadow MCP detector and Deny action
+ *  cannot be turned off. Its blocked-server list only means something while
+ *  the policy detects Shadow MCP and denies, so the server refuses an edit
+ *  that retires that posture; the editor says so up front rather than letting
+ *  the save fail. */
+export const SHADOW_MCP_ALLOW_ALL_LOCK_REASON =
+  "This policy allows every Shadow MCP server except the ones on its blocked list, so it has to keep detecting Shadow MCP and denying. Create a separate policy to enforce something else.";
+
+/** Whether an edit is bound by that rule. Only a saved allow_all policy that
+ *  is still blocking is: a block_all policy's server list is a set of
+ *  exceptions to a deny and retires with it, and a new policy has no list. */
+export function shadowMCPAllowAllPostureLocked(
+  policy:
+    | (OriginalPolicy & { shadowMcpDisposition?: string | undefined })
+    | null,
+): boolean {
+  if (!policy || policy.shadowMcpDisposition !== "allow_all") return false;
+  return isShadowMCPBlockConfiguration(policy.sources, policy.action);
+}
+
 export function shadowMCPAllowedURLsForMutation({
   action,
   selectedCategories,
@@ -72,8 +92,8 @@ export function shadowMCPBlockedURLsForMutation({
 }): string[] | undefined {
   // The blocked list only exists on allow_all blocking shadow MCP policies.
   // There is no clear-on-morph branch like the allowed-URL helper has: the
-  // server rejects source/action changes on a policy with a stored
-  // disposition, so an allow_all policy can never stop being one.
+  // server refuses to take an allow_all policy out of the blocking posture
+  // (see SHADOW_MCP_ALLOW_ALL_LOCK_REASON), so one can never stop being one.
   if (disposition !== "allow_all") return undefined;
   const targetIsShadowMCPBlock = isBlockingShadowMCPPolicy(
     true,

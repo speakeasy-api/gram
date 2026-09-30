@@ -2,12 +2,19 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { Children, isValidElement, type ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shadowMCPPolicyInventoryQueryKey } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { PolicyNew, StandardPolicyEditor } from "./PolicyDetail";
+import { SHADOW_MCP_ALLOW_ALL_LOCK_REASON } from "./policy-shadow-mcp-setup";
 import { testAccessSummary } from "@/components/shadow-mcp/shadowMCPInventoryTestFixtures";
 
 const mocks = vi.hoisted(() => ({
@@ -19,7 +26,12 @@ const mocks = vi.hoisted(() => ({
   mutateUpdate: vi.fn(),
   kind: null as string | null,
   category: null as string | null,
-  detectorSelections: [] as Array<{ category: string; selected: boolean }>,
+  detectorSelections: [] as Array<{
+    category: string;
+    selected: boolean;
+    disabledReason?: string;
+  }>,
+  pinnedActions: [] as Array<{ value: string; reason: string } | undefined>,
 }));
 
 vi.mock("sonner", () => ({
@@ -105,7 +117,14 @@ vi.mock("./use-cel-status", () => ({
 }));
 
 vi.mock("./PolicyCenter", () => ({
-  ActionPicker: () => null,
+  ActionPicker: ({
+    pinnedAction,
+  }: {
+    pinnedAction?: { value: string; reason: string };
+  }) => {
+    mocks.pinnedActions.push(pinnedAction);
+    return null;
+  },
   CustomizeRulesSheet: () => null,
   PolicyAudiencePicker: () => null,
   RuleSelectList: () => null,
@@ -116,11 +135,13 @@ vi.mock("./DetectorCard", () => ({
   DetectorCard: ({
     category,
     selected,
+    disabledReason,
   }: {
     category: string;
     selected: boolean;
+    disabledReason?: string;
   }) => {
-    mocks.detectorSelections.push({ category, selected });
+    mocks.detectorSelections.push({ category, selected, disabledReason });
     return null;
   },
 }));
@@ -332,6 +353,90 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
   });
 });
 
+describe("StandardPolicyEditor allow_all posture lock", () => {
+  afterEach(cleanup);
+
+  beforeEach(() => {
+    mocks.selectionRenders.length = 0;
+    mocks.modeRenders.length = 0;
+    mocks.kind = null;
+    mocks.category = null;
+    mocks.detectorSelections.length = 0;
+    mocks.pinnedActions.length = 0;
+    vi.clearAllMocks();
+    vi.mocked(useSdkClient).mockReturnValue({
+      access: { listShadowMCPInventory: vi.fn() },
+    } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  // Seed the inventory so the editor never issues the fetch: an in-flight
+  // query outlives the test and lands its state update after the environment
+  // is torn down.
+  function renderEditor(
+    disposition: NonNullable<RiskPolicy["shadowMcpDisposition"]>,
+    step: string,
+  ) {
+    mocks.step = step;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(shadowMCPPolicyInventoryQueryKey("project-1"), []);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <StandardPolicyEditor
+            policy={{
+              ...blockingPolicyWithDirtyDraftName(),
+              shadowMcpDisposition: disposition,
+            }}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+  }
+
+  function shadowMCPCard() {
+    return mocks.detectorSelections.find(
+      (selection) => selection.category === "shadow_mcp",
+    );
+  }
+
+  it("pins Deny on an allow_all policy", async () => {
+    renderEditor("allow_all", "action");
+
+    await waitFor(() => {
+      expect(mocks.pinnedActions.at(-1)).toEqual({
+        value: "block",
+        reason: SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
+      });
+    });
+  });
+
+  it("locks the Shadow MCP detector on an allow_all policy", async () => {
+    renderEditor("allow_all", "detect");
+
+    await waitFor(() => {
+      expect(shadowMCPCard()?.disabledReason).toBe(
+        SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
+      );
+    });
+  });
+
+  it("leaves a block_all policy's action editable", async () => {
+    renderEditor("block_all", "action");
+
+    await waitFor(() => expect(mocks.pinnedActions.length).toBeGreaterThan(0));
+    expect(mocks.pinnedActions.at(-1)).toBeUndefined();
+  });
+
+  it("leaves a block_all policy's Shadow MCP detector editable", async () => {
+    renderEditor("block_all", "detect");
+
+    await waitFor(() => expect(shadowMCPCard()).toBeDefined());
+    expect(shadowMCPCard()?.disabledReason).toBeUndefined();
+  });
+});
+
 describe("StandardPolicyEditor policy pause", () => {
   beforeEach(() => {
     mocks.saveDisabledRenders.length = 0;
@@ -351,6 +456,11 @@ describe("StandardPolicyEditor policy pause", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    // The editor asks for the Shadow MCP inventory as soon as it mounts a
+    // blocking policy. Seed it: the mocked SDK rejects, and a rejection that
+    // settles after this test lands its state update once the environment is
+    // gone, failing the run with "window is not defined".
+    queryClient.setQueryData(shadowMCPPolicyInventoryQueryKey("project-1"), []);
 
     render(
       <QueryClientProvider client={queryClient}>
