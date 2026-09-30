@@ -35,8 +35,8 @@ const (
 	// rollbackTimeout bounds a rollback after the observation's deadline.
 	rollbackTimeout = time.Second
 
-	// refreshWindow skips rewriting an unchanged result, and holds any failure
-	// back from replacing verified, for this long after the recorded attempt.
+	// refreshWindow holds any failure back from replacing verified for this
+	// long after the latest successful attempt.
 	refreshWindow = 5 * time.Minute
 
 	// verifiedHold keeps a failure that may be one user's from replacing
@@ -122,13 +122,11 @@ func providerRejection(r identitychaining.Reason) bool {
 }
 
 // supersedes reports whether result, from an attempt that started at
-// startedAt, replaces what rc records. Newer results normally win, so an older
-// contradictory attempt cannot land over them, with two throttles:
-//   - An unchanged result is rewritten at most once per refreshWindow, so every
-//     fresh token does not write to the shared row.
-//   - A failure replaces verified only after refreshWindow, and one that can
-//     be a single user's (scope_not_allowed, downstream_rejected) only after
-//     verifiedHold without a success, so mixed users do not flap the row.
+// startedAt, replaces what rc records. Newer unchanged results also advance
+// observed_at so older contradictory attempts cannot replace them.
+// A failure replaces verified only after refreshWindow, and one that can
+// be a single user's (scope_not_allowed, downstream_rejected) only after
+// verifiedHold without a success, so mixed users do not flap the row.
 func supersedes(rc repo.OktaResourceConnection, result Result, startedAt time.Time) bool {
 	if !startedAt.After(rc.UpdatedAt.Time) {
 		return false
@@ -142,7 +140,7 @@ func supersedes(rc repo.OktaResourceConnection, result Result, startedAt time.Ti
 	case age <= 0:
 		return false
 	case previous == result:
-		return age >= refreshWindow
+		return true
 	case previous == ResultVerified && (result == ResultScopeNotAllowed || result == ResultDownstreamRejected):
 		return age >= verifiedHold
 	case previous == ResultVerified:
@@ -223,7 +221,7 @@ func (o *Observer) observe(ctx context.Context, obs identitychaining.Observation
 	if err != nil {
 		return "", fmt.Errorf("read resource connection: %w", err)
 	}
-	// Unlocked first read: most attempts repeat a recent result and stop here.
+	// Unlocked first read: reject inapplicable or stale attempts before locking.
 	if !applies(rc, result, obs.RemoteIssuer) {
 		return dispositionNotApplicable, nil
 	}

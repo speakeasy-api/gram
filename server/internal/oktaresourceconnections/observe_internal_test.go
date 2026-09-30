@@ -68,7 +68,7 @@ func TestSupersedes(t *testing.T) {
 	require.False(t, supersedes(row("", time.Time{}), ResultVerified, confirmed.Add(-time.Second)), "started before confirmation")
 	require.True(t, supersedes(row("", time.Time{}), ResultVerified, confirmed.Add(time.Second)))
 	require.False(t, supersedes(row(ResultVerified, observed), ResultConnectionMissing, observed.Add(-time.Second)), "older attempt")
-	require.False(t, supersedes(row(ResultVerified, observed), ResultVerified, observed.Add(time.Minute)), "unchanged within the refresh window")
+	require.True(t, supersedes(row(ResultVerified, observed), ResultVerified, observed.Add(time.Minute)), "unchanged results advance the timestamp")
 	require.True(t, supersedes(row(ResultVerified, observed), ResultVerified, observed.Add(refreshWindow)), "unchanged refresh")
 	require.False(t, supersedes(row(ResultVerified, observed), ResultConnectionMissing, observed.Add(time.Minute)), "a fresh success holds off failures")
 	require.True(t, supersedes(row(ResultVerified, observed), ResultConnectionMissing, observed.Add(refreshWindow)), "org-level failure replaces verified")
@@ -78,8 +78,23 @@ func TestSupersedes(t *testing.T) {
 	require.True(t, supersedes(row(ResultVerified, observed), ResultDownstreamRejected, observed.Add(verifiedHold)), "no success for a day")
 	require.True(t, supersedes(row(ResultDownstreamRejected, observed), ResultVerified, observed.Add(time.Second)), "success always replaces a failure")
 
-	// A newer success that was not rewritten still keeps an older failure out.
+	// A newer success advances the timestamp and keeps an older failure out.
 	rc := row(ResultVerified, observed)
-	require.False(t, supersedes(rc, ResultVerified, observed.Add(2*time.Minute)))
+	require.True(t, supersedes(rc, ResultVerified, observed.Add(2*time.Minute)))
+	rc.ObservedAt = conv.ToPGTimestamptz(observed.Add(2 * time.Minute))
 	require.False(t, supersedes(rc, ResultConnectionMissing, observed.Add(time.Minute)))
+}
+
+func TestSupersedes_NewerFailureBlocksOlderSuccess(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	rc := repo.OktaResourceConnection{
+		UpdatedAt:      conv.ToPGTimestamptz(now.Add(-time.Hour)),
+		ObservedAt:     conv.ToPGTimestamptz(now),
+		ObservedResult: conv.ToPGText(string(ResultConnectionMissing)),
+	}
+	newer := now.Add(2 * time.Second)
+	require.True(t, supersedes(rc, ResultConnectionMissing, newer))
+	rc.ObservedAt = conv.ToPGTimestamptz(newer)
+	require.False(t, supersedes(rc, ResultVerified, now.Add(time.Second)))
 }

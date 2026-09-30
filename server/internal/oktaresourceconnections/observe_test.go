@@ -163,7 +163,7 @@ func TestObserveAttempt_AuditsTransitionsAsTheSystem(t *testing.T) {
 	require.Equal(t, "verified", after["state"])
 	require.Equal(t, oktaresourceconnections.ObserverActorDisplayName, record.ActorDisplay)
 
-	// The same result within the refresh window is neither rewritten nor audited.
+	// The same result advances the timestamp without another audit event.
 	again := obs
 	again.StartedAt = obs.StartedAt.Add(time.Minute)
 	require.NoError(t, observer.ObserveAttempt(ctx, again))
@@ -173,7 +173,7 @@ func TestObserveAttempt_AuditsTransitionsAsTheSystem(t *testing.T) {
 	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	require.WithinDuration(t, obs.StartedAt, rows[0].OktaResourceConnection.ObservedAt.Time, time.Millisecond)
+	require.WithinDuration(t, again.StartedAt, rows[0].OktaResourceConnection.ObservedAt.Time, time.Millisecond)
 
 	// A connection-level failure after the refresh window replaces verified and is audited.
 	missing := obs
@@ -322,6 +322,34 @@ func TestObserveAttempt_RefreshesAnUnchangedResultWithoutAuditing(t *testing.T) 
 	require.Equal(t, "verified", rows[0].OktaResourceConnection.ObservedResult.String)
 	require.WithinDuration(t, later.StartedAt, rows[0].OktaResourceConnection.ObservedAt.Time, time.Millisecond)
 	count, err = audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionObserve)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+}
+
+func TestObserveAttempt_NewerFailureBlocksOlderSuccess(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	observer := newObserver(t, si)
+	f, success := confirmedUpstream(t, ctx, si, "Ordering")
+	missing := success
+	missing.Outcome = failure(identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, false)
+	require.NoError(t, observer.ObserveAttempt(ctx, missing))
+
+	// The same failure from another user must advance the shared timestamp,
+	// even within the refresh window, without duplicating the audit event.
+	missing.StartedAt = success.StartedAt.Add(2 * time.Second)
+	require.NoError(t, observer.ObserveAttempt(ctx, missing))
+	success.StartedAt = success.StartedAt.Add(time.Second)
+	require.NoError(t, observer.ObserveAttempt(ctx, success))
+
+	require.Equal(t, "needs_connection", observedRow(t, ctx, si, f.serverID).State)
+	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "connection_missing", rows[0].OktaResourceConnection.ObservedResult.String)
+	require.WithinDuration(t, missing.StartedAt, rows[0].OktaResourceConnection.ObservedAt.Time, time.Millisecond)
+	count, err := audittest.AuditLogCountByAction(ctx, si.conn, audit.ActionOktaResourceConnectionObserve)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
 }
