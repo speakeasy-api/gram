@@ -343,6 +343,11 @@ type UpdateRemoteSessionClientPayload struct {
 	// Replace the upstream OAuth audience sent for this client. Omit to leave
 	// unchanged.
 	Audience *string
+	// Platform admins only. Set true to run the client in compatibility mode with
+	// the legacy callback URL, or false to migrate it to the current callback URL
+	// once that URL is registered with the identity provider. Omit to leave
+	// unchanged.
+	LegacyCallbackURL *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
