@@ -4,9 +4,7 @@ Agent skill providing comprehensive ClickHouse guidance for schema design, query
 
 ## Installation
 
-```bash
-npx skills add ClickHouse/clickhouse-agent-skills
-```
+This copy already lives in the repo at `.agents/skills/clickhouse-best-practices`. Read it from there. Do not fetch another copy.
 
 ## What's Included
 
