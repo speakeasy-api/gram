@@ -1,15 +1,18 @@
 package gram
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -46,6 +49,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/tunnel/metrics"
+	"github.com/speakeasy-api/gram/tunnel/metricspub"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/metric"
@@ -66,6 +71,7 @@ func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub
 }
 
 type mcpServiceDependencies struct {
+	TunnelMetrics  *metrics.Collector
 	Logger         *slog.Logger
 	Tracer         trace.TracerProvider
 	Meter          metric.MeterProvider
@@ -116,6 +122,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	}
 	proxy := remotemcp.NewProxyManager(d.Logger, d.Tracer, d.Meter, d.DB, d.Guardian, d.Authz, d.Posthog, d.Telemetry, d.Billing, d.BillingTracker,
 		mcpservers.NewToolDispositionCache(d.Logger, d.DB, cacheImpl), platformmcp.NewSelectedUseRecorder(d.DB), toolfilter.NewSessionToolWitnessStore(d.Logger, cacheImpl), checkpoint, d.MCPRisk, d.ProtectedResources)
+	proxy.TunnelMetrics = d.TunnelMetrics
 	cidrs := c.StringSlice("tunnel-gateway-cidr-blocks")
 	for _, cidr := range cidrs {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {
@@ -157,4 +164,18 @@ func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgx
 	chainer.SetMeterProvider(meter)
 	chainer.SetObserver(oktaresourceconnections.NewObserver(logger, meter, db, auditLogger))
 	return chainer, nil
+}
+
+// newTunnelMetrics starts request metrics for an MCP server.
+// If the publisher is unavailable, requests continue without metrics.
+func newTunnelMetrics(ctx context.Context, logger *slog.Logger, broker gcp.PublisherBroker) (*metrics.Collector, func(context.Context) error) {
+	const publisherInitTimeout = 5 * time.Second
+	initCtx, cancel := context.WithTimeout(ctx, publisherInitTimeout)
+	defer cancel()
+	pub, err := metricspub.NewPublisher(initCtx, broker)
+	if err != nil {
+		logger.WarnContext(ctx, "tunnel metrics unavailable", attr.SlogError(err))
+		return nil, func(context.Context) error { return nil }
+	}
+	return metricspub.Start(ctx, pub)
 }

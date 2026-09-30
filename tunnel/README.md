@@ -81,6 +81,43 @@ Redis is live data-plane state:
 - `tunnel_connections:<tunnelID>`: owner-scoped live connection snapshots for
   UI/API overview data, merged on read.
 
+## Diagnostics and activity
+
+The MCP server Overview separates connected agents, target network reachability,
+and MCP outcomes. Capable agents report DNS/TCP/TLS checks and aggregate HTTP
+progress when the gateway polls, about every 30 seconds. Polling backs off after
+failures. Checks never send HTTP requests or invoke MCP tools.
+HTTP/MCP stays **Not observed** until normal traffic arrives. HTTP 200 alone does
+not prove MCP success, and an open SSE response is not itself a failure.
+
+Telemetry includes bounded counters and the configured target's scheme, hostname,
+port and path. It excludes payloads, tool names, raw user agents, credentials,
+query strings and raw errors. Requests are collected in minute buckets and
+gateway connections are sampled every 15 seconds. The Overview groups history
+into 1-minute buckets for 1 hour, 15-minute buckets for 24 hours, and hourly
+buckets for 7 days.
+Missing samples remain gaps. Metrics are best-effort.
+
+Gram servers record request metrics and serve history automatically. Deploy the
+metrics schema and Pub/Sub topology/IAM before the server. These switches control
+ingestion, gateway reporting and the dashboard:
+
+| Switch                                   | Process                | Enables                        |
+| ---------------------------------------- | ---------------------- | ------------------------------ |
+| `GRAM_TUNNEL_METRICS_CONSUMER_ENABLED=1` | `gram streams`         | Metrics ingestion              |
+| `TUNNEL_METRICS_ENABLED=1`               | Tunnel gateway         | Connection history publication |
+| `TUNNEL_DIAGNOSTICS_ENABLED=1`           | Tunnel gateway         | Agent diagnostics polling      |
+| `gram-tunnel-observability`              | Dashboard feature flag | Enhanced Overview              |
+
+Gateway publication also requires `GRAM_GCP_PROJECT_ID` and permission to publish
+the metrics topic; local development can use `PUBSUB_EMULATOR_HOST`.
+
+Diagnostics enrich the optional protocol. Old agents and gateways continue to
+forward traffic; old agents show diagnostics as unsupported. Set
+`TUNNEL_DISABLE_DIAGNOSTICS=1` on an agent to suppress the capability, target
+address, probes and passive diagnostic counters. Agents and gateways can be
+rolled back independently.
+
 ## Local Validation
 
 Start the local dev stack with `./zero --agent`. The `tunnel-gateway`

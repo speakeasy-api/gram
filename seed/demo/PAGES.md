@@ -184,6 +184,10 @@ Like the attachment above, every row has invalid ciphertext, no refresh token
 and auto-refresh disabled; they are display-only. IDs derive from
 `Spec.NameSeed` (`gram-demo-validated-session-<n>`).
 
+## Tunnel source observability
+
+The Private inventory tunnel source has one linked private MCP server and deterministic 24-hour request/connection history with a recent gap. It has no connected agent. Live HTTP progress is never seeded as fresh evidence. Open its Overview with `gram-tunnel-observability` enabled and verify charts, the gap, and the no-agent diagnostic state.
+
 ## Local only (RunLocalFixtures, never the demo org)
 
 These come from `server/internal/demoseed/local.go` after the seed, so they are
@@ -346,3 +350,5 @@ No Stripe subscription, promotion, or local billing settings are seeded for it.
 Browser verification: [~] — follow check 30 in `seed/demo/verify.md`.
 
 The seeded gateway uses Progressive discovery. Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.
+
+Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, linked count, and no-agent state.

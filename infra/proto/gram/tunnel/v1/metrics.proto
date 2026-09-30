@@ -1,0 +1,51 @@
+// Proto3 preserves implicit scalar presence and the open Go API used by producers
+// and consumers.
+syntax = "proto3";
+package gram.tunnel.v1;
+import "gcp/pubsub/v1/options.proto";
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/tunnel/v1;tunnelv1";
+
+// Aggregate revision for one source/producer/bucket/dimension tuple.
+// Counters are cumulative within that tuple; connection gauges are last samples.
+// No arbitrary attributes, URLs, headers, tool names, arguments or results.
+message MetricsSnapshot {
+  option (gcp.pubsub.v1.topic) = {retention_hint: {seconds: 604800}};
+  // Tunnel source UUID. The trusted consumer resolves its owning project.
+  string source_id = 1;
+  // Random UUID per producer process lifetime.
+  string producer_id = 2;
+  // UTC Unix seconds, aligned to 15s for connections, 60s otherwise.
+  int64 bucket_unix = 3;
+  // Positive, monotonically increasing revision per tuple; latest revision wins.
+  uint64 revision = 4;
+  // One of requests, connections, coverage.
+  string kind = 5;
+  // Fronting MCP server UUID for requests; empty for connections/coverage.
+  string server_id = 6;
+  // Requests only: tools/call, tools/list, initialize, resources/read, resources/list, prompts/list, prompts/get, ping, other.
+  string method = 7;
+  // Requests only: claude, codex, cursor, chatgpt, inspector, unknown, other. Never a raw user agent.
+  string client_family = 8;
+  // Cumulative logical MCP request starts in this bucket.
+  uint64 attempts = 9;
+  // Cumulative terminal MCP successes completed in this bucket.
+  uint64 successes = 10;
+  // Cumulative terminal MCP errors completed in this bucket.
+  uint64 errors = 11;
+  // Cumulative consumer-canceled requests completed in this bucket.
+  uint64 canceled = 12;
+  // Requests: cumulative completions with no terminal result. Coverage/connections: producer loss watermark since boot; nonzero means conservatively partial.
+  uint64 incomplete = 13;
+  // Exactly 12 cumulative completion counts in milliseconds: <=10, (10,50], (50,100], (100,250], (250,500], (500,1000], (1000,2500], (2500,5000], (5000,10000], (10000,30000], (30000,60000], >60000. Zero-filled for non-request kinds.
+  repeated uint64 latency_bins = 14;
+  // Last-sample gauge: connected agent sessions for this source and producer.
+  uint32 connections = 15;
+  // Last-sample gauge: active consumer sessions.
+  uint32 consumers = 16;
+  // Last-sample gauge: active forwarding streams.
+  uint32 substreams = 17;
+  reserved 18, 19;
+  reserved "diagnostics_available", "targets_unreachable";
+  // Cumulative connections opened during this connection bucket.
+  uint64 connections_opened = 20;
+}
