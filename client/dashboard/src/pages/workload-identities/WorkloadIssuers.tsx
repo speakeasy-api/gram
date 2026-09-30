@@ -113,13 +113,14 @@ function WorkloadIssuersCatalogue(): JSX.Element {
         stage="preview"
         description="Let agents on other platforms (CI jobs, cloud services, AI agents) sign in to Gram without a stored secret."
         primaryAction={registerButton}
+        belowHeader={<TokenEndpointPicker className="mb-6" />}
       >
         <Stack
           direction="horizontal"
           justify="space-between"
           align="center"
           gap={4}
-          className="mb-6 flex-wrap"
+          className="mb-6"
         >
           <SegmentedControl
             value={view}
@@ -129,13 +130,11 @@ function WorkloadIssuersCatalogue(): JSX.Element {
               { value: "custom", label: `Custom (${issuers.length})` },
             ]}
           />
-          {view === "custom" ? (
-            <Text muted small className="min-w-0 text-right">
-              Added by hand, with values from the platform&apos;s own console.
-            </Text>
-          ) : (
-            <TokenEndpointPicker />
-          )}
+          <Text muted small className="min-w-0 text-right">
+            {view === "custom"
+              ? "Added by hand, with values from the platform's own console."
+              : "Platforms Gram knows how to federate with, ready to trust without looking anything up."}
+          </Text>
         </Stack>
 
         {view === "custom" ? (

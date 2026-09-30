@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -17,17 +18,23 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/components/page-templates", () => ({
   ResourceListPage: ({
     children,
+    description,
     primaryAction,
+    belowHeader,
     stage,
   }: {
     children: ReactNode;
+    description?: string;
     primaryAction: ReactNode;
+    belowHeader?: ReactNode;
     stage?: string;
   }) => (
     <>
       {stage && <span data-testid="stage">{stage}</span>}
+      {description && <p data-testid="description">{description}</p>}
       {primaryAction}
-      {children}
+      <div data-testid="below-header">{belowHeader}</div>
+      <div data-testid="body">{children}</div>
     </>
   ),
 }));
@@ -207,24 +214,36 @@ it("opens on the catalog, which is empty until presets exist", () => {
   expect(screen.queryAllByRole("link")).toHaveLength(0);
 });
 
-it("shows the token endpoint beside the catalog in place of its helper text", () => {
+it.each([
+  ["catalog", renderPageOnCatalog],
+  ["custom", renderPage],
+])(
+  "shows the token endpoint under the page description on the %s tab",
+  (_, renderView) => {
+    renderView();
+
+    const belowHeader = screen.getByTestId("below-header");
+    expect(within(belowHeader).getByTestId("token-endpoint")).toBeTruthy();
+    expect(
+      within(screen.getByTestId("body")).queryByTestId("token-endpoint"),
+    ).toBeNull();
+  },
+);
+
+it("keeps each tab's own helper text", () => {
   renderPageOnCatalog();
-
-  expect(screen.getByTestId("token-endpoint")).toBeTruthy();
   expect(
-    screen.queryByText(/Platforms Gram knows how to federate with/),
-  ).toBeNull();
-});
+    screen.getByText(
+      "Platforms Gram knows how to federate with, ready to trust without looking anything up.",
+    ),
+  ).toBeTruthy();
 
-it("keeps the custom tab's own helper text", () => {
-  renderPage();
-
+  fireEvent.click(screen.getByRole("button", { name: /^Custom/ }));
   expect(
     screen.getByText(
       "Added by hand, with values from the platform's own console.",
     ),
   ).toBeTruthy();
-  expect(screen.queryByTestId("token-endpoint")).toBeNull();
 });
 
 it("shows the token endpoint in the register pane", async () => {
