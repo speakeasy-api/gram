@@ -9,11 +9,14 @@ One `lgtm` container (`grafana/otel-lgtm`) runs Grafana, Tempo and Prometheus to
 
 ```
 every worktree's gram-server / gram-worker
-  → OTLP gRPC localhost:4317 → gram-shared-lgtm-1 ├→ Tempo      (traces)
-                                                  └→ Prometheus (metrics)
+  → OTLP gRPC localhost:4317 → gram-shared-otlp-sink-1   (default: ACK and drop)
+                            or gram-shared-lgtm-1       ├→ Tempo      (traces)
+                                                        └→ Prometheus (metrics)
 ```
 
-**It is shared across every worktree**, declared in `compose.shared.yml` under the `lgtm` Compose profile and the fixed project `gram-shared` — not in the per-worktree `compose.yml`. One copy serves the whole machine, so its ports are the same everywhere and are never remapped. It is opt-in: `mise run infra:start` does not start it. Run `mise run infra:lgtm` (or `mise run infra:start --lgtm`) when you need traces or metrics. `mise run open:grafana` starts it if it is not already up.
+**OTLP 4317/4318 always have a listener.** The default is `otlp-sink` — a ~35MB collector that accepts and drops telemetry so exporters do not retry into a closed port. LGTM is the opt-in store: `mise run infra:lgtm` (or `mise run infra:start --lgtm`, or `mise run open:grafana`) removes the sink and binds the same ports on `grafana/otel-lgtm`. Querying traces or metrics requires LGTM; exporting does not.
+
+**It is shared across every worktree**, declared in `compose.shared.yml` under the `lgtm` Compose profile and the fixed project `gram-shared` — not in the per-worktree `compose.yml`. One copy serves the whole machine, so its ports are the same everywhere and are never remapped.
 
 Logs and profiles are not wired into it — application logs go to stdout, so reach for `pitchfork logs` instead.
 

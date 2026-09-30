@@ -116,11 +116,25 @@ case ",${COMPOSE_PROFILES:-}," in
   *,lgtm,*) want_lgtm=true ;;
 esac
 
-# LGTM is not a synchronous startup dependency. A transient image pull must
-# not take down this worktree's databases, so warn and continue.
+# OTLP 4317/4318 always need a listener: the cheap sink by default, LGTM
+# when opted in. Both publish those ports, so only one may run.
+lgtm_running=false
+if docker ps --filter "label=com.docker.compose.project=gram-shared" \
+  --filter "label=com.docker.compose.service=lgtm" \
+  --filter "status=running" --format '{{.ID}}' | grep -q .; then
+  lgtm_running=true
+fi
 if $want_lgtm; then
-  mise run infra:lgtm \
-    || echo "⚠️  Optional shared LGTM stack failed to start; continuing with degraded observability." >&2
+  # infra:lgtm removes the sink before binding 4317/4318. If the LGTM image
+  # cannot start, put the sink back so exporters still have a listener.
+  if ! mise run infra:lgtm; then
+    echo "⚠️  Optional shared LGTM stack failed to start; continuing with degraded observability." >&2
+    mise run infra:otlp-sink \
+      || echo "⚠️  Shared OTLP sink failed to start; local telemetry export will error until it or LGTM is up." >&2
+  fi
+elif ! $lgtm_running; then
+  mise run infra:otlp-sink \
+    || echo "⚠️  Shared OTLP sink failed to start; local telemetry export will error until it or LGTM is up." >&2
 fi
 
 # Maximum time (seconds) to wait for a service to accept queries before giving

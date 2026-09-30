@@ -228,6 +228,8 @@ GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 OTLP_GRPC_HOST = "localhost"
 OTLP_GRPC_PORT = "4317"
 OTLP_HTTP_PORT = "4318"
+## Shared listener: the default otlp-sink ACKs and drops; `mise run infra:lgtm`
+## takes over the same ports when you want Grafana/Tempo/Prometheus.
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
 OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
 OTEL_RESOURCE_ATTRIBUTES = "worktree=main"

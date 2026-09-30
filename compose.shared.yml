@@ -15,8 +15,10 @@
 #   docker compose -f compose.shared.yml -p gram-shared up -d
 #   docker compose -f compose.shared.yml -p gram-shared down
 #
-# Pub/Sub is the only default shared service. LGTM is an opt-in Compose
-# profile — it is a large image and unused for most local work:
+# Pub/Sub and the OTLP sink are the default shared services. The sink is a
+# ~35MB collector that ACKs and drops traces/metrics/logs so local exporters
+# have a listener on 4317/4318 without pulling Grafana LGTM. LGTM is an
+# opt-in Compose profile — it is a large image and unused for most local work:
 #
 #   mise run infra:lgtm
 #   mise run infra:start --lgtm
@@ -25,7 +27,7 @@
 # This prevents a worktree carrying stale remapped ports from republishing a
 # shared container elsewhere and fragmenting the stack. Keep the literals in
 # sync with mise.toml: Pub/Sub 8088, LGTM 13000/13200/13100/9099, and OTLP
-# 4317/4318.
+# 4317/4318 (sink or LGTM, never both).
 #
 # Every port is bound to 127.0.0.1. These unauthenticated local development
 # services are consumed only by host processes and must not be externally
@@ -58,6 +60,24 @@ services:
       timeout: 2s
       retries: 15
       start_period: 2s
+
+  # Cheap stand-in for LGTM's OTLP ports. Local services (and Docker's own
+  # CLI, which honours OTEL_EXPORTER_OTLP_ENDPOINT) export here continuously;
+  # without a listener they retry and fill logs with connection errors. This
+  # image is ~35MB compressed versus ~1GB for grafana/otel-lgtm. `infra:lgtm`
+  # removes this container before binding the same ports on LGTM.
+  otlp-sink:
+    image: otel/opentelemetry-collector:0.161.0@sha256:b6d2b9a85b1029d05b5ad913150c1f014eed4ae99be81a1813ca5ade4a191913
+    restart: unless-stopped
+    environment:
+      GOMEMLIMIT: 64MiB
+      GOMAXPROCS: 2
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./local/otel/otlp-sink.yaml:/etc/otelcol/config.yaml:ro
+    command: ["--config=/etc/otelcol/config.yaml"]
 
   # Tempo only makes a trace searchable once it has idled the trace out and cut
   # a block — seconds to a minute. Lookup by trace ID is immediate.

@@ -187,6 +187,14 @@ await pokeDockerService(
   false,
 );
 
+const otlpGrpcPort = process.env["OTLP_GRPC_PORT"] ?? "4317";
+await pokeDockerService(
+  "otlp-sink",
+  "OTLP sink",
+  `http://localhost:${otlpGrpcPort}`,
+  true,
+);
+
 const grafanaPort = process.env["GRAFANA_PORT"] ?? "13000";
 await pokeDockerService(
   "lgtm",
