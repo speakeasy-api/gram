@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 
@@ -569,91 +570,97 @@ func filterServers(servers []*types.ExternalMCPServerEntry, search string) []*ty
 }
 
 func convertListServers(registryUUID uuid.UUID, entries []serverEntry) ([]*types.ExternalMCPServerEntry, error) {
-	registryID := registryUUID.String()
 	servers := make([]*types.ExternalMCPServerEntry, 0, len(entries))
-	for _, s := range entries {
-
-		if s.Meta.Version.Status == "deleted" {
+	for _, entry := range entries {
+		// Pulse lifecycle filtering does not apply to native discovery records.
+		if entry.Meta.Version.Status == "deleted" {
 			continue
 		}
-
-		var iconURL *string
-		if len(s.Server.Icons) > 0 {
-			iconURL = &s.Server.Icons[0].Src
+		server, err := projectListServer(registryUUID, entry)
+		if err != nil {
+			return nil, err
 		}
+		servers = append(servers, server)
+	}
+	return servers, nil
+}
 
-		// The catalog list view needs only a tool count and a read-only flag
-		// (for the card badge and the tool-behavior filter); it never reads the
-		// tool definitions, whose JSON Schemas dominate the registry payload
-		// (repeated in the top-level tools list and across every _meta remote
-		// slot). Compute the two scalars the list needs, then drop the tools from
-		// the _meta blob and omit the top-level tools array entirely. The detail
-		// page fetches full tools via getServerDetails.
-		listTools := s.Meta.Version.FirstRemote.Tools
-		toolCount := len(listTools)
-		isReadOnly := toolCount > 0
-		for _, tool := range listTools {
-			if readOnly, _ := tool.Annotations["readOnlyHint"].(bool); !readOnly {
-				isReadOnly = false
+func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMCPServerEntry, error) {
+	registryID := registryUUID.String()
+	var iconURL *string
+	if len(s.Server.Icons) > 0 {
+		iconURL = &s.Server.Icons[0].Src
+	}
+
+	// The catalog list view needs only a tool count and a read-only flag
+	// (for the card badge and the tool-behavior filter); it never reads the
+	// tool definitions, whose JSON Schemas dominate the registry payload
+	// (repeated in the top-level tools list and across every _meta remote
+	// slot). Compute the two scalars the list needs, then drop the tools from
+	// the _meta blob and omit the top-level tools array entirely. The detail
+	// page fetches full tools via getServerDetails.
+	listTools := s.Meta.Version.FirstRemote.Tools
+	toolCount := len(listTools)
+	isReadOnly := toolCount > 0
+	for _, tool := range listTools {
+		if readOnly, _ := tool.Annotations["readOnlyHint"].(bool); !readOnly {
+			isReadOnly = false
+			break
+		}
+	}
+
+	// A server supports DCR when any remote's OAuth auth option carries a
+	// non-empty registration endpoint in PulseMCP's embedded discovery
+	// result. Computed in the same pass that strips per-remote tools.
+	supportsDCR := false
+	for _, remote := range []*serverRemoteMeta{
+		&s.Meta.Version.FirstRemote,
+		&s.Meta.Version.SecondRemote,
+		&s.Meta.Version.ThirdRemote,
+		&s.Meta.Version.FourthRemote,
+		&s.Meta.Version.FifthRemote,
+	} {
+		for _, auth := range remote.AuthOptions {
+			if auth.Detail.AuthorizationServerMetadata.RegistrationEndpoint != "" {
+				supportsDCR = true
 				break
 			}
 		}
+		remote.Tools = nil
+	}
 
-		// A server supports DCR when any remote's OAuth auth option carries a
-		// non-empty registration endpoint in PulseMCP's embedded discovery
-		// result. Computed in the same pass that strips per-remote tools.
-		supportsDCR := false
-		for _, remote := range []*serverRemoteMeta{
-			&s.Meta.Version.FirstRemote,
-			&s.Meta.Version.SecondRemote,
-			&s.Meta.Version.ThirdRemote,
-			&s.Meta.Version.FourthRemote,
-			&s.Meta.Version.FifthRemote,
-		} {
-			for _, auth := range remote.AuthOptions {
-				if auth.Detail.AuthorizationServerMetadata.RegistrationEndpoint != "" {
-					supportsDCR = true
-					break
-				}
-			}
-			remote.Tools = nil
-		}
-
-		var remotes []*types.ExternalMCPRemote
-		for _, r := range s.Server.Remotes {
-			remotes = append(remotes, &types.ExternalMCPRemote{
-				URL:           r.URL,
-				TransportType: r.Type,
-				Headers:       toExternalMCPRemoteHeaders(r.Headers),
-				Variables:     toExternalMCPRemoteVariables(r.Variables),
-			})
-		}
-
-		meta, err := toCacheSafeAny(&s.Meta)
-		if err != nil {
-			return []*types.ExternalMCPServerEntry{}, fmt.Errorf("convert meta: %w", err)
-		}
-
-		servers = append(servers, &types.ExternalMCPServerEntry{
-			Repository:        toExternalMCPRepository(s.Server.Repository),
-			Packages:          toExternalMCPPackages(s.Server.Packages),
-			RegistrySpecifier: s.Server.Name,
-			Version:           s.Server.Version,
-			Description:       s.Server.Description,
-			ToolsetID:         nil,
-			McpServerID:       nil,
-			RegistryID:        &registryID,
-			Title:             s.Server.Title,
-			IconURL:           iconURL,
-			Meta:              meta,
-			ToolCount:         toolCount,
-			IsReadOnly:        isReadOnly,
-			SupportsDcr:       supportsDCR,
-			Remotes:           remotes,
+	var remotes []*types.ExternalMCPRemote
+	for _, r := range s.Server.Remotes {
+		remotes = append(remotes, &types.ExternalMCPRemote{
+			URL:           r.URL,
+			TransportType: r.Type,
+			Headers:       toExternalMCPRemoteHeaders(r.Headers),
+			Variables:     toExternalMCPRemoteVariables(r.Variables),
 		})
 	}
 
-	return servers, nil
+	meta, err := toCacheSafeAny(&s.Meta)
+	if err != nil {
+		return nil, fmt.Errorf("convert meta: %w", err)
+	}
+
+	return &types.ExternalMCPServerEntry{
+		Repository:        toExternalMCPRepository(s.Server.Repository),
+		Packages:          toExternalMCPPackages(s.Server.Packages),
+		RegistrySpecifier: s.Server.Name,
+		Version:           s.Server.Version,
+		Description:       s.Server.Description,
+		ToolsetID:         nil,
+		McpServerID:       nil,
+		RegistryID:        &registryID,
+		Title:             s.Server.Title,
+		IconURL:           iconURL,
+		Meta:              meta,
+		ToolCount:         toolCount,
+		IsReadOnly:        isReadOnly,
+		SupportsDcr:       supportsDCR,
+		Remotes:           remotes,
+	}, nil
 }
 
 func toExternalMCPRemoteHeaders(headers []RemoteHeader) []*types.ExternalMCPRemoteHeader {
@@ -803,71 +810,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return nil, fmt.Errorf("decode external mcp server details response: %w", err)
 	}
 
-	// Build a set of allowed URLs for filtering (if provided)
-	allowedURLSet := make(map[string]struct{}, len(allowedRemoteURLs))
-	for _, u := range allowedRemoteURLs {
-		allowedURLSet[u] = struct{}{}
-	}
-	hasFilter := len(allowedURLSet) > 0
-
-	// Find the remote URL, preferring streamable-http over sse
-	// If allowedRemoteURLs is set, only consider remotes in that list
-	var remoteURL string
-	var transportType externalmcptypes.TransportType
-	var tools []serverTool
-	var headers []RemoteHeader
-	var variables map[string]RemoteVariable
-	remoteIndex := -1 // Use -1 as sentinel to detect when no remote matched
-	for i, remote := range serverResp.Server.Remotes {
-		// Skip remotes not in allowed list (if filter is active)
-		if hasFilter {
-			if _, ok := allowedURLSet[remote.URL]; !ok {
-				continue
-			}
-		}
-
-		if remote.Type == "streamable-http" {
-			remoteURL = remote.URL
-			transportType = externalmcptypes.TransportTypeStreamableHTTP
-			headers = remote.Headers
-			variables = remote.Variables
-			remoteIndex = i
-			break
-		} else if remote.Type == "sse" {
-			remoteURL = remote.URL
-			transportType = externalmcptypes.TransportTypeSSE
-			headers = remote.Headers
-			variables = remote.Variables
-			remoteIndex = i
-		}
-	}
-
-	// Only fetch tools if a remote was actually matched.
-	// If remoteIndex is -1 (no match), tools stays nil.
-	// Obviously not ideal, this is just the way the registry API is structured.
-	switch remoteIndex {
-	case 0:
-		tools = serverResp.Meta.Version.FirstRemote.Tools
-	case 1:
-		tools = serverResp.Meta.Version.SecondRemote.Tools
-	case 2:
-		tools = serverResp.Meta.Version.ThirdRemote.Tools
-	case 3:
-		tools = serverResp.Meta.Version.FourthRemote.Tools
-	case 4:
-		tools = serverResp.Meta.Version.FifthRemote.Tools
-	}
-
-	details := &ServerDetails{
-		Name:          serverResp.Server.Name,
-		Description:   serverResp.Server.Description,
-		Version:       serverResp.Server.Version,
-		RemoteURL:     remoteURL,
-		TransportType: transportType,
-		Tools:         tools,
-		Headers:       headers,
-		Variables:     variables,
-	}
+	details := projectServerDetails(serverResp, allowedRemoteURLs)
 
 	// Store in cache on success.
 	if storeErr := c.detailsCache.Store(ctx, CachedServerDetailsResponse{
@@ -878,4 +821,39 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	}
 
 	return details, nil
+}
+
+// projectServerDetails selects the first allowed HTTP remote, or the last allowed SSE remote.
+func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string) *ServerDetails {
+	details := &ServerDetails{Name: record.Server.Name, Description: record.Server.Description, Version: record.Server.Version}
+	selected := -1
+	for i, remote := range record.Server.Remotes {
+		allowed := len(allowedRemoteURLs) == 0
+		if slices.Contains(allowedRemoteURLs, remote.URL) {
+			allowed = true
+		}
+		if !allowed {
+			continue
+		}
+		if remote.Type == "streamable-http" {
+			selected = i
+			break
+		}
+		if remote.Type == "sse" {
+			selected = i
+		}
+	}
+	if selected < 0 {
+		return details
+	}
+	remote := record.Server.Remotes[selected]
+	details.RemoteURL = remote.URL
+	details.TransportType = externalmcptypes.TransportType(remote.Type)
+	details.Headers = remote.Headers
+	details.Variables = remote.Variables
+	remotes := []serverRemoteMeta{record.Meta.Version.FirstRemote, record.Meta.Version.SecondRemote, record.Meta.Version.ThirdRemote, record.Meta.Version.FourthRemote, record.Meta.Version.FifthRemote}
+	if selected < len(remotes) {
+		details.Tools = remotes[selected].Tools
+	}
+	return details
 }
