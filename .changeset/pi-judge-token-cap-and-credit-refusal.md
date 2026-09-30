@@ -1,0 +1,5 @@
+---
+"server": patch
+---
+
+Stop the prompt-injection judge from being refused for credit it does not need, and separate that refusal from ordinary judge errors. The judge now caps its completion at 8192 tokens; previously it sent no `max_tokens`, so OpenRouter reserved the model's full 65,536-token output ceiling against the paying key's remaining monthly limit and returned 402 for every call once that much headroom was gone — silently failing the scanner open for the whole organization while ample credit remained. A credit or key-limit refusal now reports `insufficient_credits` rather than landing in the generic `error` bucket, a completion truncated at the cap reports `truncated` and fails open instead of being parsed into a verdict, and the failure reason is recorded on the classify span so a coverage gap is diagnosable without reading raw provider responses. The judge also records how many tokens each call generated against that cap, so the cap's headroom is visible rather than assumed.

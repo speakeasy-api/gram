@@ -242,6 +242,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt str
 	defer cancel()
 
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
+		MaxTokens:              nil,
 		OrgID:                  in.OrgID,
 		ProjectID:              in.ProjectID,
 		Model:                  judgeModel,

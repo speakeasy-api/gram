@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 func typedVerdict(kind, target string, operational bool) Verdict {
@@ -194,6 +196,11 @@ func TestTypedFailOpenReasonsAreBounded(t *testing.T) {
 	require.Equal(t, "timeout", typedFailureReason(context.DeadlineExceeded, o11y.OutcomeTimeout))
 	require.Equal(t, "malformed", typedFailureReason(errMalformedVerdict, o11y.OutcomeFailure))
 	require.Equal(t, "canceled", typedFailureReason(context.Canceled, o11y.OutcomeCanceled))
+	require.Equal(t, "truncated", typedFailureReason(errTruncatedVerdict, o11y.OutcomeFailure))
+	require.Equal(t, "insufficient_credits", typedFailureReason(
+		fmt.Errorf("openrouter completion: %w", &openrouter.HTTPError{StatusCode: http.StatusPaymentRequired, Err: openrouter.ErrInsufficientCredits}),
+		o11y.OutcomeFailure,
+	))
 }
 
 func TestTypedContextObservabilityIncludesSuppressedVerdict(t *testing.T) {
@@ -341,4 +348,77 @@ func metricAttrs(set attribute.Set) map[string]attribute.Value {
 		attrs[string(kv.Key)] = kv.Value
 	}
 	return attrs
+}
+
+// TestClassifyRecordsCompletionTokens covers the measurement the cap depends
+// on: MaxVerdictTokens is argued rather than measured.
+func TestClassifyRecordsCompletionTokens(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
+
+	const generated = 137
+	client := &fakeCompletionClient{
+		responder:        func(string) string { return safeVerdictJSON },
+		completionTokens: generated,
+	}
+	engine := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), meterProvider, client, testJudgeLimiter(t))
+
+	_, err := engine.Classify(t.Context(), req("hello"))
+	require.NoError(t, err)
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+
+	points := histogramPoints(t, collected, meterTypedCompletionTokens)
+	require.Len(t, points, 1)
+	require.Equal(t, int64(generated), points[0].Sum)
+	require.False(t, metricAttrs(points[0].Attributes)["truncated"].AsBool())
+}
+
+// TestClassifyRecordsCompletionTokensWhenTruncated pins the tail: a call cut
+// off at the cap still reports its tokens, tagged truncated.
+func TestClassifyRecordsCompletionTokensWhenTruncated(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
+
+	client := &fakeCompletionClient{
+		responder:        func(string) string { return safeVerdictJSON },
+		finishReason:     new(openrouter.FinishReasonLength),
+		completionTokens: MaxVerdictTokens,
+	}
+	engine := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), meterProvider, client, testJudgeLimiter(t))
+
+	results, err := engine.Classify(t.Context(), req("hello"))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+
+	points := histogramPoints(t, collected, meterTypedCompletionTokens)
+	require.Len(t, points, 1)
+	require.Equal(t, int64(MaxVerdictTokens), points[0].Sum)
+	require.True(t, metricAttrs(points[0].Attributes)["truncated"].AsBool())
+}
+
+func histogramPoints(t *testing.T, collected metricdata.ResourceMetrics, name string) []metricdata.HistogramDataPoint[int64] {
+	t.Helper()
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != name {
+				continue
+			}
+			histogram, ok := m.Data.(metricdata.Histogram[int64])
+			require.True(t, ok)
+			return histogram.DataPoints
+		}
+	}
+	require.Failf(t, "metric not found", "missing metric %q", name)
+	return nil
 }
