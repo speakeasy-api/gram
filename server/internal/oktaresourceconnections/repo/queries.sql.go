@@ -215,7 +215,7 @@ WHERE organization_id = $1
   AND identity_provider_connection_id = $2
   AND remote_session_issuer_id = $3
   AND resource = $4
-RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, created_at, updated_at
+RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
 `
 
 type DeleteResourceConnectionParams struct {
@@ -243,6 +243,8 @@ func (q *Queries) DeleteResourceConnection(ctx context.Context, arg DeleteResour
 		&i.Resource,
 		&i.Audience,
 		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -452,7 +454,7 @@ func (q *Queries) GetOktaApplicationLabel(ctx context.Context, arg GetOktaApplic
 }
 
 const getResourceConnectionForUpdate = `-- name: GetResourceConnectionForUpdate :one
-SELECT id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, created_at, updated_at
+SELECT id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
 FROM okta_resource_connections
 WHERE organization_id = $1
   AND identity_provider_connection_id = $2
@@ -484,6 +486,8 @@ func (q *Queries) GetResourceConnectionForUpdate(ctx context.Context, arg GetRes
 		&i.Resource,
 		&i.Audience,
 		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -767,7 +771,7 @@ func (q *Queries) ListIssuerClients(ctx context.Context, arg ListIssuerClientsPa
 
 const listResourceConnections = `-- name: ListResourceConnections :many
 SELECT
-    r.id, r.organization_id, r.identity_provider_connection_id, r.remote_session_issuer_id, r.resource, r.audience, r.okta_application_id, r.created_at, r.updated_at
+    r.id, r.organization_id, r.identity_provider_connection_id, r.remote_session_issuer_id, r.resource, r.audience, r.okta_application_id, r.observed_result, r.observed_at, r.created_at, r.updated_at
   , a.label AS okta_application_label
 FROM okta_resource_connections AS r
 LEFT JOIN okta_applications AS a
@@ -809,6 +813,8 @@ func (q *Queries) ListResourceConnections(ctx context.Context, arg ListResourceC
 			&i.OktaResourceConnection.Resource,
 			&i.OktaResourceConnection.Audience,
 			&i.OktaResourceConnection.OktaApplicationID,
+			&i.OktaResourceConnection.ObservedResult,
+			&i.OktaResourceConnection.ObservedAt,
 			&i.OktaResourceConnection.CreatedAt,
 			&i.OktaResourceConnection.UpdatedAt,
 			&i.OktaApplicationLabel,
@@ -963,7 +969,7 @@ ON CONFLICT (organization_id, identity_provider_connection_id, remote_session_is
 SET audience = EXCLUDED.audience,
     okta_application_id = COALESCE(EXCLUDED.okta_application_id, okta_resource_connections.okta_application_id),
     updated_at = clock_timestamp()
-RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, created_at, updated_at
+RETURNING id, organization_id, identity_provider_connection_id, remote_session_issuer_id, resource, audience, okta_application_id, observed_result, observed_at, created_at, updated_at
 `
 
 type UpsertResourceConnectionParams struct {
@@ -995,6 +1001,8 @@ func (q *Queries) UpsertResourceConnection(ctx context.Context, arg UpsertResour
 		&i.Resource,
 		&i.Audience,
 		&i.OktaApplicationID,
+		&i.ObservedResult,
+		&i.ObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
