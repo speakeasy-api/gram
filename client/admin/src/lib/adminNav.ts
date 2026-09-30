@@ -25,12 +25,6 @@ export const ADMIN_NAV_GROUPS = [
     label: "Account Management",
     items: [
       {
-        to: "/users",
-        label: "Users",
-        keywords: "people email members directory",
-        icon: UsersIcon,
-      },
-      {
         to: "/organizations",
         label: "Organizations",
         // Only the palette reads these. They are the words an operator types for a
@@ -38,6 +32,12 @@ export const ADMIN_NAV_GROUPS = [
         // the label still finds the page rather than reading as "no results".
         keywords: "orgs accounts customers tenants companies",
         icon: BuildingIcon,
+      },
+      {
+        to: "/users",
+        label: "Users",
+        keywords: "people email members directory",
+        icon: UsersIcon,
       },
       {
         to: "/projects",

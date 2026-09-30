@@ -23,13 +23,71 @@ function setup(initial = "") {
 const input = () => screen.getByRole("textbox", { name: "Search users" });
 const edit = (field: string, value: string) =>
   screen.getByRole("button", { name: `Edit ${field} filter: ${value}` });
-const remove = (field: string, value: string) =>
-  screen.getByRole("button", { name: `Remove ${field} filter: ${value}` });
 const type = (text: string, target = input()) =>
   fireEvent.change(target, { target: { value: text } });
 const key = (key: string, target = input(), extra = {}) =>
   fireEvent.keyDown(target, { key, ...extra });
 describe("UserSearchInput", () => {
+  it("keeps filter pills and typing inside one clickable search field", () => {
+    setup("email:example.invalid org:Studio");
+    const field = screen.getByRole("group", { name: "User search" });
+    expect(field.contains(input())).toBe(true);
+    expect(field.contains(edit("email", "example.invalid"))).toBe(true);
+    expect(field.contains(edit("org", "Studio"))).toBe(true);
+    expect(screen.queryByRole("button", { name: /Remove/ })).toBeNull();
+    expect(
+      field.contains(screen.getByRole("button", { name: "Search help" })),
+    ).toBe(false);
+    fireEvent.click(field);
+    expect(document.activeElement).toBe(input());
+  });
+  it("clears the whole query from one X inside the field and refocuses the textbox", () => {
+    function Clearable() {
+      const [value, setValue] = useState("email:admin org:Studio text");
+      return (
+        <UserSearchInput
+          value={value}
+          onChange={setValue}
+          onClear={() => setValue("")}
+        />
+      );
+    }
+    render(<Clearable />);
+    const field = screen.getByRole("group", { name: "User search" });
+    const clear = screen.getByRole("button", { name: "Clear search" });
+    expect(field.contains(clear)).toBe(true);
+    expect(clear.getAttribute("type")).toBe("button");
+    fireEvent.click(clear);
+    expect(screen.queryByRole("button", { name: /^Edit / })).toBeNull();
+    expect(input()).toHaveProperty("value", "");
+    expect(document.activeElement).toBe(input());
+  });
+  it("shows the placeholder only while the whole query is empty", () => {
+    setup();
+    expect(input().getAttribute("placeholder")).toBe("Search users…");
+    type("email:admin");
+    key("Enter");
+    expect(input().hasAttribute("placeholder")).toBe(false);
+    key("Backspace");
+    expect(input().hasAttribute("placeholder")).toBe(true);
+    type("");
+    expect(input().getAttribute("placeholder")).toBe("Search users…");
+  });
+  it("sizes an editing pill to its text and lets only the trailing draft fill the field", () => {
+    setup("first email:admin");
+    fireEvent.click(edit("email", "admin"));
+    const editing = screen.getByDisplayValue("email:admin");
+    const bare = screen.getByDisplayValue("first");
+    for (const text of [editing, bare]) {
+      expect(text.hasAttribute("placeholder")).toBe(false);
+      expect(text.hasAttribute("data-draft")).toBe(false);
+      expect(text.getAttribute("size")).toBe(
+        String((text as HTMLInputElement).value.length),
+      );
+    }
+    expect(input().hasAttribute("placeholder")).toBe(false);
+    expect(input().hasAttribute("data-draft")).toBe(true);
+  });
   it("tokenizes external filters without a trailing delimiter and associates help", () => {
     setup("email:example.invalid");
     expect(edit("email", "example.invalid")).toBeTruthy();
@@ -38,6 +96,19 @@ describe("UserSearchInput", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Search help" }));
     expect(screen.getByRole("dialog").textContent).toContain("name:");
+  });
+  it("reserves the help text's height under a validation error", () => {
+    setup();
+    const help = /^Use name:, email:, or org:/;
+    expect(screen.getByRole("status").textContent).toMatch(help);
+    type('"unclosed');
+    const status = screen.getByRole("status");
+    expect(status.textContent).not.toMatch(help);
+    expect(input().getAttribute("aria-describedby")).toBe(status.id);
+    // Hidden from assistive technology; it only holds the row's height.
+    const spacer = status.parentElement!.querySelector('[aria-hidden="true"]');
+    expect(spacer?.textContent).toMatch(help);
+    expect(spacer?.classList.contains("invisible")).toBe(true);
   });
   it.each([" ", "Enter"])(
     "commits complete filters on %s but leaves bare text editable",
@@ -83,26 +154,70 @@ describe("UserSearchInput", () => {
     expect(edit("email", "first.invalid")).toBeTruthy();
     expect(changed).toHaveBeenLastCalledWith("email:first.invalid org:Studio");
   });
-  it("uses native buttons for keyboard editing and returns focus after removal", () => {
+  it("uses native buttons for keyboard editing without remove buttons", () => {
     setup("email:example.invalid");
     expect(edit("email", "example.invalid").tagName).toBe("BUTTON");
+    expect(screen.getAllByRole("button")).toHaveLength(2); // pill + help
     fireEvent.click(edit("email", "example.invalid"));
     key("Enter", screen.getByDisplayValue("email:example.invalid"));
-    fireEvent.click(remove("email", "example.invalid"));
-    expect(document.activeElement).toBe(input());
+    expect(edit("email", "example.invalid")).toBeTruthy();
   });
-  it("selects the final pill on Backspace before removing it", () => {
+  it("backspaces from an empty draft into the adjacent pill's text", () => {
     const changed = setup("email:example.invalid org:Studio");
-    key("Backspace");
-    expect(document.activeElement).toBe(edit("org", "Studio"));
-    expect(screen.getByRole("status").textContent).toContain(
-      "Backspace to remove",
-    );
-    expect(changed).not.toHaveBeenCalled();
-    key("Backspace", document.activeElement as HTMLElement);
+    expect(key("Backspace")).toBe(false);
+    expect(screen.queryByRole("button", { name: /Edit org/ })).toBeNull();
+    expect((input() as HTMLInputElement).value).toBe("org:Studi");
+    expect(document.activeElement).toBe(input());
+    expect((input() as HTMLInputElement).selectionStart).toBe(9);
+    expect(changed).toHaveBeenLastCalledWith("email:example.invalid org:Studi");
+    // Further deletions are native until the text is gone, then Backspace
+    // enters the next pill the same way.
+    type("org:St");
+    expect(key("Backspace")).toBe(true);
+    type("");
+    expect(key("Backspace")).toBe(false);
+    expect(screen.queryByRole("button", { name: /^Edit / })).toBeNull();
+    expect((input() as HTMLInputElement).value).toBe("email:example.invali");
+    expect(changed).toHaveBeenLastCalledWith("email:example.invali");
+  });
+  it("backspaces from the start of following text into the adjacent pill", () => {
+    const changed = setup("first org:Studio middle email:example.invalid last");
+    const middle = screen.getByDisplayValue("middle") as HTMLInputElement;
+    middle.setSelectionRange(2, 2);
+    expect(key("Backspace", middle)).toBe(true);
+    middle.setSelectionRange(0, 0);
+    expect(key("Backspace", middle)).toBe(false);
+    const merged = screen.getByDisplayValue(
+      "first org:Studi middle",
+    ) as HTMLInputElement;
+    expect(document.activeElement).toBe(merged);
+    expect(merged.selectionStart).toBe("first org:Studi".length);
     expect(screen.queryByRole("button", { name: /Edit org/ })).toBeNull();
     expect(edit("email", "example.invalid")).toBeTruthy();
-    expect(document.activeElement).toBe(input());
+    expect((input() as HTMLInputElement).value).toBe("last");
+    expect(changed).toHaveBeenLastCalledWith(
+      "first org:Studi middle email:example.invalid last",
+    );
+  });
+  it("backspaces into a quoted value's source text", () => {
+    setup('org:"Example Studio"');
+    key("Backspace");
+    expect((input() as HTMLInputElement).value).toBe('org:"Example Studio');
+  });
+  it("undoes and redoes backspacing into a pill", () => {
+    const changed = setup("email:example.invalid org:Studio");
+    key("Backspace");
+    key("z", input(), { ctrlKey: true });
+    expect(edit("org", "Studio")).toBeTruthy();
+    expect((input() as HTMLInputElement).value).toBe("");
+    expect(changed).toHaveBeenLastCalledWith(
+      "email:example.invalid org:Studio",
+    );
+    key("z", input(), { metaKey: true, shiftKey: true });
+    expect(screen.queryByRole("button", { name: /Edit org/ })).toBeNull();
+    expect((input() as HTMLInputElement).value).toBe("org:Studi");
+    type("org:Stud");
+    expect(fireEvent.keyDown(input(), { key: "z", ctrlKey: true })).toBe(true);
   });
   it("ignores commit and deletion during composition", () => {
     setup();
@@ -116,7 +231,7 @@ describe("UserSearchInput", () => {
     fireEvent.compositionStart(input());
     key("Backspace");
     expect(edit("org", "Studio")).toBeTruthy();
-    expect(document.activeElement).not.toBe(edit("org", "Studio"));
+    expect((input() as HTMLInputElement).value).toBe("");
   });
   it("preserves paste without requiring a trailing space", () => {
     const changed = setup();
@@ -131,9 +246,9 @@ describe("UserSearchInput", () => {
       'org:"Example Studio" email:example.invalid',
     );
   });
-  it("undoes/redoes removal and token editing while leaving ordinary text undo native", () => {
+  it("undoes/redoes backspacing into a pill and token editing while leaving ordinary text undo native", () => {
     setup("org:Studio");
-    fireEvent.click(remove("org", "Studio"));
+    key("Backspace");
     key("z", input(), { ctrlKey: true });
     expect(edit("org", "Studio")).toBeTruthy();
     key("z", input(), { metaKey: true, shiftKey: true });
@@ -207,10 +322,10 @@ describe("UserSearchInput", () => {
   });
   it("allows native text undo to return to a transformation boundary", () => {
     setup("org:Studio");
-    fireEvent.click(remove("org", "Studio"));
-    type("ordinary");
+    key("Backspace");
+    type("org:Stu");
     expect(fireEvent.keyDown(input(), { key: "z", ctrlKey: true })).toBe(true);
-    type(""); // The input event a native text undo would deliver.
+    type("org:Studi"); // The input event a native text undo would deliver.
     key("z", input(), { ctrlKey: true });
     expect(edit("org", "Studio")).toBeTruthy();
   });
@@ -230,8 +345,8 @@ describe("UserSearchInput", () => {
         }) as HTMLInputElement
       ).value,
     ).toBe("\uFEFF");
-    fireEvent.click(remove("org", "Studio"));
-    expect(changed).toHaveBeenLastCalledWith("\uFEFF");
+    key("Backspace");
+    expect(changed).toHaveBeenLastCalledWith("\uFEFF org:Studi");
   });
   it("keeps the trailing native input mounted across token transformations", () => {
     setup();
@@ -239,7 +354,7 @@ describe("UserSearchInput", () => {
     type("org:Studio");
     key("Enter");
     expect(input()).toBe(nativeInput);
-    fireEvent.click(remove("org", "Studio"));
+    key("Backspace");
     expect(input()).toBe(nativeInput);
     key("z", input(), { metaKey: true });
     expect(input()).toBe(nativeInput);
@@ -249,7 +364,7 @@ describe("UserSearchInput", () => {
     const { rerender } = render(
       <UserSearchInput value="org:Studio" onChange={changed} />,
     );
-    fireEvent.click(remove("org", "Studio"));
+    key("Backspace");
     rerender(
       <UserSearchInput
         value="email:restored.invalid"
@@ -278,58 +393,39 @@ describe("UserSearchInput", () => {
     expect(document.activeElement).toBe(first);
     expect(edit("org", "Studio")).toBeTruthy();
   });
-  it.each(["org:Other", "org:"])(
-    "preserves Escape cancellation after removing another pill while editing %s",
-    (draft) => {
-      const changed = setup("org:Studio email:example.invalid");
-      fireEvent.click(edit("org", "Studio"));
-      type(draft, screen.getByDisplayValue("org:Studio"));
-      fireEvent.click(remove("email", "example.invalid"));
-      expect(screen.getByDisplayValue(draft)).toBeTruthy();
-      key("Escape", screen.getByDisplayValue(draft));
-      expect(edit("org", "Studio")).toBeTruthy();
-      expect(changed).toHaveBeenLastCalledWith("org:Studio");
-      key("z", input(), { ctrlKey: true });
-      expect(edit("org", "Studio")).toBeTruthy();
-      expect(edit("email", "example.invalid")).toBeTruthy();
-      key("z", input(), { ctrlKey: true, shiftKey: true });
-      expect(screen.queryByRole("button", { name: /Edit email/ })).toBeNull();
-      expect(edit("org", "Studio")).toBeTruthy();
-    },
-  );
-  it.each(["org:Other", "org:"])(
-    "adjusts the edited index for %s after removal before it and keeps removal undo distinct",
-    (draft) => {
-      setup("email:example.invalid org:Studio");
-      fireEvent.click(edit("org", "Studio"));
-      type(draft, screen.getByDisplayValue("org:Studio"));
-      fireEvent.click(remove("email", "example.invalid"));
-      key("z", input(), { ctrlKey: true });
-      expect(edit("email", "example.invalid")).toBeTruthy();
-      expect(screen.getByDisplayValue(draft)).toBeTruthy();
-      key("z", input(), { ctrlKey: true, shiftKey: true });
-      key("Escape", screen.getByDisplayValue(draft));
-      expect(edit("org", "Studio")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: /Edit email/ })).toBeNull();
-    },
-  );
-  it("undoes completed editing separately from an unrelated removal", () => {
-    setup("org:Studio email:example.invalid");
+  it("settles an unrelated edit by restoring it when backspacing into another pill", () => {
+    const changed = setup("org:Studio name:Ada email:example.invalid");
     fireEvent.click(edit("org", "Studio"));
     type("org:Other", screen.getByDisplayValue("org:Studio"));
-    fireEvent.click(remove("email", "example.invalid"));
-    key("Enter", screen.getByDisplayValue("org:Other"));
-    expect(edit("org", "Other")).toBeTruthy();
-    key("z", input(), { ctrlKey: true });
+    key("Backspace");
     expect(edit("org", "Studio")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Edit email/ })).toBeNull();
+    expect(edit("name", "Ada")).toBeTruthy();
+    expect((input() as HTMLInputElement).value).toBe("email:example.invali");
+    expect(changed).toHaveBeenLastCalledWith(
+      "org:Studio name:Ada email:example.invali",
+    );
     key("z", input(), { ctrlKey: true });
     expect(edit("email", "example.invalid")).toBeTruthy();
-    key("z", input(), { ctrlKey: true, shiftKey: true });
-    expect(screen.queryByRole("button", { name: /Edit email/ })).toBeNull();
     expect(edit("org", "Studio")).toBeTruthy();
-    key("z", input(), { ctrlKey: true, shiftKey: true });
-    expect(edit("org", "Other")).toBeTruthy();
+    expect(fireEvent.keyDown(input(), { key: "z", ctrlKey: true })).toBe(true);
+  });
+  it("merges adjacent edit text and enters the previous pill from an edit's start", () => {
+    const changed = setup("org:Studio email:example.invalid");
+    fireEvent.click(edit("email", "example.invalid"));
+    const editing = screen.getByDisplayValue(
+      "email:example.invalid",
+    ) as HTMLInputElement;
+    editing.setSelectionRange(0, 0);
+    key("Backspace", editing);
+    expect(screen.queryByRole("button", { name: /^Edit / })).toBeNull();
+    expect((input() as HTMLInputElement).value).toBe(
+      "org:Studi email:example.invalid",
+    );
+    expect((input() as HTMLInputElement).selectionStart).toBe(9);
+    expect(changed).toHaveBeenLastCalledWith("org:Studi email:example.invalid");
+    key("z", input(), { ctrlKey: true });
+    expect(edit("org", "Studio")).toBeTruthy();
+    expect(edit("email", "example.invalid")).toBeTruthy();
   });
   it.each(["org:Other", "org:"])(
     "settles %s before switching pills and preserves distinct undo",
