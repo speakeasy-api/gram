@@ -193,6 +193,7 @@ function AgentList({
     <ResourceListPage
       title="Agents"
       description="Agents visible to you."
+      stage="preview"
       primaryAction={<Button onClick={onCreate}>New agent identity</Button>}
       search={{
         value: search,
