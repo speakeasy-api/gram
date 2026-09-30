@@ -70,4 +70,3 @@ services:
     volumes:
       - ./local/otel/otlp-sink.yaml:/etc/otelcol/config.yaml:ro
     command: ["--config=/etc/otelcol/config.yaml"]
-
