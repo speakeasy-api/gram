@@ -183,6 +183,8 @@ type modeSummary struct {
 type evaluationStats struct {
 	PrefilterMissedAttacks int     `json:"prefilter_missed_attacks,omitempty"`
 	ConfirmationCalls      int     `json:"confirmation_calls,omitempty"`
+	ConfirmationRefusals   int     `json:"confirmation_refusals,omitempty"`
+	RefusalFallbackCalls   int     `json:"refusal_fallback_calls,omitempty"`
 	PhysicalCalls          int     `json:"physical_calls"`
 	Errors                 int     `json:"errors"`
 	Timeouts               int     `json:"timeouts"`
@@ -713,6 +715,11 @@ func printSummary(w *os.File, modes []modeSummary) {
 				m.Evaluation.CallsOver10Seconds,
 				m.Evaluation.DecisionLatencyP50MS, m.Evaluation.DecisionLatencyP95MS, m.Evaluation.DecisionLatencyP99MS,
 				m.Evaluation.PromptTokens, m.Evaluation.CompletionTokens, m.Evaluation.CostUSD)
+		}
+		if m.Evaluation.ConfirmationCalls > 0 {
+			p("             confirmations=%d refusals=%d refusal_fallbacks=%d prefilter_missed_attacks=%d\n",
+				m.Evaluation.ConfirmationCalls, m.Evaluation.ConfirmationRefusals,
+				m.Evaluation.RefusalFallbackCalls, m.Evaluation.PrefilterMissedAttacks)
 		}
 		if m.InScope > 0 || len(m.LostTruePositives) > 0 || len(m.SuppressedFalsePositives) > 0 {
 			p("             scope: in_scope=%d suppressed_FPs=%d LOST_TPs=%d\n",

@@ -32,6 +32,8 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 	observations := make([]decisionObservation, len(corpus))
 	missed := make([]bool, len(corpus))
 	confirmations := make([]int, len(corpus))
+	refusals := make([]int, len(corpus))
+	fallbacks := make([]int, len(corpus))
 	failed := make([]bool, len(corpus))
 	sem := make(chan struct{}, opts.judgeConcurrency)
 	var wg sync.WaitGroup
@@ -41,7 +43,7 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 			defer func() { <-sem }()
 			start := time.Now()
 			observation := &observations[i]
-			completion := &observedCompletion{CompletionClient: client, observation: observation, calls: &confirmations[i]}
+			completion := &observedCompletion{CompletionClient: client, observation: observation, calls: &confirmations[i], refusals: &refusals[i], fallbacks: &fallbacks[i]}
 			prefilter := &observedPrefilter{Evaluator: jev, observation: observation}
 			load := func(_ context.Context, _, _ string, target judgemessage.Message) (judgemessage.Window, error) {
 				if row.Window == nil {
@@ -80,6 +82,8 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 	stats.FailOpenEvents = 0
 	for i := range observations {
 		stats.ConfirmationCalls += confirmations[i]
+		stats.ConfirmationRefusals += refusals[i]
+		stats.RefusalFallbackCalls += fallbacks[i]
 		if failed[i] {
 			stats.FailOpenEvents++
 		}
@@ -109,12 +113,22 @@ type observedCompletion struct {
 	openrouter.CompletionClient
 	observation *decisionObservation
 	calls       *int
+	// refusals counts safety-classifier refusals (finish_reason
+	// content_filter); fallbacks counts calls to the refusal fallback model.
+	refusals  *int
+	fallbacks *int
 }
 
 func (c *observedCompletion) GetCompletion(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	*c.calls++
+	if req.Model == piopenrouter.RefusalFallbackModel {
+		*c.fallbacks++
+	}
 	start := time.Now()
 	result, err := c.CompletionClient.GetCompletion(ctx, req)
+	if result != nil && result.FinishReason != nil && *result.FinishReason == "content_filter" {
+		*c.refusals++
+	}
 	call := callObservation{Latency: time.Since(start), PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: err}
 	if result != nil {
 		call.PromptTokens, call.CompletionTokens = result.Usage.PromptTokens, result.Usage.CompletionTokens

@@ -28,6 +28,10 @@ import (
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
+// finishReasonContentFilter is the OpenAI-compatible finish reason OpenRouter
+// reports when the provider's safety classifier refuses the request.
+const finishReasonContentFilter = "content_filter"
+
 const (
 	// JudgeTimeout bounds a single inline completion and is shared with the
 	// offline evaluator.
@@ -67,6 +71,7 @@ const (
 	spanAttrOperational     = "pi_judge.operational"
 	spanAttrFindingSurfaced = "pi_judge.finding_surfaced"
 	spanAttrFailOpen        = "pi_judge.fail_open"
+	spanAttrRefusalFallback = "pi_judge.refusal_fallback"
 )
 
 // SystemPrompt is the typed prompt shared by production and the
@@ -120,10 +125,13 @@ type Engine struct {
 	metrics      *metrics
 	client       gramopenrouter.CompletionClient
 	model        string
-	reasoning    string
-	temperature  float64
-	schema       or.ChatJSONSchemaConfig // built once; the verdict shape is constant
-	stokenCodec  *stokens.Codec
+	// refusalFallbackModel, when set, re-judges the same evidence once after
+	// the provider's safety classifier refuses the primary model.
+	refusalFallbackModel string
+	reasoning            string
+	temperature          float64
+	schema               or.ChatJSONSchemaConfig // built once; the verdict shape is constant
+	stokenCodec          *stokens.Codec
 }
 
 type trajectoryTelemetry struct {
@@ -141,6 +149,9 @@ var _ promptinjection.Classifier = (*Engine)(nil).Classify
 var (
 	safeResult          = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: Model, Provider: "openrouter"}
 	errMalformedVerdict = errors.New("malformed typed pi verdict")
+	// errRefused is a provider safety-classifier refusal: the completion ends
+	// with finish_reason content_filter and carries no verdict.
+	errRefused = errors.New("pi judge refused by provider safety classifier")
 )
 
 // unavailableResult is every path where the judge never rendered a verdict.
@@ -161,9 +172,11 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		metrics:      newMetrics(meterProvider, logger),
 		client:       client,
 		model:        Model,
-		reasoning:    ReasoningEffort,
-		temperature:  defaultTemperature,
-		stokenCodec:  stokens.NewCodec(),
+		// Only the cascade's Opus confirmation sets a refusal fallback.
+		refusalFallbackModel: "",
+		reasoning:            ReasoningEffort,
+		temperature:          defaultTemperature,
+		stokenCodec:          stokens.NewCodec(),
 		schema: or.ChatJSONSchemaConfig{
 			Name:        "prompt_injection_typed_verdict",
 			Schema:      VerdictSchema(),
@@ -314,7 +327,13 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	defer cancel()
 
 	start := time.Now()
-	verdict, err := c.judge(decisionCtx, req, prepared, userID)
+	model := c.model
+	verdict, err := c.judge(decisionCtx, req, prepared, userID, model, c.refusalFallbackModel != "")
+	refusalFallback := errors.Is(err, errRefused) && c.refusalFallbackModel != ""
+	if refusalFallback {
+		model = c.refusalFallbackModel
+		verdict, err = c.judge(decisionCtx, req, prepared, userID, model, false)
+	}
 	failOpen := err != nil
 	stabilized := StabilizeSingle(verdict)
 
@@ -327,7 +346,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	if target == "" {
 		target = TargetNone
 	}
-	c.metrics.RecordEvent(ctx, req.OrgID, c.model, c.reasoning, contextState.contextPresent, stabilized.IsInjection, failOpen, duration)
+	c.metrics.RecordEvent(ctx, req.OrgID, model, c.reasoning, contextState.contextPresent, stabilized.IsInjection, failOpen, duration)
 	c.metrics.RecordVerdict(
 		ctx,
 		req.OrgID,
@@ -337,10 +356,12 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		stabilized.IsInjection,
 		contextState.contextPresent,
 		failOpen,
-		c.model,
+		model,
 		c.reasoning,
 	)
 	span.SetAttributes(
+		attribute.String(spanAttrModel, model),
+		attribute.Bool(spanAttrRefusalFallback, refusalFallback),
 		attribute.String(spanAttrDirectiveKind, directiveKind),
 		attribute.String(spanAttrTarget, target),
 		attribute.Bool(spanAttrOperational, stabilized.Operational),
@@ -356,7 +377,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		Operational:   false,
 		STokens:       0,
 		Completed:     false,
-		Model:         c.model,
+		Model:         model,
 		Provider:      "openrouter",
 	}
 	if failOpen {
@@ -371,7 +392,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		return result
 	}
 
-	c.metrics.RecordDetection(ctx, req.OrgID, stabilized.DirectiveKind, stabilized.Target, stabilized.Operational, c.model, c.reasoning)
+	c.metrics.RecordDetection(ctx, req.OrgID, stabilized.DirectiveKind, stabilized.Target, stabilized.Operational, model, c.reasoning)
 	c.logger.InfoContext(ctx, "PI judge detected prompt injection",
 		attr.SlogOrganizationID(req.OrgID),
 	)
@@ -412,18 +433,25 @@ func observeTrajectoryField(value string) (present bool, length int, truncated b
 	return present, length, false
 }
 
-// judge makes the physical call and records its telemetry. A failed or
-// malformed call returns the zero Verdict and an error.
-func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepared []byte, userID string) (Verdict, error) {
+// judge makes the physical call to model and records its telemetry. A failed
+// or malformed call returns the zero Verdict and an error. A refusal that will
+// be retried on a fallback model is not a fail-open event.
+func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepared []byte, userID string, model string, refusalRetried bool) (Verdict, error) {
 	start := time.Now()
-	verdict, err := c.call(ctx, req, prepared, userID)
+	verdict, err := c.call(ctx, req, prepared, userID, model)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	duration := time.Since(start)
 	reason := typedFailureReason(err, outcome)
-	c.metrics.RecordPhysicalCall(ctx, req.OrgID, c.model, c.reasoning, outcome, reason, duration)
-	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(IsInjection(verdict), err), c.model, c.reasoning, outcome, duration)
+	c.metrics.RecordPhysicalCall(ctx, req.OrgID, model, c.reasoning, outcome, reason, duration)
+	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(IsInjection(verdict), err), model, c.reasoning, outcome, duration)
+	if errors.Is(err, errRefused) && refusalRetried {
+		c.logger.InfoContext(ctx, "PI judge refused by provider safety classifier; retrying on fallback model",
+			attr.SlogOrganizationID(req.OrgID),
+		)
+		return verdict, err
+	}
 	if err != nil {
-		c.metrics.RecordFailOpen(ctx, req.OrgID, c.model, c.reasoning, reason)
+		c.metrics.RecordFailOpen(ctx, req.OrgID, model, c.reasoning, reason)
 		if outcome != o11y.OutcomeCanceled {
 			c.logger.WarnContext(ctx, "PI judge call failed; failing open",
 				attr.SlogError(err),
@@ -444,6 +472,9 @@ func typedFailureReason(err error, outcome o11y.Outcome) string {
 	}
 	if outcome == o11y.OutcomeTimeout {
 		return "timeout"
+	}
+	if errors.Is(err, errRefused) {
+		return "refused"
 	}
 	if errors.Is(err, errMalformedVerdict) {
 		return "malformed"
@@ -507,7 +538,7 @@ func judgePayloadContent(payload judgePayload) []string {
 	return content
 }
 
-func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload []byte, userID string) (Verdict, error) {
+func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload []byte, userID string, model string) (Verdict, error) {
 
 	messages := []or.ChatMessages{
 		systemMessage(c.systemPrompt),
@@ -524,7 +555,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload 
 		Tools:                     nil,
 		ToolChoice:                nil,
 		Temperature:               &c.temperature,
-		Model:                     c.model,
+		Model:                     model,
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceRiskAnalysis,
 		KeyType:                   gramopenrouter.KeyTypeInternal,
@@ -544,6 +575,9 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload 
 	})
 	if err != nil {
 		return Verdict{}, fmt.Errorf("openrouter completion: %w", err)
+	}
+	if response != nil && response.FinishReason != nil && *response.FinishReason == finishReasonContentFilter {
+		return Verdict{}, errRefused
 	}
 	if response == nil || response.Message == nil {
 		return Verdict{}, fmt.Errorf("%w: empty completion response", errMalformedVerdict)

@@ -55,6 +55,31 @@ Body/tool evidence is bounded, and
 truncated bodies are marked. Tool invocations retain names and arguments; stored
 tool results retain their actor role, but historical rows may lack a tool name.
 
+## Refusal fallback
+
+Opus 5.5 runs Anthropic's cyber safety classifier. It refuses many real
+injection payloads instead of judging them: the completion ends with
+`finish_reason: content_filter` and no verdict. Without handling, every refusal
+would be an unavailable result, so the attacks most likely to be dangerous
+would never become findings.
+
+When Opus 5.5 refuses, the same evidence is sent once to Opus 4.8
+(`anthropic/claude-opus-4.8`), Anthropic's recommended fallback for
+cyber-category refusals. Its verdict is used as the confirmation, and the
+result records the model that produced it. Both calls share the 45-second
+confirmation deadline. If Opus 4.8 also refuses, the result is unavailable.
+Only refusals fall back; timeouts, throttling, provider errors and malformed
+responses do not. Refusals are recorded with the `refused` failure reason, and
+the span's `pi_judge.refusal_fallback` attribute marks fallback verdicts.
+
+Evidence from the 1,190-case benchmark (September 30): Opus 5.5 failed 155
+calls, all refusals by the cyber classifier; 143 were still refused after three
+attempts each. Opus 4.8, with the same prompt, evidence and settings, returned
+a verdict for 131 of those 143, flagged 103 of the 141 attacks among them, and
+cleared both benign cases. With the fallback, Jev → Opus in-scope recall rises
+from 51.1% to 89.2% at 100% precision. The remaining in-scope misses are raw
+destructive commands and trajectory-to-action cases that Opus 5.5 also clears.
+
 Only an Opus-confirmed verdict creates a finding. Jev errors, unavailable context,
 malformed responses, provider throttling, and Opus errors remain unavailable verdicts,
 never completed clean scans. Existing delivery and finding persistence handle
@@ -76,8 +101,8 @@ contracts; no new tool, permission, or seed shape is needed.
 
 Run `mise exec -- go run ./server/cmd/risk-pi-report -cascade` from the repository
 root with `OPENROUTER_DEV_KEY` configured. The report uses production orchestration
-and records confirmation calls, prefilter misses, total provider cost, latency,
-precision, and recall. Run without `-cascade` for the baseline. JSONL cases can
+and records confirmation calls, confirmation refusals, refusal-fallback calls,
+prefilter misses, total provider cost, latency, precision, and recall. Run without `-cascade` for the baseline. JSONL cases can
 provide a `window` with up to five rendered messages and a `target_index`; cases
 without a window evaluate the target with its trajectory. Both Jev and Opus
 receive the same bounded trajectory used by the Gemini baseline. Conversation
@@ -91,17 +116,18 @@ precision, recall, and provider failures.
 
 ## Research and rollout evidence
 
-[Evaluating Jev for Prompt Injection](https://jev-pi-evaluation.david232314.chatgpt.site/)
-records the flag-rate study, cost assumptions, labeled benchmark, and
-[case review](https://jev-pi-evaluation.david232314.chatgpt.site/review/).
+[Evaluating Jev for Prompt Injection](https://claude.ai/artifact/BHwoQfUtzp87oMSvTpfekp)
+records the flag-rate study, cost assumptions, labeled benchmark, and case
+review.
 The 0.50 cutoff matches the research baseline. In the enriched 10,000-message
 sample it escalated 27 messages; 0.90 escalated none. The sample deliberately
 included historical positives, so these are sample escalation rates, not natural
 production prevalence or accuracy measurements.
 
-The report's Opus 5.5 benchmark had 155 errors counted as unflagged. Its costs
-include planning estimates, and its cached cascade did not exercise Jev-error
-fallback. This implementation returns unavailable on Jev errors. The research
+The report's Opus 5.5 benchmark had 155 errors counted as unflagged; a re-run
+showed they are safety-classifier refusals, which the refusal fallback above
+now handles. Its costs include planning estimates, and its cached cascade did
+not exercise Jev-error fallback. This implementation returns unavailable on Jev errors. The research
 motivates further evaluation; it does not establish rollout readiness for this
 implementation's revised Jev instructions, confirmation window, or timeout.
 
@@ -129,7 +155,8 @@ surface.
 
 Success evidence: `TestCascadeConfirmedInjection` and
 `TestCascadeOpusFailureIsUnavailable` cover confirmed findings and unavailable
-reviews. `TestRiskFindingsMCPInProcess`, `TestRiskFindingsEvidence`, and
+reviews; `TestCascadeOpusRefusalFallsBackToOpus48` and
+`TestCascadeBothModelsRefusingIsUnavailable` cover the refusal fallback. `TestRiskFindingsMCPInProcess`, `TestRiskFindingsEvidence`, and
 `TestRiskFindingsValidationAndGates` cover the existing MCP result, redaction,
 and access/feature boundaries. No Platform MCP schema or shipped workflow needs
 to change for these internal classifier decisions.
