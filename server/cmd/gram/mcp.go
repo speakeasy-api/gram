@@ -270,6 +270,24 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	publishersShutdown := len(shutdown.funcs)
 	shutdown.funcs = append(shutdown.funcs, stop)
+	enforcementDispatcher, enforcementShutdown := newRiskEnforcementDispatcher(
+		ctx,
+		logger,
+		tracerProvider,
+		meterProvider,
+		redisClient,
+		psbroker,
+		featureFlags,
+	)
+	stopPublishers := shutdown.funcs[publishersShutdown]
+	shutdown.funcs[publishersShutdown] = func(ctx context.Context) error {
+		var errs []error
+		if enforcementShutdown != nil {
+			errs = append(errs, enforcementShutdown(ctx))
+		}
+		errs = append(errs, stopPublishers(ctx))
+		return errors.Join(errs...)
+	}
 
 	logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 	toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
@@ -290,17 +308,19 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
-		c, logger, tracerProvider, meterProvider, db, redisClient, featureFlags, completions, publishers, shadowMCPClient,
+		c, logger, tracerProvider, meterProvider, db, redisClient, featureFlags, enforcementDispatcher, completions, publishers, shadowMCPClient,
 	)
 	if err != nil {
 		return err
 	}
 	shutdown.funcs = append(shutdown.funcs, mcpRiskScanner.Shutdown)
-	// Shutdown funcs run concurrently, so flag findings drain inside the
+	// Shutdown funcs run concurrently, so risk work drains inside the
 	// publishers' stop instead of racing it.
-	stopPublishers := shutdown.funcs[publishersShutdown]
+	stopEnforcementAndPublishers := shutdown.funcs[publishersShutdown]
 	shutdown.funcs[publishersShutdown] = func(ctx context.Context) error {
-		return errors.Join(mcpRiskEvaluator.Drain(ctx), stopPublishers(ctx))
+		drainErr := mcpRiskEvaluator.Drain(ctx)
+		stopErr := stopEnforcementAndPublishers(ctx)
+		return errors.Join(drainErr, stopErr)
 	}
 	slackClient := slack_client.NewSlackClient(guardianPolicy)
 	// Listing and reading triggers works without Temporal; scheduling one
