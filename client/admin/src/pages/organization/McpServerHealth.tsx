@@ -553,7 +553,7 @@ function ToolCallsChart({
           aria-label={`Tool calls per ${unit}, ${rangeLabel(range)}. ${summary}`}
           className={cn(
             PLOT,
-            "relative flex items-end justify-between gap-1 overflow-x-auto rounded-md border px-4 pt-6 pb-3",
+            "relative flex items-end justify-between gap-1 overflow-x-auto px-4 pt-6 pb-3",
           )}
         >
           {points.map((point, index) => (
