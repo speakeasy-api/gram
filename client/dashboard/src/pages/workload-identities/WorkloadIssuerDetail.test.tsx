@@ -420,3 +420,25 @@ it("refreshes, closes the sheet and confirms once the edit saves", async () => {
   expect(mocks.toastSuccess).toHaveBeenCalledWith("Platform updated");
   await waitFor(() => expect(screen.queryByText("Edit platform")).toBeNull());
 });
+
+it("keeps the sheet open and shows the server's message when the edit fails", async () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  act(() => {
+    mocks.updateOptions.onError?.(
+      new Error('an issuer named "Example deploys" already exists'),
+    );
+  });
+
+  expect(mocks.toastError).toHaveBeenCalledWith(
+    'an issuer named "Example deploys" already exists',
+  );
+  expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  expect(screen.getByText("Edit platform")).toBeTruthy();
+});
