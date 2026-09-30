@@ -19,10 +19,12 @@ import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIss
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
+import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStackOptions.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
 import { adminGetOrganizationOnboarding } from "../funcs/adminGetOrganizationOnboarding.js";
+import { adminGetOrganizationOnboardingStack } from "../funcs/adminGetOrganizationOnboardingStack.js";
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
@@ -36,6 +38,7 @@ import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
+import { adminListOnboardingSteps } from "../funcs/adminListOnboardingSteps.js";
 import { adminListOrganizationActivity } from "../funcs/adminListOrganizationActivity.js";
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
@@ -56,6 +59,7 @@ import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyM
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetOrganizationOnboarding } from "../funcs/adminSetOrganizationOnboarding.js";
+import { adminSetOrganizationOnboardingStack } from "../funcs/adminSetOrganizationOnboardingStack.js";
 import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
@@ -79,6 +83,9 @@ import { AdminListUserOrganizationsResult } from "../models/components/adminlist
 import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingConfiguration } from "../models/components/adminonboardingconfiguration.js";
+import { AdminOnboardingStack } from "../models/components/adminonboardingstack.js";
+import { AdminOnboardingStackOptions } from "../models/components/adminonboardingstackoptions.js";
+import { AdminOnboardingStepList } from "../models/components/adminonboardingsteplist.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
@@ -119,6 +126,7 @@ import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/set
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { SetOrganizationOnboardingRequestBody } from "../models/components/setorganizationonboardingrequestbody.js";
+import { SetOrganizationOnboardingStackRequestBody } from "../models/components/setorganizationonboardingstackrequestbody.js";
 import { SetRegistryEntryPublishedRequestBody } from "../models/components/setregistryentrypublishedrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { SetStripeSubscriptionRequestBody } from "../models/components/setstripesubscriptionrequestbody.js";
@@ -141,6 +149,7 @@ import { AdminGetOrganizationRequest } from "../models/operations/admingetorgani
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
 import { AdminGetOrganizationOnboardingRequest } from "../models/operations/admingetorganizationonboarding.js";
+import { AdminGetOrganizationOnboardingStackRequest } from "../models/operations/admingetorganizationonboardingstack.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
 import { AdminGetRegistryEntryRequest } from "../models/operations/admingetregistryentry.js";
@@ -220,6 +229,36 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(adminLogout(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * getOnboardingStackOptions admin
+   *
+   * @remarks
+   * Read the vendors, plans and platforms the stack form offers, from the support matrix catalog.
+   */
+  async getOnboardingStackOptions(
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingStackOptions> {
+    return unwrapAsync(adminGetOnboardingStackOptions(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * listOnboardingSteps admin
+   *
+   * @remarks
+   * Read the onboarding steps the code defines, mirrored into the database, with their groups, methods and prerequisites.
+   */
+  async listOnboardingSteps(
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingStepList> {
+    return unwrapAsync(adminListOnboardingSteps(
       this,
       options,
     ));
@@ -472,6 +511,40 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOnboardingConfiguration> {
     return unwrapAsync(adminSetOrganizationOnboarding(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationOnboardingStack admin
+   *
+   * @remarks
+   * Read the stack staff recorded for an organization: its vendors with plans and its device management.
+   */
+  async getOrganizationOnboardingStack(
+    request: AdminGetOrganizationOnboardingStackRequest,
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingStack> {
+    return unwrapAsync(adminGetOrganizationOnboardingStack(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setOrganizationOnboardingStack admin
+   *
+   * @remarks
+   * Replace the stack recorded for an organization. Vendors and plans must come from the catalog; other needs a name and none clears it.
+   */
+  async setOrganizationOnboardingStack(
+    request: SetOrganizationOnboardingStackRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingStack> {
+    return unwrapAsync(adminSetOrganizationOnboardingStack(
       this,
       request,
       options,

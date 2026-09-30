@@ -81,6 +81,10 @@ type Endpoints struct {
 	CreateRegistryEntry                   goa.Endpoint
 	SaveRegistryEntry                     goa.Endpoint
 	SetRegistryEntryPublished             goa.Endpoint
+	ListOnboardingSteps                   goa.Endpoint
+	GetOnboardingStackOptions             goa.Endpoint
+	GetOrganizationOnboardingStack        goa.Endpoint
+	SetOrganizationOnboardingStack        goa.Endpoint
 	GetStripeSubscriptionCandidate        goa.Endpoint
 	SetStripeSubscription                 goa.Endpoint
 }
@@ -172,6 +176,10 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateRegistryEntry:                   NewCreateRegistryEntryEndpoint(s, a.APIKeyAuth),
 		SaveRegistryEntry:                     NewSaveRegistryEntryEndpoint(s, a.APIKeyAuth),
 		SetRegistryEntryPublished:             NewSetRegistryEntryPublishedEndpoint(s, a.APIKeyAuth),
+		ListOnboardingSteps:                   NewListOnboardingStepsEndpoint(s, a.APIKeyAuth),
+		GetOnboardingStackOptions:             NewGetOnboardingStackOptionsEndpoint(s, a.APIKeyAuth),
+		GetOrganizationOnboardingStack:        NewGetOrganizationOnboardingStackEndpoint(s, a.APIKeyAuth),
+		SetOrganizationOnboardingStack:        NewSetOrganizationOnboardingStackEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscriptionCandidate:        NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
 		SetStripeSubscription:                 NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 	}
@@ -243,6 +251,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRegistryEntry = m(e.CreateRegistryEntry)
 	e.SaveRegistryEntry = m(e.SaveRegistryEntry)
 	e.SetRegistryEntryPublished = m(e.SetRegistryEntryPublished)
+	e.ListOnboardingSteps = m(e.ListOnboardingSteps)
+	e.GetOnboardingStackOptions = m(e.GetOnboardingStackOptions)
+	e.GetOrganizationOnboardingStack = m(e.GetOrganizationOnboardingStack)
+	e.SetOrganizationOnboardingStack = m(e.SetOrganizationOnboardingStack)
 	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
 	e.SetStripeSubscription = m(e.SetStripeSubscription)
 }
@@ -1677,6 +1689,98 @@ func NewSetRegistryEntryPublishedEndpoint(s Service, authAPIKeyFn security.AuthA
 			return nil, err
 		}
 		return s.SetRegistryEntryPublished(ctx, p)
+	}
+}
+
+// NewListOnboardingStepsEndpoint returns an endpoint function that calls the
+// method "listOnboardingSteps" of service "admin".
+func NewListOnboardingStepsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListOnboardingStepsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListOnboardingSteps(ctx, p)
+	}
+}
+
+// NewGetOnboardingStackOptionsEndpoint returns an endpoint function that calls
+// the method "getOnboardingStackOptions" of service "admin".
+func NewGetOnboardingStackOptionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOnboardingStackOptionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOnboardingStackOptions(ctx, p)
+	}
+}
+
+// NewGetOrganizationOnboardingStackEndpoint returns an endpoint function that
+// calls the method "getOrganizationOnboardingStack" of service "admin".
+func NewGetOrganizationOnboardingStackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationOnboardingStackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationOnboardingStack(ctx, p)
+	}
+}
+
+// NewSetOrganizationOnboardingStackEndpoint returns an endpoint function that
+// calls the method "setOrganizationOnboardingStack" of service "admin".
+func NewSetOrganizationOnboardingStackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationOnboardingStackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetOrganizationOnboardingStack(ctx, p)
 	}
 }
 

@@ -463,6 +463,150 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/onboarding.stackOptions:
+        get:
+            description: Read the vendors, plans and platforms the stack form offers, from the support matrix catalog.
+            operationId: adminGetOnboardingStackOptions
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingStackOptions'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getOnboardingStackOptions admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOnboardingStackOptions
+    /admin/onboarding.steps:
+        get:
+            description: Read the onboarding steps the code defines, mirrored into the database, with their groups, methods and prerequisites.
+            operationId: adminListOnboardingSteps
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingStepList'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listOnboardingSteps admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOnboardingSteps
     /admin/organization.activity:
         get:
             description: Lists activity belonging to an organization for admin operators.
@@ -1716,6 +1860,162 @@ paths:
                 - admin
             x-speakeasy-react-hook:
                 name: SetAdminOrganizationOnboarding
+    /admin/organization.onboardingStack:
+        get:
+            description: 'Read the stack staff recorded for an organization: its vendors with plans and its device management.'
+            operationId: adminGetOrganizationOnboardingStack
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingStack'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getOrganizationOnboardingStack admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOrganizationOnboardingStack
+        post:
+            description: Replace the stack recorded for an organization. Vendors and plans must come from the catalog; other needs a name and none clears it.
+            operationId: adminSetOrganizationOnboardingStack
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetOrganizationOnboardingStackRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingStack'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setOrganizationOnboardingStack admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: SetAdminOrganizationOnboardingStack
     /admin/organization.open-dashboard:
         post:
             tags:
@@ -80308,6 +80608,16 @@ components:
                 - visibility
                 - source
                 - created_at
+        AdminMdmVendorOption:
+            type: object
+            properties:
+                name:
+                    type: string
+                slug:
+                    type: string
+            required:
+                - slug
+                - name
         AdminMeterUsageBucket:
             type: object
             properties:
@@ -80390,6 +80700,32 @@ components:
                 - organization_id
                 - tasks
                 - presets
+        AdminOnboardingPlan:
+            type: object
+            properties:
+                name:
+                    type: string
+                slug:
+                    type: string
+            required:
+                - slug
+                - name
+        AdminOnboardingPlatform:
+            type: object
+            properties:
+                family:
+                    type: string
+                name:
+                    type: string
+                slug:
+                    type: string
+                surface:
+                    type: string
+            required:
+                - slug
+                - name
+                - family
+                - surface
         AdminOnboardingPreset:
             type: object
             properties:
@@ -80405,15 +80741,112 @@ components:
                 - key
                 - title
                 - visible_task_keys
+        AdminOnboardingStack:
+            type: object
+            properties:
+                mdm_vendor:
+                    type: string
+                    description: jamf, intune, iru, other or none. Absent until staff record the stack.
+                mdm_vendor_name:
+                    type: string
+                    description: The software's name when mdm_vendor is other.
+                organization_id:
+                    type: string
+                vendors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingStackVendor'
+                    description: The vendors the organization uses. Empty until staff record the stack.
+            required:
+                - organization_id
+                - vendors
+        AdminOnboardingStackOptions:
+            type: object
+            properties:
+                mdm_vendors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminMdmVendorOption'
+                    description: Device management software the form offers, ending with other.
+                vendors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingVendorOption'
+                    description: From the support matrix catalog, in catalog order.
+            required:
+                - vendors
+                - mdm_vendors
+        AdminOnboardingStackVendor:
+            type: object
+            properties:
+                plan_slug:
+                    type: string
+                    description: The plan the organization is on with this vendor. Absent for a vendor with no plans.
+                vendor:
+                    type: string
+            required:
+                - vendor
+        AdminOnboardingStep:
+            type: object
+            properties:
+                completion:
+                    type: string
+                    description: 'How the step completes: manual, fact, or children for a group.'
+                description:
+                    type: string
+                hidden_by_default:
+                    type: boolean
+                    description: Whether an organization that never saved a selection sees the step.
+                method_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: Support matrix integration methods the step configures. Empty means the step applies to every stack.
+                parent_slug:
+                    type: string
+                    description: The group this card sits under. Absent for a top-level step.
+                requires:
+                    type: array
+                    items:
+                        type: string
+                    description: Slugs of the steps that must be done before this one.
+                slug:
+                    type: string
+                title:
+                    type: string
+            required:
+                - slug
+                - title
+                - description
+                - completion
+                - hidden_by_default
+                - method_slugs
+                - requires
+        AdminOnboardingStepList:
+            type: object
+            properties:
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingStep'
+                    description: Every step in wizard order; a group precedes its cards.
+            required:
+                - steps
         AdminOnboardingTask:
             type: object
             properties:
                 description:
                     type: string
+                group:
+                    type: boolean
+                    description: 'True for a group that nests cards. Groups are not selectable: their visibility follows their cards.'
                 hidden:
                     type: boolean
                 key:
                     type: string
+                parent_key:
+                    type: string
+                    description: Key of the group this card sits under. Absent for a top-level card or a group.
                 title:
                     type: string
             required:
@@ -80421,6 +80854,27 @@ components:
                 - title
                 - description
                 - hidden
+                - group
+        AdminOnboardingVendorOption:
+            type: object
+            properties:
+                plans:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingPlan'
+                    description: Plans the vendor sells. Empty for a vendor with no plans.
+                platforms:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingPlatform'
+                    description: The vendor's products, all implied when the vendor is selected.
+                vendor:
+                    type: string
+                    description: Vendor name as the support matrix spells it.
+            required:
+                - vendor
+                - plans
+                - platforms
         AdminOpenRouterKey:
             type: object
             properties:
@@ -93772,7 +94226,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SetupTask'
-                    description: Setup tasks in catalog order.
+                    description: Setup tasks in catalog order. A group precedes the cards under it.
             required:
                 - tasks
         ListShadowMCPInventoryResult:
@@ -103349,6 +103803,26 @@ components:
             required:
                 - organization_id
                 - visible_task_keys
+        SetOrganizationOnboardingStackRequestBody:
+            type: object
+            properties:
+                mdm_vendor:
+                    type: string
+                    description: jamf, intune, iru, other or none.
+                mdm_vendor_name:
+                    type: string
+                    description: Required when mdm_vendor is other, ignored otherwise.
+                organization_id:
+                    type: string
+                vendors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingStackVendor'
+                    description: Complete explicit list; an empty array records no vendors.
+            required:
+                - organization_id
+                - vendors
+                - mdm_vendor
         SetOrganizationWhitelistRequestBody:
             type: object
             properties:
@@ -103790,12 +104264,18 @@ components:
                 description:
                     type: string
                     description: Task description.
+                group:
+                    type: boolean
+                    description: 'True for a group that nests cards. A group has no card of its own: it is hidden when every card under it is, done when every visible card is, and cannot be assigned or marked by hand.'
                 hidden:
                     type: boolean
                     description: Whether a platform administrator hid the task.
                 key:
                     type: string
                     description: Stable code-owned task key.
+                parent_key:
+                    type: string
+                    description: Key of the group this card sits under. Absent for a top-level card or a group.
                 status:
                     type: string
                     description: Effective task status.
@@ -103815,6 +104295,7 @@ components:
                 - completed_by_fact
                 - blocked_by
                 - hidden
+                - group
         SetupTaskAssignee:
             type: object
             properties:
