@@ -84,7 +84,7 @@ func TestGetUserMetricsSummary_ReauthorizesTheMCPBehindADrilldownReference(t *te
 	principal := testPrincipal()
 	window, err := resolveWindow("24h", userSearchTestNow, drilldownWindowSpec)
 	require.NoError(t, err)
-	drilldown, err := service.references.EncodeScoped(principal, subjectKindUser, mcpUsageUserScope(drilldownTarget{projectID: userSearchTestProject, mcpServerID: userSearchTestMCP, window: window}), FormatSubjectIdentity(SubjectIdentityEmail, "pat.rivera@example.com"), userSearchTestNow)
+	drilldown, err := service.references.EncodeScoped(principal, subjectKindUser, mcpUsageUserScope(drilldownTarget{identity: serverIdentity{mcpServerID: userSearchTestMCP}, projectID: userSearchTestProject, window: window}), FormatSubjectIdentity(SubjectIdentityEmail, "pat.rivera@example.com"), userSearchTestNow)
 	require.NoError(t, err)
 
 	revoked := errors.New("mcp:read revoked")

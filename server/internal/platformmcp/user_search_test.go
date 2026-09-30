@@ -35,6 +35,12 @@ func (s stubUserSearchTelemetry) GetActiveCounts(context.Context, telemetryrepo.
 	return nil, nil
 }
 
+// GetUnifiedActiveServerCount satisfies the overview read model; the user
+// search tests do not assert on the active-server tally.
+func (s stubUserSearchTelemetry) GetUnifiedActiveServerCount(context.Context, telemetryrepo.GetTopServersParams) (uint64, error) {
+	return 0, nil
+}
+
 func (s stubUserSearchTelemetry) GetTopServers(context.Context, telemetryrepo.GetTopServersParams) ([]telemetryrepo.TopServer, error) {
 	return nil, nil
 }
@@ -522,7 +528,7 @@ func TestGetUserMetricsSummary_AcceptsDrilldownReferenceOnlyWithItsScope(t *test
 	window, err := resolveWindow("24h", userSearchTestNow, drilldownWindowSpec)
 	require.NoError(t, err)
 	// Minted the way list_mcp_usage_users mints: bound to the MCP and its window.
-	reference, err := service.references.EncodeScoped(principal, subjectKindUser, mcpUsageUserScope(drilldownTarget{projectID: userSearchTestProject, mcpServerID: userSearchTestMCP, window: window}), FormatSubjectIdentity(SubjectIdentityEmail, "pat.rivera@example.com"), userSearchTestNow)
+	reference, err := service.references.EncodeScoped(principal, subjectKindUser, mcpUsageUserScope(drilldownTarget{identity: serverIdentity{mcpServerID: userSearchTestMCP}, projectID: userSearchTestProject, window: window}), FormatSubjectIdentity(SubjectIdentityEmail, "pat.rivera@example.com"), userSearchTestNow)
 	require.NoError(t, err)
 
 	_, err = service.GetUserMetricsSummary(t.Context(), principal, GetUserMetricsSummaryInput{ProjectID: userSearchTestProject, UserReference: reference, Window: "24h", MCPID: ""})
