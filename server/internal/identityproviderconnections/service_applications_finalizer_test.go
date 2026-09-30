@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	apprepo "github.com/speakeasy-api/gram/server/internal/oktaapplications/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
 
@@ -157,8 +158,9 @@ func TestApplicationsSync_FinalizeFailure_KeepsLateRequestDue(t *testing.T) {
 
 	// Use the database clock for both the attempt and the subsequent request;
 	// the host and container clocks need not agree.
-	var startedAt time.Time
-	require.NoError(t, si.conn.conn.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&startedAt))
+	clock, err := testrepo.New(si.conn.conn).GetTransactionClockFixture(ctx)
+	require.NoError(t, err)
+	startedAt := clock.TransactionNow.Time
 	attempt := finalizerRun(t, ctx, si, id, startedAt, "running")
 	_, err = si.svc.SyncApplications(ctx, &gen.SyncApplicationsPayload{SessionToken: nil, ID: verified.ID})
 	require.NoError(t, err)
