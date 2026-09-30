@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -71,7 +72,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, client *externalmcp.RegistryClie
 // nil: provenance comes from the already-fetched list entry and stands on its
 // own. includeTools false skips the details fetch entirely, for callers that
 // already have the server's own declarations and want provenance only.
-func (s *Source) Lookup(ctx context.Context, serverURL string, includeTools bool) (*Match, error) {
+func (s *Source) Lookup(ctx context.Context, projectID uuid.UUID, serverURL string, includeTools bool) (*Match, error) {
 	canonical, ok := shadowmcp.CanonicalizeInventoryURL(serverURL)
 	if !ok {
 		return nil, nil
