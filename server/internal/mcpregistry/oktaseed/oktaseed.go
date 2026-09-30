@@ -40,8 +40,28 @@ type Vendor struct {
 	Mapping mcpregistry.OktaMapping
 }
 
-// Vendors is the starter set. Keep entries alphabetical by Name.
+// Vendors is the starter set. Keep entries alphabetical by Name. Okta names
+// were read from a tenant's application list; integrator-prefixed names are
+// the keys of instances created from an integrator listing and may differ
+// from the vendor's public OIN listing. Issuers are the authorization server
+// Okta accepted as the identity assertion audience.
 var Vendors = []Vendor{
+	{
+		Name:             "ai.granola/mcp",
+		Title:            "Granola",
+		Description:      "Granola's hosted MCP server for meeting notes.",
+		WebsiteURL:       "https://www.granola.ai",
+		DocumentationURL: "https://www.granola.ai/docs/mcp",
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.granola.ai/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"integrator-4080826_granola_1"},
+			OINIntegrationID: "",
+			XAASignOnModes:   []string{"SAML_2_0"},
+			XAAIssuer:        "https://mcp-auth.granola.ai",
+		},
+	},
 	{
 		Name:             "app.linear/mcp",
 		Title:            "Linear",
@@ -57,6 +77,119 @@ var Vendors = []Vendor{
 			OINIntegrationID: "4080826",
 			XAASignOnModes:   []string{"SAML_2_0"},
 			XAAIssuer:        "https://auth.linear.com",
+		},
+	},
+	{
+		Name:             "com.atlassian/mcp",
+		Title:            "Atlassian",
+		Description:      "Atlassian's hosted MCP server for Jira and Confluence Cloud.",
+		WebsiteURL:       "https://www.atlassian.com",
+		DocumentationURL: "https://support.atlassian.com/atlassian-rovo-mcp-server/",
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.atlassian.com/v1/mcp"},
+			{Type: "sse", URL: "https://mcp.atlassian.com/v1/sse"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"atlassian"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.canva/mcp",
+		Title:            "Canva",
+		Description:      "Canva's hosted MCP server for designs and brand assets.",
+		WebsiteURL:       "https://www.canva.com",
+		DocumentationURL: "https://www.canva.dev/docs/apps/mcp-server/",
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.canva.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"canva"},
+			OINIntegrationID: "",
+			XAASignOnModes:   []string{"SAML_2_0"},
+			XAAIssuer:        "https://mcp.canva.com",
+		},
+	},
+	{
+		Name:             "com.datadoghq/mcp",
+		Title:            "Datadog",
+		Description:      "Datadog's hosted MCP server for monitors, logs, and incidents.",
+		WebsiteURL:       "https://www.datadoghq.com",
+		DocumentationURL: "https://docs.datadoghq.com/bits_ai/mcp_server/",
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.datadoghq.com/v1/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"datadog"},
+			OINIntegrationID: "",
+			XAASignOnModes:   []string{"SAML_2_0"},
+			XAAIssuer:        "https://app.datadoghq.com",
+		},
+	},
+	{
+		Name:             "com.github/mcp",
+		Title:            "GitHub",
+		Description:      "GitHub's hosted MCP server for repositories, issues, and pull requests.",
+		WebsiteURL:       "https://github.com",
+		DocumentationURL: "https://docs.github.com/en/copilot/how-tos/context/model-context-protocol/using-the-github-mcp-server",
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://api.githubcopilot.com/mcp/"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"github"},
+			OINIntegrationID: "",
+			XAASignOnModes:   nil,
+			XAAIssuer:        "",
+		},
+	},
+	{
+		Name:             "com.notion/mcp",
+		Title:            "Notion",
+		Description:      "Notion's hosted MCP server for pages and databases.",
+		WebsiteURL:       "https://www.notion.com",
+		DocumentationURL: "https://developers.notion.com/docs/mcp",
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.notion.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"notion"},
+			OINIntegrationID: "",
+			XAASignOnModes:   []string{"SAML_2_0"},
+			XAAIssuer:        "https://mcp.notion.com",
+		},
+	},
+	{
+		Name:             "com.slack/mcp",
+		Title:            "Slack",
+		Description:      "Slack's hosted MCP server for channels, messages, and search.",
+		WebsiteURL:       "https://slack.com",
+		DocumentationURL: "https://docs.slack.dev/ai/mcp-server/",
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.slack.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"slack"},
+			OINIntegrationID: "",
+			XAASignOnModes:   []string{"SAML_2_0", "OPENID_CONNECT"},
+			XAAIssuer:        "https://mcp.slack.com",
+		},
+	},
+	{
+		Name:             "com.supabase/mcp",
+		Title:            "Supabase",
+		Description:      "Supabase's hosted MCP server for projects, databases, and edge functions.",
+		WebsiteURL:       "https://supabase.com",
+		DocumentationURL: "https://supabase.com/docs/guides/getting-started/mcp",
+		Remotes: []Remote{
+			{Type: "streamable-http", URL: "https://mcp.supabase.com/mcp"},
+		},
+		Mapping: mcpregistry.OktaMapping{
+			OINNames:         []string{"integrator-4080826_supabase_1"},
+			OINIntegrationID: "",
+			XAASignOnModes:   []string{"SAML_2_0"},
+			XAAIssuer:        "https://api.supabase.com",
 		},
 	},
 }
