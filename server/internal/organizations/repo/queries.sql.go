@@ -2191,6 +2191,42 @@ func (q *Queries) LockOnboardingSteps(ctx context.Context) error {
 	return err
 }
 
+const lockOrganizationForAdminConfiguration = `-- name: LockOrganizationForAdminConfiguration :one
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR NO KEY UPDATE
+`
+
+// Pin the displayed identity without blocking settings inserts that acquire
+// foreign-key KEY SHARE locks after the chat-analysis budget lock.
+func (q *Queries) LockOrganizationForAdminConfiguration(ctx context.Context, id string) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationForAdminConfiguration, id)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const lockOrganizationForInviteAcceptance = `-- name: LockOrganizationForInviteAcceptance :one
 SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 FROM organization_metadata

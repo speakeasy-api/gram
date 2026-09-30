@@ -86,13 +86,28 @@ func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
 	return operations, nil
 }
 
+// implemented reports whether a reviewed writer is shipped. AttachWrites tests
+// keep this consent allowlist aligned with the operation registry.
+func (op WriteOperation) implemented() bool {
+	switch op {
+	case OperationSetOrganizationFeature, OperationAssignOrganizationOnboardingPlaybook,
+		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
+		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix:
+		return true
+	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer:
+		return false
+	default:
+		return false
+	}
+}
+
 // WritesAvailable reports whether consent may offer admin:write at all.
 func (c WriteConfig) WritesAvailable() bool {
 	if !c.Enabled {
 		return false
 	}
 	for _, op := range AllWriteOperations {
-		if c.Operations[op] {
+		if c.Operations[op] && op.implemented() {
 			return true
 		}
 	}

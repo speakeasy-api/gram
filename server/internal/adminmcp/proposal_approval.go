@@ -58,6 +58,7 @@ type proposalApprovalView struct {
 	ID string
 	// Operation is the stored write operation name.
 	Operation string
+	Resource  string
 	// Expiry is when the proposal stops being approvable, in RFC 3339 UTC.
 	Expiry string
 	// Change is the readable form of the stored preview.
@@ -77,10 +78,17 @@ var proposalApprovalPage = template.Must(template.New("admin-mcp-proposal").Pars
 <h1>Review staff change</h1>
 <p><strong>{{.Change.Summary}}</strong></p>
 <dl>
+<dt>Admin environment</dt>
+<dd><code>{{.Resource}}</code></dd>
+{{if .Change.PlatformGlobal}}
+<dt>Target</dt>
+<dd><strong>Platform-global configuration. Not limited to an organization.</strong></dd>
+{{else}}
 <dt>Organization</dt>
 <dd>{{.Change.OrganizationName}} ({{.Change.OrganizationSlug}})</dd>
 <dt>Organization ID</dt>
 <dd><code>{{.Change.OrganizationID}}</code></dd>
+{{end}}
 <dt>Operation</dt>
 <dd><code>{{.Operation}}</code></dd>
 <dt>Proposal expires</dt>
@@ -94,7 +102,7 @@ var proposalApprovalPage = template.Must(template.New("admin-mcp-proposal").Pars
 </table>
 {{if .Change.SideEffects}}<p>Side effects: {{.Change.SideEffects}}</p>{{end}}
 <details><summary>Exact stored proposal</summary><pre>{{.Preview}}</pre></details>
-<p>Only approve if the organization and change are correct. This approval is separate from the admin:write connection consent.</p>
+<p>Only approve if the environment, target and change are correct. This approval is separate from the admin:write connection consent and does not execute the change.</p>
 <form method="post" action="/admin-mcp/proposals/{{.ID}}">
 <input type="hidden" name="challenge" value="{{.Challenge}}">
 <input type="hidden" name="csrf_token" value="{{.CSRF}}">
@@ -213,6 +221,7 @@ func (s *StaffProposalApproval) show(w http.ResponseWriter, r *http.Request, id 
 	view := proposalApprovalView{
 		ID:        id.String(),
 		Operation: string(p.Operation),
+		Resource:  s.session.resource,
 		Expiry:    p.ExpiresAt.UTC().Format(time.RFC3339),
 		Change:    change,
 		Preview:   string(p.Preview),
