@@ -126,6 +126,28 @@ SELECT octet_length(sqlc.arg(data)::jsonb::text);
 
 -- name: CountRegistryEntries :one
 SELECT count(*) FROM mcp_registry_entries;
+
+-- name: LockOktaMappings :exec
+-- Serialize writers that claim OIN names; no index can enforce element-wise
+-- uniqueness on a jsonb array. The conflict scan below relies on READ COMMITTED
+-- taking its snapshot after this lock is granted.
+SELECT pg_advisory_xact_lock(hashtextextended('mcp_registry_entries:com.speakeasy.ai/okta', 0));
+
+-- name: ListOktaMappingConflicts :many
+-- Invalid historical rows may hold a non-array; treat them as unmapped.
+SELECT DISTINCT
+    n.name::text AS oin_name,
+    (e.data #>> '{server,name}')::text AS entry_name
+FROM mcp_registry_entries e
+CROSS JOIN LATERAL jsonb_array_elements_text(
+    CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
+        THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
+        ELSE '[]'::jsonb
+    END
+) AS n(name)
+WHERE e.id <> sqlc.arg(id)::uuid
+AND n.name = ANY(sqlc.arg(names)::text[]);
+
 -- name: DiscoverEntries :many
 -- Limit candidate metadata before measuring stored bodies.
 WITH candidates AS MATERIALIZED (

@@ -371,6 +371,52 @@ func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]Lis
 	return items, nil
 }
 
+const listOktaMappingConflicts = `-- name: ListOktaMappingConflicts :many
+SELECT DISTINCT
+    n.name::text AS oin_name,
+    (e.data #>> '{server,name}')::text AS entry_name
+FROM mcp_registry_entries e
+CROSS JOIN LATERAL jsonb_array_elements_text(
+    CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
+        THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
+        ELSE '[]'::jsonb
+    END
+) AS n(name)
+WHERE e.id <> $1::uuid
+AND n.name = ANY($2::text[])
+`
+
+type ListOktaMappingConflictsParams struct {
+	ID    uuid.UUID
+	Names []string
+}
+
+type ListOktaMappingConflictsRow struct {
+	OinName   string
+	EntryName string
+}
+
+// Invalid historical rows may hold a non-array; treat them as unmapped.
+func (q *Queries) ListOktaMappingConflicts(ctx context.Context, arg ListOktaMappingConflictsParams) ([]ListOktaMappingConflictsRow, error) {
+	rows, err := q.db.Query(ctx, listOktaMappingConflicts, arg.ID, arg.Names)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOktaMappingConflictsRow
+	for rows.Next() {
+		var i ListOktaMappingConflictsRow
+		if err := rows.Scan(&i.OinName, &i.EntryName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockEntry = `-- name: LockEntry :one
 SELECT id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
@@ -390,6 +436,18 @@ func (q *Queries) LockEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const lockOktaMappings = `-- name: LockOktaMappings :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mcp_registry_entries:com.speakeasy.ai/okta', 0))
+`
+
+// Serialize writers that claim OIN names; no index can enforce element-wise
+// uniqueness on a jsonb array. The conflict scan below relies on READ COMMITTED
+// taking its snapshot after this lock is granted.
+func (q *Queries) LockOktaMappings(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockOktaMappings)
+	return err
 }
 
 const registryReady = `-- name: RegistryReady :one

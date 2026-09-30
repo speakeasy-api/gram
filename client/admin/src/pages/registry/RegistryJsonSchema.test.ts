@@ -142,3 +142,57 @@ it("validates Speakeasy registry documentation URLs alongside the unchanged upst
     ).toEqual([]);
   }
 });
+
+it("validates and completes the Okta OIN mapping namespace", async () => {
+  const record = (okta: unknown) =>
+    JSON.stringify({
+      server: { name: "example.test/okta", description: "Okta", version: "1" },
+      _meta: { "com.speakeasy.ai/okta": okta },
+    });
+  expect(
+    await worker(
+      record({
+        oinNames: ["integrator-4080826_linear_1"],
+        oinIntegrationId: "4080826",
+        xaaSignOnModes: ["SAML_2_0"],
+        xaaIssuer: "https://auth.example.test",
+      }),
+    ).doValidation(uri),
+  ).toEqual([]);
+  for (const okta of [
+    {},
+    { oinNames: [] },
+    { oinNames: ["linear", "linear"] },
+    { oinNames: ["linear"], xaaSignOnModes: ["SWA"] },
+    { oinNames: ["linear"], xaaIssuer: "http://auth.example.test" },
+    { oinNames: ["linear"], xaaIssuer: "https://auth.example.test?x=1" },
+    { oinNames: ["linear"], unknown: true },
+    { oin_names: ["linear"] },
+  ]) {
+    expect(
+      await worker(record(okta)).doValidation(uri),
+      JSON.stringify(okta),
+    ).not.toEqual([]);
+  }
+  const properties = '{"_meta":{"com.speakeasy.ai/okta":{ }}}';
+  const propertyResult = await worker(properties).doComplete(uri, {
+    line: 0,
+    character: properties.indexOf("{ }") + 1,
+  });
+  expect(propertyResult.items.map((item) => item.label)).toEqual(
+    expect.arrayContaining([
+      "oinNames",
+      "oinIntegrationId",
+      "xaaSignOnModes",
+      "xaaIssuer",
+    ]),
+  );
+  const values = '{"_meta":{"com.speakeasy.ai/okta":{"xaaSignOnModes":[""]}}}';
+  const valueResult = await worker(values).doComplete(uri, {
+    line: 0,
+    character: values.indexOf('""') + 1,
+  });
+  expect(valueResult.items.map((item) => item.label)).toEqual(
+    expect.arrayContaining(['"SAML_2_0"', '"OPENID_CONNECT"']),
+  );
+});

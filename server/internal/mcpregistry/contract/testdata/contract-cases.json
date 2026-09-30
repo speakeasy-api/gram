@@ -744,5 +744,222 @@
       }
     },
     "valid": false
+  },
+  {
+    "name": "okta mapping",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["integrator-4080826_fixture_1", "fixture"],
+          "oinIntegrationId": "4080826",
+          "xaaSignOnModes": ["SAML_2_0", "OPENID_CONNECT"],
+          "xaaIssuer": "https://auth.example.test"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping names only",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"]
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping without names",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinIntegrationId": "4080826"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping empty names",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": []
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping duplicate names",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture", "fixture"]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping whitespace name",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture 1"]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping non-numeric integration id",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "oinIntegrationId": "abc"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping unknown sign-on mode",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "xaaSignOnModes": ["SWA"]
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping http issuer",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "xaaIssuer": "http://auth.example.test"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping issuer with query",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "xaaIssuer": "https://auth.example.test/?x=1"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping issuer with path",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "xaaIssuer": "https://auth.example.test/oauth"
+        }
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "okta mapping unknown property",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oinNames": ["fixture"],
+          "mcpUrl": "https://mcp.example.test"
+        }
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "okta mapping snake_case field",
+    "record": {
+      "server": {
+        "name": "io.example/fixture",
+        "description": "Fixture",
+        "version": "1.0"
+      },
+      "_meta": {
+        "com.speakeasy.ai/okta": {
+          "oin_names": ["fixture"]
+        }
+      }
+    },
+    "valid": false
   }
 ]

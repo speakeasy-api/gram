@@ -30,6 +30,49 @@
               "description": "Public documentation URL. HTTP and HTTPS are supported; HTTPS is recommended. Never include secrets."
             }
           }
+        },
+        "com.speakeasy.ai/okta": {
+          "type": "object",
+          "description": "Staff-maintained mapping from Okta Integration Network (OIN) applications to this server. Drives MCP server suggestions and Cross App Access prefill for organizations that sync their Okta applications. Closed object: new fields need a server deploy first. Public vendor catalog data only; never include tenant data or secrets.",
+          "properties": {
+            "oinNames": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^\\S+$"
+              },
+              "description": "Okta application `name` values (the OIN key) served by this entry, matched exactly against synced Okta apps. Catalog apps use the bare key (`linear`); integrator-published apps use `integrator-<integration id>_<key>_<n>`. Each key may map to one catalog entry across the whole catalog."
+            },
+            "oinIntegrationId": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 32,
+              "description": "Numeric OIN integration id shared by every instance of the integration."
+            },
+            "xaaSignOnModes": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": ["SAML_2_0", "OPENID_CONNECT"]
+              },
+              "description": "Okta sign-on modes of this integration that support Cross App Access. Omit when unknown; consumers then assume both SAML_2_0 and OPENID_CONNECT. App instances with other modes (SWA, bookmark) are flagged as the wrong kind."
+            },
+            "xaaIssuer": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 512,
+              "pattern": "^https://[^/?#@\\s]+(/[^?#\\s]*)?$",
+              "description": "Vendor Issuer URL entered in Okta's Cross App Access setup for this integration. HTTPS, host, optional path; no query, fragment or userinfo."
+            }
+          },
+          "required": ["oinNames"],
+          "additionalProperties": false
         }
       }
     }

@@ -76,6 +76,9 @@ func (v *Validator) validate(raw json.RawMessage, byteLimit int) []Issue {
 			return []Issue{{Path: "/_meta/com.speakeasy.ai~1catalog/documentationUrl", Message: "absolute HTTP(S) URL with a host and without userinfo required"}}
 		}
 	}
+	if issues := validateOktaMapping(meta); len(issues) > 0 {
+		return issues
+	}
 	server, _ := object["server"].(map[string]any)
 	name, _ := server["name"].(string)
 	if name == "" {
