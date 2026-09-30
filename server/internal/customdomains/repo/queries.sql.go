@@ -480,7 +480,7 @@ func (q *Queries) GetEligibleRootMcpEndpoint(ctx context.Context, arg GetEligibl
 }
 
 const getEligibleRootMcpServerForOrganization = `-- name: GetEligibleRootMcpServerForOrganization :one
-SELECT s.id, s.project_id, s.name, s.slug, s.environment_id, s.user_session_issuer_id, s.remote_session_issuer_id, s.remote_mcp_server_id, s.tunneled_mcp_server_id, s.toolset_id, s.unproxied_mcp_server_id, s.tool_variations_group_id, s.visibility, s.network_access_mode, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.project_id, s.name, s.slug, s.environment_id, s.user_session_issuer_id, s.remote_session_issuer_id, s.remote_mcp_server_id, s.tunneled_mcp_server_id, s.toolset_id, s.unproxied_mcp_server_id, s.tool_variations_group_id, s.visibility, s.network_access_mode, s.catalog_registry_id, s.catalog_server_specifier, s.catalog_remote_url, s.catalog_remote_transport, s.catalog_install_key, s.catalog_install_input_hash, s.catalog_install_invalidated_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM mcp_servers AS s
 JOIN projects AS p
   ON p.id = s.project_id
@@ -517,6 +517,13 @@ func (q *Queries) GetEligibleRootMcpServerForOrganization(ctx context.Context, a
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.CatalogRegistryID,
+		&i.CatalogServerSpecifier,
+		&i.CatalogRemoteUrl,
+		&i.CatalogRemoteTransport,
+		&i.CatalogInstallKey,
+		&i.CatalogInstallInputHash,
+		&i.CatalogInstallInvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

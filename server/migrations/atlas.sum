@@ -1,4 +1,4 @@
-h1:GLe/NsqGVr7X7yldShd9bA2H4RrusM+xHRNoptbKVnI=
+h1:VnBYWbPUzDSUEN7+ar2xewLYHlRm+QBLVSDl3ZihLio=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -442,3 +442,4 @@ h1:GLe/NsqGVr7X7yldShd9bA2H4RrusM+xHRNoptbKVnI=
 20260929165337_registry_publication_metadata.sql h1:CG9EpKlWCUA8Lkbc5qq05z985/Kf+b1pnHYCFnvS3O4=
 20260929233122_workload-issuer-description-admission-tags.sql h1:9QNIJVvQDeJanew7AygvbVVnezBmozfCw70qMYXSomY=
 20260930005350_onboarding-admin.sql h1:TMtD5eRhAvCiffV9dH38vUGSfTEEzGgLj3KJqWEKkQ8=
+20260930183228_mcp_catalog_install_binding.sql h1:8sCLRweXB8WqZzRshdpBqCd+RdMSJBCdlc7+T+4vDRA=

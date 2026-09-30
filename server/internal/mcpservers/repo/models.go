@@ -19,16 +19,23 @@ type McpServer struct {
 	RemoteSessionIssuerID uuid.NullUUID
 	RemoteMcpServerID     uuid.NullUUID
 	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
-	TunneledMcpServerID   uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	UnproxiedMcpServerID  uuid.NullUUID
-	ToolVariationsGroupID uuid.NullUUID
-	Visibility            string
-	NetworkAccessMode     pgtype.Text
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	TunneledMcpServerID         uuid.NullUUID
+	ToolsetID                   uuid.NullUUID
+	UnproxiedMcpServerID        uuid.NullUUID
+	ToolVariationsGroupID       uuid.NullUUID
+	Visibility                  string
+	NetworkAccessMode           pgtype.Text
+	CatalogRegistryID           uuid.NullUUID
+	CatalogServerSpecifier      pgtype.Text
+	CatalogRemoteUrl            pgtype.Text
+	CatalogRemoteTransport      pgtype.Text
+	CatalogInstallKey           uuid.NullUUID
+	CatalogInstallInputHash     pgtype.Text
+	CatalogInstallInvalidatedAt pgtype.Timestamptz
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
+	DeletedAt                   pgtype.Timestamptz
+	Deleted                     bool
 }
 
 type McpServerToolMetadatum struct {

@@ -6287,6 +6287,18 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   -- validated in application code so adding a mode does not require a migration.
   network_access_mode TEXT,
 
+  -- Catalog provenance is an immutable acceptance snapshot, not routing config.
+  -- No registry FK: deleting a namespace must not erase historical identity.
+  catalog_registry_id uuid,
+  catalog_server_specifier TEXT,
+  -- Advertised selection; effective URL/transport remain on the backend source.
+  catalog_remote_url TEXT,
+  catalog_remote_transport TEXT,
+  -- Nullable for manual/historical installs. Future writers validate the binding.
+  catalog_install_key uuid,
+  catalog_install_input_hash TEXT,
+  catalog_install_invalidated_at timestamptz,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -6316,6 +6328,11 @@ WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_id_key
 ON mcp_servers (project_id, id);
+
+-- Deleted and invalidated installs still reserve their accepted attempt key.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_catalog_install_key
+ON mcp_servers (project_id, catalog_install_key)
+WHERE catalog_install_key IS NOT NULL;
 
 
 -- Drives the resync that recomputes remote_session_issuer_id from a set of user

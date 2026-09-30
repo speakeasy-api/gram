@@ -116,7 +116,7 @@ VALUES (
     $12,
     $13
 )
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, catalog_registry_id, catalog_server_specifier, catalog_remote_url, catalog_remote_transport, catalog_install_key, catalog_install_input_hash, catalog_install_invalidated_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMCPServerParams struct {
@@ -167,6 +167,13 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.CatalogRegistryID,
+		&i.CatalogServerSpecifier,
+		&i.CatalogRemoteUrl,
+		&i.CatalogRemoteTransport,
+		&i.CatalogInstallKey,
+		&i.CatalogInstallInputHash,
+		&i.CatalogInstallInvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -194,7 +201,7 @@ const deleteMCPServer = `-- name: DeleteMCPServer :one
 UPDATE mcp_servers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, catalog_registry_id, catalog_server_specifier, catalog_remote_url, catalog_remote_transport, catalog_install_key, catalog_install_input_hash, catalog_install_invalidated_at, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteMCPServerParams struct {
@@ -220,6 +227,13 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.CatalogRegistryID,
+		&i.CatalogServerSpecifier,
+		&i.CatalogRemoteUrl,
+		&i.CatalogRemoteTransport,
+		&i.CatalogInstallKey,
+		&i.CatalogInstallInputHash,
+		&i.CatalogInstallInvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -266,7 +280,7 @@ func (q *Queries) DeleteMCPServerToolMetadata(ctx context.Context, arg DeleteMCP
 }
 
 const getMCPServerByIDAndOrganizationID = `-- name: GetMCPServerByIDAndOrganizationID :one
-SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.created_at, m.updated_at, m.deleted_at, m.deleted
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.catalog_registry_id, m.catalog_server_specifier, m.catalog_remote_url, m.catalog_remote_transport, m.catalog_install_key, m.catalog_install_input_hash, m.catalog_install_invalidated_at, m.created_at, m.updated_at, m.deleted_at, m.deleted
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
 WHERE m.id = $1
@@ -300,6 +314,13 @@ func (q *Queries) GetMCPServerByIDAndOrganizationID(ctx context.Context, arg Get
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.CatalogRegistryID,
+		&i.CatalogServerSpecifier,
+		&i.CatalogRemoteUrl,
+		&i.CatalogRemoteTransport,
+		&i.CatalogInstallKey,
+		&i.CatalogInstallInputHash,
+		&i.CatalogInstallInvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -309,7 +330,7 @@ func (q *Queries) GetMCPServerByIDAndOrganizationID(ctx context.Context, arg Get
 }
 
 const getMCPServerByIDAndProjectID = `-- name: GetMCPServerByIDAndProjectID :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, catalog_registry_id, catalog_server_specifier, catalog_remote_url, catalog_remote_transport, catalog_install_key, catalog_install_input_hash, catalog_install_invalidated_at, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -337,6 +358,13 @@ func (q *Queries) GetMCPServerByIDAndProjectID(ctx context.Context, arg GetMCPSe
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.CatalogRegistryID,
+		&i.CatalogServerSpecifier,
+		&i.CatalogRemoteUrl,
+		&i.CatalogRemoteTransport,
+		&i.CatalogInstallKey,
+		&i.CatalogInstallInputHash,
+		&i.CatalogInstallInvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -346,7 +374,7 @@ func (q *Queries) GetMCPServerByIDAndProjectID(ctx context.Context, arg GetMCPSe
 }
 
 const getMCPServerByLiveProjectForOrganization = `-- name: GetMCPServerByLiveProjectForOrganization :one
-SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.created_at, m.updated_at, m.deleted_at, m.deleted
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.catalog_registry_id, m.catalog_server_specifier, m.catalog_remote_url, m.catalog_remote_transport, m.catalog_install_key, m.catalog_install_input_hash, m.catalog_install_invalidated_at, m.created_at, m.updated_at, m.deleted_at, m.deleted
 FROM mcp_servers AS m
 JOIN projects AS p
   ON p.id = m.project_id
@@ -381,6 +409,13 @@ func (q *Queries) GetMCPServerByLiveProjectForOrganization(ctx context.Context, 
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.CatalogRegistryID,
+		&i.CatalogServerSpecifier,
+		&i.CatalogRemoteUrl,
+		&i.CatalogRemoteTransport,
+		&i.CatalogInstallKey,
+		&i.CatalogInstallInputHash,
+		&i.CatalogInstallInvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -390,7 +425,7 @@ func (q *Queries) GetMCPServerByLiveProjectForOrganization(ctx context.Context, 
 }
 
 const getMCPServerBySlug = `-- name: GetMCPServerBySlug :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, catalog_registry_id, catalog_server_specifier, catalog_remote_url, catalog_remote_transport, catalog_install_key, catalog_install_input_hash, catalog_install_invalidated_at, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -418,6 +453,13 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.CatalogRegistryID,
+		&i.CatalogServerSpecifier,
+		&i.CatalogRemoteUrl,
+		&i.CatalogRemoteTransport,
+		&i.CatalogInstallKey,
+		&i.CatalogInstallInputHash,
+		&i.CatalogInstallInvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -427,7 +469,7 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 }
 
 const getMCPServerByToolsetID = `-- name: GetMCPServerByToolsetID :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, catalog_registry_id, catalog_server_specifier, catalog_remote_url, catalog_remote_transport, catalog_install_key, catalog_install_input_hash, catalog_install_invalidated_at, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE toolset_id = $1::uuid AND project_id = $2 AND deleted IS FALSE
 ORDER BY created_at, id
@@ -458,6 +500,13 @@ func (q *Queries) GetMCPServerByToolsetID(ctx context.Context, arg GetMCPServerB
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.CatalogRegistryID,
+		&i.CatalogServerSpecifier,
+		&i.CatalogRemoteUrl,
+		&i.CatalogRemoteTransport,
+		&i.CatalogInstallKey,
+		&i.CatalogInstallInputHash,
+		&i.CatalogInstallInvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -701,7 +750,7 @@ func (q *Queries) ListEffectiveMCPServerToolAnnotations(ctx context.Context, arg
 }
 
 const listEnabledMCPServersByToolsetID = `-- name: ListEnabledMCPServersByToolsetID :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, catalog_registry_id, catalog_server_specifier, catalog_remote_url, catalog_remote_transport, catalog_install_key, catalog_install_input_hash, catalog_install_invalidated_at, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE toolset_id = $1::uuid
   AND project_id = $2
@@ -742,6 +791,13 @@ func (q *Queries) ListEnabledMCPServersByToolsetID(ctx context.Context, arg List
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.CatalogRegistryID,
+			&i.CatalogServerSpecifier,
+			&i.CatalogRemoteUrl,
+			&i.CatalogRemoteTransport,
+			&i.CatalogInstallKey,
+			&i.CatalogInstallInputHash,
+			&i.CatalogInstallInvalidatedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -880,7 +936,7 @@ func (q *Queries) ListMCPServerToolMetadata(ctx context.Context, arg ListMCPServ
 }
 
 const listMCPServersByLiveProjectForOrganizationLimited = `-- name: ListMCPServersByLiveProjectForOrganizationLimited :many
-SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.created_at, m.updated_at, m.deleted_at, m.deleted
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.catalog_registry_id, m.catalog_server_specifier, m.catalog_remote_url, m.catalog_remote_transport, m.catalog_install_key, m.catalog_install_input_hash, m.catalog_install_invalidated_at, m.created_at, m.updated_at, m.deleted_at, m.deleted
 FROM mcp_servers AS m
 JOIN projects AS p
   ON p.id = m.project_id
@@ -922,6 +978,13 @@ func (q *Queries) ListMCPServersByLiveProjectForOrganizationLimited(ctx context.
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.CatalogRegistryID,
+			&i.CatalogServerSpecifier,
+			&i.CatalogRemoteUrl,
+			&i.CatalogRemoteTransport,
+			&i.CatalogInstallKey,
+			&i.CatalogInstallInputHash,
+			&i.CatalogInstallInvalidatedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -938,7 +1001,7 @@ func (q *Queries) ListMCPServersByLiveProjectForOrganizationLimited(ctx context.
 }
 
 const listMCPServersByOrganizationID = `-- name: ListMCPServersByOrganizationID :many
-SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.created_at, m.updated_at, m.deleted_at, m.deleted
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.network_access_mode, m.catalog_registry_id, m.catalog_server_specifier, m.catalog_remote_url, m.catalog_remote_transport, m.catalog_install_key, m.catalog_install_input_hash, m.catalog_install_invalidated_at, m.created_at, m.updated_at, m.deleted_at, m.deleted
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
 WHERE p.organization_id = $1
@@ -974,6 +1037,13 @@ func (q *Queries) ListMCPServersByOrganizationID(ctx context.Context, organizati
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.CatalogRegistryID,
+			&i.CatalogServerSpecifier,
+			&i.CatalogRemoteUrl,
+			&i.CatalogRemoteTransport,
+			&i.CatalogInstallKey,
+			&i.CatalogInstallInputHash,
+			&i.CatalogInstallInvalidatedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -990,7 +1060,7 @@ func (q *Queries) ListMCPServersByOrganizationID(ctx context.Context, organizati
 }
 
 const listMCPServersByProjectID = `-- name: ListMCPServersByProjectID :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, catalog_registry_id, catalog_server_specifier, catalog_remote_url, catalog_remote_transport, catalog_install_key, catalog_install_input_hash, catalog_install_invalidated_at, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -1039,6 +1109,13 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.CatalogRegistryID,
+			&i.CatalogServerSpecifier,
+			&i.CatalogRemoteUrl,
+			&i.CatalogRemoteTransport,
+			&i.CatalogInstallKey,
+			&i.CatalogInstallInputHash,
+			&i.CatalogInstallInvalidatedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1317,7 +1394,7 @@ func (q *Queries) LockLiveMCPServersInOrganization(ctx context.Context, arg Lock
 }
 
 const lockMCPServerByIDAndProjectID = `-- name: LockMCPServerByIDAndProjectID :one
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, catalog_registry_id, catalog_server_specifier, catalog_remote_url, catalog_remote_transport, catalog_install_key, catalog_install_input_hash, catalog_install_invalidated_at, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 FOR UPDATE
@@ -1346,6 +1423,13 @@ func (q *Queries) LockMCPServerByIDAndProjectID(ctx context.Context, arg LockMCP
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.CatalogRegistryID,
+		&i.CatalogServerSpecifier,
+		&i.CatalogRemoteUrl,
+		&i.CatalogRemoteTransport,
+		&i.CatalogInstallKey,
+		&i.CatalogInstallInputHash,
+		&i.CatalogInstallInvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1373,7 +1457,7 @@ func (q *Queries) LockMCPServerToolMetadataWrite(ctx context.Context, mcpServerI
 }
 
 const lockMCPServersByIDs = `-- name: LockMCPServersByIDs :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, catalog_registry_id, catalog_server_specifier, catalog_remote_url, catalog_remote_transport, catalog_install_key, catalog_install_input_hash, catalog_install_invalidated_at, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
   AND id = ANY($2::uuid[])
@@ -1411,6 +1495,13 @@ func (q *Queries) LockMCPServersByIDs(ctx context.Context, arg LockMCPServersByI
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
 			&i.NetworkAccessMode,
+			&i.CatalogRegistryID,
+			&i.CatalogServerSpecifier,
+			&i.CatalogRemoteUrl,
+			&i.CatalogRemoteTransport,
+			&i.CatalogInstallKey,
+			&i.CatalogInstallInputHash,
+			&i.CatalogInstallInvalidatedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1661,7 +1752,7 @@ SET
     END,
     updated_at = clock_timestamp()
 WHERE id = $13 AND project_id = $14 AND deleted IS FALSE
-RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, catalog_registry_id, catalog_server_specifier, catalog_remote_url, catalog_remote_transport, catalog_install_key, catalog_install_input_hash, catalog_install_invalidated_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
@@ -1714,6 +1805,13 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		&i.ToolVariationsGroupID,
 		&i.Visibility,
 		&i.NetworkAccessMode,
+		&i.CatalogRegistryID,
+		&i.CatalogServerSpecifier,
+		&i.CatalogRemoteUrl,
+		&i.CatalogRemoteTransport,
+		&i.CatalogInstallKey,
+		&i.CatalogInstallInputHash,
+		&i.CatalogInstallInvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
