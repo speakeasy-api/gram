@@ -134,12 +134,30 @@ type GetServerResponseBody struct {
 // ListServerConnectionsResponseBody is the type of the "tunneledMcp" service
 // "listServerConnections" endpoint HTTP response body.
 type ListServerConnectionsResponseBody struct {
+	// available or unavailable: whether live connection storage could be read
+	CollectionState *string `form:"collection_state,omitempty" json:"collection_state,omitempty" xml:"collection_state,omitempty"`
+	// Server time when this view was read
+	ObservedAt *string `form:"observed_at,omitempty" json:"observed_at,omitempty" xml:"observed_at,omitempty"`
 	// Live tunnel connections currently visible in Redis
 	Connections []*TunneledMcpConnectionResponseBody `form:"connections" json:"connections" xml:"connections"`
 	// Number of active tunnel connections currently visible in Redis
 	ActiveConnectionCount int `form:"active_connection_count" json:"active_connection_count" xml:"active_connection_count"`
 	// Total MCP consumer sessions currently pinned across active tunnel connections
 	ActiveConsumerSessionCount int `form:"active_consumer_session_count" json:"active_consumer_session_count" xml:"active_consumer_session_count"`
+}
+
+// GetServerMetricsResponseBody is the type of the "tunneledMcp" service
+// "getServerMetrics" endpoint HTTP response body.
+type GetServerMetricsResponseBody struct {
+	// History availability
+	State         string                           `form:"state" json:"state" xml:"state"`
+	ObservedAt    string                           `form:"observed_at" json:"observed_at" xml:"observed_at"`
+	LastSampleAt  *string                          `form:"last_sample_at,omitempty" json:"last_sample_at,omitempty" xml:"last_sample_at,omitempty"`
+	BucketSeconds int                              `form:"bucket_seconds" json:"bucket_seconds" xml:"bucket_seconds"`
+	Points        []*TunnelMetricPointResponseBody `form:"points" json:"points" xml:"points"`
+	Clients       []*TunnelClientCountResponseBody `form:"clients" json:"clients" xml:"clients"`
+	// Distinct fronting MCP servers with requests in this range
+	ActiveServers int `form:"active_servers" json:"active_servers" xml:"active_servers"`
 }
 
 // UpdateServerResponseBody is the type of the "tunneledMcp" service
@@ -941,6 +959,195 @@ type ListServerConnectionsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetServerMetricsUnauthorizedResponseBody is the type of the "tunneledMcp"
+// service "getServerMetrics" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetServerMetricsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerMetricsForbiddenResponseBody is the type of the "tunneledMcp"
+// service "getServerMetrics" endpoint HTTP response body for the "forbidden"
+// error.
+type GetServerMetricsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerMetricsBadRequestResponseBody is the type of the "tunneledMcp"
+// service "getServerMetrics" endpoint HTTP response body for the "bad_request"
+// error.
+type GetServerMetricsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerMetricsNotFoundResponseBody is the type of the "tunneledMcp"
+// service "getServerMetrics" endpoint HTTP response body for the "not_found"
+// error.
+type GetServerMetricsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerMetricsConflictResponseBody is the type of the "tunneledMcp"
+// service "getServerMetrics" endpoint HTTP response body for the "conflict"
+// error.
+type GetServerMetricsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerMetricsUnsupportedMediaResponseBody is the type of the
+// "tunneledMcp" service "getServerMetrics" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetServerMetricsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerMetricsInvalidResponseBody is the type of the "tunneledMcp" service
+// "getServerMetrics" endpoint HTTP response body for the "invalid" error.
+type GetServerMetricsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerMetricsInvariantViolationResponseBody is the type of the
+// "tunneledMcp" service "getServerMetrics" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetServerMetricsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerMetricsUnexpectedResponseBody is the type of the "tunneledMcp"
+// service "getServerMetrics" endpoint HTTP response body for the "unexpected"
+// error.
+type GetServerMetricsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerMetricsGatewayErrorResponseBody is the type of the "tunneledMcp"
+// service "getServerMetrics" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetServerMetricsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UpdateServerUnauthorizedResponseBody is the type of the "tunneledMcp"
 // service "updateServer" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1552,6 +1759,11 @@ type TunneledMcpServerResponseBody struct {
 // TunneledMcpConnectionResponseBody is used to define fields on response body
 // types.
 type TunneledMcpConnectionResponseBody struct {
+	// Agent target scheme, hostname, port and path, without credentials, query or
+	// fragment
+	TargetDisplay *string `form:"target_display,omitempty" json:"target_display,omitempty" xml:"target_display,omitempty"`
+	// Optional agent diagnostics, absent for legacy agents
+	Diagnostics *TunnelDiagnosticsResponseBody `form:"diagnostics,omitempty" json:"diagnostics,omitempty" xml:"diagnostics,omitempty"`
 	// Gateway session ID for a live tunnel connection
 	GatewaySessionID string `form:"gateway_session_id" json:"gateway_session_id" xml:"gateway_session_id"`
 	// Customer-declared version of the MCP service behind this tunnel connection
@@ -1570,6 +1782,101 @@ type TunneledMcpConnectionResponseBody struct {
 	ActiveConsumerSessions int `form:"active_consumer_sessions" json:"active_consumer_sessions" xml:"active_consumer_sessions"`
 	// User-provided tunnel metadata reported by the agent
 	Metadata map[string]string `form:"metadata" json:"metadata" xml:"metadata"`
+}
+
+// TunnelDiagnosticsResponseBody is used to define fields on response body
+// types.
+type TunnelDiagnosticsResponseBody struct {
+	// Diagnostic collection state
+	State string `form:"state" json:"state" xml:"state"`
+	// Gateway receipt time
+	ReceivedAt *string `form:"received_at,omitempty" json:"received_at,omitempty" xml:"received_at,omitempty"`
+	// Probe age at view time, -1 if never sampled
+	SampleAgeMs *int64 `form:"sample_age_ms,omitempty" json:"sample_age_ms,omitempty" xml:"sample_age_ms,omitempty"`
+	// Reachable means transport only, not MCP success.
+	TargetState *string `form:"target_state,omitempty" json:"target_state,omitempty" xml:"target_state,omitempty"`
+	// Consecutive failed transport probes
+	ConsecutiveFailures *int64                            `form:"consecutive_failures,omitempty" json:"consecutive_failures,omitempty" xml:"consecutive_failures,omitempty"`
+	DNS                 *TunnelDiagnosticStepResponseBody `form:"dns,omitempty" json:"dns,omitempty" xml:"dns,omitempty"`
+	TCP                 *TunnelDiagnosticStepResponseBody `form:"tcp,omitempty" json:"tcp,omitempty" xml:"tcp,omitempty"`
+	TLS                 *TunnelDiagnosticStepResponseBody `form:"tls,omitempty" json:"tls,omitempty" xml:"tls,omitempty"`
+	// Optional aggregate request progress; absent for older agents
+	HTTPProgress *TunnelHTTPProgressResponseBody `form:"http_progress,omitempty" json:"http_progress,omitempty" xml:"http_progress,omitempty"`
+	// HTTP attempts since agent process start
+	RequestsTotal *int64 `form:"requests_total,omitempty" json:"requests_total,omitempty" xml:"requests_total,omitempty"`
+	// Transport errors since agent process start
+	TransportErrorsTotal *int64 `form:"transport_errors_total,omitempty" json:"transport_errors_total,omitempty" xml:"transport_errors_total,omitempty"`
+	// Last observed HTTP status, including authentication challenges
+	LastHTTPStatus *int `form:"last_http_status,omitempty" json:"last_http_status,omitempty" xml:"last_http_status,omitempty"`
+	// HTTP response age at view time, -1 if absent
+	LastHTTPResponseAgeMs *int64 `form:"last_http_response_age_ms,omitempty" json:"last_http_response_age_ms,omitempty" xml:"last_http_response_age_ms,omitempty"`
+	// Last transport failure category
+	LastTransportError *string `form:"last_transport_error,omitempty" json:"last_transport_error,omitempty" xml:"last_transport_error,omitempty"`
+	// Transport failure age at view time, -1 if absent
+	LastTransportErrorAgeMs *int64 `form:"last_transport_error_age_ms,omitempty" json:"last_transport_error_age_ms,omitempty" xml:"last_transport_error_age_ms,omitempty"`
+}
+
+// TunnelDiagnosticStepResponseBody is used to define fields on response body
+// types.
+type TunnelDiagnosticStepResponseBody struct {
+	// Probe state
+	State string `form:"state" json:"state" xml:"state"`
+	// Elapsed probe time in milliseconds
+	DurationMs int64 `form:"duration_ms" json:"duration_ms" xml:"duration_ms"`
+	// Bounded failure category, never raw error text
+	Failure string `form:"failure" json:"failure" xml:"failure"`
+}
+
+// TunnelHTTPProgressResponseBody is used to define fields on response body
+// types.
+type TunnelHTTPProgressResponseBody struct {
+	// Requests awaiting final HTTP response headers at the last sample
+	WaitingHeaders int64 `form:"waiting_headers" json:"waiting_headers" xml:"waiting_headers"`
+	// Open HTTP response bodies at the last sample; long-lived SSE may be expected
+	OpenResponses int64 `form:"open_responses" json:"open_responses" xml:"open_responses"`
+}
+
+// TunnelMetricPointResponseBody is used to define fields on response body
+// types.
+type TunnelMetricPointResponseBody struct {
+	Time string `form:"time" json:"time" xml:"time"`
+	// Observed tools/call attempts
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+	// Observed tools/list attempts
+	ToolsList *int64 `form:"tools_list,omitempty" json:"tools_list,omitempty" xml:"tools_list,omitempty"`
+	// Other observed MCP request attempts
+	OtherRequests *int64 `form:"other_requests,omitempty" json:"other_requests,omitempty" xml:"other_requests,omitempty"`
+	// Terminal MCP successes completed in this bucket
+	Successes *int64 `form:"successes,omitempty" json:"successes,omitempty" xml:"successes,omitempty"`
+	// Terminal errors completed in this bucket
+	Errors     *int64 `form:"errors,omitempty" json:"errors,omitempty" xml:"errors,omitempty"`
+	Canceled   *int64 `form:"canceled,omitempty" json:"canceled,omitempty" xml:"canceled,omitempty"`
+	Incomplete *int64 `form:"incomplete,omitempty" json:"incomplete,omitempty" xml:"incomplete,omitempty"`
+	// Histogram upper bound for median completion latency, -1 means above 60
+	// seconds
+	P50Ms *int64 `form:"p50_ms,omitempty" json:"p50_ms,omitempty" xml:"p50_ms,omitempty"`
+	// Histogram upper bound for p95 completion latency, -1 means above 60 seconds
+	P95Ms *int64 `form:"p95_ms,omitempty" json:"p95_ms,omitempty" xml:"p95_ms,omitempty"`
+	// Average of time-aligned sums of observed gateway connections. Missing owners
+	// are not zero.
+	Connections       *float64 `form:"connections,omitempty" json:"connections,omitempty" xml:"connections,omitempty"`
+	ConsumerSessions  *float64 `form:"consumer_sessions,omitempty" json:"consumer_sessions,omitempty" xml:"consumer_sessions,omitempty"`
+	ActiveRequests    *float64 `form:"active_requests,omitempty" json:"active_requests,omitempty" xml:"active_requests,omitempty"`
+	ConnectionsOpened *int64   `form:"connections_opened,omitempty" json:"connections_opened,omitempty" xml:"connections_opened,omitempty"`
+	// Observed producer-minute heartbeats; proves only observed coverage, not
+	// every replica
+	RequestCoverageSamples int `form:"request_coverage_samples" json:"request_coverage_samples" xml:"request_coverage_samples"`
+	// An observed producer reported aggregate loss since its last restart
+	CollectionPartial bool `form:"collection_partial" json:"collection_partial" xml:"collection_partial"`
+	// Number of observed 15-second gateway sampling slots
+	CoverageSamples int `form:"coverage_samples" json:"coverage_samples" xml:"coverage_samples"`
+}
+
+// TunnelClientCountResponseBody is used to define fields on response body
+// types.
+type TunnelClientCountResponseBody struct {
+	Family   string `form:"family" json:"family" xml:"family"`
+	Requests int64  `form:"requests" json:"requests" xml:"requests"`
 }
 
 // NewCreateServerResponseBody builds the HTTP response body from the result of
@@ -1633,6 +1940,8 @@ func NewGetServerResponseBody(res *types.TunneledMcpServer) *GetServerResponseBo
 // result of the "listServerConnections" endpoint of the "tunneledMcp" service.
 func NewListServerConnectionsResponseBody(res *types.TunneledMcpServerConnections) *ListServerConnectionsResponseBody {
 	body := &ListServerConnectionsResponseBody{
+		CollectionState:            res.CollectionState,
+		ObservedAt:                 res.ObservedAt,
 		ActiveConnectionCount:      res.ActiveConnectionCount,
 		ActiveConsumerSessionCount: res.ActiveConsumerSessionCount,
 	}
@@ -1647,6 +1956,43 @@ func NewListServerConnectionsResponseBody(res *types.TunneledMcpServerConnection
 		}
 	} else {
 		body.Connections = []*TunneledMcpConnectionResponseBody{}
+	}
+	return body
+}
+
+// NewGetServerMetricsResponseBody builds the HTTP response body from the
+// result of the "getServerMetrics" endpoint of the "tunneledMcp" service.
+func NewGetServerMetricsResponseBody(res *types.TunnelMetrics) *GetServerMetricsResponseBody {
+	body := &GetServerMetricsResponseBody{
+		State:         res.State,
+		ObservedAt:    res.ObservedAt,
+		LastSampleAt:  res.LastSampleAt,
+		BucketSeconds: res.BucketSeconds,
+		ActiveServers: res.ActiveServers,
+	}
+	if res.Points != nil {
+		body.Points = make([]*TunnelMetricPointResponseBody, len(res.Points))
+		for i, val := range res.Points {
+			if val == nil {
+				body.Points[i] = nil
+				continue
+			}
+			body.Points[i] = marshalTypesTunnelMetricPointToTunnelMetricPointResponseBody(val)
+		}
+	} else {
+		body.Points = []*TunnelMetricPointResponseBody{}
+	}
+	if res.Clients != nil {
+		body.Clients = make([]*TunnelClientCountResponseBody, len(res.Clients))
+		for i, val := range res.Clients {
+			if val == nil {
+				body.Clients[i] = nil
+				continue
+			}
+			body.Clients[i] = marshalTypesTunnelClientCountToTunnelClientCountResponseBody(val)
+		}
+	} else {
+		body.Clients = []*TunnelClientCountResponseBody{}
 	}
 	return body
 }
@@ -2259,6 +2605,150 @@ func NewListServerConnectionsGatewayErrorResponseBody(res *goa.ServiceError) *Li
 	return body
 }
 
+// NewGetServerMetricsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getServerMetrics" endpoint of the "tunneledMcp"
+// service.
+func NewGetServerMetricsUnauthorizedResponseBody(res *goa.ServiceError) *GetServerMetricsUnauthorizedResponseBody {
+	body := &GetServerMetricsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerMetricsForbiddenResponseBody builds the HTTP response body from
+// the result of the "getServerMetrics" endpoint of the "tunneledMcp" service.
+func NewGetServerMetricsForbiddenResponseBody(res *goa.ServiceError) *GetServerMetricsForbiddenResponseBody {
+	body := &GetServerMetricsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerMetricsBadRequestResponseBody builds the HTTP response body from
+// the result of the "getServerMetrics" endpoint of the "tunneledMcp" service.
+func NewGetServerMetricsBadRequestResponseBody(res *goa.ServiceError) *GetServerMetricsBadRequestResponseBody {
+	body := &GetServerMetricsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerMetricsNotFoundResponseBody builds the HTTP response body from
+// the result of the "getServerMetrics" endpoint of the "tunneledMcp" service.
+func NewGetServerMetricsNotFoundResponseBody(res *goa.ServiceError) *GetServerMetricsNotFoundResponseBody {
+	body := &GetServerMetricsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerMetricsConflictResponseBody builds the HTTP response body from
+// the result of the "getServerMetrics" endpoint of the "tunneledMcp" service.
+func NewGetServerMetricsConflictResponseBody(res *goa.ServiceError) *GetServerMetricsConflictResponseBody {
+	body := &GetServerMetricsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerMetricsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getServerMetrics" endpoint of the "tunneledMcp"
+// service.
+func NewGetServerMetricsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetServerMetricsUnsupportedMediaResponseBody {
+	body := &GetServerMetricsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerMetricsInvalidResponseBody builds the HTTP response body from
+// the result of the "getServerMetrics" endpoint of the "tunneledMcp" service.
+func NewGetServerMetricsInvalidResponseBody(res *goa.ServiceError) *GetServerMetricsInvalidResponseBody {
+	body := &GetServerMetricsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerMetricsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getServerMetrics" endpoint of the "tunneledMcp"
+// service.
+func NewGetServerMetricsInvariantViolationResponseBody(res *goa.ServiceError) *GetServerMetricsInvariantViolationResponseBody {
+	body := &GetServerMetricsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerMetricsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getServerMetrics" endpoint of the "tunneledMcp" service.
+func NewGetServerMetricsUnexpectedResponseBody(res *goa.ServiceError) *GetServerMetricsUnexpectedResponseBody {
+	body := &GetServerMetricsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerMetricsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getServerMetrics" endpoint of the "tunneledMcp"
+// service.
+func NewGetServerMetricsGatewayErrorResponseBody(res *goa.ServiceError) *GetServerMetricsGatewayErrorResponseBody {
+	body := &GetServerMetricsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUpdateServerUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "updateServer" endpoint of the "tunneledMcp" service.
 func NewUpdateServerUnauthorizedResponseBody(res *goa.ServiceError) *UpdateServerUnauthorizedResponseBody {
@@ -2724,6 +3214,19 @@ func NewGetServerPayload(id string, sessionToken *string, apikeyToken *string, p
 func NewListServerConnectionsPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.ListServerConnectionsPayload {
 	v := &tunneledmcp.ListServerConnectionsPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetServerMetricsPayload builds a tunneledMcp service getServerMetrics
+// endpoint payload.
+func NewGetServerMetricsPayload(id string, window string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.GetServerMetricsPayload {
+	v := &tunneledmcp.GetServerMetricsPayload{}
+	v.ID = id
+	v.Window = window
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

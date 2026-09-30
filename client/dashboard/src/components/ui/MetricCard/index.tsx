@@ -93,6 +93,9 @@ export function MetricCard({
         "bg-card flex min-w-0 flex-1 flex-col gap-4 p-6",
         className,
       )}
+      role="group"
+      aria-label={typeof label === "string" ? label : undefined}
+      data-tone={tone ?? "neutral"}
       {...rest}
     >
       <div className="text-eyebrow">{label}</div>
