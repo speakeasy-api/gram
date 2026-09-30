@@ -62,7 +62,7 @@ export function safeRedirectPath(value: string | null): string | undefined {
 export function redirectToLoginOnUnauthorized(): Promise<void> {
   if (redirecting) return Promise.resolve();
 
-  const { pathname, search } = window.location;
+  const { pathname, search, hash } = window.location;
   if (UNAUTHENTICATED_PATHS.some((p) => pathname.startsWith(p))) {
     return Promise.resolve();
   }
@@ -91,7 +91,7 @@ export function redirectToLoginOnUnauthorized(): Promise<void> {
 
       redirecting = true;
       clearStorageForLogout();
-      const target = safeRedirectPath(pathname + search);
+      const target = safeRedirectPath(pathname + search + hash);
       if (!target) {
         window.location.assign("/login");
         return;

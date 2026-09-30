@@ -25,6 +25,13 @@ describe("isPortablePath", () => {
     // "~foo" could be a real (if odd) first segment; only the exact "~"
     // segment is the placeholder.
     expect(isPortablePath("/~foo/toolsets")).toBe(false);
+    expect(isPortablePath("/@selfish/settings")).toBe(false);
+    expect(isPortablePath("/@other/settings")).toBe(false);
+  });
+
+  it("matches the org-level /@self prefix", () => {
+    expect(isPortablePath("/@self")).toBe(true);
+    expect(isPortablePath("/@self/settings")).toBe(true);
   });
 });
 
@@ -65,6 +72,33 @@ describe("resolvePortablePath", () => {
     const org = { slug: "acme", projects: [] };
     expect(resolvePortablePath(loc("/~/toolsets", "?tab=all"), org)).toBe(
       "/acme?tab=all",
+    );
+  });
+
+  it("expands /@self into the org, keeping the rest of the path", () => {
+    expect(resolvePortablePath(loc("/@self/settings/members"), ORG)).toBe(
+      "/acme/settings/members",
+    );
+  });
+
+  it("expands bare /@self to the org home", () => {
+    expect(resolvePortablePath(loc("/@self"), ORG)).toBe("/acme");
+  });
+
+  it("keeps /@self query and hash and ignores the preferred project", () => {
+    expect(
+      resolvePortablePath(
+        loc("/@self/billing", "?tab=usage", "#top"),
+        ORG,
+        "proj-b",
+      ),
+    ).toBe("/acme/billing?tab=usage#top");
+  });
+
+  it("expands /@self for an org with no visible projects", () => {
+    const org = { slug: "acme", projects: [] };
+    expect(resolvePortablePath(loc("/@self/settings"), org)).toBe(
+      "/acme/settings",
     );
   });
 });

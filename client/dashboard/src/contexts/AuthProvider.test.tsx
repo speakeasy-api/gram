@@ -628,6 +628,51 @@ describe("AuthProvider portable paths", () => {
     );
   });
 
+  it("bounces a logged-out /@self visitor through login with the destination", () => {
+    mocks.sessionData.mockReturnValue({
+      session: null,
+      error: new Error("unauthorized"),
+      status: "error",
+    });
+
+    renderGate("/@self/settings?tab=members#top");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/login?redirect=%2F%40self%2Fsettings%3Ftab%3Dmembers%23top",
+    );
+  });
+
+  it("sends a /@self session with no organization to sign-up", () => {
+    mocks.sessionData.mockReturnValue(
+      portableSession({ activeOrganizationId: "" }),
+    );
+
+    renderGate("/@self/settings");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/sign-up?redirect=%2F%40self%2Fsettings",
+    );
+  });
+
+  it("expands /@self into the active org", () => {
+    mocks.sessionData.mockReturnValue(portableSession());
+
+    renderGate("/@self/settings?tab=members");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/acme/settings?tab=members",
+    );
+    expect(screen.getByTestId("app")).toBeTruthy();
+  });
+
+  it("resumes a /@self destination after login", () => {
+    mocks.sessionData.mockReturnValue(portableSession());
+
+    renderGate("/login?redirect=%2F%40self%2Fsettings");
+
+    expect(screen.getByTestId("location").textContent).toBe("/acme/settings");
+  });
+
   it("leaves ordinary paths alone", () => {
     mocks.sessionData.mockReturnValue(portableSession());
 

@@ -214,7 +214,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <AppLoadingShell />;
   }
 
-  // A portable "/~" path (an external link that cannot know the viewer's
+  // A portable "/~" or "/@self" path (an external link that cannot know the viewer's
   // slugs) matches no route, so the gates below must resolve it before route
   // matching gets a say. Logged out it bounces through login carrying the
   // full destination — the same shape LoginCheck produces for slugged paths.
@@ -270,8 +270,8 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Fully authenticated: expand "/~" into the active org and the project the
-  // user last visited, keeping the destination's own query and hash.
+  // Fully authenticated: expand "/@self" into the active org, or "/~" into the
+  // active org and the project the user last visited, keeping the destination's own query and hash.
   if (session.organization) {
     const resolved = resolvePortablePath(
       location,
