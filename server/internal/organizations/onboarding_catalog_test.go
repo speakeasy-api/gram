@@ -168,8 +168,8 @@ func TestOnboardingStepRecordsPlaceGroupsBeforeTheirCards(t *testing.T) {
 		require.Less(t, position[record.Parent], position[record.Slug], "group %q must precede %q", record.Parent, record.Slug)
 		require.Equal(t, setupTaskCompletionChildren, records[position[record.Parent]].Completion)
 	}
-	// The agent observability group is visible by default because a card of
-	// its is; the distribution group hides with all of its cards.
+	// A group is visible by default while any of its cards is; every card
+	// but LiteLLM is, so both groups are.
 	require.False(t, records[position["agent-observability"]].HiddenByDefault)
-	require.True(t, records[position["mcp-distribution"]].HiddenByDefault)
+	require.False(t, records[position["mcp-distribution"]].HiddenByDefault)
 }

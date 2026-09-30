@@ -35,7 +35,7 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 	require.Empty(t, group.MethodSlugs)
 	require.Less(t, position["agent-observability"], position["instrument-agents"], "a group precedes its cards")
 	require.Less(t, position["mcp-distribution"], position["create-marketplace"])
-	require.True(t, bySlug["mcp-distribution"].HiddenByDefault)
+	require.False(t, bySlug["mcp-distribution"].HiddenByDefault, "its cards are visible by default")
 
 	card := bySlug["confirm-traffic"]
 	require.Equal(t, "agent-observability", *card.ParentSlug)
