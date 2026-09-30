@@ -605,6 +605,45 @@ func CheckOrganizationOnboardingPlaybook(ctx context.Context, db repo.DBTX, orga
 	return playbook, applicability, nil
 }
 
+// OrganizationWalksOnboardingPlaybook reports whether the organization's
+// current playbook already is the candidate: the same playbook, or its own
+// copy of that shared playbook, which carries the template's name and steps.
+func OrganizationWalksOnboardingPlaybook(current, candidate *admingen.AdminOnboardingPlaybook) bool {
+	if current == nil || candidate == nil {
+		return false
+	}
+	if current.ID == candidate.ID {
+		return true
+	}
+	if current.OrganizationID == nil || candidate.OrganizationID != nil || current.Name != candidate.Name || len(current.Steps) != len(candidate.Steps) {
+		return false
+	}
+	for index, step := range candidate.Steps {
+		if current.Steps[index].Slug != step.Slug {
+			return false
+		}
+	}
+	return true
+}
+
+// copyOnboardingPlaybook gives the organization its own copy of a shared
+// playbook: the template's name, description and steps, no use case, never a
+// default. The caller has checked the steps against the organization's stack.
+func copyOnboardingPlaybook(ctx context.Context, queries *repo.Queries, organizationID string, template *admingen.AdminOnboardingPlaybook) (uuid.UUID, error) {
+	row, err := queries.CreateOnboardingPlaybook(ctx, repo.CreateOnboardingPlaybookParams{UseCaseID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: conv.PtrToPGText(&organizationID), Name: template.Name, Description: template.Description, IsDefault: false})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("copy onboarding playbook: %w", err)
+	}
+	slugs := make([]string, 0, len(template.Steps))
+	for _, step := range template.Steps {
+		slugs = append(slugs, step.Slug)
+	}
+	if err := writePlaybookSteps(ctx, queries, row.ID, slugs); err != nil {
+		return uuid.Nil, err
+	}
+	return row.ID, nil
+}
+
 // DefaultOnboardingPlaybookID resolves a use case's default playbook, the one
 // the onboarding survey assigns.
 func DefaultOnboardingPlaybookID(ctx context.Context, db repo.DBTX, useCaseSlug string) (uuid.UUID, error) {
@@ -675,9 +714,11 @@ func playbookSnapshot(playbook *admingen.AdminOnboardingPlaybook) *audit.Organiz
 }
 
 // AssignOrganizationOnboardingPlaybook assigns a playbook to an organization,
-// or clears it when playbookID is nil. A playbook whose steps the recorded
-// stack does not support is rejected, naming them. Its caller authenticates
-// staff or an organization admin.
+// or clears it when playbookID is nil. A shared playbook is a template: the
+// organization gets a copy of its own and walks that, so a later edit to the
+// template never reaches it. A playbook whose steps the recorded stack does
+// not support is rejected, naming them. Its caller authenticates staff or an
+// organization admin.
 func AssignOrganizationOnboardingPlaybook(ctx context.Context, db *pgxpool.Pool, logger *audit.Logger, organizationID string, playbookID *uuid.UUID, actor urn.Principal, displayName *string) (*admingen.AdminOrganizationOnboardingPlaybook, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -710,15 +751,29 @@ func AssignOrganizationOnboardingPlaybookTx(ctx context.Context, tx pgx.Tx, logg
 		return nil, err
 	}
 	var assigned uuid.NullUUID
+	var template *admingen.AdminOnboardingPlaybook
 	if playbookID != nil {
-		_, applicability, err := CheckOrganizationOnboardingPlaybook(ctx, tx, organizationID, *playbookID)
+		playbook, applicability, err := CheckOrganizationOnboardingPlaybook(ctx, tx, organizationID, *playbookID)
 		if err != nil {
 			return nil, err
 		}
 		if err := refuseInapplicable(applicability); err != nil {
 			return nil, err
 		}
-		assigned = uuid.NullUUID{UUID: *playbookID, Valid: true}
+		id := *playbookID
+		if playbook.OrganizationID == nil {
+			// An organization already on its copy of this template has nothing
+			// to change, and nothing to audit.
+			if OrganizationWalksOnboardingPlaybook(before.Playbook, playbook) {
+				return before, nil
+			}
+			id, err = copyOnboardingPlaybook(ctx, queries, organizationID, playbook)
+			if err != nil {
+				return nil, err
+			}
+			template = playbook
+		}
+		assigned = uuid.NullUUID{UUID: id, Valid: true}
 	}
 	if err := queries.SetOrganizationOnboardingPlaybook(ctx, repo.SetOrganizationOnboardingPlaybookParams{OrganizationID: organizationID, PlaybookID: assigned}); err != nil {
 		return nil, fmt.Errorf("assign onboarding playbook: %w", err)
@@ -727,10 +782,15 @@ func AssignOrganizationOnboardingPlaybookTx(ctx context.Context, tx pgx.Tx, logg
 	if err != nil {
 		return nil, err
 	}
+	afterSnapshot := playbookSnapshot(after.Playbook)
+	if template != nil {
+		// The copy has no use case of its own; the audit names the template's.
+		afterSnapshot.UseCase = conv.PtrValOr(template.UseCaseSlug, "")
+	}
 	if err := logger.LogOrganizationOnboardingPlaybookAssigned(ctx, tx, audit.LogOrganizationOnboardingPlaybookAssignedEvent{
 		OrganizationID: organizationID, Actor: actor, ActorDisplayName: displayName,
 		OrganizationName: org.Name, OrganizationSlug: org.Slug,
-		PlaybookSnapshotBefore: playbookSnapshot(before.Playbook), PlaybookSnapshotAfter: playbookSnapshot(after.Playbook),
+		PlaybookSnapshotBefore: playbookSnapshot(before.Playbook), PlaybookSnapshotAfter: afterSnapshot,
 	}); err != nil {
 		return nil, fmt.Errorf("audit onboarding playbook: %w", err)
 	}

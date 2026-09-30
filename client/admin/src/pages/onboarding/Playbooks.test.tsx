@@ -206,7 +206,23 @@ beforeEach(() => {
             "the stack does not support: Set up Anthropic observability (needs Anthropic in the stack)",
           );
         }
-        assignedId = playbook.id;
+        if (playbook.organization_id) {
+          assignedId = playbook.id;
+        } else {
+          // A use case's playbook is a template: the customer gets a copy.
+          const copy: Playbook = {
+            ...structuredClone(playbook),
+            id: `${playbook.id}-copy`,
+            use_case_id: undefined,
+            use_case_slug: undefined,
+            use_case_name: undefined,
+            organization_id: body.organization_id,
+            organization_name: ORG.name,
+            is_default: false,
+          };
+          playbooks = [...playbooks, copy];
+          assignedId = copy.id;
+        }
         return json(assignment());
       }
       case "/admin/onboarding.useCases.create": {
@@ -559,13 +575,18 @@ describe("OnboardingPlaybooks", () => {
       timeout: 4000,
     });
 
-    // A use case's playbook can be assigned from its menu; the highlight
-    // moves to it.
+    // A use case's playbook can be assigned from its menu: Acme gets a copy
+    // of its own, and the highlight lands on that copy.
     openMenu(playbooksTable(), "Actions for Gateway first");
     fireEvent.click(
       await screen.findByRole("menuitem", { name: "Assign to Acme" }),
     );
-    await vi.waitFor(() => expect(highlightedRows()).toEqual(["pb-1"]));
+    await vi.waitFor(() => expect(highlightedRows()).toEqual(["pb-1-copy"]));
+    expect(rowsOf(playbooksTable())).toEqual(["pb-1", "pb-acme", "pb-1-copy"]);
+    const copied = playbooksTable().querySelector(
+      'tr[data-playbook="pb-1-copy"]',
+    );
+    expect(copied?.querySelectorAll("td")[1]?.textContent).toBe("Acme");
     expect(
       await postTo("/admin/organization.onboardingPlaybook")[0]!.clone().json(),
     ).toEqual({ organization_id: "org_acme", playbook_id: "pb-1" });
@@ -586,7 +607,12 @@ describe("OnboardingPlaybooks", () => {
     await pick("Add a step", /Distribute MCP servers/);
     fireEvent.click(screen.getByRole("button", { name: "Create playbook" }));
     await vi.waitFor(() => {
-      expect(rowsOf(playbooksTable())).toEqual(["pb-1", "pb-acme", "pb-3"]);
+      expect(rowsOf(playbooksTable())).toEqual([
+        "pb-1",
+        "pb-acme",
+        "pb-1-copy",
+        "pb-4",
+      ]);
     });
     expect(
       await postTo("/admin/onboarding.playbooks.create")[0]!.clone().json(),
@@ -602,10 +628,10 @@ describe("OnboardingPlaybooks", () => {
         .at(-1)!
         .clone()
         .json(),
-    ).toEqual({ organization_id: "org_acme", playbook_id: "pb-3" });
-    const created = playbooksTable().querySelector('tr[data-playbook="pb-3"]');
+    ).toEqual({ organization_id: "org_acme", playbook_id: "pb-4" });
+    const created = playbooksTable().querySelector('tr[data-playbook="pb-4"]');
     expect(created?.querySelectorAll("td")[1]?.textContent).toBe("Acme");
-    expect(highlightedRows()).toEqual(["pb-3"]);
+    expect(highlightedRows()).toEqual(["pb-4"]);
   });
 
   it("writes a customer a playbook from the form, unscoped", async () => {

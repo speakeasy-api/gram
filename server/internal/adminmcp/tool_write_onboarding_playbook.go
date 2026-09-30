@@ -22,7 +22,7 @@ import (
 // The playbook write assigns only. Clearing an assignment stays a dashboard
 // action, so an approved proposal can never leave an organization without a
 // playbook.
-const onboardingPlaybookSideEffects = "Assigns the playbook to the organization and records a tenant audit event. The customer's setup wizard walks the playbook's steps in its order from its next load, and saved task visibility stops applying while a playbook is assigned. The assignment is refused if the recorded stack no longer supports a step."
+const onboardingPlaybookSideEffects = "A shared playbook is copied into a playbook of the organization's own and that copy is assigned, so later edits to the shared playbook never reach the organization; the organization's own playbook is assigned as it is. Records a tenant audit event. The customer's setup wizard walks the assigned steps in their order from its next load, and saved task visibility stops applying while a playbook is assigned. The assignment is refused if the recorded stack no longer supports a step."
 
 type PrepareOnboardingPlaybookInput struct {
 	OrganizationID string `json:"organization_id" jsonschema:"Exact canonical organization ID from find_organizations, not a slug"`
@@ -46,15 +46,18 @@ type onboardingPlaybookStep struct {
 // the recorded stack. An edit to the playbook's steps, a stack change or a
 // competing assignment makes the proposal stale.
 type onboardingPlaybookState struct {
-	OrganizationID string                   `json:"organization_id"`
-	Name           string                   `json:"name"`
-	Slug           string                   `json:"slug"`
-	Assigned       string                   `json:"assigned"`
-	AssignedSteps  []string                 `json:"assigned_steps"`
-	PlaybookID     string                   `json:"playbook_id"`
-	UseCase        string                   `json:"use_case"`
-	Custom         bool                     `json:"custom"`
-	Steps          []onboardingPlaybookStep `json:"steps"`
+	OrganizationID string   `json:"organization_id"`
+	Name           string   `json:"name"`
+	Slug           string   `json:"slug"`
+	Assigned       string   `json:"assigned"`
+	AssignedSteps  []string `json:"assigned_steps"`
+	// AlreadyAssigned: the organization walks this playbook, or its own copy
+	// of it, so the change would be a no-op.
+	AlreadyAssigned bool                     `json:"already_assigned"`
+	PlaybookID      string                   `json:"playbook_id"`
+	UseCase         string                   `json:"use_case"`
+	Custom          bool                     `json:"custom"`
+	Steps           []onboardingPlaybookStep `json:"steps"`
 }
 
 // onboardingPlaybookPreview uses IDs and slugs only, never staff-authored
@@ -72,8 +75,11 @@ type onboardingPlaybookPreview struct {
 	SideEffects    string   `json:"side_effects"`
 }
 
+// onboardingPlaybookReceipt names the playbook the organization now walks,
+// which is its own copy when a shared playbook (the template) was proposed.
 type onboardingPlaybookReceipt struct {
 	PlaybookID string   `json:"playbook_id"`
+	TemplateID string   `json:"template_id"`
 	Replaced   string   `json:"replaced"`
 	Steps      []string `json:"steps"`
 }
@@ -114,7 +120,7 @@ func (o *onboardingPlaybookWriter) readState(ctx context.Context, tx pgx.Tx, org
 	}
 	state := onboardingPlaybookState{
 		OrganizationID: org.ID, Name: org.Name, Slug: org.Slug,
-		Assigned: "", AssignedSteps: []string{},
+		Assigned: "", AssignedSteps: []string{}, AlreadyAssigned: organizations.OrganizationWalksOnboardingPlaybook(current.Playbook, playbook),
 		PlaybookID: playbook.ID, UseCase: "", Custom: playbook.OrganizationID != nil,
 		Steps: make([]onboardingPlaybookStep, 0, len(applicability)),
 	}
@@ -161,7 +167,7 @@ func (o *onboardingPlaybookWriter) expectedState(ctx context.Context, tx pgx.Tx,
 	if err != nil || !digestsEqual(digest, proposal.ExpectedStateDigest) {
 		return onboardingPlaybookState{}, ErrStaleState
 	}
-	if state.Assigned == state.PlaybookID || len(unsupportedSteps(state.Steps)) > 0 {
+	if state.AlreadyAssigned || len(unsupportedSteps(state.Steps)) > 0 {
 		return onboardingPlaybookState{}, ErrProposalInvalidated
 	}
 	return state, nil
@@ -226,8 +232,8 @@ func (o *onboardingPlaybookWriter) prepare(ctx context.Context, input PrepareOnb
 	if err := tx.Commit(ctx); err != nil {
 		return ProposalOutput{}, fmt.Errorf("finish onboarding playbook proposal preparation: %w", err)
 	}
-	if state.Assigned == state.PlaybookID {
-		return ProposalOutput{}, errors.New("this playbook is already assigned to the organization; nothing would change")
+	if state.AlreadyAssigned {
+		return ProposalOutput{}, errors.New("the organization already walks this playbook; nothing would change")
 	}
 	if problems := unsupportedSteps(state.Steps); len(problems) > 0 {
 		return ProposalOutput{}, fmt.Errorf("the organization's recorded stack does not support: %s", strings.Join(problems, "; "))
@@ -262,9 +268,9 @@ func (o *onboardingPlaybookWriter) view(proposal Proposal) (proposalView, error)
 	if err := json.Unmarshal(proposal.Preview, &preview); err != nil || preview.OrganizationID == "" || preview.OrganizationID != proposal.Target.OrganizationID || preview.PlaybookID == "" || len(preview.Steps) == 0 {
 		return proposalView{}, ErrProposalInvalidated
 	}
-	kind := "the custom playbook"
+	kind, after := "the organization's own playbook", preview.PlaybookID
 	if !preview.Custom {
-		kind = "the shared playbook"
+		kind, after = "a copy of the shared playbook", "a copy of "+preview.PlaybookID
 		if preview.UseCase != "" {
 			kind += " of use case " + preview.UseCase
 		}
@@ -280,7 +286,7 @@ func (o *onboardingPlaybookWriter) view(proposal Proposal) (proposalView, error)
 		OrganizationName: preview.Name,
 		OrganizationSlug: preview.Slug,
 		Changes: []proposalViewChange{
-			{Setting: "Playbook", Before: before, After: preview.PlaybookID},
+			{Setting: "Playbook", Before: before, After: after},
 			{Setting: "Steps", Before: beforeSteps, After: strings.Join(preview.Steps, ", ")},
 		},
 		SideEffects: preview.SideEffects,
@@ -302,10 +308,18 @@ func (o *onboardingPlaybookWriter) execution(authority writeAuthority) ProposalE
 				return "", nil, ErrProposalInvalidated
 			}
 			ctx, actor, name := staffMutation(ctx, authority)
-			if _, err := organizations.AssignOrganizationOnboardingPlaybookTx(ctx, tx, o.audit, proposal.Target.OrganizationID, &playbookID, actor, name); err != nil {
+			assigned, err := organizations.AssignOrganizationOnboardingPlaybookTx(ctx, tx, o.audit, proposal.Target.OrganizationID, &playbookID, actor, name)
+			if err != nil {
 				return "", nil, fmt.Errorf("assign onboarding playbook: %w", err)
 			}
-			result, err := json.Marshal(onboardingPlaybookReceipt{PlaybookID: state.PlaybookID, Replaced: state.Assigned, Steps: playbookStepSlugs(state.Steps)})
+			if assigned == nil || assigned.Playbook == nil {
+				return "", nil, errors.New("assign onboarding playbook: nothing was assigned")
+			}
+			templateID := ""
+			if !state.Custom {
+				templateID = state.PlaybookID
+			}
+			result, err := json.Marshal(onboardingPlaybookReceipt{PlaybookID: assigned.Playbook.ID, TemplateID: templateID, Replaced: state.Assigned, Steps: playbookStepSlugs(state.Steps)})
 			if err != nil {
 				return "", nil, fmt.Errorf("encode onboarding playbook receipt: %w", err)
 			}
@@ -315,7 +329,7 @@ func (o *onboardingPlaybookWriter) execution(authority writeAuthority) ProposalE
 }
 
 func (o *onboardingPlaybookWriter) registerPrepare(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "prepare_assign_organization_onboarding_playbook", Title: "Prepare Organization Onboarding Playbook Assignment", Description: "Prepare an exact, single-organization change that assigns an onboarding playbook, named by its ID or by the use case whose default playbook the onboarding survey would assign. The assignment is checked against the organization's recorded stack and refused when a step is unsupported. Returns a server-stored preview and a private staff approval URL. Does not make the change. Requires admin:write."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareOnboardingPlaybookInput) (*mcp.CallToolResult, ProposalOutput, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "prepare_assign_organization_onboarding_playbook", Title: "Prepare Organization Onboarding Playbook Assignment", Description: "Prepare an exact, single-organization change that assigns an onboarding playbook, named by its ID or by the use case whose default playbook the onboarding survey would assign. A shared playbook is a template: the organization gets and walks a copy of its own. The assignment is checked against the organization's recorded stack and refused when a step is unsupported. Returns a server-stored preview and a private staff approval URL. Does not make the change. Requires admin:write."}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareOnboardingPlaybookInput) (*mcp.CallToolResult, ProposalOutput, error) {
 		out, err := o.prepare(ctx, input)
 		return nil, out, err
 	})

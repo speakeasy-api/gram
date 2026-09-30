@@ -424,8 +424,10 @@ export function OnboardingPlaybooks({
               Use Cases &amp; Playbooks
             </h1>
             <p className="text-muted-foreground max-w-3xl text-sm">
-              A playbook is ordered steps for a use case or for one customer.
-              Each use case's default is the one the survey assigns.
+              A playbook is ordered steps for a use case or for one customer. A
+              use case's playbook is a template: assigning it gives the customer
+              a copy of their own, and the default is the one the survey
+              assigns.
             </p>
           </div>
           <Button disabled={busy} onClick={openUseCase}>

@@ -148,8 +148,8 @@ func TestOnboardingPlaybookWriteApprovalAndExecution(t *testing.T) {
 	handler.ServeHTTP(page, approvalRequest(http.MethodGet, id, nil, "browser-session"))
 	require.Equal(t, http.StatusOK, page.Code)
 	require.Contains(t, page.Body.String(), "Synthetic A")
-	require.Contains(t, page.Body.String(), "Assign the shared playbook of use case distribution "+seeds.defaultID+" with 2 steps")
-	require.Contains(t, page.Body.String(), "<td>Playbook</td><td>None</td><td>"+seeds.defaultID+"</td>")
+	require.Contains(t, page.Body.String(), "Assign a copy of the shared playbook of use case distribution "+seeds.defaultID+" with 2 steps")
+	require.Contains(t, page.Body.String(), "<td>Playbook</td><td>None</td><td>a copy of "+seeds.defaultID+"</td>")
 	require.Contains(t, page.Body.String(), "<td>Steps</td><td>None</td><td>identity-provider, platform-mcp</td>")
 	require.NotContains(t, page.Body.String(), "staff-authored")
 	accepted := httptest.NewRecorder()
@@ -159,10 +159,12 @@ func TestOnboardingPlaybookWriteApprovalAndExecution(t *testing.T) {
 	result, err := tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
 	require.NoError(t, err)
 	require.Equal(t, string(ProposalSucceeded), result.Status)
-	require.JSONEq(t, `{"playbook_id":"`+seeds.defaultID+`","replaced":"","steps":["identity-provider","platform-mcp"]}`, string(result.Result))
 	assigned := assignedPlaybook(t, f, f.orgA)
 	require.NotNil(t, assigned)
-	require.Equal(t, seeds.defaultID, assigned.ID)
+	require.NotEqual(t, seeds.defaultID, assigned.ID, "the organization walks its own copy of the template")
+	require.Equal(t, f.orgA, *assigned.OrganizationID)
+	require.Equal(t, "staff-authored default name", assigned.Name)
+	require.JSONEq(t, `{"playbook_id":"`+assigned.ID+`","template_id":"`+seeds.defaultID+`","replaced":"","steps":["identity-provider","platform-mcp"]}`, string(result.Result))
 	require.Nil(t, assignedPlaybook(t, f, f.orgB), "execution cannot affect a second tenant")
 	require.Equal(t, 1, countWriteEvents(t, f.db, id, "executed"))
 
@@ -189,16 +191,17 @@ func TestOnboardingPlaybookWriteApprovalAndExecution(t *testing.T) {
 	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: staleExecution.ProposalID})
 	require.ErrorIs(t, err, ErrStaleState)
 	require.Zero(t, countWriteEvents(t, f.db, approvedEarly.ID, "executed"))
-	require.Equal(t, seeds.defaultID, assignedPlaybook(t, f, f.orgA).ID)
+	require.Equal(t, assigned.ID, assignedPlaybook(t, f, f.orgA).ID)
 
-	// A fresh proposal replaces the assignment and names what it replaces.
+	// A fresh proposal replaces the copy and names what it replaces. Proposing
+	// the template again is a no-op, since the organization walks its copy.
 	next, err := writer.prepare(ctx, PrepareOnboardingPlaybookInput{OrganizationID: f.orgA, PlaybookID: seeds.sharedID, RetryKey: "playbook-2"})
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(next.Preview, &preview))
-	require.Equal(t, seeds.defaultID, preview.Replaces)
+	require.Equal(t, assigned.ID, preview.Replaces)
 	require.Equal(t, []string{"identity-provider", "platform-mcp"}, preview.ReplacesSteps)
 	_, err = writer.prepare(ctx, PrepareOnboardingPlaybookInput{OrganizationID: f.orgA, PlaybookID: seeds.defaultID, RetryKey: "no-op"})
-	require.ErrorContains(t, err, "already assigned")
+	require.ErrorContains(t, err, "already walks")
 
 	otherPrincipal, ok := ctx.Value(principalKey{}).(Principal)
 	require.True(t, ok)
@@ -240,7 +243,7 @@ func TestOnboardingPlaybookWriteGoesStaleWhenThePlaybookChanges(t *testing.T) {
 	require.NoError(t, err)
 	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: retired.ProposalID})
 	require.ErrorIs(t, err, ErrStaleState)
-	require.Equal(t, seeds.defaultID, assignedPlaybook(t, f, f.orgA).ID)
+	require.Equal(t, "staff-authored default name", assignedPlaybook(t, f, f.orgA).Name)
 }
 
 func TestOnboardingPlaybookWriteAuditFailureRollsBack(t *testing.T) {
@@ -308,7 +311,7 @@ func TestOnboardingPlaybookWriteRejectsInvalidStoredArguments(t *testing.T) {
 		_, err = tools.execute(ctx, ProposalIDInput{ProposalID: p.ID.String()})
 		require.ErrorIs(t, err, tc.want, key)
 	}
-	require.Equal(t, seeds.defaultID, assignedPlaybook(t, f, f.orgA).ID)
+	require.Equal(t, "staff-authored default name", assignedPlaybook(t, f, f.orgA).Name)
 	require.Equal(t, int64(1), auditCount(t, f, audit.ActionOrganizationOnboardingPlaybookAssigned), "only the dashboard assignment is audited")
 }
 

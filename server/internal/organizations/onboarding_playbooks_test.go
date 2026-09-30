@@ -176,7 +176,11 @@ func TestOnboardingPlaybookAssignmentFollowsTheStack(t *testing.T) {
 	require.NoError(t, err)
 	assigned, err := organizations.AssignOrganizationOnboardingPlaybook(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, &playbookID, actor, nil)
 	require.NoError(t, err)
-	require.Equal(t, playbook.ID, assigned.Playbook.ID)
+	require.NotEqual(t, playbook.ID, assigned.Playbook.ID, "a shared playbook is a template; the organization walks its own copy")
+	require.Equal(t, ac.ActiveOrganizationID, *assigned.Playbook.OrganizationID)
+	require.Nil(t, assigned.Playbook.UseCaseID)
+	require.Equal(t, "Anthropic first", assigned.Playbook.Name)
+	copyID := assigned.Playbook.ID
 	for _, step := range assigned.Applicability {
 		require.True(t, step.Applies, step.Slug)
 	}
@@ -187,8 +191,22 @@ func TestOnboardingPlaybookAssignmentFollowsTheStack(t *testing.T) {
 	require.NoError(t, err)
 	var snapshot audit.OrganizationOnboardingPlaybookSnapshot
 	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &snapshot))
-	require.Equal(t, "observability", snapshot.UseCase)
+	require.Equal(t, "observability", snapshot.UseCase, "the copy's audit names the template's use case")
 	require.Equal(t, []string{"anthropic-observability", "enable-logging", "agent-observability"}, snapshot.StepSlugs)
+
+	// Assigning the template again changes nothing: the organization keeps its
+	// copy, and nothing is audited. Editing the template never reaches it.
+	again, err := organizations.AssignOrganizationOnboardingPlaybook(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, &playbookID, actor, nil)
+	require.NoError(t, err)
+	require.Equal(t, copyID, again.Playbook.ID)
+	unchanged, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationOnboardingPlaybookAssigned)
+	require.NoError(t, err)
+	require.Equal(t, after, unchanged)
+	_, err = organizations.UpdateOnboardingPlaybook(ctx, ti.conn, playbookID, "Anthropic first", "", true, []string{"anthropic-observability"})
+	require.NoError(t, err)
+	still, err := organizations.LoadOrganizationOnboardingPlaybook(ctx, ti.conn, ac.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Len(t, still.Playbook.Steps, 3, "an edit to the template never reaches the copy")
 
 	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
@@ -222,15 +240,16 @@ func TestOnboardingPlaybookAssignmentFollowsTheStack(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	mine, err := organizations.ListOnboardingPlaybooks(ctx, ti.conn, &ac.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Len(t, mine.Playbooks, 2, "the default and the custom copy")
+	require.Len(t, mine.Playbooks, 3, "the default, the assigned copy and the custom copy")
 	other, err := organizations.ListOnboardingPlaybooks(ctx, ti.conn, conv.PtrEmpty("org_someone_else"))
 	require.NoError(t, err)
 	require.Len(t, other.Playbooks, 1, "another organization never sees the copy")
 	all, err := organizations.ListOnboardingPlaybooks(ctx, ti.conn, nil)
 	require.NoError(t, err)
-	require.Len(t, all.Playbooks, 2, "unscoped, every organization's copy lists with the shared ones")
+	require.Len(t, all.Playbooks, 3, "unscoped, every organization's copy lists with the shared ones")
 	require.Nil(t, all.Playbooks[0].OrganizationName)
 	require.NotNil(t, all.Playbooks[1].OrganizationName, "a copy names its organization")
+	require.NotNil(t, all.Playbooks[2].OrganizationName)
 	customID := mustUUID(t, custom.ID)
 	_, err = organizations.AssignOrganizationOnboardingPlaybook(ctx, ti.conn, audit.NewLogger(), "org_someone_else", &customID, actor, nil)
 	require.Error(t, err)
@@ -258,17 +277,19 @@ func TestOnboardingPlaybookAssignmentFollowsTheStack(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, setupTask(listed.Tasks, "identity-provider"))
 
-	// Retiring the use case retires its playbooks and the organization falls
-	// back the same way.
-	_, err = organizations.AssignOrganizationOnboardingPlaybook(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, &playbookID, actor, nil)
+	// Retiring the use case retires its shared playbooks, but the organization
+	// keeps the copy it walks.
+	reassigned, err := organizations.AssignOrganizationOnboardingPlaybook(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, &playbookID, actor, nil)
 	require.NoError(t, err)
+	require.NotEqual(t, copyID, reassigned.Playbook.ID, "a cleared organization gets a fresh copy")
 	useCases, err := organizations.DeleteOnboardingUseCase(ctx, ti.conn, mustUUID(t, useCase.ID))
 	require.NoError(t, err)
 	require.Empty(t, useCases.UseCases)
-	fallen, err := organizations.LoadOrganizationOnboardingPlaybook(ctx, ti.conn, ac.ActiveOrganizationID)
+	kept, err := organizations.LoadOrganizationOnboardingPlaybook(ctx, ti.conn, ac.ActiveOrganizationID)
 	require.NoError(t, err)
-	require.Nil(t, fallen.Playbook)
+	require.NotNil(t, kept.Playbook)
+	require.Equal(t, reassigned.Playbook.ID, kept.Playbook.ID)
 	listed, err = ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
-	require.NotNil(t, setupTask(listed.Tasks, "identity-provider"))
+	require.Nil(t, setupTask(listed.Tasks, "identity-provider"), "the copy still decides the board")
 }
