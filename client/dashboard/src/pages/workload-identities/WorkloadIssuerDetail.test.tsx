@@ -76,13 +76,14 @@ function admission(
   workloadIssuerId: string = ISSUER_ID,
 ): WorkloadAdmission {
   const label = `machine-${String(index).padStart(2, "0")}`;
+  const platform = workloadIssuerId === OTHER_ISSUER_ID ? otherIssuer : issuer;
   return {
     id: `admission-${workloadIssuerId}-${index}`,
     organizationId: "example-org",
     projectId: "",
     workloadIssuerId,
-    issuer: issuer.issuer,
-    issuerName: issuer.name,
+    issuer: platform.issuer,
+    issuerName: platform.name,
     subject: `repo:example/${label}`,
     matchKind: "exact",
     name: label,
