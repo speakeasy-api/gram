@@ -1,6 +1,11 @@
 -- Generic tenant metrics. Duplicate deliveries contribute again across batches.
 -- Infrastructure provisions the database and application principal before DDL.
 -- No marts grants: these tables have no customer-facing reporting view.
+-- A contribution is one producer-owned measurement added to an aggregate:
+-- a Counter delta increment or a single Histogram observation.
+-- Retries/reprocessing preserve contribution_id, event_time and the payload.
+-- Replacement deduplicates raw copies within an event-month partition only.
+-- It does not retract MV increments. Manual rebuilds read deduplicated raw data.
 CREATE TABLE product_metric_contributions (
     organization_id String,
     project_id UUID,
@@ -14,17 +19,17 @@ CREATE TABLE product_metric_contributions (
     resource_attributes Array(Tuple(key String, type String, value String)),
     scope_attributes Array(Tuple(key String, type String, value String)),
     point_attributes Array(Tuple(key String, type String, value String)),
-    contribution_id String,
+    contribution_id String COMMENT 'Producer-selected immutable observation ID, unique within organization, project and instrumentation scope/version',
     event_time DateTime64(9, 'UTC'),
     observed_at DateTime64(9, 'UTC'),
-    ingested_at DateTime64(9, 'UTC') DEFAULT now64(9),
+    ingested_at DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'Selects the latest retained delivery copy, not a producer correction version',
     integer_value Int64,
     floating_value Float64
-) ENGINE = MergeTree
-PARTITION BY toYYYYMMDD(ingested_at)
-ORDER BY (organization_id, project_id, metric_name, event_time)
-TTL toDateTime(ingested_at) + INTERVAL 7 DAY
-COMMENT 'Append-oriented generic measurements retained seven days from ingestion for diagnostics and bounded rebuilds. No exactly-once guarantee';
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(event_time)
+ORDER BY (organization_id, project_id, scope_name, scope_version, contribution_id)
+TTL toStartOfMinute(event_time) + INTERVAL 90 DAY
+COMMENT 'Immutable producer-ID contributions retained 90 days by event minute for debugging and manual deduplicated rollup rebuilds. Raw replacement does not deduplicate live rollups';
 
 CREATE TABLE product_metric_sums_1m (
     organization_id String,
