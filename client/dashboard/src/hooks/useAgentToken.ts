@@ -1,7 +1,7 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import {
-  invalidateListAPIKeys,
+  invalidateAllListAPIKeys,
   useListAPIKeys,
 } from "@gram/client/react-query/listAPIKeys";
 import { useQueryClient } from "@tanstack/react-query";
@@ -70,8 +70,9 @@ export function useAgentToken(opts: {
       } catch {
         setAutoCopied(false);
       }
-      // Refresh the cached key list so it reflects the new key.
-      await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
+      // Refresh every cached key list so it reflects the new key (and the
+      // button switches to "Re-generate token").
+      await invalidateAllListAPIKeys(queryClient);
     },
   });
 
