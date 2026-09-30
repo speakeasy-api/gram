@@ -46,7 +46,7 @@ if [ ! -f mise.local.toml ] || ! grep -q 'USE_RECOMMENDED_SKILLS' mise.local.tom
 fi
 
 set +e
-setsid env INFRA_READINESS_TIMEOUT=300 PRESIDIO_READINESS_TIMEOUT=0 ./zero --agent >/tmp/zero-agent.log 2>&1
+setsid env INFRA_READINESS_TIMEOUT=300 ./zero --agent >/tmp/zero-agent.log 2>&1
 zero_exit=$?
 set -e
 if [ "$zero_exit" -ne 0 ]; then

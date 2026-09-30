@@ -2,8 +2,8 @@
 # `zero:remap-ports` remaps the host ports, so each worktree gets its own
 # Postgres, Redis, ClickHouse, and Temporal without colliding.
 # Services shared safely through explicit worktree namespaces live in
-# compose.shared.yml and run once for the whole machine: Pub/Sub,
-# Presidio, and the LGTM observability stack.
+# compose.shared.yml and run once for the whole machine: Pub/Sub and the
+# LGTM observability stack.
 name: ${COMPOSE_PROJECT_NAME:-gram}
 
 services:

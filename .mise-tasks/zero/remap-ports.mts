@@ -44,11 +44,10 @@ import { checkPort } from "get-port-please";
  * Ports of services that are shared across ALL worktrees (see
  * compose.shared.yml). These must NOT be remapped: every worktree reaches the
  * single shared stack on the same default host port. Skipping a port here also
- * skips any env var that depends on it (e.g. PRESIDIO_ANALYZER_URL), so those
+ * skips any env var that depends on it (e.g. PUBSUB_EMULATOR_HOST), so those
  * keep their mise.toml defaults too.
  */
 const SHARED_PORT_ENV_VARS = new Set([
-  "PRESIDIO_PORT",
   "PUBSUB_EMULATOR_PORT",
   // The LGTM stack is shared, so every worktree must reach it
   // on the same default host ports.
