@@ -16,14 +16,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
-// unmaskFinding is one ClickHouse risk_findings fixture row for the reveal
-// tests, carrying the reveal metadata columns (surface/field/path/tool_call_id)
-// that chrepo.InsertRiskFindings does not yet write (the live write path for
-// them is a parallel change). Inserted via a direct INSERT in insertUnmaskFinding.
+// unmaskFinding is one ClickHouse risk_findings fixture row for reveal tests.
+// It carries surface, mediation_surface, field, path, and tool_call_id because
+// chrepo.InsertRiskFindings does not yet write every reveal column. The fixture
+// uses a direct INSERT in insertUnmaskFinding.
 type unmaskFinding struct {
 	id               uuid.UUID
 	orgID            string
@@ -38,6 +39,7 @@ type unmaskFinding struct {
 	matchLen         uint32
 	matchRedacted    string
 	surface          string
+	mediationSurface string
 	field            string
 	path             string
 	toolCallID       string
@@ -95,8 +97,8 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 			start_pos, end_pos, dead_letter_reason,
 			match_len, match_redacted,
 			excluded_at, false_positive_at, message_created_at,
-			surface, field, path, tool_call_id, shadow, exclusion_id
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			surface, mediation_surface, field, path, tool_call_id, shadow, exclusion_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		f.id, createdAt, f.orgID, f.projectID,
 		f.chatMessageID, f.contentPartID, f.chatID,
@@ -104,7 +106,7 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 		f.startPos, f.endPos, f.deadLetterReason,
 		f.matchLen, f.matchRedacted,
 		nullableTime(f.excludedAt), nullableTime(f.falsePositiveAt), createdAt,
-		f.surface, f.field, f.path, f.toolCallID, f.shadow, nullableUUID(f.exclusionID),
+		f.surface, f.mediationSurface, f.field, f.path, f.toolCallID, f.shadow, nullableUUID(f.exclusionID),
 	))
 	return f.id
 }
@@ -172,6 +174,7 @@ func TestUnmaskRiskResult_ClickHouseContentSurface(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, rowID.String(), res.ID)
 	require.Equal(t, secret, res.Match)
+	require.Equal(t, "available", res.RevealState)
 
 	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
 	require.NoError(t, err)
@@ -181,6 +184,107 @@ func TestUnmaskRiskResult_ClickHouseContentSurface(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "risk_result", rec.SubjectType)
 	require.Equal(t, chatID.String(), rec.SubjectSlug, "audit records which chat the revealed value came from")
+}
+
+func TestUnmaskRiskResult_MCPUsesStoredEvidenceWithWildcardChatRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	chatID := uuid.New()
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
+
+	rowID := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:            orgID,
+		projectID:        projectID.String(),
+		chatID:           chatID.String(),
+		matchLen:         uint32(len("raw MCP credential")),
+		matchRedacted:    "<redacted len=18>",
+		mediationSurface: "hosted_mcp",
+	})
+	require.NoError(t, ti.findingEvidence.Store(ctx, risk.MCPFindingEvidenceBatch{
+		OrganizationID: orgID,
+		ProjectID:      projectID,
+		CreatedAt:      time.Now().UTC(),
+		Findings:       []risk.MCPFindingEvidence{{ID: rowID, Match: "raw MCP credential"}},
+	}))
+
+	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
+	require.NoError(t, err)
+	res, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+	require.NoError(t, err)
+	require.Equal(t, rowID.String(), res.ID)
+	require.Equal(t, "raw MCP credential", res.Match)
+	require.Equal(t, "available", res.RevealState)
+	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+	rec, err := audittest.LatestAuditLogByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
+	require.NoError(t, err)
+	require.Equal(t, chatID.String(), rec.SubjectSlug)
+}
+
+func TestUnmaskRiskResult_MCPWithoutStoredEvidenceReturnsAvailability(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
+
+	rowID := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:            orgID,
+		projectID:        projectID.String(),
+		chatID:           "not-a-uuid",
+		matchLen:         uint32(len("legacy MCP credential")),
+		matchRedacted:    "<redacted len=21>",
+		mediationSurface: "hosted_mcp",
+	})
+	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
+	require.NoError(t, err)
+
+	res, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+	require.NoError(t, err)
+	require.Equal(t, rowID.String(), res.ID)
+	require.Equal(t, "evidence_not_stored", res.RevealState)
+
+	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
+func TestUnmaskRiskResult_MCPForbiddenWithoutChatRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeOrgAdmin, orgID),
+	)
+
+	rowID := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:            orgID,
+		projectID:        projectID.String(),
+		chatID:           "not-a-uuid",
+		matchLen:         uint32(len("raw MCP credential")),
+		matchRedacted:    "<redacted len=18>",
+		mediationSurface: "hosted_mcp",
+	})
+
+	_, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 // TestUnmaskRiskResult_ClickHouseForbiddenWithoutChatRead: org:admin alone (able to browse the redacted listing) must
@@ -499,7 +603,7 @@ func TestUnmaskRiskResult_ClickHouseDerivedSources(t *testing.T) {
 }
 
 // TestUnmaskRiskResult_ClickHouseHiddenRowsNotFound: the point read applies
-// the same gates as every other risk_findings read — excluded, dismissed,
+// the same gates as every other risk_findings read: excluded, dismissed,
 // dead-letter and foreign-tenant rows all read as absent.
 func TestUnmaskRiskResult_ClickHouseHiddenRowsNotFound(t *testing.T) {
 	t.Parallel()
@@ -560,7 +664,7 @@ func TestUnmaskRiskResult_ClickHouseHiddenRowsNotFound(t *testing.T) {
 }
 
 // TestUnmaskRiskResult_ClickHouseLengthMismatchRefused: the match-length gate
-// is the reveal's integrity check — a reconstruction whose byte length
+// is the reveal's integrity check. A reconstruction whose byte length
 // disagrees with the recorded match_len (edited content shifting offsets, or
 // offsets past the end of the stored text) is refused, not served.
 func TestUnmaskRiskResult_ClickHouseLengthMismatchRefused(t *testing.T) {
@@ -626,7 +730,7 @@ func TestUnmaskRiskResult_ClickHouseLengthMismatchRefused(t *testing.T) {
 
 // TestUnmaskRiskResult_ClickHouseEmptySurfaceRefused: the table is truncated
 // and fully re-backfilled with stamped surfaces before this path serves
-// traffic, so an empty surface is treated like an unknown one — refused
+// traffic, so an empty surface is treated like an unknown one and refused
 // rather than guessed at.
 func TestUnmaskRiskResult_ClickHouseEmptySurfaceRefused(t *testing.T) {
 	t.Parallel()

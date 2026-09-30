@@ -59977,7 +59977,7 @@ paths:
                 type: mutation
     /rpc/risk.unmaskResult:
         post:
-            description: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
+            description: Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.
             operationId: unmaskRiskResult
             parameters:
                 - allowEmptyValue: true
@@ -101656,9 +101656,16 @@ components:
                 match:
                     type: string
                     description: The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).
+                reveal_state:
+                    type: string
+                    description: Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+                    enum:
+                        - available
+                        - evidence_not_stored
             required:
                 - id
                 - match
+                - reveal_state
         RiskUserBreakdownResult:
             type: object
             properties:

@@ -23778,7 +23778,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    release-session-quarantine: Release an active session quarantine.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-for-agent: List risk analysis results with the `+"`"+`match`+"`"+` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `+"`"+`match`+"`"+` value — a non-sensitive server URL or command identifier — is passed through verbatim.`)
-	fmt.Fprintln(os.Stderr, `    unmask-risk-result: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.`)
+	fmt.Fprintln(os.Stderr, `    unmask-risk-result: Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
 	fmt.Fprintln(os.Stderr, `    mark-risk-results-false-positive: Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.`)
 	fmt.Fprintln(os.Stderr, `    unmark-risk-results-false-positive: Undo a false-positive dismissal for one or more risk results.`)
@@ -24166,7 +24166,7 @@ func riskUnmaskRiskResultUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.`)
+	fmt.Fprintln(os.Stderr, `Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
