@@ -333,19 +333,20 @@ SELECT
     m.user_session_issuer_id,
     t.external_oauth_server_id,
     t.oauth_proxy_server_id,
-    COALESCE(m.slug, (
+    COALESCE((
         SELECT e.slug FROM mcp_endpoints e
-        WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE
-        ORDER BY e.created_at, e.id
+        WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE AND e.is_domain_root IS NOT TRUE
+        ORDER BY (e.custom_domain_id IS NULL), e.created_at, e.id
         LIMIT 1
-    ), t.mcp_slug, '')::text AS url_slug,
+    ), m.slug, CASE WHEN w.wrapper_count <= 1 THEN t.mcp_slug END, '')::text AS url_slug,
     COALESCE(t.slug, '')::text AS toolset_slug,
-    (
-        SELECT count(*) FROM mcp_servers w
-        WHERE w.toolset_id = m.toolset_id AND w.project_id = m.project_id AND w.deleted IS FALSE
-    )::bigint AS toolset_wrapper_count
+    w.wrapper_count AS toolset_wrapper_count
 FROM mcp_servers m
 LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+CROSS JOIN LATERAL (
+    SELECT count(*)::bigint AS wrapper_count FROM mcp_servers o
+    WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+) w
 WHERE m.id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
@@ -402,6 +403,10 @@ type AdminGetMcpServerAuthRow struct {
 // resolves it; the legacy OAuth columns live on the toolset only.
 // toolset_wrapper_count counts live wrappers of the toolset, so the caller can
 // drop a toolset slug that would also select another wrapper's calls.
+// url_slug is the slug in the /mcp/<slug> path clients call: the primary live
+// endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+// a domain root has no such path), else the server's own slug, else the
+// toolset's mcp_slug when no other wrapper shares that toolset.
 func (q *Queries) AdminGetMcpServerAuth(ctx context.Context, arg AdminGetMcpServerAuthParams) (AdminGetMcpServerAuthRow, error) {
 	row := q.db.QueryRow(ctx, adminGetMcpServerAuth, arg.ID, arg.ProjectID)
 	var i AdminGetMcpServerAuthRow
@@ -691,7 +696,15 @@ SELECT
 FROM user_session_issuers i
 WHERE i.id = $1
   AND i.deleted IS FALSE
+  AND (i.project_id = $2::uuid
+       OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $3::text)))
 `
+
+type AdminGetUserSessionIssuerParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
 
 type AdminGetUserSessionIssuerRow struct {
 	ID                            uuid.UUID
@@ -708,10 +721,10 @@ type AdminGetUserSessionIssuerRow struct {
 }
 
 // The issuer a server in the project points at. It may be attached to the
-// project, the organization or the platform, so it is reached through the
-// server rather than scoped by project here.
-func (q *Queries) AdminGetUserSessionIssuer(ctx context.Context, id uuid.UUID) (AdminGetUserSessionIssuerRow, error) {
-	row := q.db.QueryRow(ctx, adminGetUserSessionIssuer, id)
+// project, the organization or the platform; one attached anywhere else is not
+// visible to the project and reads as absent.
+func (q *Queries) AdminGetUserSessionIssuer(ctx context.Context, arg AdminGetUserSessionIssuerParams) (AdminGetUserSessionIssuerRow, error) {
+	row := q.db.QueryRow(ctx, adminGetUserSessionIssuer, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i AdminGetUserSessionIssuerRow
 	err := row.Scan(
 		&i.ID,

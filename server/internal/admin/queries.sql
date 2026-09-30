@@ -935,6 +935,10 @@ ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK 
 -- resolves it; the legacy OAuth columns live on the toolset only.
 -- toolset_wrapper_count counts live wrappers of the toolset, so the caller can
 -- drop a toolset slug that would also select another wrapper's calls.
+-- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
+-- endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
+-- a domain root has no such path), else the server's own slug, else the
+-- toolset's mcp_slug when no other wrapper shares that toolset.
 SELECT
     m.id,
     COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name,
@@ -947,19 +951,20 @@ SELECT
     m.user_session_issuer_id,
     t.external_oauth_server_id,
     t.oauth_proxy_server_id,
-    COALESCE(m.slug, (
+    COALESCE((
         SELECT e.slug FROM mcp_endpoints e
-        WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE
-        ORDER BY e.created_at, e.id
+        WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE AND e.is_domain_root IS NOT TRUE
+        ORDER BY (e.custom_domain_id IS NULL), e.created_at, e.id
         LIMIT 1
-    ), t.mcp_slug, '')::text AS url_slug,
+    ), m.slug, CASE WHEN w.wrapper_count <= 1 THEN t.mcp_slug END, '')::text AS url_slug,
     COALESCE(t.slug, '')::text AS toolset_slug,
-    (
-        SELECT count(*) FROM mcp_servers w
-        WHERE w.toolset_id = m.toolset_id AND w.project_id = m.project_id AND w.deleted IS FALSE
-    )::bigint AS toolset_wrapper_count
+    w.wrapper_count AS toolset_wrapper_count
 FROM mcp_servers m
 LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+CROSS JOIN LATERAL (
+    SELECT count(*)::bigint AS wrapper_count FROM mcp_servers o
+    WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+) w
 WHERE m.id = @id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
@@ -989,8 +994,8 @@ WHERE t.id = @id
 
 -- name: AdminGetUserSessionIssuer :one
 -- The issuer a server in the project points at. It may be attached to the
--- project, the organization or the platform, so it is reached through the
--- server rather than scoped by project here.
+-- project, the organization or the platform; one attached anywhere else is not
+-- visible to the project and reads as absent.
 SELECT
     i.id,
     i.slug,
@@ -1005,7 +1010,9 @@ SELECT
     i.created_at
 FROM user_session_issuers i
 WHERE i.id = @id
-  AND i.deleted IS FALSE;
+  AND i.deleted IS FALSE
+  AND (i.project_id = @project_id::uuid
+       OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = @organization_id::text)));
 
 -- name: AdminListOtherServersUsingIssuer :many
 -- Live servers in the project, other than the one described, that share the

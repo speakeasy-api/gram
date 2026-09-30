@@ -138,6 +138,12 @@ func TestMCPServerHealth_ToolsetBackedServer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), outcomes.Success)
 	require.Equal(t, int64(1), outcomes.ClientError, "a row carrying only the toolset slug is matched through it")
+
+	points, err := reader.Series(ctx, target, from, to, 24*time.Hour)
+	require.NoError(t, err)
+	total, failed := seriesTotals(points)
+	require.Equal(t, int64(2), total, "the series matches either identity and counts a row carrying both once")
+	require.Equal(t, int64(1), failed)
 }
 
 func TestMCPServerHealth_ToolsetOnlyServer(t *testing.T) {

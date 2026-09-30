@@ -187,6 +187,11 @@ var AdminMcpServerHealth = Type("AdminMcpServerHealth", func() {
 	Attribute("tool_calls", AdminMcpServerHealthToolCalls)
 })
 
+// MCP parity: exposed through Staff Admin MCP as describe_mcp_server_health
+// (S-1121), the audience this endpoint serves. Deliberately not a Platform MCP
+// tool: that surface serves an organization's own administrators, who already
+// have get_mcp_diagnostics for the same outcomes, and this read spans
+// issuer, session and client configuration only staff may see.
 func mcpServerHealthMethods() {
 	Method("describeMcpServerHealth", func() {
 		Description("Describes one MCP server's health: authentication configuration, session counts and tool call outcomes over a window (admin view, no auth scoping).")

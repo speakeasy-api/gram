@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -92,16 +91,18 @@ func (s *Service) DescribeMcpServerHealth(ctx context.Context, payload *gen.Desc
 	now := time.Now().UTC()
 	from := now.AddDate(0, 0, -payload.WindowDays)
 
-	result, err := s.buildMCPServerHealth(ctx, queries, projectID, server, from)
+	result, err := s.buildMCPServerHealth(ctx, queries, payload.OrganizationID, projectID, server, from)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read mcp server health").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	logsEnabled, err := s.productFeatures.IsFeatureEnabled(ctx, payload.OrganizationID, productfeatures.FeatureLogs)
+	// Strict, not cached: a stale cache entry could read telemetry for an
+	// organization that has just turned logs off.
+	features, err := s.productFeatures.SnapshotStrict(ctx, payload.OrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read organization logs feature").LogError(ctx, s.logger, logAttrs...)
 	}
-	if !logsEnabled {
+	if !features.LogsEnabled {
 		// Rows are dropped at write time while logs are off, so zeros would
 		// claim a quiet server that was never observed.
 		result.ToolCalls = &gen.AdminMcpServerHealthToolCalls{
@@ -145,7 +146,7 @@ func healthBucket(windowDays int) (time.Duration, error) {
 }
 
 // buildMCPServerHealth assembles every section but tool_calls from Postgres.
-func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, server repo.AdminGetMcpServerAuthRow, windowStart time.Time) (*gen.AdminMcpServerHealth, error) {
+func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Queries, organizationID string, projectID uuid.UUID, server repo.AdminGetMcpServerAuthRow, windowStart time.Time) (*gen.AdminMcpServerHealth, error) {
 	switch server.Visibility {
 	case "disabled", "private", "public":
 	default:
@@ -183,7 +184,7 @@ func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Querie
 	}
 
 	if server.UserSessionIssuerID.Valid {
-		issuer, err := s.readUserSessionIssuer(ctx, queries, projectID, server.ID, server.UserSessionIssuerID.UUID, windowStart)
+		issuer, err := s.readUserSessionIssuer(ctx, queries, organizationID, projectID, server.ID, server.UserSessionIssuerID.UUID, windowStart)
 		if err != nil {
 			return nil, err
 		}
@@ -228,10 +229,14 @@ func legacyAuth(server repo.AdminGetMcpServerAuthRow) *string {
 	return &mode
 }
 
-// readUserSessionIssuer returns nil when the issuer has been deleted, which
-// leaves the server with no issuer in force.
-func (s *Service) readUserSessionIssuer(ctx context.Context, queries *repo.Queries, projectID, serverID, issuerID uuid.UUID, windowStart time.Time) (*gen.AdminMcpServerHealthUserSessionIssuer, error) {
-	row, err := queries.AdminGetUserSessionIssuer(ctx, issuerID)
+// readUserSessionIssuer returns nil when the issuer has been deleted or is not
+// visible to the project, which leaves the server with no issuer in force.
+func (s *Service) readUserSessionIssuer(ctx context.Context, queries *repo.Queries, organizationID string, projectID, serverID, issuerID uuid.UUID, windowStart time.Time) (*gen.AdminMcpServerHealthUserSessionIssuer, error) {
+	row, err := queries.AdminGetUserSessionIssuer(ctx, repo.AdminGetUserSessionIssuerParams{
+		ID:             issuerID,
+		ProjectID:      projectID,
+		OrganizationID: organizationID,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil

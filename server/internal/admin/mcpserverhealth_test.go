@@ -598,3 +598,58 @@ func TestDescribeMcpServerHealth_OmitsURLSlugWhenServerHasNone(t *testing.T) {
 	require.Nil(t, got.Correlation.URLSlug)
 	require.Empty(t, f.reader.targets[0].URLSlug)
 }
+
+// Hook-observed calls carry the URL the client called, so the endpoint slug
+// wins over the server's own slug.
+func TestDescribeMcpServerHealth_URLSlugPrefersPrimaryEndpoint(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "addressed", false)
+	serverID := f.seedServerWithIssuer(t, toolsetID, uuid.Nil, "server-slug")
+	seedMCPEndpoint(t, t.Context(), f.conn, f.projectID, serverID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "endpoint-slug-"+uuid.NewString()[:8])
+
+	got, err := f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(*got.Correlation.URLSlug, "endpoint-slug-"))
+}
+
+// A toolset's mcp_slug addresses the toolset, not one of several wrappers of
+// it, so it is no fallback for a wrapper that shares the toolset.
+func TestDescribeMcpServerHealth_SharedToolsetSlugIsNoURLFallback(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "fanned", false)
+	first := f.seedServerWithIssuer(t, toolsetID, uuid.Nil, "")
+	f.seedServerWithIssuer(t, toolsetID, uuid.Nil, "")
+
+	got, err := f.describe(t, first, 14)
+	require.NoError(t, err)
+	require.Nil(t, got.Correlation.URLSlug)
+	require.Nil(t, got.Correlation.ToolsetSlug)
+}
+
+// An issuer attached to another project is not visible here, so the server
+// reads as having none.
+func TestDescribeMcpServerHealth_IssuerOutsideProjectIsIgnored(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	otherProject := seedProject(t, t.Context(), f.conn, f.orgID, "other-"+uuid.NewString()[:8])
+	foreign, err := usersessionsrepo.New(f.conn).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          otherProject,
+		OrganizationID:     pgtype.Text{String: f.orgID, Valid: true},
+		Slug:               "foreign",
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    conv.PtrToPGInterval(new(time.Hour)),
+	})
+	require.NoError(t, err)
+	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "borrowing", false)
+	serverID := f.seedServerWithIssuer(t, toolsetID, foreign.ID, "borrowing")
+
+	got, err := f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.Nil(t, got.UserSessionIssuer)
+	require.Equal(t, "gram_private", *got.LegacyAuth)
+}
