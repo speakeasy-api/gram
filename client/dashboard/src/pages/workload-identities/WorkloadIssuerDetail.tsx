@@ -173,7 +173,7 @@ function IssuerDetail(): JSX.Element {
   const { page, pageRows, setPage } = usePagedRows({
     rows: visibleAdmissions,
     pageSize: MACHINES_PAGE_SIZE,
-    resetOn: [search],
+    resetOn: [issuerId, search],
   });
 
   const agents = useMemo(
@@ -499,13 +499,16 @@ function IssuerDetail(): JSX.Element {
     </RequireScope>
   );
 
-  const handleEdit = (values: RegisterIssuerValues) => {
-    if (issuer === undefined || editValues === undefined) return;
+  const handleEdit = (
+    values: RegisterIssuerValues,
+    baseline: RegisterIssuerValues | undefined,
+  ) => {
+    if (issuer === undefined || baseline === undefined) return;
     updateIssuer.mutate({
       request: {
         updateWorkloadIssuerForm: {
           id: issuer.id,
-          ...changedIssuerFields(editValues, values),
+          ...changedIssuerFields(baseline, values),
         },
       },
     });

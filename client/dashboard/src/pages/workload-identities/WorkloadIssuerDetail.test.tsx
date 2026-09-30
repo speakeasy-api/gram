@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -8,7 +9,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import type { ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { WorkloadIssuerDetailPage } from "./WorkloadIssuerDetail";
 
@@ -45,9 +46,25 @@ vi.mock("@/routes", () => ({
   }),
 }));
 
-const ISSUER_ID = "11111111-1111-1111-1111-111111111111";
+const mocks = vi.hoisted(() => ({
+  invalidate: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+  updateIssuer: vi.fn(),
+  updateOptions: {} as {
+    onSuccess?: () => Promise<void> | void;
+    onError?: (error: unknown) => void;
+  },
+}));
 
-const issuer = {
+vi.mock("sonner", () => ({
+  toast: { success: mocks.toastSuccess, error: mocks.toastError },
+}));
+
+const ISSUER_ID = "11111111-1111-1111-1111-111111111111";
+const OTHER_ISSUER_ID = "33333333-3333-3333-3333-333333333333";
+
+const baseIssuer = {
   id: ISSUER_ID,
   organizationId: "example-org",
   projectId: "",
@@ -56,18 +73,32 @@ const issuer = {
   jwksUri: "https://ci-identity.example.com/jwks",
   description: "Deploy jobs for the main repository",
   allowWildcardAdmission: false,
-  tags: [],
+  tags: [] as string[],
   createdAt: new Date("2026-09-25T00:00:00Z"),
   updatedAt: new Date("2026-09-25T00:00:00Z"),
 };
 
-function admission(index: number, tags: string[] = []): WorkloadAdmission {
+let issuer = baseIssuer;
+
+const otherIssuer = {
+  ...baseIssuer,
+  id: OTHER_ISSUER_ID,
+  name: "Other CI",
+  issuer: "https://other-ci-identity.example.com",
+  jwksUri: "https://other-ci-identity.example.com/jwks",
+};
+
+function admission(
+  index: number,
+  tags: string[] = [],
+  workloadIssuerId: string = ISSUER_ID,
+): WorkloadAdmission {
   const label = `machine-${String(index).padStart(2, "0")}`;
   return {
-    id: `admission-${index}`,
+    id: `admission-${workloadIssuerId}-${index}`,
     organizationId: "example-org",
     projectId: "",
-    workloadIssuerId: ISSUER_ID,
+    workloadIssuerId,
     issuer: issuer.issuer,
     issuerName: issuer.name,
     subject: `repo:example/${label}`,
@@ -86,12 +117,12 @@ let admissions: WorkloadAdmission[] = [];
 
 vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
   useWorkloadIdentities: () => ({
-    data: { issuers: [issuer], admissions },
+    data: { issuers: [issuer, otherIssuer], admissions },
     isPending: false,
     isError: false,
     refetch: vi.fn(),
   }),
-  invalidateAllWorkloadIdentities: vi.fn(),
+  invalidateAllWorkloadIdentities: mocks.invalidate,
 }));
 vi.mock("@gram/client/react-query/agents.js", () => ({
   useAgents: () => ({
@@ -112,12 +143,13 @@ vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({
     isPending: false,
   }),
 }));
-const updateIssuer = vi.fn();
 vi.mock("@gram/client/react-query/updateWorkloadIssuer.js", () => ({
-  useUpdateWorkloadIssuerMutation: () => ({
-    mutate: updateIssuer,
-    isPending: false,
-  }),
+  useUpdateWorkloadIssuerMutation: (
+    options: typeof mocks.updateOptions = {},
+  ) => {
+    mocks.updateOptions = options;
+    return { mutate: mocks.updateIssuer, isPending: false };
+  },
 }));
 const updateSubject = vi.fn();
 vi.mock("@gram/client/react-query/updateWorkloadSubject.js", () => ({
@@ -141,7 +173,12 @@ vi.mock("@gram/client/react-query/withdrawWorkloadSubject.js", () => ({
 
 beforeEach(() => {
   admissions = [];
-  updateIssuer.mockReset();
+  issuer = baseIssuer;
+  mocks.updateIssuer.mockReset();
+  mocks.invalidate.mockReset();
+  mocks.toastSuccess.mockReset();
+  mocks.toastError.mockReset();
+  mocks.updateOptions = {};
   updateSubject.mockReset();
 });
 afterEach(cleanup);
@@ -150,9 +187,10 @@ function renderPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  render(
+  const page = () => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[`/access-hub/${ISSUER_ID}`]}>
+        <Link to={`/access-hub/${OTHER_ISSUER_ID}`}>Other platform</Link>
         <Routes>
           <Route
             path="/access-hub/:issuerId"
@@ -160,8 +198,10 @@ function renderPage() {
           />
         </Routes>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const { rerender } = render(page());
+  return { rerender: () => rerender(page()) };
 }
 
 function visibleMachines(): string[] {
@@ -255,6 +295,25 @@ it("returns to the first page when the search changes", async () => {
   expect(screen.queryByRole("button", { name: "Next page" })).toBeNull();
 });
 
+it("starts each platform on the first page", () => {
+  admissions = [
+    ...Array.from({ length: 12 }, (_, i) => admission(i + 1)),
+    ...Array.from({ length: 12 }, (_, i) =>
+      admission(i + 1, [], OTHER_ISSUER_ID),
+    ),
+  ];
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  expect(screen.getByText("11–12 of 12")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("link", { name: "Other platform" }));
+
+  expect(screen.getByText("Other CI")).toBeTruthy();
+  expect(screen.getByText("1–10 of 12")).toBeTruthy();
+  expect(visibleMachines()[0]).toBe("machine-01");
+});
+
 it("puts stop trusting in its own section below the machines", () => {
   admissions = [admission(1)];
   renderPage();
@@ -316,8 +375,8 @@ it("sends only the fields the edit changed", () => {
   });
   fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-  expect(updateIssuer).toHaveBeenCalledTimes(1);
-  expect(updateIssuer).toHaveBeenCalledWith({
+  expect(mocks.updateIssuer).toHaveBeenCalledTimes(1);
+  expect(mocks.updateIssuer).toHaveBeenCalledWith({
     request: {
       updateWorkloadIssuerForm: {
         id: ISSUER_ID,
@@ -377,8 +436,30 @@ it("sends only the machine fields the edit changed", () => {
   expect(updateSubject).toHaveBeenCalledWith({
     request: {
       updateWorkloadSubjectForm: {
-        id: "admission-1",
+        id: `admission-${ISSUER_ID}-1`,
         name: "Release bot",
+      },
+    },
+  });
+});
+
+it("repoints the JWKS URI and clears the tags", () => {
+  issuer = { ...baseIssuer, tags: ["deploys"] };
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("JWKS URI"), {
+    target: { value: " https://keys.example.com/jwks " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Remove deploys" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadIssuerForm: {
+        id: ISSUER_ID,
+        jwksUri: "https://keys.example.com/jwks",
+        tags: [],
       },
     },
   });
@@ -425,4 +506,47 @@ it("opens each machine's own values when editing one after another", () => {
   expect(
     (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
   ).toBe("machine-02");
+});
+
+it("diffs against the platform as it stood when the sheet opened", () => {
+  const { rerender } = renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+
+  // Another operator's edit arrives through a refresh while the sheet is open.
+  issuer = {
+    ...baseIssuer,
+    description: "Updated elsewhere",
+    jwksUri: "https://ci-identity.example.com/keys",
+  };
+  rerender();
+
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadIssuerForm: { id: ISSUER_ID, name: "Example deploys" },
+    },
+  });
+});
+
+it("refreshes, closes the sheet and confirms once the edit saves", async () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await act(async () => {
+    await mocks.updateOptions.onSuccess?.();
+  });
+
+  expect(mocks.invalidate).toHaveBeenCalledTimes(1);
+  expect(mocks.toastSuccess).toHaveBeenCalledWith("Platform updated");
+  await waitFor(() => expect(screen.queryByText("Edit platform")).toBeNull());
 });
