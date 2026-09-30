@@ -570,6 +570,17 @@ describe("AuthProvider portable paths", () => {
     });
   }
 
+  // What auth.info returns for a user with no memberships: the server only
+  // leaves activeOrganizationId empty when the organization list is empty too,
+  // and the client falls back to a blank organization entry.
+  function noOrgSession() {
+    return portableSession({
+      organizations: [],
+      organization: { id: "", name: "", slug: "", projects: [] },
+      activeOrganizationId: "",
+    });
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -595,9 +606,7 @@ describe("AuthProvider portable paths", () => {
   });
 
   it("sends a session with no organization to sign-up with the destination", () => {
-    mocks.sessionData.mockReturnValue(
-      portableSession({ activeOrganizationId: "" }),
-    );
+    mocks.sessionData.mockReturnValue(noOrgSession());
 
     renderGate("/~/toolsets");
 
@@ -643,9 +652,7 @@ describe("AuthProvider portable paths", () => {
   });
 
   it("sends a /@self session with no organization to sign-up", () => {
-    mocks.sessionData.mockReturnValue(
-      portableSession({ activeOrganizationId: "" }),
-    );
+    mocks.sessionData.mockReturnValue(noOrgSession());
 
     renderGate("/@self/settings");
 
