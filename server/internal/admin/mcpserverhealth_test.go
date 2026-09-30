@@ -92,6 +92,30 @@ func (f healthFixture) describe(t *testing.T, serverID uuid.UUID, windowDays int
 	})
 }
 
+func (f healthFixture) toolCalls(t *testing.T, serverID uuid.UUID, windowDays int) (*gen.AdminMcpServerToolCalls, error) {
+	t.Helper()
+
+	return f.svc.GetMcpServerToolCalls(t.Context(), &gen.GetMcpServerToolCallsPayload{
+		AdminSessionToken: nil,
+		OrganizationID:    f.orgID,
+		ProjectID:         f.projectID.String(),
+		McpServerID:       serverID.String(),
+		WindowDays:        windowDays,
+	})
+}
+
+// requireNoLeaks checks a wire body for the secrets, error text and subjects
+// the fixtures plant.
+func requireNoLeaks(t *testing.T, body any) {
+	t.Helper()
+
+	rendered, err := json.Marshal(body)
+	require.NoError(t, err)
+	for _, leaked := range []string{"secret-ciphertext", "token-ciphertext", "upstream said no", "alice", "user:"} {
+		require.NotContains(t, string(rendered), leaked)
+	}
+}
+
 func (f healthFixture) seedUserSessionIssuer(t *testing.T, slug string) uuid.UUID {
 	t.Helper()
 
@@ -381,26 +405,26 @@ func TestDescribeMcpServerHealth_IssuerWithTwoClients(t *testing.T) {
 	require.Nil(t, static.Sessions.FirstLinkedAt)
 	require.Empty(t, static.Sessions.ValidationStatusCounts)
 
-	require.Equal(t, "logging:enabled", got.ToolCalls.Type)
-	require.Equal(t, 14, *got.ToolCalls.WindowDays)
-	require.Equal(t, int64(86400), *got.ToolCalls.BucketSeconds)
-	require.Equal(t, "2026-09-28T12:00:00Z", *got.ToolCalls.Watermark)
-	require.Equal(t, int64(7), got.ToolCalls.Outcomes.Success)
-	require.Equal(t, int64(3), got.ToolCalls.Outcomes.ServerError)
-	require.Len(t, got.ToolCalls.Daily, 2)
-	require.Equal(t, "2026-09-28T00:00:00Z", got.ToolCalls.Daily[1].BucketStart)
-	require.Equal(t, int64(9), got.ToolCalls.Daily[1].Total)
+	require.Empty(t, f.reader.targets, "describe reads no telemetry")
 
+	// Secrets, error text and subjects never reach either wire body.
+	requireNoLeaks(t, adminserver.NewDescribeMcpServerHealthResponseBody(got))
+
+	calls, err := f.toolCalls(t, serverID, 14)
+	require.NoError(t, err)
+	require.Equal(t, "logging:enabled", calls.Type)
+	require.Equal(t, 14, *calls.WindowDays)
+	require.Equal(t, int64(86400), *calls.BucketSeconds)
+	require.Equal(t, "2026-09-28T12:00:00Z", *calls.Watermark)
+	require.Equal(t, int64(7), calls.Outcomes.Success)
+	require.Equal(t, int64(3), calls.Outcomes.ServerError)
+	require.Len(t, calls.Daily, 2)
+	require.Equal(t, "2026-09-28T00:00:00Z", calls.Daily[1].BucketStart)
+	require.Equal(t, int64(9), calls.Daily[1].Total)
 	require.Equal(t, []MCPServerTelemetryTarget{{
 		ProjectID: f.projectID.String(), MCPServerID: serverID.String(), ToolsetSlug: "backing", URLSlug: "served",
 	}}, f.reader.targets)
-
-	// Secrets, error text and subjects never reach the wire body.
-	rendered, err := json.Marshal(adminserver.NewDescribeMcpServerHealthResponseBody(got))
-	require.NoError(t, err)
-	for _, leaked := range []string{"secret-ciphertext", "token-ciphertext", "upstream said no", "alice", "user:"} {
-		require.NotContains(t, string(rendered), leaked)
-	}
+	requireNoLeaks(t, adminserver.NewGetMcpServerToolCallsResponseBody(calls))
 }
 
 func TestDescribeMcpServerHealth_SharedIssuerAndToolset(t *testing.T) {
@@ -424,6 +448,9 @@ func TestDescribeMcpServerHealth_SharedIssuerAndToolset(t *testing.T) {
 		others = append(others, other.ID)
 	}
 	require.ElementsMatch(t, []string{second.String(), legacyToolset.String()}, others)
+
+	_, err = f.toolCalls(t, first, 30)
+	require.NoError(t, err)
 	require.Empty(t, f.reader.targets[0].ToolsetSlug)
 	require.Equal(t, []time.Duration{24 * time.Hour}, f.reader.buckets)
 }
@@ -489,29 +516,32 @@ func TestDescribeMcpServerHealth_LegacyModes(t *testing.T) {
 	}
 }
 
-func TestDescribeMcpServerHealth_LoggingDisabled(t *testing.T) {
+func TestGetMcpServerToolCalls_LoggingDisabled(t *testing.T) {
 	t.Parallel()
 
 	f := newHealthFixture(t, false)
 	serverID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "quiet", true)
 
-	got, err := f.describe(t, serverID, 90)
+	calls, err := f.toolCalls(t, serverID, 90)
 	require.NoError(t, err)
-	require.Equal(t, "logging:disabled", got.ToolCalls.Type)
-	require.Nil(t, got.ToolCalls.Outcomes)
-	require.Nil(t, got.ToolCalls.Daily)
+	require.Equal(t, "logging:disabled", calls.Type)
+	require.Nil(t, calls.Outcomes)
+	require.Nil(t, calls.Daily)
 	require.Empty(t, f.reader.targets, "telemetry is not read while logs are off")
+
+	_, err = f.describe(t, serverID, 90)
+	require.NoError(t, err, "the configuration view does not depend on logs")
 }
 
-func TestDescribeMcpServerHealth_WeeklyBucketsAtNinetyDays(t *testing.T) {
+func TestGetMcpServerToolCalls_WeeklyBucketsAtNinetyDays(t *testing.T) {
 	t.Parallel()
 
 	f := newHealthFixture(t, true)
 	serverID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "weekly", true)
 
-	got, err := f.describe(t, serverID, 90)
+	calls, err := f.toolCalls(t, serverID, 90)
 	require.NoError(t, err)
-	require.Equal(t, int64(604800), *got.ToolCalls.BucketSeconds)
+	require.Equal(t, int64(604800), *calls.BucketSeconds)
 	require.Equal(t, []time.Duration{7 * 24 * time.Hour}, f.reader.buckets)
 }
 
@@ -531,6 +561,16 @@ func TestDescribeMcpServerHealth_ProjectInAnotherOrganizationIsNotFound(t *testi
 		WindowDays:        14,
 	})
 	requireHealthCode(t, err, oops.CodeNotFound)
+
+	_, err = f.svc.GetMcpServerToolCalls(t.Context(), &gen.GetMcpServerToolCallsPayload{
+		AdminSessionToken: nil,
+		OrganizationID:    otherOrg,
+		ProjectID:         f.projectID.String(),
+		McpServerID:       serverID.String(),
+		WindowDays:        14,
+	})
+	requireHealthCode(t, err, oops.CodeNotFound)
+	require.Empty(t, f.reader.targets)
 }
 
 func TestDescribeMcpServerHealth_ServerInAnotherProjectIsNotFound(t *testing.T) {
@@ -548,6 +588,8 @@ func TestDescribeMcpServerHealth_ServerInAnotherProjectIsNotFound(t *testing.T) 
 	requireHealthCode(t, err, oops.CodeNotFound)
 	_, err = f.describe(t, uuid.New(), 14)
 	requireHealthCode(t, err, oops.CodeNotFound)
+	_, err = f.toolCalls(t, serverID, 14)
+	requireHealthCode(t, err, oops.CodeNotFound)
 }
 
 func TestDescribeMcpServerHealth_WindowOutsideEnumIsBadRequest(t *testing.T) {
@@ -557,6 +599,8 @@ func TestDescribeMcpServerHealth_WindowOutsideEnumIsBadRequest(t *testing.T) {
 	serverID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "window", true)
 
 	_, err := f.describe(t, serverID, 7)
+	requireHealthCode(t, err, oops.CodeBadRequest)
+	_, err = f.toolCalls(t, serverID, 7)
 	requireHealthCode(t, err, oops.CodeBadRequest)
 }
 
@@ -596,6 +640,9 @@ func TestDescribeMcpServerHealth_OmitsURLSlugWhenServerHasNone(t *testing.T) {
 	got, err := f.describe(t, serverID, 14)
 	require.NoError(t, err)
 	require.Nil(t, got.Correlation.URLSlug)
+
+	_, err = f.toolCalls(t, serverID, 14)
+	require.NoError(t, err)
 	require.Empty(t, f.reader.targets[0].URLSlug)
 }
 

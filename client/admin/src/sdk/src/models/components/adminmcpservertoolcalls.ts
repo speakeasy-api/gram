@@ -9,13 +9,13 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  AdminMcpServerHealthOutcomes,
-  AdminMcpServerHealthOutcomes$inboundSchema,
-} from "./adminmcpserverhealthoutcomes.js";
+  AdminMcpServerToolCallBucket,
+  AdminMcpServerToolCallBucket$inboundSchema,
+} from "./adminmcpservertoolcallbucket.js";
 import {
-  AdminMcpServerHealthSeriesPoint,
-  AdminMcpServerHealthSeriesPoint$inboundSchema,
-} from "./adminmcpserverhealthseriespoint.js";
+  AdminMcpServerToolCallOutcomes,
+  AdminMcpServerToolCallOutcomes$inboundSchema,
+} from "./adminmcpservertoolcalloutcomes.js";
 
 export const Type = {
   LoggingDisabled: "logging:disabled",
@@ -24,9 +24,9 @@ export const Type = {
 export type Type = ClosedEnum<typeof Type>;
 
 /**
- * Tool call telemetry, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field.
+ * One MCP server's tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Gram directly.
  */
-export type AdminMcpServerHealthToolCalls = {
+export type AdminMcpServerToolCalls = {
   /**
    * Width of each series bucket.
    */
@@ -34,11 +34,11 @@ export type AdminMcpServerHealthToolCalls = {
   /**
    * Tool calls per bucket, oldest first.
    */
-  daily?: Array<AdminMcpServerHealthSeriesPoint> | undefined;
+  daily?: Array<AdminMcpServerToolCallBucket> | undefined;
   /**
    * Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.
    */
-  outcomes?: AdminMcpServerHealthOutcomes | undefined;
+  outcomes?: AdminMcpServerToolCallOutcomes | undefined;
   type: Type;
   /**
    * Telemetry is complete up to this time.
@@ -54,14 +54,14 @@ export type AdminMcpServerHealthToolCalls = {
 export const Type$inboundSchema: z.ZodMiniEnum<typeof Type> = z.enum(Type);
 
 /** @internal */
-export const AdminMcpServerHealthToolCalls$inboundSchema: z.ZodMiniType<
-  AdminMcpServerHealthToolCalls,
+export const AdminMcpServerToolCalls$inboundSchema: z.ZodMiniType<
+  AdminMcpServerToolCalls,
   unknown
 > = z.pipe(
   z.object({
     bucket_seconds: z.optional(z.int()),
-    daily: z.optional(z.array(AdminMcpServerHealthSeriesPoint$inboundSchema)),
-    outcomes: z.optional(AdminMcpServerHealthOutcomes$inboundSchema),
+    daily: z.optional(z.array(AdminMcpServerToolCallBucket$inboundSchema)),
+    outcomes: z.optional(AdminMcpServerToolCallOutcomes$inboundSchema),
     type: Type$inboundSchema,
     watermark: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -76,12 +76,12 @@ export const AdminMcpServerHealthToolCalls$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function adminMcpServerHealthToolCallsFromJSON(
+export function adminMcpServerToolCallsFromJSON(
   jsonString: string,
-): SafeParseResult<AdminMcpServerHealthToolCalls, SDKValidationError> {
+): SafeParseResult<AdminMcpServerToolCalls, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AdminMcpServerHealthToolCalls$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AdminMcpServerHealthToolCalls' from JSON`,
+    (x) => AdminMcpServerToolCalls$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AdminMcpServerToolCalls' from JSON`,
   );
 }

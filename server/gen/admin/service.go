@@ -215,9 +215,14 @@ type Service interface {
 	// session activity, policy enforcement, identity attribution, token usage and
 	// shadow MCP exposure.
 	GetSupportCoverage(context.Context, *GetSupportCoveragePayload) (res *SupportCoverageResult, err error)
-	// Describes one MCP server's health: authentication configuration, session
-	// counts and tool call outcomes over a window (admin view, no auth scoping).
+	// Describes one MCP server's health: authentication configuration and session
+	// counts (admin view, no auth scoping). Tool calls come from
+	// getMcpServerToolCalls.
 	DescribeMcpServerHealth(context.Context, *DescribeMcpServerHealthPayload) (res *AdminMcpServerHealth, err error)
+	// Reads one MCP server's tool call outcomes and series over a window (admin
+	// view, no auth scoping). Returns logging:disabled without reading telemetry
+	// when the organization's logs are off.
+	GetMcpServerToolCalls(context.Context, *GetMcpServerToolCallsPayload) (res *AdminMcpServerToolCalls, err error)
 	// Staff-only registry administration: Okta application names observed across
 	// synced tenants that plausibly belong to the entry, for confirmation in the
 	// editor.
@@ -309,7 +314,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [82]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
+var MethodNames = [83]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -459,7 +464,6 @@ type AdminMcpServerHealth struct {
 	// issuer.
 	LegacyAuth        *string
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuer
-	ToolCalls         *AdminMcpServerHealthToolCalls
 }
 
 // The identities telemetry is matched on for this server.
@@ -473,18 +477,6 @@ type AdminMcpServerHealthCorrelation struct {
 	// The toolset slug stamped on hosted calls. Absent when the server has no
 	// toolset or several live servers share it.
 	ToolsetSlug *string
-}
-
-// Tool calls inside the window by outcome class. In-band tool errors (isError
-// inside HTTP 200) count as success.
-type AdminMcpServerHealthOutcomes struct {
-	Success      int64
-	Unauthorized int64
-	ClientError  int64
-	ServerError  int64
-	Blocked      int64
-	Failed       int64
-	Unknown      int64
 }
 
 // A remote session client attached to the issuer, with its upstream issuer and
@@ -558,15 +550,6 @@ type AdminMcpServerHealthRemoteSessions struct {
 	ValidationStatusCounts map[string]int64
 }
 
-// Tool calls in one bucket of the series.
-type AdminMcpServerHealthSeriesPoint struct {
-	BucketStart string
-	// Tool calls in the bucket.
-	Total int64
-	// Failed tool calls in the bucket.
-	Failed int64
-}
-
 // The server the health report describes, as listProjectMcpServers lists it.
 type AdminMcpServerHealthServer struct {
 	// The mcp_servers row ID, or the toolset ID for a toolset-only server.
@@ -586,22 +569,6 @@ type AdminMcpServerHealthServerRef struct {
 	ID string
 	// Display name of the server.
 	Name string
-}
-
-// Tool call telemetry, discriminated on type. logging:disabled carries nothing
-// else: the organization's logs are off, so calls were never recorded.
-// logging:enabled carries every other field.
-type AdminMcpServerHealthToolCalls struct {
-	Type string
-	// Length of the window in days.
-	WindowDays *int
-	// Telemetry is complete up to this time.
-	Watermark *string
-	Outcomes  *AdminMcpServerHealthOutcomes
-	// Width of each series bucket.
-	BucketSeconds *int64
-	// Tool calls per bucket, oldest first.
-	Daily []*AdminMcpServerHealthSeriesPoint
 }
 
 // The external authorization server whose assertions the issuer trusts.
@@ -655,6 +622,42 @@ type AdminMcpServerHealthUserSessions struct {
 	LastIssuedAt *string
 	// Sessions whose refresh deadline has not passed.
 	Live int64
+}
+
+// Tool calls in one bucket of the series.
+type AdminMcpServerToolCallBucket struct {
+	BucketStart string
+	// Tool calls in the bucket.
+	Total int64
+	// Failed tool calls in the bucket.
+	Failed int64
+}
+
+// Tool calls inside the window by outcome class. In-band tool errors (isError
+// inside HTTP 200) count as success.
+type AdminMcpServerToolCallOutcomes struct {
+	Success      int64
+	Unauthorized int64
+	ClientError  int64
+	ServerError  int64
+	Blocked      int64
+	Failed       int64
+	Unknown      int64
+}
+
+// AdminMcpServerToolCalls is the result type of the admin service
+// getMcpServerToolCalls method.
+type AdminMcpServerToolCalls struct {
+	Type string
+	// Length of the window in days.
+	WindowDays *int
+	// Telemetry is complete up to this time.
+	Watermark *string
+	Outcomes  *AdminMcpServerToolCallOutcomes
+	// Width of each series bucket.
+	BucketSeconds *int64
+	// Tool calls per bucket, oldest first.
+	Daily []*AdminMcpServerToolCallBucket
 }
 
 type AdminMdmVendorOption struct {
@@ -1418,7 +1421,7 @@ type DescribeMcpServerHealthPayload struct {
 	// The server id from listProjectMcpServers; the toolset ID for toolset-only
 	// servers.
 	McpServerID string
-	// Window in days.
+	// Window in days for distinct_subjects_in_window.
 	WindowDays int
 }
 
@@ -1496,6 +1499,22 @@ type GetInferenceKeysPayload struct {
 type GetInferenceSpendHistoryPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// GetMcpServerToolCallsPayload is the payload type of the admin service
+// getMcpServerToolCalls method.
+type GetMcpServerToolCallsPayload struct {
+	AdminSessionToken *string
+	// Organization the project must belong to. A project outside it is reported as
+	// not found.
+	OrganizationID string
+	// Project ID.
+	ProjectID string
+	// The server id from listProjectMcpServers; the toolset ID for toolset-only
+	// servers.
+	McpServerID string
+	// Window in days. 90 days is bucketed weekly, shorter windows daily.
+	WindowDays int
 }
 
 // GetMeterUsagePayload is the payload type of the admin service getMeterUsage

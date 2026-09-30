@@ -138,7 +138,7 @@ var AdminMcpServerHealthUserSessionIssuer = Type("AdminMcpServerHealthUserSessio
 	Attribute("remote_session_clients", ArrayOf(AdminMcpServerHealthRemoteSessionClient), "Remote session clients attached to the issuer.")
 })
 
-var AdminMcpServerHealthOutcomes = Type("AdminMcpServerHealthOutcomes", func() {
+var AdminMcpServerToolCallOutcomes = Type("AdminMcpServerToolCallOutcomes", func() {
 	Description("Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.")
 	Required("success", "unauthorized", "client_error", "server_error", "blocked", "failed", "unknown")
 
@@ -151,7 +151,7 @@ var AdminMcpServerHealthOutcomes = Type("AdminMcpServerHealthOutcomes", func() {
 	Attribute("unknown", Int64)
 })
 
-var AdminMcpServerHealthSeriesPoint = Type("AdminMcpServerHealthSeriesPoint", func() {
+var AdminMcpServerToolCallBucket = Type("AdminMcpServerToolCallBucket", func() {
 	Description("Tool calls in one bucket of the series.")
 	Required("bucket_start", "total", "failed")
 
@@ -160,8 +160,8 @@ var AdminMcpServerHealthSeriesPoint = Type("AdminMcpServerHealthSeriesPoint", fu
 	Attribute("failed", Int64, "Failed tool calls in the bucket.")
 })
 
-var AdminMcpServerHealthToolCalls = Type("AdminMcpServerHealthToolCalls", func() {
-	Description("Tool call telemetry, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field.")
+var AdminMcpServerToolCalls = Type("AdminMcpServerToolCalls", func() {
+	Description("One MCP server's tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Gram directly.")
 	Required("type")
 
 	Attribute("type", String, func() {
@@ -169,14 +169,14 @@ var AdminMcpServerHealthToolCalls = Type("AdminMcpServerHealthToolCalls", func()
 	})
 	Attribute("window_days", Int, "Length of the window in days.")
 	Attribute("watermark", String, "Telemetry is complete up to this time.", func() { Format(FormatDateTime) })
-	Attribute("outcomes", AdminMcpServerHealthOutcomes)
+	Attribute("outcomes", AdminMcpServerToolCallOutcomes)
 	Attribute("bucket_seconds", Int64, "Width of each series bucket.")
-	Attribute("daily", ArrayOf(AdminMcpServerHealthSeriesPoint), "Tool calls per bucket, oldest first.")
+	Attribute("daily", ArrayOf(AdminMcpServerToolCallBucket), "Tool calls per bucket, oldest first.")
 })
 
 var AdminMcpServerHealth = Type("AdminMcpServerHealth", func() {
-	Description("Health of one MCP server: its authentication configuration, session counts and tool call outcomes. Never carries secrets, error text, subjects, users or emails.")
-	Required("server", "correlation", "tool_calls")
+	Description("Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.")
+	Required("server", "correlation")
 
 	Attribute("server", AdminMcpServerHealthServer)
 	Attribute("correlation", AdminMcpServerHealthCorrelation)
@@ -184,17 +184,16 @@ var AdminMcpServerHealth = Type("AdminMcpServerHealth", func() {
 		Enum("external_oauth", "oauth_proxy", "gram_private")
 	})
 	Attribute("user_session_issuer", AdminMcpServerHealthUserSessionIssuer)
-	Attribute("tool_calls", AdminMcpServerHealthToolCalls)
 })
 
-// MCP parity: exposed through Staff Admin MCP as describe_mcp_server_health
-// (S-1121), the audience this endpoint serves. Deliberately not a Platform MCP
+// MCP parity: both methods are exposed through Staff Admin MCP (S-1121), the
+// audience they serve. Deliberately not a Platform MCP
 // tool: that surface serves an organization's own administrators, who already
 // have get_mcp_diagnostics for the same outcomes, and this read spans
 // issuer, session and client configuration only staff may see.
 func mcpServerHealthMethods() {
 	Method("describeMcpServerHealth", func() {
-		Description("Describes one MCP server's health: authentication configuration, session counts and tool call outcomes over a window (admin view, no auth scoping).")
+		Description("Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
@@ -203,7 +202,7 @@ func mcpServerHealthMethods() {
 			Attribute("organization_id", String, "Organization the project must belong to. A project outside it is reported as not found.")
 			Attribute("project_id", String, "Project ID.", func() { Format(FormatUUID) })
 			Attribute("mcp_server_id", String, "The server id from listProjectMcpServers; the toolset ID for toolset-only servers.", func() { Format(FormatUUID) })
-			Attribute("window_days", Int, "Window in days.", func() {
+			Attribute("window_days", Int, "Window in days for distinct_subjects_in_window.", func() {
 				Enum(14, 30, 90)
 				Default(14)
 			})
@@ -224,5 +223,38 @@ func mcpServerHealthMethods() {
 		Meta("openapi:operationId", "adminDescribeMcpServerHealth")
 		Meta("openapi:extension:x-speakeasy-name-override", "describeMcpServerHealth")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminDescribeMcpServerHealth"}`)
+	})
+
+	Method("getMcpServerToolCalls", func() {
+		Description("Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "project_id", "mcp_server_id")
+
+			Attribute("organization_id", String, "Organization the project must belong to. A project outside it is reported as not found.")
+			Attribute("project_id", String, "Project ID.", func() { Format(FormatUUID) })
+			Attribute("mcp_server_id", String, "The server id from listProjectMcpServers; the toolset ID for toolset-only servers.", func() { Format(FormatUUID) })
+			Attribute("window_days", Int, "Window in days. 90 days is bucketed weekly, shorter windows daily.", func() {
+				Enum(14, 30, 90)
+				Default(14)
+			})
+		})
+
+		Result(AdminMcpServerToolCalls)
+
+		HTTP(func() {
+			GET("/admin/project.mcpServerToolCalls")
+
+			Param("organization_id")
+			Param("project_id")
+			Param("mcp_server_id")
+			Param("window_days")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminGetMcpServerToolCalls")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMcpServerToolCalls")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminGetMcpServerToolCalls"}`)
 	})
 }

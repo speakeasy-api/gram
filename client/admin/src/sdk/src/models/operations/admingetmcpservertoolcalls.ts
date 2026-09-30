@@ -7,19 +7,19 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * Window in days for distinct_subjects_in_window.
+ * Window in days. 90 days is bucketed weekly, shorter windows daily.
  */
-export const WindowDays = {
+export const QueryParamWindowDays = {
   Fourteen: 14,
   Thirty: 30,
   Ninety: 90,
 } as const;
 /**
- * Window in days for distinct_subjects_in_window.
+ * Window in days. 90 days is bucketed weekly, shorter windows daily.
  */
-export type WindowDays = ClosedEnum<typeof WindowDays>;
+export type QueryParamWindowDays = ClosedEnum<typeof QueryParamWindowDays>;
 
-export type AdminDescribeMcpServerHealthRequest = {
+export type AdminGetMcpServerToolCallsRequest = {
   /**
    * Organization the project must belong to. A project outside it is reported as not found.
    */
@@ -33,17 +33,18 @@ export type AdminDescribeMcpServerHealthRequest = {
    */
   mcpServerId: string;
   /**
-   * Window in days for distinct_subjects_in_window.
+   * Window in days. 90 days is bucketed weekly, shorter windows daily.
    */
-  windowDays?: WindowDays | undefined;
+  windowDays?: QueryParamWindowDays | undefined;
 };
 
 /** @internal */
-export const WindowDays$outboundSchema: z.ZodMiniEnum<typeof WindowDays> = z
-  .enum(WindowDays);
+export const QueryParamWindowDays$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamWindowDays
+> = z.enum(QueryParamWindowDays);
 
 /** @internal */
-export type AdminDescribeMcpServerHealthRequest$Outbound = {
+export type AdminGetMcpServerToolCallsRequest$Outbound = {
   organization_id: string;
   project_id: string;
   mcp_server_id: string;
@@ -51,15 +52,15 @@ export type AdminDescribeMcpServerHealthRequest$Outbound = {
 };
 
 /** @internal */
-export const AdminDescribeMcpServerHealthRequest$outboundSchema: z.ZodMiniType<
-  AdminDescribeMcpServerHealthRequest$Outbound,
-  AdminDescribeMcpServerHealthRequest
+export const AdminGetMcpServerToolCallsRequest$outboundSchema: z.ZodMiniType<
+  AdminGetMcpServerToolCallsRequest$Outbound,
+  AdminGetMcpServerToolCallsRequest
 > = z.pipe(
   z.object({
     organizationId: z.string(),
     projectId: z.string(),
     mcpServerId: z.string(),
-    windowDays: z._default(WindowDays$outboundSchema, 14),
+    windowDays: z._default(QueryParamWindowDays$outboundSchema, 14),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -71,12 +72,12 @@ export const AdminDescribeMcpServerHealthRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function adminDescribeMcpServerHealthRequestToJSON(
-  adminDescribeMcpServerHealthRequest: AdminDescribeMcpServerHealthRequest,
+export function adminGetMcpServerToolCallsRequestToJSON(
+  adminGetMcpServerToolCallsRequest: AdminGetMcpServerToolCallsRequest,
 ): string {
   return JSON.stringify(
-    AdminDescribeMcpServerHealthRequest$outboundSchema.parse(
-      adminDescribeMcpServerHealthRequest,
+    AdminGetMcpServerToolCallsRequest$outboundSchema.parse(
+      adminGetMcpServerToolCallsRequest,
     ),
   );
 }

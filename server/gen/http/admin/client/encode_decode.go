@@ -14090,6 +14090,243 @@ func DecodeDescribeMcpServerHealthResponse(decoder func(*http.Response) goahttp.
 	}
 }
 
+// BuildGetMcpServerToolCallsRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getMcpServerToolCalls"
+// endpoint
+func (c *Client) BuildGetMcpServerToolCallsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMcpServerToolCallsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getMcpServerToolCalls", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMcpServerToolCallsRequest returns an encoder for requests sent to
+// the admin getMcpServerToolCalls server.
+func EncodeGetMcpServerToolCallsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetMcpServerToolCallsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getMcpServerToolCalls", "*admin.GetMcpServerToolCallsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("project_id", p.ProjectID)
+		values.Add("mcp_server_id", p.McpServerID)
+		values.Add("window_days", fmt.Sprintf("%v", p.WindowDays))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetMcpServerToolCallsResponse returns a decoder for responses returned
+// by the admin getMcpServerToolCalls endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetMcpServerToolCallsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMcpServerToolCallsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMcpServerToolCallsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			res := NewGetMcpServerToolCallsAdminMcpServerToolCallsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMcpServerToolCallsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMcpServerToolCallsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMcpServerToolCallsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMcpServerToolCallsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMcpServerToolCallsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMcpServerToolCallsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMcpServerToolCallsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMcpServerToolCallsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+				}
+				err = ValidateGetMcpServerToolCallsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+				}
+				return nil, NewGetMcpServerToolCallsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMcpServerToolCallsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+				}
+				err = ValidateGetMcpServerToolCallsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+				}
+				return nil, NewGetMcpServerToolCallsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getMcpServerToolCalls", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMcpServerToolCallsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getMcpServerToolCalls", err)
+			}
+			err = ValidateGetMcpServerToolCallsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getMcpServerToolCalls", err)
+			}
+			return nil, NewGetMcpServerToolCallsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getMcpServerToolCalls", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetRegistryOktaCandidatesRequest instantiates a HTTP request object
 // with method and path set to call the "admin" service
 // "getRegistryOktaCandidates" endpoint
@@ -20660,41 +20897,14 @@ func unmarshalAdminMcpServerHealthRemoteSessionsResponseBodyToAdminAdminMcpServe
 	return res
 }
 
-// unmarshalAdminMcpServerHealthToolCallsResponseBodyToAdminAdminMcpServerHealthToolCalls
-// builds a value of type *admin.AdminMcpServerHealthToolCalls from a value of
-// type *AdminMcpServerHealthToolCallsResponseBody.
-func unmarshalAdminMcpServerHealthToolCallsResponseBodyToAdminAdminMcpServerHealthToolCalls(v *AdminMcpServerHealthToolCallsResponseBody) *admin.AdminMcpServerHealthToolCalls {
-	res := &admin.AdminMcpServerHealthToolCalls{
-		Type:          *v.Type,
-		WindowDays:    v.WindowDays,
-		Watermark:     v.Watermark,
-		BucketSeconds: v.BucketSeconds,
-	}
-	if v.Outcomes != nil {
-		res.Outcomes = unmarshalAdminMcpServerHealthOutcomesResponseBodyToAdminAdminMcpServerHealthOutcomes(v.Outcomes)
-	}
-	if v.Daily != nil {
-		res.Daily = make([]*admin.AdminMcpServerHealthSeriesPoint, len(v.Daily))
-		for i, val := range v.Daily {
-			if val == nil {
-				res.Daily[i] = nil
-				continue
-			}
-			res.Daily[i] = unmarshalAdminMcpServerHealthSeriesPointResponseBodyToAdminAdminMcpServerHealthSeriesPoint(val)
-		}
-	}
-
-	return res
-}
-
-// unmarshalAdminMcpServerHealthOutcomesResponseBodyToAdminAdminMcpServerHealthOutcomes
-// builds a value of type *admin.AdminMcpServerHealthOutcomes from a value of
-// type *AdminMcpServerHealthOutcomesResponseBody.
-func unmarshalAdminMcpServerHealthOutcomesResponseBodyToAdminAdminMcpServerHealthOutcomes(v *AdminMcpServerHealthOutcomesResponseBody) *admin.AdminMcpServerHealthOutcomes {
+// unmarshalAdminMcpServerToolCallOutcomesResponseBodyToAdminAdminMcpServerToolCallOutcomes
+// builds a value of type *admin.AdminMcpServerToolCallOutcomes from a value of
+// type *AdminMcpServerToolCallOutcomesResponseBody.
+func unmarshalAdminMcpServerToolCallOutcomesResponseBodyToAdminAdminMcpServerToolCallOutcomes(v *AdminMcpServerToolCallOutcomesResponseBody) *admin.AdminMcpServerToolCallOutcomes {
 	if v == nil {
 		return nil
 	}
-	res := &admin.AdminMcpServerHealthOutcomes{
+	res := &admin.AdminMcpServerToolCallOutcomes{
 		Success:      *v.Success,
 		Unauthorized: *v.Unauthorized,
 		ClientError:  *v.ClientError,
@@ -20707,14 +20917,14 @@ func unmarshalAdminMcpServerHealthOutcomesResponseBodyToAdminAdminMcpServerHealt
 	return res
 }
 
-// unmarshalAdminMcpServerHealthSeriesPointResponseBodyToAdminAdminMcpServerHealthSeriesPoint
-// builds a value of type *admin.AdminMcpServerHealthSeriesPoint from a value
-// of type *AdminMcpServerHealthSeriesPointResponseBody.
-func unmarshalAdminMcpServerHealthSeriesPointResponseBodyToAdminAdminMcpServerHealthSeriesPoint(v *AdminMcpServerHealthSeriesPointResponseBody) *admin.AdminMcpServerHealthSeriesPoint {
+// unmarshalAdminMcpServerToolCallBucketResponseBodyToAdminAdminMcpServerToolCallBucket
+// builds a value of type *admin.AdminMcpServerToolCallBucket from a value of
+// type *AdminMcpServerToolCallBucketResponseBody.
+func unmarshalAdminMcpServerToolCallBucketResponseBodyToAdminAdminMcpServerToolCallBucket(v *AdminMcpServerToolCallBucketResponseBody) *admin.AdminMcpServerToolCallBucket {
 	if v == nil {
 		return nil
 	}
-	res := &admin.AdminMcpServerHealthSeriesPoint{
+	res := &admin.AdminMcpServerToolCallBucket{
 		BucketStart: *v.BucketStart,
 		Total:       *v.Total,
 		Failed:      *v.Failed,

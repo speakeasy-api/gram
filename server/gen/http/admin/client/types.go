@@ -1787,7 +1787,21 @@ type DescribeMcpServerHealthResponseBody struct {
 	// issuer.
 	LegacyAuth        *string                                            `form:"legacy_auth,omitempty" json:"legacy_auth,omitempty" xml:"legacy_auth,omitempty"`
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuerResponseBody `form:"user_session_issuer,omitempty" json:"user_session_issuer,omitempty" xml:"user_session_issuer,omitempty"`
-	ToolCalls         *AdminMcpServerHealthToolCallsResponseBody         `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+}
+
+// GetMcpServerToolCallsResponseBody is the type of the "admin" service
+// "getMcpServerToolCalls" endpoint HTTP response body.
+type GetMcpServerToolCallsResponseBody struct {
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Length of the window in days.
+	WindowDays *int `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
+	// Telemetry is complete up to this time.
+	Watermark *string                                     `form:"watermark,omitempty" json:"watermark,omitempty" xml:"watermark,omitempty"`
+	Outcomes  *AdminMcpServerToolCallOutcomesResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
+	// Width of each series bucket.
+	BucketSeconds *int64 `form:"bucket_seconds,omitempty" json:"bucket_seconds,omitempty" xml:"bucket_seconds,omitempty"`
+	// Tool calls per bucket, oldest first.
+	Daily []*AdminMcpServerToolCallBucketResponseBody `form:"daily,omitempty" json:"daily,omitempty" xml:"daily,omitempty"`
 }
 
 // GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
@@ -13247,6 +13261,194 @@ type DescribeMcpServerHealthGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetMcpServerToolCallsUnauthorizedResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMcpServerToolCallsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerToolCallsForbiddenResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMcpServerToolCallsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerToolCallsBadRequestResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMcpServerToolCallsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerToolCallsNotFoundResponseBody is the type of the "admin" service
+// "getMcpServerToolCalls" endpoint HTTP response body for the "not_found"
+// error.
+type GetMcpServerToolCallsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerToolCallsConflictResponseBody is the type of the "admin" service
+// "getMcpServerToolCalls" endpoint HTTP response body for the "conflict" error.
+type GetMcpServerToolCallsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerToolCallsUnsupportedMediaResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetMcpServerToolCallsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerToolCallsInvalidResponseBody is the type of the "admin" service
+// "getMcpServerToolCalls" endpoint HTTP response body for the "invalid" error.
+type GetMcpServerToolCallsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerToolCallsInvariantViolationResponseBody is the type of the
+// "admin" service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetMcpServerToolCallsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerToolCallsUnexpectedResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMcpServerToolCallsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerToolCallsGatewayErrorResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMcpServerToolCallsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetRegistryOktaCandidatesUnauthorizedResponseBody is the type of the "admin"
 // service "getRegistryOktaCandidates" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -18488,24 +18690,9 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 	ValidationStatusCounts map[string]int64 `form:"validation_status_counts,omitempty" json:"validation_status_counts,omitempty" xml:"validation_status_counts,omitempty"`
 }
 
-// AdminMcpServerHealthToolCallsResponseBody is used to define fields on
+// AdminMcpServerToolCallOutcomesResponseBody is used to define fields on
 // response body types.
-type AdminMcpServerHealthToolCallsResponseBody struct {
-	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// Length of the window in days.
-	WindowDays *int `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
-	// Telemetry is complete up to this time.
-	Watermark *string                                   `form:"watermark,omitempty" json:"watermark,omitempty" xml:"watermark,omitempty"`
-	Outcomes  *AdminMcpServerHealthOutcomesResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
-	// Width of each series bucket.
-	BucketSeconds *int64 `form:"bucket_seconds,omitempty" json:"bucket_seconds,omitempty" xml:"bucket_seconds,omitempty"`
-	// Tool calls per bucket, oldest first.
-	Daily []*AdminMcpServerHealthSeriesPointResponseBody `form:"daily,omitempty" json:"daily,omitempty" xml:"daily,omitempty"`
-}
-
-// AdminMcpServerHealthOutcomesResponseBody is used to define fields on
-// response body types.
-type AdminMcpServerHealthOutcomesResponseBody struct {
+type AdminMcpServerToolCallOutcomesResponseBody struct {
 	Success      *int64 `form:"success,omitempty" json:"success,omitempty" xml:"success,omitempty"`
 	Unauthorized *int64 `form:"unauthorized,omitempty" json:"unauthorized,omitempty" xml:"unauthorized,omitempty"`
 	ClientError  *int64 `form:"client_error,omitempty" json:"client_error,omitempty" xml:"client_error,omitempty"`
@@ -18515,9 +18702,9 @@ type AdminMcpServerHealthOutcomesResponseBody struct {
 	Unknown      *int64 `form:"unknown,omitempty" json:"unknown,omitempty" xml:"unknown,omitempty"`
 }
 
-// AdminMcpServerHealthSeriesPointResponseBody is used to define fields on
+// AdminMcpServerToolCallBucketResponseBody is used to define fields on
 // response body types.
-type AdminMcpServerHealthSeriesPointResponseBody struct {
+type AdminMcpServerToolCallBucketResponseBody struct {
 	BucketStart *string `form:"bucket_start,omitempty" json:"bucket_start,omitempty" xml:"bucket_start,omitempty"`
 	// Tool calls in the bucket.
 	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
@@ -29482,7 +29669,6 @@ func NewDescribeMcpServerHealthAdminMcpServerHealthOK(body *DescribeMcpServerHea
 	if body.UserSessionIssuer != nil {
 		v.UserSessionIssuer = unmarshalAdminMcpServerHealthUserSessionIssuerResponseBodyToAdminAdminMcpServerHealthUserSessionIssuer(body.UserSessionIssuer)
 	}
-	v.ToolCalls = unmarshalAdminMcpServerHealthToolCallsResponseBodyToAdminAdminMcpServerHealthToolCalls(body.ToolCalls)
 
 	return v
 }
@@ -29625,6 +29811,182 @@ func NewDescribeMcpServerHealthUnexpected(body *DescribeMcpServerHealthUnexpecte
 // NewDescribeMcpServerHealthGatewayError builds a admin service
 // describeMcpServerHealth endpoint gateway_error error.
 func NewDescribeMcpServerHealthGatewayError(body *DescribeMcpServerHealthGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsAdminMcpServerToolCallsOK builds a "admin" service
+// "getMcpServerToolCalls" endpoint result from a HTTP "OK" response.
+func NewGetMcpServerToolCallsAdminMcpServerToolCallsOK(body *GetMcpServerToolCallsResponseBody) *admin.AdminMcpServerToolCalls {
+	v := &admin.AdminMcpServerToolCalls{
+		Type:          *body.Type,
+		WindowDays:    body.WindowDays,
+		Watermark:     body.Watermark,
+		BucketSeconds: body.BucketSeconds,
+	}
+	if body.Outcomes != nil {
+		v.Outcomes = unmarshalAdminMcpServerToolCallOutcomesResponseBodyToAdminAdminMcpServerToolCallOutcomes(body.Outcomes)
+	}
+	if body.Daily != nil {
+		v.Daily = make([]*admin.AdminMcpServerToolCallBucket, len(body.Daily))
+		for i, val := range body.Daily {
+			if val == nil {
+				v.Daily[i] = nil
+				continue
+			}
+			v.Daily[i] = unmarshalAdminMcpServerToolCallBucketResponseBodyToAdminAdminMcpServerToolCallBucket(val)
+		}
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsUnauthorized builds a admin service
+// getMcpServerToolCalls endpoint unauthorized error.
+func NewGetMcpServerToolCallsUnauthorized(body *GetMcpServerToolCallsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsForbidden builds a admin service
+// getMcpServerToolCalls endpoint forbidden error.
+func NewGetMcpServerToolCallsForbidden(body *GetMcpServerToolCallsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsBadRequest builds a admin service
+// getMcpServerToolCalls endpoint bad_request error.
+func NewGetMcpServerToolCallsBadRequest(body *GetMcpServerToolCallsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsNotFound builds a admin service
+// getMcpServerToolCalls endpoint not_found error.
+func NewGetMcpServerToolCallsNotFound(body *GetMcpServerToolCallsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsConflict builds a admin service
+// getMcpServerToolCalls endpoint conflict error.
+func NewGetMcpServerToolCallsConflict(body *GetMcpServerToolCallsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsUnsupportedMedia builds a admin service
+// getMcpServerToolCalls endpoint unsupported_media error.
+func NewGetMcpServerToolCallsUnsupportedMedia(body *GetMcpServerToolCallsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsInvalid builds a admin service getMcpServerToolCalls
+// endpoint invalid error.
+func NewGetMcpServerToolCallsInvalid(body *GetMcpServerToolCallsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsInvariantViolation builds a admin service
+// getMcpServerToolCalls endpoint invariant_violation error.
+func NewGetMcpServerToolCallsInvariantViolation(body *GetMcpServerToolCallsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsUnexpected builds a admin service
+// getMcpServerToolCalls endpoint unexpected error.
+func NewGetMcpServerToolCallsUnexpected(body *GetMcpServerToolCallsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerToolCallsGatewayError builds a admin service
+// getMcpServerToolCalls endpoint gateway_error error.
+func NewGetMcpServerToolCallsGatewayError(body *GetMcpServerToolCallsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -35374,9 +35736,6 @@ func ValidateDescribeMcpServerHealthResponseBody(body *DescribeMcpServerHealthRe
 	if body.Correlation == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("correlation", "body"))
 	}
-	if body.ToolCalls == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
-	}
 	if body.Server != nil {
 		if err2 := ValidateAdminMcpServerHealthServerResponseBody(body.Server); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -35392,9 +35751,33 @@ func ValidateDescribeMcpServerHealthResponseBody(body *DescribeMcpServerHealthRe
 			err = goa.MergeErrors(err, err2)
 		}
 	}
-	if body.ToolCalls != nil {
-		if err2 := ValidateAdminMcpServerHealthToolCallsResponseBody(body.ToolCalls); err2 != nil {
+	return
+}
+
+// ValidateGetMcpServerToolCallsResponseBody runs the validations defined on
+// GetMcpServerToolCallsResponseBody
+func ValidateGetMcpServerToolCallsResponseBody(body *GetMcpServerToolCallsResponseBody) (err error) {
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Type != nil {
+		if !(*body.Type == "logging:disabled" || *body.Type == "logging:enabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"logging:disabled", "logging:enabled"}))
+		}
+	}
+	if body.Watermark != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.watermark", *body.Watermark, goa.FormatDateTime))
+	}
+	if body.Outcomes != nil {
+		if err2 := ValidateAdminMcpServerToolCallOutcomesResponseBody(body.Outcomes); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Daily {
+		if e != nil {
+			if err2 := ValidateAdminMcpServerToolCallBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -50476,6 +50859,247 @@ func ValidateDescribeMcpServerHealthGatewayErrorResponseBody(body *DescribeMcpSe
 	return
 }
 
+// ValidateGetMcpServerToolCallsUnauthorizedResponseBody runs the validations
+// defined on getMcpServerToolCalls_unauthorized_response_body
+func ValidateGetMcpServerToolCallsUnauthorizedResponseBody(body *GetMcpServerToolCallsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerToolCallsForbiddenResponseBody runs the validations
+// defined on getMcpServerToolCalls_forbidden_response_body
+func ValidateGetMcpServerToolCallsForbiddenResponseBody(body *GetMcpServerToolCallsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerToolCallsBadRequestResponseBody runs the validations
+// defined on getMcpServerToolCalls_bad_request_response_body
+func ValidateGetMcpServerToolCallsBadRequestResponseBody(body *GetMcpServerToolCallsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerToolCallsNotFoundResponseBody runs the validations
+// defined on getMcpServerToolCalls_not_found_response_body
+func ValidateGetMcpServerToolCallsNotFoundResponseBody(body *GetMcpServerToolCallsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerToolCallsConflictResponseBody runs the validations
+// defined on getMcpServerToolCalls_conflict_response_body
+func ValidateGetMcpServerToolCallsConflictResponseBody(body *GetMcpServerToolCallsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerToolCallsUnsupportedMediaResponseBody runs the
+// validations defined on getMcpServerToolCalls_unsupported_media_response_body
+func ValidateGetMcpServerToolCallsUnsupportedMediaResponseBody(body *GetMcpServerToolCallsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerToolCallsInvalidResponseBody runs the validations
+// defined on getMcpServerToolCalls_invalid_response_body
+func ValidateGetMcpServerToolCallsInvalidResponseBody(body *GetMcpServerToolCallsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerToolCallsInvariantViolationResponseBody runs the
+// validations defined on
+// getMcpServerToolCalls_invariant_violation_response_body
+func ValidateGetMcpServerToolCallsInvariantViolationResponseBody(body *GetMcpServerToolCallsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerToolCallsUnexpectedResponseBody runs the validations
+// defined on getMcpServerToolCalls_unexpected_response_body
+func ValidateGetMcpServerToolCallsUnexpectedResponseBody(body *GetMcpServerToolCallsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerToolCallsGatewayErrorResponseBody runs the validations
+// defined on getMcpServerToolCalls_gateway_error_response_body
+func ValidateGetMcpServerToolCallsGatewayErrorResponseBody(body *GetMcpServerToolCallsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody runs the
 // validations defined on getRegistryOktaCandidates_unauthorized_response_body
 func ValidateGetRegistryOktaCandidatesUnauthorizedResponseBody(body *GetRegistryOktaCandidatesUnauthorizedResponseBody) (err error) {
@@ -57494,38 +58118,9 @@ func ValidateAdminMcpServerHealthRemoteSessionsResponseBody(body *AdminMcpServer
 	return
 }
 
-// ValidateAdminMcpServerHealthToolCallsResponseBody runs the validations
-// defined on AdminMcpServerHealthToolCallsResponseBody
-func ValidateAdminMcpServerHealthToolCallsResponseBody(body *AdminMcpServerHealthToolCallsResponseBody) (err error) {
-	if body.Type == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
-	}
-	if body.Type != nil {
-		if !(*body.Type == "logging:disabled" || *body.Type == "logging:enabled") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"logging:disabled", "logging:enabled"}))
-		}
-	}
-	if body.Watermark != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.watermark", *body.Watermark, goa.FormatDateTime))
-	}
-	if body.Outcomes != nil {
-		if err2 := ValidateAdminMcpServerHealthOutcomesResponseBody(body.Outcomes); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	for _, e := range body.Daily {
-		if e != nil {
-			if err2 := ValidateAdminMcpServerHealthSeriesPointResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateAdminMcpServerHealthOutcomesResponseBody runs the validations
-// defined on AdminMcpServerHealthOutcomesResponseBody
-func ValidateAdminMcpServerHealthOutcomesResponseBody(body *AdminMcpServerHealthOutcomesResponseBody) (err error) {
+// ValidateAdminMcpServerToolCallOutcomesResponseBody runs the validations
+// defined on AdminMcpServerToolCallOutcomesResponseBody
+func ValidateAdminMcpServerToolCallOutcomesResponseBody(body *AdminMcpServerToolCallOutcomesResponseBody) (err error) {
 	if body.Success == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("success", "body"))
 	}
@@ -57550,9 +58145,9 @@ func ValidateAdminMcpServerHealthOutcomesResponseBody(body *AdminMcpServerHealth
 	return
 }
 
-// ValidateAdminMcpServerHealthSeriesPointResponseBody runs the validations
-// defined on AdminMcpServerHealthSeriesPointResponseBody
-func ValidateAdminMcpServerHealthSeriesPointResponseBody(body *AdminMcpServerHealthSeriesPointResponseBody) (err error) {
+// ValidateAdminMcpServerToolCallBucketResponseBody runs the validations
+// defined on AdminMcpServerToolCallBucketResponseBody
+func ValidateAdminMcpServerToolCallBucketResponseBody(body *AdminMcpServerToolCallBucketResponseBody) (err error) {
 	if body.BucketStart == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_start", "body"))
 	}

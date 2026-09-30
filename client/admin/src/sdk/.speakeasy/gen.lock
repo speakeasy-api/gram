@@ -55,6 +55,7 @@ trackedFiles:
   src/funcs/adminGetGlobalIssuerMigratePreflight.ts: {}
   src/funcs/adminGetInferenceKeys.ts: {}
   src/funcs/adminGetInferenceSpendHistory.ts: {}
+  src/funcs/adminGetMcpServerToolCalls.ts: {}
   src/funcs/adminGetMeterUsage.ts: {}
   src/funcs/adminGetOnboardingStackOptions.ts: {}
   src/funcs/adminGetOrganization.ts: {}
@@ -144,17 +145,17 @@ trackedFiles:
   src/models/components/adminmcpserver.ts: {}
   src/models/components/adminmcpserverhealth.ts: {}
   src/models/components/adminmcpserverhealthcorrelation.ts: {}
-  src/models/components/adminmcpserverhealthoutcomes.ts: {}
   src/models/components/adminmcpserverhealthremotesessionclient.ts: {}
   src/models/components/adminmcpserverhealthremotesessionissuer.ts: {}
   src/models/components/adminmcpserverhealthremotesessions.ts: {}
-  src/models/components/adminmcpserverhealthseriespoint.ts: {}
   src/models/components/adminmcpserverhealthserver.ts: {}
   src/models/components/adminmcpserverhealthserverref.ts: {}
-  src/models/components/adminmcpserverhealthtoolcalls.ts: {}
   src/models/components/adminmcpserverhealthtrustedremotesession.ts: {}
   src/models/components/adminmcpserverhealthusersessionissuer.ts: {}
   src/models/components/adminmcpserverhealthusersessions.ts: {}
+  src/models/components/adminmcpservertoolcallbucket.ts: {}
+  src/models/components/adminmcpservertoolcalloutcomes.ts: {}
+  src/models/components/adminmcpservertoolcalls.ts: {}
   src/models/components/adminmdmvendoroption.ts: {}
   src/models/components/adminmeterusagebucket.ts: {}
   src/models/components/adminmeterusageresponse.ts: {}
@@ -273,6 +274,7 @@ trackedFiles:
   src/models/operations/admingetglobalissuermigratepreflight.ts: {}
   src/models/operations/admingetinferencekeys.ts: {}
   src/models/operations/admingetinferencespendhistory.ts: {}
+  src/models/operations/admingetmcpservertoolcalls.ts: {}
   src/models/operations/admingetmeterusage.ts: {}
   src/models/operations/admingetorganization.ts: {}
   src/models/operations/admingetorganizationchatanalysissettings.ts: {}
@@ -325,6 +327,8 @@ trackedFiles:
   src/react-query/adminGetInferenceKeys.ts: {}
   src/react-query/adminGetInferenceSpendHistory.core.ts: {}
   src/react-query/adminGetInferenceSpendHistory.ts: {}
+  src/react-query/adminGetMcpServerToolCalls.core.ts: {}
+  src/react-query/adminGetMcpServerToolCalls.ts: {}
   src/react-query/adminGetMeterUsage.core.ts: {}
   src/react-query/adminGetMeterUsage.ts: {}
   src/react-query/adminGetOrganization.core.ts: {}
@@ -627,7 +631,7 @@ examples:
           window_days: 14
       responses:
         "200":
-          application/json: {"correlation": {}, "server": {"created_at": "2026-12-13T15:06:49.015Z", "id": "<id>", "name": "<value>", "source": "unproxied", "visibility": "public"}, "tool_calls": {"type": "logging:enabled"}}
+          application/json: {"correlation": {}, "server": {"created_at": "2026-12-13T15:06:49.015Z", "id": "<id>", "name": "<value>", "source": "unproxied", "visibility": "public"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -775,6 +779,21 @@ examples:
       responses:
         "200":
           application/json: [{"period_end": "2025-05-06", "period_start": "2025-08-23", "spend_usd": "<value>"}]
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminGetMcpServerToolCalls:
+    speakeasy-default-admin-get-mcp-server-tool-calls:
+      parameters:
+        query:
+          organization_id: "<id>"
+          project_id: "1215ab39-5b6c-49f2-8df4-7c385c78dae4"
+          mcp_server_id: "1023185f-9b62-49ec-94da-d50f3ea7fe74"
+          window_days: 14
+      responses:
+        "200":
+          application/json: {"type": "logging:disabled"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

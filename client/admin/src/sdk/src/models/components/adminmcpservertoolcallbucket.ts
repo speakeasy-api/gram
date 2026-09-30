@@ -11,7 +11,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Tool calls in one bucket of the series.
  */
-export type AdminMcpServerHealthSeriesPoint = {
+export type AdminMcpServerToolCallBucket = {
   bucketStart: Date;
   /**
    * Failed tool calls in the bucket.
@@ -24,8 +24,8 @@ export type AdminMcpServerHealthSeriesPoint = {
 };
 
 /** @internal */
-export const AdminMcpServerHealthSeriesPoint$inboundSchema: z.ZodMiniType<
-  AdminMcpServerHealthSeriesPoint,
+export const AdminMcpServerToolCallBucket$inboundSchema: z.ZodMiniType<
+  AdminMcpServerToolCallBucket,
   unknown
 > = z.pipe(
   z.object({
@@ -43,12 +43,12 @@ export const AdminMcpServerHealthSeriesPoint$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function adminMcpServerHealthSeriesPointFromJSON(
+export function adminMcpServerToolCallBucketFromJSON(
   jsonString: string,
-): SafeParseResult<AdminMcpServerHealthSeriesPoint, SDKValidationError> {
+): SafeParseResult<AdminMcpServerToolCallBucket, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AdminMcpServerHealthSeriesPoint$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AdminMcpServerHealthSeriesPoint' from JSON`,
+    (x) => AdminMcpServerToolCallBucket$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AdminMcpServerToolCallBucket' from JSON`,
   );
 }

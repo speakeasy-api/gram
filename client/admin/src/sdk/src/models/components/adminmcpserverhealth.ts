@@ -17,10 +17,6 @@ import {
   AdminMcpServerHealthServer$inboundSchema,
 } from "./adminmcpserverhealthserver.js";
 import {
-  AdminMcpServerHealthToolCalls,
-  AdminMcpServerHealthToolCalls$inboundSchema,
-} from "./adminmcpserverhealthtoolcalls.js";
-import {
   AdminMcpServerHealthUserSessionIssuer,
   AdminMcpServerHealthUserSessionIssuer$inboundSchema,
 } from "./adminmcpserverhealthusersessionissuer.js";
@@ -39,7 +35,7 @@ export const LegacyAuth = {
 export type LegacyAuth = ClosedEnum<typeof LegacyAuth>;
 
 /**
- * Health of one MCP server: its authentication configuration, session counts and tool call outcomes. Never carries secrets, error text, subjects, users or emails.
+ * Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.
  */
 export type AdminMcpServerHealth = {
   /**
@@ -54,10 +50,6 @@ export type AdminMcpServerHealth = {
    * The server the health report describes, as listProjectMcpServers lists it.
    */
   server: AdminMcpServerHealthServer;
-  /**
-   * Tool call telemetry, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field.
-   */
-  toolCalls: AdminMcpServerHealthToolCalls;
   /**
    * The user session issuer that authenticates the server's users.
    */
@@ -77,7 +69,6 @@ export const AdminMcpServerHealth$inboundSchema: z.ZodMiniType<
     correlation: AdminMcpServerHealthCorrelation$inboundSchema,
     legacy_auth: z.optional(LegacyAuth$inboundSchema),
     server: AdminMcpServerHealthServer$inboundSchema,
-    tool_calls: AdminMcpServerHealthToolCalls$inboundSchema,
     user_session_issuer: z.optional(
       AdminMcpServerHealthUserSessionIssuer$inboundSchema,
     ),
@@ -85,7 +76,6 @@ export const AdminMcpServerHealth$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "legacy_auth": "legacyAuth",
-      "tool_calls": "toolCalls",
       "user_session_issuer": "userSessionIssuer",
     });
   }),

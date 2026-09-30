@@ -12,9 +12,9 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  AdminMcpServerHealth,
-  AdminMcpServerHealth$inboundSchema,
-} from "../models/components/adminmcpserverhealth.js";
+  AdminMcpServerToolCalls,
+  AdminMcpServerToolCalls$inboundSchema,
+} from "../models/components/adminmcpservertoolcalls.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -30,25 +30,25 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  AdminDescribeMcpServerHealthRequest,
-  AdminDescribeMcpServerHealthRequest$outboundSchema,
-} from "../models/operations/admindescribemcpserverhealth.js";
+  AdminGetMcpServerToolCallsRequest,
+  AdminGetMcpServerToolCallsRequest$outboundSchema,
+} from "../models/operations/admingetmcpservertoolcalls.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * describeMcpServerHealth admin
+ * getMcpServerToolCalls admin
  *
  * @remarks
- * Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.
+ * Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.
  */
-export function adminDescribeMcpServerHealth(
+export function adminGetMcpServerToolCalls(
   client: GramCore,
-  request: AdminDescribeMcpServerHealthRequest,
+  request: AdminGetMcpServerToolCallsRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    AdminMcpServerHealth,
+    AdminMcpServerToolCalls,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -69,12 +69,12 @@ export function adminDescribeMcpServerHealth(
 
 async function $do(
   client: GramCore,
-  request: AdminDescribeMcpServerHealthRequest,
+  request: AdminGetMcpServerToolCallsRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      AdminMcpServerHealth,
+      AdminMcpServerToolCalls,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -90,8 +90,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(AdminDescribeMcpServerHealthRequest$outboundSchema, value),
+    (value) => z.parse(AdminGetMcpServerToolCallsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -100,7 +99,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/admin/project.mcpServerHealth")();
+  const path = pathToFunc("/admin/project.mcpServerToolCalls")();
 
   const query = encodeFormQuery({
     "mcp_server_id": payload.mcp_server_id,
@@ -116,7 +115,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "adminDescribeMcpServerHealth",
+    operationID: "adminGetMcpServerToolCalls",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,
@@ -160,7 +159,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    AdminMcpServerHealth,
+    AdminMcpServerToolCalls,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -171,7 +170,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, AdminMcpServerHealth$inboundSchema),
+    M.json(200, AdminMcpServerToolCalls$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

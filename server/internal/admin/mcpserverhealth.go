@@ -52,26 +52,36 @@ var validationStatuses = map[string]bool{
 // unexpected label through.
 var errHealthMalformed = errors.New("malformed mcp server health value")
 
-func (s *Service) DescribeMcpServerHealth(ctx context.Context, payload *gen.DescribeMcpServerHealthPayload) (*gen.AdminMcpServerHealth, error) {
-	projectID, err := uuid.Parse(payload.ProjectID)
+// healthServer is the target both server health reads resolve first: the
+// project checked against the organization, then the server within it.
+type healthServer struct {
+	queries   *repo.Queries
+	projectID uuid.UUID
+	row       repo.AdminGetMcpServerAuthRow
+	bucket    time.Duration
+	logAttrs  []slog.Attr
+}
+
+func (s *Service) resolveHealthServer(ctx context.Context, organizationID, rawProjectID, rawServerID string, windowDays int) (*healthServer, error) {
+	projectID, err := uuid.Parse(rawProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id")
 	}
-	serverID, err := uuid.Parse(payload.McpServerID)
+	serverID, err := uuid.Parse(rawServerID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id")
 	}
-	bucket, err := healthBucket(payload.WindowDays)
+	bucket, err := healthBucket(windowDays)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "window_days must be 14, 30 or 90")
 	}
 
-	logAttrs := []slog.Attr{attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectID(projectID.String())}
+	logAttrs := []slog.Attr{attr.SlogOrganizationID(organizationID), attr.SlogProjectID(projectID.String())}
 
 	queries := repo.New(s.db)
 	belongs, err := queries.AdminProjectBelongsToOrganization(ctx, repo.AdminProjectBelongsToOrganizationParams{
 		ProjectID:      projectID,
-		OrganizationID: payload.OrganizationID,
+		OrganizationID: organizationID,
 	})
 	switch {
 	case err != nil:
@@ -80,7 +90,7 @@ func (s *Service) DescribeMcpServerHealth(ctx context.Context, payload *gen.Desc
 		return nil, oops.C(oops.CodeNotFound)
 	}
 
-	server, err := queries.AdminGetMcpServerAuth(ctx, repo.AdminGetMcpServerAuthParams{ID: serverID, ProjectID: projectID})
+	row, err := queries.AdminGetMcpServerAuth(ctx, repo.AdminGetMcpServerAuthParams{ID: serverID, ProjectID: projectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
@@ -88,50 +98,63 @@ func (s *Service) DescribeMcpServerHealth(ctx context.Context, payload *gen.Desc
 		return nil, oops.E(oops.CodeUnexpected, err, "read mcp server").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	now := time.Now().UTC()
-	from := now.AddDate(0, 0, -payload.WindowDays)
+	return &healthServer{queries: queries, projectID: projectID, row: row, bucket: bucket, logAttrs: logAttrs}, nil
+}
 
-	result, err := s.buildMCPServerHealth(ctx, queries, payload.OrganizationID, projectID, server, from)
+func (s *Service) DescribeMcpServerHealth(ctx context.Context, payload *gen.DescribeMcpServerHealthPayload) (*gen.AdminMcpServerHealth, error) {
+	target, err := s.resolveHealthServer(ctx, payload.OrganizationID, payload.ProjectID, payload.McpServerID, payload.WindowDays)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read mcp server health").LogError(ctx, s.logger, logAttrs...)
+		return nil, err
 	}
 
+	from := time.Now().UTC().AddDate(0, 0, -payload.WindowDays)
+	result, err := s.buildMCPServerHealth(ctx, target.queries, payload.OrganizationID, target.projectID, target.row, from)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read mcp server health").LogError(ctx, s.logger, target.logAttrs...)
+	}
+	return result, nil
+}
+
+func (s *Service) GetMcpServerToolCalls(ctx context.Context, payload *gen.GetMcpServerToolCallsPayload) (*gen.AdminMcpServerToolCalls, error) {
+	target, err := s.resolveHealthServer(ctx, payload.OrganizationID, payload.ProjectID, payload.McpServerID, payload.WindowDays)
+	if err != nil {
+		return nil, err
+	}
 	// Strict, not cached: a stale cache entry could read telemetry for an
 	// organization that has just turned logs off.
 	features, err := s.productFeatures.SnapshotStrict(ctx, payload.OrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read organization logs feature").LogError(ctx, s.logger, logAttrs...)
+		return nil, oops.E(oops.CodeUnexpected, err, "read organization logs feature").LogError(ctx, s.logger, target.logAttrs...)
 	}
 	if !features.LogsEnabled {
 		// Rows are dropped at write time while logs are off, so zeros would
 		// claim a quiet server that was never observed.
-		result.ToolCalls = &gen.AdminMcpServerHealthToolCalls{
+		return &gen.AdminMcpServerToolCalls{
 			Type:          toolCallsLoggingDisabled,
 			WindowDays:    nil,
 			Watermark:     nil,
 			Outcomes:      nil,
 			BucketSeconds: nil,
 			Daily:         nil,
-		}
-		return result, nil
+		}, nil
 	}
 
 	if s.mcpServerHealth == nil {
 		return nil, oops.E(oops.CodeUnavailable, nil, "mcp server health telemetry is unavailable")
 	}
-	target := MCPServerTelemetryTarget{
-		ProjectID:   projectID.String(),
-		MCPServerID: conv.PtrValOr(result.Correlation.McpServerID, ""),
-		ToolsetSlug: conv.PtrValOr(result.Correlation.ToolsetSlug, ""),
-		URLSlug:     conv.PtrValOr(result.Correlation.URLSlug, ""),
+	correlation := healthCorrelation(target.row)
+	telemetryTarget := MCPServerTelemetryTarget{
+		ProjectID:   target.projectID.String(),
+		MCPServerID: conv.PtrValOr(correlation.McpServerID, ""),
+		ToolsetSlug: conv.PtrValOr(correlation.ToolsetSlug, ""),
+		URLSlug:     conv.PtrValOr(correlation.URLSlug, ""),
 	}
-	toolCalls, err := s.readToolCalls(ctx, target, payload.WindowDays, from, now, bucket)
+	now := time.Now().UTC()
+	toolCalls, err := s.readToolCalls(ctx, telemetryTarget, payload.WindowDays, now.AddDate(0, 0, -payload.WindowDays), now, target.bucket)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read mcp server tool calls").LogError(ctx, s.logger, logAttrs...)
+		return nil, oops.E(oops.CodeUnexpected, err, "read mcp server tool calls").LogError(ctx, s.logger, target.logAttrs...)
 	}
-	result.ToolCalls = toolCalls
-
-	return result, nil
+	return toolCalls, nil
 }
 
 func healthBucket(windowDays int) (time.Duration, error) {
@@ -145,28 +168,12 @@ func healthBucket(windowDays int) (time.Duration, error) {
 	}
 }
 
-// buildMCPServerHealth assembles every section but tool_calls from Postgres.
+// buildMCPServerHealth assembles the health report from Postgres.
 func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Queries, organizationID string, projectID uuid.UUID, server repo.AdminGetMcpServerAuthRow, windowStart time.Time) (*gen.AdminMcpServerHealth, error) {
 	switch server.Visibility {
 	case "disabled", "private", "public":
 	default:
 		return nil, fmt.Errorf("%w: visibility %q", errHealthMalformed, server.Visibility)
-	}
-
-	correlation := &gen.AdminMcpServerHealthCorrelation{
-		URLSlug:     conv.PtrEmpty(server.UrlSlug),
-		McpServerID: nil,
-		ToolsetSlug: nil,
-	}
-	if !server.ToolsetOnly {
-		id := server.ID.String()
-		correlation.McpServerID = &id
-	}
-	// Hosted calls carry only the toolset slug, so a slug shared by several
-	// wrappers would count their calls as this server's.
-	if server.ToolsetSlug != "" && (server.ToolsetOnly || server.ToolsetWrapperCount <= 1) {
-		slug := server.ToolsetSlug
-		correlation.ToolsetSlug = &slug
 	}
 
 	result := &gen.AdminMcpServerHealth{
@@ -177,10 +184,9 @@ func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Querie
 			Visibility: server.Visibility,
 			CreatedAt:  server.CreatedAt.Time.UTC().Format(time.RFC3339),
 		},
-		Correlation:       correlation,
+		Correlation:       healthCorrelation(server),
 		LegacyAuth:        nil,
 		UserSessionIssuer: nil,
-		ToolCalls:         nil,
 	}
 
 	if server.UserSessionIssuerID.Valid {
@@ -195,6 +201,26 @@ func (s *Service) buildMCPServerHealth(ctx context.Context, queries *repo.Querie
 	}
 
 	return result, nil
+}
+
+// healthCorrelation lists the identities telemetry is matched on for the
+// server. Hosted calls carry only the toolset slug, so a slug shared by
+// several wrappers would count their calls as this server's and is left out.
+func healthCorrelation(server repo.AdminGetMcpServerAuthRow) *gen.AdminMcpServerHealthCorrelation {
+	correlation := &gen.AdminMcpServerHealthCorrelation{
+		URLSlug:     conv.PtrEmpty(server.UrlSlug),
+		McpServerID: nil,
+		ToolsetSlug: nil,
+	}
+	if !server.ToolsetOnly {
+		id := server.ID.String()
+		correlation.McpServerID = &id
+	}
+	if server.ToolsetSlug != "" && (server.ToolsetOnly || server.ToolsetWrapperCount <= 1) {
+		slug := server.ToolsetSlug
+		correlation.ToolsetSlug = &slug
+	}
+	return correlation
 }
 
 func healthServerSource(server repo.AdminGetMcpServerAuthRow) string {
@@ -471,7 +497,7 @@ func healthAttachmentScope(scope pgtype.Text) (string, error) {
 	}
 }
 
-func (s *Service) readToolCalls(ctx context.Context, target MCPServerTelemetryTarget, windowDays int, from, to time.Time, bucket time.Duration) (*gen.AdminMcpServerHealthToolCalls, error) {
+func (s *Service) readToolCalls(ctx context.Context, target MCPServerTelemetryTarget, windowDays int, from, to time.Time, bucket time.Duration) (*gen.AdminMcpServerToolCalls, error) {
 	outcomes, err := s.mcpServerHealth.Outcomes(ctx, target, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("read outcomes: %w", err)
@@ -480,7 +506,7 @@ func (s *Service) readToolCalls(ctx context.Context, target MCPServerTelemetryTa
 		return nil, fmt.Errorf("%w: no outcomes", errHealthMalformed)
 	}
 
-	daily := []*gen.AdminMcpServerHealthSeriesPoint{}
+	daily := []*gen.AdminMcpServerToolCallBucket{}
 	// The series reads the direct lane only. A server reachable only through
 	// hook-observed URLs has no identity it can filter on there.
 	if target.MCPServerID != "" || target.ToolsetSlug != "" {
@@ -488,12 +514,12 @@ func (s *Service) readToolCalls(ctx context.Context, target MCPServerTelemetryTa
 		if err != nil {
 			return nil, fmt.Errorf("read series: %w", err)
 		}
-		daily = make([]*gen.AdminMcpServerHealthSeriesPoint, 0, len(points))
+		daily = make([]*gen.AdminMcpServerToolCallBucket, 0, len(points))
 		for _, point := range points {
 			if point.Total < 0 || point.Failed < 0 || point.Failed > point.Total {
 				return nil, fmt.Errorf("%w: series bucket counts", errHealthMalformed)
 			}
-			daily = append(daily, &gen.AdminMcpServerHealthSeriesPoint{
+			daily = append(daily, &gen.AdminMcpServerToolCallBucket{
 				BucketStart: point.BucketStart.UTC().Format(time.RFC3339),
 				Total:       point.Total,
 				Failed:      point.Failed,
@@ -508,11 +534,11 @@ func (s *Service) readToolCalls(ctx context.Context, target MCPServerTelemetryTa
 	}
 	bucketSeconds := int64(bucket / time.Second)
 
-	return &gen.AdminMcpServerHealthToolCalls{
+	return &gen.AdminMcpServerToolCalls{
 		Type:       toolCallsLoggingEnabled,
 		WindowDays: &windowDays,
 		Watermark:  watermark,
-		Outcomes: &gen.AdminMcpServerHealthOutcomes{
+		Outcomes: &gen.AdminMcpServerToolCallOutcomes{
 			Success:      outcomes.Success,
 			Unauthorized: outcomes.Unauthorized,
 			ClientError:  outcomes.ClientError,

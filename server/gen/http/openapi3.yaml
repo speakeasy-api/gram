@@ -4256,7 +4256,7 @@ paths:
                 - admin_auth_header_Authorization: []
     /admin/project.mcpServerHealth:
         get:
-            description: 'Describes one MCP server''s health: authentication configuration, session counts and tool call outcomes over a window (admin view, no auth scoping).'
+            description: 'Describes one MCP server''s health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.'
             operationId: adminDescribeMcpServerHealth
             parameters:
                 - allowEmptyValue: true
@@ -4286,12 +4286,12 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
-                  description: Window in days.
+                  description: Window in days for distinct_subjects_in_window.
                   in: query
                   name: window_days
                   schema:
                     default: 14
-                    description: Window in days.
+                    description: Window in days for distinct_subjects_in_window.
                     enum:
                         - 14
                         - 30
@@ -4367,6 +4367,119 @@ paths:
             x-speakeasy-name-override: describeMcpServerHealth
             x-speakeasy-react-hook:
                 name: AdminDescribeMcpServerHealth
+    /admin/project.mcpServerToolCalls:
+        get:
+            description: Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.
+            operationId: adminGetMcpServerToolCalls
+            parameters:
+                - allowEmptyValue: true
+                  description: Organization the project must belong to. A project outside it is reported as not found.
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: Organization the project must belong to. A project outside it is reported as not found.
+                    type: string
+                - allowEmptyValue: true
+                  description: Project ID.
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    description: Project ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The server id from listProjectMcpServers; the toolset ID for toolset-only servers.
+                  in: query
+                  name: mcp_server_id
+                  required: true
+                  schema:
+                    description: The server id from listProjectMcpServers; the toolset ID for toolset-only servers.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Window in days. 90 days is bucketed weekly, shorter windows daily.
+                  in: query
+                  name: window_days
+                  schema:
+                    default: 14
+                    description: Window in days. 90 days is bucketed weekly, shorter windows daily.
+                    enum:
+                        - 14
+                        - 30
+                        - 90
+                    format: int64
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminMcpServerToolCalls'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getMcpServerToolCalls admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getMcpServerToolCalls
+            x-speakeasy-react-hook:
+                name: AdminGetMcpServerToolCalls
     /admin/project.mcpServers:
         get:
             tags:
@@ -82375,15 +82488,12 @@ components:
                         - gram_private
                 server:
                     $ref: '#/components/schemas/AdminMcpServerHealthServer'
-                tool_calls:
-                    $ref: '#/components/schemas/AdminMcpServerHealthToolCalls'
                 user_session_issuer:
                     $ref: '#/components/schemas/AdminMcpServerHealthUserSessionIssuer'
-            description: 'Health of one MCP server: its authentication configuration, session counts and tool call outcomes. Never carries secrets, error text, subjects, users or emails.'
+            description: 'Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.'
             required:
                 - server
                 - correlation
-                - tool_calls
         AdminMcpServerHealthCorrelation:
             type: object
             properties:
@@ -82397,39 +82507,6 @@ components:
                     type: string
                     description: The slug in the server's /mcp/<slug> URL, matched against hook-observed calls. Absent when the server has no slug.
             description: The identities telemetry is matched on for this server.
-        AdminMcpServerHealthOutcomes:
-            type: object
-            properties:
-                blocked:
-                    type: integer
-                    format: int64
-                client_error:
-                    type: integer
-                    format: int64
-                failed:
-                    type: integer
-                    format: int64
-                server_error:
-                    type: integer
-                    format: int64
-                success:
-                    type: integer
-                    format: int64
-                unauthorized:
-                    type: integer
-                    format: int64
-                unknown:
-                    type: integer
-                    format: int64
-            description: Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.
-            required:
-                - success
-                - unauthorized
-                - client_error
-                - server_error
-                - blocked
-                - failed
-                - unknown
         AdminMcpServerHealthRemoteSessionClient:
             type: object
             properties:
@@ -82588,25 +82665,6 @@ components:
                 - linked_subjects
                 - reauthorizations
                 - validation_status_counts
-        AdminMcpServerHealthSeriesPoint:
-            type: object
-            properties:
-                bucket_start:
-                    type: string
-                    format: date-time
-                failed:
-                    type: integer
-                    description: Failed tool calls in the bucket.
-                    format: int64
-                total:
-                    type: integer
-                    description: Tool calls in the bucket.
-                    format: int64
-            description: Tool calls in one bucket of the series.
-            required:
-                - bucket_start
-                - total
-                - failed
         AdminMcpServerHealthServer:
             type: object
             properties:
@@ -82655,36 +82713,6 @@ components:
             required:
                 - id
                 - name
-        AdminMcpServerHealthToolCalls:
-            type: object
-            properties:
-                bucket_seconds:
-                    type: integer
-                    description: Width of each series bucket.
-                    format: int64
-                daily:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AdminMcpServerHealthSeriesPoint'
-                    description: Tool calls per bucket, oldest first.
-                outcomes:
-                    $ref: '#/components/schemas/AdminMcpServerHealthOutcomes'
-                type:
-                    type: string
-                    enum:
-                        - logging:disabled
-                        - logging:enabled
-                watermark:
-                    type: string
-                    description: Telemetry is complete up to this time.
-                    format: date-time
-                window_days:
-                    type: integer
-                    description: Length of the window in days.
-                    format: int64
-            description: 'Tool call telemetry, discriminated on type. logging:disabled carries nothing else: the organization''s logs are off, so calls were never recorded. logging:enabled carries every other field.'
-            required:
-                - type
         AdminMcpServerHealthTrustedRemoteSession:
             type: object
             properties:
@@ -82799,6 +82827,88 @@ components:
                 - distinct_subjects_ever
                 - distinct_subjects_in_window
                 - live
+        AdminMcpServerToolCallBucket:
+            type: object
+            properties:
+                bucket_start:
+                    type: string
+                    format: date-time
+                failed:
+                    type: integer
+                    description: Failed tool calls in the bucket.
+                    format: int64
+                total:
+                    type: integer
+                    description: Tool calls in the bucket.
+                    format: int64
+            description: Tool calls in one bucket of the series.
+            required:
+                - bucket_start
+                - total
+                - failed
+        AdminMcpServerToolCallOutcomes:
+            type: object
+            properties:
+                blocked:
+                    type: integer
+                    format: int64
+                client_error:
+                    type: integer
+                    format: int64
+                failed:
+                    type: integer
+                    format: int64
+                server_error:
+                    type: integer
+                    format: int64
+                success:
+                    type: integer
+                    format: int64
+                unauthorized:
+                    type: integer
+                    format: int64
+                unknown:
+                    type: integer
+                    format: int64
+            description: Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.
+            required:
+                - success
+                - unauthorized
+                - client_error
+                - server_error
+                - blocked
+                - failed
+                - unknown
+        AdminMcpServerToolCalls:
+            type: object
+            properties:
+                bucket_seconds:
+                    type: integer
+                    description: Width of each series bucket.
+                    format: int64
+                daily:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminMcpServerToolCallBucket'
+                    description: Tool calls per bucket, oldest first.
+                outcomes:
+                    $ref: '#/components/schemas/AdminMcpServerToolCallOutcomes'
+                type:
+                    type: string
+                    enum:
+                        - logging:disabled
+                        - logging:enabled
+                watermark:
+                    type: string
+                    description: Telemetry is complete up to this time.
+                    format: date-time
+                window_days:
+                    type: integer
+                    description: Length of the window in days.
+                    format: int64
+            description: 'One MCP server''s tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization''s logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Gram directly.'
+            required:
+                - type
         AdminMdmVendorOption:
             type: object
             properties:

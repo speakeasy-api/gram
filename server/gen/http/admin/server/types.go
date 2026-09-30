@@ -1795,7 +1795,21 @@ type DescribeMcpServerHealthResponseBody struct {
 	// issuer.
 	LegacyAuth        *string                                            `form:"legacy_auth,omitempty" json:"legacy_auth,omitempty" xml:"legacy_auth,omitempty"`
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuerResponseBody `form:"user_session_issuer,omitempty" json:"user_session_issuer,omitempty" xml:"user_session_issuer,omitempty"`
-	ToolCalls         *AdminMcpServerHealthToolCallsResponseBody         `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
+}
+
+// GetMcpServerToolCallsResponseBody is the type of the "admin" service
+// "getMcpServerToolCalls" endpoint HTTP response body.
+type GetMcpServerToolCallsResponseBody struct {
+	Type string `form:"type" json:"type" xml:"type"`
+	// Length of the window in days.
+	WindowDays *int `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
+	// Telemetry is complete up to this time.
+	Watermark *string                                     `form:"watermark,omitempty" json:"watermark,omitempty" xml:"watermark,omitempty"`
+	Outcomes  *AdminMcpServerToolCallOutcomesResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
+	// Width of each series bucket.
+	BucketSeconds *int64 `form:"bucket_seconds,omitempty" json:"bucket_seconds,omitempty" xml:"bucket_seconds,omitempty"`
+	// Tool calls per bucket, oldest first.
+	Daily []*AdminMcpServerToolCallBucketResponseBody `form:"daily,omitempty" json:"daily,omitempty" xml:"daily,omitempty"`
 }
 
 // GetRegistryOktaCandidatesResponseBody is the type of the "admin" service
@@ -13255,6 +13269,194 @@ type DescribeMcpServerHealthGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetMcpServerToolCallsUnauthorizedResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMcpServerToolCallsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerToolCallsForbiddenResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMcpServerToolCallsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerToolCallsBadRequestResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMcpServerToolCallsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerToolCallsNotFoundResponseBody is the type of the "admin" service
+// "getMcpServerToolCalls" endpoint HTTP response body for the "not_found"
+// error.
+type GetMcpServerToolCallsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerToolCallsConflictResponseBody is the type of the "admin" service
+// "getMcpServerToolCalls" endpoint HTTP response body for the "conflict" error.
+type GetMcpServerToolCallsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerToolCallsUnsupportedMediaResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetMcpServerToolCallsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerToolCallsInvalidResponseBody is the type of the "admin" service
+// "getMcpServerToolCalls" endpoint HTTP response body for the "invalid" error.
+type GetMcpServerToolCallsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerToolCallsInvariantViolationResponseBody is the type of the
+// "admin" service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetMcpServerToolCallsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerToolCallsUnexpectedResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMcpServerToolCallsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerToolCallsGatewayErrorResponseBody is the type of the "admin"
+// service "getMcpServerToolCalls" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMcpServerToolCallsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetRegistryOktaCandidatesUnauthorizedResponseBody is the type of the "admin"
 // service "getRegistryOktaCandidates" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -18476,24 +18678,9 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 	ValidationStatusCounts map[string]int64 `form:"validation_status_counts" json:"validation_status_counts" xml:"validation_status_counts"`
 }
 
-// AdminMcpServerHealthToolCallsResponseBody is used to define fields on
+// AdminMcpServerToolCallOutcomesResponseBody is used to define fields on
 // response body types.
-type AdminMcpServerHealthToolCallsResponseBody struct {
-	Type string `form:"type" json:"type" xml:"type"`
-	// Length of the window in days.
-	WindowDays *int `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
-	// Telemetry is complete up to this time.
-	Watermark *string                                   `form:"watermark,omitempty" json:"watermark,omitempty" xml:"watermark,omitempty"`
-	Outcomes  *AdminMcpServerHealthOutcomesResponseBody `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
-	// Width of each series bucket.
-	BucketSeconds *int64 `form:"bucket_seconds,omitempty" json:"bucket_seconds,omitempty" xml:"bucket_seconds,omitempty"`
-	// Tool calls per bucket, oldest first.
-	Daily []*AdminMcpServerHealthSeriesPointResponseBody `form:"daily,omitempty" json:"daily,omitempty" xml:"daily,omitempty"`
-}
-
-// AdminMcpServerHealthOutcomesResponseBody is used to define fields on
-// response body types.
-type AdminMcpServerHealthOutcomesResponseBody struct {
+type AdminMcpServerToolCallOutcomesResponseBody struct {
 	Success      int64 `form:"success" json:"success" xml:"success"`
 	Unauthorized int64 `form:"unauthorized" json:"unauthorized" xml:"unauthorized"`
 	ClientError  int64 `form:"client_error" json:"client_error" xml:"client_error"`
@@ -18503,9 +18690,9 @@ type AdminMcpServerHealthOutcomesResponseBody struct {
 	Unknown      int64 `form:"unknown" json:"unknown" xml:"unknown"`
 }
 
-// AdminMcpServerHealthSeriesPointResponseBody is used to define fields on
+// AdminMcpServerToolCallBucketResponseBody is used to define fields on
 // response body types.
-type AdminMcpServerHealthSeriesPointResponseBody struct {
+type AdminMcpServerToolCallBucketResponseBody struct {
 	BucketStart string `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
 	// Tool calls in the bucket.
 	Total int64 `form:"total" json:"total" xml:"total"`
@@ -20108,8 +20295,30 @@ func NewDescribeMcpServerHealthResponseBody(res *admin.AdminMcpServerHealth) *De
 	if res.UserSessionIssuer != nil {
 		body.UserSessionIssuer = marshalAdminAdminMcpServerHealthUserSessionIssuerToAdminMcpServerHealthUserSessionIssuerResponseBody(res.UserSessionIssuer)
 	}
-	if res.ToolCalls != nil {
-		body.ToolCalls = marshalAdminAdminMcpServerHealthToolCallsToAdminMcpServerHealthToolCallsResponseBody(res.ToolCalls)
+	return body
+}
+
+// NewGetMcpServerToolCallsResponseBody builds the HTTP response body from the
+// result of the "getMcpServerToolCalls" endpoint of the "admin" service.
+func NewGetMcpServerToolCallsResponseBody(res *admin.AdminMcpServerToolCalls) *GetMcpServerToolCallsResponseBody {
+	body := &GetMcpServerToolCallsResponseBody{
+		Type:          res.Type,
+		WindowDays:    res.WindowDays,
+		Watermark:     res.Watermark,
+		BucketSeconds: res.BucketSeconds,
+	}
+	if res.Outcomes != nil {
+		body.Outcomes = marshalAdminAdminMcpServerToolCallOutcomesToAdminMcpServerToolCallOutcomesResponseBody(res.Outcomes)
+	}
+	if res.Daily != nil {
+		body.Daily = make([]*AdminMcpServerToolCallBucketResponseBody, len(res.Daily))
+		for i, val := range res.Daily {
+			if val == nil {
+				body.Daily[i] = nil
+				continue
+			}
+			body.Daily[i] = marshalAdminAdminMcpServerToolCallBucketToAdminMcpServerToolCallBucketResponseBody(val)
+		}
 	}
 	return body
 }
@@ -29384,6 +29593,156 @@ func NewDescribeMcpServerHealthGatewayErrorResponseBody(res *goa.ServiceError) *
 	return body
 }
 
+// NewGetMcpServerToolCallsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getMcpServerToolCalls" endpoint of the "admin"
+// service.
+func NewGetMcpServerToolCallsUnauthorizedResponseBody(res *goa.ServiceError) *GetMcpServerToolCallsUnauthorizedResponseBody {
+	body := &GetMcpServerToolCallsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerToolCallsForbiddenResponseBody builds the HTTP response body
+// from the result of the "getMcpServerToolCalls" endpoint of the "admin"
+// service.
+func NewGetMcpServerToolCallsForbiddenResponseBody(res *goa.ServiceError) *GetMcpServerToolCallsForbiddenResponseBody {
+	body := &GetMcpServerToolCallsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerToolCallsBadRequestResponseBody builds the HTTP response body
+// from the result of the "getMcpServerToolCalls" endpoint of the "admin"
+// service.
+func NewGetMcpServerToolCallsBadRequestResponseBody(res *goa.ServiceError) *GetMcpServerToolCallsBadRequestResponseBody {
+	body := &GetMcpServerToolCallsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerToolCallsNotFoundResponseBody builds the HTTP response body
+// from the result of the "getMcpServerToolCalls" endpoint of the "admin"
+// service.
+func NewGetMcpServerToolCallsNotFoundResponseBody(res *goa.ServiceError) *GetMcpServerToolCallsNotFoundResponseBody {
+	body := &GetMcpServerToolCallsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerToolCallsConflictResponseBody builds the HTTP response body
+// from the result of the "getMcpServerToolCalls" endpoint of the "admin"
+// service.
+func NewGetMcpServerToolCallsConflictResponseBody(res *goa.ServiceError) *GetMcpServerToolCallsConflictResponseBody {
+	body := &GetMcpServerToolCallsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerToolCallsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getMcpServerToolCalls" endpoint of the
+// "admin" service.
+func NewGetMcpServerToolCallsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMcpServerToolCallsUnsupportedMediaResponseBody {
+	body := &GetMcpServerToolCallsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerToolCallsInvalidResponseBody builds the HTTP response body
+// from the result of the "getMcpServerToolCalls" endpoint of the "admin"
+// service.
+func NewGetMcpServerToolCallsInvalidResponseBody(res *goa.ServiceError) *GetMcpServerToolCallsInvalidResponseBody {
+	body := &GetMcpServerToolCallsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerToolCallsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getMcpServerToolCalls" endpoint of the
+// "admin" service.
+func NewGetMcpServerToolCallsInvariantViolationResponseBody(res *goa.ServiceError) *GetMcpServerToolCallsInvariantViolationResponseBody {
+	body := &GetMcpServerToolCallsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerToolCallsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getMcpServerToolCalls" endpoint of the "admin"
+// service.
+func NewGetMcpServerToolCallsUnexpectedResponseBody(res *goa.ServiceError) *GetMcpServerToolCallsUnexpectedResponseBody {
+	body := &GetMcpServerToolCallsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerToolCallsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getMcpServerToolCalls" endpoint of the "admin"
+// service.
+func NewGetMcpServerToolCallsGatewayErrorResponseBody(res *goa.ServiceError) *GetMcpServerToolCallsGatewayErrorResponseBody {
+	body := &GetMcpServerToolCallsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetRegistryOktaCandidatesUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "getRegistryOktaCandidates" endpoint of
 // the "admin" service.
@@ -33774,6 +34133,19 @@ func NewGetSupportCoveragePayload(organizationID string, windowDays int, adminSe
 // describeMcpServerHealth endpoint payload.
 func NewDescribeMcpServerHealthPayload(organizationID string, projectID string, mcpServerID string, windowDays int, adminSessionToken *string) *admin.DescribeMcpServerHealthPayload {
 	v := &admin.DescribeMcpServerHealthPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.McpServerID = mcpServerID
+	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetMcpServerToolCallsPayload builds a admin service getMcpServerToolCalls
+// endpoint payload.
+func NewGetMcpServerToolCallsPayload(organizationID string, projectID string, mcpServerID string, windowDays int, adminSessionToken *string) *admin.GetMcpServerToolCallsPayload {
+	v := &admin.GetMcpServerToolCallsPayload{}
 	v.OrganizationID = organizationID
 	v.ProjectID = projectID
 	v.McpServerID = mcpServerID

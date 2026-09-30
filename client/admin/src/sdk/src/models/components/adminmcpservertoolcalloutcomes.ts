@@ -11,7 +11,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.
  */
-export type AdminMcpServerHealthOutcomes = {
+export type AdminMcpServerToolCallOutcomes = {
   blocked: number;
   clientError: number;
   failed: number;
@@ -22,8 +22,8 @@ export type AdminMcpServerHealthOutcomes = {
 };
 
 /** @internal */
-export const AdminMcpServerHealthOutcomes$inboundSchema: z.ZodMiniType<
-  AdminMcpServerHealthOutcomes,
+export const AdminMcpServerToolCallOutcomes$inboundSchema: z.ZodMiniType<
+  AdminMcpServerToolCallOutcomes,
   unknown
 > = z.pipe(
   z.object({
@@ -43,12 +43,12 @@ export const AdminMcpServerHealthOutcomes$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function adminMcpServerHealthOutcomesFromJSON(
+export function adminMcpServerToolCallOutcomesFromJSON(
   jsonString: string,
-): SafeParseResult<AdminMcpServerHealthOutcomes, SDKValidationError> {
+): SafeParseResult<AdminMcpServerToolCallOutcomes, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AdminMcpServerHealthOutcomes$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AdminMcpServerHealthOutcomes' from JSON`,
+    (x) => AdminMcpServerToolCallOutcomes$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AdminMcpServerToolCallOutcomes' from JSON`,
   );
 }

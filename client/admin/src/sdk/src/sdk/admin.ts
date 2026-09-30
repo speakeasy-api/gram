@@ -25,6 +25,7 @@ import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalI
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
+import { adminGetMcpServerToolCalls } from "../funcs/adminGetMcpServerToolCalls.js";
 import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStackOptions.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
@@ -94,6 +95,7 @@ import { AdminListProjectMcpServersResult } from "../models/components/adminlist
 import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
 import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
 import { AdminMcpServerHealth } from "../models/components/adminmcpserverhealth.js";
+import { AdminMcpServerToolCalls } from "../models/components/adminmcpservertoolcalls.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingPlaybook } from "../models/components/adminonboardingplaybook.js";
 import { AdminOnboardingPlaybookList } from "../models/components/adminonboardingplaybooklist.js";
@@ -171,6 +173,7 @@ import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operati
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
 import { AdminGetInferenceKeysRequest } from "../models/operations/admingetinferencekeys.js";
 import { AdminGetInferenceSpendHistoryRequest } from "../models/operations/admingetinferencespendhistory.js";
+import { AdminGetMcpServerToolCallsRequest } from "../models/operations/admingetmcpservertoolcalls.js";
 import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusage.js";
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
@@ -1011,13 +1014,30 @@ export class Admin extends ClientSDK {
    * describeMcpServerHealth admin
    *
    * @remarks
-   * Describes one MCP server's health: authentication configuration, session counts and tool call outcomes over a window (admin view, no auth scoping).
+   * Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.
    */
   async describeMcpServerHealth(
     request: AdminDescribeMcpServerHealthRequest,
     options?: RequestOptions,
   ): Promise<AdminMcpServerHealth> {
     return unwrapAsync(adminDescribeMcpServerHealth(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getMcpServerToolCalls admin
+   *
+   * @remarks
+   * Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.
+   */
+  async getMcpServerToolCalls(
+    request: AdminGetMcpServerToolCallsRequest,
+    options?: RequestOptions,
+  ): Promise<AdminMcpServerToolCalls> {
+    return unwrapAsync(adminGetMcpServerToolCalls(
       this,
       request,
       options,

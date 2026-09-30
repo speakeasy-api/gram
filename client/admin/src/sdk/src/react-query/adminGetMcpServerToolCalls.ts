@@ -22,9 +22,9 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  AdminDescribeMcpServerHealthRequest,
-  WindowDays,
-} from "../models/operations/admindescribemcpserverhealth.js";
+  AdminGetMcpServerToolCallsRequest,
+  QueryParamWindowDays,
+} from "../models/operations/admingetmcpservertoolcalls.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -32,19 +32,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  AdminDescribeMcpServerHealthQueryData,
-  buildAdminDescribeMcpServerHealthQuery,
-  prefetchAdminDescribeMcpServerHealth,
-  queryKeyAdminDescribeMcpServerHealth,
-} from "./adminDescribeMcpServerHealth.core.js";
+  AdminGetMcpServerToolCallsQueryData,
+  buildAdminGetMcpServerToolCallsQuery,
+  prefetchAdminGetMcpServerToolCalls,
+  queryKeyAdminGetMcpServerToolCalls,
+} from "./adminGetMcpServerToolCalls.core.js";
 export {
-  type AdminDescribeMcpServerHealthQueryData,
-  buildAdminDescribeMcpServerHealthQuery,
-  prefetchAdminDescribeMcpServerHealth,
-  queryKeyAdminDescribeMcpServerHealth,
+  type AdminGetMcpServerToolCallsQueryData,
+  buildAdminGetMcpServerToolCallsQuery,
+  prefetchAdminGetMcpServerToolCalls,
+  queryKeyAdminGetMcpServerToolCalls,
 };
 
-export type AdminDescribeMcpServerHealthQueryError =
+export type AdminGetMcpServerToolCallsQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -56,24 +56,24 @@ export type AdminDescribeMcpServerHealthQueryError =
   | SDKValidationError;
 
 /**
- * describeMcpServerHealth admin
+ * getMcpServerToolCalls admin
  *
  * @remarks
- * Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.
+ * Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.
  */
-export function useAdminDescribeMcpServerHealth(
-  request: AdminDescribeMcpServerHealthRequest,
+export function useAdminGetMcpServerToolCalls(
+  request: AdminGetMcpServerToolCallsRequest,
   options?: QueryHookOptions<
-    AdminDescribeMcpServerHealthQueryData,
-    AdminDescribeMcpServerHealthQueryError
+    AdminGetMcpServerToolCallsQueryData,
+    AdminGetMcpServerToolCallsQueryError
   >,
 ): UseQueryResult<
-  AdminDescribeMcpServerHealthQueryData,
-  AdminDescribeMcpServerHealthQueryError
+  AdminGetMcpServerToolCallsQueryData,
+  AdminGetMcpServerToolCallsQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildAdminDescribeMcpServerHealthQuery(
+    ...buildAdminGetMcpServerToolCallsQuery(
       client,
       request,
       options,
@@ -83,24 +83,24 @@ export function useAdminDescribeMcpServerHealth(
 }
 
 /**
- * describeMcpServerHealth admin
+ * getMcpServerToolCalls admin
  *
  * @remarks
- * Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.
+ * Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.
  */
-export function useAdminDescribeMcpServerHealthSuspense(
-  request: AdminDescribeMcpServerHealthRequest,
+export function useAdminGetMcpServerToolCallsSuspense(
+  request: AdminGetMcpServerToolCallsRequest,
   options?: SuspenseQueryHookOptions<
-    AdminDescribeMcpServerHealthQueryData,
-    AdminDescribeMcpServerHealthQueryError
+    AdminGetMcpServerToolCallsQueryData,
+    AdminGetMcpServerToolCallsQueryError
   >,
 ): UseSuspenseQueryResult<
-  AdminDescribeMcpServerHealthQueryData,
-  AdminDescribeMcpServerHealthQueryError
+  AdminGetMcpServerToolCallsQueryData,
+  AdminGetMcpServerToolCallsQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildAdminDescribeMcpServerHealthQuery(
+    ...buildAdminGetMcpServerToolCallsQuery(
       client,
       request,
       options,
@@ -109,31 +109,31 @@ export function useAdminDescribeMcpServerHealthSuspense(
   });
 }
 
-export function setAdminDescribeMcpServerHealthData(
+export function setAdminGetMcpServerToolCallsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
       organizationId: string;
       projectId: string;
       mcpServerId: string;
-      windowDays?: WindowDays | undefined;
+      windowDays?: QueryParamWindowDays | undefined;
     },
   ],
-  data: AdminDescribeMcpServerHealthQueryData,
-): AdminDescribeMcpServerHealthQueryData | undefined {
-  const key = queryKeyAdminDescribeMcpServerHealth(...queryKeyBase);
+  data: AdminGetMcpServerToolCallsQueryData,
+): AdminGetMcpServerToolCallsQueryData | undefined {
+  const key = queryKeyAdminGetMcpServerToolCalls(...queryKeyBase);
 
-  return client.setQueryData<AdminDescribeMcpServerHealthQueryData>(key, data);
+  return client.setQueryData<AdminGetMcpServerToolCallsQueryData>(key, data);
 }
 
-export function invalidateAdminDescribeMcpServerHealth(
+export function invalidateAdminGetMcpServerToolCalls(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       organizationId: string;
       projectId: string;
       mcpServerId: string;
-      windowDays?: WindowDays | undefined;
+      windowDays?: QueryParamWindowDays | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
@@ -143,18 +143,18 @@ export function invalidateAdminDescribeMcpServerHealth(
     queryKey: [
       "@gram/admin-client",
       "admin",
-      "describeMcpServerHealth",
+      "getMcpServerToolCalls",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllAdminDescribeMcpServerHealth(
+export function invalidateAllAdminGetMcpServerToolCalls(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/admin-client", "admin", "describeMcpServerHealth"],
+    queryKey: ["@gram/admin-client", "admin", "getMcpServerToolCalls"],
   });
 }
