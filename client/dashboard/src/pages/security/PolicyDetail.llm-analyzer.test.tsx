@@ -166,7 +166,11 @@ function renderEditor(
       <TooltipProvider>
         <StandardPolicyEditor
           policy={policy}
-          initialCategories={initialCategories}
+          prefill={
+            initialCategories
+              ? { categories: new Set(initialCategories), mcpServerIds: [] }
+              : undefined
+          }
         />
       </TooltipProvider>
     </QueryClientProvider>

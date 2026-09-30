@@ -544,6 +544,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Team Access",
             url: "team-access",
           },
+          guardrails: {
+            title: "MCP Server Guardrails",
+            url: "guardrails",
+          },
           sessions: {
             title: "MCP Server Clients and Sessions",
             url: "sessions",
