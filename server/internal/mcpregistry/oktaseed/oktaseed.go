@@ -154,11 +154,15 @@ func withMapping(data json.RawMessage, mapping mcpregistry.OktaMapping) (json.Ra
 	if err := json.Unmarshal(data, &root); err != nil {
 		return nil, fmt.Errorf("decode record: %w", err)
 	}
-	meta := map[string]json.RawMessage{}
+	var meta map[string]json.RawMessage
 	if raw, ok := root["_meta"]; ok {
 		if err := json.Unmarshal(raw, &meta); err != nil {
 			return nil, fmt.Errorf("decode metadata: %w", err)
 		}
+	}
+	// A stored "_meta": null decodes to a nil map; repair it rather than panic.
+	if meta == nil {
+		meta = map[string]json.RawMessage{}
 	}
 	encoded, err := json.Marshal(mapping)
 	if err != nil {

@@ -5,19 +5,22 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry/oktaseed"
+	registryrepo "github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	env, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	env, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -89,6 +92,36 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	e, err = svc.GetByName(ctx, first.Name)
 	require.NoError(t, err)
 	require.Contains(t, string(e.Data), "https://docs.example.test/edited")
+	mapping, err := mcpregistry.ParseOktaMapping(e.Data)
+	require.NoError(t, err)
+	require.Equal(t, first.Mapping, mapping)
+}
+
+func TestApplyRepairsNullMetadata(t *testing.T) {
+	t.Parallel()
+	v, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "oktaseednulltestdb")
+	require.NoError(t, err)
+	svc := mcpregistry.New(db, v)
+
+	// A legacy row that predates validation may hold "_meta": null; the seed
+	// repairs it instead of panicking on a nil map.
+	first := oktaseed.Vendors[0]
+	remotes := make([]string, 0, len(first.Remotes))
+	for _, r := range first.Remotes {
+		remotes = append(remotes, `{"type":"`+r.Type+`","url":"`+r.URL+`"}`)
+	}
+	legacy := `{"server":{"name":"` + first.Name + `","description":"Legacy","version":"1","remotes":[` + strings.Join(remotes, ",") + `]},"_meta":null}`
+	require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: json.RawMessage(legacy), Published: true}))
+
+	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Updated)
+	e, err := svc.GetByName(ctx, first.Name)
+	require.NoError(t, err)
+	require.Empty(t, v.ValidateStored(e.Data))
 	mapping, err := mcpregistry.ParseOktaMapping(e.Data)
 	require.NoError(t, err)
 	require.Equal(t, first.Mapping, mapping)
