@@ -43,6 +43,30 @@ it("appends to an existing list once and keeps sibling fields", () => {
   });
 });
 
+it("refuses primitives, arrays and duplicate keys on the edit path", () => {
+  expect(addOinName('{"_meta": 5}', "x")).toHaveProperty("error");
+  expect(addOinName('{"_meta": []}', "x")).toHaveProperty("error");
+  expect(
+    addOinName('{"_meta": {"com.speakeasy.ai/okta": "x"}}', "x"),
+  ).toHaveProperty("error");
+  expect(
+    addOinName('{"_meta": {"a": 1}, "_meta": {"b": 2}}', "x"),
+  ).toHaveProperty("error");
+  expect(
+    addOinName(
+      '{"_meta": {"com.speakeasy.ai/okta": {"oinNames": []}, "com.speakeasy.ai/okta": {}}}',
+      "x",
+    ),
+  ).toHaveProperty("error");
+  const ok = addOinName('{"_meta": {"other": true}}', "x") as {
+    text: string;
+  };
+  expect(JSON.parse(ok.text)._meta).toEqual({
+    other: true,
+    "com.speakeasy.ai/okta": { oinNames: ["x"] },
+  });
+});
+
 it("reports text that is not an editable JSON object", () => {
   expect(addOinName("not json", "x")).toHaveProperty("error");
   expect(addOinName("[]", "x")).toHaveProperty("error");

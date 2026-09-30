@@ -272,7 +272,9 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
                     setText(next.text);
                     setIssues([]);
                     setServerIssues([]);
-                    setFailure(null);
+                    // A conflict keeps its explanation; Save stays disabled
+                    // until the entry is reloaded.
+                    if (!conflict) setFailure(null);
                     setEdited(true);
                   }}
                 />
