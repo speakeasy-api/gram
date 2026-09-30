@@ -212,5 +212,8 @@ func (s *Service) tryRevokeRefreshToken(ctx context.Context, logger *slog.Logger
 	if err := s.chatSessionsManager.RevokeToken(ctx, deleted.Jti); err != nil {
 		logger.ErrorContext(ctx, "failed to push jti into revocation cache", attr.SlogError(err))
 	}
+	if err := s.userSessionRefreshReplayCache.DeleteByKey(ctx, refreshTokenReplayKey(issuerID, hash)); err != nil {
+		logger.WarnContext(ctx, "failed to drop refresh token replay on revoke", attr.SlogError(err))
+	}
 	return true
 }

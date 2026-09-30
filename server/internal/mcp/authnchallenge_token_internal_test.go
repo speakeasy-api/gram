@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -123,12 +124,6 @@ func TestStoreRefreshTokenReplayFailureDoesNotOverwriteSuccess(t *testing.T) {
 	t.Parallel()
 
 	service, _, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
-	mr := miniredis.RunT(t)
-	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	service.userSessionRefreshReplayCache = cache.NewTypedObjectCache[userSessionRefreshReplay](
-		testenv.NewLogger(t), cache.NewRedisCacheAdapter(client), cache.SuffixNone,
-	)
 	require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), replay))
 
 	stored := service.storeRefreshTokenReplayFailure(
@@ -228,8 +223,133 @@ func newRefreshTokenReplayTestFixture(
 	service.enc = enc
 	service.metrics = &mcpmetrics.Metrics{}
 	service.userSessionSigner = sessiontokens.NewSigner("test-jwt-secret")
+	newRefreshTokenReplayRedis(t, service)
 	return service, endpoint, &clientRow, userSessionRefreshReplay{
 		Key:        payload.ReplayKey,
 		Ciphertext: ciphertext,
+		ExpiresAt:  expiresAt,
 	}
+}
+
+// newRefreshTokenReplayRedis backs the replay cache and the revocation cache
+// with one miniredis and returns it for TTL and key inspection.
+func newRefreshTokenReplayRedis(t *testing.T, service *Service) *miniredis.Miniredis {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	service.userSessionRefreshReplayCache = cache.NewTypedObjectCache[userSessionRefreshReplay](
+		testenv.NewLogger(t), cache.NewRedisCacheAdapter(client), cache.SuffixNone,
+	)
+	service.chatSessionsManager = chatsessions.NewManager(testenv.NewLogger(t), client, "test-jwt-secret")
+	return mr
+}
+
+// encodeRefreshTokenReplay encrypts payload into a served replay entry.
+func encodeRefreshTokenReplay(t *testing.T, service *Service, payload userSessionRefreshReplayPayload) userSessionRefreshReplay {
+	t.Helper()
+	plaintext, err := json.Marshal(payload)
+	require.NoError(t, err)
+	ciphertext, err := service.enc.Encrypt(plaintext)
+	require.NoError(t, err)
+	return userSessionRefreshReplay{Key: payload.ReplayKey, Ciphertext: ciphertext, ExpiresAt: payload.AccessExpiresAt}
+}
+
+func decodeRefreshTokenReplay(t *testing.T, service *Service, replay userSessionRefreshReplay) userSessionRefreshReplayPayload {
+	t.Helper()
+	plaintext, err := service.enc.Decrypt(replay.Ciphertext)
+	require.NoError(t, err)
+	var payload userSessionRefreshReplayPayload
+	require.NoError(t, json.Unmarshal([]byte(plaintext), &payload))
+	return payload
+}
+
+func TestWriteRefreshTokenReplayFollowsLaterRotation(t *testing.T) {
+	t.Parallel()
+
+	service, endpoint, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	first := decodeRefreshTokenReplay(t, service, replay)
+
+	// The successor was rotated again: its jti is revoked and its own replay
+	// sits under its refresh token.
+	second := first
+	second.JTI = strings.Repeat("b", 43)
+	second.ReplayKey = refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(first.Response.RefreshToken))
+	second.Response.RefreshToken = "refresh-token-2"
+	second.Response.AccessToken = "access-token-2"
+	require.NoError(t, service.userSessionRefreshReplayCache.Store(t.Context(), encodeRefreshTokenReplay(t, service, second)))
+	require.NoError(t, service.chatSessionsManager.RevokeToken(t.Context(), first.JTI))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
+	err := service.writeRefreshTokenReplay(
+		t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none",
+		replay.Key, replay, testenv.NewLogger(t),
+	)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var response tokenResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Equal(t, "refresh-token-2", response.RefreshToken)
+	require.Equal(t, "access-token-2", response.AccessToken)
+}
+
+func TestWriteRefreshTokenReplayRejectsRevokedSuccessor(t *testing.T) {
+	t.Parallel()
+
+	service, endpoint, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	first := decodeRefreshTokenReplay(t, service, replay)
+	require.NoError(t, service.chatSessionsManager.RevokeToken(t.Context(), first.JTI))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	err := service.writeRefreshTokenReplay(
+		t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none",
+		replay.Key, replay, logger,
+	)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refreshed session is no longer active"}`, w.Body.String())
+	require.Contains(t, logs.String(), `"gram.oauth.failure_reason":"refresh_token_revoked"`)
+}
+
+func TestUserSessionRefreshReplayTTL(t *testing.T) {
+	t.Parallel()
+
+	rejection := userSessionRefreshReplay{Key: "k", Ciphertext: "", ExpiresAt: time.Time{}}
+	require.Equal(t, refreshTokenReplayGracePeriod, rejection.TTL())
+
+	nearExpiry := userSessionRefreshReplay{Key: "k", Ciphertext: "", ExpiresAt: time.Now().Add(5 * time.Second)}
+	require.Equal(t, refreshTokenReplayGracePeriod, nearExpiry.TTL())
+
+	served := userSessionRefreshReplay{Key: "k", Ciphertext: "", ExpiresAt: time.Now().Add(time.Hour)}
+	require.Greater(t, served.TTL(), 59*time.Minute)
+	require.LessOrEqual(t, served.TTL(), time.Hour)
+}
+
+func TestStoreRefreshTokenReplayKeepsSuccessorUntilAccessExpiry(t *testing.T) {
+	t.Parallel()
+
+	service, _, clientRow, replay := newRefreshTokenReplayTestFixture(t, time.Now().Add(time.Hour))
+	mr := newRefreshTokenReplayRedis(t, service)
+	payload := decodeRefreshTokenReplay(t, service, replay)
+
+	require.True(t, service.storeRefreshTokenReplayFailure(
+		t.Context(), replay.Key, clientRow.ID,
+		"refresh_token_unknown_or_already_used",
+		"refresh_token is unknown or already used", testenv.NewLogger(t),
+	))
+	keys := mr.Keys()
+	require.Len(t, keys, 1)
+	require.Equal(t, refreshTokenReplayGracePeriod, mr.TTL(keys[0]))
+
+	// A committed rotation supersedes a cached rejection and lives until the
+	// successor's access token expires.
+	require.NoError(t, service.storeRefreshTokenReplay(t.Context(), replay.Key, payload))
+	keys = mr.Keys()
+	require.Len(t, keys, 1)
+	require.Greater(t, mr.TTL(keys[0]), refreshTokenReplayGracePeriod)
+	require.LessOrEqual(t, mr.TTL(keys[0]), time.Hour)
 }

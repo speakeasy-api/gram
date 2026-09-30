@@ -65,12 +65,18 @@ type tokenResponse struct {
 }
 
 const (
-	// refreshTokenReplayGracePeriod is intentionally short: it only covers
-	// clients that issue parallel refresh requests from several open sessions.
+	// refreshTokenReplayGracePeriod bounds the rotation lease and cached
+	// rejections. A served successor lives until its access token expires
+	// instead, so a window that shares a token store and wakes late still
+	// lands on the live pair. The accepted cost is that a consumed refresh
+	// token yields that same pair for the rest of the hour.
 	refreshTokenReplayGracePeriod     = 30 * time.Second
 	refreshTokenReplayWait            = 5 * time.Second
 	refreshTokenReplayInitialPollWait = 20 * time.Millisecond
 	refreshTokenReplayMaxPollWait     = 1 * time.Second
+	// refreshTokenReplayMaxHops bounds how many later rotations a replay may
+	// follow before giving up on a stale token.
+	refreshTokenReplayMaxHops = 4
 )
 
 // userSessionRefreshReplay is the encrypted result of a recent refresh-token
@@ -81,6 +87,9 @@ type userSessionRefreshReplay struct {
 
 	// Ciphertext holds the AES-GCM-encrypted replay payload.
 	Ciphertext string `json:"ciphertext"`
+
+	// ExpiresAt is the served successor's access expiry; zero for a rejection.
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 type userSessionRefreshReplayPayload struct {
@@ -148,7 +157,18 @@ var _ cache.CacheableObject[userSessionRefreshReplay] = (*userSessionRefreshRepl
 
 func (r userSessionRefreshReplay) CacheKey() string { return r.Key }
 
-func (r userSessionRefreshReplay) TTL() time.Duration { return refreshTokenReplayGracePeriod }
+func refreshTokenReplayKey(issuerID uuid.UUID, refreshTokenHash string) string {
+	return "userSessionRefreshReplay:" + issuerID.String() + ":" + refreshTokenHash
+}
+
+// TTL keeps a served successor until its access token expires, with the grace
+// period as the floor.
+func (r userSessionRefreshReplay) TTL() time.Duration {
+	if r.ExpiresAt.IsZero() {
+		return refreshTokenReplayGracePeriod
+	}
+	return max(time.Until(r.ExpiresAt), refreshTokenReplayGracePeriod)
+}
 
 // HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3 /
 // §6). Mounted at `POST /mcp/{mcpSlug}/token` on the MCP host and, when one is
@@ -868,7 +888,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	}
 
 	refreshTokenHash := sha256Hex(req.RefreshToken)
-	replayKey := "userSessionRefreshReplay:" + endpoint.UserSessionIssuerID.String() + ":" + refreshTokenHash
+	replayKey := refreshTokenReplayKey(endpoint.UserSessionIssuerID, refreshTokenHash)
 	lockKey := "lock:" + replayKey
 	lockOwner, err := generateOpaqueToken()
 	if err != nil {
@@ -1088,8 +1108,7 @@ func (s *Service) rotateRefreshToken(
 					return true, s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, existing, logger)
 				}
 			}
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_unknown_or_already_used")
-			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or already used")
+			return true, s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token request rejected", "refresh_token_unknown_or_already_used", "refresh_token is unknown or already used", logger)
 		}
 		return true, oops.E(oops.CodeUnexpected, err, "revoke old refresh token").LogError(ctx, logger)
 	}
@@ -1113,8 +1132,7 @@ func (s *Service) rotateRefreshToken(
 			"refresh_token was issued to a different client",
 			logger,
 		)
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_client_mismatch")
-		return published, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
+		return published, s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token request rejected", "refresh_token_client_mismatch", "refresh_token was issued to a different client", logger)
 	}
 
 	if !oldSession.RefreshExpiresAt.Valid || !oldSession.RefreshExpiresAt.Time.After(time.Now()) {
@@ -1134,8 +1152,7 @@ func (s *Service) rotateRefreshToken(
 			"refresh_token has expired",
 			logger,
 		)
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_expired")
-		return published, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
+		return published, s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token request rejected", "refresh_token_expired", "refresh_token has expired", logger)
 	}
 
 	// Session length is an absolute authorization lifetime. Rotation carries
@@ -1253,6 +1270,25 @@ func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lo
 	}
 }
 
+// writeRefreshTokenRejected logs, counts and writes an invalid_grant rejection
+// of a refresh_token grant.
+func (s *Service) writeRefreshTokenRejected(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	clientRow *usersessions_repo.UserSessionClient,
+	presentedAuthMethod string,
+	message string,
+	failureReason string,
+	description string,
+	logger *slog.Logger,
+) error {
+	logOAuthClientCredentialEvent(ctx, logger, r, message, clientRow.ClientID, presentedAuthMethod, "refresh_token", failureReason)
+	s.metrics.RecordOAuthRefreshTokenRejected(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, failureReason)
+	return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", description)
+}
+
 func (s *Service) writeRefreshTokenReplay(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -1263,6 +1299,22 @@ func (s *Service) writeRefreshTokenReplay(
 	presentedAuthMethod string,
 	replayKey string,
 	replay userSessionRefreshReplay,
+	logger *slog.Logger,
+) error {
+	return s.writeRefreshTokenReplayHop(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, 0, logger)
+}
+
+func (s *Service) writeRefreshTokenReplayHop(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	clientRow *usersessions_repo.UserSessionClient,
+	baseURL string,
+	presentedAuthMethod string,
+	replayKey string,
+	replay userSessionRefreshReplay,
+	hops int,
 	logger *slog.Logger,
 ) error {
 	plaintext, err := s.enc.Decrypt(replay.Ciphertext)
@@ -1284,20 +1336,39 @@ func (s *Service) writeRefreshTokenReplay(
 		if failureReason == "" {
 			failureReason = "refresh_token_replay_rejected"
 		}
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", failureReason)
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", payload.ErrorDescription)
+		return s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token replay rejected", failureReason, payload.ErrorDescription, logger)
 	}
 	if payload.ClientID != clientRow.ID {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_client_mismatch")
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
+		return s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token replay rejected", "refresh_token_client_mismatch", "refresh_token was issued to a different client", logger)
 	}
 	if now := time.Now(); !payload.AccessExpiresAt.After(now) || !payload.AuthorizationExpiresAt.After(now) {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_expired")
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
+		return s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token replay rejected", "refresh_token_expired", "refresh_token has expired", logger)
 	}
 	if payload.Subject == nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_payload_invalid")
 		return oops.E(oops.CodeUnexpected, nil, "refresh token replay response is missing subject").LogError(ctx, logger)
+	}
+	// Every rotation and revocation of the successor pushes its jti here, so
+	// a replay never hands out a pair the runtime would already refuse. A
+	// later rotation left its own replay under the successor's refresh token;
+	// follow it so a window that slept through several rotations still lands
+	// on the live pair.
+	revoked, err := s.chatSessionsManager.IsTokenRevoked(ctx, payload.JTI)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check refreshed session revocation").LogError(ctx, logger)
+	}
+	if revoked {
+		if hops < refreshTokenReplayMaxHops {
+			nextKey := refreshTokenReplayKey(endpoint.UserSessionIssuerID, sha256Hex(payload.Response.RefreshToken))
+			next, nextErr := s.userSessionRefreshReplayCache.Get(ctx, nextKey)
+			if nextErr == nil {
+				return s.writeRefreshTokenReplayHop(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, nextKey, next, hops+1, logger)
+			}
+			if !errors.Is(nextErr, redisCache.ErrCacheMiss) {
+				logger.WarnContext(ctx, "failed to read chained refresh token replay", attr.SlogError(nextErr))
+			}
+		}
+		return s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token replay rejected", "refresh_token_revoked", "refreshed session is no longer active", logger)
 	}
 	if payload.Subject.Kind == urn.SessionSubjectKindAgent {
 		replaySession, err := usersessions_repo.New(s.db).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
@@ -1306,15 +1377,13 @@ func (s *Service) writeRefreshTokenReplay(
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_revoked")
-				return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
+				return s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token replay rejected", "refresh_token_revoked", "refreshed session is no longer active", logger)
 			}
 			return oops.E(oops.CodeUnexpected, err, "load refreshed session for replay").LogError(ctx, logger)
 		}
 		if !replaySession.UserSessionClientID.Valid || replaySession.UserSessionClientID.UUID != clientRow.ID ||
 			replaySession.SubjectUrn.String() != payload.Subject.String() || !replaySession.ExpiresAt.Valid || !replaySession.ExpiresAt.Time.After(time.Now()) {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_session_mismatch")
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
+			return s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token replay rejected", "refresh_token_replay_session_mismatch", "refreshed session is no longer active", logger)
 		}
 		credential, cerr := loadAgentSessionCredential(
 			endpoint, *payload.Subject, replaySession.SubjectUrn, replaySession.OrganizationID,
@@ -1332,8 +1401,7 @@ func (s *Service) writeRefreshTokenReplay(
 			if errors.As(cerr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
 				return cerr
 			}
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
+			return s.writeRefreshTokenRejected(ctx, w, r, endpoint, clientRow, presentedAuthMethod, "oauth refresh_token replay rejected", "agent_admission_denied", "agent authorization is no longer valid; reauthorize", logger)
 		}
 	}
 
@@ -1393,6 +1461,7 @@ func (s *Service) storeRefreshTokenReplay(
 	if err := s.userSessionRefreshReplayCache.Store(ctx, userSessionRefreshReplay{
 		Key:        replayKey,
 		Ciphertext: ciphertext,
+		ExpiresAt:  payload.AccessExpiresAt,
 	}); err != nil {
 		return fmt.Errorf("store refresh token replay response: %w", err)
 	}
@@ -1439,6 +1508,7 @@ func (s *Service) storeRefreshTokenReplayFailure(
 	stored, err := s.userSessionRefreshReplayCache.StoreIfAbsent(ctx, userSessionRefreshReplay{
 		Key:        replayKey,
 		Ciphertext: ciphertext,
+		ExpiresAt:  time.Time{},
 	})
 	if err != nil {
 		logger.WarnContext(ctx, "failed to cache refresh token replay rejection", attr.SlogError(err))

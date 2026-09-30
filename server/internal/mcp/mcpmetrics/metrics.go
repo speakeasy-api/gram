@@ -113,8 +113,13 @@ type Metrics struct {
 	oauthFlowDeclinedCounter  metric.Int64Counter
 
 	// oauthRefreshTokenReplayServedCounter counts refresh responses served from
-	// the encrypted replay cache rather than by rotating the database session.
+	// the encrypted replay cache rather than by rotating the database session,
+	// any time within the successor's access-token lifetime.
 	oauthRefreshTokenReplayServedCounter metric.Int64Counter
+
+	// oauthRefreshTokenRejectedCounter counts invalid_grant rejections of
+	// refresh_token grants by failure reason.
+	oauthRefreshTokenRejectedCounter metric.Int64Counter
 
 	// oauthAuthorityUnavailableCounter counts transient private-authority lookup
 	// failures. These remain retryable and are therefore intentionally separate
@@ -213,6 +218,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth refresh token replay served counter", attr.SlogError(err))
 	}
 
+	oauthRefreshTokenRejectedCounter, err := meter.Int64Counter(
+		"oauth.refresh_token.rejected",
+		metric.WithDescription("OAuth refresh_token grants rejected with invalid_grant, by issuer, MCP slug and failure reason"),
+		metric.WithUnit("{rejection}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create oauth refresh token rejected counter", attr.SlogError(err))
+	}
+
 	oauthAuthorityUnavailableCounter, err := meter.Int64Counter(
 		"oauth.authority.unavailable",
 		metric.WithDescription("Retryable private OAuth endpoint authority lookup failures by issuer, MCP slug, and OAuth flow stage"),
@@ -264,6 +278,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthFlowFailedCounter:               oauthFlowFailedCounter,
 		oauthFlowDeclinedCounter:             oauthFlowDeclinedCounter,
 		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
+		oauthRefreshTokenRejectedCounter:     oauthRefreshTokenRejectedCounter,
 		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 	}
@@ -520,6 +535,17 @@ func (m *Metrics) RecordOAuthRefreshTokenReplayServed(ctx context.Context, issue
 		return
 	}
 	m.oauthRefreshTokenReplayServedCounter.Add(ctx, 1, metric.WithAttributes(oauthFlowDimensions(issuerID, mcpSlug)...))
+}
+
+// RecordOAuthRefreshTokenRejected records an invalid_grant rejection of a
+// refresh_token grant. Kept apart from oauth.flow.failed, which excludes
+// refresh grants by design.
+func (m *Metrics) RecordOAuthRefreshTokenRejected(ctx context.Context, issuerID, mcpSlug, reason string) {
+	if m == nil || m.oauthRefreshTokenRejectedCounter == nil {
+		return
+	}
+	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFailureReason(reason))
+	m.oauthRefreshTokenRejectedCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
 
 // MetaDispatchOutcome classifies how a meta member dispatch was credentialed.

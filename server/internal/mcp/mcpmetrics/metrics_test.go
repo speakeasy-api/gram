@@ -149,6 +149,7 @@ func TestMetrics_RecordOAuthRefreshTokenReplayServed(t *testing.T) {
 	m := NewMetrics(meter, testenv.NewLogger(t))
 
 	m.RecordOAuthRefreshTokenReplayServed(t.Context(), "issuer-1", "mcp-slug-1")
+	m.RecordOAuthRefreshTokenRejected(t.Context(), "issuer-1", "mcp-slug-1", "refresh_token_unknown_or_already_used")
 }
 
 func TestMetrics_RecordOAuthFlow_NilCountersDoNotPanic(t *testing.T) {
@@ -163,6 +164,7 @@ func TestMetrics_RecordOAuthFlow_NilCountersDoNotPanic(t *testing.T) {
 	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageIDPCallback)
 	m.RecordOAuthAuthorityUnavailable(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageToken)
 	m.RecordOAuthRefreshTokenReplayServed(t.Context(), "issuer-1", "mcp-slug-1")
+	m.RecordOAuthRefreshTokenRejected(t.Context(), "issuer-1", "mcp-slug-1", "refresh_token_expired")
 }
 
 // TestRequestCounterRecord_NilSafety pins the documented contract that a nil

@@ -502,14 +502,71 @@ func TestHandleToken_RefreshReplayExpiresBackToInvalidGrant(t *testing.T) {
 	require.Equal(t, http.StatusOK, first.code, first.body)
 
 	replayKey, lockKey := refreshReplayKeys(issuer.ID, refreshToken)
-	// Both keys expire at the grace boundary. Removing them models the state
-	// after that TTL without making the test wait for wall-clock expiration.
+	// The lock expires at the grace boundary and the replay when the successor
+	// access token does. Removing them models the state after both TTLs
+	// without making the test wait for wall-clock expiration.
 	require.NoError(t, ti.cacheAdapter.Delete(ctx, lockKey))
 	require.NoError(t, ti.cacheAdapter.Delete(ctx, replayKey+":"))
 	expired := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, expired.err)
 	require.Equal(t, http.StatusBadRequest, expired.code)
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, expired.body)
+}
+
+func TestHandleToken_StaleWindowFollowsLaterRotations(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, _, client, refreshToken := seedRefreshReplaySession(t, ctx, ti)
+
+	// Window A rotates R1 and then R2; window B still holds R1.
+	first := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, first.err)
+	require.Equal(t, http.StatusOK, first.code, first.body)
+	var firstResponse map[string]any
+	require.NoError(t, json.Unmarshal([]byte(first.body), &firstResponse))
+	secondToken, _ := firstResponse["refresh_token"].(string)
+	require.NotEmpty(t, secondToken)
+
+	second := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, secondToken)
+	require.NoError(t, second.err)
+	require.Equal(t, http.StatusOK, second.code, second.body)
+
+	stale := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, stale.err)
+	require.Equal(t, http.StatusOK, stale.code, stale.body)
+	assertSameTokenPair(t, second.body, stale.body)
+}
+
+func TestHandleToken_RevokedSuccessorIsNotReplayed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, _, client, refreshToken := seedRefreshReplaySession(t, ctx, ti)
+
+	first := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, first.err)
+	require.Equal(t, http.StatusOK, first.code, first.body)
+	var firstResponse map[string]any
+	require.NoError(t, json.Unmarshal([]byte(first.body), &firstResponse))
+	secondToken, _ := firstResponse["refresh_token"].(string)
+	require.NotEmpty(t, secondToken)
+
+	// RFC 7009 revoke of the successor drops its replay and revokes its jti.
+	form := url.Values{"token": {secondToken}, "token_type_hint": {"refresh_token"}, "client_id": {client.ClientID}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/revoke", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleRevoke(w, req))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stale := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, stale.err)
+	require.Equal(t, http.StatusBadRequest, stale.code, stale.body)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refreshed session is no longer active"}`, stale.body)
 }
 
 func TestHandleToken_RefreshRotationAdoptsCachedWinnerAfterLockLoss(t *testing.T) {
