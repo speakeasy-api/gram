@@ -304,10 +304,6 @@ func TestArrayDimFilter_MixedCombinesWithOr(t *testing.T) {
 	require.Equal(t, []any{[]string{"eng"}}, args)
 }
 
-// TestToolUsageTraceTargetFilter_MatchesConfiguredServersByTargetType pins that a
-// configured remote or tunneled server, which carries no toolset slug, is
-// matched by the target id its matcher stamps under both target types it can be
-// classified as, while the hosted toolset selector stays hosted-only.
 // TestToolUsageTraceTargetFilter_ConfiguredServerSelectorsOmitShadowRows pins
 // that the selectors an mcp_id-scoped search builds from a configured server
 // never reach the shadow target type. A shadow row's target id is the name the
@@ -352,4 +348,46 @@ func TestToolUsageTraceTargetFilter_MatchesConfiguredServersByTargetType(t *test
 		ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP, "billing", "00000000-0000-0000-0000-000000000002",
 		ToolUsageTargetTypeShadowMCP, "Billing",
 	}, args)
+}
+
+// TestToolUsageTraceUserFilter_FoldsTheEmailKind pins that an email identity
+// filter folds through the identity map on both sides when the organization is
+// in the fold, so an address a folded list produced selects the calls stored
+// under a linked alias. Ids stay literal — the map is email-keyed.
+func TestToolUsageTraceUserFilter_FoldsTheEmailKind(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, toolUsageTraceUserFilter(ListToolUsageTracesParams{}))
+
+	literal, literalArgs, err := toolUsageTraceUserFilter(ListToolUsageTracesParams{
+		UserFilters: []ToolUsageUserFilter{{Kind: toolUsageUserKindEmail, Key: "work@example.com"}},
+	}).ToSql()
+	require.NoError(t, err)
+	require.Equal(t, "((user_kind = ? AND user_key = ?))", literal)
+	require.Equal(t, []any{toolUsageUserKindEmail, "work@example.com"}, literalArgs)
+
+	folded, foldedArgs, err := toolUsageTraceUserFilter(ListToolUsageTracesParams{
+		CanonicalIdentityOrg: "org_0123456789",
+		UserFilters:          []ToolUsageUserFilter{{Kind: toolUsageUserKindEmail, Key: "Work@Example.com"}},
+	}).ToSql()
+	require.NoError(t, err)
+	require.Contains(t, folded, "joinGet('identity_map', 'canonical_email', 'org_0123456789', lowerUTF8(user_key))",
+		"the column side must fold, or a row stored under a linked alias can never match")
+	require.Contains(t, folded, "user_kind = ?")
+	require.Equal(t, []any{toolUsageUserKindEmail, "work@example.com", "work@example.com"}, foldedArgs,
+		"the requested address must fold through the same map, lowercased")
+
+	// An id-keyed identity is not an email and keeps exact matching even in the
+	// fold: a folded list reports such a person by their raw id.
+	ids, idArgs, err := toolUsageTraceUserFilter(ListToolUsageTracesParams{
+		CanonicalIdentityOrg: "org_0123456789",
+		UserFilters: []ToolUsageUserFilter{
+			{Kind: toolUsageUserKindUserID, Key: "user_42"},
+			{Kind: toolUsageUserKindExternalUserID, Key: "ext-7"},
+		},
+	}).ToSql()
+	require.NoError(t, err)
+	require.NotContains(t, ids, "identity_map")
+	require.Equal(t, "((user_kind = ? AND user_key = ?) OR (user_kind = ? AND user_key = ?))", ids)
+	require.Equal(t, []any{toolUsageUserKindUserID, "user_42", toolUsageUserKindExternalUserID, "ext-7"}, idArgs)
 }

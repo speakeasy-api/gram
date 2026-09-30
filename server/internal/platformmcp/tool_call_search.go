@@ -63,6 +63,14 @@ var toolCallAttributeOps = map[string]struct{}{
 	"eq": {}, "not_eq": {}, "in": {}, "exists": {}, "not_exists": {}, "contains": {},
 }
 
+// toolCallIdentityAttributeSegments name path segments that carry a person's
+// identifier on system attributes the platform does not materialize — a LiteLLM
+// virtual key's user_email, say. The materialized identity columns are
+// recognized exactly by telemetryrepo.IsIdentityAttributePath, which is guarded
+// there against a new column appearing unclassified; the rest of the system
+// namespace is open-ended, so a segment token is the only signal there is.
+var toolCallIdentityAttributeSegments = []string{"email", "user_id", "userid", "username", "user_name", "upn"}
+
 // toolCallContentAttributePrefixes name system attributes that carry tool
 // inputs, outputs, or conversation content. They are refused as filters and
 // withheld from key discovery, because a predicate over them is an oracle for
@@ -131,7 +139,7 @@ type SearchToolCallsInput struct {
 	Outcome          string                    `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, failure, blocked, or pending"`
 	MCPID            string                    `json:"mcp_id,omitempty" jsonschema:"optional configured MCP ID, as returned by find_mcp or get_mcp, to narrow to one server; matches only calls the platform tied to that server, never calls an app merely reported under a matching name"`
 	UserReference    string                    `json:"user_reference,omitempty" jsonschema:"optional person reference from a previous search_tool_calls row in this project, or from list_mcp_usage_users when the same mcp_id and window are supplied"`
-	Attributes       []ToolCallAttributeFilter `json:"attributes,omitempty" jsonschema:"optional attribute filters, at most 5, combined with AND; discover keys with list_attribute_keys"`
+	Attributes       []ToolCallAttributeFilter `json:"attributes,omitempty" jsonschema:"optional attribute filters, at most 5, combined with AND; discover keys with list_attribute_keys. Attributes that identify a person are refused: narrow to one person with user_reference"`
 	Limit            int                       `json:"limit,omitempty" jsonschema:"maximum calls to return; defaults to 20 and is capped at 50"`
 	Cursor           string                    `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous search_tool_calls result"`
 }
@@ -277,18 +285,22 @@ func (s *DiagnosticsService) SearchToolCalls(ctx context.Context, principal Prin
 		// calling app, so selecting one by name would fold an unrelated
 		// same-named server's calls into this server's history. See
 		// serverIdentity.toolLogsTargets.
-		ShadowServerNames:  nil,
-		MetaMCPServerIDs:   nil,
-		UserFilters:        userFilters,
-		HookSources:        nil,
-		ClientKeys:         nil,
-		AccountType:        "",
-		Statuses:           statuses,
-		Query:              "",
-		Filters:            search.repoFilters(),
-		SortOrder:          "desc",
-		CursorTimeUnixNano: cursorTime,
-		CursorID:           cursorID,
+		ShadowServerNames: nil,
+		MetaMCPServerIDs:  nil,
+		UserFilters:       userFilters,
+		// Folded exactly as the lists that produce a person reference are, so a
+		// reference selects every address the person's calls are stored under
+		// rather than only the one spelling the producer happened to report.
+		CanonicalIdentityOrg: s.canonicalIdentityOrg(ctx, principal.OrganizationID),
+		HookSources:          nil,
+		ClientKeys:           nil,
+		AccountType:          "",
+		Statuses:             statuses,
+		Query:                "",
+		Filters:              search.repoFilters(),
+		SortOrder:            "desc",
+		CursorTimeUnixNano:   cursorTime,
+		CursorID:             cursorID,
 		// One extra row decides whether another page exists without a second
 		// round trip, and is dropped before anything is projected.
 		Limit: search.limit + 1,
@@ -392,6 +404,18 @@ func normalizeToolCallAttributeFilter(filter ToolCallAttributeFilter) (telemetry
 	if !custom && isContentAttribute(key) {
 		return telemetryrepo.AttributeFilter{}, fmt.Errorf("%w: attribute %q carries tool content and cannot be filtered on", ErrToolCallSearchInvalid, key)
 	}
+	// Refused, not routed. Narrowing to one named person is an attribution read
+	// that RecordUsageAttributionRead has to record first, and user_reference is
+	// where that happens: it resolves a bound, expiring handle, records the read,
+	// and refuses the whole call when the record cannot be written. An identity
+	// attribute would reach the same rows as an ordinary predicate, past the
+	// audit and past the reference's own scoping. Routing it to the audited path
+	// instead would need the set of identity-bearing keys to be complete forever;
+	// refusing leaves one door, and a key this surface fails to recognize
+	// narrows nothing rather than reading unaudited.
+	if !custom && isIdentityAttribute(key) {
+		return telemetryrepo.AttributeFilter{}, fmt.Errorf("%w: attribute %q identifies a person; narrow to one person with user_reference, which is recorded as an attribution read", ErrToolCallSearchInvalid, key)
+	}
 	op := strings.ToLower(strings.TrimSpace(filter.Op))
 	if op == "" {
 		op = "eq"
@@ -432,6 +456,32 @@ func isContentAttribute(key string) bool {
 	for _, prefix := range toolCallContentAttributePrefixes {
 		if strings.HasPrefix(key, prefix) {
 			return true
+		}
+	}
+	return false
+}
+
+// isIdentityAttribute reports whether a system attribute selects one named
+// person. The platform's own identity columns are recognized exactly; any other
+// system path is treated as identity-bearing when one of its segments carries an
+// identifier token, which is what catches an identity attribute the platform
+// records without materializing.
+//
+// Custom "@" keys are deliberately out of scope: they hold whatever a project's
+// integrations attached, carry no platform identity semantics, and every
+// operator is documented as allowed on them. A project that attaches its own
+// person identifier as a custom attribute can therefore still be filtered on it,
+// and the audited user_reference remains the only way to select by the identity
+// the platform itself recorded.
+func isIdentityAttribute(key string) bool {
+	if telemetryrepo.IsIdentityAttributePath(key) {
+		return true
+	}
+	for segment := range strings.SplitSeq(key, ".") {
+		for _, token := range toolCallIdentityAttributeSegments {
+			if strings.Contains(segment, token) {
+				return true
+			}
 		}
 	}
 	return false
@@ -721,8 +771,9 @@ type ListAttributeKeysOutput struct {
 	// attached; every operator is allowed on them.
 	CustomKeys []string `json:"custom_keys"`
 	// SystemKeys are the platform-recorded attributes that may be filtered on.
-	// Keys that carry tool content are withheld here because a search refuses
-	// them.
+	// Keys that carry tool content, and keys that identify a person, are
+	// withheld here because a search refuses them: one person's calls are
+	// narrowed to with user_reference, which records the attribution read.
 	SystemKeys []string `json:"system_keys"`
 	Truncated  bool     `json:"truncated"`
 }
@@ -784,7 +835,11 @@ func splitAttributeKeys(keys []string) ([]string, []string) {
 			custom = append(custom, customAttributePrefix+suffix)
 			continue
 		}
-		if key == "" || isContentAttribute(key) {
+		// Content and identity keys are withheld rather than listed: a search
+		// refuses both, so offering one would advertise a filter that cannot be
+		// used, and listing the identity keys would suggest the audited person
+		// filter can be sidestepped.
+		if key == "" || isContentAttribute(key) || isIdentityAttribute(key) {
 			continue
 		}
 		system = append(system, key)

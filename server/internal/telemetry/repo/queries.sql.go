@@ -4164,16 +4164,21 @@ type ListToolUsageTracesParams struct {
 	ShadowServerNames  []string
 	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
-	HookSources        []string
-	ClientKeys         []string // Optional filter - lowercased MCP client names; "unattributed" selects calls with no reported client
-	AccountType        string   // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
-	Statuses           []string // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
-	Query              string
-	Filters            []AttributeFilter
-	SortOrder          string
-	CursorTimeUnixNano int64
-	CursorID           string
-	Limit              int
+	// CanonicalIdentityOrg, when set, folds the email user filter through the
+	// identity_map for that organization, so an identity produced by a folded
+	// list selects every linked address the person's calls are stored under.
+	// Empty keeps the literal comparison.
+	CanonicalIdentityOrg string
+	HookSources          []string
+	ClientKeys           []string // Optional filter - lowercased MCP client names; "unattributed" selects calls with no reported client
+	AccountType          string   // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
+	Statuses             []string // Optional trace-outcome filter: error, success, blocked, pending. Empty means all.
+	Query                string
+	Filters              []AttributeFilter
+	SortOrder            string
+	CursorTimeUnixNano   int64
+	CursorID             string
+	Limit                int
 }
 
 // ToolUsageSummary contains bounded chart-ready tool usage aggregates.
@@ -4559,6 +4564,39 @@ func toolUsageTraceTargetFilter(arg ListToolUsageTracesParams) squirrel.Sqlizer 
 	return targetFilters
 }
 
+// toolUsageTraceUserFilter narrows normalized traces to the named identities.
+// Selectors are OR-ed, and each is matched together with the user kind it is
+// recorded under so an email can never match an id-keyed row.
+//
+// The email kind folds through the identity map when CanonicalIdentityOrg is
+// set, on both sides of the comparison. Without the fold this filter is a
+// literal user_key comparison, while the lists that hand callers an identity to
+// filter by (ListMCPUsageUsers, the attribute metrics summaries) fold theirs —
+// so a person whose calls are stored under a linked alias would be selected by
+// an address that appears on none of their rows and the filter would match
+// nothing, or only the part of their history spelled that one way. Folding here
+// keeps a filter consistent with the list that produced its identity.
+//
+// Ids never fold: the identity map is email-keyed and cannot resolve one.
+func toolUsageTraceUserFilter(arg ListToolUsageTracesParams) squirrel.Sqlizer {
+	if len(arg.UserFilters) == 0 {
+		return nil
+	}
+	orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+	userFilters := squirrel.Or{}
+	for _, filter := range arg.UserFilters {
+		key := squirrel.Sqlizer(squirrel.Eq{"user_key": filter.Key})
+		if orgLit != "" && filter.Kind == toolUsageUserKindEmail {
+			key = canonicalEmailPredicate(orgLit, "user_key", []string{filter.Key})
+		}
+		userFilters = append(userFilters, squirrel.And{
+			squirrel.Eq{"user_kind": filter.Kind},
+			key,
+		})
+	}
+	return userFilters
+}
+
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTracesParams) ([]ToolUsageTraceSummary, error) {
 	cteSQL, cteArgs, err := toolUsageTraceRowsCTE(arg)
@@ -4617,15 +4655,8 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 	// way.
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 
-	if len(arg.UserFilters) > 0 {
-		userFilters := squirrel.Or{}
-		for _, filter := range arg.UserFilters {
-			userFilters = append(userFilters, squirrel.And{
-				squirrel.Eq{"user_kind": filter.Kind},
-				squirrel.Eq{"user_key": filter.Key},
-			})
-		}
-		sb = sb.Where(userFilters)
+	if userFilter := toolUsageTraceUserFilter(arg); userFilter != nil {
+		sb = sb.Where(userFilter)
 	}
 
 	// http.response.status_code filters are applied here, against the aggregated
@@ -4660,6 +4691,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 	}
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // validated by service layer
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 
 	query, queryArgs, err := sb.ToSql()
 	if err != nil {
@@ -6286,16 +6318,19 @@ func toolUsageRawNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []a
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
-		HookSources:        nil,
-		ClientKeys:         nil,
-		AccountType:        "",
-		Statuses:           nil,
-		Query:              arg.Query,
-		Filters:            arg.Filters,
-		SortOrder:          "",
-		CursorTimeUnixNano: 0,
-		CursorID:           "",
-		Limit:              0,
+		// The CTE this builds carries no user filter, so there is nothing to
+		// fold; the summary path applies its own identity handling.
+		CanonicalIdentityOrg: "",
+		HookSources:          nil,
+		ClientKeys:           nil,
+		AccountType:          "",
+		Statuses:             nil,
+		Query:                arg.Query,
+		Filters:              arg.Filters,
+		SortOrder:            "",
+		CursorTimeUnixNano:   0,
+		CursorID:             "",
+		Limit:                0,
 		// Every other narrowing stays with toolUsageFilteredSelect, which
 		// applies it to the projection below. Passing it twice would filter the
 		// same rows in two places and drift the moment one changes.

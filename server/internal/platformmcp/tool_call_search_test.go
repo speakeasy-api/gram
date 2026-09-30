@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -38,6 +39,10 @@ func (s stubDiagnosticsTelemetry) GetActiveCounts(context.Context, telemetryrepo
 
 func (s stubDiagnosticsTelemetry) GetTopServers(context.Context, telemetryrepo.GetTopServersParams) ([]telemetryrepo.TopServer, error) {
 	return nil, nil
+}
+
+func (s stubDiagnosticsTelemetry) GetUnifiedActiveServerCount(context.Context, telemetryrepo.GetTopServersParams) (uint64, error) {
+	return 0, nil
 }
 
 func (s stubDiagnosticsTelemetry) GetSkillsSummary(context.Context, telemetryrepo.GetSkillsSummaryParams) ([]telemetryrepo.SkillSummaryRow, error) {
@@ -96,6 +101,36 @@ func (a *recordingDrilldownAuditor) RecordUserMCPStatusRead(context.Context, Pri
 func (a *recordingDrilldownAuditor) RecordUsageAttributionRead(_ context.Context, _ Principal, projectID, targetKind, target, maskedIdentity, window string) error {
 	a.attributions = append(a.attributions, strings.Join([]string{projectID, targetKind, target, maskedIdentity, window}, "|"))
 	return nil
+}
+
+// failingDrilldownAuditor stands for an audit sink that cannot record, which
+// must refuse the read rather than let it proceed unrecorded.
+type failingDrilldownAuditor struct {
+	calls int
+}
+
+var errAuditSinkUnavailable = errors.New("audit sink unavailable")
+
+func (a *failingDrilldownAuditor) RecordUserMCPStatusRead(context.Context, Principal, string, string, string, string) error {
+	return errAuditSinkUnavailable
+}
+
+func (a *failingDrilldownAuditor) RecordUsageAttributionRead(context.Context, Principal, string, string, string, string, string) error {
+	a.calls++
+	return errAuditSinkUnavailable
+}
+
+// stubCanonicalIdentityGate puts one organization in the identity fold, the way
+// the telemetry service's rollout flag does.
+type stubCanonicalIdentityGate struct {
+	orgID string
+}
+
+func (g stubCanonicalIdentityGate) CanonicalOrgFor(_ context.Context, orgID string) string {
+	if orgID == g.orgID {
+		return orgID
+	}
+	return ""
 }
 
 var toolCallSearchTestNow = time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
@@ -488,6 +523,121 @@ func TestListAttributeKeys_SplitsCustomFromFilterableSystemKeys(t *testing.T) {
 
 	_, err = service.ListAttributeKeys(t.Context(), testPrincipal(), ListAttributeKeysInput{ProjectID: ""})
 	require.ErrorIs(t, err, ErrToolCallSearchInvalid)
+}
+
+// TestSearchToolCalls_RefusesIdentityAttributesBeforeAnyRead pins that
+// user_reference is the only way to narrow to one person, because it is the only
+// way that records the attribution read. An identity attribute would reach the
+// same rows through an ordinary predicate, so it is refused before the search
+// runs — and refused for the same request the audited path would refuse, rather
+// than succeeding where that path fails closed.
+func TestSearchToolCalls_RefusesIdentityAttributesBeforeAnyRead(t *testing.T) {
+	t.Parallel()
+
+	reader := &recordingToolCallSearchReader{rows: []telemetryrepo.ToolUsageTraceSummary{
+		toolCallSearchRow("row-1", toolCallSearchTestNow.Add(-time.Minute), "email", "person@example.test", 200),
+	}}
+	auditor := &failingDrilldownAuditor{}
+	service := newToolCallSearchService(t, reader, auditor)
+	principal := testPrincipal()
+
+	// The platform's own identity columns, the paths that reach them without
+	// being materialized, and both operators that can name a value.
+	for _, filter := range []ToolCallAttributeFilter{
+		{Key: "user.email", Op: "eq", Values: []string{"person@example.test"}},
+		{Key: "user.email", Op: "in", Values: []string{"person@example.test", "other@example.test"}},
+		{Key: "user.email", Op: "not_eq", Values: []string{"person@example.test"}},
+		{Key: "user.email", Op: "exists"},
+		{Key: "user.id", Op: "eq", Values: []string{"user-1"}},
+		{Key: "gram.external_user.id", Op: "eq", Values: []string{"ext-1"}},
+		{Key: "gram.litellm.user_email", Op: "eq", Values: []string{"person@example.test"}},
+		{Key: "gram.actor.username", Op: "eq", Values: []string{"person"}},
+	} {
+		_, err := service.SearchToolCalls(t.Context(), principal, SearchToolCallsInput{
+			ProjectID:  toolCallSearchTestProject,
+			Attributes: []ToolCallAttributeFilter{filter},
+		})
+		require.ErrorIs(t, err, ErrToolCallSearchInvalid, filter.Key+" "+filter.Op)
+		require.ErrorContains(t, err, "user_reference", filter.Key+" "+filter.Op)
+	}
+	require.Zero(t, reader.calls, "a refused identity filter must not reach the tool-call read")
+	require.Zero(t, auditor.calls, "the refusal happens before anything is recorded")
+
+	// The audited door, for the same person, with the same auditor: it refuses
+	// too, and reads nothing. This is the comparison the attribute path was
+	// bypassing.
+	reference, err := service.references.EncodeScoped(principal, subjectKindUser, toolCallSearchUserScope(toolCallSearchTestProject), FormatSubjectIdentity(SubjectIdentityEmail, "person@example.test"), toolCallSearchTestNow)
+	require.NoError(t, err)
+	_, err = service.SearchToolCalls(t.Context(), principal, SearchToolCallsInput{ProjectID: toolCallSearchTestProject, UserReference: reference})
+	require.ErrorIs(t, err, errAuditSinkUnavailable)
+	require.Equal(t, 1, auditor.calls)
+	require.Zero(t, reader.calls, "an attribution read that cannot be recorded must not be served")
+
+	// A project's own custom attribute keeps every operator: it is the project's
+	// data, not the platform's identity model.
+	_, err = service.SearchToolCalls(t.Context(), principal, SearchToolCallsInput{
+		ProjectID:  toolCallSearchTestProject,
+		Attributes: []ToolCallAttributeFilter{{Key: "@requester_email", Op: "eq", Values: []string{"person@example.test"}}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, reader.calls)
+}
+
+// TestListAttributeKeys_WithholdsIdentityKeys pins that key discovery never
+// offers a filter the search refuses, so an agent is not led to build an
+// unaudited identity search and told it is malformed only afterwards.
+func TestListAttributeKeys_WithholdsIdentityKeys(t *testing.T) {
+	t.Parallel()
+
+	reader := &recordingToolCallSearchReader{keys: []string{
+		"user.email",
+		"user.id",
+		"gram.external_user.id",
+		"gram.litellm.user_email",
+		"gram.hook.source",
+		"app.region",
+	}}
+	service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
+
+	output, err := service.ListAttributeKeys(t.Context(), testPrincipal(), ListAttributeKeysInput{ProjectID: toolCallSearchTestProject})
+	require.NoError(t, err)
+	require.Equal(t, []string{"gram.hook.source"}, output.SystemKeys)
+	require.Equal(t, []string{"@region"}, output.CustomKeys)
+}
+
+// TestSearchToolCalls_FoldsThePersonReferenceLikeItsProducer pins that a person
+// filter asks for the same identity folding the lists that mint a reference
+// apply. list_mcp_usage_users can report a canonical directory address for calls
+// stored under a linked alias, so without the fold the advertised reference
+// would select rows whose user_key never carries that address — none of them, or
+// only the part of the person's history spelled that one way.
+func TestSearchToolCalls_FoldsThePersonReferenceLikeItsProducer(t *testing.T) {
+	t.Parallel()
+
+	reader := &recordingToolCallSearchReader{}
+	service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
+	principal := testPrincipal()
+	service = service.WithCanonicalIdentityGate(stubCanonicalIdentityGate{orgID: principal.OrganizationID})
+
+	// A canonical address minted the way list_mcp_usage_users mints one, for a
+	// person whose calls are recorded under an alias.
+	reference, err := service.references.EncodeScoped(principal, subjectKindUser, toolCallSearchUserScope(toolCallSearchTestProject), FormatSubjectIdentity(SubjectIdentityEmail, "work@example.test"), toolCallSearchTestNow)
+	require.NoError(t, err)
+
+	_, err = service.SearchToolCalls(t.Context(), principal, SearchToolCallsInput{ProjectID: toolCallSearchTestProject, UserReference: reference})
+	require.NoError(t, err)
+	require.Equal(t, []telemetryrepo.ToolUsageUserFilter{{Kind: "email", Key: "work@example.test"}}, reader.traceParams.UserFilters)
+	require.Equal(t, principal.OrganizationID, reader.traceParams.CanonicalIdentityOrg,
+		"the trace filter must fold through the same identity map the reference's producer folded through")
+
+	// An organization outside the rollout keeps the literal comparison, exactly
+	// as its producer does.
+	outside := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{}).WithCanonicalIdentityGate(stubCanonicalIdentityGate{orgID: "another-organization"})
+	outsideReference, err := outside.references.EncodeScoped(principal, subjectKindUser, toolCallSearchUserScope(toolCallSearchTestProject), FormatSubjectIdentity(SubjectIdentityEmail, "work@example.test"), toolCallSearchTestNow)
+	require.NoError(t, err)
+	_, err = outside.SearchToolCalls(t.Context(), principal, SearchToolCallsInput{ProjectID: toolCallSearchTestProject, UserReference: outsideReference})
+	require.NoError(t, err)
+	require.Empty(t, reader.traceParams.CanonicalIdentityOrg)
 }
 
 // TestToolLogsTargets_RemoteServerWithoutToolsetSlug pins that a configured
