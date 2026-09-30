@@ -927,3 +927,177 @@ WHERE id = @id;
 
 -- name: RejectOrganizationEntitlementsFixture :exec
 ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (feature_name = 'automatic-role-distribution') NOT VALID;
+
+-- name: AdminGetMcpServerAuth :one
+-- The server describeMcpServerHealth reports on, keyed on the mcp_servers id or,
+-- for a toolset-only server, the toolset id. A toolset-backed wrapper takes its
+-- issuer from its own row, not its toolset's, matching how the MCP endpoint
+-- resolves it; the legacy OAuth columns live on the toolset only.
+-- toolset_wrapper_count counts live wrappers of the toolset, so the caller can
+-- drop a toolset slug that would also select another wrapper's calls.
+SELECT
+    m.id,
+    COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name,
+    FALSE AS toolset_only,
+    m.toolset_id,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    m.visibility,
+    m.created_at,
+    m.user_session_issuer_id,
+    t.external_oauth_server_id,
+    t.oauth_proxy_server_id,
+    COALESCE(m.slug, (
+        SELECT e.slug FROM mcp_endpoints e
+        WHERE e.mcp_server_id = m.id AND e.deleted IS FALSE
+        ORDER BY e.created_at, e.id
+        LIMIT 1
+    ), t.mcp_slug, '')::text AS url_slug,
+    COALESCE(t.slug, '')::text AS toolset_slug,
+    (
+        SELECT count(*) FROM mcp_servers w
+        WHERE w.toolset_id = m.toolset_id AND w.project_id = m.project_id AND w.deleted IS FALSE
+    )::bigint AS toolset_wrapper_count
+FROM mcp_servers m
+LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+WHERE m.id = @id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+UNION ALL
+SELECT
+    t.id,
+    t.name,
+    TRUE AS toolset_only,
+    t.id AS toolset_id,
+    NULL::uuid AS remote_mcp_server_id,
+    NULL::uuid AS tunneled_mcp_server_id,
+    CASE WHEN t.mcp_is_public THEN 'public' ELSE 'private' END AS visibility,
+    t.created_at,
+    t.user_session_issuer_id,
+    t.external_oauth_server_id,
+    t.oauth_proxy_server_id,
+    COALESCE(t.mcp_slug, '')::text AS url_slug,
+    t.slug AS toolset_slug,
+    0::bigint AS toolset_wrapper_count
+FROM toolsets t
+WHERE t.id = @id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND NOT EXISTS (SELECT 1 FROM mcp_servers m
+                   WHERE m.toolset_id = t.id AND m.deleted IS FALSE);
+
+-- name: AdminGetUserSessionIssuer :one
+-- The issuer a server in the project points at. It may be attached to the
+-- project, the organization or the platform, so it is reached through the
+-- server rather than scoped by project here.
+SELECT
+    i.id,
+    i.slug,
+    i.classification,
+    i.authn_challenge_mode,
+    (EXTRACT(EPOCH FROM i.session_duration) / 3600)::bigint AS session_duration_hours,
+    i.attachment_scope,
+    i.client_id_metadata_admission_mode,
+    i.use_authentication_host,
+    i.trusted_remote_session_issuer_id,
+    i.trusted_remote_session_client_id,
+    i.created_at
+FROM user_session_issuers i
+WHERE i.id = @id
+  AND i.deleted IS FALSE;
+
+-- name: AdminListOtherServersUsingIssuer :many
+-- Live servers in the project, other than the one described, that share the
+-- issuer: mcp_servers rows and toolset-only toolsets.
+SELECT m.id, COALESCE(m.name, t.name, m.slug, m.id::text)::text AS name
+FROM mcp_servers m
+LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
+WHERE m.project_id = @project_id
+  AND m.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND m.id <> @exclude_id
+  AND m.deleted IS FALSE
+UNION ALL
+SELECT t.id, t.name
+FROM toolsets t
+WHERE t.project_id = @project_id
+  AND t.user_session_issuer_id = @user_session_issuer_id
+  AND t.id <> @exclude_id
+  AND t.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND NOT EXISTS (SELECT 1 FROM mcp_servers w
+                   WHERE w.toolset_id = t.id AND w.deleted IS FALSE)
+ORDER BY name, id;
+
+-- name: AdminUserSessionStats :one
+-- A refresh soft-deletes a session row and inserts a new one, so
+-- last_issued_at includes refreshes.
+SELECT
+    count(DISTINCT subject_urn) FILTER (WHERE subject_urn LIKE 'user:%')::bigint AS distinct_subjects_ever,
+    count(DISTINCT subject_urn) FILTER (WHERE subject_urn LIKE 'user:%' AND created_at >= @window_start)::bigint AS distinct_subjects_in_window,
+    min(created_at)::timestamptz AS first_issued_at,
+    max(created_at)::timestamptz AS last_issued_at,
+    count(*) FILTER (WHERE deleted IS FALSE AND refresh_expires_at > clock_timestamp())::bigint AS live
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id;
+
+-- name: AdminListIssuerRemoteSessionClients :many
+-- Live remote session clients attached to the issuer, with their upstream
+-- issuer. Only the columns the health report exposes: no secrets, JWKS bodies
+-- or error text.
+SELECT
+    c.id,
+    (c.client_id_metadata_uri IS NOT NULL)::boolean AS is_cimd,
+    (c.client_id_issued_at IS NOT NULL)::boolean AS is_dcr,
+    c.token_endpoint_auth_method,
+    c.scope,
+    c.grant_types,
+    (c.identity_provider_connection_id IS NOT NULL)::boolean AS has_identity_provider_connection,
+    c.attachment_scope,
+    c.upstream_rejected_at,
+    r.id AS issuer_id,
+    r.slug AS issuer_slug,
+    r.name AS issuer_name,
+    r.issuer AS issuer_url,
+    r.attachment_scope AS issuer_attachment_scope,
+    (r.tunneled_mcp_server_id IS NOT NULL)::boolean AS issuer_tunneled,
+    r.oidc AS issuer_oidc,
+    r.passthrough AS issuer_passthrough,
+    r.code_challenge_methods_supported AS issuer_code_challenge_methods_supported,
+    r.client_id_metadata_document_supported AS issuer_cimd_supported,
+    r.scope_override AS issuer_scope_override,
+    r.metadata_fetched_at AS issuer_metadata_fetched_at,
+    r.metadata_last_error_at AS issuer_metadata_last_error_at,
+    r.jwks_last_error_at AS issuer_jwks_last_error_at
+FROM remote_session_client_user_session_issuers a
+JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+JOIN remote_session_issuers r ON r.id = c.remote_session_issuer_id AND r.deleted IS FALSE
+WHERE a.user_session_issuer_id = @user_session_issuer_id
+ORDER BY c.created_at, c.id;
+
+-- name: AdminRemoteSessionStats :many
+-- Per client: distinct users with a live upstream session, fresh
+-- authorizations beyond each session's first, and the first link.
+SELECT
+    remote_session_client_id,
+    count(DISTINCT subject_urn) FILTER (WHERE deleted IS FALSE)::bigint AS linked_subjects,
+    COALESCE(sum(grant_generation - 1), 0)::bigint AS reauthorizations,
+    min(created_at)::timestamptz AS first_linked_at
+FROM remote_sessions
+WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+  AND user_session_issuer_id = @user_session_issuer_id
+GROUP BY remote_session_client_id;
+
+-- name: AdminRemoteSessionValidationCounts :many
+-- Live sessions per client and last validation status. Sessions never
+-- validated have a NULL status and are left out.
+SELECT
+    remote_session_client_id,
+    validation_status::text AS validation_status,
+    count(*)::bigint AS sessions
+FROM remote_sessions
+WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND deleted IS FALSE
+  AND validation_status IS NOT NULL
+GROUP BY remote_session_client_id, validation_status;
