@@ -119,6 +119,10 @@ interval exactly. It uses finer tiers for partial edges. A 90-day daily chart ca
 use daily interiors, hourly edges and minute tails; a seven-minute interval uses
 minute rows. Requests never silently change resolution. UTC days are the contract;
 these tiers do not represent arbitrary local-time calendar days.
+Serving sort keys put time before series ID, after the fixed tenant/descriptor
+prefix. This favors broad-series range queries and exact boundary pruning. The
+implementation uses bounded hash aggregation rather than relying on an in-order
+aggregation optimization that the attribute-grouped query plan does not provide.
 
 Every read has a ten-second end-to-end deadline, including waiting for one of four
 process-wide read slots and all discovery/catalogue phases. Discovery is bounded
@@ -254,6 +258,34 @@ profile. It reports 24h/five-minute, 30d/hourly and 90d/daily results with model
 environment filters, optional region grouping, one/four readers, and per-request
 scan totals across all four phases. Rejected workloads are reported explicitly.
 The SQL seed fixture documents the reproducible bounded/high-cardinality profiles.
+
+### Catalogue/tier benchmark, 2026-09-30
+
+ClickHouse 26.2.19.43, two CPUs / 4 GiB RAM, six million contributions per profile
+(three million per instrument), spread across 90 days. Warm caches, compacted
+tables, no simultaneous ingestion, 20 samples per case. Measurements include the
+complete Go query path and all discovery/catalogue phases. The bounded profile has
+at most 1,024 series per tenant/instrument; filters select up to 128 of them.
+Both filters (`model-0`, production environment) and eight-region grouping apply:
+
+| Range / interval | Counter p95, 1 / 4 readers | Histogram p95, 1 / 4 readers | Counter total scan |
+| ---------------- | -------------------------: | ---------------------------: | -----------------: |
+| 24h / 5 minutes  |                89 / 193 ms |                 125 / 185 ms |           39.9 MiB |
+| 30d / 1 hour     |             276 / 1,298 ms |                 217 / 939 ms |          167.0 MiB |
+| 90d / 1 day      |               166 / 425 ms |                 148 / 343 ms |           79.0 MiB |
+
+Peak server memory per phase for grouped bounded-profile queries was approximately
+23–28 MiB. Daily resolution scans less than 30 days at hourly resolution. Moving
+time ahead of series ID reduced the bounded-profile 90-day total scan from about
+700 MiB to 79 MiB, especially by avoiding broad monthly scans for partial edges.
+The point budget rejects high-cardinality 30-day hourly requests rather than
+silently changing resolution; those callers need coarser intervals or narrower
+filters. In the final time-first high-cardinality run, 90-day counter queries
+completed at 3.16 seconds p95 with one reader, but four readers hit the ten-second
+request deadline. That stress run did not pass its concurrency experiment; the
+catalogue and tiers do not make unconstrained dimensions inexpensive. The earlier
+series-first run also showed substantial catalogue cost. These short local
+experiments are directional evidence, not Cloud SLOs.
 
 The measurements below are historical evidence for the original wide minute-only
 layout, not acceptance results for the catalogue/tier implementation.

@@ -98,6 +98,6 @@ func TestSyntheticLoad(t *testing.T) {
 		}
 		var parts, rows, bytes uint64
 		require.NoError(t, conn.QueryRow(t.Context(), "SELECT count(), sum(rows), sum(bytes_on_disk) FROM system.parts WHERE active AND database=currentDatabase() AND table='product_metric_sums_1m'").Scan(&parts, &rows, &bytes))
-		t.Logf("after %s repetition: rollup_rows=%d parts=%d disk_bytes=%d (merges stopped)", repetition, rows, parts, bytes)
+		t.Logf("after %s repetition: rollup_rows=%d parts=%d disk_bytes=%d (minute merges stopped)", repetition, rows, parts, bytes)
 	}
 }
