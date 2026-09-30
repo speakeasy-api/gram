@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	_ Cache               = (*RedisCacheAdapter)(nil)
-	_ CompareAndSwapCache = (*RedisCacheAdapter)(nil)
+	_ Cache                               = (*RedisCacheAdapter)(nil)
+	_ CompareAndSwapCache                 = (*RedisCacheAdapter)(nil)
+	_ ExpiryPreservingCompareAndSwapCache = (*RedisCacheAdapter)(nil)
 )
 
 const mutateMaxRetries = 5
@@ -161,6 +162,32 @@ return 0
 	swapped, err := r.client.Eval(ctx, compareAndSwap, []string{key}, expectedRaw, replacementRaw, ttl.Milliseconds()).Int64()
 	if err != nil {
 		return false, fmt.Errorf("compare and swap %s: %w", key, err)
+	}
+	return swapped == 1, nil
+}
+
+// CompareAndSwapPreservingTTL keeps the original deadline in the same atomic
+// operation that checks state. A separate TTL/read/write could revive a key
+// consumed by another request or extend its lifetime across a delayed write.
+func (r *RedisCacheAdapter) CompareAndSwapPreservingTTL(ctx context.Context, key string, expected, replacement any) (bool, error) {
+	expectedRaw, err := r.cache.Marshal(expected)
+	if err != nil {
+		return false, fmt.Errorf("marshal expected value: %w", err)
+	}
+	replacementRaw, err := r.cache.Marshal(replacement)
+	if err != nil {
+		return false, fmt.Errorf("marshal replacement value: %w", err)
+	}
+	const compareAndSwap = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  redis.call("SET", KEYS[1], ARGV[2], "KEEPTTL")
+  return 1
+end
+return 0
+`
+	swapped, err := r.client.Eval(ctx, compareAndSwap, []string{key}, expectedRaw, replacementRaw).Int64()
+	if err != nil {
+		return false, fmt.Errorf("compare and swap preserving expiry %s: %w", key, err)
 	}
 	return swapped == 1, nil
 }

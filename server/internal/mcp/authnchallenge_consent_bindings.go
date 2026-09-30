@@ -52,6 +52,18 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 		return oops.E(oops.CodeForbidden, err, "consent authorizer is not eligible")
 	}
 	if r.PostForm.Get("action") == "agent_session_handoff" {
+		if !state.ConsentSessionRequired {
+			marked := state
+			marked.ConsentSessionRequired = true
+			swapped, err := s.authnChallengeCache.CompareAndSwapPreservingTTL(ctx, state, marked)
+			if err != nil {
+				return oops.E(oops.CodeUnavailable, err, "error requiring consent session confirmation")
+			}
+			if !swapped {
+				return oops.E(oops.CodeUnauthorized, nil, "consent state changed; retry authorization")
+			}
+			state = marked
+		}
 		return s.startConsentSessionHandoff(w, r, endpoint, state)
 	}
 	// Explicit confirmation selects the identity for this challenge. A stale
@@ -65,6 +77,9 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 		}
 		token = handoff.SessionToken
 	case errors.Is(err, redisCache.ErrCacheMiss):
+		if state.ConsentSessionRequired {
+			return oops.E(oops.CodeUnauthorized, nil, "confirm your Gram account again")
+		}
 		if cookie, err := r.Cookie(constants.SessionCookie); err == nil {
 			token = cookie.Value
 		}

@@ -131,6 +131,11 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	require.Error(t, err)
 	start, err := call("agent_session_handoff", false, nil)
 	require.NoError(t, err)
+	marked, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	require.True(t, marked.ConsentSessionRequired)
+	_, err = call("agent_connections", true, nil)
+	require.Error(t, err, "once confirmation starts, a local cookie must not bypass it")
 	var handoff struct {
 		URL string `json:"url"`
 	}
@@ -211,6 +216,28 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	require.True(t, strings.HasPrefix(completed.Header().Get("Location"), "https://mcp.example.com/mcp/"), "return to the challenged mint origin, not the dashboard origin")
 	_, err = confirm(http.MethodPost, handoff.URL, token, csrfMatch[1])
 	require.Error(t, err, "confirmation is single use")
+	// Expiring/evicting the shorter confirmation record must not silently
+	// restore ambient-cookie authentication for this still-live challenge.
+	require.NoError(t, ti.cacheAdapter.Delete(ctx, "consentSession:"+fx.stateID+":"))
+	_, err = call("agent_connections", true, nil)
+	require.Error(t, err, "missing confirmation cannot fall back to a valid local cookie")
+	_, err = call("agent_connections", false, nil)
+	require.Error(t, err)
+	required, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	require.True(t, required.ConsentSessionRequired)
+	// A new explicit handoff can recover without weakening the original marker.
+	renewed, err := call("agent_session_handoff", true, nil)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(renewed.Body.Bytes(), &handoff))
+	newPage, err := confirm(http.MethodGet, handoff.URL, token, "")
+	require.NoError(t, err)
+	newCSRF := regexp.MustCompile(`name="csrf_token" value="([^"]+)"`).FindStringSubmatch(newPage.Body.String())
+	require.Len(t, newCSRF, 2)
+	_, err = confirm(http.MethodPost, handoff.URL, token, newCSRF[1])
+	require.NoError(t, err)
+	_, err = call("agent_connections", false, nil)
+	require.NoError(t, err, "fresh confirmation restores the challenge-bound session")
 	// A completed handoff wins over both a stale custom-origin cookie and a
 	// valid cookie for a different Gram user.
 	for name, localCookie := range map[string]string{

@@ -142,6 +142,11 @@ type AuthnChallengeState struct {
 	// kept separate from the eventual credential subject so selecting an agent
 	// never makes the agent appear to have consented for itself.
 	AuthorizerUserID string `json:"authorizer_user_id,omitempty"`
+	// ConsentSessionRequired permanently disables ambient-cookie fallback once
+	// this challenge starts dashboard confirmation. It outlives the shorter
+	// confirmed-session reference, so expiry requires explicit reconfirmation.
+	ConsentSessionRequired bool `json:"consent_session_required,omitempty"`
+
 	// AuthorizerImpersonated preserves WorkOS support-session provenance across
 	// the redirect to consent. A nil value marks legacy or unresolved state and
 	// fails agent authorization closed; false is serialized after an ordinary

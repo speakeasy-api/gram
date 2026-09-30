@@ -58,8 +58,29 @@ func (s *Service) validateConsentSessionURLs() error {
 	return nil
 }
 
+// The cached mint origin can differ from the canonical dashboard origin. Check
+// the constructed return URL too; its state query is required, not URL config.
+func (s *Service) consentSessionReturnURL(endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (string, error) {
+	target, err := endpoint.ConsentURL(state.mintOriginOr(s.serverURL.String()), state.ID)
+	if err != nil {
+		return "", fmt.Errorf("build consent session return URL: %w", err)
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return "", fmt.Errorf("parse consent session return URL: %w", err)
+	}
+	u.RawQuery, u.ForceQuery = "", false
+	if err := validateConsentSessionURL(u); err != nil {
+		return "", oops.E(oops.CodeUnavailable, err, "account confirmation return URL is unavailable")
+	}
+	return target, nil
+}
+
 func (s *Service) startConsentSessionHandoff(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) error {
 	if err := s.validateConsentSessionURLs(); err != nil {
+		return err
+	}
+	if _, err := s.consentSessionReturnURL(endpoint, state); err != nil {
 		return err
 	}
 	if enabled, _, _ := s.agentAuthorizationRollout(r.Context(), endpoint.LogWith(s.logger), endpoint); !enabled {
@@ -129,6 +150,11 @@ func (s *Service) HandleConsentSessionHandoff(w http.ResponseWriter, r *http.Req
 	if err := endpoint.ValidateGlobalChallenge(r.Context(), s.db, state.Endpoint, state.UserSessionIssuerID); err != nil {
 		return oauthAuthorityError(err)
 	}
+	// Validate before consuming the ticket or persisting any session reference.
+	target, err := s.consentSessionReturnURL(endpoint, state)
+	if err != nil {
+		return err
+	}
 	if state.AgentAuthorizationTarget == nil || !state.AgentAuthorizationTarget.matches(endpoint) {
 		return oops.C(oops.CodeForbidden)
 	}
@@ -170,10 +196,6 @@ func (s *Service) HandleConsentSessionHandoff(w http.ResponseWriter, r *http.Req
 	}
 	if err := s.consentSessionCache.Store(r.Context(), consentSessionHandoff{ID: state.ID, ChallengeID: state.ID, CSRFToken: "", SessionToken: token}); err != nil {
 		return fmt.Errorf("store confirmed consent session: %w", err)
-	}
-	target, err := endpoint.ConsentURL(state.mintOriginOr(s.serverURL.String()), state.ID)
-	if err != nil {
-		return err
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
 	return nil
