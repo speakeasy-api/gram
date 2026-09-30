@@ -20,21 +20,21 @@ const (
 type WriteOperation string
 
 const (
-	OperationSetOrganizationFeature    WriteOperation = "set_organization_feature"
-	OperationSetOrganizationOnboarding WriteOperation = "set_organization_onboarding"
-	OperationSetChatAnalysisSettings   WriteOperation = "set_organization_chat_analysis_settings"
-	OperationExtendOrganizationTrial   WriteOperation = "extend_organization_trial"
-	OperationEnableOrganization        WriteOperation = "enable_organization"
-	OperationDisableOrganization       WriteOperation = "disable_organization"
-	OperationCreateGlobalIssuer        WriteOperation = "create_global_issuer"
-	OperationUpdateGlobalIssuer        WriteOperation = "update_global_issuer"
-	OperationUpdateSupportMatrix       WriteOperation = "update_support_matrix"
+	OperationSetOrganizationFeature               WriteOperation = "set_organization_feature"
+	OperationAssignOrganizationOnboardingPlaybook WriteOperation = "assign_organization_onboarding_playbook"
+	OperationSetChatAnalysisSettings              WriteOperation = "set_organization_chat_analysis_settings"
+	OperationExtendOrganizationTrial              WriteOperation = "extend_organization_trial"
+	OperationEnableOrganization                   WriteOperation = "enable_organization"
+	OperationDisableOrganization                  WriteOperation = "disable_organization"
+	OperationCreateGlobalIssuer                   WriteOperation = "create_global_issuer"
+	OperationUpdateGlobalIssuer                   WriteOperation = "update_global_issuer"
+	OperationUpdateSupportMatrix                  WriteOperation = "update_support_matrix"
 )
 
 // AllWriteOperations is the complete allowlist, in a stable order.
 var AllWriteOperations = []WriteOperation{
 	OperationSetOrganizationFeature,
-	OperationSetOrganizationOnboarding,
+	OperationAssignOrganizationOnboardingPlaybook,
 	OperationSetChatAnalysisSettings,
 	OperationExtendOrganizationTrial,
 	OperationEnableOrganization,

@@ -38,12 +38,12 @@ func TestWriteToolsDispatchByStoredOperation(t *testing.T) {
 	feature, _, err := f.store.Create(t.Context(), f.owner, featureProposal(f.orgA, "dispatch-feature", true), time.Now())
 	require.NoError(t, err)
 	onboardingInput := featureProposal(f.orgA, "dispatch-onboarding", true)
-	onboardingInput.Operation = OperationSetOrganizationOnboarding
+	onboardingInput.Operation = OperationAssignOrganizationOnboardingPlaybook
 	onboarding, _, err := f.store.Create(t.Context(), f.owner, onboardingInput, time.Now())
 	require.NoError(t, err)
 
-	both := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true, OperationSetOrganizationOnboarding: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	featureOnly := newWriteTools(f.store, both, "", map[WriteOperation]operationWriter{OperationSetOrganizationFeature: stubWriter{}})                       //nolint:exhaustive // Only selected operations are implemented by this test.
+	both := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true, OperationAssignOrganizationOnboardingPlaybook: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
+	featureOnly := newWriteTools(f.store, both, "", map[WriteOperation]operationWriter{OperationSetOrganizationFeature: stubWriter{}})                                  //nolint:exhaustive // Only selected operations are implemented by this test.
 	out, err := featureOnly.status(ctx, ProposalIDInput{ProposalID: feature.ID.String()})
 	require.NoError(t, err)
 	require.Equal(t, string(OperationSetOrganizationFeature), out.Operation)
@@ -53,8 +53,8 @@ func TestWriteToolsDispatchByStoredOperation(t *testing.T) {
 	require.ErrorIs(t, err, ErrProposalNotFound)
 
 	// The switch checked is the one for the stored operation, not any enabled one.
-	onboardingOnly := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationOnboarding: true}}                                                              //nolint:exhaustive // Only selected write operations are enabled by this test.
-	tools := newWriteTools(f.store, onboardingOnly, "", map[WriteOperation]operationWriter{OperationSetOrganizationFeature: stubWriter{}, OperationSetOrganizationOnboarding: stubWriter{}}) //nolint:exhaustive // Only selected operations are implemented by this test.
+	onboardingOnly := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationAssignOrganizationOnboardingPlaybook: true}}                                                              //nolint:exhaustive // Only selected write operations are enabled by this test.
+	tools := newWriteTools(f.store, onboardingOnly, "", map[WriteOperation]operationWriter{OperationSetOrganizationFeature: stubWriter{}, OperationAssignOrganizationOnboardingPlaybook: stubWriter{}}) //nolint:exhaustive // Only selected operations are implemented by this test.
 	_, err = tools.status(ctx, ProposalIDInput{ProposalID: feature.ID.String()})
 	require.ErrorIs(t, err, ErrWriteDisabled)
 	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: feature.ID.String()})
@@ -73,7 +73,7 @@ func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 
 	require.NoError(t, AttachWrites(&Runtime{}, oauth, &productfeatures.Client{}, WriteConfig{}))
 	require.Contains(t, oauth.Approval.operations, OperationSetOrganizationFeature)
-	require.Contains(t, oauth.Approval.operations, OperationSetOrganizationOnboarding)
+	require.Contains(t, oauth.Approval.operations, OperationAssignOrganizationOnboardingPlaybook)
 	require.Contains(t, oauth.Approval.operations, OperationExtendOrganizationTrial)
 }
 

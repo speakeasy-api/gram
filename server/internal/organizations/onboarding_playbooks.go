@@ -561,6 +561,11 @@ func rejectInapplicable(ctx context.Context, queries *repo.Queries, organization
 	if err != nil {
 		return err
 	}
+	return refuseInapplicable(applicability)
+}
+
+// refuseInapplicable names every step the recorded stack does not support.
+func refuseInapplicable(applicability []*admingen.AdminOnboardingStepApplicability) error {
 	problems := make([]string, 0)
 	for _, step := range applicability {
 		if !step.Applies {
@@ -571,6 +576,54 @@ func rejectInapplicable(ctx context.Context, queries *repo.Queries, organization
 		return oops.E(oops.CodeBadRequest, nil, "the stack does not support: %s", strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+// CheckOrganizationOnboardingPlaybook reads a playbook the organization could
+// be assigned and how each of its steps fares against the recorded stack. A
+// playbook that does not exist, or is another organization's custom one, is a
+// bad request, the way assigning it would be.
+func CheckOrganizationOnboardingPlaybook(ctx context.Context, db repo.DBTX, organizationID string, playbookID uuid.UUID) (*admingen.AdminOnboardingPlaybook, []*admingen.AdminOnboardingStepApplicability, error) {
+	queries := repo.New(db)
+	playbook, err := loadPlaybook(ctx, queries, playbookID)
+	if err != nil {
+		if isNotFound(err) {
+			return nil, nil, oops.E(oops.CodeBadRequest, nil, "unknown playbook")
+		}
+		return nil, nil, err
+	}
+	if playbook.OrganizationID != nil && *playbook.OrganizationID != organizationID {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "that playbook belongs to another organization")
+	}
+	slugs := make([]string, 0, len(playbook.Steps))
+	for _, step := range playbook.Steps {
+		slugs = append(slugs, step.Slug)
+	}
+	applicability, err := stepApplicability(ctx, queries, organizationID, slugs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return playbook, applicability, nil
+}
+
+// DefaultOnboardingPlaybookID resolves a use case's default playbook, the one
+// the onboarding survey assigns.
+func DefaultOnboardingPlaybookID(ctx context.Context, db repo.DBTX, useCaseSlug string) (uuid.UUID, error) {
+	queries := repo.New(db)
+	useCase, err := queries.GetOnboardingUseCaseBySlug(ctx, useCaseSlug)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, oops.E(oops.CodeBadRequest, nil, "unknown onboarding use case")
+		}
+		return uuid.Nil, fmt.Errorf("load onboarding use case: %w", err)
+	}
+	playbook, err := queries.GetOnboardingDefaultPlaybook(ctx, conv.ToNullUUID(useCase.ID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, oops.E(oops.CodeBadRequest, nil, "use case %q has no default playbook yet", useCaseSlug)
+		}
+		return uuid.Nil, fmt.Errorf("load default onboarding playbook: %w", err)
+	}
+	return playbook.ID, nil
 }
 
 // LoadOrganizationOnboardingPlaybook reads the playbook assigned to an
@@ -631,6 +684,19 @@ func AssignOrganizationOnboardingPlaybook(ctx context.Context, db *pgxpool.Pool,
 		return nil, fmt.Errorf("begin assign onboarding playbook: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	after, err := AssignOrganizationOnboardingPlaybookTx(ctx, tx, logger, organizationID, playbookID, actor, displayName)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit assign onboarding playbook: %w", err)
+	}
+	return after, nil
+}
+
+// AssignOrganizationOnboardingPlaybookTx makes the assignment and its audit
+// record inside the caller's transaction. The caller owns commit.
+func AssignOrganizationOnboardingPlaybookTx(ctx context.Context, tx pgx.Tx, logger *audit.Logger, organizationID string, playbookID *uuid.UUID, actor urn.Principal, displayName *string) (*admingen.AdminOrganizationOnboardingPlaybook, error) {
 	queries := repo.New(tx)
 	org, err := queries.LockOrganizationForSetupTaskUpdate(ctx, organizationID)
 	if err != nil {
@@ -645,21 +711,11 @@ func AssignOrganizationOnboardingPlaybook(ctx context.Context, db *pgxpool.Pool,
 	}
 	var assigned uuid.NullUUID
 	if playbookID != nil {
-		playbook, err := loadPlaybook(ctx, queries, *playbookID)
+		_, applicability, err := CheckOrganizationOnboardingPlaybook(ctx, tx, organizationID, *playbookID)
 		if err != nil {
-			if isNotFound(err) {
-				return nil, oops.E(oops.CodeBadRequest, nil, "unknown playbook")
-			}
 			return nil, err
 		}
-		if playbook.OrganizationID != nil && *playbook.OrganizationID != organizationID {
-			return nil, oops.E(oops.CodeBadRequest, nil, "that playbook belongs to another organization")
-		}
-		slugs := make([]string, 0, len(playbook.Steps))
-		for _, step := range playbook.Steps {
-			slugs = append(slugs, step.Slug)
-		}
-		if err := rejectInapplicable(ctx, queries, organizationID, slugs); err != nil {
+		if err := refuseInapplicable(applicability); err != nil {
 			return nil, err
 		}
 		assigned = uuid.NullUUID{UUID: *playbookID, Valid: true}
@@ -677,9 +733,6 @@ func AssignOrganizationOnboardingPlaybook(ctx context.Context, db *pgxpool.Pool,
 		PlaybookSnapshotBefore: playbookSnapshot(before.Playbook), PlaybookSnapshotAfter: playbookSnapshot(after.Playbook),
 	}); err != nil {
 		return nil, fmt.Errorf("audit onboarding playbook: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit assign onboarding playbook: %w", err)
 	}
 	return after, nil
 }
