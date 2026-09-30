@@ -286,6 +286,25 @@ describe("McpServerHealth", () => {
     expect(prompt).toContain("in the default project");
   });
 
+  it("drops the tail and searches login logs by issuer when there is no slug", async () => {
+    respond = (windowDays) => ({
+      ...withIssuer(windowDays),
+      correlation: { mcp_server_id: SERVER_ID },
+    });
+    await open();
+    await screen.findByRole("heading", { name: "crm" });
+
+    expect(screen.queryByRole("link", { name: /Tool call tail/ })).toBe(null);
+    const login = new URL(
+      screen
+        .getByRole("link", { name: /Login challenge logs/ })
+        .getAttribute("href")!,
+    );
+    expect(login.searchParams.get("query")).toBe(
+      '@gram.oauth.issuer:"https://login.example.test"',
+    );
+  });
+
   it("names a legacy auth mode when there is no issuer", async () => {
     respond = (windowDays) => ({
       server: { ...SERVER, source: "toolset_only", visibility: "public" },
