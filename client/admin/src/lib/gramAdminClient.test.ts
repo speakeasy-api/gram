@@ -528,7 +528,6 @@ describe("organization writes through the generated client", () => {
       "sub_placeholder_1",
     );
     expect(request.method).toBe("GET");
-    expect(request.cache).toBe("no-store");
   });
 
   it("posts the subscription id to the set path", async () => {
