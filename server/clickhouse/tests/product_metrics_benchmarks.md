@@ -1,5 +1,39 @@
 # Product metrics encoding evidence
 
+The encoding measurements below describe the attribute representation, not the
+current serving layout. Serving rollups are narrow series-ID tables. Full typed
+attributes live in raw contributions and the series catalogue.
+
+## Series catalogue and resolution tiers
+
+The raw table materializes a SHA-256 series fingerprint over tenant/project,
+descriptor (including instrumentation version and instrument), numeric kind, and
+all three canonical typed attribute arrays. Description and delivery IDs are not
+series identity. Producers sort and validate attributes before insertion.
+
+The catalogue retains full identity in its merge key, including the fingerprint,
+so conflicting canonical identities cannot replace each other. Queries validate
+active catalogue identities before filtering and reject missing/conflicting entries
+rather than silently dropping or combining measurements. No serving query uses
+`FINAL`. ID sets travel as native external tables, not interpolated SQL lists.
+
+Six narrow serving tables hold Counter and Histogram aggregates at one-minute,
+one-hour and UTC one-day resolutions. All six MVs consume raw insert blocks
+directly. Source replacement does not retract any tier's duplicate increments.
+The catalogue has a seventh idempotent min/max MV. MV writes are not atomic;
+ambiguous failures need retry and, if necessary, operator repair.
+
+The supported query horizon remains 90 days. Minute/raw TTLs are 90 days. Coarse
+tiers and catalogue metadata have a 91-day physical TTL guard so a bucket or its
+metadata cannot expire while it still overlaps the supported horizon. Queries
+never expose the guard day. Fine tiers answer partial coarse-bucket boundaries.
+
+Migration preserves existing minute delivery totals, derives hourly/daily totals
+from them, and reconstructs catalogue entries before discarding repeated attributes
+from serving rows. Pause writers throughout. Local rollback restores attributes
+from checked catalogue identities and preserves minute totals. Repair fixtures
+exercise all six target tables and catalogue recovery from retained raw data.
+
 ## Method
 
 `product_metrics_encoding.sql` is executable against a disposable database on

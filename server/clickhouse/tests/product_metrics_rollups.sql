@@ -4,6 +4,11 @@ SET async_insert = 0, materialized_views_ignore_errors = 0, insert_deduplicate =
 TRUNCATE TABLE product_metric_contributions;
 TRUNCATE TABLE product_metric_sums_1m;
 TRUNCATE TABLE product_metric_histograms_1m;
+TRUNCATE TABLE product_metric_sums_1h;
+TRUNCATE TABLE product_metric_sums_1d;
+TRUNCATE TABLE product_metric_histograms_1h;
+TRUNCATE TABLE product_metric_histograms_1d;
+TRUNCATE TABLE product_metric_series;
 SYSTEM STOP MERGES product_metric_contributions;
 SYSTEM STOP MERGES product_metric_sums_1m;
 SYSTEM STOP MERGES product_metric_histograms_1m;
@@ -87,22 +92,57 @@ CREATE TABLE product_metric_sums_rebuilt AS product_metric_sums_1m;
 CREATE TABLE product_metric_histograms_rebuilt AS product_metric_histograms_1m;
 INSERT INTO product_metric_sums_rebuilt
 SELECT organization_id, project_id, metric_name, toStartOfMinute(event_time) AS bucket,
-    scope_name, scope_version, unit, number_kind, resource_attributes, scope_attributes, point_attributes,
+    scope_name, scope_version, unit, number_kind, series_id,
     sum(toInt128(integer_value)), sum(floating_value), count()
 FROM product_metric_contributions FINAL WHERE instrument = 'counter' AND event_time >= now() - INTERVAL 90 DAY
 GROUP BY organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit,
-    number_kind, resource_attributes, scope_attributes, point_attributes;
+    number_kind, series_id;
 INSERT INTO product_metric_histograms_rebuilt
 SELECT organization_id, project_id, metric_name, toStartOfMinute(event_time) AS bucket,
-    scope_name, scope_version, unit, number_kind, resource_attributes, scope_attributes, point_attributes,
+    scope_name, scope_version, unit, number_kind, series_id,
     sum(toInt128(integer_value)), sum(floating_value), count(), min(integer_value), max(integer_value), min(floating_value), max(floating_value)
 FROM product_metric_contributions FINAL WHERE instrument = 'histogram' AND event_time >= now() - INTERVAL 90 DAY
 GROUP BY organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit,
-    number_kind, resource_attributes, scope_attributes, point_attributes;
+    number_kind, series_id;
 ALTER TABLE product_metric_sums_1m REPLACE PARTITION {repair_partition:UInt32} FROM product_metric_sums_rebuilt;
 ALTER TABLE product_metric_histograms_1m REPLACE PARTITION {repair_partition:UInt32} FROM product_metric_histograms_rebuilt;
 SELECT throwIf(toString(sum(integer_sum)) != '9223372036854775807' OR sum(contributions) != 1, 'manual counter repair failed') FROM product_metric_sums_1m WHERE metric_name = 'gram.synthetic.count';
 SELECT throwIf(sum(contributions) != 10 OR sum(floating_sum) != 19 OR sum(floating_sum)/sum(contributions) != 1.9, 'manual histogram repair failed') FROM product_metric_histograms_1m WHERE metric_name = 'gram.synthetic.duration';
+-- Every coarse tier is replaced from the repaired minute aggregates, without
+-- replaying observations through the live source or incrementing existing totals.
+DROP TABLE IF EXISTS product_metric_sums_hour_rebuilt;
+DROP TABLE IF EXISTS product_metric_sums_day_rebuilt;
+DROP TABLE IF EXISTS product_metric_histograms_hour_rebuilt;
+DROP TABLE IF EXISTS product_metric_histograms_day_rebuilt;
+CREATE TABLE product_metric_sums_hour_rebuilt AS product_metric_sums_1h;
+CREATE TABLE product_metric_sums_day_rebuilt AS product_metric_sums_1d;
+CREATE TABLE product_metric_histograms_hour_rebuilt AS product_metric_histograms_1h;
+CREATE TABLE product_metric_histograms_day_rebuilt AS product_metric_histograms_1d;
+INSERT INTO product_metric_sums_hour_rebuilt SELECT * REPLACE (toStartOfHour(bucket) AS bucket) FROM product_metric_sums_rebuilt;
+INSERT INTO product_metric_sums_day_rebuilt SELECT * REPLACE (toStartOfDay(bucket, 'UTC') AS bucket) FROM product_metric_sums_rebuilt;
+INSERT INTO product_metric_histograms_hour_rebuilt SELECT * REPLACE (toStartOfHour(bucket) AS bucket) FROM product_metric_histograms_rebuilt;
+INSERT INTO product_metric_histograms_day_rebuilt SELECT * REPLACE (toStartOfDay(bucket, 'UTC') AS bucket) FROM product_metric_histograms_rebuilt;
+ALTER TABLE product_metric_sums_1h REPLACE PARTITION {repair_partition:UInt32} FROM product_metric_sums_hour_rebuilt;
+ALTER TABLE product_metric_sums_1d REPLACE PARTITION {repair_partition:UInt32} FROM product_metric_sums_day_rebuilt;
+ALTER TABLE product_metric_histograms_1h REPLACE PARTITION {repair_partition:UInt32} FROM product_metric_histograms_hour_rebuilt;
+ALTER TABLE product_metric_histograms_1d REPLACE PARTITION {repair_partition:UInt32} FROM product_metric_histograms_day_rebuilt;
+SELECT throwIf(toString(sum(integer_sum)) != '9223372036854775807' OR sum(contributions) != 1, 'daily counter repair failed') FROM product_metric_sums_1d WHERE metric_name = 'gram.synthetic.count';
+SELECT throwIf(sum(contributions) != 10 OR sum(floating_sum) != 19 OR min(floating_min) != 1 OR max(floating_max) != 10, 'daily histogram repair failed') FROM product_metric_histograms_1d WHERE metric_name = 'gram.synthetic.duration';
+DROP TABLE product_metric_sums_hour_rebuilt;
+DROP TABLE product_metric_sums_day_rebuilt;
+DROP TABLE product_metric_histograms_hour_rebuilt;
+DROP TABLE product_metric_histograms_day_rebuilt;
+
+-- Simulate lost catalogue metadata, then restore identities without touching
+-- delivery-inclusive aggregates. Production repair uses isolated/swap targets.
+TRUNCATE TABLE product_metric_series;
+INSERT INTO product_metric_series
+SELECT organization_id, project_id, metric_name, scope_name, scope_version, unit, instrument, number_kind,
+    series_id, resource_attributes, scope_attributes, point_attributes, min(event_time), max(event_time)
+FROM product_metric_contributions FINAL
+GROUP BY organization_id, project_id, metric_name, scope_name, scope_version, unit, instrument, number_kind,
+    series_id, resource_attributes, scope_attributes, point_attributes;
+SELECT throwIf(uniqExact(series_id) != 8, 'catalogue rebuild lost typed identities') FROM product_metric_series WHERE metric_name = 'gram.synthetic.identity';
 DROP TABLE product_metric_sums_rebuilt;
 DROP TABLE product_metric_histograms_rebuilt;
 
