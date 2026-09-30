@@ -59,6 +59,9 @@ Demo seed: no dashboard data consumer, so use deterministic synthetic fixtures.
 2. Apply the ClickHouse migration with the existing infrastructure-owned database
    and application credentials. The writer needs INSERT on the source and MV
    targets; the repository needs SELECT on the targets. No marts grants change.
+   Keep writers paused throughout the raw engine-swap migration or rollback;
+   it copies retained rows and reattaches the incremental views without replaying
+   their increments. Keep consumption disabled during initial rollout.
 3. Register each producer's definitions at the streams composition root and in
    its publisher. The generic stack registers no production definitions. Unknown
    or conflicting descriptors are permanently invalid, not learned into a cache.
@@ -119,11 +122,43 @@ guarantee that every target equals every source row after ambiguous failures.
   data, or ten seconds. Up to 32 filter/group expressions bound query complexity,
   not producer dimensions or stored series. These are defensive execution budgets,
   not promised latency/scale acceptance criteria.
-- Raw contributions are retained seven days from ingestion. Rebuilds are limited
-  to that evidence window; older rebuilds require producer-owned facts. Replaying
-  contributions through the live source adds counts again. Rebuild into isolated
-  targets, compare scoped results, then replace affected rollup partitions through
-  an operator-controlled procedure. No automatic backfill is supplied.
+- Raw contributions and rollups are retained for 90 days from event-minute start.
+  Raw storage uses `ReplacingMergeTree(ingested_at)`, monthly UTC event-time
+  partitions, and the organization/project/scope-name/scope-version/contribution-ID
+  replacement key. Event-time partitioning keeps retries in the same partition.
+  `ingested_at` selects the latest delivery copy, not a measurement correction.
+  Background replacement is eventual and does not retract live MV increments.
+
+## Manual rollup repair
+
+Raw contributions provide evidence for an operator-run, out-of-band repair within
+the retained horizon. They do not provide automatic reconciliation. Producers must
+minimize duplicate publication and preserve immutable IDs, timestamps and payloads
+across retries and reprocessing; conflicting payloads across batches cannot be
+reliably repaired by picking a delivery copy.
+
+1. Select affected event-month partitions and a fixed retained-minute cutoff.
+   Pause and drain all contribution writers for the repair, including late arrivals
+   and retries, until replacement finishes. Coordinate readers if they require a
+   consistent view across both rollup tables; the replacements are not one atomic
+   transaction.
+2. Read retained raw contributions with explicit deduplication (`FINAL`) into
+   isolated aggregate targets using the live MVs' grouping and aggregate formulas.
+   Rebuild every retained row for each affected partition, across all tenants and
+   metrics: replacing a monthly partition with a tenant-only rebuild loses data.
+   Finish before the source evidence reaches its TTL boundary; expired evidence
+   requires producer-owned facts.
+3. Compare counts, sums, extrema and tenant/series coverage. Replace each affected
+   rollup partition from the isolated target, rather than appending repaired totals.
+   Handle partitions with no retained source rows explicitly. Never replay raw rows
+   into the live source, which adds increments again.
+4. Verify both rollup targets before resuming writers. Later deliveries, including
+   retries of repaired observations, remain duplicate-inclusive and may require
+   another repair. Keep recovery copies until validation completes.
+
+`server/clickhouse/tests/product_metrics_rollups.sql` demonstrates deduplicated
+counter/histogram rebuilding and partition replacement in a disposable database.
+It is a validation fixture, not a production repair command.
 
 ## Operational and analytical diagnostics
 
