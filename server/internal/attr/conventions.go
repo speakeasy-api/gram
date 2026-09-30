@@ -20,6 +20,7 @@ const (
 	RegistrySeedCreatedKey           = attribute.Key("gram.registry.seed.created")
 	RegistrySeedUpdatedKey           = attribute.Key("gram.registry.seed.updated")
 	RegistrySeedUnchangedKey         = attribute.Key("gram.registry.seed.unchanged")
+	RegistrySeedDryRunKey            = attribute.Key("gram.registry.seed.dry_run")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -3214,3 +3215,4 @@ func SlogRegistrySeedOutcome(v string) slog.Attr {
 func SlogRegistrySeedCreated(v int) slog.Attr   { return slog.Int(string(RegistrySeedCreatedKey), v) }
 func SlogRegistrySeedUpdated(v int) slog.Attr   { return slog.Int(string(RegistrySeedUpdatedKey), v) }
 func SlogRegistrySeedUnchanged(v int) slog.Attr { return slog.Int(string(RegistrySeedUnchangedKey), v) }
+func SlogRegistrySeedDryRun(v bool) slog.Attr   { return slog.Bool(string(RegistrySeedDryRunKey), v) }

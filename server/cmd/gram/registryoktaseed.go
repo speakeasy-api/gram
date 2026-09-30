@@ -22,6 +22,10 @@ func newRegistryOktaSeedCommand() *cli.Command {
 				EnvVars:  []string{"GRAM_DATABASE_URL"},
 				Required: true,
 			},
+			&cli.BoolFlag{
+				Name:  "dry-run",
+				Usage: "Report what would be created or updated without writing",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			ctx := c.Context
@@ -43,14 +47,15 @@ func newRegistryOktaSeedCommand() *cli.Command {
 			if err := registry.Ready(ctx); err != nil {
 				return fmt.Errorf("registry not ready: %w", err)
 			}
-			result, err := oktaseed.Apply(ctx, logger, registry)
+			result, err := oktaseed.Apply(ctx, logger, registry, c.Bool("dry-run"))
 			if err != nil {
 				return fmt.Errorf("apply okta catalog seed: %w", err)
 			}
 			logger.InfoContext(ctx, "okta catalog seed finished",
 				attr.SlogRegistrySeedCreated(result.Created),
 				attr.SlogRegistrySeedUpdated(result.Updated),
-				attr.SlogRegistrySeedUnchanged(result.Unchanged))
+				attr.SlogRegistrySeedUnchanged(result.Unchanged),
+				attr.SlogRegistrySeedDryRun(c.Bool("dry-run")))
 			return nil
 		},
 	}

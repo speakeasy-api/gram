@@ -70,15 +70,16 @@ type Result struct {
 
 // Apply creates missing vendor entries and writes the Okta namespace onto
 // existing ones without touching their name, remotes or other metadata. It
-// is safe to run repeatedly.
-func Apply(ctx context.Context, logger *slog.Logger, svc *mcpregistry.Service) (Result, error) {
+// is safe to run repeatedly. With dryRun it reports what it would do and
+// writes nothing; the records are still validated.
+func Apply(ctx context.Context, logger *slog.Logger, svc *mcpregistry.Service, dryRun bool) (Result, error) {
 	var result Result
 	for _, v := range Vendors {
-		outcome, err := apply(ctx, svc, v)
+		outcome, err := apply(ctx, svc, v, dryRun)
 		if err != nil {
 			return result, fmt.Errorf("seed %s: %w", v.Name, err)
 		}
-		logger.InfoContext(ctx, "okta catalog seed applied", attr.SlogRegistryEntryName(v.Name), attr.SlogRegistrySeedOutcome(outcome))
+		logger.InfoContext(ctx, "okta catalog seed applied", attr.SlogRegistryEntryName(v.Name), attr.SlogRegistrySeedOutcome(outcome), attr.SlogRegistrySeedDryRun(dryRun))
 		switch outcome {
 		case "created":
 			result.Created++
@@ -91,13 +92,19 @@ func Apply(ctx context.Context, logger *slog.Logger, svc *mcpregistry.Service) (
 	return result, nil
 }
 
-func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor) (string, error) {
+func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor, dryRun bool) (string, error) {
 	existing, err := svc.GetByName(ctx, v.Name)
 	switch {
 	case errors.Is(err, mcpregistry.ErrNotFound):
 		data, err := v.record()
 		if err != nil {
 			return "", err
+		}
+		if dryRun {
+			if issues := svc.Validate(data); len(issues) > 0 {
+				return "", &mcpregistry.InvalidError{Issues: issues}
+			}
+			return "created", nil
 		}
 		if _, err := svc.Create(ctx, data); err != nil {
 			return "", fmt.Errorf("create: %w", err)
@@ -113,6 +120,12 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor) (string, err
 	data, err := withMapping(existing.Data, v.Mapping)
 	if err != nil {
 		return "", err
+	}
+	if dryRun {
+		if issues := svc.Validate(data); len(issues) > 0 {
+			return "", &mcpregistry.InvalidError{Issues: issues}
+		}
+		return "updated", nil
 	}
 	if _, err := svc.Save(ctx, existing.ID, mcpregistry.Token(existing), data); err != nil {
 		return "", fmt.Errorf("save: %w", err)

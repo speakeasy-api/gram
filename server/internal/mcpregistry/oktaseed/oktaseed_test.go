@@ -50,7 +50,14 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	svc := mcpregistry.New(db, v)
 	logger := testenv.NewLogger(t)
 
-	result, err := oktaseed.Apply(ctx, logger, svc)
+	// A dry run reports the creates and writes nothing.
+	result, err := oktaseed.Apply(ctx, logger, svc, true)
+	require.NoError(t, err)
+	require.Equal(t, oktaseed.Result{Created: len(oktaseed.Vendors), Updated: 0, Unchanged: 0}, result)
+	_, err = svc.GetByName(ctx, oktaseed.Vendors[0].Name)
+	require.ErrorIs(t, err, mcpregistry.ErrNotFound)
+
+	result, err = oktaseed.Apply(ctx, logger, svc, false)
 	require.NoError(t, err)
 	require.Equal(t, oktaseed.Result{Created: len(oktaseed.Vendors), Updated: 0, Unchanged: 0}, result)
 	for _, vendor := range oktaseed.Vendors {
@@ -63,7 +70,7 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	}
 
 	// A second run changes nothing.
-	result, err = oktaseed.Apply(ctx, logger, svc)
+	result, err = oktaseed.Apply(ctx, logger, svc, false)
 	require.NoError(t, err)
 	require.Equal(t, oktaseed.Result{Created: 0, Updated: 0, Unchanged: len(oktaseed.Vendors)}, result)
 
@@ -86,7 +93,7 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	_, err = svc.Save(ctx, e.ID, mcpregistry.Token(e), edited)
 	require.NoError(t, err)
 
-	result, err = oktaseed.Apply(ctx, logger, svc)
+	result, err = oktaseed.Apply(ctx, logger, svc, false)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Updated)
 	e, err = svc.GetByName(ctx, first.Name)
@@ -116,7 +123,7 @@ func TestApplyRepairsNullMetadata(t *testing.T) {
 	legacy := `{"server":{"name":"` + first.Name + `","description":"Legacy","version":"1","remotes":[` + strings.Join(remotes, ",") + `]},"_meta":null}`
 	require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: json.RawMessage(legacy), Published: true}))
 
-	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc)
+	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc, false)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Updated)
 	e, err := svc.GetByName(ctx, first.Name)
