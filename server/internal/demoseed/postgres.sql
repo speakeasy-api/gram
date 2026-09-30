@@ -1615,6 +1615,26 @@ BEGIN
           ARRAY['releases:read'], 'Fictional release account',
           now() - interval '3 days', now() - interval '40 minutes');
 
+  -- Upstream sessions on Linear's CIMD client, one per last-validation outcome
+  -- plus one never validated, so the admin server health page shows every
+  -- validation state. Inert like the session above: an invalid ciphertext and
+  -- no refresh token. grant_generation above 1 records re-authorizations.
+  INSERT INTO remote_sessions
+    (id, subject_urn, user_session_issuer_id, remote_session_client_id,
+     access_token_encrypted, access_expires_at, auto_refresh, scopes,
+     grant_generation, last_validated_at, validation_status, created_at, last_used_at)
+  SELECT demo.det_uuid('gram-demo-validated-session-' || v.n),
+         'user:' || demo_user_ids[v.n], demo.det_uuid('gram-demo-issuer-linear'),
+         demo.det_uuid('gram-demo-remote-identity-client-linear'),
+         'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+         ARRAY['read'], v.grant_generation,
+         CASE WHEN v.status IS NOT NULL THEN now() - (v.n || ' hours')::interval END,
+         v.status, now() - ((v.n + 2) || ' days')::interval, now() - (v.n || ' hours')::interval
+  FROM (VALUES
+    (1, 'valid', 1), (2, 'valid', 3), (3, 'rejected_by_member', 2),
+    (4, 'inactive', 1), (5, 'unknown', 1), (6, NULL, 1)
+  ) AS v(n, status, grant_generation);
+
   ------------------------------------------------------------------
   -- Many principals can reference one exact human-owned session. Reconnecting
   -- must never silently replace these references with a different session.
@@ -3256,8 +3276,18 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray FROM remote_sessions
   WHERE user_session_issuer_id IN
     (SELECT id FROM user_session_issuers WHERE project_id = proj_a);
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 user-owned upstream session, found %', stray;
+  IF stray <> 7 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 7 user-owned upstream sessions, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_sessions
+  WHERE remote_session_client_id = demo.det_uuid('gram-demo-remote-identity-client-linear')
+    AND deleted IS FALSE
+    AND access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT' AND refresh_token_encrypted IS NULL
+    AND (validation_status IS NULL
+         OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'));
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 inert validated-spread upstream sessions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM agents WHERE organization_id = demo_org;
