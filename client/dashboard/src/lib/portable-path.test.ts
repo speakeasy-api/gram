@@ -81,6 +81,18 @@ describe("resolvePortablePath", () => {
     );
   });
 
+  // Docs link project pages as /@self/projects/default/<page>; they must land
+  // on the default project, never the viewer's last-visited one.
+  it("keeps an explicit project in /@self paths", () => {
+    expect(
+      resolvePortablePath(
+        loc("/@self/projects/default/toolsets", "?tab=all"),
+        ORG,
+        "proj-b",
+      ),
+    ).toBe("/acme/projects/default/toolsets?tab=all");
+  });
+
   it("expands bare /@self to the org home", () => {
     expect(resolvePortablePath(loc("/@self"), ORG)).toBe("/acme");
   });
