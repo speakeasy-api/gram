@@ -337,26 +337,9 @@ func attachCustomDomainToToolset(
 ) (toolsets_repo.Toolset, customdomains_repo.CustomDomain) {
 	t.Helper()
 
-	domainsRepo := customdomains_repo.New(ti.conn)
-	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Domain:         domainName,
-		IngressName:    pgtype.Text{String: "", Valid: false},
-		CertSecretName: pgtype.Text{String: "", Valid: false},
-		IpAllowlist:    []string{},
-	})
-	require.NoError(t, err)
+	domain := createActivatedCustomDomain(t, ctx, ti, authCtx.ActiveOrganizationID, domainName)
 
-	domain, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
-		ID:             domain.ID,
-		Verified:       true,
-		Activated:      true,
-		IngressName:    pgtype.Text{String: "", Valid: false},
-		CertSecretName: pgtype.Text{String: "", Valid: false},
-	})
-	require.NoError(t, err)
-
-	toolset, err = toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
 		Name:                   toolset.Name,
 		Description:            toolset.Description,
 		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,

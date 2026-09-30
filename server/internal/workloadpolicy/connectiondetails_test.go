@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
@@ -17,6 +18,7 @@ import (
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // newMCPServer creates a remote-backed MCP server in projectID.
@@ -62,6 +64,42 @@ func newProject(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
 	})
 	require.NoError(t, err)
 	return project.ID
+}
+
+// newToolsetBackedMCPServer creates an MCP server in projectID backed by a new
+// toolset, under an id of its own.
+func newToolsetBackedMCPServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, name string) mcpservers_repo.McpServer {
+	t.Helper()
+
+	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         ti.orgID,
+		ProjectID:              projectID,
+		Name:                   name + " toolset",
+		Slug:                   "toolset-" + uuid.NewString()[:8],
+		Description:            pgtype.Text{},
+		DefaultEnvironmentSlug: pgtype.Text{},
+		McpSlug:                pgtype.Text{},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+	server, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+		ID:                    uuid.New(),
+		ProjectID:             projectID,
+		Name:                  conv.ToPGText(name),
+		Slug:                  conv.ToPGText("server-" + uuid.NewString()[:8]),
+		EnvironmentID:         uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{},
+		RemoteMcpServerID:     uuid.NullUUID{},
+		TunneledMcpServerID:   uuid.NullUUID{},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		UnproxiedMcpServerID:  uuid.NullUUID{},
+		ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility:            "private",
+		NetworkAccessMode:     conv.ToPGText("public_only"),
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, toolset.ID, server.ID)
+	return server
 }
 
 // withConnectionReadGrants gives the caller workload:read on the organization
@@ -124,11 +162,15 @@ func TestConnectionDetails_RendersEachEndpointTheResolverReturns(t *testing.T) {
 	require.Equal(t, "https://auth.example.com/mcp/payments/token", ready.TokenEndpoint)
 	require.True(t, ready.OnAuthenticationHost)
 	require.True(t, ready.WorkloadGrantAdvertised)
+	require.Equal(t, []string{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer"}, ready.GrantTypesSupported)
 	require.True(t, ready.Ready)
 	require.Nil(t, ready.NotReadyReason)
 
 	notReady := details.Endpoints[1]
 	require.Equal(t, "mcp.customer.example", notReady.APIHost)
+	require.False(t, notReady.OnAuthenticationHost)
+	require.False(t, notReady.WorkloadGrantAdvertised)
+	require.Equal(t, []string{"authorization_code", "refresh_token"}, notReady.GrantTypesSupported)
 	require.False(t, notReady.Ready)
 	require.NotNil(t, notReady.NotReadyReason)
 	require.Equal(t, string(mcp.FederationWorkloadGrantUnavailable), *notReady.NotReadyReason)
@@ -138,11 +180,22 @@ func TestConnectionDetails_ReachesServersInAnyProjectWithoutAProject(t *testing.
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	server := newMCPServer(t, ctx, ti, newProject(t, ctx, ti), "Elsewhere")
+	ti.federation.endpoints = []mcp.FederationEndpoint{{
+		ResourceURL:             "https://app.example.com/mcp/elsewhere",
+		Issuer:                  "",
+		TokenEndpoint:           "",
+		OnAuthenticationHost:    false,
+		GrantTypesSupported:     []string{},
+		WorkloadGrantAdvertised: false,
+		NotReady:                mcp.FederationNoAuthorizationServer,
+	}}
 
 	details, err := connectionDetails(withConnectionReadGrants(t, withoutProject(t, ctx), ti, server), ti, server.ID)
 	require.NoError(t, err)
 	require.Equal(t, server.ID.String(), details.McpServerID)
-	require.Empty(t, details.Endpoints)
+	require.Equal(t, []uuid.UUID{server.ID}, ti.federation.resolved)
+	require.Len(t, details.Endpoints, 1)
+	require.Equal(t, "https://app.example.com/mcp/elsewhere", details.Endpoints[0].ResourceURL)
 }
 
 func TestConnectionDetails_APIKeyReachesOnlyItsProject(t *testing.T) {
@@ -187,4 +240,27 @@ func TestConnectionDetails_UnknownServerIsNotFound(t *testing.T) {
 
 	_, err := connectionDetails(withoutProject(t, ctx), ti, uuid.New())
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// A toolset-backed server's mcp:read grant is written against its toolset, so
+// a grant naming the toolset reads its connection details and one naming only
+// the server's own id does not.
+func TestConnectionDetails_ToolsetBackedServerReadsTheToolsetGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	server := newToolsetBackedMCPServer(t, ctx, ti, ti.projectID, "Hosted")
+
+	onToolset := authztest.WithExactGrants(t, withoutProject(t, ctx),
+		authz.NewGrant(authz.ScopeWorkloadRead, ti.orgID),
+		authz.NewGrant(authz.ScopeMCPRead, server.ToolsetID.UUID.String()),
+	)
+	details, err := connectionDetails(onToolset, ti, server.ID)
+	require.NoError(t, err)
+	require.Equal(t, server.ID.String(), details.McpServerID)
+	require.Equal(t, []uuid.UUID{server.ID}, ti.federation.resolved)
+
+	onServer := withConnectionReadGrants(t, withoutProject(t, ctx), ti, server)
+	_, err = connectionDetails(onServer, ti, server.ID)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Equal(t, []uuid.UUID{server.ID}, ti.federation.resolved)
 }

@@ -224,6 +224,12 @@ it("marks a platform's page as a preview", () => {
   expect(screen.getByTestId("stage").textContent).toBe("preview");
 });
 
+it("offers to connect the platform to an MCP server", () => {
+  renderPage();
+
+  expect(screen.getByTestId("connect-platform")).toBeTruthy();
+});
+
 it("keeps the issuer URL on its own labeled line, apart from the description", () => {
   renderPage();
 

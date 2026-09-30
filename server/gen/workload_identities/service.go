@@ -272,9 +272,11 @@ type WorkloadConnectionEndpoint struct {
 	// Why an exchange here cannot succeed; absent when ready.
 	// not_publicly_reachable: the address does not resolve publicly (disabled, or
 	// private network only). no_authorization_server: the server is not gated on a
-	// Gram user session issuer. workload_grant_unavailable: the metadata does not
-	// advertise the workload grant. agent_rollout_disabled: the organization is
-	// outside the agent authorization rollout the token endpoint requires.
+	// Gram user session issuer, or is an anonymous public tunnel, which serves no
+	// OAuth metadata even when it has one. workload_grant_unavailable: the
+	// metadata does not advertise the workload grant. agent_rollout_disabled: the
+	// organization is outside the agent authorization rollout the token endpoint
+	// requires.
 	NotReadyReason *string
 }
 

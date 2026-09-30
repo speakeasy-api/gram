@@ -16,6 +16,7 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type {
   NotReadyReason,
@@ -47,6 +48,20 @@ type ServerGroup = {
   projectName: string;
   servers: McpServer[];
 };
+
+// The connection details read requires mcp:read on the server, written against
+// its toolset when it is toolset-backed, so only those servers are offered.
+function canReadServer(
+  grants: Parameters<typeof hasScopeInGrants>[0],
+  server: McpServer,
+): boolean {
+  return hasScopeInGrants(
+    grants,
+    "mcp:read",
+    server.toolsetId ?? server.id,
+    server.projectId,
+  );
+}
 
 function serverLabel(server: McpServer): string {
   return server.name || server.slug || server.id;
@@ -185,17 +200,20 @@ function ConnectionDetails({
  */
 export function ConnectPlatformSection(): JSX.Element {
   const organization = useOrganization();
+  const { grants, isLoading: grantsLoading } = useRBAC();
   const servers = useListMcpServersForOrg(undefined, undefined, {
     throwOnError: false,
   });
   const [selected, setSelected] = useState("");
 
+  const allServers = servers.data?.mcpServers ?? [];
   const groups = useMemo((): ServerGroup[] => {
     const projectNames = new Map(
       organization.projects.map((project) => [project.id, project.name]),
     );
     const byProject = new Map<string, ServerGroup>();
     for (const server of servers.data?.mcpServers ?? []) {
+      if (!canReadServer(grants, server)) continue;
       let group = byProject.get(server.projectId);
       if (!group) {
         group = {
@@ -208,10 +226,10 @@ export function ConnectPlatformSection(): JSX.Element {
       group.servers.push(server);
     }
     return [...byProject.values()];
-  }, [organization.projects, servers.data]);
+  }, [grants, organization.projects, servers.data]);
 
   let body: ReactNode;
-  if (servers.isPending) {
+  if (servers.isPending || grantsLoading) {
     body = <SkeletonTable />;
   } else if (servers.isError) {
     body = (
@@ -230,12 +248,20 @@ export function ConnectPlatformSection(): JSX.Element {
         }
       />
     );
-  } else if (groups.length === 0) {
+  } else if (allServers.length === 0) {
     body = (
       <InlineEmptyState
         icon="server"
         heading="No MCP servers yet"
         description="Create an MCP server, then come back for the values to point this platform at."
+      />
+    );
+  } else if (groups.length === 0) {
+    body = (
+      <InlineEmptyState
+        icon="lock"
+        heading="No MCP servers you can view"
+        description="Reading a server's connection values takes read access to that MCP server. Ask an admin for access."
       />
     );
   } else {

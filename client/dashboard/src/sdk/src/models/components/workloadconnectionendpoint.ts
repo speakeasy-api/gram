@@ -10,7 +10,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Why an exchange here cannot succeed; absent when ready. not_publicly_reachable: the address does not resolve publicly (disabled, or private network only). no_authorization_server: the server is not gated on a Gram user session issuer. workload_grant_unavailable: the metadata does not advertise the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.
+ * Why an exchange here cannot succeed; absent when ready. not_publicly_reachable: the address does not resolve publicly (disabled, or private network only). no_authorization_server: the server is not gated on a Gram user session issuer, or is an anonymous public tunnel, which serves no OAuth metadata even when it has one. workload_grant_unavailable: the metadata does not advertise the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.
  */
 export const NotReadyReason = {
   NotPubliclyReachable: "not_publicly_reachable",
@@ -19,7 +19,7 @@ export const NotReadyReason = {
   AgentRolloutDisabled: "agent_rollout_disabled",
 } as const;
 /**
- * Why an exchange here cannot succeed; absent when ready. not_publicly_reachable: the address does not resolve publicly (disabled, or private network only). no_authorization_server: the server is not gated on a Gram user session issuer. workload_grant_unavailable: the metadata does not advertise the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.
+ * Why an exchange here cannot succeed; absent when ready. not_publicly_reachable: the address does not resolve publicly (disabled, or private network only). no_authorization_server: the server is not gated on a Gram user session issuer, or is an anonymous public tunnel, which serves no OAuth metadata even when it has one. workload_grant_unavailable: the metadata does not advertise the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.
  */
 export type NotReadyReason = ClosedEnum<typeof NotReadyReason>;
 
@@ -40,7 +40,7 @@ export type WorkloadConnectionEndpoint = {
    */
   issuer: string;
   /**
-   * Why an exchange here cannot succeed; absent when ready. not_publicly_reachable: the address does not resolve publicly (disabled, or private network only). no_authorization_server: the server is not gated on a Gram user session issuer. workload_grant_unavailable: the metadata does not advertise the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.
+   * Why an exchange here cannot succeed; absent when ready. not_publicly_reachable: the address does not resolve publicly (disabled, or private network only). no_authorization_server: the server is not gated on a Gram user session issuer, or is an anonymous public tunnel, which serves no OAuth metadata even when it has one. workload_grant_unavailable: the metadata does not advertise the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.
    */
   notReadyReason?: NotReadyReason | undefined;
   /**

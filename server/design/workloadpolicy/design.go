@@ -406,7 +406,7 @@ var WorkloadConnectionEndpoint = Type("WorkloadConnectionEndpoint", func() {
 	Attribute("grant_types_supported", ArrayOf(String), "grant_types_supported as the authorization server metadata lists it. Empty when Gram is not this address's authorization server.")
 	Attribute("workload_grant_advertised", Boolean, "Whether the metadata lists the jwt-bearer grant because the clientless workload assertion exchange is available here.")
 	Attribute("ready", Boolean, "Whether nothing Gram knows of stops an exchange at this address. The platform's own configuration and the trust policy are not checked.")
-	Attribute("not_ready_reason", String, "Why an exchange here cannot succeed; absent when ready. not_publicly_reachable: the address does not resolve publicly (disabled, or private network only). no_authorization_server: the server is not gated on a Gram user session issuer. workload_grant_unavailable: the metadata does not advertise the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.", func() {
+	Attribute("not_ready_reason", String, "Why an exchange here cannot succeed; absent when ready. not_publicly_reachable: the address does not resolve publicly (disabled, or private network only). no_authorization_server: the server is not gated on a Gram user session issuer, or is an anonymous public tunnel, which serves no OAuth metadata even when it has one. workload_grant_unavailable: the metadata does not advertise the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.", func() {
 		Enum("not_publicly_reachable", "no_authorization_server", "workload_grant_unavailable", "agent_rollout_disabled")
 	})
 

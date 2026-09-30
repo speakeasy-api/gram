@@ -7,6 +7,18 @@ import { ConnectPlatformSection } from "./ConnectPlatformSection";
 
 const PROJECT_ID = "44444444-4444-4444-8444-444444444444";
 const SERVER_ID = "55555555-5555-4555-8555-555555555555";
+const OTHER_SERVER_ID = "66666666-6666-4666-8666-666666666666";
+const TOOLSET_SERVER_ID = "77777777-7777-4777-8777-777777777777";
+const TOOLSET_ID = "88888888-8888-4888-8888-888888888888";
+
+type Grant = { scope: string; selectors?: Array<Record<string, string>> };
+
+function readGrant(resourceId: string): Grant {
+  return {
+    scope: "mcp:read",
+    selectors: [{ resourceKind: "mcp", resourceId }],
+  };
+}
 
 const readyEndpoint: WorkloadConnectionEndpoint = {
   resourceUrl: "https://app.example.com/mcp/payments",
@@ -37,12 +49,17 @@ const mocks = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
   detailsRequests: [] as unknown[],
+  grants: [] as Grant[],
 }));
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     projects: [{ id: PROJECT_ID, name: "Payments project", slug: "payments" }],
   }),
+}));
+vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useRBAC")>()),
+  useRBAC: () => ({ grants: mocks.grants, isLoading: false }),
 }));
 vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
   useListMcpServersForOrg: () => mocks.servers,
@@ -54,12 +71,13 @@ vi.mock("@gram/client/react-query/workloadConnectionDetails.js", () => ({
   },
 }));
 
-function server(id: string, name: string) {
+function server(id: string, name: string, toolsetId?: string) {
   return {
     id,
     projectId: PROJECT_ID,
     name,
     slug: name.toLowerCase(),
+    toolsetId,
     networkAccessMode: "public_only",
     visibility: "private",
     createdAt: new Date("2026-09-28T00:00:00Z"),
@@ -85,6 +103,7 @@ beforeEach(() => {
     refetch: vi.fn(),
   };
   mocks.detailsRequests = [];
+  mocks.grants = [readGrant(SERVER_ID)];
   // Radix scrolls the selected option into view in browsers.
   Element.prototype.scrollIntoView = vi.fn<() => void>();
 });
@@ -211,4 +230,100 @@ it("offers a retry when the connection details fail to load", async () => {
   await pickServer("Payments");
 
   expect(screen.getByText("Couldn't load the connection details")).toBeTruthy();
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: "Try again" }));
+  expect(mocks.details.refetch).toHaveBeenCalled();
+});
+
+it("offers only the servers the viewer can read", async () => {
+  mocks.servers.data = {
+    mcpServers: [
+      server(SERVER_ID, "Payments"),
+      server(OTHER_SERVER_ID, "Billing"),
+      server(TOOLSET_SERVER_ID, "Hosted", TOOLSET_ID),
+    ],
+  };
+  // A toolset-backed server's read grant names its toolset, not the server.
+  mocks.grants = [readGrant(SERVER_ID), readGrant(TOOLSET_ID)];
+  renderSection();
+
+  await userEvent
+    .setup()
+    .click(screen.getByRole("combobox", { name: "MCP server" }));
+  expect(screen.getByRole("option", { name: "Payments" })).toBeTruthy();
+  expect(screen.getByRole("option", { name: "Hosted" })).toBeTruthy();
+  expect(screen.queryByRole("option", { name: "Billing" })).toBeNull();
+});
+
+it("says so when the viewer can read none of the organization's servers", () => {
+  mocks.grants = [readGrant(OTHER_SERVER_ID)];
+  renderSection();
+
+  expect(screen.getByText("No MCP servers you can view")).toBeTruthy();
+  expect(screen.queryByRole("combobox", { name: "MCP server" })).toBeNull();
+});
+
+it("says so when the picked server has no address", async () => {
+  mocks.details.data = {
+    mcpServerId: SERVER_ID,
+    mcpServerName: "Payments",
+    endpoints: [],
+  };
+  renderSection();
+  await pickServer("Payments");
+
+  expect(screen.getByText("This MCP server has no address")).toBeTruthy();
+  expect(screen.queryByText("Resource (MCP server URL)")).toBeNull();
+});
+
+it("shows no token endpoint when the server is not publicly reachable", async () => {
+  mocks.details.data = {
+    mcpServerId: SERVER_ID,
+    mcpServerName: "Payments",
+    endpoints: [
+      {
+        ...readyEndpoint,
+        issuer: "",
+        tokenEndpoint: "",
+        onAuthenticationHost: false,
+        grantTypesSupported: [],
+        workloadGrantAdvertised: false,
+        ready: false,
+        notReadyReason: "not_publicly_reachable",
+      },
+    ],
+  };
+  renderSection();
+  await pickServer("Payments");
+
+  expect(screen.getByText(/can't be reached publicly/)).toBeTruthy();
+  expect(screen.queryByText("Token endpoint")).toBeNull();
+  expect(screen.queryByText("Authorization server issuer")).toBeNull();
+  expect(valueOf("Resource (MCP server URL)")).toBe(readyEndpoint.resourceUrl);
+});
+
+it("keeps the values when agent authorization is off", async () => {
+  mocks.details.data = {
+    mcpServerId: SERVER_ID,
+    mcpServerName: "Payments",
+    endpoints: [
+      {
+        ...readyEndpoint,
+        ready: false,
+        notReadyReason: "agent_rollout_disabled",
+      },
+    ],
+  };
+  renderSection();
+  await pickServer("Payments");
+
+  const warning = screen.getByText("Not ready: exchanges will fail");
+  expect(
+    within(warning.parentElement as HTMLElement).getByText(
+      /Agent authorization isn't enabled for this organization/,
+    ),
+  ).toBeTruthy();
+  expect(valueOf("Token endpoint")).toBe(readyEndpoint.tokenEndpoint);
+  expect(valueOf("Authorization server issuer")).toBe(readyEndpoint.issuer);
 });
