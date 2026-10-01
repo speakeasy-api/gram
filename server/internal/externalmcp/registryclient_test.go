@@ -1125,6 +1125,7 @@ func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
 }
 
 func TestProjectServerDetailsRemoteSelection(t *testing.T) {
+	t.Parallel()
 	var record serverDetailsEntry
 	require.NoError(t, json.Unmarshal([]byte(`{"server":{"name":"io.example/server","version":"1","remotes":[{"type":"sse","url":"https://example.com/first"},{"type":"sse","url":"https://example.com/last","headers":[]},{"type":"streamable-http","url":"https://example.com/http-first","headers":[]},{"type":"streamable-http","url":"https://example.com/http-last"}]},"_meta":{"com.pulsemcp/server-version":{"remotes[1]":{"tools":[]},"remotes[2]":{"tools":[]}}}}`), &record))
 	for _, tc := range []struct {
@@ -1141,6 +1142,7 @@ func TestProjectServerDetailsRemoteSelection(t *testing.T) {
 		{name: "no match", allowed: []string{"https://example.com/unknown"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			details := projectServerDetails(record, tc.allowed)
 			require.Equal(t, "io.example/server", details.Name)
 			require.Equal(t, "1", details.Version)

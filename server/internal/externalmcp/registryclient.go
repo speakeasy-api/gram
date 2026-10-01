@@ -825,7 +825,16 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 // projectServerDetails selects the first allowed HTTP remote, or the last allowed SSE remote.
 func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string) *ServerDetails {
-	details := &ServerDetails{Name: record.Server.Name, Description: record.Server.Description, Version: record.Server.Version}
+	details := &ServerDetails{
+		Name:          record.Server.Name,
+		Description:   record.Server.Description,
+		Version:       record.Server.Version,
+		RemoteURL:     "",
+		TransportType: "",
+		Tools:         nil,
+		Headers:       nil,
+		Variables:     nil,
+	}
 	selected := -1
 	for i, remote := range record.Server.Remotes {
 		allowed := len(allowedRemoteURLs) == 0
