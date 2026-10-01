@@ -335,11 +335,12 @@ func (q *Queries) ListInstalledRemoteURLs(ctx context.Context, arg ListInstalled
 
 const listMappedApplications = `-- name: ListMappedApplications :many
 WITH mapped AS MATERIALIZED (
-    SELECT e.id AS registry_entry_id, n.name
+    SELECT e.id AS registry_entry_id, (n.value #>> '{}')::text AS name
     FROM mcp_registry_entries AS e
-    CROSS JOIN LATERAL jsonb_array_elements_text(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') AS n(name)
+    CROSS JOIN LATERAL jsonb_array_elements(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') AS n(value)
     WHERE e.published
       AND jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
+      AND jsonb_typeof(n.value) = 'string'
 )
 SELECT
     m.registry_entry_id
@@ -365,6 +366,7 @@ WHERE a.organization_id = $1
   AND a.identity_provider_connection_id = $2
   AND a.removed_at IS NULL
   AND a.status = 'ACTIVE'
+  AND lower(a.name) !~ '^(oidc_client|bookmark|template_.*|saml_2_0|wsfed|auto_login|browser_plugin|secure_password_store)$'
   AND EXISTS (
     SELECT 1 FROM okta_application_assignments AS s
     WHERE s.organization_id = a.organization_id
@@ -394,8 +396,9 @@ type ListMappedApplicationsRow struct {
 // entries whose Okta mapping names them. The mapping is unnested once into a
 // materialized set so the join hashes on the name instead of probing every
 // record per application. Invalid historical records may hold a non-array
-// mapping and are skipped here and again in Go. Records are fetched
-// separately, once per entry.
+// mapping or non-string names; both are skipped here and again in Go. Names
+// Okta gives every admin-created app say nothing about the vendor and never
+// match. Records are fetched separately, once per entry.
 func (q *Queries) ListMappedApplications(ctx context.Context, arg ListMappedApplicationsParams) ([]ListMappedApplicationsRow, error) {
 	rows, err := q.db.Query(ctx, listMappedApplications, arg.OrganizationID, arg.IdentityProviderConnectionID)
 	if err != nil {

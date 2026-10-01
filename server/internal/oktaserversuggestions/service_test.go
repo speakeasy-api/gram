@@ -342,6 +342,29 @@ func TestDismissAndRestore(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+func TestListSkipsUnsafeRemotesAndUnusableNames(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	createEntry(t, ctx, si, entryRecord("example.test/mixed", []string{"http://mcp.mixed.example/mcp", "https://user@mcp.mixed.example/mcp", "https://mcp.mixed.example/mcp"}, `{"oinNames":["mixed"]}`), true)
+	createEntry(t, ctx, si, entryRecord("example.test/plain", []string{"http://mcp.plain.example/mcp"}, `{"oinNames":["plain"]}`), true)
+	createEntry(t, ctx, si, entryRecord("example.test/generic", []string{"https://mcp.generic.example/mcp"}, `{"oinNames":["oidc_client","template_saml_2_0"]}`), true)
+	createEntry(t, ctx, si, entryRecord("example.test/numeric", []string{"https://mcp.numeric.example/mcp"}, `{"oinNames":[4080826]}`), true)
+	createApp(t, ctx, si, "0oa1", "Mixed", "mixed", "SAML_2_0", true)
+	createApp(t, ctx, si, "0oa2", "Plain", "plain", "SAML_2_0", true)
+	createApp(t, ctx, si, "0oa3", "Custom OIDC", "oidc_client", "OPENID_CONNECT", true)
+	createApp(t, ctx, si, "0oa4", "Custom SAML", "template_saml_2_0", "SAML_2_0", true)
+	createApp(t, ctx, si, "0oa5", "Numeric", "4080826", "SAML_2_0", true)
+
+	// Only the HTTPS remote without userinfo is offered; an entry left with
+	// no remote, a generic custom app name, and a non-string mapped name are
+	// never suggested.
+	result := list(t, ctx, si, true)
+	require.Len(t, result.Suggestions, 1)
+	require.Equal(t, "example.test/mixed", result.Suggestions[0].ServerName)
+	require.Len(t, result.Suggestions[0].Remotes, 1)
+	require.Equal(t, "https://mcp.mixed.example/mcp", result.Suggestions[0].Remotes[0].URL)
+}
+
 func TestInstalledDetection(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
