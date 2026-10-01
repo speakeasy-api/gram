@@ -73,17 +73,18 @@ WHERE organization_id = @organization_id;
 
 -- Backends a live MCP server in one of the organization's projects fronts.
 -- Tenancy through projects, since neither table has an organization column.
--- URLs compare without a trailing slash, as the resource connection readiness
--- does; the catalog and the admin may differ on it.
+-- URLs compare without a query string, fragment, or trailing slash: admins
+-- append options to the vendor endpoint, and the catalog and the admin may
+-- differ on the slash.
 -- name: ListInstalledRemoteURLs :many
-SELECT DISTINCT rtrim(r.url, '/')::text AS url
+SELECT DISTINCT rtrim(regexp_replace(r.url, '[?#].*$', ''), '/')::text AS url
 FROM remote_mcp_servers AS r
 JOIN projects AS p ON p.id = r.project_id
 JOIN mcp_servers AS ms ON ms.remote_mcp_server_id = r.id AND ms.project_id = r.project_id AND ms.deleted IS FALSE
 WHERE p.organization_id = @organization_id
   AND p.deleted IS FALSE
   AND r.deleted IS FALSE
-  AND rtrim(r.url, '/') = ANY(@urls::text[]);
+  AND rtrim(regexp_replace(r.url, '[?#].*$', ''), '/') = ANY(@urls::text[]);
 
 -- name: UpsertDismissal :one
 INSERT INTO okta_server_suggestion_dismissals (organization_id, registry_entry_id)

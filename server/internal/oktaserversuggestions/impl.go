@@ -479,7 +479,14 @@ func group(rows []repo.ListMappedApplicationsRow, records map[uuid.UUID]record) 
 	return suggestions
 }
 
-func normalizeURL(u string) string { return strings.TrimRight(u, "/") }
+// normalizeURL drops the query string, fragment, and trailing slash, matching
+// ListInstalledRemoteURLs.
+func normalizeURL(u string) string {
+	if i := strings.IndexAny(u, "?#"); i >= 0 {
+		u = u[:i]
+	}
+	return strings.TrimRight(u, "/")
+}
 
 func (snap *snapshot) result(includeAll bool) *srv.ListOktaServerSuggestionsResult {
 	result := &srv.ListOktaServerSuggestionsResult{

@@ -350,9 +350,10 @@ func TestInstalledDetection(t *testing.T) {
 	createApp(t, ctx, si, "0oa1", "Linear", "linear", "SAML_2_0", true)
 	createApp(t, ctx, si, "0oa2", "Notion", "notion", "OPENID_CONNECT", true)
 
-	// A trailing slash on the admin-entered URL still counts, and installed
-	// outranks dismissed while keeping the dismissal timestamp.
-	serverID := installServer(t, ctx, si, si.orgID, "https://mcp.notion.example/mcp/")
+	// A trailing slash and a query string on the admin-entered URL still
+	// count, and installed outranks dismissed while keeping the dismissal
+	// timestamp.
+	serverID := installServer(t, ctx, si, si.orgID, "https://mcp.notion.example/mcp/?toolsets=core")
 	_, err := si.svc.Dismiss(ctx, &gen.DismissPayload{SessionToken: nil, RegistryEntryID: notion.String()})
 	require.NoError(t, err)
 	result := list(t, ctx, si, true)
