@@ -1492,6 +1492,39 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (GetProject
 	return i, err
 }
 
+const listSupportMatrixSlugs = `-- name: ListSupportMatrixSlugs :many
+SELECT 'platform' AS kind, slug FROM support_matrix_platforms WHERE deleted_at IS NULL
+UNION ALL SELECT 'method', slug FROM support_matrix_integration_methods WHERE deleted_at IS NULL
+UNION ALL SELECT 'capability', slug FROM support_matrix_capabilities WHERE deleted_at IS NULL
+UNION ALL SELECT 'plan', slug FROM support_matrix_plans WHERE deleted_at IS NULL
+ORDER BY 1, 2
+`
+
+type ListSupportMatrixSlugsRow struct {
+	Kind string
+	Slug string
+}
+
+func (q *Queries) ListSupportMatrixSlugs(ctx context.Context) ([]ListSupportMatrixSlugsRow, error) {
+	rows, err := q.db.Query(ctx, listSupportMatrixSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSupportMatrixSlugsRow
+	for rows.Next() {
+		var i ListSupportMatrixSlugsRow
+		if err := rows.Scan(&i.Kind, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockEnterpriseTrialInOrganizations = `-- name: LockEnterpriseTrialInOrganizations :one
 SELECT organization_id
 FROM trials
@@ -1559,42 +1592,6 @@ SELECT pg_advisory_xact_lock(719438201)
 func (q *Queries) LockSupportMatrix(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, lockSupportMatrix)
 	return err
-}
-
-const readSupportMatrix = `-- name: ReadSupportMatrix :one
-WITH reference_facts AS (
-  SELECT m.slug AS method_slug, jsonb_object_agg(c.slug, jsonb_build_object('status', r.status, 'note', r.notes, 'verify', r.needs_verification)) AS facts
-  FROM support_matrix_method_capabilities r
-  JOIN support_matrix_integration_methods m ON m.id = r.integration_method_id AND m.deleted_at IS NULL
-  JOIN support_matrix_capabilities c ON c.id = r.capability_id AND c.deleted_at IS NULL
-  WHERE r.deleted_at IS NULL GROUP BY m.slug
-), coverage_facts AS (
-  SELECT f.method_platform_id, jsonb_object_agg(c.slug, jsonb_build_object('status', f.status, 'note', f.notes, 'verify', f.needs_verification)) AS facts
-  FROM support_matrix_coverage f
-  JOIN support_matrix_capabilities c ON c.id = f.capability_id AND c.deleted_at IS NULL
-  WHERE f.deleted_at IS NULL GROUP BY f.method_platform_id
-), mappings AS (
-  SELECT m.slug || '/' || p.slug AS key,
-    jsonb_build_object('applicability', mp.applicability, 'conditions', mp.conditions, 'facts', coalesce(cf.facts, '{}'::jsonb)) AS value
-  FROM support_matrix_method_platforms mp
-  JOIN support_matrix_integration_methods m ON m.id = mp.integration_method_id AND m.deleted_at IS NULL
-  JOIN support_matrix_platforms p ON p.id = mp.platform_id AND p.deleted_at IS NULL
-  LEFT JOIN coverage_facts cf ON cf.method_platform_id = mp.id
-  WHERE mp.deleted_at IS NULL
-)
-SELECT jsonb_build_object(
- 'methods', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.slug, 'name', m.name, 'vendor', m.vendor, 'plans', m.plan_notes, 'facts', coalesce(r.facts, '{}'::jsonb)) ORDER BY m.sort_order, m.slug), '[]'::jsonb) FROM support_matrix_integration_methods m LEFT JOIN reference_facts r ON r.method_slug = m.slug WHERE m.deleted_at IS NULL),
- 'products', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', p.slug, 'name', p.name, 'vendor', p.vendor, 'family', p.family, 'surface', p.surface) ORDER BY p.sort_order, p.slug), '[]'::jsonb) FROM support_matrix_platforms p WHERE p.deleted_at IS NULL),
- 'capabilities', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', c.slug, 'name', c.name, 'group', c.category) ORDER BY c.sort_order, c.slug), '[]'::jsonb) FROM support_matrix_capabilities c WHERE c.deleted_at IS NULL),
- 'draft', jsonb_build_object('mappings', (SELECT coalesce(jsonb_object_agg(key, value), '{}'::jsonb) FROM mappings), 'references', (SELECT coalesce(jsonb_object_agg(method_slug, facts), '{}'::jsonb) FROM reference_facts))
-)::jsonb AS snapshot
-`
-
-func (q *Queries) ReadSupportMatrix(ctx context.Context) ([]byte, error) {
-	row := q.db.QueryRow(ctx, readSupportMatrix)
-	var snapshot []byte
-	err := row.Scan(&snapshot)
-	return snapshot, err
 }
 
 const retireSupportPlans = `-- name: RetireSupportPlans :exec
@@ -1687,21 +1684,6 @@ func (q *Queries) SeedSupportPlatforms(ctx context.Context, catalog []byte) erro
 	return err
 }
 
-const seedSupportReferences = `-- name: SeedSupportReferences :exec
-INSERT INTO support_matrix_method_capabilities (integration_method_id, capability_id, status, notes, needs_verification)
-SELECT m.id, c.id, f.value->>'status', f.value->>'note', (f.value->>'verify')::boolean
-FROM jsonb_array_elements($1::jsonb->'methods') AS source
-CROSS JOIN LATERAL jsonb_each(source->'facts') AS f
-JOIN support_matrix_integration_methods m ON m.slug = source->>'id'
-JOIN support_matrix_capabilities c ON c.slug = f.key
-ON CONFLICT (integration_method_id, capability_id) DO NOTHING
-`
-
-func (q *Queries) SeedSupportReferences(ctx context.Context, catalog []byte) error {
-	_, err := q.db.Exec(ctx, seedSupportReferences, catalog)
-	return err
-}
-
 const setOrganizationAccess = `-- name: SetOrganizationAccess :one
 UPDATE organization_metadata
 SET disabled_at = CASE
@@ -1739,85 +1721,4 @@ func (q *Queries) SetOrganizationAccess(ctx context.Context, arg SetOrganization
 		&i.DisabledAt,
 	)
 	return i, err
-}
-
-const upsertSupportCoverage = `-- name: UpsertSupportCoverage :exec
-INSERT INTO support_matrix_coverage (method_platform_id, capability_id, status, notes, needs_verification)
-SELECT $1::uuid, c.id, $2::text, $3::text, $4::boolean
-FROM support_matrix_capabilities c WHERE c.slug = $5::text AND c.deleted_at IS NULL
-ON CONFLICT (method_platform_id, capability_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes, needs_verification = EXCLUDED.needs_verification, verified_at = NULL, updated_at = clock_timestamp(), deleted_at = NULL
-`
-
-type UpsertSupportCoverageParams struct {
-	MappingID         uuid.UUID
-	Status            string
-	Notes             string
-	NeedsVerification bool
-	CapabilitySlug    string
-}
-
-func (q *Queries) UpsertSupportCoverage(ctx context.Context, arg UpsertSupportCoverageParams) error {
-	_, err := q.db.Exec(ctx, upsertSupportCoverage,
-		arg.MappingID,
-		arg.Status,
-		arg.Notes,
-		arg.NeedsVerification,
-		arg.CapabilitySlug,
-	)
-	return err
-}
-
-const upsertSupportMapping = `-- name: UpsertSupportMapping :one
-INSERT INTO support_matrix_method_platforms (integration_method_id, platform_id, applicability, conditions)
-SELECT m.id, p.id, $1::text, $2::text
-FROM support_matrix_integration_methods m, support_matrix_platforms p
-WHERE m.slug = $3::text AND p.slug = $4::text AND m.deleted_at IS NULL AND p.deleted_at IS NULL
-ON CONFLICT (integration_method_id, platform_id) DO UPDATE SET applicability = EXCLUDED.applicability, conditions = EXCLUDED.conditions, updated_at = clock_timestamp(), deleted_at = NULL
-RETURNING id
-`
-
-type UpsertSupportMappingParams struct {
-	Applicability string
-	Conditions    string
-	MethodSlug    string
-	PlatformSlug  string
-}
-
-func (q *Queries) UpsertSupportMapping(ctx context.Context, arg UpsertSupportMappingParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, upsertSupportMapping,
-		arg.Applicability,
-		arg.Conditions,
-		arg.MethodSlug,
-		arg.PlatformSlug,
-	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const upsertSupportReference = `-- name: UpsertSupportReference :exec
-INSERT INTO support_matrix_method_capabilities (integration_method_id, capability_id, status, notes, needs_verification)
-SELECT m.id, c.id, $1::text, $2::text, $3::boolean
-FROM support_matrix_integration_methods m, support_matrix_capabilities c
-WHERE m.slug = $4::text AND c.slug = $5::text AND m.deleted_at IS NULL AND c.deleted_at IS NULL
-ON CONFLICT (integration_method_id, capability_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes, needs_verification = EXCLUDED.needs_verification, verified_at = NULL, updated_at = clock_timestamp(), deleted_at = NULL
-`
-
-type UpsertSupportReferenceParams struct {
-	Status            string
-	Notes             string
-	NeedsVerification bool
-	MethodSlug        string
-	CapabilitySlug    string
-}
-
-func (q *Queries) UpsertSupportReference(ctx context.Context, arg UpsertSupportReferenceParams) error {
-	_, err := q.db.Exec(ctx, upsertSupportReference,
-		arg.Status,
-		arg.Notes,
-		arg.NeedsVerification,
-		arg.MethodSlug,
-		arg.CapabilitySlug,
-	)
-	return err
 }

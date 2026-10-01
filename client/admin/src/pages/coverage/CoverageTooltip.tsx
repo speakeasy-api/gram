@@ -1,6 +1,10 @@
 import type { JSX } from "react";
 import { accountLabels, type AccountFilter } from "./accounts";
-import type { resolveMatrixCell, MethodContribution } from "./matrixCell";
+import {
+  osSummary,
+  type MatrixCell,
+  type MethodContribution,
+} from "./matrixCell";
 import { statusLabels } from "./model";
 
 function methodNames(entries: MethodContribution[]): string {
@@ -17,7 +21,7 @@ export function CoverageTooltip({
   cell,
 }: {
   account: AccountFilter;
-  cell: ReturnType<typeof resolveMatrixCell>;
+  cell: MatrixCell;
 }): JSX.Element {
   const supported = cell.contributions.filter(
     ({ fact }) => fact.status === "supported",
@@ -25,6 +29,7 @@ export function CoverageTooltip({
   const partial = cell.contributions.filter(
     ({ fact }) => fact.status === "partial",
   );
+  const os = osSummary(cell);
   return (
     <div className="space-y-1">
       <p className="font-medium">
@@ -40,6 +45,10 @@ export function CoverageTooltip({
       {cell.method && cell.fact.note && (
         <p className="whitespace-pre-wrap opacity-75">{cell.fact.note}</p>
       )}
+      {cell.support?.note && (
+        <p className="whitespace-pre-wrap opacity-75">{cell.support.note}</p>
+      )}
+      {os && <p className="opacity-75">Operating systems: {os}</p>}
     </div>
   );
 }

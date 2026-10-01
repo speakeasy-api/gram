@@ -9,7 +9,6 @@ import (
 	admingen "github.com/speakeasy-api/gram/server/gen/admin"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/admin"
-	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -318,9 +317,12 @@ func TestOnboardingPlaybookApplicabilityJudgesAMethodOnItsOwnVendor(t *testing.T
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test")
-	// The Cursor API is not applicable on any Cursor platform.
+	// The Cursor API is not applicable on any Cursor platform. The matrix in
+	// code owns these cells; the mirror rows are written directly here.
 	for _, platform := range []string{"cursor-ide", "cursor-cli", "cursor-cloud"} {
-		_, err := adminrepo.New(ti.conn).UpsertSupportMapping(ctx, adminrepo.UpsertSupportMappingParams{Applicability: "na", Conditions: "", MethodSlug: "cursor-api", PlatformSlug: platform})
+		_, err := ti.conn.Exec(ctx, //nolint:glint // notestingrawsql: nothing writes support matrix cells any more; the check under test still reads them.
+			"INSERT INTO support_matrix_method_platforms (integration_method_id, platform_id, applicability, conditions) SELECT m.id, p.id, 'na', '' FROM support_matrix_integration_methods m, support_matrix_platforms p WHERE m.slug = 'cursor-api' AND p.slug = $1 AND m.deleted_at IS NULL AND p.deleted_at IS NULL",
+			platform)
 		require.NoError(t, err)
 	}
 	// OpenCode joins the stack. Its platform has no entry for the Cursor API,

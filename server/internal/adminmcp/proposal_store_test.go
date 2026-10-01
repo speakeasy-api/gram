@@ -159,7 +159,7 @@ func TestProposalStoreRejectsInvalidTargets(t *testing.T) {
 	require.Error(t, err)
 
 	global := featureProposal(f.orgA, "global", true)
-	global.Operation = OperationUpdateSupportMatrix
+	global.Operation = OperationUpdateGlobalIssuer
 	_, _, err = f.store.Create(ctx, f.owner, global, now)
 	require.Error(t, err, "a platform-global operation must not carry a tenant")
 

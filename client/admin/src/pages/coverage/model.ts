@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+// The support matrix as the server serves it: the file it was built with
+// (server/internal/supportmatrix/matrix.yaml), with one explicit cell per
+// capability wherever a method applies to a platform. Nothing here derives a
+// status from prose; the file states every cell.
+
 export const statusLabels = {
   supported: "Supported",
   partial: "Partial",
@@ -17,14 +22,13 @@ export const symbols: Record<Status, string> = {
   na: "—",
   unknown: "?",
 };
-export type Capability = { id: string; name: string; group: string };
-export type Product = {
-  id: string;
-  name: string;
-  vendor: string;
-  family: string;
-  surface: string;
-};
+export const applicabilityLabels = {
+  unknown: "Unknown",
+  applicable: "Applies",
+  na: "Does not apply",
+} as const;
+export type Applicability = keyof typeof applicabilityLabels;
+
 const factSchema = z.object({
   status: z.enum([
     "supported",
@@ -39,81 +43,99 @@ const factSchema = z.object({
 });
 export type Fact = z.infer<typeof factSchema>;
 export const unknown: Fact = { status: "unknown", note: "", verify: false };
-export type Method = {
-  id: string;
-  name: string;
-  vendor: string;
-  plans: string;
-  facts: Record<string, Fact>;
+export const notApplicable: Fact = {
+  status: "na",
+  note: "Method does not apply to this platform",
+  verify: false,
 };
-export const mappingSchema = z.object({
+
+export const eligibilities = ["supported", "unsupported", "unknown"] as const;
+export type Eligibility = (typeof eligibilities)[number];
+const osSupport = z.enum(["supported", "verify"]);
+export type OSSupport = z.infer<typeof osSupport>;
+
+const supportSchema = z.object({
+  platform: z.string(),
   applicability: z.enum(["unknown", "applicable", "na"]),
-  conditions: z.string(),
-  facts: z.record(z.string(), factSchema),
+  accounts: z.object({
+    personal: z.enum(eligibilities),
+    team: z.enum(eligibilities),
+    enterprise: z.enum(eligibilities),
+  }),
+  os: z
+    .object({
+      mac: osSupport.optional(),
+      windows: osSupport.optional(),
+      linux: osSupport.optional(),
+    })
+    .optional(),
+  note: z.string(),
+  cells: z.record(z.string(), factSchema),
 });
-export type Mapping = z.infer<typeof mappingSchema>;
-export const emptyMapping: Mapping = {
-  applicability: "unknown",
-  conditions: "",
-  facts: {},
-};
-export const draftSchema = z.object({
-  mappings: z.record(z.string(), mappingSchema),
-  references: z.record(z.string(), z.record(z.string(), factSchema)),
+/** One method on one platform. */
+export type PlatformSupport = z.infer<typeof supportSchema>;
+
+const capabilitySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  group: z.string(),
 });
-export type Draft = z.infer<typeof draftSchema>;
-export const storageKey = "gram-integration-coverage-v1";
-export function mappingKey(methodId: string, productId: string): string {
-  return `${methodId}/${productId}`;
-}
-export function getFact(
-  mapping: Mapping,
-  capabilityId: string,
-  reference: Fact = unknown,
-): Fact {
-  if (mapping.applicability === "na")
-    return {
-      status: "na",
-      note: "Method does not apply to this product",
-      verify: false,
-    };
-  if (mapping.applicability === "unknown") return unknown;
-  const explicit = mapping.facts[capabilityId];
-  if (explicit) return explicit;
-  const conditions = mapping.conditions;
-  const note = ["Derived from method reference", reference.note, conditions]
-    .filter(Boolean)
-    .join("; ");
-  const verify =
-    reference.verify || /\b(?:verify|wip|maybe)\b|\?/i.test(conditions);
-  // Platform qualifiers narrow the method's general capability claims.
-  if (
-    (/\bcost only\b/i.test(conditions) && capabilityId !== "cost") ||
-    (/\bsession tracking only\b/i.test(conditions) &&
-      capabilityId !== "session")
-  )
-    return { status: "na", note, verify };
-  if (
-    /\bno hooks\b/i.test(conditions) &&
-    /\b(?:via )?hooks\b/i.test(reference.note)
-  )
-    return { status: "unimplemented", note, verify };
-  if (/\bwip\b/i.test(conditions) && reference.status === "supported")
-    return { status: "partial", note, verify: true };
-  return { ...reference, note, verify };
+export type Capability = z.infer<typeof capabilitySchema>;
+const platformSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  vendor: z.string(),
+  family: z.string(),
+  surface: z.string(),
+});
+export type Platform = z.infer<typeof platformSchema>;
+const methodSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  vendor: z.string(),
+  plans: z.string(),
+  claims: z.record(z.string(), factSchema),
+  platforms: z.array(supportSchema),
+});
+export type Method = z.infer<typeof methodSchema>;
+
+export const catalogSchema = z.object({
+  capabilities: z.array(capabilitySchema),
+  platforms: z.array(platformSchema),
+  methods: z.array(methodSchema),
+});
+export type Catalog = z.infer<typeof catalogSchema>;
+export const snapshotSchema = catalogSchema.extend({ revision: z.string() });
+export type Snapshot = z.infer<typeof snapshotSchema>;
+
+/** Where the matrix lives, for readers who want to change it. */
+export const matrixSourceURL =
+  "https://github.com/speakeasy-api/gram/blob/main/server/internal/supportmatrix/matrix.yaml";
+
+export function platformSupport(
+  method: Method,
+  platformId: string,
+): PlatformSupport | undefined {
+  return method.platforms.find((support) => support.platform === platformId);
 }
 
-export function methodReference(
-  draft: Draft,
-  method: Method,
+/** The cell of a method on a platform, across every account type. A method
+ * that does not apply is not applicable for every capability, and one whose
+ * applicability is unknown is unknown for every capability. */
+export function cellFact(
+  support: PlatformSupport | undefined,
   capabilityId: string,
 ): Fact {
-  return (
-    draft.references[method.id]?.[capabilityId] ??
-    method.facts[capabilityId] ??
-    unknown
-  );
+  if (!support || support.applicability === "unknown") return unknown;
+  if (support.applicability === "na") return notApplicable;
+  return support.cells[capabilityId] ?? unknown;
 }
+
+/** What a method claims for a capability, platform aside. */
+export function claimFact(method: Method, capabilityId: string): Fact {
+  return method.claims[capabilityId] ?? unknown;
+}
+
 export function summarize(facts: Fact[]): Fact {
   // A known positive is useful, but unknown methods must not yield a negative claim.
   const supported = facts.filter((fact) => fact.status === "supported");
@@ -138,33 +160,3 @@ export function summarize(facts: Fact[]): Fact {
     return { ...unknown, status: "impossible" };
   return { ...unknown, status: "unimplemented" };
 }
-
-export const catalogSchema = z.object({
-  methods: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      vendor: z.string(),
-      plans: z.string(),
-      facts: z.record(z.string(), factSchema),
-    }),
-  ),
-  products: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      vendor: z.string(),
-      family: z.string(),
-      surface: z.string(),
-    }),
-  ),
-  capabilities: z.array(
-    z.object({ id: z.string(), name: z.string(), group: z.string() }),
-  ),
-});
-export type Catalog = z.infer<typeof catalogSchema>;
-export const snapshotSchema = catalogSchema.extend({
-  draft: draftSchema,
-  revision: z.string(),
-});
-export type Snapshot = z.infer<typeof snapshotSchema>;

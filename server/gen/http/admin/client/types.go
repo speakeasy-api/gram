@@ -369,13 +369,6 @@ type ChangeTrialEndDateRequestBody struct {
 	EndsAt string `form:"ends_at" json:"ends_at" xml:"ends_at"`
 }
 
-// UpdateSupportMatrixRequestBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP request body.
-type UpdateSupportMatrixRequestBody struct {
-	Revision string                   `form:"revision" json:"revision" xml:"revision"`
-	Draft    *SupportDraftRequestBody `form:"draft" json:"draft" xml:"draft"`
-}
-
 // CreateRegistryEntryRequestBody is the type of the "admin" service
 // "createRegistryEntry" endpoint HTTP request body.
 type CreateRegistryEntryRequestBody struct {
@@ -1742,21 +1735,11 @@ type GetSpendBreakdownResponseBody struct {
 // GetSupportMatrixResponseBody is the type of the "admin" service
 // "getSupportMatrix" endpoint HTTP response body.
 type GetSupportMatrixResponseBody struct {
-	Methods      []*SupportMethodResponseBody     `json:"methods"`
-	Products     []*SupportPlatformResponseBody   `json:"products"`
 	Capabilities []*SupportCapabilityResponseBody `json:"capabilities"`
-	Draft        *SupportDraftResponseBody        `json:"draft"`
-	Revision     *string                          `json:"revision"`
-}
-
-// UpdateSupportMatrixResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body.
-type UpdateSupportMatrixResponseBody struct {
+	Platforms    []*SupportPlatformResponseBody   `json:"platforms"`
 	Methods      []*SupportMethodResponseBody     `json:"methods"`
-	Products     []*SupportPlatformResponseBody   `json:"products"`
-	Capabilities []*SupportCapabilityResponseBody `json:"capabilities"`
-	Draft        *SupportDraftResponseBody        `json:"draft"`
-	Revision     *string                          `json:"revision"`
+	// Hex SHA-256 of the deployed matrix file.
+	Revision *string `json:"revision"`
 }
 
 // GetSupportCoverageResponseBody is the type of the "admin" service
@@ -12658,191 +12641,6 @@ type GetSupportMatrixGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateSupportMatrixUnauthorizedResponseBody is the type of the "admin"
-// service "updateSupportMatrix" endpoint HTTP response body for the
-// "unauthorized" error.
-type UpdateSupportMatrixUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpdateSupportMatrixForbiddenResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "forbidden" error.
-type UpdateSupportMatrixForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpdateSupportMatrixBadRequestResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "bad_request"
-// error.
-type UpdateSupportMatrixBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpdateSupportMatrixNotFoundResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "not_found" error.
-type UpdateSupportMatrixNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpdateSupportMatrixConflictResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "conflict" error.
-type UpdateSupportMatrixConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpdateSupportMatrixUnsupportedMediaResponseBody is the type of the "admin"
-// service "updateSupportMatrix" endpoint HTTP response body for the
-// "unsupported_media" error.
-type UpdateSupportMatrixUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpdateSupportMatrixInvalidResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "invalid" error.
-type UpdateSupportMatrixInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpdateSupportMatrixInvariantViolationResponseBody is the type of the "admin"
-// service "updateSupportMatrix" endpoint HTTP response body for the
-// "invariant_violation" error.
-type UpdateSupportMatrixInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpdateSupportMatrixUnexpectedResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "unexpected" error.
-type UpdateSupportMatrixUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpdateSupportMatrixGatewayErrorResponseBody is the type of the "admin"
-// service "updateSupportMatrix" endpoint HTTP response body for the
-// "gateway_error" error.
-type UpdateSupportMatrixGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // GetSupportCoverageUnauthorizedResponseBody is the type of the "admin"
 // service "getSupportCoverage" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -17631,20 +17429,12 @@ type SpendBucketResponseBody struct {
 	CostUsd *string `form:"cost_usd,omitempty" json:"cost_usd,omitempty" xml:"cost_usd,omitempty"`
 }
 
-// SupportMethodResponseBody is used to define fields on response body types.
-type SupportMethodResponseBody struct {
-	ID     *string                             `json:"id"`
-	Name   *string                             `json:"name"`
-	Vendor *string                             `json:"vendor"`
-	Plans  *string                             `json:"plans"`
-	Facts  map[string]*SupportFactResponseBody `json:"facts"`
-}
-
-// SupportFactResponseBody is used to define fields on response body types.
-type SupportFactResponseBody struct {
-	Status *string `json:"status"`
-	Note   *string `json:"note"`
-	Verify *bool   `json:"verify"`
+// SupportCapabilityResponseBody is used to define fields on response body
+// types.
+type SupportCapabilityResponseBody struct {
+	ID    *string `json:"id"`
+	Name  *string `json:"name"`
+	Group *string `json:"group"`
 }
 
 // SupportPlatformResponseBody is used to define fields on response body types.
@@ -17656,45 +17446,50 @@ type SupportPlatformResponseBody struct {
 	Surface *string `json:"surface"`
 }
 
-// SupportCapabilityResponseBody is used to define fields on response body
+// SupportMethodResponseBody is used to define fields on response body types.
+type SupportMethodResponseBody struct {
+	ID     *string `json:"id"`
+	Name   *string `json:"name"`
+	Vendor *string `json:"vendor"`
+	Plans  *string `json:"plans"`
+	// What the method delivers per capability, platform aside.
+	Claims map[string]*SupportFactResponseBody `json:"claims"`
+	// Every platform once, in the matrix's platform order.
+	Platforms []*SupportPlatformSupportResponseBody `json:"platforms"`
+}
+
+// SupportFactResponseBody is used to define fields on response body types.
+type SupportFactResponseBody struct {
+	Status *string `json:"status"`
+	Note   *string `json:"note"`
+	Verify *bool   `json:"verify"`
+}
+
+// SupportPlatformSupportResponseBody is used to define fields on response body
 // types.
-type SupportCapabilityResponseBody struct {
-	ID    *string `json:"id"`
-	Name  *string `json:"name"`
-	Group *string `json:"group"`
+type SupportPlatformSupportResponseBody struct {
+	Platform      *string                      `json:"platform"`
+	Applicability *string                      `json:"applicability"`
+	Accounts      *SupportAccountsResponseBody `json:"accounts"`
+	Os            *SupportOSResponseBody       `json:"os,omitempty"`
+	Note          *string                      `json:"note"`
+	// One fact per capability when the method applies; empty otherwise, meaning
+	// not applicable or unknown everywhere.
+	Cells map[string]*SupportFactResponseBody `json:"cells"`
 }
 
-// SupportDraftResponseBody is used to define fields on response body types.
-type SupportDraftResponseBody struct {
-	Mappings   map[string]*SupportMappingResponseBody         `json:"mappings"`
-	References map[string]map[string]*SupportFactResponseBody `json:"references"`
+// SupportAccountsResponseBody is used to define fields on response body types.
+type SupportAccountsResponseBody struct {
+	Personal   *string `json:"personal"`
+	Team       *string `json:"team"`
+	Enterprise *string `json:"enterprise"`
 }
 
-// SupportMappingResponseBody is used to define fields on response body types.
-type SupportMappingResponseBody struct {
-	Applicability *string                             `json:"applicability"`
-	Conditions    *string                             `json:"conditions"`
-	Facts         map[string]*SupportFactResponseBody `json:"facts"`
-}
-
-// SupportDraftRequestBody is used to define fields on request body types.
-type SupportDraftRequestBody struct {
-	Mappings   map[string]*SupportMappingRequestBody         `json:"mappings"`
-	References map[string]map[string]*SupportFactRequestBody `json:"references"`
-}
-
-// SupportMappingRequestBody is used to define fields on request body types.
-type SupportMappingRequestBody struct {
-	Applicability string                             `json:"applicability"`
-	Conditions    string                             `json:"conditions"`
-	Facts         map[string]*SupportFactRequestBody `json:"facts"`
-}
-
-// SupportFactRequestBody is used to define fields on request body types.
-type SupportFactRequestBody struct {
-	Status string `json:"status"`
-	Note   string `json:"note"`
-	Verify bool   `json:"verify"`
+// SupportOSResponseBody is used to define fields on response body types.
+type SupportOSResponseBody struct {
+	Mac     *string `json:"mac,omitempty"`
+	Windows *string `json:"windows,omitempty"`
+	Linux   *string `json:"linux,omitempty"`
 }
 
 // SupportCoverageCellResponseBody is used to define fields on response body
@@ -18252,18 +18047,6 @@ func NewChangeTrialEndDateRequestBody(p *admin.ChangeTrialEndDatePayload) *Chang
 	body := &ChangeTrialEndDateRequestBody{
 		ID:     p.ID,
 		EndsAt: p.EndsAt,
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixRequestBody builds the HTTP request body from the
-// payload of the "updateSupportMatrix" endpoint of the "admin" service.
-func NewUpdateSupportMatrixRequestBody(p *admin.UpdateSupportMatrixPayload) *UpdateSupportMatrixRequestBody {
-	body := &UpdateSupportMatrixRequestBody{
-		Revision: p.Revision,
-	}
-	if p.Draft != nil {
-		body.Draft = marshalAdminSupportDraftToSupportDraftRequestBody(p.Draft)
 	}
 	return body
 }
@@ -28093,22 +27876,6 @@ func NewGetSupportMatrixSupportMatrixOK(body *GetSupportMatrixResponseBody) *adm
 	v := &admin.SupportMatrix{
 		Revision: *body.Revision,
 	}
-	v.Methods = make([]*admin.SupportMethod, len(body.Methods))
-	for i, val := range body.Methods {
-		if val == nil {
-			v.Methods[i] = nil
-			continue
-		}
-		v.Methods[i] = unmarshalSupportMethodResponseBodyToAdminSupportMethod(val)
-	}
-	v.Products = make([]*admin.SupportPlatform, len(body.Products))
-	for i, val := range body.Products {
-		if val == nil {
-			v.Products[i] = nil
-			continue
-		}
-		v.Products[i] = unmarshalSupportPlatformResponseBodyToAdminSupportPlatform(val)
-	}
 	v.Capabilities = make([]*admin.SupportCapability, len(body.Capabilities))
 	for i, val := range body.Capabilities {
 		if val == nil {
@@ -28117,7 +27884,22 @@ func NewGetSupportMatrixSupportMatrixOK(body *GetSupportMatrixResponseBody) *adm
 		}
 		v.Capabilities[i] = unmarshalSupportCapabilityResponseBodyToAdminSupportCapability(val)
 	}
-	v.Draft = unmarshalSupportDraftResponseBodyToAdminSupportDraft(body.Draft)
+	v.Platforms = make([]*admin.SupportPlatform, len(body.Platforms))
+	for i, val := range body.Platforms {
+		if val == nil {
+			v.Platforms[i] = nil
+			continue
+		}
+		v.Platforms[i] = unmarshalSupportPlatformResponseBodyToAdminSupportPlatform(val)
+	}
+	v.Methods = make([]*admin.SupportMethod, len(body.Methods))
+	for i, val := range body.Methods {
+		if val == nil {
+			v.Methods[i] = nil
+			continue
+		}
+		v.Methods[i] = unmarshalSupportMethodResponseBodyToAdminSupportMethod(val)
+	}
 
 	return v
 }
@@ -28260,191 +28042,6 @@ func NewGetSupportMatrixUnexpected(body *GetSupportMatrixUnexpectedResponseBody)
 // NewGetSupportMatrixGatewayError builds a admin service getSupportMatrix
 // endpoint gateway_error error.
 func NewGetSupportMatrixGatewayError(body *GetSupportMatrixGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateSupportMatrixSupportMatrixOK builds a "admin" service
-// "updateSupportMatrix" endpoint result from a HTTP "OK" response.
-func NewUpdateSupportMatrixSupportMatrixOK(body *UpdateSupportMatrixResponseBody) *admin.SupportMatrix {
-	v := &admin.SupportMatrix{
-		Revision: *body.Revision,
-	}
-	v.Methods = make([]*admin.SupportMethod, len(body.Methods))
-	for i, val := range body.Methods {
-		if val == nil {
-			v.Methods[i] = nil
-			continue
-		}
-		v.Methods[i] = unmarshalSupportMethodResponseBodyToAdminSupportMethod(val)
-	}
-	v.Products = make([]*admin.SupportPlatform, len(body.Products))
-	for i, val := range body.Products {
-		if val == nil {
-			v.Products[i] = nil
-			continue
-		}
-		v.Products[i] = unmarshalSupportPlatformResponseBodyToAdminSupportPlatform(val)
-	}
-	v.Capabilities = make([]*admin.SupportCapability, len(body.Capabilities))
-	for i, val := range body.Capabilities {
-		if val == nil {
-			v.Capabilities[i] = nil
-			continue
-		}
-		v.Capabilities[i] = unmarshalSupportCapabilityResponseBodyToAdminSupportCapability(val)
-	}
-	v.Draft = unmarshalSupportDraftResponseBodyToAdminSupportDraft(body.Draft)
-
-	return v
-}
-
-// NewUpdateSupportMatrixUnauthorized builds a admin service
-// updateSupportMatrix endpoint unauthorized error.
-func NewUpdateSupportMatrixUnauthorized(body *UpdateSupportMatrixUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateSupportMatrixForbidden builds a admin service updateSupportMatrix
-// endpoint forbidden error.
-func NewUpdateSupportMatrixForbidden(body *UpdateSupportMatrixForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateSupportMatrixBadRequest builds a admin service updateSupportMatrix
-// endpoint bad_request error.
-func NewUpdateSupportMatrixBadRequest(body *UpdateSupportMatrixBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateSupportMatrixNotFound builds a admin service updateSupportMatrix
-// endpoint not_found error.
-func NewUpdateSupportMatrixNotFound(body *UpdateSupportMatrixNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateSupportMatrixConflict builds a admin service updateSupportMatrix
-// endpoint conflict error.
-func NewUpdateSupportMatrixConflict(body *UpdateSupportMatrixConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateSupportMatrixUnsupportedMedia builds a admin service
-// updateSupportMatrix endpoint unsupported_media error.
-func NewUpdateSupportMatrixUnsupportedMedia(body *UpdateSupportMatrixUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateSupportMatrixInvalid builds a admin service updateSupportMatrix
-// endpoint invalid error.
-func NewUpdateSupportMatrixInvalid(body *UpdateSupportMatrixInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateSupportMatrixInvariantViolation builds a admin service
-// updateSupportMatrix endpoint invariant_violation error.
-func NewUpdateSupportMatrixInvariantViolation(body *UpdateSupportMatrixInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateSupportMatrixUnexpected builds a admin service updateSupportMatrix
-// endpoint unexpected error.
-func NewUpdateSupportMatrixUnexpected(body *UpdateSupportMatrixUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpdateSupportMatrixGatewayError builds a admin service
-// updateSupportMatrix endpoint gateway_error error.
-func NewUpdateSupportMatrixGatewayError(body *UpdateSupportMatrixGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -33898,34 +33495,17 @@ func ValidateGetSpendBreakdownResponseBody(body *GetSpendBreakdownResponseBody) 
 // ValidateGetSupportMatrixResponseBody runs the validations defined on
 // GetSupportMatrixResponseBody
 func ValidateGetSupportMatrixResponseBody(body *GetSupportMatrixResponseBody) (err error) {
-	if body.Methods == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("methods", "body"))
-	}
-	if body.Products == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("products", "body"))
-	}
 	if body.Capabilities == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("capabilities", "body"))
 	}
-	if body.Draft == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("draft", "body"))
+	if body.Platforms == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platforms", "body"))
+	}
+	if body.Methods == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("methods", "body"))
 	}
 	if body.Revision == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("revision", "body"))
-	}
-	for _, e := range body.Methods {
-		if e != nil {
-			if err2 := ValidateSupportMethodResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.Products {
-		if e != nil {
-			if err2 := ValidateSupportPlatformResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
 	}
 	for _, e := range body.Capabilities {
 		if e != nil {
@@ -33934,56 +33514,18 @@ func ValidateGetSupportMatrixResponseBody(body *GetSupportMatrixResponseBody) (e
 			}
 		}
 	}
-	if body.Draft != nil {
-		if err2 := ValidateSupportDraftResponseBody(body.Draft); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	return
-}
-
-// ValidateUpdateSupportMatrixResponseBody runs the validations defined on
-// UpdateSupportMatrixResponseBody
-func ValidateUpdateSupportMatrixResponseBody(body *UpdateSupportMatrixResponseBody) (err error) {
-	if body.Methods == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("methods", "body"))
-	}
-	if body.Products == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("products", "body"))
-	}
-	if body.Capabilities == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("capabilities", "body"))
-	}
-	if body.Draft == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("draft", "body"))
-	}
-	if body.Revision == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("revision", "body"))
-	}
-	for _, e := range body.Methods {
-		if e != nil {
-			if err2 := ValidateSupportMethodResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.Products {
+	for _, e := range body.Platforms {
 		if e != nil {
 			if err2 := ValidateSupportPlatformResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
 	}
-	for _, e := range body.Capabilities {
+	for _, e := range body.Methods {
 		if e != nil {
-			if err2 := ValidateSupportCapabilityResponseBody(e); err2 != nil {
+			if err2 := ValidateSupportMethodResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	if body.Draft != nil {
-		if err2 := ValidateSupportDraftResponseBody(body.Draft); err2 != nil {
-			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -48352,246 +47894,6 @@ func ValidateGetSupportMatrixGatewayErrorResponseBody(body *GetSupportMatrixGate
 	return
 }
 
-// ValidateUpdateSupportMatrixUnauthorizedResponseBody runs the validations
-// defined on updateSupportMatrix_unauthorized_response_body
-func ValidateUpdateSupportMatrixUnauthorizedResponseBody(body *UpdateSupportMatrixUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateSupportMatrixForbiddenResponseBody runs the validations
-// defined on updateSupportMatrix_forbidden_response_body
-func ValidateUpdateSupportMatrixForbiddenResponseBody(body *UpdateSupportMatrixForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateSupportMatrixBadRequestResponseBody runs the validations
-// defined on updateSupportMatrix_bad_request_response_body
-func ValidateUpdateSupportMatrixBadRequestResponseBody(body *UpdateSupportMatrixBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateSupportMatrixNotFoundResponseBody runs the validations defined
-// on updateSupportMatrix_not_found_response_body
-func ValidateUpdateSupportMatrixNotFoundResponseBody(body *UpdateSupportMatrixNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateSupportMatrixConflictResponseBody runs the validations defined
-// on updateSupportMatrix_conflict_response_body
-func ValidateUpdateSupportMatrixConflictResponseBody(body *UpdateSupportMatrixConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateSupportMatrixUnsupportedMediaResponseBody runs the validations
-// defined on updateSupportMatrix_unsupported_media_response_body
-func ValidateUpdateSupportMatrixUnsupportedMediaResponseBody(body *UpdateSupportMatrixUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateSupportMatrixInvalidResponseBody runs the validations defined
-// on updateSupportMatrix_invalid_response_body
-func ValidateUpdateSupportMatrixInvalidResponseBody(body *UpdateSupportMatrixInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateSupportMatrixInvariantViolationResponseBody runs the
-// validations defined on updateSupportMatrix_invariant_violation_response_body
-func ValidateUpdateSupportMatrixInvariantViolationResponseBody(body *UpdateSupportMatrixInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateSupportMatrixUnexpectedResponseBody runs the validations
-// defined on updateSupportMatrix_unexpected_response_body
-func ValidateUpdateSupportMatrixUnexpectedResponseBody(body *UpdateSupportMatrixUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpdateSupportMatrixGatewayErrorResponseBody runs the validations
-// defined on updateSupportMatrix_gateway_error_response_body
-func ValidateUpdateSupportMatrixGatewayErrorResponseBody(body *UpdateSupportMatrixGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateGetSupportCoverageUnauthorizedResponseBody runs the validations
 // defined on getSupportCoverage_unauthorized_response_body
 func ValidateGetSupportCoverageUnauthorizedResponseBody(body *GetSupportCoverageUnauthorizedResponseBody) (err error) {
@@ -54806,6 +54108,42 @@ func ValidateSpendBucketResponseBody(body *SpendBucketResponseBody) (err error) 
 	return
 }
 
+// ValidateSupportCapabilityResponseBody runs the validations defined on
+// SupportCapabilityResponseBody
+func ValidateSupportCapabilityResponseBody(body *SupportCapabilityResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Group == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group", "body"))
+	}
+	return
+}
+
+// ValidateSupportPlatformResponseBody runs the validations defined on
+// SupportPlatformResponseBody
+func ValidateSupportPlatformResponseBody(body *SupportPlatformResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Vendor == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendor", "body"))
+	}
+	if body.Family == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("family", "body"))
+	}
+	if body.Surface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
+	}
+	return
+}
+
 // ValidateSupportMethodResponseBody runs the validations defined on
 // SupportMethodResponseBody
 func ValidateSupportMethodResponseBody(body *SupportMethodResponseBody) (err error) {
@@ -54821,12 +54159,22 @@ func ValidateSupportMethodResponseBody(body *SupportMethodResponseBody) (err err
 	if body.Plans == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("plans", "body"))
 	}
-	if body.Facts == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("facts", "body"))
+	if body.Claims == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("claims", "body"))
 	}
-	for _, v := range body.Facts {
+	if body.Platforms == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platforms", "body"))
+	}
+	for _, v := range body.Claims {
 		if v != nil {
 			if err2 := ValidateSupportFactResponseBody(v); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Platforms {
+		if e != nil {
+			if err2 := ValidateSupportPlatformSupportResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -54859,93 +54207,45 @@ func ValidateSupportFactResponseBody(body *SupportFactResponseBody) (err error) 
 	return
 }
 
-// ValidateSupportPlatformResponseBody runs the validations defined on
-// SupportPlatformResponseBody
-func ValidateSupportPlatformResponseBody(body *SupportPlatformResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+// ValidateSupportPlatformSupportResponseBody runs the validations defined on
+// SupportPlatformSupportResponseBody
+func ValidateSupportPlatformSupportResponseBody(body *SupportPlatformSupportResponseBody) (err error) {
+	if body.Platform == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform", "body"))
 	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Vendor == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("vendor", "body"))
-	}
-	if body.Family == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("family", "body"))
-	}
-	if body.Surface == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
-	}
-	return
-}
-
-// ValidateSupportCapabilityResponseBody runs the validations defined on
-// SupportCapabilityResponseBody
-func ValidateSupportCapabilityResponseBody(body *SupportCapabilityResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Group == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("group", "body"))
-	}
-	return
-}
-
-// ValidateSupportDraftResponseBody runs the validations defined on
-// SupportDraftResponseBody
-func ValidateSupportDraftResponseBody(body *SupportDraftResponseBody) (err error) {
-	if body.Mappings == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mappings", "body"))
-	}
-	if body.References == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("references", "body"))
-	}
-	for _, v := range body.Mappings {
-		if v != nil {
-			if err2 := ValidateSupportMappingResponseBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, v := range body.References {
-		for _, v := range v {
-			if v != nil {
-				if err2 := ValidateSupportFactResponseBody(v); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		}
-	}
-	return
-}
-
-// ValidateSupportMappingResponseBody runs the validations defined on
-// SupportMappingResponseBody
-func ValidateSupportMappingResponseBody(body *SupportMappingResponseBody) (err error) {
 	if body.Applicability == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("applicability", "body"))
 	}
-	if body.Conditions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("conditions", "body"))
+	if body.Accounts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("accounts", "body"))
 	}
-	if body.Facts == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("facts", "body"))
+	if body.Note == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("note", "body"))
+	}
+	if body.Cells == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cells", "body"))
 	}
 	if body.Applicability != nil {
 		if !(*body.Applicability == "unknown" || *body.Applicability == "applicable" || *body.Applicability == "na") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.applicability", *body.Applicability, []any{"unknown", "applicable", "na"}))
 		}
 	}
-	if body.Conditions != nil {
-		if utf8.RuneCountInString(*body.Conditions) > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.conditions", *body.Conditions, utf8.RuneCountInString(*body.Conditions), 10000, false))
+	if body.Accounts != nil {
+		if err2 := ValidateSupportAccountsResponseBody(body.Accounts); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
-	for _, v := range body.Facts {
+	if body.Os != nil {
+		if err2 := ValidateSupportOSResponseBody(body.Os); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Note != nil {
+		if utf8.RuneCountInString(*body.Note) > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 10000, false))
+		}
+	}
+	for _, v := range body.Cells {
 		if v != nil {
 			if err2 := ValidateSupportFactResponseBody(v); err2 != nil {
 				err = goa.MergeErrors(err, err2)
@@ -54955,64 +54255,53 @@ func ValidateSupportMappingResponseBody(body *SupportMappingResponseBody) (err e
 	return
 }
 
-// ValidateSupportDraftRequestBody runs the validations defined on
-// SupportDraftRequestBody
-func ValidateSupportDraftRequestBody(body *SupportDraftRequestBody) (err error) {
-	if body.Mappings == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mappings", "body"))
+// ValidateSupportAccountsResponseBody runs the validations defined on
+// SupportAccountsResponseBody
+func ValidateSupportAccountsResponseBody(body *SupportAccountsResponseBody) (err error) {
+	if body.Personal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("personal", "body"))
 	}
-	if body.References == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("references", "body"))
+	if body.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
-	for _, v := range body.Mappings {
-		if v != nil {
-			if err2 := ValidateSupportMappingRequestBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
+	if body.Enterprise == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enterprise", "body"))
+	}
+	if body.Personal != nil {
+		if !(*body.Personal == "supported" || *body.Personal == "unsupported" || *body.Personal == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.personal", *body.Personal, []any{"supported", "unsupported", "unknown"}))
 		}
 	}
-	for _, v := range body.References {
-		for _, v := range v {
-			if v != nil {
-				if err2 := ValidateSupportFactRequestBody(v); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
+	if body.Team != nil {
+		if !(*body.Team == "supported" || *body.Team == "unsupported" || *body.Team == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.team", *body.Team, []any{"supported", "unsupported", "unknown"}))
 		}
 	}
-	return
-}
-
-// ValidateSupportMappingRequestBody runs the validations defined on
-// SupportMappingRequestBody
-func ValidateSupportMappingRequestBody(body *SupportMappingRequestBody) (err error) {
-	if body.Facts == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("facts", "body"))
-	}
-	if !(body.Applicability == "unknown" || body.Applicability == "applicable" || body.Applicability == "na") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.applicability", body.Applicability, []any{"unknown", "applicable", "na"}))
-	}
-	if utf8.RuneCountInString(body.Conditions) > 10000 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.conditions", body.Conditions, utf8.RuneCountInString(body.Conditions), 10000, false))
-	}
-	for _, v := range body.Facts {
-		if v != nil {
-			if err2 := ValidateSupportFactRequestBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
+	if body.Enterprise != nil {
+		if !(*body.Enterprise == "supported" || *body.Enterprise == "unsupported" || *body.Enterprise == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.enterprise", *body.Enterprise, []any{"supported", "unsupported", "unknown"}))
 		}
 	}
 	return
 }
 
-// ValidateSupportFactRequestBody runs the validations defined on
-// SupportFactRequestBody
-func ValidateSupportFactRequestBody(body *SupportFactRequestBody) (err error) {
-	if !(body.Status == "supported" || body.Status == "partial" || body.Status == "unimplemented" || body.Status == "impossible" || body.Status == "na" || body.Status == "unknown") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", body.Status, []any{"supported", "partial", "unimplemented", "impossible", "na", "unknown"}))
+// ValidateSupportOSResponseBody runs the validations defined on
+// SupportOSResponseBody
+func ValidateSupportOSResponseBody(body *SupportOSResponseBody) (err error) {
+	if body.Mac != nil {
+		if !(*body.Mac == "supported" || *body.Mac == "verify") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mac", *body.Mac, []any{"supported", "verify"}))
+		}
 	}
-	if utf8.RuneCountInString(body.Note) > 10000 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", body.Note, utf8.RuneCountInString(body.Note), 10000, false))
+	if body.Windows != nil {
+		if !(*body.Windows == "supported" || *body.Windows == "verify") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.windows", *body.Windows, []any{"supported", "verify"}))
+		}
+	}
+	if body.Linux != nil {
+		if !(*body.Linux == "supported" || *body.Linux == "verify") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.linux", *body.Linux, []any{"supported", "verify"}))
+		}
 	}
 	return
 }

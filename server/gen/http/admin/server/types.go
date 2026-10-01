@@ -369,13 +369,6 @@ type ChangeTrialEndDateRequestBody struct {
 	EndsAt *string `form:"ends_at,omitempty" json:"ends_at,omitempty" xml:"ends_at,omitempty"`
 }
 
-// UpdateSupportMatrixRequestBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP request body.
-type UpdateSupportMatrixRequestBody struct {
-	Revision *string                  `form:"revision,omitempty" json:"revision,omitempty" xml:"revision,omitempty"`
-	Draft    *SupportDraftRequestBody `form:"draft,omitempty" json:"draft,omitempty" xml:"draft,omitempty"`
-}
-
 // CreateRegistryEntryRequestBody is the type of the "admin" service
 // "createRegistryEntry" endpoint HTTP request body.
 type CreateRegistryEntryRequestBody struct {
@@ -1750,21 +1743,11 @@ type GetSpendBreakdownResponseBody struct {
 // GetSupportMatrixResponseBody is the type of the "admin" service
 // "getSupportMatrix" endpoint HTTP response body.
 type GetSupportMatrixResponseBody struct {
-	Methods      []*SupportMethodResponseBody     `json:"methods"`
-	Products     []*SupportPlatformResponseBody   `json:"products"`
 	Capabilities []*SupportCapabilityResponseBody `json:"capabilities"`
-	Draft        *SupportDraftResponseBody        `json:"draft"`
-	Revision     string                           `json:"revision"`
-}
-
-// UpdateSupportMatrixResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body.
-type UpdateSupportMatrixResponseBody struct {
+	Platforms    []*SupportPlatformResponseBody   `json:"platforms"`
 	Methods      []*SupportMethodResponseBody     `json:"methods"`
-	Products     []*SupportPlatformResponseBody   `json:"products"`
-	Capabilities []*SupportCapabilityResponseBody `json:"capabilities"`
-	Draft        *SupportDraftResponseBody        `json:"draft"`
-	Revision     string                           `json:"revision"`
+	// Hex SHA-256 of the deployed matrix file.
+	Revision string `json:"revision"`
 }
 
 // GetSupportCoverageResponseBody is the type of the "admin" service
@@ -12666,191 +12649,6 @@ type GetSupportMatrixGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateSupportMatrixUnauthorizedResponseBody is the type of the "admin"
-// service "updateSupportMatrix" endpoint HTTP response body for the
-// "unauthorized" error.
-type UpdateSupportMatrixUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateSupportMatrixForbiddenResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "forbidden" error.
-type UpdateSupportMatrixForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateSupportMatrixBadRequestResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "bad_request"
-// error.
-type UpdateSupportMatrixBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateSupportMatrixNotFoundResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "not_found" error.
-type UpdateSupportMatrixNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateSupportMatrixConflictResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "conflict" error.
-type UpdateSupportMatrixConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateSupportMatrixUnsupportedMediaResponseBody is the type of the "admin"
-// service "updateSupportMatrix" endpoint HTTP response body for the
-// "unsupported_media" error.
-type UpdateSupportMatrixUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateSupportMatrixInvalidResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "invalid" error.
-type UpdateSupportMatrixInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateSupportMatrixInvariantViolationResponseBody is the type of the "admin"
-// service "updateSupportMatrix" endpoint HTTP response body for the
-// "invariant_violation" error.
-type UpdateSupportMatrixInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateSupportMatrixUnexpectedResponseBody is the type of the "admin" service
-// "updateSupportMatrix" endpoint HTTP response body for the "unexpected" error.
-type UpdateSupportMatrixUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// UpdateSupportMatrixGatewayErrorResponseBody is the type of the "admin"
-// service "updateSupportMatrix" endpoint HTTP response body for the
-// "gateway_error" error.
-type UpdateSupportMatrixGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GetSupportCoverageUnauthorizedResponseBody is the type of the "admin"
 // service "getSupportCoverage" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -17639,20 +17437,12 @@ type SpendBucketResponseBody struct {
 	CostUsd string `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
 }
 
-// SupportMethodResponseBody is used to define fields on response body types.
-type SupportMethodResponseBody struct {
-	ID     string                              `json:"id"`
-	Name   string                              `json:"name"`
-	Vendor string                              `json:"vendor"`
-	Plans  string                              `json:"plans"`
-	Facts  map[string]*SupportFactResponseBody `json:"facts"`
-}
-
-// SupportFactResponseBody is used to define fields on response body types.
-type SupportFactResponseBody struct {
-	Status string `json:"status"`
-	Note   string `json:"note"`
-	Verify bool   `json:"verify"`
+// SupportCapabilityResponseBody is used to define fields on response body
+// types.
+type SupportCapabilityResponseBody struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Group string `json:"group"`
 }
 
 // SupportPlatformResponseBody is used to define fields on response body types.
@@ -17664,25 +17454,50 @@ type SupportPlatformResponseBody struct {
 	Surface string `json:"surface"`
 }
 
-// SupportCapabilityResponseBody is used to define fields on response body
+// SupportMethodResponseBody is used to define fields on response body types.
+type SupportMethodResponseBody struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Vendor string `json:"vendor"`
+	Plans  string `json:"plans"`
+	// What the method delivers per capability, platform aside.
+	Claims map[string]*SupportFactResponseBody `json:"claims"`
+	// Every platform once, in the matrix's platform order.
+	Platforms []*SupportPlatformSupportResponseBody `json:"platforms"`
+}
+
+// SupportFactResponseBody is used to define fields on response body types.
+type SupportFactResponseBody struct {
+	Status string `json:"status"`
+	Note   string `json:"note"`
+	Verify bool   `json:"verify"`
+}
+
+// SupportPlatformSupportResponseBody is used to define fields on response body
 // types.
-type SupportCapabilityResponseBody struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Group string `json:"group"`
+type SupportPlatformSupportResponseBody struct {
+	Platform      string                       `json:"platform"`
+	Applicability string                       `json:"applicability"`
+	Accounts      *SupportAccountsResponseBody `json:"accounts"`
+	Os            *SupportOSResponseBody       `json:"os,omitempty"`
+	Note          string                       `json:"note"`
+	// One fact per capability when the method applies; empty otherwise, meaning
+	// not applicable or unknown everywhere.
+	Cells map[string]*SupportFactResponseBody `json:"cells"`
 }
 
-// SupportDraftResponseBody is used to define fields on response body types.
-type SupportDraftResponseBody struct {
-	Mappings   map[string]*SupportMappingResponseBody         `json:"mappings"`
-	References map[string]map[string]*SupportFactResponseBody `json:"references"`
+// SupportAccountsResponseBody is used to define fields on response body types.
+type SupportAccountsResponseBody struct {
+	Personal   string `json:"personal"`
+	Team       string `json:"team"`
+	Enterprise string `json:"enterprise"`
 }
 
-// SupportMappingResponseBody is used to define fields on response body types.
-type SupportMappingResponseBody struct {
-	Applicability string                              `json:"applicability"`
-	Conditions    string                              `json:"conditions"`
-	Facts         map[string]*SupportFactResponseBody `json:"facts"`
+// SupportOSResponseBody is used to define fields on response body types.
+type SupportOSResponseBody struct {
+	Mac     *string `json:"mac,omitempty"`
+	Windows *string `json:"windows,omitempty"`
+	Linux   *string `json:"linux,omitempty"`
 }
 
 // SupportCoverageCellResponseBody is used to define fields on response body
@@ -17842,26 +17657,6 @@ type AdminOnboardingStepApplicabilityResponseBody struct {
 	Applies bool `form:"applies" json:"applies" xml:"applies"`
 	// Why not, when it does not.
 	Reason string `form:"reason" json:"reason" xml:"reason"`
-}
-
-// SupportDraftRequestBody is used to define fields on request body types.
-type SupportDraftRequestBody struct {
-	Mappings   map[string]*SupportMappingRequestBody         `json:"mappings"`
-	References map[string]map[string]*SupportFactRequestBody `json:"references"`
-}
-
-// SupportMappingRequestBody is used to define fields on request body types.
-type SupportMappingRequestBody struct {
-	Applicability *string                            `json:"applicability"`
-	Conditions    *string                            `json:"conditions"`
-	Facts         map[string]*SupportFactRequestBody `json:"facts"`
-}
-
-// SupportFactRequestBody is used to define fields on request body types.
-type SupportFactRequestBody struct {
-	Status *string `json:"status"`
-	Note   *string `json:"note"`
-	Verify *bool   `json:"verify"`
 }
 
 // AdminOnboardingStackVendorRequestBody is used to define fields on request
@@ -19132,30 +18927,6 @@ func NewGetSupportMatrixResponseBody(res *admin.SupportMatrix) *GetSupportMatrix
 	body := &GetSupportMatrixResponseBody{
 		Revision: res.Revision,
 	}
-	if res.Methods != nil {
-		body.Methods = make([]*SupportMethodResponseBody, len(res.Methods))
-		for i, val := range res.Methods {
-			if val == nil {
-				body.Methods[i] = nil
-				continue
-			}
-			body.Methods[i] = marshalAdminSupportMethodToSupportMethodResponseBody(val)
-		}
-	} else {
-		body.Methods = []*SupportMethodResponseBody{}
-	}
-	if res.Products != nil {
-		body.Products = make([]*SupportPlatformResponseBody, len(res.Products))
-		for i, val := range res.Products {
-			if val == nil {
-				body.Products[i] = nil
-				continue
-			}
-			body.Products[i] = marshalAdminSupportPlatformToSupportPlatformResponseBody(val)
-		}
-	} else {
-		body.Products = []*SupportPlatformResponseBody{}
-	}
 	if res.Capabilities != nil {
 		body.Capabilities = make([]*SupportCapabilityResponseBody, len(res.Capabilities))
 		for i, val := range res.Capabilities {
@@ -19168,17 +18939,17 @@ func NewGetSupportMatrixResponseBody(res *admin.SupportMatrix) *GetSupportMatrix
 	} else {
 		body.Capabilities = []*SupportCapabilityResponseBody{}
 	}
-	if res.Draft != nil {
-		body.Draft = marshalAdminSupportDraftToSupportDraftResponseBody(res.Draft)
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixResponseBody builds the HTTP response body from the
-// result of the "updateSupportMatrix" endpoint of the "admin" service.
-func NewUpdateSupportMatrixResponseBody(res *admin.SupportMatrix) *UpdateSupportMatrixResponseBody {
-	body := &UpdateSupportMatrixResponseBody{
-		Revision: res.Revision,
+	if res.Platforms != nil {
+		body.Platforms = make([]*SupportPlatformResponseBody, len(res.Platforms))
+		for i, val := range res.Platforms {
+			if val == nil {
+				body.Platforms[i] = nil
+				continue
+			}
+			body.Platforms[i] = marshalAdminSupportPlatformToSupportPlatformResponseBody(val)
+		}
+	} else {
+		body.Platforms = []*SupportPlatformResponseBody{}
 	}
 	if res.Methods != nil {
 		body.Methods = make([]*SupportMethodResponseBody, len(res.Methods))
@@ -19191,33 +18962,6 @@ func NewUpdateSupportMatrixResponseBody(res *admin.SupportMatrix) *UpdateSupport
 		}
 	} else {
 		body.Methods = []*SupportMethodResponseBody{}
-	}
-	if res.Products != nil {
-		body.Products = make([]*SupportPlatformResponseBody, len(res.Products))
-		for i, val := range res.Products {
-			if val == nil {
-				body.Products[i] = nil
-				continue
-			}
-			body.Products[i] = marshalAdminSupportPlatformToSupportPlatformResponseBody(val)
-		}
-	} else {
-		body.Products = []*SupportPlatformResponseBody{}
-	}
-	if res.Capabilities != nil {
-		body.Capabilities = make([]*SupportCapabilityResponseBody, len(res.Capabilities))
-		for i, val := range res.Capabilities {
-			if val == nil {
-				body.Capabilities[i] = nil
-				continue
-			}
-			body.Capabilities[i] = marshalAdminSupportCapabilityToSupportCapabilityResponseBody(val)
-		}
-	} else {
-		body.Capabilities = []*SupportCapabilityResponseBody{}
-	}
-	if res.Draft != nil {
-		body.Draft = marshalAdminSupportDraftToSupportDraftResponseBody(res.Draft)
 	}
 	return body
 }
@@ -28054,148 +27798,6 @@ func NewGetSupportMatrixGatewayErrorResponseBody(res *goa.ServiceError) *GetSupp
 	return body
 }
 
-// NewUpdateSupportMatrixUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
-func NewUpdateSupportMatrixUnauthorizedResponseBody(res *goa.ServiceError) *UpdateSupportMatrixUnauthorizedResponseBody {
-	body := &UpdateSupportMatrixUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixForbiddenResponseBody builds the HTTP response body
-// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
-func NewUpdateSupportMatrixForbiddenResponseBody(res *goa.ServiceError) *UpdateSupportMatrixForbiddenResponseBody {
-	body := &UpdateSupportMatrixForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixBadRequestResponseBody builds the HTTP response body
-// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
-func NewUpdateSupportMatrixBadRequestResponseBody(res *goa.ServiceError) *UpdateSupportMatrixBadRequestResponseBody {
-	body := &UpdateSupportMatrixBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixNotFoundResponseBody builds the HTTP response body
-// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
-func NewUpdateSupportMatrixNotFoundResponseBody(res *goa.ServiceError) *UpdateSupportMatrixNotFoundResponseBody {
-	body := &UpdateSupportMatrixNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixConflictResponseBody builds the HTTP response body
-// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
-func NewUpdateSupportMatrixConflictResponseBody(res *goa.ServiceError) *UpdateSupportMatrixConflictResponseBody {
-	body := &UpdateSupportMatrixConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "updateSupportMatrix" endpoint of the "admin"
-// service.
-func NewUpdateSupportMatrixUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateSupportMatrixUnsupportedMediaResponseBody {
-	body := &UpdateSupportMatrixUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixInvalidResponseBody builds the HTTP response body from
-// the result of the "updateSupportMatrix" endpoint of the "admin" service.
-func NewUpdateSupportMatrixInvalidResponseBody(res *goa.ServiceError) *UpdateSupportMatrixInvalidResponseBody {
-	body := &UpdateSupportMatrixInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "updateSupportMatrix" endpoint of the
-// "admin" service.
-func NewUpdateSupportMatrixInvariantViolationResponseBody(res *goa.ServiceError) *UpdateSupportMatrixInvariantViolationResponseBody {
-	body := &UpdateSupportMatrixInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixUnexpectedResponseBody builds the HTTP response body
-// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
-func NewUpdateSupportMatrixUnexpectedResponseBody(res *goa.ServiceError) *UpdateSupportMatrixUnexpectedResponseBody {
-	body := &UpdateSupportMatrixUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateSupportMatrixGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "updateSupportMatrix" endpoint of the "admin" service.
-func NewUpdateSupportMatrixGatewayErrorResponseBody(res *goa.ServiceError) *UpdateSupportMatrixGatewayErrorResponseBody {
-	body := &UpdateSupportMatrixGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewGetSupportCoverageUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getSupportCoverage" endpoint of the "admin" service.
 func NewGetSupportCoverageUnauthorizedResponseBody(res *goa.ServiceError) *GetSupportCoverageUnauthorizedResponseBody {
@@ -32401,18 +32003,6 @@ func NewGetSupportMatrixPayload(adminSessionToken *string) *admin.GetSupportMatr
 	return v
 }
 
-// NewUpdateSupportMatrixPayload builds a admin service updateSupportMatrix
-// endpoint payload.
-func NewUpdateSupportMatrixPayload(body *UpdateSupportMatrixRequestBody, adminSessionToken *string) *admin.UpdateSupportMatrixPayload {
-	v := &admin.UpdateSupportMatrixPayload{
-		Revision: *body.Revision,
-	}
-	v.Draft = unmarshalSupportDraftRequestBodyToAdminSupportDraft(body.Draft)
-	v.AdminSessionToken = adminSessionToken
-
-	return v
-}
-
 // NewGetSupportCoveragePayload builds a admin service getSupportCoverage
 // endpoint payload.
 func NewGetSupportCoveragePayload(organizationID string, windowDays int, adminSessionToken *string) *admin.GetSupportCoveragePayload {
@@ -33101,33 +32691,6 @@ func ValidateChangeTrialEndDateRequestBody(body *ChangeTrialEndDateRequestBody) 
 	return
 }
 
-// ValidateUpdateSupportMatrixRequestBody runs the validations defined on
-// UpdateSupportMatrixRequestBody
-func ValidateUpdateSupportMatrixRequestBody(body *UpdateSupportMatrixRequestBody) (err error) {
-	if body.Revision == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("revision", "body"))
-	}
-	if body.Draft == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("draft", "body"))
-	}
-	if body.Revision != nil {
-		if utf8.RuneCountInString(*body.Revision) < 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.revision", *body.Revision, utf8.RuneCountInString(*body.Revision), 64, true))
-		}
-	}
-	if body.Revision != nil {
-		if utf8.RuneCountInString(*body.Revision) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.revision", *body.Revision, utf8.RuneCountInString(*body.Revision), 64, false))
-		}
-	}
-	if body.Draft != nil {
-		if err2 := ValidateSupportDraftRequestBody(body.Draft); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	return
-}
-
 // ValidateCreateRegistryEntryRequestBody runs the validations defined on
 // CreateRegistryEntryRequestBody
 func ValidateCreateRegistryEntryRequestBody(body *CreateRegistryEntryRequestBody) (err error) {
@@ -33300,91 +32863,6 @@ func ValidateSetStripeSubscriptionRequestBody(body *SetStripeSubscriptionRequest
 	if body.StripeSubscriptionID != nil {
 		if utf8.RuneCountInString(*body.StripeSubscriptionID) > 255 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_subscription_id", *body.StripeSubscriptionID, utf8.RuneCountInString(*body.StripeSubscriptionID), 255, false))
-		}
-	}
-	return
-}
-
-// ValidateSupportDraftRequestBody runs the validations defined on
-// SupportDraftRequestBody
-func ValidateSupportDraftRequestBody(body *SupportDraftRequestBody) (err error) {
-	if body.Mappings == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mappings", "body"))
-	}
-	if body.References == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("references", "body"))
-	}
-	for _, v := range body.Mappings {
-		if v != nil {
-			if err2 := ValidateSupportMappingRequestBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, v := range body.References {
-		for _, v := range v {
-			if v != nil {
-				if err2 := ValidateSupportFactRequestBody(v); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		}
-	}
-	return
-}
-
-// ValidateSupportMappingRequestBody runs the validations defined on
-// SupportMappingRequestBody
-func ValidateSupportMappingRequestBody(body *SupportMappingRequestBody) (err error) {
-	if body.Applicability == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("applicability", "body"))
-	}
-	if body.Conditions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("conditions", "body"))
-	}
-	if body.Facts == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("facts", "body"))
-	}
-	if body.Applicability != nil {
-		if !(*body.Applicability == "unknown" || *body.Applicability == "applicable" || *body.Applicability == "na") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.applicability", *body.Applicability, []any{"unknown", "applicable", "na"}))
-		}
-	}
-	if body.Conditions != nil {
-		if utf8.RuneCountInString(*body.Conditions) > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.conditions", *body.Conditions, utf8.RuneCountInString(*body.Conditions), 10000, false))
-		}
-	}
-	for _, v := range body.Facts {
-		if v != nil {
-			if err2 := ValidateSupportFactRequestBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateSupportFactRequestBody runs the validations defined on
-// SupportFactRequestBody
-func ValidateSupportFactRequestBody(body *SupportFactRequestBody) (err error) {
-	if body.Status == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
-	}
-	if body.Note == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("note", "body"))
-	}
-	if body.Verify == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("verify", "body"))
-	}
-	if body.Status != nil {
-		if !(*body.Status == "supported" || *body.Status == "partial" || *body.Status == "unimplemented" || *body.Status == "impossible" || *body.Status == "na" || *body.Status == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"supported", "partial", "unimplemented", "impossible", "na", "unknown"}))
-		}
-	}
-	if body.Note != nil {
-		if utf8.RuneCountInString(*body.Note) > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 10000, false))
 		}
 	}
 	return

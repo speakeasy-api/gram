@@ -207,10 +207,9 @@ type Service interface {
 	// metered products over a maximum of three calendar months. Available for
 	// every organization regardless of account type or subscription state.
 	GetSpendBreakdown(context.Context, *GetSpendBreakdownPayload) (res *AdminSpendBreakdownResponse, err error)
-	// Read the shared support catalog and product coverage.
+	// Read the support matrix the server was built with. It is code, changed by
+	// pull request: server/internal/supportmatrix/matrix.yaml.
 	GetSupportMatrix(context.Context, *GetSupportMatrixPayload) (res *SupportMatrix, err error)
-	// Save coverage against the last read revision; rejects concurrent changes.
-	UpdateSupportMatrix(context.Context, *UpdateSupportMatrixPayload) (res *SupportMatrix, err error)
 	// Observed support coverage for one organization: per-surface evidence for
 	// session activity, policy enforcement, identity attribution, token usage and
 	// shadow MCP exposure.
@@ -299,7 +298,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [79]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
+var MethodNames = [78]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "getSupportCoverage", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -1924,6 +1923,13 @@ type StartTrialPayload struct {
 	Days int
 }
 
+// Which account types can use a method on a platform.
+type SupportAccounts struct {
+	Personal   string `json:"personal"`
+	Team       string `json:"team"`
+	Enterprise string `json:"enterprise"`
+}
+
 type SupportCapability struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
@@ -1972,39 +1978,38 @@ type SupportCoverageUnmapped struct {
 	Sessions int64
 }
 
-type SupportDraft struct {
-	Mappings   map[string]*SupportMapping         `json:"mappings"`
-	References map[string]map[string]*SupportFact `json:"references"`
-}
-
 type SupportFact struct {
 	Status string `json:"status"`
 	Note   string `json:"note"`
 	Verify bool   `json:"verify"`
 }
 
-type SupportMapping struct {
-	Applicability string                  `json:"applicability"`
-	Conditions    string                  `json:"conditions"`
-	Facts         map[string]*SupportFact `json:"facts"`
-}
-
 // SupportMatrix is the result type of the admin service getSupportMatrix
 // method.
 type SupportMatrix struct {
-	Methods      []*SupportMethod     `json:"methods"`
-	Products     []*SupportPlatform   `json:"products"`
 	Capabilities []*SupportCapability `json:"capabilities"`
-	Draft        *SupportDraft        `json:"draft"`
-	Revision     string               `json:"revision"`
+	Platforms    []*SupportPlatform   `json:"platforms"`
+	Methods      []*SupportMethod     `json:"methods"`
+	// Hex SHA-256 of the deployed matrix file.
+	Revision string `json:"revision"`
 }
 
 type SupportMethod struct {
-	ID     string                  `json:"id"`
-	Name   string                  `json:"name"`
-	Vendor string                  `json:"vendor"`
-	Plans  string                  `json:"plans"`
-	Facts  map[string]*SupportFact `json:"facts"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Vendor string `json:"vendor"`
+	Plans  string `json:"plans"`
+	// What the method delivers per capability, platform aside.
+	Claims map[string]*SupportFact `json:"claims"`
+	// Every platform once, in the matrix's platform order.
+	Platforms []*SupportPlatformSupport `json:"platforms"`
+}
+
+// What is known per operating system; an absent one is unknown.
+type SupportOS struct {
+	Mac     *string `json:"mac,omitempty"`
+	Windows *string `json:"windows,omitempty"`
+	Linux   *string `json:"linux,omitempty"`
 }
 
 type SupportPlatform struct {
@@ -2013,6 +2018,19 @@ type SupportPlatform struct {
 	Vendor  string `json:"vendor"`
 	Family  string `json:"family"`
 	Surface string `json:"surface"`
+}
+
+// One method on one platform: whether it applies, who can use it, and one cell
+// per capability when it applies.
+type SupportPlatformSupport struct {
+	Platform      string           `json:"platform"`
+	Applicability string           `json:"applicability"`
+	Accounts      *SupportAccounts `json:"accounts"`
+	Os            *SupportOS       `json:"os,omitempty"`
+	Note          string           `json:"note"`
+	// One fact per capability when the method applies; empty otherwise, meaning
+	// not applicable or unknown everywhere.
+	Cells map[string]*SupportFact `json:"cells"`
 }
 
 // TriggerOrganizationChatAnalysisPayload is the payload type of the admin
@@ -2144,14 +2162,6 @@ type UpdateOrganizationPayload struct {
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool
-}
-
-// UpdateSupportMatrixPayload is the payload type of the admin service
-// updateSupportMatrix method.
-type UpdateSupportMatrixPayload struct {
-	AdminSessionToken *string
-	Revision          string
-	Draft             *SupportDraft
 }
 
 // UploadImageResult is the result type of the admin service

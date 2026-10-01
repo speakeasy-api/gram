@@ -1,12 +1,5 @@
 import { accountFact, type AccountFilter } from "./accounts";
-import {
-  emptyMapping,
-  getFact,
-  mappingKey,
-  methodReference,
-  type Draft,
-  type Method,
-} from "./model";
+import { cellFact, platformSupport, type Method } from "./model";
 
 export type CoverageTarget = { platformId: string; capabilityId: string };
 export type Requirements = {
@@ -21,27 +14,19 @@ export type Requirements = {
  * Preserve inclusion-minimal alternatives, including larger sets that do not
  * contain an already sufficient combination. */
 export function integrationRequirements(
-  draft: Draft,
   targets: CoverageTarget[],
   candidates: Method[],
   account: AccountFilter = "all",
 ): Requirements {
   const providers = targets.map((target) =>
     candidates.map((method) => {
-      const mapping =
-        draft.mappings[mappingKey(method.id, target.platformId)] ??
-        emptyMapping;
+      const support = platformSupport(method, target.platformId);
       return {
         method,
         fact: accountFact(
-          method,
-          getFact(
-            mapping,
-            target.capabilityId,
-            methodReference(draft, method, target.capabilityId),
-          ),
+          support,
+          cellFact(support, target.capabilityId),
           account,
-          mapping.conditions,
         ),
       };
     }),

@@ -727,64 +727,6 @@ SELECT value->>'id', value->>'name', value->>'group', ordinality::integer
 FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'capabilities') WITH ORDINALITY
 ON CONFLICT (slug) DO NOTHING;
 
--- name: SeedSupportReferences :exec
-INSERT INTO support_matrix_method_capabilities (integration_method_id, capability_id, status, notes, needs_verification)
-SELECT m.id, c.id, f.value->>'status', f.value->>'note', (f.value->>'verify')::boolean
-FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'methods') AS source
-CROSS JOIN LATERAL jsonb_each(source->'facts') AS f
-JOIN support_matrix_integration_methods m ON m.slug = source->>'id'
-JOIN support_matrix_capabilities c ON c.slug = f.key
-ON CONFLICT (integration_method_id, capability_id) DO NOTHING;
-
--- name: ReadSupportMatrix :one
-WITH reference_facts AS (
-  SELECT m.slug AS method_slug, jsonb_object_agg(c.slug, jsonb_build_object('status', r.status, 'note', r.notes, 'verify', r.needs_verification)) AS facts
-  FROM support_matrix_method_capabilities r
-  JOIN support_matrix_integration_methods m ON m.id = r.integration_method_id AND m.deleted_at IS NULL
-  JOIN support_matrix_capabilities c ON c.id = r.capability_id AND c.deleted_at IS NULL
-  WHERE r.deleted_at IS NULL GROUP BY m.slug
-), coverage_facts AS (
-  SELECT f.method_platform_id, jsonb_object_agg(c.slug, jsonb_build_object('status', f.status, 'note', f.notes, 'verify', f.needs_verification)) AS facts
-  FROM support_matrix_coverage f
-  JOIN support_matrix_capabilities c ON c.id = f.capability_id AND c.deleted_at IS NULL
-  WHERE f.deleted_at IS NULL GROUP BY f.method_platform_id
-), mappings AS (
-  SELECT m.slug || '/' || p.slug AS key,
-    jsonb_build_object('applicability', mp.applicability, 'conditions', mp.conditions, 'facts', coalesce(cf.facts, '{}'::jsonb)) AS value
-  FROM support_matrix_method_platforms mp
-  JOIN support_matrix_integration_methods m ON m.id = mp.integration_method_id AND m.deleted_at IS NULL
-  JOIN support_matrix_platforms p ON p.id = mp.platform_id AND p.deleted_at IS NULL
-  LEFT JOIN coverage_facts cf ON cf.method_platform_id = mp.id
-  WHERE mp.deleted_at IS NULL
-)
-SELECT jsonb_build_object(
- 'methods', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.slug, 'name', m.name, 'vendor', m.vendor, 'plans', m.plan_notes, 'facts', coalesce(r.facts, '{}'::jsonb)) ORDER BY m.sort_order, m.slug), '[]'::jsonb) FROM support_matrix_integration_methods m LEFT JOIN reference_facts r ON r.method_slug = m.slug WHERE m.deleted_at IS NULL),
- 'products', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', p.slug, 'name', p.name, 'vendor', p.vendor, 'family', p.family, 'surface', p.surface) ORDER BY p.sort_order, p.slug), '[]'::jsonb) FROM support_matrix_platforms p WHERE p.deleted_at IS NULL),
- 'capabilities', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', c.slug, 'name', c.name, 'group', c.category) ORDER BY c.sort_order, c.slug), '[]'::jsonb) FROM support_matrix_capabilities c WHERE c.deleted_at IS NULL),
- 'draft', jsonb_build_object('mappings', (SELECT coalesce(jsonb_object_agg(key, value), '{}'::jsonb) FROM mappings), 'references', (SELECT coalesce(jsonb_object_agg(method_slug, facts), '{}'::jsonb) FROM reference_facts))
-)::jsonb AS snapshot;
-
--- name: UpsertSupportMapping :one
-INSERT INTO support_matrix_method_platforms (integration_method_id, platform_id, applicability, conditions)
-SELECT m.id, p.id, sqlc.arg(applicability)::text, sqlc.arg(conditions)::text
-FROM support_matrix_integration_methods m, support_matrix_platforms p
-WHERE m.slug = sqlc.arg(method_slug)::text AND p.slug = sqlc.arg(platform_slug)::text AND m.deleted_at IS NULL AND p.deleted_at IS NULL
-ON CONFLICT (integration_method_id, platform_id) DO UPDATE SET applicability = EXCLUDED.applicability, conditions = EXCLUDED.conditions, updated_at = clock_timestamp(), deleted_at = NULL
-RETURNING id;
-
--- name: UpsertSupportCoverage :exec
-INSERT INTO support_matrix_coverage (method_platform_id, capability_id, status, notes, needs_verification)
-SELECT sqlc.arg(mapping_id)::uuid, c.id, sqlc.arg(status)::text, sqlc.arg(notes)::text, sqlc.arg(needs_verification)::boolean
-FROM support_matrix_capabilities c WHERE c.slug = sqlc.arg(capability_slug)::text AND c.deleted_at IS NULL
-ON CONFLICT (method_platform_id, capability_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes, needs_verification = EXCLUDED.needs_verification, verified_at = NULL, updated_at = clock_timestamp(), deleted_at = NULL;
-
--- name: UpsertSupportReference :exec
-INSERT INTO support_matrix_method_capabilities (integration_method_id, capability_id, status, notes, needs_verification)
-SELECT m.id, c.id, sqlc.arg(status)::text, sqlc.arg(notes)::text, sqlc.arg(needs_verification)::boolean
-FROM support_matrix_integration_methods m, support_matrix_capabilities c
-WHERE m.slug = sqlc.arg(method_slug)::text AND c.slug = sqlc.arg(capability_slug)::text AND m.deleted_at IS NULL AND c.deleted_at IS NULL
-ON CONFLICT (integration_method_id, capability_id) DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes, needs_verification = EXCLUDED.needs_verification, verified_at = NULL, updated_at = clock_timestamp(), deleted_at = NULL;
-
 -- name: AdminListUsers :many
 SELECT u.id, u.email, u.display_name, u.last_login
 FROM users u
@@ -845,3 +787,10 @@ ORDER BY lower(o.name), o.slug, o.id LIMIT @page_limit::int OFFSET @page_offset:
 -- name: AdminCountUserOrganizations :one
 SELECT (SELECT count(*) FROM organization_user_relationships m WHERE m.user_id = u.id AND m.deleted IS FALSE) AS total
 FROM users u WHERE u.id = @user_id::text AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL;
+-- name: ListSupportMatrixSlugs :many
+SELECT 'platform' AS kind, slug FROM support_matrix_platforms WHERE deleted_at IS NULL
+UNION ALL SELECT 'method', slug FROM support_matrix_integration_methods WHERE deleted_at IS NULL
+UNION ALL SELECT 'capability', slug FROM support_matrix_capabilities WHERE deleted_at IS NULL
+UNION ALL SELECT 'plan', slug FROM support_matrix_plans WHERE deleted_at IS NULL
+ORDER BY 1, 2;
+

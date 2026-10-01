@@ -33,35 +33,25 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Choice } from "./Choice";
 import { matrixCsv, downloadMatrixCsv } from "./csv";
-import { resolveMatrixCell } from "./matrixCell";
+import { osSummary, resolveMatrixCell, type MatrixCell } from "./matrixCell";
 import { CoverageTooltip } from "./CoverageTooltip";
 import { IntegrationRequirements } from "./IntegrationRequirements";
-import { Choice } from "./CoverageEditor";
 import {
-  mappingKey,
+  applicabilityLabels,
   statusLabels,
   symbols,
-  type Capability,
-  type Draft,
   type Catalog,
   type Fact,
-  type Mapping,
-  type Method,
-  type Product,
+  type Platform,
 } from "./model";
 
 import "./platform-headers.css";
 import "./support-status.css";
 
 type Axis = "methods" | "platforms" | "capabilities";
-type Item = { id: string; name: string; group: string; platform?: Product };
-export type Selection = {
-  account?: AccountFilter;
-  capability: Capability;
-  method?: Method;
-  product?: Product;
-};
+type Item = { id: string; name: string; group: string; platform?: Platform };
 const axisOptions = [
   { value: "methods", label: "Integration methods" },
   { value: "platforms", label: "Platforms" },
@@ -69,24 +59,19 @@ const axisOptions = [
 ];
 function catalogItems({
   methods,
-  products,
+  platforms,
   capabilities,
 }: Catalog): Record<Axis, Item[]> {
   return {
     methods: methods.map((method) => ({ ...method, group: method.vendor })),
-    platforms: products.map((product) => ({
-      ...product,
-      group: product.family,
-      platform: product,
+    platforms: platforms.map((platform) => ({
+      ...platform,
+      group: platform.family,
+      platform,
     })),
     capabilities,
   };
 }
-const applicabilityOptions = [
-  { value: "unknown", label: "? Unknown" },
-  { value: "applicable", label: "✓ Applies" },
-  { value: "na", label: "— Does not apply" },
-];
 
 function headerIdentity(axis: Axis, item: Item) {
   const platform = axis === "platforms" ? item.platform : undefined;
@@ -145,20 +130,20 @@ function AxisPicker({
   onSelect: (ids: string[]) => void;
 }): JSX.Element {
   const catalog = useCatalog();
-  const { products } = catalog;
+  const { platforms } = catalog;
   const items = catalogItems(catalog);
   const [search, setSearch] = useState("");
   const options =
     axis === "platforms"
-      ? [...new Set(products.map((product) => product.family))].map(
+      ? [...new Set(platforms.map((platform) => platform.family))].map(
           (family) => ({
             id: family,
             name: family,
-            group: products.find((product) => product.family === family)!
+            group: platforms.find((platform) => platform.family === family)!
               .vendor,
-            ids: products
-              .filter((product) => product.family === family)
-              .map((product) => product.id),
+            ids: platforms
+              .filter((platform) => platform.family === family)
+              .map((platform) => platform.id),
           }),
         )
       : items[axis].map((item) => ({ ...item, ids: [item.id] }));
@@ -286,29 +271,29 @@ function AccountIcons({
   );
 }
 
+const cellClassName =
+  "support-status focus-visible:ring-ring flex min-h-10 w-full items-center justify-center gap-1.5 px-1.5 py-1 text-xs focus-visible:ring-2 focus-visible:ring-inset";
+
 function FactCell({
   cell,
   accounts,
   account,
   label,
-  onClick,
 }: {
-  cell: ReturnType<typeof resolveMatrixCell>;
-  accounts?: Record<AccountType, ReturnType<typeof resolveMatrixCell>>;
+  cell: MatrixCell;
+  accounts?: Record<AccountType, MatrixCell>;
   account: AccountFilter;
   label: string;
-  onClick: () => void;
 }): JSX.Element {
   const { fact } = cell;
   return (
     <Tooltip delayDuration={450}>
       <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onClick}
+        <div
+          tabIndex={0}
           aria-label={`${label}: ${accounts ? accountTypes.map((account) => `${accountLabels[account]}: ${statusLabels[accounts[account].fact.status]}`).join(", ") : statusLabels[fact.status]}${fact.verify ? ", needs verification" : ""}`}
           data-support-status={accounts ? "accounts" : fact.status}
-          className="support-status focus-visible:ring-ring flex min-h-10 w-full items-center justify-center gap-1.5 px-1.5 py-1 text-xs focus-visible:ring-2 focus-visible:ring-inset"
+          className={cellClassName}
         >
           {accounts ? (
             <AccountIcons
@@ -329,7 +314,7 @@ function FactCell({
               </span>
             </>
           )}
-        </button>
+        </div>
       </TooltipTrigger>
       <TooltipContent
         side="top"
@@ -344,21 +329,54 @@ function FactCell({
         ) : (
           <CoverageTooltip account={account} cell={cell} />
         )}
-        <p className="text-xs opacity-75">Click to inspect or edit coverage.</p>
       </TooltipContent>
     </Tooltip>
   );
 }
 
-export function MatrixExplorer({
-  draft,
-  onSave,
-  onSelect,
+/** Whether a method applies to a platform, with its qualifiers on hover. */
+function ApplicabilityCell({
+  cell,
+  label,
 }: {
-  draft: Draft;
-  onSave: (draft: Draft) => Promise<boolean>;
-  onSelect: (selection: Selection) => void;
+  cell: MatrixCell;
+  label: string;
 }): JSX.Element {
+  const applicability = cell.support?.applicability ?? "unknown";
+  const status = { applicable: "supported", na: "na", unknown: "unknown" }[
+    applicability
+  ];
+  const os = osSummary(cell);
+  return (
+    <Tooltip delayDuration={450}>
+      <TooltipTrigger asChild>
+        <div
+          tabIndex={0}
+          aria-label={`${label}: ${applicabilityLabels[applicability]}`}
+          data-support-status={status}
+          className={cellClassName}
+        >
+          <span className="shrink-0 text-base">
+            {symbols[status as Fact["status"]]}
+          </span>
+          <span className="min-w-0 truncate">
+            {applicabilityLabels[applicability]}
+          </span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="max-w-sm text-left">
+        <p className="font-semibold">{label}</p>
+        <p>{applicabilityLabels[applicability]}</p>
+        {cell.support?.note && (
+          <p className="whitespace-pre-wrap opacity-75">{cell.support.note}</p>
+        )}
+        {os && <p className="opacity-75">Operating systems: {os}</p>}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+export function MatrixExplorer(): JSX.Element {
   const catalog = useCatalog();
   const { methods } = catalog;
   const [account, setAccount] = useState<AccountFilter>("all");
@@ -459,23 +477,17 @@ export function MatrixExplorer({
       ...exportRows.map((row) => [
         row.name,
         ...exportColumns.map((column) => {
-          const cell = resolveMatrixCell(
-            draft,
-            catalog,
-            {
-              [axes.rows]: row.id,
-              [axes.columns]: column.id,
-              [third]: sliceId,
-            },
-            account,
-          );
+          const ids = {
+            [axes.rows]: row.id,
+            [axes.columns]: column.id,
+            [third]: sliceId,
+          };
+          const cell = resolveMatrixCell(catalog, ids, account);
           if (!cell.capability) {
-            const labels = {
-              unknown: "Unknown",
-              applicable: "Applies",
-              na: "Does not apply",
-            };
-            return [labels[cell.mapping.applicability], cell.mapping.conditions]
+            return [
+              applicabilityLabels[cell.support?.applicability ?? "unknown"],
+              cell.support?.note,
+            ]
               .filter(Boolean)
               .join("; ");
           }
@@ -484,13 +496,13 @@ export function MatrixExplorer({
               ? accountTypes
                   .map(
                     (type) =>
-                      `${accountLabels[type]}: ${statusLabels[resolveMatrixCell(draft, catalog, { [axes.rows]: row.id, [axes.columns]: column.id, [third]: sliceId }, type).fact.status]}`,
+                      `${accountLabels[type]}: ${statusLabels[resolveMatrixCell(catalog, ids, type).fact.status]}`,
                   )
                   .join("; ")
               : statusLabels[cell.fact.status],
             cell.fact.note,
             cell.fact.verify ? "Needs verification" : "",
-            cell.mapping.conditions,
+            cell.support?.note,
           ]
             .filter(Boolean)
             .join("; ");
@@ -508,31 +520,11 @@ export function MatrixExplorer({
       [axes.columns]: column.id,
       [third]: sliceId,
     };
-    const cell = resolveMatrixCell(draft, catalog, ids, account);
-    const { method, product, capability, mapping } = cell;
+    const cell = resolveMatrixCell(catalog, ids, account);
+    const { method, platform, capability } = cell;
     const label = `${row.name} × ${column.name}`;
-    if (!capability && method && product) {
-      const key = mappingKey(method.id, product.id);
-      return (
-        <Choice
-          label={label}
-          value={mapping.applicability}
-          options={applicabilityOptions}
-          onChange={(value) =>
-            void onSave({
-              ...draft,
-              mappings: {
-                ...draft.mappings,
-                [key]: {
-                  ...mapping,
-                  applicability: value as Mapping["applicability"],
-                },
-              },
-            })
-          }
-        />
-      );
-    }
+    if (!capability && method && platform)
+      return <ApplicabilityCell cell={cell} label={label} />;
     if (!capability) return <span>Unknown</span>;
     return (
       <FactCell
@@ -543,13 +535,12 @@ export function MatrixExplorer({
             ? (Object.fromEntries(
                 accountTypes.map((type) => [
                   type,
-                  resolveMatrixCell(draft, catalog, ids, type),
+                  resolveMatrixCell(catalog, ids, type),
                 ]),
-              ) as Record<AccountType, ReturnType<typeof resolveMatrixCell>>)
+              ) as Record<AccountType, MatrixCell>)
             : undefined
         }
         label={label}
-        onClick={() => onSelect({ method, product, capability, account })}
       />
     );
   }
@@ -614,7 +605,6 @@ export function MatrixExplorer({
         </div>
       </div>
       <IntegrationRequirements
-        draft={draft}
         account={account}
         platformIds={scope.platforms}
         capabilityIds={scope.capabilities}
@@ -624,8 +614,8 @@ export function MatrixExplorer({
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="text-muted-foreground">
           {third === "capabilities" && sliceId === "all"
-            ? "Set whether each method applies to each platform. Changes save immediately."
-            : "Click a cell to inspect coverage, conditions, and contributing methods."}
+            ? "Whether each method applies to each platform."
+            : "Hover a cell for the methods behind it and their notes."}
         </p>
         <div className="flex items-center gap-3">
           <span className="text-muted-foreground text-xs">
@@ -646,7 +636,7 @@ export function MatrixExplorer({
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <p className="text-muted-foreground">
           Click row or column headers to focus multiple items. Click again to
-          deselect; click cells to edit.
+          deselect.
         </p>
         {(rowHighlights.length > 0 || columnHighlights.length > 0) && (
           <Button
@@ -800,8 +790,8 @@ export function MatrixExplorer({
         </Table>
       </div>
       <p className="text-muted-foreground text-xs">
-        Choose which items appear using “selected” beside each axis. Changing
-        the view never changes your saved coverage.
+        Choose which items appear using “selected” beside each axis. The view
+        never changes the matrix: it is code, changed by pull request.
       </p>
     </>
   );
