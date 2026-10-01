@@ -99798,6 +99798,9 @@ components:
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
+                automatic_role_distribution:
+                    type: boolean
+                    description: Whether the staff rollout for automatic role plugin setup is enabled
                 consent_tool_filtering_enabled:
                     type: boolean
                     description: Whether MCP consent screens offer the tool filtering picker for the organization
@@ -99872,6 +99875,7 @@ components:
                 - consent_tool_filtering_enabled
                 - session_portability_enabled
                 - network_ingress_enabled
+                - automatic_role_distribution
                 - device_agent
         Project:
             type: object
@@ -105264,6 +105268,7 @@ components:
                         - consent_tool_filtering
                         - session_portability
                         - network_ingress
+                        - automatic-role-distribution
                     maxLength: 60
                 organization_id:
                     type: string
@@ -105368,6 +105373,7 @@ components:
                         - consent_tool_filtering
                         - session_portability
                         - network_ingress
+                        - automatic-role-distribution
                     maxLength: 60
                 organization_id:
                     type: string

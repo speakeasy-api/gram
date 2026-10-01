@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const pipelineCountOrganizationRole = `-- name: PipelineCountOrganizationRole :one
@@ -139,5 +140,93 @@ type PipelineRenamePluginParams struct {
 
 func (q *Queries) PipelineRenamePlugin(ctx context.Context, arg PipelineRenamePluginParams) error {
 	_, err := q.db.Exec(ctx, pipelineRenamePlugin, arg.ID, arg.ProjectID)
+	return err
+}
+
+const rolloutActiveRoles = `-- name: RolloutActiveRoles :many
+SELECT ('role:global:' || id)::text AS role_urn FROM global_roles WHERE deleted IS FALSE AND workos_deleted IS FALSE
+UNION ALL
+SELECT ('role:organization:' || id)::text AS role_urn FROM organization_roles WHERE organization_id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE
+`
+
+func (q *Queries) RolloutActiveRoles(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, rolloutActiveRoles, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var role_urn string
+		if err := rows.Scan(&role_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, role_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rolloutBlockedBackends = `-- name: RolloutBlockedBackends :many
+SELECT pid FROM pg_catalog.pg_stat_activity
+WHERE datname = current_database() AND $1::integer = ANY(pg_catalog.pg_blocking_pids(pid))
+`
+
+// Observe real lock dependencies without relying on production query text.
+func (q *Queries) RolloutBlockedBackends(ctx context.Context, blockerPid int32) ([]pgtype.Int4, error) {
+	rows, err := q.db.Query(ctx, rolloutBlockedBackends, blockerPid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Int4
+	for rows.Next() {
+		var pid pgtype.Int4
+		if err := rows.Scan(&pid); err != nil {
+			return nil, err
+		}
+		items = append(items, pid)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rolloutInsertGlobalRoles = `-- name: RolloutInsertGlobalRoles :exec
+INSERT INTO global_roles (workos_slug, workos_name, workos_created_at, workos_updated_at, deleted_at)
+SELECT 'rollout-global-' || n, 'Rollout Global ' || n, clock_timestamp(), clock_timestamp(),
+CASE WHEN n > 103 THEN clock_timestamp() ELSE NULL END
+FROM generate_series(1, 105) n
+`
+
+// Include more than one page, and deleted roles that must not receive setup requests.
+func (q *Queries) RolloutInsertGlobalRoles(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rolloutInsertGlobalRoles)
+	return err
+}
+
+const rolloutInsertLocalRoles = `-- name: RolloutInsertLocalRoles :exec
+INSERT INTO organization_roles (organization_id, workos_slug, workos_name, workos_created_at, workos_updated_at, deleted_at)
+SELECT $1, 'rollout-local-' || n, 'Rollout Local ' || n, clock_timestamp(), clock_timestamp(),
+CASE WHEN n > 103 THEN clock_timestamp() ELSE NULL END
+FROM generate_series(1, 105) n
+`
+
+// Simulate pre-rollout roles created while distribution was disabled; pagination must discover them.
+func (q *Queries) RolloutInsertLocalRoles(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolloutInsertLocalRoles, organizationID)
+	return err
+}
+
+const rolloutRejectOutbox = `-- name: RolloutRejectOutbox :exec
+ALTER TABLE publish_outbox ADD CONSTRAINT reject_rollout_outbox CHECK (topic != 'gram.role_distribution.v1.RoleDistributionSetupRequestedV1') NOT VALID
+`
+
+// Prove rollout flag rolls back if enqueue fails.
+func (q *Queries) RolloutRejectOutbox(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rolloutRejectOutbox)
 	return err
 }
