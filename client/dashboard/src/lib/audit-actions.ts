@@ -135,6 +135,8 @@ export const AUDIT_ACTIONS = [
   "openrouter-key:enable",
   "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
+  "organization:disabled",
+  "organization:enabled",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
@@ -145,6 +147,9 @@ export const AUDIT_ACTIONS = [
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
   "organization:onboarding_updated",
+  "organization:onboarding_stack_updated",
+  "organization:onboarding_playbook_assigned",
+  "organization:onboarding_playbook_unassigned",
   "organization:payg_activated",
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
@@ -587,6 +592,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "openrouter-key:set_spend_cap":
       return "changed inference cap for";
 
+    case "organization:enabled":
+      return "enabled organization access for";
+    case "organization:disabled":
+      return "disabled organization access for";
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";
     case "organization:webhooks_disabled":
@@ -623,6 +632,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated setup task for";
     case "organization:onboarding_updated":
       return "updated onboarding for";
+    case "organization:onboarding_stack_updated":
+      return "updated the onboarding stack for";
+    case "organization:onboarding_playbook_assigned":
+      return "assigned an onboarding playbook to";
+    case "organization:onboarding_playbook_unassigned":
+      return "removed the onboarding playbook from";
 
     case "organization_invitation:create":
       return "invited";

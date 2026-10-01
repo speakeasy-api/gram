@@ -43,6 +43,22 @@ func TestWriteConfigDefaultsToDisabled(t *testing.T) {
 	require.False(t, WriteConfig{Enabled: true}.WritesAvailable())
 }
 
+func TestWriteConsentOffersOnlyImplementedOperations(t *testing.T) {
+	t.Parallel()
+	for _, op := range AllWriteOperations {
+		config := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{op: true}} //nolint:exhaustive // Exercise each operation separately.
+		require.Equal(t, op.implemented(), config.WritesAvailable(), op)
+		oauth := &StaffOAuth{writes: config}
+		want := []string{ScopeRead}
+		if op.implemented() {
+			want = append(want, ScopeWrite)
+		}
+		require.Equal(t, want, oauth.scopesSupported(), op)
+		_, allowed := normalizeRequestedScopes(ScopeWrite, config.WritesAvailable())
+		require.Equal(t, op.implemented(), allowed, op)
+	}
+}
+
 func TestParseWriteOperationsRejectsUnknownNames(t *testing.T) {
 	t.Parallel()
 	operations, err := ParseWriteOperations(" set_organization_feature, ,extend_organization_trial ")

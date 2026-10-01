@@ -48,6 +48,7 @@ var All = []outbox.EventRegistration{
 	OktaResourceConnectionV1,
 	OktaServerSuggestionV1,
 	OpenRouterAPIKeyV1,
+	OrganizationAccessV1,
 	OrganizationBillingV1,
 	OrganizationDeviceAgentConfigurationV1,
 	OrganizationEnterpriseTrialV1,

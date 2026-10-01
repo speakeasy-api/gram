@@ -378,7 +378,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
     undefined,
     { throwOnError: false },
   );
-  const entitled = enterprise && features.data?.networkIngressEnabled === true;
+  const entitled = features.data?.networkIngressEnabled === true;
   const ingressResult = useNetworkIngress(undefined, undefined, {
     enabled: canManageIngress,
     retry: (failureCount) => failureCount < 2,
@@ -405,7 +405,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
           ingress={ingress}
           statusStale={ingressResult.isError}
         />
-      ) : ingressResult.isPending || (enterprise && features.isPending) ? (
+      ) : ingressResult.isPending || features.isPending ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
             <Text small muted>
@@ -413,8 +413,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
             </Text>
           </SettingsSection.Body>
         </SettingsSection.Panel>
-      ) : ingressResult.isError ||
-        (enterprise && (features.isError || !features.data)) ? (
+      ) : ingressResult.isError || features.isError || !features.data ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
             <Alert variant="error" dismissible={false}>
@@ -429,6 +428,19 @@ export function PrivateNetworkSection(): JSX.Element | null {
           entitled={entitled}
           enterprise={enterprise}
         />
+      ) : entitled ? (
+        <InlineEmptyState
+          icon="network"
+          heading="No private network connected"
+          description="Connect a Tailscale tailnet to create private URLs for this organization."
+          action={
+            <RequireScope scope="org:admin" level="component">
+              <Button size="sm" onClick={() => setSetupOpen(true)}>
+                Connect Tailscale
+              </Button>
+            </RequireScope>
+          }
+        />
       ) : !enterprise ? (
         <EnterpriseGate
           allowed={false}
@@ -440,19 +452,13 @@ export function PrivateNetworkSection(): JSX.Element | null {
         <InlineEmptyState
           icon="network"
           heading="No private network connected"
-          description={
-            entitled
-              ? "Connect a Tailscale tailnet to create private URLs for this organization."
-              : "Tailscale private access is available for Enterprise organizations. Contact our team to enable it for your organization."
-          }
+          description="Tailscale private access is not enabled for this organization yet. Contact support to enable it."
           action={
-            entitled ? (
-              <RequireScope scope="org:admin" level="component">
-                <Button size="sm" onClick={() => setSetupOpen(true)}>
-                  Connect Tailscale
-                </Button>
-              </RequireScope>
-            ) : undefined
+            <Button asChild variant="secondary" size="sm">
+              <a href="mailto:support@speakeasy.com?subject=Enable%20Tailscale%20private%20access">
+                Contact support
+              </a>
+            </Button>
           }
         />
       )}

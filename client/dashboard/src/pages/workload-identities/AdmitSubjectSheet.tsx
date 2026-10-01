@@ -151,10 +151,10 @@ export function AdmitSubjectSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            Allow a machine
+            Allow access
           </SheetTitle>
           <SheetDescription>
-            Allowing a machine is the grant of access. The agent you choose
+            Allowing access lets a machine sign in to Gram. The agent you choose
             supplies the whole policy that the machine acts under, so it is
             chosen at the same time.
           </SheetDescription>
@@ -289,7 +289,7 @@ export function AdmitSubjectSheet({
               disabled={!canSubmit || isPending}
             >
               <Button.Text>
-                {isPending ? "Allowing…" : "Allow machine"}
+                {isPending ? "Allowing…" : "Allow access"}
               </Button.Text>
             </Button>
           </SheetFooter>

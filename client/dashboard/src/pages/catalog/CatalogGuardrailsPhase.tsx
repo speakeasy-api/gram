@@ -42,9 +42,9 @@ const DETECTOR_CHIP_LABELS: Partial<Record<RuleCategory, string>> = {
   prompt_injection: "Prompt injection",
 };
 
-/** The catalog install's skippable Guardrails step: a recommended, pre-filled
- *  guardrail the user can switch off, summarized, with the full form one
- *  click away. */
+/** The catalog install's Guardrails step: a recommended, pre-filled guardrail
+ *  the user can switch off (Add to Project then installs without one),
+ *  summarized, with the full editor one click away. */
 export function CatalogGuardrailsPhase({
   releaseState,
   onClose,
@@ -152,21 +152,16 @@ export function CatalogGuardrailsPhase({
             Cancel
           </Button>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => void releaseState.skip()}>
-            <Button.Text>Skip for now</Button.Text>
-          </Button>
-          <Button
-            disabled={enabled && !valid}
-            onClick={() =>
-              void (enabled
-                ? releaseState.installWithGuardrail()
-                : releaseState.skip())
-            }
-          >
-            <Button.Text>Add to Project</Button.Text>
-          </Button>
-        </div>
+        <Button
+          disabled={enabled && !valid}
+          onClick={() =>
+            void (enabled
+              ? releaseState.installWithGuardrail()
+              : releaseState.skip())
+          }
+        >
+          <Button.Text>Add to Project</Button.Text>
+        </Button>
       </Dialog.Footer>
     </div>
   );

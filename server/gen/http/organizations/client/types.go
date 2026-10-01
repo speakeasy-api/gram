@@ -219,7 +219,7 @@ type GenerateWorkOSAdminPortalLinkResponseBody struct {
 // ListSetupTasksResponseBody is the type of the "organizations" service
 // "listSetupTasks" endpoint HTTP response body.
 type ListSetupTasksResponseBody struct {
-	// Setup tasks in catalog order.
+	// Setup tasks in catalog order. A group precedes the cards under it.
 	Tasks []*SetupTaskResponseBody `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
 }
 
@@ -243,12 +243,19 @@ type UpdateSetupTaskResponseBody struct {
 	BlockedBy []string `form:"blocked_by,omitempty" json:"blocked_by,omitempty" xml:"blocked_by,omitempty"`
 	// Whether a platform administrator hid the task.
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string `form:"parent_key,omitempty" json:"parent_key,omitempty" xml:"parent_key,omitempty"`
+	// True for a group that nests cards. A group has no card of its own: it is
+	// hidden when every card under it is, done when every visible card is, and
+	// cannot be assigned or marked by hand.
+	Group *bool `form:"group,omitempty" json:"group,omitempty" xml:"group,omitempty"`
 }
 
 // SubmitOnboardingSurveyResponseBody is the type of the "organizations"
 // service "submitOnboardingSurvey" endpoint HTTP response body.
 type SubmitOnboardingSurveyResponseBody struct {
-	// Setup tasks in catalog order.
+	// Setup tasks in catalog order. A group precedes the cards under it.
 	Tasks []*SetupTaskResponseBody `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
 }
 
@@ -3553,6 +3560,13 @@ type SetupTaskResponseBody struct {
 	BlockedBy []string `form:"blocked_by,omitempty" json:"blocked_by,omitempty" xml:"blocked_by,omitempty"`
 	// Whether a platform administrator hid the task.
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
+	// Key of the group this card sits under. Absent for a top-level card or a
+	// group.
+	ParentKey *string `form:"parent_key,omitempty" json:"parent_key,omitempty" xml:"parent_key,omitempty"`
+	// True for a group that nests cards. A group has no card of its own: it is
+	// hidden when every card under it is, done when every visible card is, and
+	// cannot be assigned or marked by hand.
+	Group *bool `form:"group,omitempty" json:"group,omitempty" xml:"group,omitempty"`
 }
 
 // SetupTaskAssigneeResponseBody is used to define fields on response body
@@ -6088,6 +6102,8 @@ func NewUpdateSetupTaskSetupTaskOK(body *UpdateSetupTaskResponseBody) *organizat
 		Status:          *body.Status,
 		CompletedByFact: *body.CompletedByFact,
 		Hidden:          *body.Hidden,
+		ParentKey:       body.ParentKey,
+		Group:           *body.Group,
 	}
 	if body.Assignee != nil {
 		v.Assignee = unmarshalSetupTaskAssigneeResponseBodyToOrganizationsSetupTaskAssignee(body.Assignee)
@@ -6685,6 +6701,9 @@ func ValidateUpdateSetupTaskResponseBody(body *UpdateSetupTaskResponseBody) (err
 	}
 	if body.Hidden == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hidden", "body"))
+	}
+	if body.Group == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group", "body"))
 	}
 	if body.Status != nil {
 		if !(*body.Status == "todo" || *body.Status == "in_progress" || *body.Status == "awaiting_support" || *body.Status == "done") {
@@ -10928,6 +10947,9 @@ func ValidateSetupTaskResponseBody(body *SetupTaskResponseBody) (err error) {
 	}
 	if body.Hidden == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hidden", "body"))
+	}
+	if body.Group == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group", "body"))
 	}
 	if body.Status != nil {
 		if !(*body.Status == "todo" || *body.Status == "in_progress" || *body.Status == "awaiting_support" || *body.Status == "done") {
