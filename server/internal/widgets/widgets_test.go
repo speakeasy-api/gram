@@ -297,6 +297,18 @@ func TestListAndGetWidgets(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, gotStale.InvalidReason, "get validates on read too")
 
+	// A stored key the query does not know is named on read, not ignored.
+	unknownKey, err := widgetsrepo.New(ti.conn).CreateWidget(ctx, widgetsrepo.CreateWidgetParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
+		Name: "unknown key", Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions",
+		Query: []byte(`{"window":"7d","measures":[{"op":"count"}],"from":"2026-09-01T00:00:00Z"}`), Visualization: []byte(`{"type":"table"}`),
+	})
+	require.NoError(t, err)
+	gotUnknown, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: unknownKey.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.NotNil(t, gotUnknown.InvalidReason)
+	require.Contains(t, *gotUnknown.InvalidReason, `"from"`)
+
 	_, err = ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: uuid.NewString(), SessionToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeNotFound)
 

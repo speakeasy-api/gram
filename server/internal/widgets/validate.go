@@ -12,10 +12,8 @@ import (
 )
 
 // Query is the part of a widget the server plans: the question, in catalog
-// vocabulary, plus the relative window it is asked over. A save refuses keys
-// this code does not know (see decodeQueryStrict), but reading a stored row
-// stays tolerant of them, so an old row fails validation with a readable
-// message rather than failing to decode at all.
+// vocabulary, plus the relative window it is asked over. Decoding refuses
+// keys this code does not know, on save and on read alike (see decodeQuery).
 type Query struct {
 	Window     string         `json:"window"`
 	Grain      string         `json:"grain"`
@@ -91,9 +89,9 @@ var windows = map[string]time.Duration{
 // read, so a catalog change is visible breakage naming what went missing
 // instead of quietly wrong numbers.
 func validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) string {
-	var query Query
-	if err := json.Unmarshal(rawQuery, &query); err != nil {
-		return "query is not a JSON object: " + err.Error()
+	query, err := decodeQuery(rawQuery)
+	if err != nil {
+		return "invalid query: " + err.Error()
 	}
 	if reason := validateQuery(catalog, dataset, query, now); reason != "" {
 		return reason
@@ -196,17 +194,18 @@ func validateVisualization(visualization Visualization, query Query) string {
 	return ""
 }
 
-// decodeQueryStrict refuses a query carrying a key Query does not know. A
-// misspelled key or an absolute from/to would otherwise be dropped by the
-// tolerant decode, pass validation, and be stored and replayed as sent.
-func decodeQueryStrict(raw []byte) error {
+// decodeQuery reads a query, refusing a key Query does not know. A
+// misspelled key or an absolute from/to would otherwise be dropped, pass
+// validation, and be stored and replayed as sent; on read, such a row says
+// so in its invalid reason, naming the key.
+func decodeQuery(raw []byte) (Query, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var query Query
 	if err := dec.Decode(&query); err != nil {
-		return fmt.Errorf("decode query: %w", err)
+		return Query{}, fmt.Errorf("decode query: %w", err)
 	}
-	return nil
+	return query, nil
 }
 
 // canonical returns why an enum value cannot be saved: it is not in the

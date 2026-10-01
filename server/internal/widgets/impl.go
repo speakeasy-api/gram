@@ -363,7 +363,10 @@ func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalue
 }
 
 // checkWidget validates a widget's query against the catalog and its
-// visualization against the query, and returns both encoded for storage.
+// visualization against the query, and returns both encoded for storage. A
+// query key the server does not know is refused. The payload bytes are what
+// is stored, not a re-encoding of the decoded query, which would add zero
+// values the client reads as a different query.
 func (s *Service) checkWidget(dataset string, query, visualization map[string]any) ([]byte, []byte, error) {
 	if _, ok := s.catalog.Dataset(dataset); !ok {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "unknown_dataset: dataset %q does not exist", dataset)
@@ -371,13 +374,6 @@ func (s *Service) checkWidget(dataset string, query, visualization map[string]an
 	encodedQuery, err := json.Marshal(query)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeBadRequest, err, "query is not encodable as JSON")
-	}
-	// Saving is strict about the query's keys while reading stays tolerant.
-	// The payload bytes are what is stored, not a re-encoding of the decoded
-	// struct, which would add zero values the client reads as a different
-	// query.
-	if err := decodeQueryStrict(encodedQuery); err != nil {
-		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid query: %s", err.Error())
 	}
 	encodedVisualization, err := json.Marshal(lowercaseChartType(visualization))
 	if err != nil {
