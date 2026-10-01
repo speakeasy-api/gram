@@ -3,9 +3,19 @@
 `gram streams` consumes `gram.conversation.v1.Message` through
 `gram.sigint.v1.Evaluator` and publishes successful `gram.sigint.v1.Reading`
 messages. Configure **`GRAM_SIGINT_OPENROUTER_API_KEY`** with a platform-owned
-OpenRouter inference key. The receiver is not registered when this is unset.
+OpenRouter inference key. The receiver is not registered when this is unset,
+unless temporary ack-only mode is enabled.
 The shared Jev client uses this key for every tenant; evaluation does not resolve
 customer credentials or provision organization OpenRouter keys.
+
+For an initial rollout, pass `--sigint-ack-only` to `gram streams` or set
+`GRAM_SIGINT_ACK_ONLY=true`. This starts the subscription without requiring an
+inference key and acknowledges every decoded batch before entitlement checks,
+sensor loading, content resolution, classification, or reading publication.
+It takes precedence even when an inference key is configured. This drains the
+subscription; messages acknowledged in this mode are not evaluated later when
+the flag is disabled. To begin evaluation, disable the flag and configure the
+platform inference key. The flag defaults to false and affects only sigint.
 
 The organization must have `signals_intelligence` enabled. A single SQL statement
 loads active project-owned sensor definitions and signal membership in order.
