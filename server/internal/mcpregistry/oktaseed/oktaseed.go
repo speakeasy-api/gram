@@ -644,6 +644,8 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor) (string, err
 	case err != nil:
 		return "", fmt.Errorf("lookup: %w", err)
 	}
+	// The seed owns the namespace: one that is missing, stale or undecodable
+	// is replaced below.
 	current, err := mcpregistry.ParseOktaMapping(existing.Data)
 	iconed, iconAdded, iconErr := withIcon(existing.Data, v.IconURL)
 	if iconErr != nil {
