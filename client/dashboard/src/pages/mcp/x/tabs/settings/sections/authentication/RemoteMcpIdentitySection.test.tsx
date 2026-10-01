@@ -1282,10 +1282,14 @@ describe("RemoteMcpIdentitySectionBody", () => {
         },
       },
     });
-    mocks.discoverProtectedResource.mockResolvedValue({
-      available: true,
-      metadata: { scopesSupported: ["issues"] },
-    });
+    // Only the scope probe answers; the save-time probe stays unavailable,
+    // so the resource's scopes can only come from what the field loaded.
+    mocks.protectedResourceMetadata.mockImplementation(
+      (_id: unknown, enabled: unknown) =>
+        enabled
+          ? { status: "available", metadata: { scopesSupported: ["issues"] } }
+          : { status: "idle", metadata: null },
+    );
 
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));

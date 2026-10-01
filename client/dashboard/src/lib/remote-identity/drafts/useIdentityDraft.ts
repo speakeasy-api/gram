@@ -795,6 +795,7 @@ export function useUserIdentityDraft({
             ? chosenScopes
             : preferredScopes(
                 prm.metadata?.scopesSupported ??
+                  resourceScopes ??
                   (await protectedResourceScopes(client, remoteMcpServerId)),
                 selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
               );
