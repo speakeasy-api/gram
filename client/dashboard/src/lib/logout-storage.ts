@@ -92,6 +92,22 @@ export function setPreservedStorageImpersonating(value: boolean): void {
   sessionClassified = true;
 }
 
+/**
+ * Mark this document as the viewer's own logged-out session.
+ *
+ * Storage cleanup refuses to read localStorage until the document is
+ * classified, so an impersonation load cannot snapshot the customer org.
+ * A logged-out visit never receives a session, so it never classifies, and
+ * the cleanup that bounces the browser to /login deletes theme and project
+ * favorites. Call this only after auth.info has confirmed there is no
+ * session. A document already marked as impersonation is left alone — its
+ * snapshot has to stay the admin's.
+ */
+export function noteOwnLoggedOutSession(): void {
+  if (sessionIsImpersonating) return;
+  sessionClassified = true;
+}
+
 /** Drop the in-memory snapshot the way a full navigation would. Tests only. */
 export function resetPreservedStorageCapture(): void {
   lastCaptured = [];
