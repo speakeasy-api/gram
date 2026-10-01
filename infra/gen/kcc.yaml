@@ -1377,6 +1377,91 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-reading
+    spec:
+      definition: |
+        edition = "2024";
+        message Reading {
+          message Actor {
+            string user_id = 1;
+            string external_user_id = 2;
+            string user_email = 3;
+          }
+          message Account {
+            string user_account_id = 1;
+            string account_type = 2;
+            string billing_mode = 3;
+          }
+          message Event {
+            string kind = 1;
+            string id = 2;
+            string occurred_at = 3;
+            oneof context {
+              ConversationMessage conversation_message = 4;
+              ToolCall tool_call = 5;
+            }
+          }
+          message ConversationMessage {
+            enum Role {
+              ROLE_UNSPECIFIED = 0;
+              ROLE_USER = 1;
+              ROLE_ASSISTANT = 2;
+            }
+            string conversation_id = 1;
+            Role role = 2;
+          }
+          message ToolCall {
+            string tool_name = 1;
+            string tool_call_id = 2;
+            string mcp_server_id = 3;
+          }
+          message Probability {
+            string signal_id = 1;
+            double probability = 2;
+            string signal_slug = 3;
+          }
+          message MultiLabel {
+            repeated Probability signals = 1;
+          }
+          message Choice {
+            string selected_signal_id = 1;
+            repeated Probability distribution = 2;
+            double confidence = 3;
+            string selected_signal_slug = 4;
+          }
+          message Score {
+            double expected_index = 1;
+            repeated Probability distribution = 2;
+            double confidence = 3;
+          }
+          string id = 1;
+          string evaluation_attempt_id = 2;
+          string organization_id = 3;
+          string project_id = 4;
+          Event event = 5;
+          string sensor_id = 6;
+          string sensor_slug = 7;
+          string evaluated_at = 8;
+          string definition_hash = 9;
+          string configured_model = 10;
+          repeated string models = 11;
+          string compiler_version = 12;
+          Actor actor = 13;
+          string billing_user_id = 14;
+          string source = 15;
+          Account account = 16;
+          string assistant_id = 17;
+          bool replayed = 18;
+          oneof result {
+            MultiLabel multi_label = 19;
+            Choice choice = 20;
+            Score score = 21;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-log-record
     spec:
@@ -1927,6 +2012,20 @@ pubsub:
         name: gram-risk-v1-prompt-policy-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-evaluator
+      topic_proto_message: gram-conversation-v1-message
+    name: gram-sigint-v1-evaluator
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-conversation-v1-message
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-noop
       topic_proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-noop
@@ -2369,6 +2468,16 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-reading
+    spec:
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-sigint-v1-reading
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record

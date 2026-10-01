@@ -13,6 +13,12 @@ import (
 	"syscall"
 	"time"
 
+	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
+	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
+	"github.com/speakeasy-api/gram/server/internal/classifier/jev"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
+
 	"cloud.google.com/go/pubsub/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -244,6 +250,28 @@ func newStreamsCommand() *cli.Command {
 			Usage:   "The URL of the dashboard site, used to deep link from growth activity events",
 			EnvVars: []string{"GRAM_SITE_URL"},
 		},
+		&cli.StringFlag{
+			Name:    "sigint-openrouter-api-key",
+			Usage:   "Platform OpenRouter inference key for sensor evaluation; unset leaves the receiver stopped unless sigint-ack-only is enabled",
+			EnvVars: []string{"GRAM_SIGINT_OPENROUTER_API_KEY"},
+		},
+		&cli.BoolFlag{
+			Name:    "sigint-ack-only",
+			Usage:   "Temporarily drain the sensor evaluation subscription: acknowledge all messages without evaluation or reading publication",
+			EnvVars: []string{"GRAM_SIGINT_ACK_ONLY"},
+		},
+		&cli.StringFlag{
+			Name:     "assets-backend",
+			Usage:    "Asset storage backend for conversation snapshots",
+			EnvVars:  []string{"GRAM_ASSETS_BACKEND"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "assets-uri",
+			Usage:    "Asset storage URI for conversation snapshots",
+			EnvVars:  []string{"GRAM_ASSETS_URI"},
+			Required: true,
+		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -362,6 +390,11 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			assetStorage, assetShutdown, err := newAssetStorage(ctx, logger, assetStorageOptions{assetsBackend: c.String("assets-backend"), assetsURI: c.String("assets-uri")})
+			if err != nil {
+				return fmt.Errorf("initialize evaluation asset storage: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, assetShutdown)
 			stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
@@ -407,9 +440,10 @@ func newStreamsCommand() *cli.Command {
 				spanPub       gcp.Publisher[*otelv1.Span]
 				riskMeterPub  gcp.Publisher[*meteringv1.MeterReading]
 				sessionLogPub gcp.Publisher[*telemetryv1.LogRecord]
+				readingsPub   gcp.Publisher[*sigintv1.Reading]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub, readingsPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -444,6 +478,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create risk meter publisher: %w", err)
 			}
 			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
+			readingsPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &sigintv1.Reading{}, gcp.WithPubSubPublishSettings(&meterPublishSettings))
+			if err != nil {
+				return fmt.Errorf("create sensor readings publisher: %w", err)
+			}
+			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key")))))
+			if err != nil {
+				return fmt.Errorf("create sensor evaluator: %w", err)
+			}
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
 			replyWriter := enforcereply.NewWriter(redisClient)
@@ -673,6 +715,17 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
+				if c.Bool("sigint-ack-only") || c.String("sigint-openrouter-api-key") != "" {
+					var handler streams.BatchResultHandler[*conversationv1.Message] = evaluation.NewConversationHandler(sensorEvaluator, assetStorage)
+					if c.Bool("sigint-ack-only") {
+						// A successful batch with no staged failures acknowledges every
+						// message, without entering the evaluation path.
+						handler = streams.BatchResultHandlerFunc[*conversationv1.Message](func(context.Context, []streams.BatchMessage[*conversationv1.Message]) error {
+							return nil
+						})
+					}
+					mustReceiveBatchWithResult(rg, &conversationv1.Message{}, &sigintv1.Evaluator{}, handler, gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
+				}
 				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
 				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))
