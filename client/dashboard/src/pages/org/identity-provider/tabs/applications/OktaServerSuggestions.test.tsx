@@ -161,6 +161,20 @@ it("dismisses and restores by registry entry id", () => {
   );
 });
 
+it("shows the entry icon and falls back to an initial without one", () => {
+  show([
+    suggestion({ iconUrl: "https://example.com/icon.png" }),
+    suggestion({ registryEntryId: "entry-2", title: "Other" }),
+  ]);
+  const icons = document.querySelectorAll("img");
+  expect(icons).toHaveLength(1);
+  expect(icons[0]?.getAttribute("src")).toBe("https://example.com/icon.png");
+  expect(screen.getByText("O")).toBeTruthy();
+  fireEvent.error(icons[0] as HTMLImageElement);
+  expect(document.querySelectorAll("img")).toHaveLength(0);
+  expect(screen.getByText("E")).toBeTruthy();
+});
+
 it("offers no actions for an installed suggestion", () => {
   show([suggestion({ state: "installed" })]);
   expect(screen.getByText("Installed")).toBeTruthy();

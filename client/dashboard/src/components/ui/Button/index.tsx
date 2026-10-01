@@ -163,6 +163,8 @@ const buttonVariants = cva(
           "border border-neutral-default bg-transparent text-btn-secondary hover:border-neutral-hover hover:bg-btn-secondary hover:text-btn-secondary-hover active:border-neutral-active active:bg-btn-secondary-hover active:text-btn-secondary-active disabled:border-neutral-disabled disabled:bg-transparent disabled:text-btn-secondary-disabled",
         tertiary:
           "bg-transparent text-btn-tertiary hover:bg-btn-secondary-hover hover:text-btn-tertiary-hover active:bg-btn-secondary-active active:text-btn-tertiary-active disabled:text-btn-tertiary-disabled",
+        success:
+          "bg-success-default text-white hover:bg-success-highlight hover:shadow-[0px_2px_1px_0px_rgba(255,255,255,0.08)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.25)_inset] active:bg-success-highlight active:shadow-none disabled:bg-btn-primary-disabled disabled:text-btn-primary-disabled",
         "destructive-primary":
           "bg-btn-destructive text-btn-destructive-primary hover:bg-btn-destructive-hover hover:text-btn-destructive-primary-hover hover:shadow-[0px_2px_1px_0px_rgba(255,255,255,0.08)_inset,0px_-2px_1px_0px_rgba(0,0,0,0.25)_inset] active:bg-btn-destructive-active active:text-btn-destructive-primary-active active:shadow-none disabled:bg-btn-destructive-disabled disabled:text-btn-destructive-primary-disabled",
         "destructive-secondary":

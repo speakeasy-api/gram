@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/Select";
 import { SkeletonParagraph } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useOrganization } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
@@ -43,8 +44,12 @@ const STATE_BADGE: Record<
 > = {
   open: { label: "Suggested", variant: "success" },
   dismissed: { label: "Dismissed", variant: "neutral" },
-  installed: { label: "Installed", variant: "information" },
+  installed: { label: "Installed", variant: "neutral" },
 };
+
+const DETAIL_LABEL =
+  "flex h-6 items-center self-center border border-information-muted bg-information-softest px-2 text-xs whitespace-nowrap text-default-information";
+const DETAIL_LINE = "flex h-6 min-w-0 items-center";
 
 function inlineError(error: unknown): void {
   toast.error(error instanceof Error ? error.message : "Request failed");
@@ -164,7 +169,7 @@ export function OktaServerSuggestions(): JSX.Element {
         />
       )}
       {data && data.suggestions.length > 0 && (
-        <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-4">
           {data.suggestions.map((suggestion) => (
             <li key={suggestion.registryEntryId}>
               <SuggestionCard
@@ -218,74 +223,65 @@ function SuggestionCard({
   onRestore: () => void;
 }): JSX.Element {
   const badge = STATE_BADGE[suggestion.state];
+  const installable = isSuggestionInstallable(suggestion);
+  const name = suggestion.title ?? suggestion.serverName;
+  const apps = primaryFirst(
+    suggestion.oktaApplications,
+    (app) => app.xaaSupported,
+  );
+  const remotes = primaryFirst(suggestion.remotes, isInstallableRemote);
   return (
     <Card className="h-full">
-      <Card.Header>
-        <Card.Title>{suggestion.title ?? suggestion.serverName}</Card.Title>
-        <Card.Description>{suggestion.description}</Card.Description>
-        <Card.Info>
-          <Badge variant={badge.variant} size="sm">
+      <div className="flex items-center gap-3">
+        <SuggestionIcon name={name} iconUrl={suggestion.iconUrl} />
+        <Card.Title className="min-w-0 flex-1 truncate">{name}</Card.Title>
+        {suggestion.state !== "open" && (
+          <Badge variant={badge.variant} size="sm" className="shrink-0">
             {badge.label}
           </Badge>
-        </Card.Info>
-      </Card.Header>
-      <Card.Content>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <span className="text-eyebrow">In your Okta</span>
-            <ul className="flex flex-col gap-1">
-              {suggestion.oktaApplications.map((app) => (
-                <li
-                  key={app.oktaAppId}
-                  className="flex flex-wrap items-center gap-2"
-                >
-                  <Text small>{app.label}</Text>
-                  <Badge variant="neutral" size="sm">
-                    {humanizeOktaToken(app.signOnMode)}
-                  </Badge>
-                  {!app.xaaSupported && (
-                    <Text muted small>
-                      This sign-on mode cannot be used for Cross App Access.
-                    </Text>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-eyebrow">
-              {suggestion.remotes.length > 1 ? "Endpoints" : "Endpoint"}
-            </span>
-            {suggestion.remotes.map((remote) => (
-              <code key={remote.url} className="font-mono text-xs break-all">
+        )}
+      </div>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 pt-1 text-sm">
+        <dt className={DETAIL_LABEL}>
+          {apps.length > 1 ? "Okta apps" : "Okta app"}
+        </dt>
+        <dd className="flex min-w-0 flex-col">
+          {apps.map((app) => (
+            <OktaApplicationLine key={app.oktaAppId} app={app} />
+          ))}
+        </dd>
+        <dt className={DETAIL_LABEL}>
+          {remotes.length > 1 ? "Endpoints" : "Endpoint"}
+        </dt>
+        <dd className="flex min-w-0 flex-col">
+          {remotes.map((remote) => (
+            <code
+              key={remote.url}
+              className={`${DETAIL_LINE} font-mono text-xs`}
+            >
+              <span className="truncate" title={remote.url}>
                 {remote.url}
-              </code>
-            ))}
-          </div>
-          {suggestion.state === "open" &&
-            !isSuggestionInstallable(suggestion) && (
-              <Text muted small>
-                None of these endpoints use streamable HTTP over HTTPS, so this
-                server cannot be added from here yet.
-              </Text>
-            )}
-          {suggestion.state === "dismissed" && suggestion.dismissedAt && (
-            <Text muted small>
-              Dismissed <HumanizeDateTime date={suggestion.dismissedAt} />.
-            </Text>
-          )}
-          {suggestion.state === "installed" && (
-            <Text muted small>
-              A server in this organization already uses this endpoint.
-            </Text>
-          )}
-        </div>
-      </Card.Content>
-      <Card.Footer>
-        <Card.Actions>
+              </span>
+            </code>
+          ))}
+        </dd>
+      </dl>
+      {suggestion.state === "open" && !installable && (
+        <Text muted small>
+          None of these endpoints use streamable HTTP over HTTPS, so this server
+          cannot be added from here yet.
+        </Text>
+      )}
+      <Card.Footer className="mt-auto">
+        <div className="flex min-h-8 flex-wrap items-center gap-3">
           {suggestion.state === "open" && (
             <>
-              <Button size="sm" disabled={busy || !canAdd} onClick={onAdd}>
+              <Button
+                size="sm"
+                variant="success"
+                disabled={busy || !canAdd || !installable}
+                onClick={onAdd}
+              >
                 Add server
               </Button>
               <Button
@@ -299,28 +295,88 @@ function SuggestionCard({
             </>
           )}
           {suggestion.state === "dismissed" && (
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={busy}
-              onClick={onRestore}
-            >
-              Restore
-            </Button>
-          )}
-          {suggestion.documentationUrl && (
-            <Button variant="tertiary" size="sm" asChild>
-              <a
-                href={suggestion.documentationUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={onRestore}
               >
-                Documentation
-              </a>
-            </Button>
+                Restore
+              </Button>
+              {suggestion.dismissedAt && (
+                <Text muted small>
+                  Dismissed <HumanizeDateTime date={suggestion.dismissedAt} />.
+                </Text>
+              )}
+            </>
           )}
-        </Card.Actions>
+          {suggestion.state === "installed" && (
+            <Text muted small>
+              A server in this organization already uses this endpoint.
+            </Text>
+          )}
+        </div>
       </Card.Footer>
     </Card>
+  );
+}
+
+/** Vendor icon tile; falls back to the first letter when there is no icon or it fails to load. */
+function SuggestionIcon({
+  name,
+  iconUrl,
+}: {
+  name: string;
+  iconUrl: string | undefined;
+}): JSX.Element {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-8 shrink-0 items-center justify-center border bg-card text-sm font-semibold text-muted-foreground"
+    >
+      {iconUrl && !failed ? (
+        <img
+          src={iconUrl}
+          alt=""
+          className="size-5 object-contain"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        name.charAt(0).toUpperCase()
+      )}
+    </span>
+  );
+}
+
+/** Stable reorder that leads with the entries the card should show first. */
+function primaryFirst<T>(items: T[], isPrimary: (item: T) => boolean): T[] {
+  return [...items.filter(isPrimary), ...items.filter((i) => !isPrimary(i))];
+}
+
+function isInstallableRemote(remote: { type: string; url: string }): boolean {
+  return remote.type === "streamable-http" && remote.url.startsWith("https://");
+}
+
+type OktaApplication = OktaServerSuggestion["oktaApplications"][number];
+
+function OktaApplicationLine({ app }: { app: OktaApplication }): JSX.Element {
+  const mode = (
+    <Badge variant="neutral" size="sm">
+      {humanizeOktaToken(app.signOnMode)}
+    </Badge>
+  );
+  return (
+    <span className={`${DETAIL_LINE} gap-2`}>
+      <span className="truncate">{app.label}</span>
+      {app.xaaSupported ? (
+        mode
+      ) : (
+        <SimpleTooltip tooltip="This sign-on mode cannot be used for Cross App Access.">
+          <span>{mode}</span>
+        </SimpleTooltip>
+      )}
+    </span>
   );
 }

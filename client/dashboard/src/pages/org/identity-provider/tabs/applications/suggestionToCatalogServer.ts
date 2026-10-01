@@ -42,6 +42,7 @@ export function suggestionToCatalogServer(
     registrySpecifier: suggestion.serverName,
     title: suggestion.title ?? suggestion.serverName,
     description: suggestion.description,
+    iconUrl: suggestion.iconUrl,
     remotes,
     isReadOnly: false,
     supportsDcr: false,
