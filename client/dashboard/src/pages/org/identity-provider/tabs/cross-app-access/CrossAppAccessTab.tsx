@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
@@ -30,7 +31,7 @@ import {
   oktaConnectionsUrl,
   oktaConsoleUrl,
 } from "../../oktaConsoleLinks";
-import { AGENT_SECTION_ID } from "../../tabs";
+import { AGENT_SECTION_ID, oktaViewHref } from "../../tabs";
 import { useClearedConfirmations } from "./useClearedConfirmations";
 import { useXaaConfirm } from "./useXaaConfirm";
 import { XaaBulkConfirmBar } from "./XaaBulkConfirmBar";
@@ -243,12 +244,12 @@ function ReadinessChecklist({
           <Text variant="small">
             Save the Okta AI agent details first. The Okta links and connections
             below need the agent&apos;s ID.{" "}
-            <a
-              href={`#${AGENT_SECTION_ID}`}
+            <Link
+              to={oktaViewHref("cross-app-access", AGENT_SECTION_ID)}
               className="underline underline-offset-2"
             >
               Record it in the setup steps above
-            </a>
+            </Link>
             .
           </Text>
         </Alert>
