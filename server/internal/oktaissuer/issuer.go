@@ -13,12 +13,21 @@ import (
 // ErrInvalid is returned for every rejected issuer; the text never echoes input.
 var ErrInvalid = errors.New("https URL with a host and without query, fragment or userinfo required")
 
-// Validate applies the Okta resource connection audience rule: https, a host,
-// an optional path, nothing else. Okta compares audiences byte for byte, so no
-// normalization happens here.
+// ValidateAudience applies the Okta resource connection audience rule: https,
+// a host, an optional path, nothing else. Okta compares audiences byte for
+// byte, so no normalization happens here.
+func ValidateAudience(audience string) error {
+	parsed, err := url.Parse(audience)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Opaque != "" || parsed.ForceQuery || strings.ContainsAny(audience, "?#") {
+		return ErrInvalid
+	}
+	return nil
+}
+
+// Validate applies the audience rule and also rejects invisible characters,
+// for the staff-curated catalog issuer.
 func Validate(issuer string) error {
-	parsed, err := url.Parse(issuer)
-	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Opaque != "" || parsed.ForceQuery || strings.ContainsAny(issuer, "?#") || HasInvisible(issuer) {
+	if err := ValidateAudience(issuer); err != nil || HasInvisible(issuer) {
 		return ErrInvalid
 	}
 	return nil
