@@ -1336,6 +1336,36 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-tunnel-v1-metrics-snapshot
+    name: gram-tunnel-v1-metrics-snapshot
+    spec:
+      definition: |
+        syntax = "proto3";
+        message MetricsSnapshot {
+          string source_id = 1;
+          string producer_id = 2;
+          int64 bucket_unix = 3;
+          uint64 revision = 4;
+          string kind = 5;
+          string server_id = 6;
+          string method = 7;
+          string client_family = 8;
+          uint64 attempts = 9;
+          uint64 successes = 10;
+          uint64 errors = 11;
+          uint64 canceled = 12;
+          uint64 incomplete = 13;
+          repeated uint64 latency_bins = 14;
+          uint32 connections = 15;
+          uint32 consumers = 16;
+          uint32 substreams = 17;
+          reserved 18, 19;
+          reserved "diagnostics_available", "targets_unreachable";
+          uint64 connections_opened = 20;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-event
     name: gram-webhooks-v1-event
     spec:
@@ -1892,6 +1922,24 @@ pubsub:
         name: gram-telemetry-v1-log-record
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-tunnel-v1-metrics-ch-writer
+      topic_proto_message: gram-tunnel-v1-metrics-snapshot
+    name: gram-tunnel-v1-metrics-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-tunnel-v1-metrics-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-tunnel-v1-metrics-snapshot
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-svix-relay
       topic_proto_message: gram-webhooks-v1-event
     name: gram-webhooks-v1-svix-relay
@@ -2308,6 +2356,23 @@ pubsub:
     name: gram-telemetry-v1-tool-call-log-relay-dlq
     spec:
       messageRetentionDuration: 604800s
+  - labels:
+      dlq_for: gram-tunnel-v1-metrics-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-tunnel-v1-metrics-ch-writer
+    name: gram-tunnel-v1-metrics-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-tunnel-v1-metrics-snapshot
+    name: gram-tunnel-v1-metrics-snapshot
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-tunnel-v1-metrics-snapshot
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-event

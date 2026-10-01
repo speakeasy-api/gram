@@ -2592,6 +2592,23 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      now() - interval '10 hours');
 
   ------------------------------------------------------------------
+  -- Tunnel example is deliberately disconnected: historical activity must not
+  -- fabricate a live customer agent in the shared demo environment.
+  INSERT INTO tunneled_mcp_servers (id,project_id,name,key_hash,key_prefix,status,agent_version,last_seen_at)
+  VALUES ('dec0de00-0000-4000-a000-000000000701',proj_a,'Private inventory tunnel',
+    md5('gram-demo-inert-tunnel-key'),'demo_inert','active','0.2.0',NULL);
+  INSERT INTO mcp_servers (id,project_id,name,slug,tunneled_mcp_server_id,visibility)
+  VALUES ('dec0de00-0000-4000-a000-000000000702',proj_a,'Private inventory','acme-demo-private-inventory',
+    'dec0de00-0000-4000-a000-000000000701','private');
+  INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
+  VALUES ('dec0de00-0000-4000-a000-000000000703', proj_a,
+    'dec0de00-0000-4000-a000-000000000702', 'acme-demo-private-inventory');
+  SELECT count(*) INTO stray FROM mcp_endpoints
+  WHERE project_id = proj_a AND mcp_server_id = 'dec0de00-0000-4000-a000-000000000702' AND NOT deleted;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 private tunnel endpoint, found %', stray;
+  END IF;
+
   -- Postflight asserts: demo data landed, and nothing leaked outside
   -- the demo org.
   ------------------------------------------------------------------

@@ -68126,6 +68126,122 @@ paths:
       x-speakeasy-name-override: getServer
       x-speakeasy-react-hook:
         name: GetTunneledMcpServer
+  /rpc/tunneledMcp.getServerMetrics:
+    get:
+      description: Read seven-day payload-free tunnel activity aggregates
+      operationId: getTunneledMcpServerMetrics
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: window
+          schema:
+            default: day
+            enum:
+              - hour
+              - day
+              - week
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TunnelMetrics'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getServerMetrics tunneledMcp
+      tags:
+        - tunneledMcp
+      x-speakeasy-name-override: getServerMetrics
+      x-speakeasy-react-hook:
+        name: GetTunneledMcpServerMetrics
   /rpc/tunneledMcp.listServerConnections:
     get:
       description: List live tunnel connections for a tunneled MCP server
@@ -102131,6 +102247,226 @@ components:
         - output_tokens
         - cache_creation_tokens
         - total_tokens
+    TunnelClientCount:
+      type: object
+      properties:
+        family:
+          type: string
+        requests:
+          type: integer
+          format: int64
+      required:
+        - family
+        - requests
+    TunnelDiagnosticStep:
+      type: object
+      properties:
+        duration_ms:
+          type: integer
+          description: Elapsed probe time in milliseconds
+          format: int64
+        failure:
+          type: string
+          description: Bounded failure category, never raw error text
+        state:
+          type: string
+          description: Probe state
+          enum:
+            - pass
+            - fail
+            - not_applicable
+            - not_tested
+      required:
+        - state
+        - duration_ms
+        - failure
+    TunnelDiagnostics:
+      type: object
+      properties:
+        consecutive_failures:
+          type: integer
+          description: Consecutive failed transport probes
+          format: int64
+        dns:
+          $ref: '#/components/schemas/TunnelDiagnosticStep'
+        http_progress:
+          $ref: '#/components/schemas/TunnelHTTPProgress'
+        last_http_response_age_ms:
+          type: integer
+          description: HTTP response age at view time, -1 if absent
+          format: int64
+        last_http_status:
+          type: integer
+          description: Last observed HTTP status, including authentication challenges
+          format: int64
+        last_transport_error:
+          type: string
+          description: Last transport failure category
+        last_transport_error_age_ms:
+          type: integer
+          description: Transport failure age at view time, -1 if absent
+          format: int64
+        received_at:
+          type: string
+          description: Gateway receipt time
+          format: date-time
+        requests_total:
+          type: integer
+          description: HTTP attempts since agent process start
+          format: int64
+        sample_age_ms:
+          type: integer
+          description: Probe age at view time, -1 if never sampled
+          format: int64
+        state:
+          type: string
+          description: Diagnostic collection state
+          enum:
+            - pending
+            - available
+            - stale
+            - unavailable
+            - unsupported
+            - disabled
+        target_state:
+          type: string
+          description: Reachable means transport only, not MCP success.
+          enum:
+            - pending
+            - reachable
+            - unreachable
+            - unknown
+        tcp:
+          $ref: '#/components/schemas/TunnelDiagnosticStep'
+        tls:
+          $ref: '#/components/schemas/TunnelDiagnosticStep'
+        transport_errors_total:
+          type: integer
+          description: Transport errors since agent process start
+          format: int64
+      required:
+        - state
+    TunnelHTTPProgress:
+      type: object
+      properties:
+        open_responses:
+          type: integer
+          description: Open HTTP response bodies at the last sample; long-lived SSE may be expected
+          format: int64
+        waiting_headers:
+          type: integer
+          description: Requests awaiting final HTTP response headers at the last sample
+          format: int64
+      required:
+        - waiting_headers
+        - open_responses
+    TunnelMetricPoint:
+      type: object
+      properties:
+        active_requests:
+          type: number
+          format: double
+        canceled:
+          type: integer
+          format: int64
+        collection_partial:
+          type: boolean
+          description: An observed producer reported aggregate loss since its last restart
+        connections:
+          type: number
+          description: Average of time-aligned sums of observed gateway connections. Missing owners are not zero.
+          format: double
+        connections_opened:
+          type: integer
+          format: int64
+        consumer_sessions:
+          type: number
+          format: double
+        coverage_samples:
+          type: integer
+          description: Number of observed 15-second gateway sampling slots
+          format: int64
+        errors:
+          type: integer
+          description: Terminal errors completed in this bucket
+          format: int64
+        incomplete:
+          type: integer
+          format: int64
+        other_requests:
+          type: integer
+          description: Other observed MCP request attempts
+          format: int64
+        p50_ms:
+          type: integer
+          description: Histogram upper bound for median completion latency, -1 means above 60 seconds
+          format: int64
+        p95_ms:
+          type: integer
+          description: Histogram upper bound for p95 completion latency, -1 means above 60 seconds
+          format: int64
+        request_coverage_samples:
+          type: integer
+          description: Observed producer-minute heartbeats; proves only observed coverage, not every replica
+          format: int64
+        successes:
+          type: integer
+          description: Terminal MCP successes completed in this bucket
+          format: int64
+        time:
+          type: string
+          format: date-time
+        tool_calls:
+          type: integer
+          description: Observed tools/call attempts
+          format: int64
+        tools_list:
+          type: integer
+          description: Observed tools/list attempts
+          format: int64
+      required:
+        - time
+        - coverage_samples
+        - request_coverage_samples
+        - collection_partial
+    TunnelMetrics:
+      type: object
+      properties:
+        active_servers:
+          type: integer
+          description: Distinct fronting MCP servers with requests in this range
+          format: int64
+        bucket_seconds:
+          type: integer
+          format: int64
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/TunnelClientCount'
+        last_sample_at:
+          type: string
+          format: date-time
+        observed_at:
+          type: string
+          format: date-time
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/TunnelMetricPoint'
+        state:
+          type: string
+          description: History availability
+          enum:
+            - available
+            - unavailable
+            - too_large
+      required:
+        - state
+        - observed_at
+        - bucket_seconds
+        - points
+        - clients
+        - active_servers
     TunneledMcpConnection:
       type: object
       properties:
@@ -102149,6 +102485,8 @@ components:
           type: string
           description: When this tunnel session connected
           format: date-time
+        diagnostics:
+          $ref: '#/components/schemas/TunnelDiagnostics'
         gateway_session_id:
           type: string
           description: Gateway session ID for a live tunnel connection
@@ -102167,6 +102505,9 @@ components:
         service_version:
           type: string
           description: Customer-declared version of the MCP service behind this tunnel connection
+        target_display:
+          type: string
+          description: Agent target scheme, hostname, port and path, without credentials, query or fragment
       required:
         - gateway_session_id
         - service_version
@@ -102277,11 +102618,18 @@ components:
           type: integer
           description: Total MCP consumer sessions currently pinned across active tunnel connections
           format: int64
+        collection_state:
+          type: string
+          description: 'available or unavailable: whether live connection storage could be read'
         connections:
           type: array
           items:
             $ref: '#/components/schemas/TunneledMcpConnection'
           description: Live tunnel connections currently visible in Redis
+        observed_at:
+          type: string
+          description: Server time when this view was read
+          format: date-time
       description: Live connection details for a tunneled MCP server
       required:
         - connections

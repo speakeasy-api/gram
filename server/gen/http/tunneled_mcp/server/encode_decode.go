@@ -928,6 +928,244 @@ func EncodeListServerConnectionsError(encoder func(context.Context, http.Respons
 	}
 }
 
+// EncodeGetServerMetricsResponse returns an encoder for responses returned by
+// the tunneledMcp getServerMetrics endpoint.
+func EncodeGetServerMetricsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*types.TunnelMetrics)
+		enc := encoder(ctx, w)
+		body := NewGetServerMetricsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetServerMetricsRequest returns a decoder for requests sent to the
+// tunneledMcp getServerMetrics endpoint.
+func DecodeGetServerMetricsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*tunneledmcp.GetServerMetricsPayload, error) {
+	return func(r *http.Request) (*tunneledmcp.GetServerMetricsPayload, error) {
+		var payload *tunneledmcp.GetServerMetricsPayload
+		var (
+			id               string
+			window           string
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+			err              error
+		)
+		qp := r.URL.Query()
+		id = qp.Get("id")
+		if id == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		windowRaw := qp.Get("window")
+		if windowRaw != "" {
+			window = windowRaw
+		} else {
+			window = "day"
+		}
+		if !(window == "hour" || window == "day" || window == "week") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("window", window, []any{"hour", "day", "week"}))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetServerMetricsPayload(id, window, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetServerMetricsError returns an encoder for errors returned by the
+// getServerMetrics tunneledMcp endpoint.
+func EncodeGetServerMetricsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerMetricsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerMetricsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerMetricsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerMetricsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerMetricsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerMetricsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerMetricsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerMetricsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerMetricsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerMetricsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeUpdateServerResponse returns an encoder for responses returned by the
 // tunneledMcp updateServer endpoint.
 func EncodeUpdateServerResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1659,6 +1897,7 @@ func marshalTypesTunneledMcpServerToTunneledMcpServerResponseBody(v *types.Tunne
 // *types.TunneledMcpConnection.
 func marshalTypesTunneledMcpConnectionToTunneledMcpConnectionResponseBody(v *types.TunneledMcpConnection) *TunneledMcpConnectionResponseBody {
 	res := &TunneledMcpConnectionResponseBody{
+		TargetDisplay:          v.TargetDisplay,
 		GatewaySessionID:       v.GatewaySessionID,
 		ServiceVersion:         v.ServiceVersion,
 		AgentVersion:           v.AgentVersion,
@@ -1668,6 +1907,9 @@ func marshalTypesTunneledMcpConnectionToTunneledMcpConnectionResponseBody(v *typ
 		ActiveSubstreams:       v.ActiveSubstreams,
 		ActiveConsumerSessions: v.ActiveConsumerSessions,
 	}
+	if v.Diagnostics != nil {
+		res.Diagnostics = marshalTypesTunnelDiagnosticsToTunnelDiagnosticsResponseBody(v.Diagnostics)
+	}
 	if v.Metadata != nil {
 		res.Metadata = make(map[string]string, len(v.Metadata))
 		for key, val := range v.Metadata {
@@ -1675,6 +1917,112 @@ func marshalTypesTunneledMcpConnectionToTunneledMcpConnectionResponseBody(v *typ
 			tv := val
 			res.Metadata[tk] = tv
 		}
+	}
+
+	return res
+}
+
+// marshalTypesTunnelDiagnosticsToTunnelDiagnosticsResponseBody builds a value
+// of type *TunnelDiagnosticsResponseBody from a value of type
+// *types.TunnelDiagnostics.
+func marshalTypesTunnelDiagnosticsToTunnelDiagnosticsResponseBody(v *types.TunnelDiagnostics) *TunnelDiagnosticsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &TunnelDiagnosticsResponseBody{
+		State:                   v.State,
+		ReceivedAt:              v.ReceivedAt,
+		SampleAgeMs:             v.SampleAgeMs,
+		TargetState:             v.TargetState,
+		ConsecutiveFailures:     v.ConsecutiveFailures,
+		RequestsTotal:           v.RequestsTotal,
+		TransportErrorsTotal:    v.TransportErrorsTotal,
+		LastHTTPStatus:          v.LastHTTPStatus,
+		LastHTTPResponseAgeMs:   v.LastHTTPResponseAgeMs,
+		LastTransportError:      v.LastTransportError,
+		LastTransportErrorAgeMs: v.LastTransportErrorAgeMs,
+	}
+	if v.DNS != nil {
+		res.DNS = marshalTypesTunnelDiagnosticStepToTunnelDiagnosticStepResponseBody(v.DNS)
+	}
+	if v.TCP != nil {
+		res.TCP = marshalTypesTunnelDiagnosticStepToTunnelDiagnosticStepResponseBody(v.TCP)
+	}
+	if v.TLS != nil {
+		res.TLS = marshalTypesTunnelDiagnosticStepToTunnelDiagnosticStepResponseBody(v.TLS)
+	}
+	if v.HTTPProgress != nil {
+		res.HTTPProgress = marshalTypesTunnelHTTPProgressToTunnelHTTPProgressResponseBody(v.HTTPProgress)
+	}
+
+	return res
+}
+
+// marshalTypesTunnelDiagnosticStepToTunnelDiagnosticStepResponseBody builds a
+// value of type *TunnelDiagnosticStepResponseBody from a value of type
+// *types.TunnelDiagnosticStep.
+func marshalTypesTunnelDiagnosticStepToTunnelDiagnosticStepResponseBody(v *types.TunnelDiagnosticStep) *TunnelDiagnosticStepResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &TunnelDiagnosticStepResponseBody{
+		State:      v.State,
+		DurationMs: v.DurationMs,
+		Failure:    v.Failure,
+	}
+
+	return res
+}
+
+// marshalTypesTunnelHTTPProgressToTunnelHTTPProgressResponseBody builds a
+// value of type *TunnelHTTPProgressResponseBody from a value of type
+// *types.TunnelHTTPProgress.
+func marshalTypesTunnelHTTPProgressToTunnelHTTPProgressResponseBody(v *types.TunnelHTTPProgress) *TunnelHTTPProgressResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &TunnelHTTPProgressResponseBody{
+		WaitingHeaders: v.WaitingHeaders,
+		OpenResponses:  v.OpenResponses,
+	}
+
+	return res
+}
+
+// marshalTypesTunnelMetricPointToTunnelMetricPointResponseBody builds a value
+// of type *TunnelMetricPointResponseBody from a value of type
+// *types.TunnelMetricPoint.
+func marshalTypesTunnelMetricPointToTunnelMetricPointResponseBody(v *types.TunnelMetricPoint) *TunnelMetricPointResponseBody {
+	res := &TunnelMetricPointResponseBody{
+		Time:                   v.Time,
+		ToolCalls:              v.ToolCalls,
+		ToolsList:              v.ToolsList,
+		OtherRequests:          v.OtherRequests,
+		Successes:              v.Successes,
+		Errors:                 v.Errors,
+		Canceled:               v.Canceled,
+		Incomplete:             v.Incomplete,
+		P50Ms:                  v.P50Ms,
+		P95Ms:                  v.P95Ms,
+		Connections:            v.Connections,
+		ConsumerSessions:       v.ConsumerSessions,
+		ActiveRequests:         v.ActiveRequests,
+		ConnectionsOpened:      v.ConnectionsOpened,
+		RequestCoverageSamples: v.RequestCoverageSamples,
+		CollectionPartial:      v.CollectionPartial,
+		CoverageSamples:        v.CoverageSamples,
+	}
+
+	return res
+}
+
+// marshalTypesTunnelClientCountToTunnelClientCountResponseBody builds a value
+// of type *TunnelClientCountResponseBody from a value of type
+// *types.TunnelClientCount.
+func marshalTypesTunnelClientCountToTunnelClientCountResponseBody(v *types.TunnelClientCount) *TunnelClientCountResponseBody {
+	res := &TunnelClientCountResponseBody{
+		Family:   v.Family,
+		Requests: v.Requests,
 	}
 
 	return res

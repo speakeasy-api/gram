@@ -2587,3 +2587,20 @@ SELECT throwIf(
   (SELECT countIf(cost_usd > 0) FROM agent_events
    WHERE organization_id = 'org_gram_demo_workspace' AND surface = 'codex') != 0,
   'demo seed postflight: Codex states no cost, so no Codex demo row may carry one');
+
+-- Payload-free tunnel example. This source ID is rewritten with the tenant's UUIDPrefix.
+ALTER TABLE tunnel_metric_snapshots DELETE WHERE source_id = 'dec0de00-0000-4000-a000-000000000701' SETTINGS mutations_sync=2;
+INSERT INTO tunnel_metric_snapshots
+(gram_project_id,source_id,bucket,kind,producer_id,server_id,method,client_family,revision,attempts,successes,errors,canceled,incomplete,latency_bins,connections,consumers,substreams,connections_opened)
+SELECT toUUID('dec0de00-0000-4000-a000-000000000001'),toUUID('dec0de00-0000-4000-a000-000000000701'),toStartOfMinute(now())-toIntervalMinute(number+20),
+ 'requests',toUUID('dec0de00-0000-4000-a000-000000000703'),toUUID('dec0de00-0000-4000-a000-000000000702'),
+ if(number%5=0,'tools/list','tools/call'),if(number%3=0,'claude','cursor'),1,
+ 12+number%21,11+number%21,1,0,0,[0,0,4,7+number%21,1,0,0,0,0,0,0,0],0,0,0,0
+FROM numbers(1420);
+INSERT INTO tunnel_metric_snapshots
+(gram_project_id,source_id,bucket,kind,producer_id,server_id,method,client_family,revision,attempts,successes,errors,canceled,incomplete,latency_bins,connections,consumers,substreams,connections_opened)
+SELECT toUUID('dec0de00-0000-4000-a000-000000000001'),toUUID('dec0de00-0000-4000-a000-000000000701'),toStartOfInterval(now(),INTERVAL 15 SECOND)-toIntervalSecond(15*number+1200),
+ 'connections',toUUID('dec0de00-0000-4000-a000-000000000704'),toUUID('00000000-0000-0000-0000-000000000000'),'', '',1,
+ 0,0,0,0,0,[0,0,0,0,0,0,0,0,0,0,0,0],if(number%240<12,1,2),4+number%9,number%4,if(number=5679,2,0)
+FROM numbers(5680);
+SELECT throwIf(count()!=7100,'demo seed: tunnel metric rows missing') FROM tunnel_metric_snapshots WHERE source_id='dec0de00-0000-4000-a000-000000000701';

@@ -28,6 +28,7 @@ export const FEATURE_FLAGS = {
   riskLlmAnalyzer: "gram-risk-llm-analyzer",
   riskWatchdog: "gram-risk-watchdog",
   tunneledMcp: "gram-tunneled-mcp",
+  tunnelObservability: "gram-tunnel-observability",
   userSessionsDashboard: "user-sessions-dashboard",
 } as const;
 

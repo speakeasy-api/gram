@@ -1,3 +1,6 @@
+import { useTelemetry } from "@/contexts/Telemetry";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { TunnelObservability } from "./TunnelObservability";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -15,7 +18,7 @@ import { Link } from "react-router";
 
 // Live sessions come from Redis heartbeats; a short poll keeps the panel
 // honest without hammering the API while the page sits open.
-const CONNECTIONS_POLL_MS = 15_000;
+const CONNECTIONS_POLL_MS = 30_000;
 
 type StatusPresentation = {
   label: string;
@@ -115,16 +118,20 @@ const columns: Column<TunneledMcpConnection>[] = [
   },
 ];
 
-// Ported from the retired tunneled source page's overview: which agents are
-// holding the tunnel open right now, and when the source was last seen.
+// Shows connected agents and the source's last-seen time.
 export function TunneledMcpConnectionsPanel({
   tunneledMcpServerId,
   agentSetupHref,
+  logsHref,
 }: {
   tunneledMcpServerId: string;
   /** Settings anchor with the agent snippets, offered when nothing is connected. */
   agentSetupHref: string;
+  logsHref: string;
 }): JSX.Element {
+  const telemetry = useTelemetry();
+  const enhanced =
+    telemetry.isFeatureEnabled(FEATURE_FLAGS.tunnelObservability) === true;
   // The status badge and last-seen come from the source row, so it polls on
   // the same cadence as the connections table or it would go stale as agents
   // come and go.
@@ -132,6 +139,7 @@ export function TunneledMcpConnectionsPanel({
     getTunneledMcpServerArgs(tunneledMcpServerId),
     undefined,
     {
+      enabled: !enhanced,
       refetchInterval: CONNECTIONS_POLL_MS,
       refetchIntervalInBackground: false,
     },
@@ -141,10 +149,24 @@ export function TunneledMcpConnectionsPanel({
       getTunneledMcpServerArgs(tunneledMcpServerId),
       undefined,
       {
+        throwOnError: false,
         refetchInterval: CONNECTIONS_POLL_MS,
         refetchIntervalInBackground: false,
       },
     );
+
+  if (enhanced) {
+    return (
+      <TunnelObservability
+        id={tunneledMcpServerId}
+        connections={data}
+        loading={isLoading}
+        error={isError}
+        logsHref={logsHref}
+        agentSetupHref={agentSetupHref}
+      />
+    );
+  }
 
   const connections = data?.connections ?? [];
   // Without the source row (still loading, or its poll failed) there is no

@@ -6,7 +6,7 @@ ARG TARGETOS TARGETARCH VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags="-s -w" -o /out/tunnel-agent ./tunnel/cmd/tunnel-agent
+    go build -trimpath -ldflags="-s -w -X github.com/speakeasy-api/gram/tunnel/wire.AgentVersion=${VERSION}" -o /out/tunnel-agent ./tunnel/cmd/tunnel-agent
 
 FROM alpine:3.22
 ARG VERSION=dev

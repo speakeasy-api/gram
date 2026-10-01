@@ -25,9 +25,17 @@ export type TunneledMcpServerConnections = {
    */
   activeConsumerSessionCount: number;
   /**
+   * available or unavailable: whether live connection storage could be read
+   */
+  collectionState?: string | undefined;
+  /**
    * Live tunnel connections currently visible in Redis
    */
   connections: Array<TunneledMcpConnection>;
+  /**
+   * Server time when this view was read
+   */
+  observedAt?: Date | undefined;
 };
 
 /** @internal */
@@ -38,12 +46,18 @@ export const TunneledMcpServerConnections$inboundSchema: z.ZodMiniType<
   z.object({
     active_connection_count: z.int(),
     active_consumer_session_count: z.int(),
+    collection_state: z.optional(z.string()),
     connections: z.array(TunneledMcpConnection$inboundSchema),
+    observed_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       "active_connection_count": "activeConnectionCount",
       "active_consumer_session_count": "activeConsumerSessionCount",
+      "collection_state": "collectionState",
+      "observed_at": "observedAt",
     });
   }),
 );
