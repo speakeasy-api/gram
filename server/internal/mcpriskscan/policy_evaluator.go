@@ -180,13 +180,14 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 		return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("MCP payload is %s", subject.Payload.Availability()))
 	}
 
-	match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, policyScanRequest(subject, subject.Payload.Bytes()))
+	request := policyScanRequest(subject, subject.Payload.Bytes())
+	match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, request)
 	if match != nil {
 		outcome := riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED
 		if event.Phase() == PhaseResponse {
 			outcome = riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD
 		}
-		p.publish(scanCtx, subject.Event, match.policy, match.findings, outcome)
+		p.publish(scanCtx, subject.Event, match.policy, match.findings, outcome, request.Text)
 		return deniedDecision(subject.Event.Phase(), match.policy, match.findings[0])
 	}
 	if scanErr != nil || scanCtx.Err() != nil {
@@ -272,10 +273,13 @@ func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subje
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), p.config.Deadline)
 		defer cancel()
 		request := policyScanRequest(subject, payload)
+		// Every policy scans the same text, so it is stored with the first
+		// persisted findings only.
+		unstoredPayload := request.Text
 		for _, policy := range policies {
 			findings, err := p.detector.ScanMCPPolicy(ctx, policy, request)
-			if len(findings) > 0 {
-				p.publish(ctx, subject.Event, policy, findings, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED)
+			if len(findings) > 0 && p.publish(ctx, subject.Event, policy, findings, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED, unstoredPayload) {
+				unstoredPayload = ""
 			}
 			if err != nil {
 				p.logger.WarnContext(ctx, "MCP flag policy scan failed", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
@@ -298,10 +302,13 @@ func (p *policyEvaluator) drain(ctx context.Context) error {
 	}
 }
 
-func (p *policyEvaluator) publish(ctx context.Context, event Event, policy policycore.Policy, findings []scanners.Finding, outcome riskv1.Finding_EnforcementOutcome) {
+// publish emits findings and stores their evidence. A non-empty payload is
+// the scanned text, stored once per execution phase; publish reports whether
+// it was persisted.
+func (p *policyEvaluator) publish(ctx context.Context, event Event, policy policycore.Policy, findings []scanners.Finding, outcome riskv1.Finding_EnforcementOutcome, payload string) bool {
 	if p.publisher == nil {
 		p.logger.WarnContext(ctx, "MCP policy findings publisher is unavailable", attr.SlogRiskPolicyID(policy.ID.String()))
-		return
+		return false
 	}
 	principal := event.Principal()
 	attribution := riskv1.Finding_Attribution_builder{
@@ -343,17 +350,21 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 		p.logger.WarnContext(ctx, "failed to publish MCP policy findings", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
 	}
 	if p.evidenceWriter == nil {
-		return
+		return false
 	}
 	projectID, err := uuid.Parse(event.ProjectID)
 	if err != nil {
 		p.logger.WarnContext(ctx, "failed to parse MCP finding evidence project id", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
-		return
+		return false
 	}
 	ids := scanners.FindingIDs(meta, findings)
 	evidence := make([]risk.MCPFindingEvidence, 0, len(findings))
 	for i, finding := range findings {
 		evidence = append(evidence, risk.MCPFindingEvidence{ID: ids[i], Match: finding.Match})
+	}
+	var scanned *risk.MCPExecutionPayload
+	if payload != "" {
+		scanned = &risk.MCPExecutionPayload{ExecutionID: event.ExecutionID(), Phase: event.Phase(), Payload: payload}
 	}
 	storeCtx, cancel := context.WithTimeout(ctx, mcpFindingEvidenceStoreTimeout)
 	defer cancel()
@@ -362,9 +373,12 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 		ProjectID:      projectID,
 		CreatedAt:      time.Now().UTC(),
 		Findings:       evidence,
+		Execution:      scanned,
 	}); err != nil {
 		p.logger.WarnContext(ctx, "failed to store MCP policy finding evidence", attr.SlogRiskPolicyID(policy.ID.String()), attr.SlogError(err))
+		return false
 	}
+	return scanned != nil
 }
 
 func (p *policyEvaluator) resolveIndeterminate(ctx context.Context, phase string, err error) Decision {

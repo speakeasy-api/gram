@@ -391,6 +391,10 @@ var _ = Service("risk", func() {
 			Attribute("mcp_server_id", String, "Optional concrete MCP server ID to match exactly.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("result_id", String, "Optional risk result ID; returns at most that one finding. Used to resolve a deep link to a finding that is not on a loaded page.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("execution_id", String, "Optional mediated execution ID; returns every finding raised on that one MCP call.")
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
@@ -423,6 +427,8 @@ var _ = Service("risk", func() {
 			Param("policy_id")
 			Param("chat_id")
 			Param("mcp_server_id")
+			Param("result_id")
+			Param("execution_id")
 			Param("category")
 			Param("rule_id")
 			Param("user_id")
@@ -540,6 +546,37 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.results")
 		Meta("openapi:extension:x-speakeasy-name-override", "unmask")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUnmaskResult", "type": "mutation"}`)
+	})
+
+	Method("revealRiskResultPayload", func() {
+		Description("Return the full scanned payload of the MCP tool call a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The risk result ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskRevealPayloadResult)
+
+		HTTP(func() {
+			// POST for the same reason as unmaskResult: every reveal writes an audit entry.
+			POST("/rpc/risk.revealResultPayload")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(RiskIDRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revealRiskResultPayload")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "revealPayload")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskRevealResultPayload", "type": "mutation"}`)
 	})
 
 	Method("listRiskResultsByChat", func() {
@@ -1983,6 +2020,22 @@ var RiskUnmaskResultResult = Type("RiskUnmaskResultResult", func() {
 		Enum("available", "evidence_not_stored")
 	})
 	Required("id", "match", "reveal_state")
+})
+
+var RiskRevealPayloadResult = Type("RiskRevealPayloadResult", func() {
+	Attribute("id", String, "The risk result ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("reveal_state", String, "Whether the payload was revealed or its evidence is unavailable or expired.", func() {
+		Enum("available", "evidence_not_stored")
+	})
+	Attribute("execution_id", String, "The mediated execution the payload belongs to.")
+	Attribute("phase", String, "Execution phase the payload was scanned in (request or response).")
+	Attribute("payload", String, "The exact text the scanners inspected: the tools/call arguments JSON for a request, or the extracted result text for a response. Empty when reveal_state is evidence_not_stored.")
+	Attribute("expires_at", String, "When the stored payload is deleted. Absent when reveal_state is evidence_not_stored.", func() {
+		Format(FormatDateTime)
+	})
+	Required("id", "reveal_state", "payload")
 })
 
 var ListRiskResultsForAgentResult = Type("ListRiskResultsForAgentResult", func() {

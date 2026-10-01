@@ -396,6 +396,8 @@ func (s *RiskFindingListService) listFindings(ctx context.Context, principal Pri
 		PolicyIDs:       policyIDs,
 		MCPServerID:     filters.MCPServerID,
 		ChatID:          filters.ChatID,
+		ResultID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExecutionID:     "",
 		From:            from,
 		To:              to,
 		Category:        filters.Category,

@@ -585,6 +585,7 @@ trackedFiles:
   src/funcs/riskResultsListDismissed.ts: {}
   src/funcs/riskResultsListForAgent.ts: {}
   src/funcs/riskResultsMarkFalsePositive.ts: {}
+  src/funcs/riskResultsRevealPayload.ts: {}
   src/funcs/riskResultsUnmarkFalsePositive.ts: {}
   src/funcs/riskResultsUnmask.ts: {}
   src/funcs/riskRulesTest.ts: {}
@@ -1566,6 +1567,7 @@ trackedFiles:
   src/models/components/riskpolicystatus.ts: {}
   src/models/components/riskresult.ts: {}
   src/models/components/riskresultredacted.ts: {}
+  src/models/components/riskrevealpayloadresult.ts: {}
   src/models/components/riskrulebreakdownentry.ts: {}
   src/models/components/riskrulebreakdownresult.ts: {}
   src/models/components/risksegment.ts: {}
@@ -2481,6 +2483,7 @@ trackedFiles:
   src/models/operations/retirejsonwebkey.ts: {}
   src/models/operations/retryaiintegrationschedule.ts: {}
   src/models/operations/retrydeviceintegrationschedule.ts: {}
+  src/models/operations/revealriskresultpayload.ts: {}
   src/models/operations/revokeagent.ts: {}
   src/models/operations/revokeagentsession.ts: {}
   src/models/operations/revokeallorganizationremotesessionclientsessions.ts: {}
@@ -3449,6 +3452,7 @@ trackedFiles:
   src/react-query/riskPoliciesTrigger.ts: {}
   src/react-query/riskPoliciesUpdate.ts: {}
   src/react-query/riskReleaseSessionQuarantine.ts: {}
+  src/react-query/riskRevealResultPayload.ts: {}
   src/react-query/riskRevokePolicyBypassRequest.ts: {}
   src/react-query/riskRuleBreakdown.core.ts: {}
   src/react-query/riskRuleBreakdown.ts: {}
@@ -10764,6 +10768,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  revealRiskResultPayload:
+    speakeasy-default-reveal-risk-result-payload:
+      requestBody:
+        application/json: {"id": "3b503415-d5f7-4890-8356-3d5395a9f3d0"}
+      responses:
+        "200":
+          application/json: {"id": "8abde13a-d19e-47cf-bb00-9fa3e49bd613", "payload": "<value>", "reveal_state": "evidence_not_stored"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   revokeAPIKey:
     speakeasy-default-revoke-API-key:
       parameters:

@@ -648,3 +648,81 @@ func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
 	require.Contains(t, uniqueIDs, uniqOld.ID.String())
 	require.NotContains(t, uniqueIDs, uniqNew.ID.String())
 }
+
+func TestListRiskResults_ExecutionAndResultFilters(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("MCP findings")})
+	require.NoError(t, err)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	chatID, messageID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+	executionID := uuid.NewString()
+	at := time.Now().UTC().Add(-time.Hour)
+
+	request := chListFinding(t, projectID, orgID, chatID, messageID, policy.ID, at, at, "gitleaks", "secret.github_pat", "", "<redacted len=7 sha=aaaaaaaa>", "", "")
+	request.ExecutionID = executionID
+	request.Phase = "request"
+	request.MediationSurface = "remote_mcp"
+	response := request
+	response.ID = uuid.New()
+	response.Phase = "response"
+	otherExecution := request
+	otherExecution.ID = uuid.New()
+	otherExecution.ExecutionID = uuid.NewString()
+	foreignProject := request
+	foreignProject.ID = uuid.New()
+	foreignProject.ProjectID = uuid.NewString()
+	// A dismissal mirrored from Postgres carries no execution metadata; the
+	// filter must still resolve the finding to its dismissed state.
+	dismissed := request
+	dismissed.ID = uuid.New()
+	dismissedCopy := dismissed
+	dismissedCopy.ExecutionID = ""
+	dismissedCopy.Phase = ""
+	dismissedCopy.MediationSurface = ""
+	dismissedAt := at.Add(time.Minute)
+	dismissedCopy.ExcludedAt = &dismissedAt
+	dismissedCopy.ExcludedReason = chrepo.ExcludedReasonManual
+	dismissedCopy.EventKind = chrepo.EventKindSuppression
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{request, response, otherExecution, foreignProject, dismissed}))
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{dismissedCopy}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	byExecution, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ExecutionID: &executionID})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(byExecution.Results))
+	for _, result := range byExecution.Results {
+		ids = append(ids, result.ID)
+		require.Equal(t, executionID, *result.ExecutionID)
+	}
+	require.ElementsMatch(t, []string{request.ID.String(), response.ID.String()}, ids)
+	require.Equal(t, int64(2), byExecution.TotalCount)
+
+	// Chat-scoped requests still honor the narrower filters.
+	byExecutionInChat, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ExecutionID: &executionID, ChatID: new(chatID.String())})
+	require.NoError(t, err)
+	require.Len(t, byExecutionInChat.Results, 2)
+
+	byResult, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ResultID: new(response.ID.String())})
+	require.NoError(t, err)
+	require.Len(t, byResult.Results, 1)
+	require.Equal(t, response.ID.String(), byResult.Results[0].ID)
+	require.Equal(t, int64(1), byResult.TotalCount)
+
+	foreign, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ResultID: new(foreignProject.ID.String())})
+	require.NoError(t, err)
+	require.Empty(t, foreign.Results)
+
+	dismissedByID, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ResultID: new(dismissed.ID.String())})
+	require.NoError(t, err)
+	require.Empty(t, dismissedByID.Results)
+
+	_, err = ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ResultID: new("not-a-uuid")})
+	require.Error(t, err)
+}

@@ -44,6 +44,8 @@ import {
   isBlockingOutcome,
   mcpServerDisplayName,
 } from "./risk-outcome";
+import { chatFindingDetail } from "./finding-kind";
+import { FindingDrawer } from "./FindingDrawer";
 import { MCPFindingContext } from "./MCPFindingContext";
 import {
   buildMCPFindingNames,
@@ -63,10 +65,13 @@ import {
 import {
   isRationaleSource,
   isShadowMcpSource,
-  scoreToRating,
   SEVERITY_RATING_LABEL,
-  type SeverityRating,
 } from "./risk-utils";
+import {
+  displayedScoreRating,
+  SEVERITY_EDGE,
+  SEVERITY_TEXT,
+} from "./risk-severity";
 
 // Signal-list layout (Risk Watchdog idiom): the severity score leads each row
 // as a big serif numeral, so it sits directly after the checkbox.
@@ -77,42 +82,10 @@ import {
 // alone rather than an empty Rule cell.
 //
 // Evidence gets the widest track: for judge and LLM analyzer findings it holds
-// a sentence or two of rationale, where every other column holds a label.
+// a sentence or two of rationale, where every other column holds a label. The
+// actions track also holds the enforcement outcome of MCP findings.
 const RISK_EVENTS_GRID =
-  "grid grid-cols-[28px_88px_172px_minmax(0,1.3fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
-// MCP-scoped layout: the actions track also holds the enforcement outcome.
-const RISK_EVENTS_GRID_MCP =
-  "grid grid-cols-[28px_88px_172px_minmax(0,1.3fr)_minmax(0,0.95fr)_minmax(0,0.85fr)_minmax(0,2.2fr)_minmax(0,0.9fr)_150px] gap-3";
-
-// Signal severity palette: band → text / row-edge classes. Colors are
-// token-derived — brand red hsl(4,67%,47%) (--color-brand-red-500) is reserved
-// for critical, the feedback-orange ramp covers high/medium, low stays neutral
-// ink. Applied to the score numeral, the severity word, and the row's 2px
-// left edge.
-const SEVERITY_TEXT: Record<SeverityRating, string> = {
-  critical: "text-[var(--color-brand-red-500)]",
-  high: "text-[var(--color-feedback-orange-600)]",
-  medium: "text-[var(--color-feedback-orange-400)]",
-  low: "text-foreground",
-};
-
-const SEVERITY_EDGE: Record<SeverityRating, string> = {
-  critical: "border-l-[var(--color-brand-red-500)]",
-  high: "border-l-[var(--color-feedback-orange-600)]",
-  medium: "border-l-[var(--color-feedback-orange-400)]",
-  low: "border-l-border",
-};
-
-// Ratings key off the rounded value we display, so a score sitting just below
-// a band boundary (e.g. 3.96 → shown as "4.0") never renders in a color that
-// disagrees with the band its displayed value falls in.
-function displayedScoreRating(score: number): {
-  displayed: number;
-  rating: SeverityRating;
-} {
-  const displayed = Math.round(score * 10) / 10;
-  return { displayed, rating: scoreToRating(displayed) };
-}
+  "grid grid-cols-[28px_80px_156px_minmax(0,1.2fr)_minmax(0,1.35fr)_minmax(0,0.9fr)_minmax(0,1.9fr)_minmax(0,0.9fr)_120px] gap-3";
 
 // The signal-list score block: thin display-serif numeral over a mono
 // uppercase severity word, both colored by band. The numeral carries the exact
@@ -195,6 +168,7 @@ export default function RiskEvents(): JSX.Element {
     featuresQuery.data?.logsEnabled === false;
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
+  const selectedFindingId = searchParams.get("finding");
   const containerRef = useRef<HTMLDivElement>(null);
   const headerMeasure = useMeasuredHeight<HTMLDivElement>();
 
@@ -233,6 +207,26 @@ export default function RiskEvents(): JSX.Element {
           } else {
             next.delete("chat_id");
           }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const setSelectedFindingId = useCallback(
+    (findingId: string | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (findingId) {
+            next.set("finding", findingId);
+          } else {
+            next.delete("finding");
+          }
+          // The transcript belongs to the finding it was opened from.
+          next.delete("chat_id");
           return next;
         },
         { replace: true },
@@ -281,18 +275,6 @@ export default function RiskEvents(): JSX.Element {
         ]),
       ),
     [serverCountsData?.servers],
-  );
-  const mcpServerNameById = useMemo(
-    () =>
-      mcpScoped
-        ? new Map(
-            mcpServers.map((server) => [
-              server.id,
-              mcpServerDisplayName(server),
-            ]),
-          )
-        : null,
-    [mcpScoped, mcpServers],
   );
 
   const { data: platformToolsetsData } = useRiskListMcpPlatformToolsets(
@@ -604,7 +586,6 @@ export default function RiskEvents(): JSX.Element {
             <RiskEventsHeader
               selection={selection}
               headerRef={headerMeasure.ref}
-              mcpScoped={mcpScoped}
             />
           </div>
         }
@@ -622,12 +603,28 @@ export default function RiskEvents(): JSX.Element {
           ) : null
         }
         detail={
-          <ChatDetailSheet
-            chatId={selectedChatId}
-            onClose={() => setSelectedChatId(null)}
-            onDelete={() => setSelectedChatId(null)}
-            riskFocus
-          />
+          <>
+            <FindingDrawer
+              findingId={selectedFindingId}
+              results={visibleResults}
+              policyNameById={policyNameById}
+              policyScoreById={policyScoreById}
+              mcpFindingNames={mcpFindingNames}
+              transcriptChatId={selectedChatId}
+              onSelect={setSelectedFindingId}
+              onOpenTranscript={setSelectedChatId}
+              onDismiss={(r) => dismiss([r])}
+              onSetupExclusion={(r) => exclusionRule.open([r])}
+            />
+            {/* Older links open a transcript straight from the list; with a
+                finding open the drawer hosts the transcript instead. */}
+            <ChatDetailSheet
+              chatId={selectedFindingId ? null : selectedChatId}
+              onClose={() => setSelectedChatId(null)}
+              onDelete={() => setSelectedChatId(null)}
+              riskFocus
+            />
+          </>
         }
         scrollRef={containerRef}
         onScroll={handleScroll}
@@ -652,10 +649,10 @@ export default function RiskEvents(): JSX.Element {
           results={visibleResults}
           policyNameById={policyNameById}
           policyScoreById={policyScoreById}
-          mcpServerNameById={mcpServerNameById}
           mcpFindingNames={mcpFindingNames}
           scrollRef={containerRef}
-          onSelectChat={setSelectedChatId}
+          selectedFindingId={selectedFindingId}
+          onSelectFinding={setSelectedFindingId}
           selection={selection}
           onDismiss={(r) => dismiss([r])}
           onSetupExclusion={(r) => exclusionRule.open([r])}
@@ -695,17 +692,15 @@ function InactivePolicyNotice({
 function RiskEventsHeader({
   selection,
   headerRef,
-  mcpScoped,
 }: {
   selection: RowSelection<RiskResult>;
   headerRef: (node: HTMLDivElement | null) => void;
-  mcpScoped: boolean;
 }) {
   return (
     <div
       ref={headerRef}
       className={cn(
-        mcpScoped ? RISK_EVENTS_GRID_MCP : RISK_EVENTS_GRID,
+        RISK_EVENTS_GRID,
         // whitespace-nowrap keeps two-word labels ("Session Name") on one
         // line when their fr track compresses.
         "text-eyebrow bg-muted/30 shrink-0 items-center border-b px-5 py-2.5 whitespace-nowrap",
@@ -721,9 +716,7 @@ function RiskEventsHeader({
       <div className="min-w-0">Severity</div>
       <div className="min-w-0">Timestamp</div>
       <div className="min-w-0">Category / Rule</div>
-      <div className="min-w-0 whitespace-nowrap">
-        {mcpScoped ? "Session · Tool" : "Session Name"}
-      </div>
+      <div className="min-w-0 whitespace-nowrap">Session · Tool</div>
       <div className="min-w-0">User</div>
       <div className="min-w-0">Evidence</div>
       <div className="min-w-0">Policy</div>
@@ -741,11 +734,11 @@ function RiskEventsRows({
   policyScoreById,
   mcpFindingNames,
   scrollRef,
-  onSelectChat,
+  selectedFindingId,
+  onSelectFinding,
   selection,
   onDismiss,
   onSetupExclusion,
-  mcpServerNameById,
 }: {
   error: Error | null;
   filtered: boolean;
@@ -755,13 +748,11 @@ function RiskEventsRows({
   mcpFindingNames: MCPFindingNames;
   policyScoreById: Map<string, number>;
   scrollRef: RefObject<HTMLDivElement | null>;
-  onSelectChat: (chatId: string | null) => void;
+  selectedFindingId: string | null;
+  onSelectFinding: (findingId: string | null) => void;
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
-  // Set only when MCP-scoped guardrails are enabled; switches the rows to the
-  // server/tool + outcome layout.
-  mcpServerNameById: Map<string, string> | null;
 }) {
   const rowVirtualizer = useVirtualizer({
     count: results.length,
@@ -771,6 +762,16 @@ function RiskEventsRows({
     estimateSize: () => 68,
     overscan: 12,
   });
+
+  // Keeps the drawer's j/k selection on screen.
+  const selectedIndex = selectedFindingId
+    ? results.findIndex((r) => r.id === selectedFindingId)
+    : -1;
+  useEffect(() => {
+    if (selectedIndex >= 0) {
+      rowVirtualizer.scrollToIndex(selectedIndex, { align: "auto" });
+    }
+  }, [selectedIndex, rowVirtualizer]);
 
   if (error) {
     return (
@@ -823,11 +824,11 @@ function RiskEventsRows({
               policyName={policyNameById.get(result.policyId)}
               policyScore={policyScoreById.get(result.policyId)}
               mcpFindingNames={mcpFindingNames}
-              onSelectChat={onSelectChat}
+              selected={result.id === selectedFindingId}
+              onSelect={onSelectFinding}
               selection={selection}
               onDismiss={onDismiss}
               onSetupExclusion={onSetupExclusion}
-              mcpServerNameById={mcpServerNameById}
             />
           </div>
         );
@@ -841,26 +842,23 @@ export function RiskEventsRow({
   policyName,
   policyScore,
   mcpFindingNames,
-  onSelectChat,
+  selected = false,
+  onSelect,
   selection,
   onDismiss,
   onSetupExclusion,
-  mcpServerNameById = null,
 }: {
   result: RiskResult;
   policyName: string | undefined;
   policyScore: number | undefined;
   mcpFindingNames?: MCPFindingNames;
-  onSelectChat: (chatId: string | null) => void;
+  selected?: boolean;
+  onSelect: (findingId: string) => void;
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
-  mcpServerNameById?: Map<string, string> | null;
 }): JSX.Element {
-  const mcpScoped = mcpServerNameById != null;
-  const outcomeLabel = mcpScoped
-    ? enforcementOutcomeLabel(result.enforcementOutcome)
-    : null;
+  const outcomeLabel = enforcementOutcomeLabel(result.enforcementOutcome);
   const isShadowMCP = isShadowMcpSource(result.source);
   // Judge and LLM analyzer findings carry their evidence as a rationale.
   const isEventSource = isRationaleSource(result.source);
@@ -869,42 +867,41 @@ export function RiskEventsRow({
   const edgeRating =
     policyScore != null ? displayedScoreRating(policyScore).rating : null;
 
-  // A row click opens the chat only when the gesture both starts and ends inside
+  // A row click opens the drawer only when the gesture both starts and ends inside
   // the row. This rejects the stray click Radix's outside-dismiss sends here:
   // closing the View-event dialog by clicking its overlay fires pointerdown on
   // the (portaled) overlay, which unmounts, so the trailing click lands on a row
-  // cell and would otherwise open the chat.
+  // cell and would otherwise open the drawer.
   const pointerDownInsideRef = useRef(false);
 
   const handleShare = useCallback(async () => {
-    if (!result.chatId) return;
     const url = new URL(window.location.href);
-    url.searchParams.set("chat_id", result.chatId);
+    url.searchParams.set("finding", result.id);
+    url.searchParams.delete("chat_id");
     try {
       await navigator.clipboard.writeText(url.toString());
       toast.success("Link copied to clipboard");
     } catch {
       toast.error("Failed to copy link");
     }
-  }, [result.chatId]);
+  }, [result.id]);
 
   const rowActions: Action[] = [
-    ...(result.chatId
-      ? [{ label: "Copy link", onClick: () => void handleShare() }]
-      : []),
+    { label: "Copy link", onClick: () => void handleShare() },
     { label: "Suppress Once", onClick: () => onDismiss(result) },
     { label: "Create Rule", onClick: () => onSetupExclusion(result) },
   ];
 
   return (
     <div
-      role={result.chatId ? "button" : undefined}
-      tabIndex={result.chatId ? 0 : undefined}
+      role="button"
+      tabIndex={0}
+      aria-current={selected || undefined}
       className={cn(
-        mcpScoped ? RISK_EVENTS_GRID_MCP : RISK_EVENTS_GRID,
-        "hover:bg-muted/30 w-full items-center border-b border-l-2 px-5 py-3 text-left text-sm transition-colors",
+        RISK_EVENTS_GRID,
+        "w-full cursor-pointer items-center border-b border-l-2 px-5 py-3 text-left text-sm transition-colors",
+        selected ? "bg-muted/50" : "hover:bg-muted/30",
         edgeRating ? SEVERITY_EDGE[edgeRating] : "border-l-transparent",
-        !result.chatId && "cursor-default",
       )}
       onPointerDown={(e) => {
         pointerDownInsideRef.current = e.currentTarget.contains(
@@ -919,24 +916,21 @@ export function RiskEventsRow({
         if (!startedInside) return;
         // The row wraps its own interactive controls (match reveal, the
         // View-event dialog trigger, copy-link); a click on one of those must
-        // not also open the chat. stopPropagation on those children doesn't
+        // not also open the drawer. stopPropagation on those children doesn't
         // reliably stop this handler under React's event delegation, so guard on
         // the real target too.
         if ((e.target as HTMLElement).closest("button, a")) return;
-        if (result.chatId) {
-          onSelectChat(result.chatId);
-        }
+        onSelect(result.id);
       }}
       onKeyDown={(e) => {
         // Only the row itself activates on Enter/Space. Key events bubbling up
         // from a focused child control (match reveal, the event dialog trigger,
         // copy-link) must reach that control instead — preventing them here
-        // would swallow the control's own activation and wrongly open the chat.
+        // would swallow the control's own activation and wrongly open the drawer.
         if (e.target !== e.currentTarget) return;
-        if (!result.chatId) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onSelectChat(result.chatId);
+          onSelect(result.id);
         }
       }}
     >
@@ -961,9 +955,7 @@ export function RiskEventsRow({
         {isMCPFinding(result) ? (
           <MCPFindingContext finding={result} names={mcpFindingNames} />
         ) : (
-          <span className="block truncate">
-            {result.chatTitle ?? "Untitled"}
-          </span>
+          <ChatFindingContext result={result} />
         )}
       </div>
       <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
@@ -1021,6 +1013,23 @@ export function RiskEventsRow({
         ) : null}
         <MoreActions actions={rowActions} />
       </div>
+    </div>
+  );
+}
+
+function ChatFindingContext({ result }: { result: RiskResult }): JSX.Element {
+  const title = result.chatTitle ?? "Untitled";
+  const detail = chatFindingDetail(result);
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-foreground block truncate" title={title}>
+        {title}
+      </span>
+      {detail && (
+        <span className="block truncate" title={detail}>
+          {detail}
+        </span>
+      )}
     </div>
   );
 }

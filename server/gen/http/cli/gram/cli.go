@@ -180,7 +180,7 @@ func UsageCommands() []string {
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|list-remote-sessions|count-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|reveal-risk-result-payload|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"slack-directory-connections (list|sync|list-members|list-person-accounts|get-member|set-mapping|begin|disconnect)",
@@ -2951,6 +2951,8 @@ func ParseEndpoint(
 		riskListRiskResultsPolicyIDFlag         = riskListRiskResultsFlags.String("policy-id", "", "")
 		riskListRiskResultsChatIDFlag           = riskListRiskResultsFlags.String("chat-id", "", "")
 		riskListRiskResultsMcpServerIDFlag      = riskListRiskResultsFlags.String("mcp-server-id", "", "")
+		riskListRiskResultsResultIDFlag         = riskListRiskResultsFlags.String("result-id", "", "")
+		riskListRiskResultsExecutionIDFlag      = riskListRiskResultsFlags.String("execution-id", "", "")
 		riskListRiskResultsCategoryFlag         = riskListRiskResultsFlags.String("category", "", "")
 		riskListRiskResultsRuleIDFlag           = riskListRiskResultsFlags.String("rule-id", "", "")
 		riskListRiskResultsUserIDFlag           = riskListRiskResultsFlags.String("user-id", "", "")
@@ -2989,6 +2991,12 @@ func ParseEndpoint(
 		riskUnmaskRiskResultApikeyTokenFlag      = riskUnmaskRiskResultFlags.String("apikey-token", "", "")
 		riskUnmaskRiskResultSessionTokenFlag     = riskUnmaskRiskResultFlags.String("session-token", "", "")
 		riskUnmaskRiskResultProjectSlugInputFlag = riskUnmaskRiskResultFlags.String("project-slug-input", "", "")
+
+		riskRevealRiskResultPayloadFlags                = flag.NewFlagSet("reveal-risk-result-payload", flag.ExitOnError)
+		riskRevealRiskResultPayloadBodyFlag             = riskRevealRiskResultPayloadFlags.String("body", "REQUIRED", "")
+		riskRevealRiskResultPayloadApikeyTokenFlag      = riskRevealRiskResultPayloadFlags.String("apikey-token", "", "")
+		riskRevealRiskResultPayloadSessionTokenFlag     = riskRevealRiskResultPayloadFlags.String("session-token", "", "")
+		riskRevealRiskResultPayloadProjectSlugInputFlag = riskRevealRiskResultPayloadFlags.String("project-slug-input", "", "")
 
 		riskListRiskResultsByChatFlags                = flag.NewFlagSet("list-risk-results-by-chat", flag.ExitOnError)
 		riskListRiskResultsByChatCursorFlag           = riskListRiskResultsByChatFlags.String("cursor", "", "")
@@ -5366,6 +5374,7 @@ func ParseEndpoint(
 	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
 	riskListRiskResultsForAgentFlags.Usage = riskListRiskResultsForAgentUsage
 	riskUnmaskRiskResultFlags.Usage = riskUnmaskRiskResultUsage
+	riskRevealRiskResultPayloadFlags.Usage = riskRevealRiskResultPayloadUsage
 	riskListRiskResultsByChatFlags.Usage = riskListRiskResultsByChatUsage
 	riskMarkRiskResultsFalsePositiveFlags.Usage = riskMarkRiskResultsFalsePositiveUsage
 	riskUnmarkRiskResultsFalsePositiveFlags.Usage = riskUnmarkRiskResultsFalsePositiveUsage
@@ -7735,6 +7744,9 @@ func ParseEndpoint(
 
 			case "unmask-risk-result":
 				epf = riskUnmaskRiskResultFlags
+
+			case "reveal-risk-result-payload":
+				epf = riskRevealRiskResultPayloadFlags
 
 			case "list-risk-results-by-chat":
 				epf = riskListRiskResultsByChatFlags
@@ -10612,13 +10624,16 @@ func ParseEndpoint(
 				data, err = riskc.BuildReleaseSessionQuarantinePayload(*riskReleaseSessionQuarantineBodyFlag, *riskReleaseSessionQuarantineApikeyTokenFlag, *riskReleaseSessionQuarantineSessionTokenFlag, *riskReleaseSessionQuarantineProjectSlugInputFlag)
 			case "list-risk-results":
 				endpoint = c.ListRiskResults()
-				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsMcpServerIDFlag, *riskListRiskResultsCategoryFlag, *riskListRiskResultsRuleIDFlag, *riskListRiskResultsUserIDFlag, *riskListRiskResultsExternalUserIdsFlag, *riskListRiskResultsUniqueMatchFlag, *riskListRiskResultsNonAssistantFlag, *riskListRiskResultsAssistantIDFlag, *riskListRiskResultsFromFlag, *riskListRiskResultsToFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsMcpServerIDFlag, *riskListRiskResultsResultIDFlag, *riskListRiskResultsExecutionIDFlag, *riskListRiskResultsCategoryFlag, *riskListRiskResultsRuleIDFlag, *riskListRiskResultsUserIDFlag, *riskListRiskResultsExternalUserIdsFlag, *riskListRiskResultsUniqueMatchFlag, *riskListRiskResultsNonAssistantFlag, *riskListRiskResultsAssistantIDFlag, *riskListRiskResultsFromFlag, *riskListRiskResultsToFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
 			case "list-risk-results-for-agent":
 				endpoint = c.ListRiskResultsForAgent()
 				data, err = riskc.BuildListRiskResultsForAgentPayload(*riskListRiskResultsForAgentPolicyIDFlag, *riskListRiskResultsForAgentChatIDFlag, *riskListRiskResultsForAgentMcpServerIDFlag, *riskListRiskResultsForAgentCategoryFlag, *riskListRiskResultsForAgentRuleIDFlag, *riskListRiskResultsForAgentUserIDFlag, *riskListRiskResultsForAgentUniqueMatchFlag, *riskListRiskResultsForAgentNonAssistantFlag, *riskListRiskResultsForAgentAssistantIDFlag, *riskListRiskResultsForAgentFromFlag, *riskListRiskResultsForAgentToFlag, *riskListRiskResultsForAgentCursorFlag, *riskListRiskResultsForAgentLimitFlag, *riskListRiskResultsForAgentApikeyTokenFlag, *riskListRiskResultsForAgentSessionTokenFlag, *riskListRiskResultsForAgentProjectSlugInputFlag)
 			case "unmask-risk-result":
 				endpoint = c.UnmaskRiskResult()
 				data, err = riskc.BuildUnmaskRiskResultPayload(*riskUnmaskRiskResultBodyFlag, *riskUnmaskRiskResultApikeyTokenFlag, *riskUnmaskRiskResultSessionTokenFlag, *riskUnmaskRiskResultProjectSlugInputFlag)
+			case "reveal-risk-result-payload":
+				endpoint = c.RevealRiskResultPayload()
+				data, err = riskc.BuildRevealRiskResultPayloadPayload(*riskRevealRiskResultPayloadBodyFlag, *riskRevealRiskResultPayloadApikeyTokenFlag, *riskRevealRiskResultPayloadSessionTokenFlag, *riskRevealRiskResultPayloadProjectSlugInputFlag)
 			case "list-risk-results-by-chat":
 				endpoint = c.ListRiskResultsByChat()
 				data, err = riskc.BuildListRiskResultsByChatPayload(*riskListRiskResultsByChatCursorFlag, *riskListRiskResultsByChatLimitFlag, *riskListRiskResultsByChatApikeyTokenFlag, *riskListRiskResultsByChatSessionTokenFlag, *riskListRiskResultsByChatProjectSlugInputFlag)
@@ -23870,6 +23885,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-for-agent: List risk analysis results with the `+"`"+`match`+"`"+` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `+"`"+`match`+"`"+` value — a non-sensitive server URL or command identifier — is passed through verbatim.`)
 	fmt.Fprintln(os.Stderr, `    unmask-risk-result: Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.`)
+	fmt.Fprintln(os.Stderr, `    reveal-risk-result-payload: Return the full scanned payload of the MCP tool call a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
 	fmt.Fprintln(os.Stderr, `    mark-risk-results-false-positive: Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.`)
 	fmt.Fprintln(os.Stderr, `    unmark-risk-results-false-positive: Undo a false-positive dismissal for one or more risk results.`)
@@ -24154,6 +24170,8 @@ func riskListRiskResultsUsage() {
 	fmt.Fprint(os.Stderr, " -policy-id STRING")
 	fmt.Fprint(os.Stderr, " -chat-id STRING")
 	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -result-id STRING")
+	fmt.Fprint(os.Stderr, " -execution-id STRING")
 	fmt.Fprint(os.Stderr, " -category STRING")
 	fmt.Fprint(os.Stderr, " -rule-id STRING")
 	fmt.Fprint(os.Stderr, " -user-id STRING")
@@ -24178,6 +24196,8 @@ func riskListRiskResultsUsage() {
 	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -chat-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -result-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -execution-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -category STRING: `)
 	fmt.Fprintln(os.Stderr, `    -rule-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
@@ -24195,7 +24215,7 @@ func riskListRiskResultsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --category \"abc123\" --rule-id \"abc123\" --user-id \"abc123\" --external-user-ids '[\n      \"abc123\"\n   ]' --unique-match false --non-assistant false --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --result-id \"550e8400-e29b-41d4-a716-446655440000\" --execution-id \"abc123\" --category \"abc123\" --rule-id \"abc123\" --user-id \"abc123\" --external-user-ids '[\n      \"abc123\"\n   ]' --unique-match false --non-assistant false --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskResultsForAgentUsage() {
@@ -24268,6 +24288,30 @@ func riskUnmaskRiskResultUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk unmask-risk-result --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskRevealRiskResultPayloadUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk reveal-risk-result-payload", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Return the full scanned payload of the MCP tool call a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk reveal-risk-result-payload --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskResultsByChatUsage() {

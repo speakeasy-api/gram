@@ -591,6 +591,9 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	if _, err := pr.DeleteProjectRiskFindingEvidence(ctx, repo.DeleteProjectRiskFindingEvidenceParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove project risk finding evidence")
 	}
+	if _, err := pr.DeleteProjectRiskExecutionEvidence(ctx, repo.DeleteProjectRiskExecutionEvidenceParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove project risk execution evidence")
+	}
 
 	_, err = pr.DeleteProject(ctx, projectID)
 	switch {

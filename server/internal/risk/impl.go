@@ -1378,8 +1378,21 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		}
 		chatID = id.String()
 	}
+	resultIDInput := payload.ResultID
+	if resultIDInput != nil && strings.TrimSpace(*resultIDInput) == "" {
+		resultIDInput = nil
+	}
+	resultID, err := conv.PtrToNullUUID(resultIDInput)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid result ID")
+	}
+	executionID := ""
+	if payload.ExecutionID != nil {
+		executionID = strings.TrimSpace(*payload.ExecutionID)
+	}
 
-	if chatID != "" && mcpServerID == "" {
+	// The Postgres chat listing cannot narrow by finding or execution.
+	if chatID != "" && mcpServerID == "" && !resultID.Valid && executionID == "" {
 		totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
 		if err != nil {
 			totalCount = 0
@@ -1441,7 +1454,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if toTime.Valid {
 		to = &toTime.Time
 	}
-	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
+	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, resultID, executionID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -1476,6 +1489,8 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		PolicyID:         payload.PolicyID,
 		ChatID:           payload.ChatID,
 		McpServerID:      payload.McpServerID,
+		ResultID:         nil,
+		ExecutionID:      nil,
 		Category:         payload.Category,
 		RuleID:           payload.RuleID,
 		// The agent surface lists its own project's findings; it has no
