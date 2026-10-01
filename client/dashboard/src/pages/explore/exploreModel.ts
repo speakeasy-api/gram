@@ -333,6 +333,55 @@ export function initialSpec(datasets: AnalyticsDataset[]): ExploreSpec | null {
   return first ? specForDataset(first) : null;
 }
 
+/**
+ * What a spec asks for that the catalog no longer offers, naming the first
+ * missing piece, or "" when every part of it still resolves. Rows still
+ * being composed — a measure waiting on its field, a filter with no field
+ * yet — are builder state, not breakage, so they pass.
+ */
+export function specProblem(
+  datasets: AnalyticsDataset[],
+  spec: ExploreSpec,
+): string {
+  const dataset = findDataset(datasets, spec.dataset);
+  if (!dataset) return `dataset "${spec.dataset}" does not exist`;
+
+  const ops = opsForDataset(dataset);
+  for (const measure of spec.measures) {
+    if (!ops.includes(measure.op)) {
+      return `${spec.dataset} has no ${measure.op} aggregation`;
+    }
+    if (measure.op === "count" || measure.field === "") continue;
+    const fields = fieldsForOp(dataset, measure.op).map((field) => field.name);
+    if (!fields.includes(measure.field)) {
+      return `field "${measure.field}" cannot be aggregated by ${measure.op} in ${spec.dataset}`;
+    }
+  }
+
+  const dimensions = dimensionFields(dataset).map((field) => field.name);
+  for (const dimension of spec.dimensions) {
+    if (!dimensions.includes(dimension)) {
+      return `field "${dimension}" is not a dimension of ${spec.dataset}`;
+    }
+  }
+
+  for (const filter of spec.filters) {
+    if (filter.field === "") continue;
+    const field = fieldByName(dataset, filter.field);
+    if (!operatorsForField(field).includes(filter.operator)) {
+      return `field "${filter.field}" cannot be filtered by ${filter.operator} in ${spec.dataset}`;
+    }
+  }
+
+  if (
+    spec.orderBy !== "" &&
+    !completeMeasures(spec.measures).map(measureAlias).includes(spec.orderBy)
+  ) {
+    return `order by "${spec.orderBy}" names no measure in the query`;
+  }
+  return "";
+}
+
 /** Parse the LIMIT control's text into a spec limit (0 = server default). */
 export function parseLimit(raw: string): number {
   const parsed = Number(raw);
