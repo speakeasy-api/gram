@@ -2232,3 +2232,30 @@ ORDER BY (organization_id, project_id, occurred_at_unix_nano, canonical_metric, 
 TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'One row per measurement data point per measure, at the producer native grain. Carries a full dimension repeat so no join is required. Retained beyond agent_events so billing can read historical cycles. Replacing collapses only on background merges, so a reader must de-duplicate on metric_id (FINAL, or ORDER BY observed_at_unix_nano DESC then LIMIT 1 BY metric_id, since an unordered LIMIT 1 BY keeps an arbitrary version) and never sum raw rows.';
+
+-- Payload-free producer aggregates. Management reads first authorize source_id
+-- against the caller's project. UUID source IDs are globally unique.
+CREATE TABLE IF NOT EXISTS tunnel_metric_snapshots (
+    gram_project_id UUID,
+    source_id UUID,
+    bucket DateTime('UTC'),
+    kind LowCardinality(String),
+    producer_id UUID,
+    server_id UUID,
+    method LowCardinality(String),
+    client_family LowCardinality(String),
+    revision UInt64,
+    attempts UInt64,
+    successes UInt64,
+    errors UInt64,
+    canceled UInt64,
+    incomplete UInt64,
+    latency_bins Array(UInt64),
+    connections UInt32,
+    consumers UInt32,
+    substreams UInt32,
+    connections_opened UInt64
+) ENGINE = ReplacingMergeTree(revision)
+PARTITION BY toDate(bucket)
+ORDER BY (gram_project_id, source_id, bucket, kind, producer_id, server_id, method, client_family)
+TTL bucket + INTERVAL 7 DAY DELETE;
