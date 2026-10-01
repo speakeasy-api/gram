@@ -1070,3 +1070,80 @@ WHERE sd.project_id = @project_id
   AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 ORDER BY p.slug ASC, s.name ASC;
+
+-- name: SetPluginAutoCreatedFixture :exec
+-- Fixture for verifying read-only plugin origin metadata in inventory responses.
+UPDATE plugins SET auto_created = @auto_created WHERE id = @id AND project_id = @project_id;
+
+-- Test fixtures for role setup lifecycle and transactional fault injection.
+
+-- name: EnableRoleSetupFeatureFixture :exec
+INSERT INTO organization_features (organization_id, feature_name) VALUES ($1, 'automatic-role-distribution') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+
+-- name: DisableRoleSetupOrganizationFixture :exec
+UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1;
+
+-- name: DisableRoleSetupFeatureFixture :exec
+UPDATE organization_features SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution';
+
+-- name: RestoreRoleSetupFeatureFixture :exec
+UPDATE organization_features SET deleted_at = NULL WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution';
+
+-- name: DeleteRoleSetupRoleFixture :exec
+UPDATE organization_roles SET deleted_at = clock_timestamp() WHERE 'role:organization:' || id::text = @role_urn::text AND organization_id = @organization_id;
+
+-- name: DeleteRoleSetupWorkOSRoleFixture :exec
+UPDATE organization_roles SET workos_deleted_at = clock_timestamp() WHERE 'role:organization:' || id::text = @role_urn::text AND organization_id = @organization_id;
+
+-- name: DeleteRoleSetupProjectFixture :exec
+UPDATE projects SET deleted_at = clock_timestamp() WHERE id = $1;
+
+-- name: RestoreRoleSetupProjectFixture :exec
+UPDATE projects SET deleted_at = NULL WHERE id = $1;
+
+-- name: AgeDeletedRoleSetupProjectFixture :exec
+UPDATE projects SET created_at = '1990-01-01', deleted_at = clock_timestamp() WHERE id = $1;
+
+-- name: AgeRoleSetupProjectFixture :exec
+UPDATE projects SET created_at = '2000-01-01' WHERE id = $1;
+
+-- name: CreateRoleSetupGlobalRoleFixture :exec
+INSERT INTO global_roles (id, workos_slug, workos_name, workos_created_at, workos_updated_at) VALUES ($1,'setup-global','Global Engineering',clock_timestamp(),clock_timestamp());
+
+-- name: CreateRoleSetupCatalogRegistrationFixture :exec
+INSERT INTO platform_mcp_catalog_registrations (organization_id,project_id,source_kind,catalog_provider,catalog_reference,status,mcp_server_id) VALUES ($1,$2,'remote','direct-remote-url-v1','https://example.com/mcp','active',$3);
+
+-- name: DeleteRoleSetupCatalogRegistrationFixture :exec
+DELETE FROM platform_mcp_catalog_registrations WHERE mcp_server_id = $1 AND project_id = $2;
+
+-- name: CreateRoleSetupPublicationFailureFunctionFixture :exec
+CREATE FUNCTION reject_setup_publication() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.topic = 'gram.plugins.v1.PublicationRequested' THEN RAISE EXCEPTION 'injected publication failure'; END IF; RETURN NEW; END $$;
+
+-- name: CreateRoleSetupPublicationFailureTriggerFixture :exec
+CREATE TRIGGER reject_setup_publication BEFORE INSERT ON publish_outbox FOR EACH ROW EXECUTE FUNCTION reject_setup_publication();
+
+-- name: DropRoleSetupPublicationFailureTriggerFixture :exec
+DO $$ BEGIN
+  DROP TRIGGER reject_setup_publication ON publish_outbox;
+END $$;
+
+-- name: CreateRoleSetupPauseFunctionFixture :exec
+CREATE FUNCTION test_pause_plugin_write() RETURNS trigger LANGUAGE plpgsql AS $$
+ BEGIN
+   IF TG_ARGV[0] = '' OR NEW.slug = TG_ARGV[0] THEN
+     PERFORM pg_advisory_xact_lock(8241243);
+   END IF;
+   RETURN NEW;
+ END $$;
+
+-- name: CreateRoleSetupPauseAllTriggerFixture :exec
+CREATE TRIGGER test_pause_plugin_write BEFORE INSERT OR UPDATE ON plugins FOR EACH ROW EXECUTE FUNCTION test_pause_plugin_write('');
+
+-- name: CreateRoleSetupPauseSalesTriggerFixture :exec
+CREATE TRIGGER test_pause_plugin_write BEFORE INSERT OR UPDATE ON plugins FOR EACH ROW EXECUTE FUNCTION test_pause_plugin_write('sales-team');
+
+-- name: LockRoleSetupPauseFixture :exec
+SELECT pg_advisory_xact_lock(8241243);
+
+-- name: GetRoleSetupBlockedPIDFixture :one
+SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = current_database() AND @blocker::int = ANY(pg_blocking_pids(pid)) ORDER BY pid LIMIT 1), 0)::integer AS pid;

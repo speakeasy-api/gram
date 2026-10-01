@@ -286,9 +286,11 @@ export const AUDIT_ACTIONS = [
   "widget:delete",
   "widget:update",
   "workload-admission:admit",
+  "workload-admission:update",
   "workload-admission:withdraw",
   "workload-issuer:create",
   "workload-issuer:delete",
+  "workload-issuer:update",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -691,6 +693,8 @@ export function staticActionPhrase(action: AuditAction): string {
     case "project:delete":
       return "deleted project";
 
+    // Saved queries were replaced by widgets; these stay so audit rows
+    // written before the change still read well.
     case "query:create":
       return "created saved query";
     case "query:update":
@@ -912,12 +916,16 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "workload-issuer:create":
       return "started trusting workload issuer";
+    case "workload-issuer:update":
+      return "updated workload issuer";
     case "workload-issuer:delete":
       return "stopped trusting workload issuer";
     // Named for what they do, because the row is the grant of machine access
     // rather than a record about one.
     case "workload-admission:admit":
       return "admitted workload";
+    case "workload-admission:update":
+      return "updated workload";
     case "workload-admission:withdraw":
       return "withdrew workload";
 

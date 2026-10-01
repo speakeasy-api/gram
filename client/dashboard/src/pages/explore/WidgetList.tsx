@@ -1,0 +1,363 @@
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Button } from "@/components/ui/Button";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { SearchBar } from "@/components/ui/SearchBar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Table, type Column, type SortDescriptor } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { useUser } from "@/contexts/Auth";
+import { formatRelativeTime } from "@/lib/dates";
+import type { Widget } from "@gram/client/models/components/widget.js";
+import {
+  ChartArea,
+  ChartBar,
+  ChartColumn,
+  ChartLine,
+  Hash,
+  LayoutGrid,
+  Table as TableIcon,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
+import { useMemo, useState, type JSX } from "react";
+import { useCanEditWidget } from "./useCanEditWidget";
+import { useCreatorName } from "./useCreatorName";
+import { useWidgetMutations } from "./useWidgetMutations";
+import { DeleteWidgetDialog, WidgetDetailsDialog } from "./WidgetDialogs";
+
+// The sort the list opens on: the server's own order, most recently updated
+// first.
+const DEFAULT_SORT: SortDescriptor = { id: "updated", direction: "desc" };
+
+const ANYONE = "anyone";
+const ME = "me";
+const ALL_DATASETS = "__all__";
+
+const CHART_ICONS: Record<string, { icon: LucideIcon; label: string }> = {
+  line: { icon: ChartLine, label: "Line" },
+  area: { icon: ChartArea, label: "Area" },
+  bar: { icon: ChartColumn, label: "Bar" },
+  ranked: { icon: ChartBar, label: "Ranked" },
+  table: { icon: TableIcon, label: "Table" },
+  number: { icon: Hash, label: "Number" },
+};
+
+/**
+ * The project's widgets, as the Widgets tab lists them: searchable by name,
+ * filterable by who saved them and what they ask, and opened in the Explore
+ * tab with a click. Duplicating one is how it is shared.
+ */
+export function WidgetList({
+  widgets,
+  isPending,
+  isError,
+  onOpen,
+  confirmLeave,
+  onDeleted,
+  onExplore,
+  onRetry,
+}: {
+  widgets: Widget[];
+  isPending: boolean;
+  isError: boolean;
+  /** Open a widget in the Explore tab. */
+  onOpen: (widget: Widget) => void;
+  /**
+   * Run this once leaving the open widget's unsaved edits is confirmed,
+   * before anything is opened or copied.
+   */
+  confirmLeave: (proceed: () => void) => void;
+  /** A widget was deleted. */
+  onDeleted: (id: string) => void;
+  /** Switch to the Explore tab with nothing open. */
+  onExplore: () => void;
+  onRetry: () => void;
+}): JSX.Element {
+  const user = useUser();
+  const creator = useCreatorName();
+  const canEdit = useCanEditWidget();
+  const mutations = useWidgetMutations();
+
+  const [search, setSearch] = useState("");
+  const [createdBy, setCreatedBy] = useState(ANYONE);
+  const [dataset, setDataset] = useState(ALL_DATASETS);
+  const [sort, setSort] = useState<SortDescriptor | null>(DEFAULT_SORT);
+  const [renaming, setRenaming] = useState<Widget | null>(null);
+  const [deleting, setDeleting] = useState<Widget | null>(null);
+
+  const datasets = useMemo(
+    () => [...new Set(widgets.map((widget) => widget.dataset))].sort(),
+    [widgets],
+  );
+
+  const columns: Column<Widget>[] = [
+    {
+      key: "name",
+      header: "Name",
+      width: "3fr",
+      sortable: true,
+      sortValue: (widget) => widget.name,
+      render: (widget) => (
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-medium" title={widget.name}>
+              {widget.name}
+            </span>
+            {widget.invalidReason ? (
+              <SimpleTooltip tooltip={widget.invalidReason}>
+                <TriangleAlert
+                  className="text-warning size-3.5 shrink-0"
+                  aria-label="No longer works"
+                />
+              </SimpleTooltip>
+            ) : null}
+          </span>
+          {widget.description ? (
+            <span
+              className="text-muted-foreground truncate text-xs"
+              title={widget.description}
+            >
+              {widget.description}
+            </span>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: "dataset",
+      header: "Dataset",
+      width: "1fr",
+      render: (widget) => (
+        <span className="font-mono text-xs">{widget.dataset}</span>
+      ),
+    },
+    {
+      key: "chart",
+      header: "Chart",
+      width: "1fr",
+      render: (widget) => <ChartTypeCell type={widget.visualization.type} />,
+    },
+    {
+      key: "creator",
+      header: "Created by",
+      width: "1.5fr",
+      render: (widget) => (
+        <span className="truncate">{creator(widget.createdByUserId)}</span>
+      ),
+    },
+    {
+      key: "updated",
+      id: "updated",
+      header: "Updated",
+      width: "1fr",
+      sortable: true,
+      sortValue: (widget) => widget.updatedAt,
+      render: (widget) => (
+        <span className="text-muted-foreground">
+          {formatRelativeTime(widget.updatedAt)}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "64px",
+      render: (widget) => (
+        // The row opens the widget on click, so the menu keeps its own.
+        <span onClick={(event) => event.stopPropagation()}>
+          <MoreActions
+            triggerAriaLabel={`Actions for ${widget.name}`}
+            actions={[
+              {
+                label: "Open",
+                icon: "square-arrow-out-up-right",
+                onClick: () => confirmLeave(() => onOpen(widget)),
+              },
+              ...(canEdit(widget)
+                ? [
+                    {
+                      label: "Rename",
+                      icon: "pencil" as const,
+                      onClick: () => setRenaming(widget),
+                    },
+                  ]
+                : []),
+              {
+                label: "Duplicate",
+                icon: "copy",
+                disabled: mutations.pending,
+                onClick: () =>
+                  confirmLeave(() => mutations.duplicate(widget.id, onOpen)),
+              },
+              // Someone else's widget without project write can only be
+              // copied.
+              ...(canEdit(widget)
+                ? [
+                    {
+                      label: "Delete",
+                      icon: "trash" as const,
+                      destructive: true,
+                      separatorBefore: true,
+                      onClick: () => setDeleting(widget),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        </span>
+      ),
+    },
+  ];
+
+  if (isPending) {
+    return (
+      <div className="flex flex-col gap-2" aria-busy="true">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+  // A failed background refetch keeps the cached list on screen.
+  if (isError && widgets.length === 0) {
+    return (
+      <InlineEmptyState
+        icon="triangle-alert"
+        heading="The widgets did not load"
+        description="Your widgets are safe; the list could not be fetched."
+        action={
+          <Button variant="secondary" size="sm" onClick={onRetry}>
+            Try again
+          </Button>
+        }
+      />
+    );
+  }
+  if (widgets.length === 0) {
+    return (
+      <InlineEmptyState
+        icon="layout-grid"
+        heading="No widgets yet"
+        description="Build a question in Explore and save it as a widget to keep it here."
+        action={
+          <Button variant="secondary" size="sm" onClick={onExplore}>
+            Go to Explore
+          </Button>
+        }
+      />
+    );
+  }
+
+  const needle = search.trim().toLowerCase();
+  const filtered = widgets.filter(
+    (widget) =>
+      (needle === "" || widget.name.toLowerCase().includes(needle)) &&
+      (createdBy === ANYONE || widget.createdByUserId === user.id) &&
+      (dataset === ALL_DATASETS || widget.dataset === dataset),
+  );
+  const rows = sortTableData(filtered, columns, sort) as Widget[];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Search widgets"
+          className="w-72"
+        />
+        <Select value={createdBy} onValueChange={setCreatedBy}>
+          <SelectTrigger className="w-44" aria-label="Created by">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ANYONE}>Created by anyone</SelectItem>
+            <SelectItem value={ME}>Created by me</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={dataset} onValueChange={setDataset}>
+          <SelectTrigger className="w-44" aria-label="Dataset">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_DATASETS}>All datasets</SelectItem>
+            {datasets.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Table
+        columns={columns}
+        data={rows}
+        rowKey={(widget) => widget.id}
+        onRowClick={(widget) => confirmLeave(() => onOpen(widget))}
+        sort={sort}
+        onSortChange={setSort}
+        noResultsMessage="No widgets match these filters."
+      />
+
+      <WidgetDetailsDialog
+        key={renaming?.id ?? "closed"}
+        open={renaming !== null}
+        title="Rename widget"
+        confirm="Rename"
+        initial={{
+          name: renaming?.name ?? "",
+          description: renaming?.description,
+        }}
+        pending={mutations.pending}
+        onCancel={() => setRenaming(null)}
+        onSubmit={(details) => {
+          if (!renaming) return;
+          mutations.update(
+            renaming.id,
+            {
+              ...details,
+              dataset: renaming.dataset,
+              query: renaming.query,
+              visualization: renaming.visualization,
+            },
+            () => setRenaming(null),
+          );
+        }}
+      />
+      <DeleteWidgetDialog
+        name={deleting?.name ?? ""}
+        open={deleting !== null}
+        pending={mutations.pending}
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => {
+          if (!deleting) return;
+          const { id } = deleting;
+          mutations.remove(id, () => {
+            setDeleting(null);
+            onDeleted(id);
+          });
+        }}
+      />
+    </div>
+  );
+}
+
+function ChartTypeCell({ type }: { type: unknown }): JSX.Element {
+  const known = typeof type === "string" ? CHART_ICONS[type] : undefined;
+  const Icon = known?.icon ?? LayoutGrid;
+  const label = known?.label ?? (typeof type === "string" ? type : "—");
+  return (
+    <span className="text-muted-foreground flex items-center gap-1.5">
+      <Icon className="size-3.5 shrink-0" aria-hidden />
+      {label}
+    </span>
+  );
+}

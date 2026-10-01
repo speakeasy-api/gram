@@ -4665,6 +4665,7 @@ func marshalPluginsDistributionPluginToDistributionPluginResponseBody(v *plugins
 		ID:          v.ID,
 		Name:        v.Name,
 		Description: v.Description,
+		AutoCreated: v.AutoCreated,
 		IsDefault:   v.IsDefault,
 	}
 
@@ -4680,6 +4681,7 @@ func marshalPluginsPluginToPluginResponseBody(v *plugins.Plugin) *PluginResponse
 		Slug:                     v.Slug,
 		Description:              v.Description,
 		IsDefault:                v.IsDefault,
+		AutoCreated:              v.AutoCreated,
 		ServerCount:              v.ServerCount,
 		SkillCount:               v.SkillCount,
 		AssignmentCount:          v.AssignmentCount,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -2172,6 +2173,9 @@ func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
 
 	firstOutbox, err := testQueries.ListPublishOutboxRows(t.Context())
 	require.NoError(t, err)
+	firstOutbox = slices.DeleteFunc(firstOutbox, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&webhooksv1.Event{}))
+	})
 	require.NotEmpty(t, firstOutbox)
 	for _, row := range firstOutbox {
 		require.Equal(t, td.orgID, row.OrganizationID)
@@ -2221,6 +2225,9 @@ func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
 	// the outbox still holds exactly the first attempt's emissions.
 	allOutbox, err := testQueries.ListPublishOutboxRows(t.Context())
 	require.NoError(t, err)
+	allOutbox = slices.DeleteFunc(allOutbox, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&webhooksv1.Event{}))
+	})
 	require.Len(t, allOutbox, len(firstOutbox), "a redrive must not re-emit webhook events for already-announced findings")
 }
 
@@ -2265,6 +2272,9 @@ func TestAnalyzeBatch_LegacyRandomIDRowsConverge(t *testing.T) {
 
 	announced, err := testQueries.ListPublishOutboxRows(t.Context())
 	require.NoError(t, err)
+	announced = slices.DeleteFunc(announced, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&webhooksv1.Event{}))
+	})
 	require.NotEmpty(t, announced)
 
 	// Rewrite history into the pre-rollout shape: identical rows under random
@@ -2338,5 +2348,8 @@ func TestAnalyzeBatch_LegacyRandomIDRowsConverge(t *testing.T) {
 
 	afterOutbox, err := testQueries.ListPublishOutboxRows(t.Context())
 	require.NoError(t, err)
+	afterOutbox = slices.DeleteFunc(afterOutbox, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&webhooksv1.Event{}))
+	})
 	require.Len(t, afterOutbox, len(announced), "legacy rows were already announced; the re-analysis must not re-announce them")
 }

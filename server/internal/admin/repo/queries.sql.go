@@ -1597,6 +1597,15 @@ func (q *Queries) ReadSupportMatrix(ctx context.Context) ([]byte, error) {
 	return snapshot, err
 }
 
+const rejectOrganizationEntitlementsFixture = `-- name: RejectOrganizationEntitlementsFixture :exec
+ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (feature_name = 'automatic-role-distribution') NOT VALID
+`
+
+func (q *Queries) RejectOrganizationEntitlementsFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rejectOrganizationEntitlementsFixture)
+	return err
+}
+
 const retireSupportPlans = `-- name: RetireSupportPlans :exec
 UPDATE support_matrix_plans
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
