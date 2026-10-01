@@ -468,6 +468,7 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 
 	// Reformat JSON payloads as YAML with literal block scalars for strings
 	// containing newlines before both token counting and the analyzer request.
+	source := text
 	text = reformatJSONAsYAML(text)
 
 	truncated := len(text) > presidioMaxMessageBytes
@@ -498,6 +499,9 @@ func (p *PresidioClient) analyzeOne(ctx context.Context, idx int, text string, e
 
 		findings, err := p.analyzeOnce(ctx, text, entities, scoreThreshold, onProgress)
 		if err == nil {
+			if text != source {
+				remapPresidioOffsets(source, text, findings)
+			}
 			return scanners.Result{Findings: findings, STokens: int64(stokenCount), Completed: countErr == nil && !truncated}, false
 		}
 
@@ -749,6 +753,34 @@ func computeRetryBackoff(base time.Duration, attempt int) time.Duration {
 		}
 	}
 	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
+}
+
+// remapPresidioOffsets moves finding offsets from the reformatted text
+// Presidio scanned onto the source text, matching the same occurrence of each
+// match. A match with no verbatim occurrence in the source (it spanned a JSON
+// escape) gets an empty span rather than offsets into the wrong text.
+func remapPresidioOffsets(source, scanned string, findings []scanners.Finding) {
+	for i := range findings {
+		f := &findings[i]
+		if f.Match == "" || f.StartPos < 0 || f.StartPos > len(scanned) {
+			continue
+		}
+		nth := strings.Count(scanned[:f.StartPos], f.Match)
+		pos := -1
+		for from, k := 0, 0; k <= nth; k++ {
+			idx := strings.Index(source[from:], f.Match)
+			if idx < 0 {
+				break
+			}
+			pos = from + idx
+			from = pos + len(f.Match)
+		}
+		if pos < 0 {
+			f.StartPos, f.EndPos = 0, 0
+			continue
+		}
+		f.StartPos, f.EndPos = pos, pos+len(f.Match)
+	}
 }
 
 // reformatJSONAsYAML tries to parse text as a JSON value and re-emit it as

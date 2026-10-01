@@ -937,3 +937,32 @@ func newTestPresidioClient(t *testing.T, baseURL string) *PresidioClient {
 	client.baseBackoff = 0
 	return client
 }
+
+func TestRemapPresidioOffsets_IndexesSourceText(t *testing.T) {
+	t.Parallel()
+
+	source := `{"a":"x@y.io","b":"note","c":"mail x@y.io and \u00e9 z@w.io"}`
+	scanned := reformatJSONAsYAML(source)
+	require.NotEqual(t, source, scanned)
+
+	var findings []scanners.Finding
+	for _, m := range []string{"x@y.io", "x@y.io", "z@w.io"} {
+		from := 0
+		if len(findings) > 0 && findings[len(findings)-1].Match == m {
+			from = findings[len(findings)-1].EndPos
+		}
+		idx := strings.Index(scanned[from:], m)
+		require.GreaterOrEqual(t, idx, 0)
+		findings = append(findings, scanners.Finding{Match: m, StartPos: from + idx, EndPos: from + idx + len(m)})
+	}
+	findings = append(findings, scanners.Finding{Match: "and é", StartPos: strings.Index(scanned, "and é"), EndPos: 0})
+
+	remapPresidioOffsets(source, scanned, findings)
+
+	for _, f := range findings[:3] {
+		assert.Equal(t, f.Match, source[f.StartPos:f.EndPos])
+	}
+	assert.Less(t, findings[0].StartPos, findings[1].StartPos, "repeated matches keep their order")
+	assert.Equal(t, 0, findings[3].StartPos, "a match spanning an escape has no source span")
+	assert.Equal(t, 0, findings[3].EndPos)
+}
