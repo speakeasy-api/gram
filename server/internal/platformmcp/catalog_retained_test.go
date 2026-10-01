@@ -67,14 +67,14 @@ func TestCatalogRetainedUnpublishedIdentity(t *testing.T) {
 			ctx := t.Context()
 			err = testrepo.New(conn).DeleteRetainedCatalogSourcesFixture(ctx)
 			require.NoError(t, err)
-			pulseID := uuid.New()
-			err = testrepo.New(conn).InsertRetainedPulseCatalogSourceFixture(ctx, pulseID)
+			legacyID := uuid.New()
+			err = testrepo.New(conn).InsertRetainedLegacyCatalogSourceFixture(ctx, legacyID)
 			require.NoError(t, err)
 			require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, conn))
 			native := &retainedCatalogRecord{published: true, data: json.RawMessage(`{"server":{"name":"reviewed/mcp","description":"Native retained record","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://native.test/{region}/mcp","headers":[{"name":"Authorization","isRequired":true,"isSecret":true}],"variables":{"region":{"default":"us","isRequired":true,"choices":["us","eu"]}}}]}}`)}
-			pulse := &retainedCatalogRecord{published: true, data: json.RawMessage(`{"server":{"name":"reviewed/mcp","description":"Pulse retained record","version":"2.0.0","remotes":[{"type":"streamable-http","url":"https://pulse.test/mcp"}]}}`)}
+			legacy := &retainedCatalogRecord{published: true, data: json.RawMessage(`{"server":{"name":"reviewed/mcp","description":"Legacy retained record","version":"2.0.0","remotes":[{"type":"streamable-http","url":"https://legacy.example.test/mcp"}]}}`)}
 			flags := &retainedCatalogFlags{enabled: true}
-			identity := externalmcp.NewCatalogService(conn, externalmcp.NewNativeRegistryReader(pulse), externalmcp.NewNativeRegistryReader(native), flags)
+			identity := externalmcp.NewCatalogService(conn, externalmcp.NewNativeRegistryReader(legacy), externalmcp.NewNativeRegistryReader(native), flags)
 			nativeSource, err := identity.SelectedSource(ctx, "organization", "organization")
 			require.NoError(t, err)
 			require.Equal(t, "speakeasy", nativeSource.SourceKey)
@@ -90,7 +90,7 @@ func TestCatalogRetainedUnpublishedIdentity(t *testing.T) {
 				}
 				return []RegistryCatalogSource{{Client: reader, Descriptors: []CatalogDescriptor{BrowserCatalogDescriptor(source.Registry)}}}, nil
 			}).WithIdentityService(identity)
-			id, record := pulseID, pulse
+			id, record := legacyID, legacy
 			if initiallyNative {
 				id, record = externalmcp.NativeCatalogRegistryID, native
 			}

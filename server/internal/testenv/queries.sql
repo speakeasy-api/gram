@@ -1740,5 +1740,5 @@ SELECT pg_backend_pid();
 -- name: DeleteRetainedCatalogSourcesFixture :exec
 DELETE FROM mcp_registries;
 
--- name: InsertRetainedPulseCatalogSourceFixture :exec
-INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Pulse','https://api.pulsemcp.com','pulse_v0_1','pulse_server_credentials',true,'certified','pulse');
+-- name: InsertRetainedLegacyCatalogSourceFixture :exec
+INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Legacy catalog','https://legacy.example.test','pulse_v0_1','pulse_server_credentials',true,'certified','pulse');

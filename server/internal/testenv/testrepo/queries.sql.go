@@ -2616,12 +2616,12 @@ func (q *Queries) InsertRemoteSessionEMABindingFixture(ctx context.Context, arg 
 	return id, err
 }
 
-const insertRetainedPulseCatalogSourceFixture = `-- name: InsertRetainedPulseCatalogSourceFixture :exec
-INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Pulse','https://api.pulsemcp.com','pulse_v0_1','pulse_server_credentials',true,'certified','pulse')
+const insertRetainedLegacyCatalogSourceFixture = `-- name: InsertRetainedLegacyCatalogSourceFixture :exec
+INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Legacy catalog','https://legacy.example.test','pulse_v0_1','pulse_server_credentials',true,'certified','pulse')
 `
 
-func (q *Queries) InsertRetainedPulseCatalogSourceFixture(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, insertRetainedPulseCatalogSourceFixture, id)
+func (q *Queries) InsertRetainedLegacyCatalogSourceFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, insertRetainedLegacyCatalogSourceFixture, id)
 	return err
 }
 
