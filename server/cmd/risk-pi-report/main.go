@@ -752,6 +752,9 @@ var optionalCorpusFiles = []string{
 	"adversarial_ais324.jsonl",
 	"trajectory_twins.jsonl",
 	"cascade_context.jsonl",
+	"llmail_inject.jsonl",
+	"agentdojo.jsonl",
+	"agentdyn.jsonl",
 }
 
 func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
