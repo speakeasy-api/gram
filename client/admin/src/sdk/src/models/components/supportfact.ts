@@ -28,10 +28,6 @@ export type SupportFact = {
 export const SupportFactStatus$inboundSchema: z.ZodMiniEnum<
   typeof SupportFactStatus
 > = z.enum(SupportFactStatus);
-/** @internal */
-export const SupportFactStatus$outboundSchema: z.ZodMiniEnum<
-  typeof SupportFactStatus
-> = SupportFactStatus$inboundSchema;
 
 /** @internal */
 export const SupportFact$inboundSchema: z.ZodMiniType<SupportFact, unknown> = z
@@ -40,26 +36,7 @@ export const SupportFact$inboundSchema: z.ZodMiniType<SupportFact, unknown> = z
     status: SupportFactStatus$inboundSchema,
     verify: z.boolean(),
   });
-/** @internal */
-export type SupportFact$Outbound = {
-  note: string;
-  status: string;
-  verify: boolean;
-};
 
-/** @internal */
-export const SupportFact$outboundSchema: z.ZodMiniType<
-  SupportFact$Outbound,
-  SupportFact
-> = z.object({
-  note: z.string(),
-  status: SupportFactStatus$outboundSchema,
-  verify: z.boolean(),
-});
-
-export function supportFactToJSON(supportFact: SupportFact): string {
-  return JSON.stringify(SupportFact$outboundSchema.parse(supportFact));
-}
 export function supportFactFromJSON(
   jsonString: string,
 ): SafeParseResult<SupportFact, SDKValidationError> {

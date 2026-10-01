@@ -195,7 +195,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|get-stripe-subscription-candidate|set-stripe-subscription)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|get-support-coverage|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|get-stripe-subscription-candidate|set-stripe-subscription)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4335,10 +4335,6 @@ func ParseEndpoint(
 		adminGetSupportMatrixFlags                 = flag.NewFlagSet("get-support-matrix", flag.ExitOnError)
 		adminGetSupportMatrixAdminSessionTokenFlag = adminGetSupportMatrixFlags.String("admin-session-token", "", "")
 
-		adminUpdateSupportMatrixFlags                 = flag.NewFlagSet("update-support-matrix", flag.ExitOnError)
-		adminUpdateSupportMatrixBodyFlag              = adminUpdateSupportMatrixFlags.String("body", "REQUIRED", "")
-		adminUpdateSupportMatrixAdminSessionTokenFlag = adminUpdateSupportMatrixFlags.String("admin-session-token", "", "")
-
 		adminGetSupportCoverageFlags                 = flag.NewFlagSet("get-support-coverage", flag.ExitOnError)
 		adminGetSupportCoverageOrganizationIDFlag    = adminGetSupportCoverageFlags.String("organization-id", "REQUIRED", "")
 		adminGetSupportCoverageWindowDaysFlag        = adminGetSupportCoverageFlags.String("window-days", "30", "")
@@ -5616,7 +5612,6 @@ func ParseEndpoint(
 	adminGetMeterUsageFlags.Usage = adminGetMeterUsageUsage
 	adminGetSpendBreakdownFlags.Usage = adminGetSpendBreakdownUsage
 	adminGetSupportMatrixFlags.Usage = adminGetSupportMatrixUsage
-	adminUpdateSupportMatrixFlags.Usage = adminUpdateSupportMatrixUsage
 	adminGetSupportCoverageFlags.Usage = adminGetSupportCoverageUsage
 	adminListRegistryEntriesFlags.Usage = adminListRegistryEntriesUsage
 	adminGetRegistryEntryFlags.Usage = adminGetRegistryEntryUsage
@@ -8496,9 +8491,6 @@ func ParseEndpoint(
 			case "get-support-matrix":
 				epf = adminGetSupportMatrixFlags
 
-			case "update-support-matrix":
-				epf = adminUpdateSupportMatrixFlags
-
 			case "get-support-coverage":
 				epf = adminGetSupportCoverageFlags
 
@@ -11369,9 +11361,6 @@ func ParseEndpoint(
 			case "get-support-matrix":
 				endpoint = c.GetSupportMatrix()
 				data, err = adminc.BuildGetSupportMatrixPayload(*adminGetSupportMatrixAdminSessionTokenFlag)
-			case "update-support-matrix":
-				endpoint = c.UpdateSupportMatrix()
-				data, err = adminc.BuildUpdateSupportMatrixPayload(*adminUpdateSupportMatrixBodyFlag, *adminUpdateSupportMatrixAdminSessionTokenFlag)
 			case "get-support-coverage":
 				endpoint = c.GetSupportCoverage()
 				data, err = adminc.BuildGetSupportCoveragePayload(*adminGetSupportCoverageOrganizationIDFlag, *adminGetSupportCoverageWindowDaysFlag, *adminGetSupportCoverageAdminSessionTokenFlag)
@@ -28940,8 +28929,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    change-trial-end-date: Sets a running trial's end date to a future instant, shortening or extending it without restarting the trial.`)
 	fmt.Fprintln(os.Stderr, `    get-meter-usage: Returns totals-only ordinary meter usage for an organization over a bounded UTC-day window.`)
 	fmt.Fprintln(os.Stderr, `    get-spend-breakdown: Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.`)
-	fmt.Fprintln(os.Stderr, `    get-support-matrix: Read the shared support catalog and product coverage.`)
-	fmt.Fprintln(os.Stderr, `    update-support-matrix: Save coverage against the last read revision; rejects concurrent changes.`)
+	fmt.Fprintln(os.Stderr, `    get-support-matrix: Read the support matrix the server was built with. It is code, changed by pull request: server/internal/supportmatrix/matrix.yaml.`)
 	fmt.Fprintln(os.Stderr, `    get-support-coverage: Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.`)
 	fmt.Fprintln(os.Stderr, `    list-registry-entries: Staff-only registry administration.`)
 	fmt.Fprintln(os.Stderr, `    get-registry-entry: Staff-only registry administration.`)
@@ -30121,7 +30109,7 @@ func adminGetSupportMatrixUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Read the shared support catalog and product coverage.`)
+	fmt.Fprintln(os.Stderr, `Read the support matrix the server was built with. It is code, changed by pull request: server/internal/supportmatrix/matrix.yaml.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
@@ -30129,26 +30117,6 @@ func adminGetSupportMatrixUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-support-matrix --admin-session-token \"abc123\"")
-}
-
-func adminUpdateSupportMatrixUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin update-support-matrix", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Save coverage against the last read revision; rejects concurrent changes.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-support-matrix --body '{\n      \"draft\": {\n         \"mappings\": {\n            \"abc123\": {\n               \"applicability\": \"applicable\",\n               \"conditions\": \"aaa\",\n               \"facts\": {\n                  \"abc123\": {\n                     \"note\": \"aaa\",\n                     \"status\": \"partial\",\n                     \"verify\": false\n                  }\n               }\n            }\n         },\n         \"references\": {\n            \"abc123\": {\n               \"abc123\": {\n                  \"note\": \"aaa\",\n                  \"status\": \"partial\",\n                  \"verify\": false\n               }\n            }\n         }\n      },\n      \"revision\": \"aaa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetSupportCoverageUsage() {

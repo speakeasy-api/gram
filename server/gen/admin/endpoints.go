@@ -72,7 +72,6 @@ type Endpoints struct {
 	GetMeterUsage                         goa.Endpoint
 	GetSpendBreakdown                     goa.Endpoint
 	GetSupportMatrix                      goa.Endpoint
-	UpdateSupportMatrix                   goa.Endpoint
 	GetSupportCoverage                    goa.Endpoint
 	ListRegistryEntries                   goa.Endpoint
 	GetRegistryEntry                      goa.Endpoint
@@ -176,7 +175,6 @@ func NewEndpoints(s Service) *Endpoints {
 		GetMeterUsage:                         NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
 		GetSpendBreakdown:                     NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
 		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
-		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
 		GetSupportCoverage:                    NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
 		ListRegistryEntries:                   NewListRegistryEntriesEndpoint(s, a.APIKeyAuth),
 		GetRegistryEntry:                      NewGetRegistryEntryEndpoint(s, a.APIKeyAuth),
@@ -260,7 +258,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetMeterUsage = m(e.GetMeterUsage)
 	e.GetSpendBreakdown = m(e.GetSpendBreakdown)
 	e.GetSupportMatrix = m(e.GetSupportMatrix)
-	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
 	e.GetSupportCoverage = m(e.GetSupportCoverage)
 	e.ListRegistryEntries = m(e.ListRegistryEntries)
 	e.GetRegistryEntry = m(e.GetRegistryEntry)
@@ -1509,29 +1506,6 @@ func NewGetSupportMatrixEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.GetSupportMatrix(ctx, p)
-	}
-}
-
-// NewUpdateSupportMatrixEndpoint returns an endpoint function that calls the
-// method "updateSupportMatrix" of service "admin".
-func NewUpdateSupportMatrixEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*UpdateSupportMatrixPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "admin_auth",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.AdminSessionToken != nil {
-			key = *p.AdminSessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.UpdateSupportMatrix(ctx, p)
 	}
 }
 

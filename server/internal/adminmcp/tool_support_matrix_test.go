@@ -62,25 +62,23 @@ func callSupportMatrixToolAs(t *testing.T, reader SupportMatrixReader, staff *co
 
 func supportMatrixFixture() *gen.SupportMatrix {
 	return &gen.SupportMatrix{
+		Capabilities: []*gen.SupportCapability{{ID: "capability-a", Name: "Capability A", Group: "Group A"}},
+		Platforms:    []*gen.SupportPlatform{{ID: "product-a", Name: "Product A", Vendor: "Vendor B", Family: "agent", Surface: "desktop"}},
 		Methods: []*gen.SupportMethod{{
 			ID: "method-a", Name: "Method A", Vendor: "Vendor A", Plans: "operator plan notes",
-			Facts: map[string]*gen.SupportFact{"capability-a": {Status: "partial", Note: "private reference note", Verify: true}},
+			Claims: map[string]*gen.SupportFact{"capability-a": {Status: "partial", Note: "private reference note", Verify: true}},
+			Platforms: []*gen.SupportPlatformSupport{{
+				Platform: "product-a", Applicability: "applicable",
+				Accounts: &gen.SupportAccounts{Personal: "unsupported", Team: "supported", Enterprise: "unknown"},
+				Os:       &gen.SupportOS{Mac: new("supported")}, Note: "private operator condition",
+				Cells: map[string]*gen.SupportFact{"capability-a": {Status: "supported", Note: "private coverage note", Verify: true}},
+			}},
 		}},
-		Products:     []*gen.SupportPlatform{{ID: "product-a", Name: "Product A", Vendor: "Vendor B", Family: "agent", Surface: "desktop"}},
-		Capabilities: []*gen.SupportCapability{{ID: "capability-a", Name: "Capability A", Group: "Group A"}},
-		Draft: &gen.SupportDraft{
-			Mappings: map[string]*gen.SupportMapping{"method-a/product-a": {
-				Applicability: "applicable", Conditions: "private operator condition",
-				Facts: map[string]*gen.SupportFact{"capability-a": {Status: "supported", Note: "private coverage note", Verify: true}},
-			}},
-			References: map[string]map[string]*gen.SupportFact{"method-a": {
-				"capability-a": {Status: "partial", Note: "private reference note", Verify: true},
-			}},
-		},
 		Revision: "private revision",
 	}
 }
 
+//go:fix inline
 func supportMatrixFacts(count int) map[string]*gen.SupportFact {
 	facts := make(map[string]*gen.SupportFact, count)
 	for index := range count {
@@ -102,9 +100,13 @@ func TestGetSupportMatrixProjectsBoundedFactsOnly(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &output))
 	require.Len(t, output.Methods, 1)
 	require.Equal(t, []SupportMatrixFact{{CapabilityID: "capability-a", Status: "partial"}}, output.Methods[0].Facts)
-	require.Equal(t, []SupportMatrixMapping{{MethodID: "method-a", ProductID: "product-a", Applicability: "applicable", Facts: []SupportMatrixFact{{CapabilityID: "capability-a", Status: "supported"}}}}, output.Mappings)
+	require.Equal(t, []SupportMatrixMapping{{
+		MethodID: "method-a", ProductID: "product-a", Applicability: "applicable",
+		Accounts: SupportMatrixAccounts{Personal: "unsupported", Team: "supported", Enterprise: "unknown"},
+		Facts:    []SupportMatrixFact{{CapabilityID: "capability-a", Status: "supported"}},
+	}}, output.Mappings)
 	require.Equal(t, []SupportMatrixReference{{MethodID: "method-a", Facts: []SupportMatrixFact{{CapabilityID: "capability-a", Status: "partial"}}}}, output.References)
-	for _, omitted := range []string{"operator plan notes", "private operator condition", "private coverage note", "private reference note", "private revision", `"note"`, `"conditions"`, `"verify"`, `"plans"`, `"revision"`} {
+	for _, omitted := range []string{"operator plan notes", "private operator condition", "private coverage note", "private reference note", "private revision", `"note"`, `"os"`, `"verify"`, `"plans"`, `"revision"`} {
 		require.NotContains(t, body, omitted)
 	}
 }
@@ -112,14 +114,19 @@ func TestGetSupportMatrixProjectsBoundedFactsOnly(t *testing.T) {
 func TestGetSupportMatrixOrdersMapFactsDeterministically(t *testing.T) {
 	t.Parallel()
 	matrix := supportMatrixFixture()
+	accounts := &gen.SupportAccounts{Personal: "supported", Team: "supported", Enterprise: "supported"}
+	matrix.Methods[0].Platforms = append(matrix.Methods[0].Platforms, &gen.SupportPlatformSupport{
+		Platform: "product-b", Applicability: "unknown", Accounts: accounts,
+		Cells: map[string]*gen.SupportFact{"capability-b": {Status: "partial"}, "capability-a": {Status: "na"}},
+	})
 	matrix.Methods = append(matrix.Methods, &gen.SupportMethod{ID: "method-b", Name: "Method B", Vendor: "Vendor A",
-		Facts: map[string]*gen.SupportFact{"capability-c": {Status: "supported"}, "capability-b": {Status: "impossible"}, "capability-a": {Status: "unknown"}}})
-	matrix.Products = append(matrix.Products, &gen.SupportPlatform{ID: "product-b", Name: "Product B", Vendor: "Vendor B", Family: "agent", Surface: "cli"})
+		Claims:    map[string]*gen.SupportFact{"capability-c": {Status: "supported"}, "capability-b": {Status: "impossible"}, "capability-a": {Status: "unknown"}},
+		Platforms: []*gen.SupportPlatformSupport{{Platform: "product-b", Applicability: "na", Accounts: accounts, Cells: map[string]*gen.SupportFact{}}},
+	})
+	matrix.Platforms = append(matrix.Platforms, &gen.SupportPlatform{ID: "product-b", Name: "Product B", Vendor: "Vendor B", Family: "agent", Surface: "cli"})
 	matrix.Capabilities = append(matrix.Capabilities, &gen.SupportCapability{ID: "capability-b", Name: "Capability B", Group: "Group A"})
-	matrix.Draft.Mappings["method-b/product-b"] = &gen.SupportMapping{Applicability: "na", Facts: map[string]*gen.SupportFact{}}
-	matrix.Draft.Mappings["method-a/product-b"] = &gen.SupportMapping{Applicability: "unknown", Facts: map[string]*gen.SupportFact{"capability-b": {Status: "partial"}, "capability-a": {Status: "na"}}}
-	matrix.Draft.References["method-b"] = map[string]*gen.SupportFact{"capability-b": {Status: "supported"}, "capability-a": {Status: "unimplemented"}}
 
+	all := SupportMatrixAccounts{Personal: "supported", Team: "supported", Enterprise: "supported"}
 	want := GetSupportMatrixOutput{
 		Methods: []SupportMatrixMethod{
 			{ID: "method-a", Name: "Method A", Vendor: "Vendor A", Facts: []SupportMatrixFact{{CapabilityID: "capability-a", Status: "partial"}}},
@@ -136,13 +143,13 @@ func TestGetSupportMatrixOrdersMapFactsDeterministically(t *testing.T) {
 			{ID: "capability-b", Name: "Capability B", Group: "Group A"},
 		},
 		Mappings: []SupportMatrixMapping{
-			{MethodID: "method-a", ProductID: "product-a", Applicability: "applicable", Facts: []SupportMatrixFact{{CapabilityID: "capability-a", Status: "supported"}}},
-			{MethodID: "method-a", ProductID: "product-b", Applicability: "unknown", Facts: []SupportMatrixFact{{CapabilityID: "capability-a", Status: "na"}, {CapabilityID: "capability-b", Status: "partial"}}},
-			{MethodID: "method-b", ProductID: "product-b", Applicability: "na", Facts: []SupportMatrixFact{}},
+			{MethodID: "method-a", ProductID: "product-a", Applicability: "applicable", Accounts: SupportMatrixAccounts{Personal: "unsupported", Team: "supported", Enterprise: "unknown"}, Facts: []SupportMatrixFact{{CapabilityID: "capability-a", Status: "supported"}}},
+			{MethodID: "method-a", ProductID: "product-b", Applicability: "unknown", Accounts: all, Facts: []SupportMatrixFact{{CapabilityID: "capability-a", Status: "na"}, {CapabilityID: "capability-b", Status: "partial"}}},
+			{MethodID: "method-b", ProductID: "product-b", Applicability: "na", Accounts: all, Facts: []SupportMatrixFact{}},
 		},
 		References: []SupportMatrixReference{
 			{MethodID: "method-a", Facts: []SupportMatrixFact{{CapabilityID: "capability-a", Status: "partial"}}},
-			{MethodID: "method-b", Facts: []SupportMatrixFact{{CapabilityID: "capability-a", Status: "unimplemented"}, {CapabilityID: "capability-b", Status: "supported"}}},
+			{MethodID: "method-b", Facts: []SupportMatrixFact{{CapabilityID: "capability-a", Status: "unknown"}, {CapabilityID: "capability-b", Status: "impossible"}, {CapabilityID: "capability-c", Status: "supported"}}},
 		},
 	}
 	// Map iteration is randomised, so repeated calls catch any unsorted projection.
@@ -172,10 +179,7 @@ func TestGetSupportMatrixRequiresVerifiedStaff(t *testing.T) {
 
 func TestGetSupportMatrixFailsClosed(t *testing.T) {
 	t.Parallel()
-	oversizedReferences := make(map[string]map[string]*gen.SupportFact, maxSupportMatrixEntries+1)
-	for index := range maxSupportMatrixEntries + 1 {
-		oversizedReferences["method-"+strconv.Itoa(index)] = map[string]*gen.SupportFact{}
-	}
+	oversizedPlatforms := make([]*gen.SupportPlatformSupport, maxSupportMatrixEntries+1)
 	for _, tc := range []struct {
 		name   string
 		reader SupportMatrixReader
@@ -183,20 +187,58 @@ func TestGetSupportMatrixFailsClosed(t *testing.T) {
 		{name: "missing reader"},
 		{name: "error", reader: &recordingSupportMatrixReader{err: errors.New("private database failure")}},
 		{name: "nil result", reader: &recordingSupportMatrixReader{}},
-		{name: "nil draft", reader: &recordingSupportMatrixReader{result: &gen.SupportMatrix{}}},
-		{name: "oversized methods", reader: &recordingSupportMatrixReader{result: &gen.SupportMatrix{Draft: &gen.SupportDraft{}, Methods: make([]*gen.SupportMethod, maxSupportMatrixEntries+1)}}},
-		{name: "oversized products", reader: &recordingSupportMatrixReader{result: &gen.SupportMatrix{Draft: &gen.SupportDraft{}, Products: make([]*gen.SupportPlatform, maxSupportMatrixEntries+1)}}},
-		{name: "oversized capabilities", reader: &recordingSupportMatrixReader{result: &gen.SupportMatrix{Draft: &gen.SupportDraft{}, Capabilities: make([]*gen.SupportCapability, maxSupportMatrixEntries+1)}}},
-		{name: "oversized references", reader: &recordingSupportMatrixReader{result: &gen.SupportMatrix{Draft: &gen.SupportDraft{References: oversizedReferences}}}},
-		{name: "too many total facts", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
+		{name: "oversized methods", reader: &recordingSupportMatrixReader{result: &gen.SupportMatrix{Methods: make([]*gen.SupportMethod, maxSupportMatrixEntries+1)}}},
+		{name: "oversized products", reader: &recordingSupportMatrixReader{result: &gen.SupportMatrix{Platforms: make([]*gen.SupportPlatform, maxSupportMatrixEntries+1)}}},
+		{name: "oversized capabilities", reader: &recordingSupportMatrixReader{result: &gen.SupportMatrix{Capabilities: make([]*gen.SupportCapability, maxSupportMatrixEntries+1)}}},
+		{name: "oversized platforms on a method", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
 			matrix := supportMatrixFixture()
-			// Method facts reach the cap on their own; the fixture's mapping fact pushes the total over it.
-			matrix.Methods[0].Facts = supportMatrixFacts(maxSupportMatrixFacts)
+			matrix.Methods[0].Platforms = oversizedPlatforms
 			return matrix
 		}()}},
-		{name: "invalid fact", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
+		{name: "too many mappings", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
 			matrix := supportMatrixFixture()
-			matrix.Draft.References["method-a"]["capability-a"].Status = "invented"
+			accounts := &gen.SupportAccounts{Personal: "supported", Team: "supported", Enterprise: "supported"}
+			// Eleven methods on two hundred platforms each: every entry is within
+			// bounds on its own, the mapping count is not.
+			matrix.Methods = nil
+			for method := range 11 {
+				platforms := make([]*gen.SupportPlatformSupport, 0, maxSupportMatrixEntries)
+				for platform := range maxSupportMatrixEntries {
+					platforms = append(platforms, &gen.SupportPlatformSupport{Platform: "product-" + strconv.Itoa(platform), Applicability: "na", Accounts: accounts, Cells: map[string]*gen.SupportFact{}})
+				}
+				matrix.Methods = append(matrix.Methods, &gen.SupportMethod{ID: "method-" + strconv.Itoa(method), Name: "Method", Vendor: "Vendor", Claims: map[string]*gen.SupportFact{}, Platforms: platforms})
+			}
+			return matrix
+		}()}},
+		{name: "too many total facts", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
+			matrix := supportMatrixFixture()
+			// Claims count twice (method and reference), so half the cap on their own pushes the total over it with the cell.
+			matrix.Methods[0].Claims = supportMatrixFacts(maxSupportMatrixFacts / 2)
+			return matrix
+		}()}},
+		{name: "invalid claim", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
+			matrix := supportMatrixFixture()
+			matrix.Methods[0].Claims["capability-a"].Status = "invented"
+			return matrix
+		}()}},
+		{name: "invalid cell", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
+			matrix := supportMatrixFixture()
+			matrix.Methods[0].Platforms[0].Cells["capability-a"].Status = "invented"
+			return matrix
+		}()}},
+		{name: "invalid applicability", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
+			matrix := supportMatrixFixture()
+			matrix.Methods[0].Platforms[0].Applicability = "sometimes"
+			return matrix
+		}()}},
+		{name: "invalid eligibility", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
+			matrix := supportMatrixFixture()
+			matrix.Methods[0].Platforms[0].Accounts.Team = "maybe"
+			return matrix
+		}()}},
+		{name: "missing accounts", reader: &recordingSupportMatrixReader{result: func() *gen.SupportMatrix {
+			matrix := supportMatrixFixture()
+			matrix.Methods[0].Platforms[0].Accounts = nil
 			return matrix
 		}()}},
 	} {

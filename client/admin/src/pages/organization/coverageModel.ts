@@ -1,8 +1,6 @@
 import {
-  emptyMapping,
-  getFact,
-  mappingKey,
-  methodReference,
+  cellFact,
+  platformSupport,
   type Snapshot,
 } from "@/pages/coverage/model";
 
@@ -61,7 +59,7 @@ export const capabilities: ReadonlyArray<{
   },
 ];
 
-// The catalog groups products into families that line up with the surfaces the
+// The matrix groups platforms into families that line up with the surfaces the
 // telemetry fold produces. Anything outside these falls into "other".
 const familyToSurface: Readonly<Record<string, SurfaceId>> = {
   "Claude Code": "claude_code",
@@ -97,8 +95,8 @@ export type MethodFootprint = {
 };
 
 /**
- * What each integration claims it covers, read from the operator-editable
- * support matrix rather than a second list maintained here.
+ * What each integration claims it covers, read from the support matrix
+ * rather than a second list maintained here.
  *
  * Identity attribution has no catalog capability, so no method claims it.
  */
@@ -111,18 +109,12 @@ export function methodFootprints(
 
   const rows = snapshot.methods.map((method) => {
     const footprint = new Set<string>();
-    for (const product of snapshot.products) {
-      const surface = familyToSurface[product.family] ?? "other";
-      const mapping =
-        snapshot.draft.mappings[mappingKey(method.id, product.id)] ??
-        emptyMapping;
+    for (const platform of snapshot.platforms) {
+      const surface = familyToSurface[platform.family] ?? "other";
+      const support = platformSupport(method, platform.id);
       for (const capability of capabilities) {
         if (!capability.catalogId) continue;
-        const fact = getFact(
-          mapping,
-          capability.catalogId,
-          methodReference(snapshot.draft, method, capability.catalogId),
-        );
+        const fact = cellFact(support, capability.catalogId);
         if (fact.status === "supported" || fact.status === "partial") {
           footprint.add(cellKey(capability.id, surface));
         }

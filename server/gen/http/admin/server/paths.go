@@ -282,11 +282,6 @@ func GetSupportMatrixAdminPath() string {
 	return "/admin/supportMatrix.get"
 }
 
-// UpdateSupportMatrixAdminPath returns the URL path to the admin service updateSupportMatrix HTTP endpoint.
-func UpdateSupportMatrixAdminPath() string {
-	return "/admin/supportMatrix.update"
-}
-
 // GetSupportCoverageAdminPath returns the URL path to the admin service getSupportCoverage HTTP endpoint.
 func GetSupportCoverageAdminPath() string {
 	return "/admin/supportCoverage.get"

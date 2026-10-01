@@ -21,7 +21,8 @@ const (
 
 var errSupportMatrixUnavailable = errors.New("support matrix is unavailable")
 
-// SupportMatrixReader is the admin service's read-only global support catalogue contract.
+// SupportMatrixReader is the admin service's read of the support matrix the
+// server was built with.
 type SupportMatrixReader interface {
 	GetSupportMatrix(context.Context, *gen.GetSupportMatrixPayload) (*gen.SupportMatrix, error)
 }
@@ -60,11 +61,21 @@ type SupportMatrixFact struct {
 	Status       string `json:"status"`
 }
 
+// SupportMatrixAccounts says which account types can use the method on the product.
+type SupportMatrixAccounts struct {
+	Personal   string `json:"personal"`
+	Team       string `json:"team"`
+	Enterprise string `json:"enterprise"`
+}
+
 type SupportMatrixMapping struct {
-	MethodID      string              `json:"method_id"`
-	ProductID     string              `json:"product_id"`
-	Applicability string              `json:"applicability"`
-	Facts         []SupportMatrixFact `json:"facts"`
+	MethodID      string                `json:"method_id"`
+	ProductID     string                `json:"product_id"`
+	Applicability string                `json:"applicability"`
+	Accounts      SupportMatrixAccounts `json:"accounts"`
+	// Facts are the cells: one per capability when the method applies to the
+	// product, none otherwise.
+	Facts []SupportMatrixFact `json:"facts"`
 }
 
 type SupportMatrixReference struct {
@@ -76,7 +87,7 @@ func registerSupportMatrixTools(server *mcp.Server, reader SupportMatrixReader) 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_support_matrix",
 		Title:       "Get Global Support Matrix Facts",
-		Description: "Read the global support catalogue: methods, products, capabilities, and declared applicability and status facts. Notes, conditions, plan text, verification flags, and revisions are intentionally omitted.",
+		Description: "Read the support matrix the server was built with: methods, products, capabilities, each method's claims per capability, and per product whether the method applies, which account types can use it, and one status per capability when it applies. Notes, plan text, operating systems, verification flags and the revision are intentionally omitted. The matrix is code, changed by pull request.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, GetSupportMatrixOutput, error) {
 		output := GetSupportMatrixOutput{
@@ -87,59 +98,55 @@ func registerSupportMatrixTools(server *mcp.Server, reader SupportMatrixReader) 
 			return nil, output, errSupportMatrixUnavailable
 		}
 		matrix, err := reader.GetSupportMatrix(ctx, &gen.GetSupportMatrixPayload{})
-		if err != nil || matrix == nil || matrix.Draft == nil || len(matrix.Methods) > maxSupportMatrixEntries || len(matrix.Products) > maxSupportMatrixEntries || len(matrix.Capabilities) > maxSupportMatrixEntries || len(matrix.Draft.Mappings) > maxSupportMatrixFacts || len(matrix.Draft.References) > maxSupportMatrixEntries {
+		if err != nil || matrix == nil || len(matrix.Methods) > maxSupportMatrixEntries || len(matrix.Platforms) > maxSupportMatrixEntries || len(matrix.Capabilities) > maxSupportMatrixEntries {
 			return nil, output, errSupportMatrixUnavailable
 		}
 
-		factCount := 0
-		for _, method := range matrix.Methods {
-			if method == nil || !validSupportMatrixText(method.ID) || !validSupportMatrixText(method.Name) || !validSupportMatrixText(method.Vendor) {
-				return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
-			}
-			facts, valid := projectSupportMatrixFacts(method.Facts)
-			factCount += len(facts)
-			if !valid || factCount > maxSupportMatrixFacts {
-				return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
-			}
-			output.Methods = append(output.Methods, SupportMatrixMethod{ID: method.ID, Name: method.Name, Vendor: method.Vendor, Facts: facts})
-		}
-		for _, product := range matrix.Products {
-			if product == nil || !validSupportMatrixText(product.ID) || !validSupportMatrixText(product.Name) || !validSupportMatrixText(product.Vendor) || !validSupportMatrixText(product.Family) || !validSupportMatrixText(product.Surface) {
-				return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
-			}
-			output.Products = append(output.Products, SupportMatrixProduct{ID: product.ID, Name: product.Name, Vendor: product.Vendor, Family: product.Family, Surface: product.Surface})
-		}
 		for _, capability := range matrix.Capabilities {
 			if capability == nil || !validSupportMatrixText(capability.ID) || !validSupportMatrixText(capability.Name) || !validSupportMatrixText(capability.Group) {
 				return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
 			}
 			output.Capabilities = append(output.Capabilities, SupportMatrixCapability{ID: capability.ID, Name: capability.Name, Group: capability.Group})
 		}
-
-		for _, key := range slices.Sorted(maps.Keys(matrix.Draft.Mappings)) {
-			mapping := matrix.Draft.Mappings[key]
-			methodID, productID, ok := splitSupportMatrixMappingKey(key)
-			if !ok || mapping == nil || (mapping.Applicability != "unknown" && mapping.Applicability != "applicable" && mapping.Applicability != "na") {
+		for _, product := range matrix.Platforms {
+			if product == nil || !validSupportMatrixText(product.ID) || !validSupportMatrixText(product.Name) || !validSupportMatrixText(product.Vendor) || !validSupportMatrixText(product.Family) || !validSupportMatrixText(product.Surface) {
 				return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
 			}
-			facts, valid := projectSupportMatrixFacts(mapping.Facts)
-			factCount += len(facts)
-			if !valid || factCount > maxSupportMatrixFacts {
-				return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
-			}
-			output.Mappings = append(output.Mappings, SupportMatrixMapping{MethodID: methodID, ProductID: productID, Applicability: mapping.Applicability, Facts: facts})
+			output.Products = append(output.Products, SupportMatrixProduct{ID: product.ID, Name: product.Name, Vendor: product.Vendor, Family: product.Family, Surface: product.Surface})
 		}
-		for _, methodID := range slices.Sorted(maps.Keys(matrix.Draft.References)) {
-			factsByCapability := matrix.Draft.References[methodID]
-			if !validSupportMatrixText(methodID) {
+		factCount := 0
+		for _, method := range matrix.Methods {
+			if method == nil || !validSupportMatrixText(method.ID) || !validSupportMatrixText(method.Name) || !validSupportMatrixText(method.Vendor) || len(method.Platforms) > maxSupportMatrixEntries {
 				return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
 			}
-			facts, valid := projectSupportMatrixFacts(factsByCapability)
-			factCount += len(facts)
+			claims, valid := projectSupportMatrixFacts(method.Claims)
+			// Claims are reported twice, with the method and as its reference.
+			factCount += 2 * len(claims)
 			if !valid || factCount > maxSupportMatrixFacts {
 				return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
 			}
-			output.References = append(output.References, SupportMatrixReference{MethodID: methodID, Facts: facts})
+			output.Methods = append(output.Methods, SupportMatrixMethod{ID: method.ID, Name: method.Name, Vendor: method.Vendor, Facts: claims})
+			output.References = append(output.References, SupportMatrixReference{MethodID: method.ID, Facts: claims})
+			for _, support := range method.Platforms {
+				if support == nil || !validSupportMatrixText(support.Platform) || support.Platform == "" || !validSupportMatrixApplicability(support.Applicability) || support.Accounts == nil {
+					return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
+				}
+				for _, eligibility := range []string{support.Accounts.Personal, support.Accounts.Team, support.Accounts.Enterprise} {
+					if !validSupportMatrixEligibility(eligibility) {
+						return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
+					}
+				}
+				cells, valid := projectSupportMatrixFacts(support.Cells)
+				factCount += len(cells)
+				if !valid || factCount > maxSupportMatrixFacts || len(output.Mappings) >= maxSupportMatrixFacts {
+					return nil, GetSupportMatrixOutput{}, errSupportMatrixUnavailable
+				}
+				output.Mappings = append(output.Mappings, SupportMatrixMapping{
+					MethodID: method.ID, ProductID: support.Platform, Applicability: support.Applicability,
+					Accounts: SupportMatrixAccounts{Personal: support.Accounts.Personal, Team: support.Accounts.Team, Enterprise: support.Accounts.Enterprise},
+					Facts:    cells,
+				})
+			}
 		}
 		return nil, output, nil
 	})
@@ -173,12 +180,20 @@ func validSupportMatrixStatus(status string) bool {
 	}
 }
 
-func splitSupportMatrixMappingKey(key string) (string, string, bool) {
-	for index := 0; index < len(key); index++ {
-		if key[index] == '/' {
-			methodID, productID := key[:index], key[index+1:]
-			return methodID, productID, validSupportMatrixText(methodID) && validSupportMatrixText(productID) && productID != ""
-		}
+func validSupportMatrixApplicability(value string) bool {
+	switch value {
+	case "applicable", "na", "unknown":
+		return true
+	default:
+		return false
 	}
-	return "", "", false
+}
+
+func validSupportMatrixEligibility(value string) bool {
+	switch value {
+	case "supported", "unsupported", "unknown":
+		return true
+	default:
+		return false
+	}
 }

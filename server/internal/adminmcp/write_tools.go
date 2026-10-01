@@ -232,7 +232,6 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 		OperationSetChatAnalysisSettings:              &chatAnalysisWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), now: time.Now},
 		OperationEnableOrganization:                   &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationEnableOrganization},
 		OperationDisableOrganization:                  &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationDisableOrganization},
-		OperationUpdateSupportMatrix:                  &supportMatrixWriter{store: store, writes: writes, baseURL: oauth.Resource()},
 	})
 	for _, op := range writes.EnabledOperations() {
 		if tools.writers[op] == nil {

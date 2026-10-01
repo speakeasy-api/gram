@@ -1,0 +1,2658 @@
+# The support matrix: which integration methods apply to which platforms and
+# what each delivers per capability, per account type and operating system.
+#
+# This file is the only source. It is embedded in the server, read by the
+# admin dashboard's Support matrix page and the Admin MCP, and validated by
+# the tests in this package. To change it, open a pull request; CI runs the
+# tests. Every method lists every platform, and a method that applies to a
+# platform lists one cell per capability. A method that does not apply is not
+# applicable for every capability there, and one whose applicability is
+# unknown is unknown for every capability. Keep notes short and free of
+# customer names, emails and ids: this repository is public.
+capabilities:
+  - id: org
+    name: "Org-wide"
+    group: "MCP Distribution"
+  - id: role
+    name: "Role-based"
+    group: "MCP Distribution"
+  - id: session
+    name: "Session tracking"
+    group: "Observability"
+  - id: session-cost
+    name: "Session cost"
+    group: "Observability"
+  - id: session-tokens
+    name: "Session tokens"
+    group: "Observability"
+  - id: cost
+    name: "Cost tracking"
+    group: "Observability"
+  - id: tokens
+    name: "Token tracking"
+    group: "Observability"
+  - id: blocking
+    name: "Blocking"
+    group: "Security"
+  - id: mcp-redaction
+    name: "MCP redaction"
+    group: "Security"
+  - id: prompt-redaction
+    name: "Prompt redaction"
+    group: "Security"
+  - id: shadow-mcp
+    name: "Shadow MCP"
+    group: "Shadow AI"
+  - id: shadow-ai
+    name: "Shadow AI"
+    group: "Shadow AI"
+platforms:
+  - id: claude-code-cli
+    name: "Claude Code · CLI"
+    vendor: "Anthropic"
+    family: "Claude Code"
+    surface: "CLI"
+  - id: claude-code-web
+    name: "Claude Code · Web"
+    vendor: "Anthropic"
+    family: "Claude Code"
+    surface: "Web"
+  - id: claude-code-desktop
+    name: "Claude Code · Desktop"
+    vendor: "Anthropic"
+    family: "Claude Code"
+    surface: "Desktop"
+  - id: claude-code-vscode
+    name: "Claude Code · VSCode"
+    vendor: "Anthropic"
+    family: "Claude Code"
+    surface: "VSCode"
+  - id: claude-code-cloud
+    name: "Claude Code · Cloud"
+    vendor: "Anthropic"
+    family: "Claude Code"
+    surface: "Cloud"
+  - id: claude-chat-web
+    name: "Claude Chat · Web"
+    vendor: "Anthropic"
+    family: "Claude Chat"
+    surface: "Web"
+  - id: claude-chat-desktop
+    name: "Claude Chat · Desktop"
+    vendor: "Anthropic"
+    family: "Claude Chat"
+    surface: "Desktop"
+  - id: cowork-desktop
+    name: "Cowork · Desktop"
+    vendor: "Anthropic"
+    family: "Cowork"
+    surface: "Desktop"
+  - id: cowork-cloud
+    name: "Cowork · Cloud"
+    vendor: "Anthropic"
+    family: "Cowork"
+    surface: "Cloud"
+  - id: cowork-web
+    name: "Cowork · Web"
+    vendor: "Anthropic"
+    family: "Cowork"
+    surface: "Web"
+  - id: other-claudes-claude-tag
+    name: "Other Claudes · Claude Tag"
+    vendor: "Anthropic"
+    family: "Other Claudes"
+    surface: "Claude Tag"
+  - id: other-claudes-claude-mobile
+    name: "Other Claudes · Claude Mobile"
+    vendor: "Anthropic"
+    family: "Other Claudes"
+    surface: "Claude Mobile"
+  - id: codex-cli
+    name: "Codex · CLI"
+    vendor: "OpenAI"
+    family: "Codex"
+    surface: "CLI"
+  - id: codex-desktop
+    name: "Codex · Desktop"
+    vendor: "OpenAI"
+    family: "Codex"
+    surface: "Desktop"
+  - id: codex-cloud-web
+    name: "Codex · Cloud/web"
+    vendor: "OpenAI"
+    family: "Codex"
+    surface: "Cloud/web"
+  - id: chatgpt-desktop
+    name: "ChatGPT · Desktop"
+    vendor: "OpenAI"
+    family: "ChatGPT"
+    surface: "Desktop"
+  - id: chatgpt-web
+    name: "ChatGPT · Web"
+    vendor: "OpenAI"
+    family: "ChatGPT"
+    surface: "Web"
+  - id: cursor-ide
+    name: "Cursor · IDE"
+    vendor: "Cursor"
+    family: "Cursor"
+    surface: "IDE"
+  - id: cursor-cli
+    name: "Cursor · CLI"
+    vendor: "Cursor"
+    family: "Cursor"
+    surface: "CLI"
+  - id: cursor-cloud
+    name: "Cursor · Cloud"
+    vendor: "Cursor"
+    family: "Cursor"
+    surface: "Cloud"
+  - id: opencode-app
+    name: "OpenCode"
+    vendor: "OpenCode"
+    family: "OpenCode"
+    surface: "App"
+  - id: gemini-cli-cli
+    name: "Gemini CLI · CLI"
+    vendor: "Google"
+    family: "Gemini CLI"
+    surface: "CLI"
+  - id: openclaw-app
+    name: "OpenClaw"
+    vendor: "OpenClaw"
+    family: "OpenClaw"
+    surface: "App"
+  - id: github-copilot-app
+    name: "GitHub Copilot"
+    vendor: "GitHub"
+    family: "GitHub Copilot"
+    surface: "App"
+# Organizational plans a vendor sells, as the stack form offers them; an
+# organization's recorded stack names one per vendor. A plan's vendor must sell
+# a platform above. Individual plans are left out on purpose.
+plans:
+  - { id: anthropic-team, vendor: "Anthropic", name: "Team" }
+  - { id: anthropic-enterprise, vendor: "Anthropic", name: "Enterprise" }
+  - { id: openai-business, vendor: "OpenAI", name: "Business" }
+  - { id: openai-enterprise, vendor: "OpenAI", name: "Enterprise" }
+  - { id: cursor-teams, vendor: "Cursor", name: "Teams" }
+  - { id: cursor-enterprise, vendor: "Cursor", name: "Enterprise" }
+  - {
+      id: google-gemini-code-assist-standard,
+      vendor: "Google",
+      name: "Gemini Code Assist Standard",
+    }
+  - {
+      id: google-gemini-code-assist-enterprise,
+      vendor: "Google",
+      name: "Gemini Code Assist Enterprise",
+    }
+  - { id: github-copilot-business, vendor: "GitHub", name: "Copilot Business" }
+  - {
+      id: github-copilot-enterprise,
+      vendor: "GitHub",
+      name: "Copilot Enterprise",
+    }
+methods:
+  - id: device
+    name: "Device Agent"
+    vendor: "Cross-platform"
+    plans: "Team and personal accounts"
+    claims:
+      org: { status: supported, note: "✅ (via plugins)", verify: false }
+      role: { status: supported, note: "✅ (via plugins)", verify: false }
+      session: { status: supported, note: "✅ (via hooks)", verify: false }
+      session-cost: { status: supported, note: "✅ (via hooks)", verify: false }
+      session-tokens:
+        { status: supported, note: "✅ (via hooks)", verify: false }
+      cost: { status: supported, note: "✅ (via otel)", verify: false }
+      tokens: { status: supported, note: "✅ (via otel)", verify: false }
+      blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+      mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+      prompt-redaction: { status: impossible, note: "☠️", verify: false }
+      shadow-mcp: { status: supported, note: "✅", verify: false }
+      shadow-ai: { status: supported, note: "✅", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: claude-code-web
+        applicability: na
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+      - platform: claude-code-desktop
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: claude-code-vscode
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: claude-code-cloud
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: claude-chat-web
+        applicability: na
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+      - platform: claude-chat-desktop
+        applicability: unknown
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+      - platform: cowork-desktop
+        applicability: unknown
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+      - platform: cowork-cloud
+        applicability: na
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+      - platform: cowork-web
+        applicability: na
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+      - platform: other-claudes-claude-tag
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: na, note: "✅", verify: true }
+          shadow-ai: { status: na, note: "✅", verify: true }
+      - platform: other-claudes-claude-mobile
+        applicability: na
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+      - platform: codex-cli
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: codex-desktop
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: codex-cloud-web
+        applicability: unknown
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+      - platform: chatgpt-desktop
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: chatgpt-web
+        applicability: na
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+      - platform: cursor-ide
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: cursor-cli
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: cursor-cloud
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        note: "WIP"
+        cells:
+          org: { status: partial, note: "WIP", verify: true }
+          role: { status: partial, note: "WIP", verify: true }
+          session: { status: partial, note: "WIP", verify: true }
+          session-cost: { status: partial, note: "WIP", verify: true }
+          session-tokens: { status: partial, note: "WIP", verify: true }
+          cost: { status: partial, note: "WIP", verify: true }
+          tokens: { status: partial, note: "WIP", verify: true }
+          blocking: { status: partial, note: "WIP", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: partial, note: "WIP", verify: true }
+          shadow-ai: { status: partial, note: "WIP", verify: true }
+      - platform: opencode-app
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: gemini-cli-cli
+        applicability: unknown
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+      - platform: openclaw-app
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+      - platform: github-copilot-app
+        applicability: applicable
+        accounts:
+          { personal: supported, team: supported, enterprise: supported }
+        os: { mac: supported, windows: supported, linux: verify }
+        cells:
+          org: { status: supported, note: "✅ (via plugins)", verify: true }
+          role: { status: supported, note: "✅ (via plugins)", verify: true }
+          session: { status: supported, note: "✅ (via hooks)", verify: true }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: true }
+          cost: { status: supported, note: "✅ (via otel)", verify: true }
+          tokens: { status: supported, note: "✅ (via otel)", verify: true }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: supported, note: "✅", verify: true }
+          shadow-ai: { status: supported, note: "✅", verify: true }
+  - id: hooks
+    name: "Anthropic Hooks"
+    vendor: "Anthropic"
+    plans: "Plan eligibility not applicable in source"
+    claims:
+      org: { status: na, note: "--", verify: false }
+      role: { status: na, note: "--", verify: false }
+      session: { status: supported, note: "✅", verify: false }
+      session-cost: { status: supported, note: "✅", verify: false }
+      session-tokens: { status: supported, note: "✅", verify: false }
+      cost: { status: unimplemented, note: "❌", verify: false }
+      tokens: { status: unimplemented, note: "❌ (cursor)", verify: false }
+      blocking: { status: supported, note: "✅", verify: false }
+      mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+      prompt-redaction: { status: impossible, note: "☠️", verify: false }
+      shadow-mcp: { status: impossible, note: "☠️", verify: false }
+      shadow-ai: { status: impossible, note: "☠️", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌ (cursor)", verify: false }
+          blocking: { status: supported, note: "✅", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-web
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: claude-code-desktop
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌ (cursor)", verify: false }
+          blocking: { status: supported, note: "✅", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-vscode
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        note: "not nice"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌ (cursor)", verify: false }
+          blocking: { status: supported, note: "✅", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-cloud
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        note: "verify"
+        cells:
+          org: { status: na, note: "--", verify: true }
+          role: { status: na, note: "--", verify: true }
+          session: { status: supported, note: "✅", verify: true }
+          session-cost: { status: supported, note: "✅", verify: true }
+          session-tokens: { status: supported, note: "✅", verify: true }
+          cost: { status: unimplemented, note: "❌", verify: true }
+          tokens: { status: unimplemented, note: "❌ (cursor)", verify: true }
+          blocking: { status: supported, note: "✅", verify: true }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: true }
+          prompt-redaction: { status: impossible, note: "☠️", verify: true }
+          shadow-mcp: { status: impossible, note: "☠️", verify: true }
+          shadow-ai: { status: impossible, note: "☠️", verify: true }
+      - platform: claude-chat-web
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: claude-chat-desktop
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: cowork-desktop
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌ (cursor)", verify: false }
+          blocking: { status: supported, note: "✅", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-cloud
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌ (cursor)", verify: false }
+          blocking: { status: supported, note: "✅", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-web
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌ (cursor)", verify: false }
+          blocking: { status: supported, note: "✅", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: other-claudes-claude-tag
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌ (cursor)", verify: false }
+          blocking: { status: supported, note: "✅", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: other-claudes-claude-mobile
+        applicability: unknown
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        note: "maybe with cowork"
+      - platform: codex-cli
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: codex-desktop
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: codex-cloud-web
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: chatgpt-desktop
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: chatgpt-web
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: cursor-ide
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: cursor-cli
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: cursor-cloud
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: opencode-app
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: gemini-cli-cli
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: openclaw-app
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: github-copilot-app
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+  - id: settings
+    name: "Managed settings file"
+    vendor: "Anthropic"
+    plans: "Team plans; personal accounts not possible"
+    claims:
+      org: { status: supported, note: "✅", verify: false }
+      role: { status: impossible, note: "☠️", verify: false }
+      session: { status: supported, note: "✅ (via hooks)", verify: false }
+      session-cost: { status: supported, note: "✅ (via hooks)", verify: false }
+      session-tokens:
+        { status: supported, note: "✅ (via hooks)", verify: false }
+      cost: { status: supported, note: "✅ (via hooks)", verify: false }
+      tokens: { status: supported, note: "✅ (via hooks)", verify: false }
+      blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+      mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+      prompt-redaction: { status: impossible, note: "☠️", verify: false }
+      shadow-mcp: { status: impossible, note: "☠️", verify: false }
+      shadow-ai: { status: impossible, note: "☠️", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: supported, note: "✅", verify: false }
+          role: { status: impossible, note: "☠️", verify: false }
+          session: { status: supported, note: "✅ (via hooks)", verify: false }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          cost: { status: supported, note: "✅ (via hooks)", verify: false }
+          tokens: { status: supported, note: "✅ (via hooks)", verify: false }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: supported, note: "✅", verify: false }
+          role: { status: impossible, note: "☠️", verify: false }
+          session: { status: supported, note: "✅ (via hooks)", verify: false }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          cost: { status: supported, note: "✅ (via hooks)", verify: false }
+          tokens: { status: supported, note: "✅ (via hooks)", verify: false }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-vscode
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: supported, note: "✅", verify: false }
+          role: { status: impossible, note: "☠️", verify: false }
+          session: { status: supported, note: "✅ (via hooks)", verify: false }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          cost: { status: supported, note: "✅ (via hooks)", verify: false }
+          tokens: { status: supported, note: "✅ (via hooks)", verify: false }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-cloud
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        note: "verify"
+      - platform: claude-chat-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-chat-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cowork-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cowork-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cowork-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: other-claudes-claude-tag
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: other-claudes-claude-mobile
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-cloud-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-ide
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: opencode-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: gemini-cli-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: openclaw-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: github-copilot-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+  - id: plugins
+    name: "Anthropic Admin Plugin Dist"
+    vendor: "Anthropic"
+    plans: "Team plans; personal accounts not possible"
+    claims:
+      org: { status: supported, note: "✅", verify: false }
+      role: { status: supported, note: "✅", verify: false }
+      session: { status: supported, note: "✅ (via hooks)", verify: false }
+      session-cost: { status: supported, note: "✅ (via hooks)", verify: false }
+      session-tokens:
+        { status: supported, note: "✅ (via hooks)", verify: false }
+      cost: { status: supported, note: "❌", verify: false }
+      tokens: { status: supported, note: "❌", verify: false }
+      blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+      mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+      prompt-redaction: { status: impossible, note: "☠️", verify: false }
+      shadow-mcp: { status: impossible, note: "☠️", verify: false }
+      shadow-ai: { status: impossible, note: "☠️", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-web
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: supported, note: "✅", verify: false }
+          role: { status: supported, note: "✅", verify: false }
+          session: { status: supported, note: "✅ (via hooks)", verify: false }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          cost: { status: supported, note: "❌", verify: false }
+          tokens: { status: supported, note: "❌", verify: false }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-vscode
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-chat-web
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        note: "mcp, no hooks"
+        cells:
+          org: { status: supported, note: "✅", verify: false }
+          role: { status: supported, note: "✅", verify: false }
+          session:
+            { status: unimplemented, note: "mcp, no hooks", verify: false }
+          session-cost:
+            { status: unimplemented, note: "mcp, no hooks", verify: false }
+          session-tokens:
+            { status: unimplemented, note: "mcp, no hooks", verify: false }
+          cost: { status: supported, note: "❌", verify: false }
+          tokens: { status: supported, note: "❌", verify: false }
+          blocking:
+            { status: unimplemented, note: "mcp, no hooks", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-chat-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        note: "mcp, no hooks"
+        cells:
+          org: { status: supported, note: "✅", verify: false }
+          role: { status: supported, note: "✅", verify: false }
+          session:
+            { status: unimplemented, note: "mcp, no hooks", verify: false }
+          session-cost:
+            { status: unimplemented, note: "mcp, no hooks", verify: false }
+          session-tokens:
+            { status: unimplemented, note: "mcp, no hooks", verify: false }
+          cost: { status: supported, note: "❌", verify: false }
+          tokens: { status: supported, note: "❌", verify: false }
+          blocking:
+            { status: unimplemented, note: "mcp, no hooks", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: supported, note: "✅", verify: false }
+          role: { status: supported, note: "✅", verify: false }
+          session: { status: supported, note: "✅ (via hooks)", verify: false }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          cost: { status: supported, note: "❌", verify: false }
+          tokens: { status: supported, note: "❌", verify: false }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-cloud
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: supported, note: "✅", verify: false }
+          role: { status: supported, note: "✅", verify: false }
+          session: { status: supported, note: "✅ (via hooks)", verify: false }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          cost: { status: supported, note: "❌", verify: false }
+          tokens: { status: supported, note: "❌", verify: false }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-web
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: supported, note: "✅", verify: false }
+          role: { status: supported, note: "✅", verify: false }
+          session: { status: supported, note: "✅ (via hooks)", verify: false }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          cost: { status: supported, note: "❌", verify: false }
+          tokens: { status: supported, note: "❌", verify: false }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: other-claudes-claude-tag
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: supported, note: "✅", verify: false }
+          role: { status: supported, note: "✅", verify: false }
+          session: { status: supported, note: "✅ (via hooks)", verify: false }
+          session-cost:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          session-tokens:
+            { status: supported, note: "✅ (via hooks)", verify: false }
+          cost: { status: supported, note: "❌", verify: false }
+          tokens: { status: supported, note: "❌", verify: false }
+          blocking: { status: supported, note: "✅ (via hooks)", verify: false }
+          mcp-redaction: { status: unimplemented, note: "❌", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: other-claudes-claude-mobile
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        note: "maybe with cowork"
+      - platform: codex-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-cloud-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-ide
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: opencode-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: gemini-cli-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: openclaw-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: github-copilot-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+  - id: anthropic-api
+    name: "Anthropic Compliance API"
+    vendor: "Anthropic"
+    plans: "Team plans; personal accounts not possible"
+    claims:
+      org: { status: na, note: "--", verify: false }
+      role: { status: na, note: "--", verify: false }
+      session: { status: supported, note: "✅", verify: false }
+      session-cost: { status: impossible, note: "☠️", verify: false }
+      session-tokens: { status: impossible, note: "☠️", verify: false }
+      cost: { status: supported, note: "✅", verify: true }
+      tokens: { status: supported, note: "✅", verify: true }
+      blocking: { status: na, note: "--", verify: false }
+      mcp-redaction: { status: na, note: "--", verify: false }
+      prompt-redaction: { status: na, note: "--", verify: false }
+      shadow-mcp: { status: impossible, note: "☠️", verify: false }
+      shadow-ai: { status: impossible, note: "☠️", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-web
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-desktop
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-vscode
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-cloud
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-chat-web
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: supported, note: "✅", verify: true }
+          tokens: { status: supported, note: "✅", verify: true }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-chat-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: supported, note: "✅", verify: true }
+          tokens: { status: supported, note: "✅", verify: true }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-desktop
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cowork-cloud
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cowork-web
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: other-claudes-claude-tag
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: other-claudes-claude-mobile
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-cloud-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-ide
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: opencode-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: gemini-cli-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: openclaw-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: github-copilot-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+  - id: inference
+    name: "Inference hooks"
+    vendor: "Anthropic"
+    plans: "Team plans; personal accounts not possible"
+    claims:
+      org: { status: na, note: "--", verify: false }
+      role: { status: na, note: "--", verify: false }
+      session: { status: supported, note: "✅", verify: false }
+      session-cost: { status: impossible, note: "☠️", verify: false }
+      session-tokens: { status: impossible, note: "☠️", verify: false }
+      cost: { status: impossible, note: "☠️", verify: false }
+      tokens: { status: impossible, note: "☠️", verify: false }
+      blocking:
+        { status: supported, note: "✅ (prompt & tool_call)", verify: false }
+      mcp-redaction: { status: impossible, note: "☠️", verify: false }
+      prompt-redaction: { status: impossible, note: "☠️", verify: false }
+      shadow-mcp: { status: impossible, note: "☠️", verify: false }
+      shadow-ai: { status: impossible, note: "☠️", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-web
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-vscode
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-cloud
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-chat-web
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-chat-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-cloud
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-web
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: other-claudes-claude-tag
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: other-claudes-claude-mobile
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: impossible, note: "☠️", verify: false }
+          tokens: { status: impossible, note: "☠️", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (prompt & tool_call)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: impossible, note: "☠️", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: codex-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-cloud-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-ide
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: opencode-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: gemini-cli-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: openclaw-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: github-copilot-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+  - id: otel
+    name: "OTEL export"
+    vendor: "Anthropic"
+    plans: "Team plans; personal accounts not possible"
+    claims:
+      org: { status: na, note: "--", verify: false }
+      role: { status: na, note: "--", verify: false }
+      session: { status: supported, note: "✅ (claude) VERIFY", verify: true }
+      session-cost: { status: supported, note: "✅", verify: false }
+      session-tokens: { status: supported, note: "✅", verify: false }
+      cost: { status: supported, note: "✅", verify: false }
+      tokens: { status: supported, note: "✅", verify: false }
+      blocking: { status: na, note: "--", verify: false }
+      mcp-redaction: { status: na, note: "--", verify: false }
+      prompt-redaction: { status: na, note: "--", verify: false }
+      shadow-mcp: { status: impossible, note: "☠️", verify: false }
+      shadow-ai: { status: impossible, note: "☠️", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (claude) VERIFY", verify: true }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (claude) VERIFY", verify: true }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-vscode
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (claude) VERIFY", verify: true }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-cloud
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        note: "verify"
+      - platform: claude-chat-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-chat-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cowork-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (claude) VERIFY", verify: true }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-cloud
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (claude) VERIFY", verify: true }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-web
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (claude) VERIFY", verify: true }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: other-claudes-claude-tag
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (claude) VERIFY", verify: true }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: other-claudes-claude-mobile
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-cloud-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-ide
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: opencode-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: gemini-cli-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: openclaw-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: github-copilot-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+  - id: litellm
+    name: "LiteLLM"
+    vendor: "Others"
+    plans: "Source lists MDM under team plans; eligibility needs clarification"
+    claims:
+      org: { status: na, note: "--", verify: false }
+      role: { status: na, note: "--", verify: false }
+      session: { status: supported, note: "✅", verify: false }
+      session-cost: { status: supported, note: "✅", verify: false }
+      session-tokens: { status: supported, note: "✅", verify: false }
+      cost: { status: supported, note: "✅", verify: false }
+      tokens: { status: supported, note: "✅", verify: false }
+      blocking:
+        { status: supported, note: "✅ (not for tool calls)", verify: false }
+      mcp-redaction: { status: impossible, note: "☠️", verify: false }
+      prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+      shadow-mcp: { status: impossible, note: "☠️", verify: false }
+      shadow-ai: { status: impossible, note: "☠️", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-web
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: claude-code-desktop
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: claude-code-vscode
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        note: "verify"
+        cells:
+          org: { status: na, note: "--", verify: true }
+          role: { status: na, note: "--", verify: true }
+          session: { status: supported, note: "✅", verify: true }
+          session-cost: { status: supported, note: "✅", verify: true }
+          session-tokens: { status: supported, note: "✅", verify: true }
+          cost: { status: supported, note: "✅", verify: true }
+          tokens: { status: supported, note: "✅", verify: true }
+          blocking:
+            { status: supported, note: "✅ (not for tool calls)", verify: true }
+          mcp-redaction: { status: impossible, note: "☠️", verify: true }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: true }
+          shadow-mcp: { status: impossible, note: "☠️", verify: true }
+          shadow-ai: { status: impossible, note: "☠️", verify: true }
+      - platform: claude-code-cloud
+        applicability: unknown
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        note: "verify"
+      - platform: claude-chat-web
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: claude-chat-desktop
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: cowork-desktop
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-cloud
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cowork-web
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: other-claudes-claude-tag
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: other-claudes-claude-mobile
+        applicability: na
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: codex-cli
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: codex-desktop
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: codex-cloud-web
+        applicability: unknown
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: chatgpt-desktop
+        applicability: unknown
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        note: "verify"
+      - platform: chatgpt-web
+        applicability: unknown
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        note: "verify"
+      - platform: cursor-ide
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cursor-cli
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cursor-cloud
+        applicability: unknown
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: opencode-app
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: gemini-cli-cli
+        applicability: unknown
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+      - platform: openclaw-app
+        applicability: applicable
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: supported, note: "✅", verify: false }
+          session-cost: { status: supported, note: "✅", verify: false }
+          session-tokens: { status: supported, note: "✅", verify: false }
+          cost: { status: supported, note: "✅", verify: false }
+          tokens: { status: supported, note: "✅", verify: false }
+          blocking:
+            {
+              status: supported,
+              note: "✅ (not for tool calls)",
+              verify: false,
+            }
+          mcp-redaction: { status: impossible, note: "☠️", verify: false }
+          prompt-redaction: { status: unimplemented, note: "❌", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: github-copilot-app
+        applicability: unknown
+        accounts: { personal: unknown, team: unknown, enterprise: unknown }
+  - id: cursor-api
+    name: "Cursor API"
+    vendor: "Cursor"
+    plans: "Team plans; personal accounts not possible"
+    claims:
+      org: { status: na, note: "--", verify: false }
+      role: { status: na, note: "--", verify: false }
+      session: { status: unimplemented, note: "❌", verify: false }
+      session-cost: { status: supported, note: "✅", verify: false }
+      session-tokens: { status: supported, note: "✅", verify: false }
+      cost: { status: supported, note: "✅", verify: false }
+      tokens: { status: supported, note: "✅", verify: false }
+      blocking: { status: na, note: "--", verify: false }
+      mcp-redaction: { status: na, note: "--", verify: false }
+      prompt-redaction: { status: na, note: "--", verify: false }
+      shadow-mcp: { status: impossible, note: "☠️", verify: false }
+      shadow-ai: { status: impossible, note: "☠️", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-vscode
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-code-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-chat-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: claude-chat-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cowork-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cowork-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cowork-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: other-claudes-claude-tag
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: other-claudes-claude-mobile
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: codex-cloud-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: chatgpt-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: cursor-ide
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        note: "cost only"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: na, note: "cost only", verify: false }
+          session-cost: { status: na, note: "cost only", verify: false }
+          session-tokens: { status: na, note: "cost only", verify: false }
+          cost: { status: supported, note: "✅ (cost only)", verify: false }
+          tokens: { status: na, note: "cost only", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: na, note: "cost only", verify: false }
+          shadow-ai: { status: na, note: "cost only", verify: false }
+      - platform: cursor-cli
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        note: "cost only"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: na, note: "cost only", verify: false }
+          session-cost: { status: na, note: "cost only", verify: false }
+          session-tokens: { status: na, note: "cost only", verify: false }
+          cost: { status: supported, note: "✅ (cost only)", verify: false }
+          tokens: { status: na, note: "cost only", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: na, note: "cost only", verify: false }
+          shadow-ai: { status: na, note: "cost only", verify: false }
+      - platform: cursor-cloud
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+        note: "cost only"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: na, note: "cost only", verify: false }
+          session-cost: { status: na, note: "cost only", verify: false }
+          session-tokens: { status: na, note: "cost only", verify: false }
+          cost: { status: supported, note: "✅ (cost only)", verify: false }
+          tokens: { status: na, note: "cost only", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: na, note: "cost only", verify: false }
+          shadow-ai: { status: na, note: "cost only", verify: false }
+      - platform: opencode-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: gemini-cli-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: openclaw-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+      - platform: github-copilot-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: supported, enterprise: supported }
+  - id: openai-api
+    name: "OpenAI Compliance API"
+    vendor: "OpenAI"
+    plans: "Enterprise only; personal accounts not possible"
+    claims:
+      org: { status: na, note: "--", verify: false }
+      role: { status: na, note: "--", verify: false }
+      session: { status: unimplemented, note: "❌", verify: false }
+      session-cost: { status: impossible, note: "☠️", verify: false }
+      session-tokens: { status: impossible, note: "☠️", verify: false }
+      cost: { status: supported, note: "✅ VERIFY", verify: true }
+      tokens: { status: unimplemented, note: "❌", verify: false }
+      blocking: { status: na, note: "--", verify: false }
+      mcp-redaction: { status: na, note: "--", verify: false }
+      prompt-redaction: { status: na, note: "--", verify: false }
+      shadow-mcp: { status: impossible, note: "☠️", verify: false }
+      shadow-ai: { status: impossible, note: "☠️", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-code-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-code-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-code-vscode
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-code-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-chat-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-chat-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: cowork-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: cowork-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: cowork-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: other-claudes-claude-tag
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: other-claudes-claude-mobile
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: codex-cli
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+        note: "cost only"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: na, note: "cost only", verify: false }
+          session-cost: { status: na, note: "cost only", verify: false }
+          session-tokens: { status: na, note: "cost only", verify: false }
+          cost:
+            {
+              status: supported,
+              note: "✅ (cost only); cost tracking VERIFY",
+              verify: true,
+            }
+          tokens: { status: na, note: "cost only", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: na, note: "cost only", verify: false }
+          shadow-ai: { status: na, note: "cost only", verify: false }
+      - platform: codex-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+        note: "cost only"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: na, note: "cost only", verify: false }
+          session-cost: { status: na, note: "cost only", verify: false }
+          session-tokens: { status: na, note: "cost only", verify: false }
+          cost:
+            {
+              status: supported,
+              note: "✅ (cost only); cost tracking VERIFY",
+              verify: true,
+            }
+          tokens: { status: na, note: "cost only", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: na, note: "cost only", verify: false }
+          shadow-ai: { status: na, note: "cost only", verify: false }
+      - platform: codex-cloud-web
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: chatgpt-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+        note: "cost only"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: na, note: "cost only", verify: false }
+          session-cost: { status: na, note: "cost only", verify: false }
+          session-tokens: { status: na, note: "cost only", verify: false }
+          cost:
+            {
+              status: supported,
+              note: "✅ (cost only); cost tracking VERIFY",
+              verify: true,
+            }
+          tokens: { status: na, note: "cost only", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: na, note: "cost only", verify: false }
+          shadow-ai: { status: na, note: "cost only", verify: false }
+      - platform: chatgpt-web
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+        note: "cost only"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session: { status: na, note: "cost only", verify: false }
+          session-cost: { status: na, note: "cost only", verify: false }
+          session-tokens: { status: na, note: "cost only", verify: false }
+          cost:
+            {
+              status: supported,
+              note: "✅ (cost only); cost tracking VERIFY",
+              verify: true,
+            }
+          tokens: { status: na, note: "cost only", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: na, note: "cost only", verify: false }
+          shadow-ai: { status: na, note: "cost only", verify: false }
+      - platform: cursor-ide
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: cursor-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: cursor-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: opencode-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: gemini-cli-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: openclaw-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: github-copilot-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+  - id: conversations
+    name: "ChatGPT Conversations"
+    vendor: "OpenAI"
+    plans: "Enterprise only; personal accounts not possible"
+    claims:
+      org: { status: na, note: "--", verify: false }
+      role: { status: na, note: "--", verify: false }
+      session: { status: supported, note: "✅", verify: false }
+      session-cost: { status: impossible, note: "☠️", verify: false }
+      session-tokens: { status: impossible, note: "☠️", verify: false }
+      cost: { status: unimplemented, note: "❌", verify: false }
+      tokens: { status: unimplemented, note: "❌", verify: false }
+      blocking: { status: na, note: "--", verify: false }
+      mcp-redaction: { status: na, note: "--", verify: false }
+      prompt-redaction: { status: na, note: "--", verify: false }
+      shadow-mcp: { status: impossible, note: "☠️", verify: false }
+      shadow-ai: { status: impossible, note: "☠️", verify: false }
+    platforms:
+      - platform: claude-code-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-code-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-code-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-code-vscode
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-code-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-chat-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: claude-chat-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: cowork-desktop
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: cowork-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: cowork-web
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: other-claudes-claude-tag
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: other-claudes-claude-mobile
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: codex-cli
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+        note: "session tracking"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (session tracking)", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: codex-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+        note: "session tracking"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (session tracking)", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: codex-cloud-web
+        applicability: unknown
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: chatgpt-desktop
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+        note: "session tracking"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (session tracking)", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: chatgpt-web
+        applicability: applicable
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+        note: "session tracking"
+        cells:
+          org: { status: na, note: "--", verify: false }
+          role: { status: na, note: "--", verify: false }
+          session:
+            { status: supported, note: "✅ (session tracking)", verify: false }
+          session-cost: { status: impossible, note: "☠️", verify: false }
+          session-tokens: { status: impossible, note: "☠️", verify: false }
+          cost: { status: unimplemented, note: "❌", verify: false }
+          tokens: { status: unimplemented, note: "❌", verify: false }
+          blocking: { status: na, note: "--", verify: false }
+          mcp-redaction: { status: na, note: "--", verify: false }
+          prompt-redaction: { status: na, note: "--", verify: false }
+          shadow-mcp: { status: impossible, note: "☠️", verify: false }
+          shadow-ai: { status: impossible, note: "☠️", verify: false }
+      - platform: cursor-ide
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: cursor-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: cursor-cloud
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: opencode-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: gemini-cli-cli
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: openclaw-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }
+      - platform: github-copilot-app
+        applicability: na
+        accounts:
+          { personal: unsupported, team: unsupported, enterprise: supported }

@@ -236,10 +236,6 @@ type Client struct {
 	// getSupportMatrix endpoint.
 	GetSupportMatrixDoer goahttp.Doer
 
-	// UpdateSupportMatrix Doer is the HTTP client used to make requests to the
-	// updateSupportMatrix endpoint.
-	UpdateSupportMatrixDoer goahttp.Doer
-
 	// GetSupportCoverage Doer is the HTTP client used to make requests to the
 	// getSupportCoverage endpoint.
 	GetSupportCoverageDoer goahttp.Doer
@@ -407,7 +403,6 @@ func NewClient(
 		GetMeterUsageDoer:                         doer,
 		GetSpendBreakdownDoer:                     doer,
 		GetSupportMatrixDoer:                      doer,
-		UpdateSupportMatrixDoer:                   doer,
 		GetSupportCoverageDoer:                    doer,
 		ListRegistryEntriesDoer:                   doer,
 		GetRegistryEntryDoer:                      doer,
@@ -1759,30 +1754,6 @@ func (c *Client) GetSupportMatrix() goa.Endpoint {
 		resp, err := c.GetSupportMatrixDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getSupportMatrix", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// UpdateSupportMatrix returns an endpoint that makes HTTP requests to the
-// admin service updateSupportMatrix server.
-func (c *Client) UpdateSupportMatrix() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeUpdateSupportMatrixRequest(c.encoder)
-		decodeResponse = DecodeUpdateSupportMatrixResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpdateSupportMatrixRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.UpdateSupportMatrixDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "updateSupportMatrix", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -7,12 +7,23 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { SupportFact, SupportFact$inboundSchema } from "./supportfact.js";
+import {
+  SupportPlatformSupport,
+  SupportPlatformSupport$inboundSchema,
+} from "./supportplatformsupport.js";
 
 export type SupportMethod = {
-  facts: { [k: string]: SupportFact };
+  /**
+   * What the method delivers per capability, platform aside.
+   */
+  claims: { [k: string]: SupportFact };
   id: string;
   name: string;
   plans: string;
+  /**
+   * Every platform once, in the matrix's platform order.
+   */
+  platforms: Array<SupportPlatformSupport>;
   vendor: string;
 };
 
@@ -21,10 +32,11 @@ export const SupportMethod$inboundSchema: z.ZodMiniType<
   SupportMethod,
   unknown
 > = z.object({
-  facts: z.record(z.string(), SupportFact$inboundSchema),
+  claims: z.record(z.string(), SupportFact$inboundSchema),
   id: z.string(),
   name: z.string(),
   plans: z.string(),
+  platforms: z.array(SupportPlatformSupport$inboundSchema),
   vendor: z.string(),
 });
 

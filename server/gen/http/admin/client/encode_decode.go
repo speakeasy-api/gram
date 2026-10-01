@@ -13384,241 +13384,6 @@ func DecodeGetSupportMatrixResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
-// BuildUpdateSupportMatrixRequest instantiates a HTTP request object with
-// method and path set to call the "admin" service "updateSupportMatrix"
-// endpoint
-func (c *Client) BuildUpdateSupportMatrixRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateSupportMatrixAdminPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("admin", "updateSupportMatrix", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeUpdateSupportMatrixRequest returns an encoder for requests sent to the
-// admin updateSupportMatrix server.
-func EncodeUpdateSupportMatrixRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*admin.UpdateSupportMatrixPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("admin", "updateSupportMatrix", "*admin.UpdateSupportMatrixPayload", v)
-		}
-		if p.AdminSessionToken != nil {
-			head := *p.AdminSessionToken
-			req.Header.Set("Authorization", head)
-		}
-		body := NewUpdateSupportMatrixRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("admin", "updateSupportMatrix", err)
-		}
-		return nil
-	}
-}
-
-// DecodeUpdateSupportMatrixResponse returns a decoder for responses returned
-// by the admin updateSupportMatrix endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-// DecodeUpdateSupportMatrixResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeUpdateSupportMatrixResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body UpdateSupportMatrixResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-			}
-			err = ValidateUpdateSupportMatrixResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-			}
-			res := NewUpdateSupportMatrixSupportMatrixOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body UpdateSupportMatrixUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-			}
-			err = ValidateUpdateSupportMatrixUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-			}
-			return nil, NewUpdateSupportMatrixUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body UpdateSupportMatrixForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-			}
-			err = ValidateUpdateSupportMatrixForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-			}
-			return nil, NewUpdateSupportMatrixForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body UpdateSupportMatrixBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-			}
-			err = ValidateUpdateSupportMatrixBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-			}
-			return nil, NewUpdateSupportMatrixBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body UpdateSupportMatrixNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-			}
-			err = ValidateUpdateSupportMatrixNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-			}
-			return nil, NewUpdateSupportMatrixNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body UpdateSupportMatrixConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-			}
-			err = ValidateUpdateSupportMatrixConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-			}
-			return nil, NewUpdateSupportMatrixConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body UpdateSupportMatrixUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-			}
-			err = ValidateUpdateSupportMatrixUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-			}
-			return nil, NewUpdateSupportMatrixUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body UpdateSupportMatrixInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-			}
-			err = ValidateUpdateSupportMatrixInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-			}
-			return nil, NewUpdateSupportMatrixInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body UpdateSupportMatrixInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-				}
-				err = ValidateUpdateSupportMatrixInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-				}
-				return nil, NewUpdateSupportMatrixInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body UpdateSupportMatrixUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-				}
-				err = ValidateUpdateSupportMatrixUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-				}
-				return nil, NewUpdateSupportMatrixUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("admin", "updateSupportMatrix", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body UpdateSupportMatrixGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "updateSupportMatrix", err)
-			}
-			err = ValidateUpdateSupportMatrixGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "updateSupportMatrix", err)
-			}
-			return nil, NewUpdateSupportMatrixGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("admin", "updateSupportMatrix", resp.StatusCode, string(body))
-		}
-	}
-}
-
 // BuildGetSupportCoverageRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "getSupportCoverage" endpoint
 func (c *Client) BuildGetSupportCoverageRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -19493,35 +19258,14 @@ func unmarshalSpendBucketResponseBodyToAdminSpendBucket(v *SpendBucketResponseBo
 	return res
 }
 
-// unmarshalSupportMethodResponseBodyToAdminSupportMethod builds a value of
-// type *admin.SupportMethod from a value of type *SupportMethodResponseBody.
-func unmarshalSupportMethodResponseBodyToAdminSupportMethod(v *SupportMethodResponseBody) *admin.SupportMethod {
-	res := &admin.SupportMethod{
-		ID:     *v.ID,
-		Name:   *v.Name,
-		Vendor: *v.Vendor,
-		Plans:  *v.Plans,
-	}
-	res.Facts = make(map[string]*admin.SupportFact, len(v.Facts))
-	for key, val := range v.Facts {
-		tk := key
-		if val == nil {
-			res.Facts[tk] = nil
-			continue
-		}
-		res.Facts[tk] = unmarshalSupportFactResponseBodyToAdminSupportFact(val)
-	}
-
-	return res
-}
-
-// unmarshalSupportFactResponseBodyToAdminSupportFact builds a value of type
-// *admin.SupportFact from a value of type *SupportFactResponseBody.
-func unmarshalSupportFactResponseBodyToAdminSupportFact(v *SupportFactResponseBody) *admin.SupportFact {
-	res := &admin.SupportFact{
-		Status: *v.Status,
-		Note:   *v.Note,
-		Verify: *v.Verify,
+// unmarshalSupportCapabilityResponseBodyToAdminSupportCapability builds a
+// value of type *admin.SupportCapability from a value of type
+// *SupportCapabilityResponseBody.
+func unmarshalSupportCapabilityResponseBodyToAdminSupportCapability(v *SupportCapabilityResponseBody) *admin.SupportCapability {
+	res := &admin.SupportCapability{
+		ID:    *v.ID,
+		Name:  *v.Name,
+		Group: *v.Group,
 	}
 
 	return res
@@ -19542,203 +19286,97 @@ func unmarshalSupportPlatformResponseBodyToAdminSupportPlatform(v *SupportPlatfo
 	return res
 }
 
-// unmarshalSupportCapabilityResponseBodyToAdminSupportCapability builds a
-// value of type *admin.SupportCapability from a value of type
-// *SupportCapabilityResponseBody.
-func unmarshalSupportCapabilityResponseBodyToAdminSupportCapability(v *SupportCapabilityResponseBody) *admin.SupportCapability {
-	res := &admin.SupportCapability{
-		ID:    *v.ID,
-		Name:  *v.Name,
-		Group: *v.Group,
+// unmarshalSupportMethodResponseBodyToAdminSupportMethod builds a value of
+// type *admin.SupportMethod from a value of type *SupportMethodResponseBody.
+func unmarshalSupportMethodResponseBodyToAdminSupportMethod(v *SupportMethodResponseBody) *admin.SupportMethod {
+	res := &admin.SupportMethod{
+		ID:     *v.ID,
+		Name:   *v.Name,
+		Vendor: *v.Vendor,
+		Plans:  *v.Plans,
 	}
-
-	return res
-}
-
-// unmarshalSupportDraftResponseBodyToAdminSupportDraft builds a value of type
-// *admin.SupportDraft from a value of type *SupportDraftResponseBody.
-func unmarshalSupportDraftResponseBodyToAdminSupportDraft(v *SupportDraftResponseBody) *admin.SupportDraft {
-	res := &admin.SupportDraft{}
-	res.Mappings = make(map[string]*admin.SupportMapping, len(v.Mappings))
-	for key, val := range v.Mappings {
+	res.Claims = make(map[string]*admin.SupportFact, len(v.Claims))
+	for key, val := range v.Claims {
 		tk := key
 		if val == nil {
-			res.Mappings[tk] = nil
+			res.Claims[tk] = nil
 			continue
 		}
-		res.Mappings[tk] = unmarshalSupportMappingResponseBodyToAdminSupportMapping(val)
+		res.Claims[tk] = unmarshalSupportFactResponseBodyToAdminSupportFact(val)
 	}
-	res.References = make(map[string]map[string]*admin.SupportFact, len(v.References))
-	for key, val := range v.References {
-		tk := key
-		tvb := make(map[string]*admin.SupportFact, len(val))
-		for key, val := range val {
-			tk := key
-			if val == nil {
-				tvb[tk] = nil
-				continue
-			}
-			tvb[tk] = unmarshalSupportFactResponseBodyToAdminSupportFact(val)
-		}
-		res.References[tk] = tvb
-	}
-
-	return res
-}
-
-// unmarshalSupportMappingResponseBodyToAdminSupportMapping builds a value of
-// type *admin.SupportMapping from a value of type *SupportMappingResponseBody.
-func unmarshalSupportMappingResponseBodyToAdminSupportMapping(v *SupportMappingResponseBody) *admin.SupportMapping {
-	res := &admin.SupportMapping{
-		Applicability: *v.Applicability,
-		Conditions:    *v.Conditions,
-	}
-	res.Facts = make(map[string]*admin.SupportFact, len(v.Facts))
-	for key, val := range v.Facts {
-		tk := key
+	res.Platforms = make([]*admin.SupportPlatformSupport, len(v.Platforms))
+	for i, val := range v.Platforms {
 		if val == nil {
-			res.Facts[tk] = nil
+			res.Platforms[i] = nil
 			continue
 		}
-		res.Facts[tk] = unmarshalSupportFactResponseBodyToAdminSupportFact(val)
+		res.Platforms[i] = unmarshalSupportPlatformSupportResponseBodyToAdminSupportPlatformSupport(val)
 	}
 
 	return res
 }
 
-// marshalAdminSupportDraftToSupportDraftRequestBody builds a value of type
-// *SupportDraftRequestBody from a value of type *admin.SupportDraft.
-func marshalAdminSupportDraftToSupportDraftRequestBody(v *admin.SupportDraft) *SupportDraftRequestBody {
-	res := &SupportDraftRequestBody{}
-	if v.Mappings != nil {
-		res.Mappings = make(map[string]*SupportMappingRequestBody, len(v.Mappings))
-		for key, val := range v.Mappings {
-			tk := key
-			if val == nil {
-				res.Mappings[tk] = nil
-				continue
-			}
-			res.Mappings[tk] = marshalAdminSupportMappingToSupportMappingRequestBody(val)
-		}
-	}
-	if v.References != nil {
-		res.References = make(map[string]map[string]*SupportFactRequestBody, len(v.References))
-		for key, val := range v.References {
-			tk := key
-			tvb := make(map[string]*SupportFactRequestBody, len(val))
-			for key, val := range val {
-				tk := key
-				if val == nil {
-					tvb[tk] = nil
-					continue
-				}
-				tvb[tk] = marshalAdminSupportFactToSupportFactRequestBody(val)
-			}
-			res.References[tk] = tvb
-		}
-	}
-
-	return res
-}
-
-// marshalAdminSupportMappingToSupportMappingRequestBody builds a value of type
-// *SupportMappingRequestBody from a value of type *admin.SupportMapping.
-func marshalAdminSupportMappingToSupportMappingRequestBody(v *admin.SupportMapping) *SupportMappingRequestBody {
-	res := &SupportMappingRequestBody{
-		Applicability: v.Applicability,
-		Conditions:    v.Conditions,
-	}
-	if v.Facts != nil {
-		res.Facts = make(map[string]*SupportFactRequestBody, len(v.Facts))
-		for key, val := range v.Facts {
-			tk := key
-			if val == nil {
-				res.Facts[tk] = nil
-				continue
-			}
-			res.Facts[tk] = marshalAdminSupportFactToSupportFactRequestBody(val)
-		}
-	}
-
-	return res
-}
-
-// marshalAdminSupportFactToSupportFactRequestBody builds a value of type
-// *SupportFactRequestBody from a value of type *admin.SupportFact.
-func marshalAdminSupportFactToSupportFactRequestBody(v *admin.SupportFact) *SupportFactRequestBody {
-	res := &SupportFactRequestBody{
-		Status: v.Status,
-		Note:   v.Note,
-		Verify: v.Verify,
-	}
-
-	return res
-}
-
-// marshalSupportDraftRequestBodyToAdminSupportDraft builds a value of type
-// *admin.SupportDraft from a value of type *SupportDraftRequestBody.
-func marshalSupportDraftRequestBodyToAdminSupportDraft(v *SupportDraftRequestBody) *admin.SupportDraft {
-	res := &admin.SupportDraft{}
-	if v.Mappings != nil {
-		res.Mappings = make(map[string]*admin.SupportMapping, len(v.Mappings))
-		for key, val := range v.Mappings {
-			tk := key
-			if val == nil {
-				res.Mappings[tk] = nil
-				continue
-			}
-			res.Mappings[tk] = marshalSupportMappingRequestBodyToAdminSupportMapping(val)
-		}
-	}
-	if v.References != nil {
-		res.References = make(map[string]map[string]*admin.SupportFact, len(v.References))
-		for key, val := range v.References {
-			tk := key
-			tvb := make(map[string]*admin.SupportFact, len(val))
-			for key, val := range val {
-				tk := key
-				if val == nil {
-					tvb[tk] = nil
-					continue
-				}
-				tvb[tk] = marshalSupportFactRequestBodyToAdminSupportFact(val)
-			}
-			res.References[tk] = tvb
-		}
-	}
-
-	return res
-}
-
-// marshalSupportMappingRequestBodyToAdminSupportMapping builds a value of type
-// *admin.SupportMapping from a value of type *SupportMappingRequestBody.
-func marshalSupportMappingRequestBodyToAdminSupportMapping(v *SupportMappingRequestBody) *admin.SupportMapping {
-	res := &admin.SupportMapping{
-		Applicability: v.Applicability,
-		Conditions:    v.Conditions,
-	}
-	if v.Facts != nil {
-		res.Facts = make(map[string]*admin.SupportFact, len(v.Facts))
-		for key, val := range v.Facts {
-			tk := key
-			if val == nil {
-				res.Facts[tk] = nil
-				continue
-			}
-			res.Facts[tk] = marshalSupportFactRequestBodyToAdminSupportFact(val)
-		}
-	}
-
-	return res
-}
-
-// marshalSupportFactRequestBodyToAdminSupportFact builds a value of type
-// *admin.SupportFact from a value of type *SupportFactRequestBody.
-func marshalSupportFactRequestBodyToAdminSupportFact(v *SupportFactRequestBody) *admin.SupportFact {
+// unmarshalSupportFactResponseBodyToAdminSupportFact builds a value of type
+// *admin.SupportFact from a value of type *SupportFactResponseBody.
+func unmarshalSupportFactResponseBodyToAdminSupportFact(v *SupportFactResponseBody) *admin.SupportFact {
 	res := &admin.SupportFact{
-		Status: v.Status,
-		Note:   v.Note,
-		Verify: v.Verify,
+		Status: *v.Status,
+		Note:   *v.Note,
+		Verify: *v.Verify,
+	}
+
+	return res
+}
+
+// unmarshalSupportPlatformSupportResponseBodyToAdminSupportPlatformSupport
+// builds a value of type *admin.SupportPlatformSupport from a value of type
+// *SupportPlatformSupportResponseBody.
+func unmarshalSupportPlatformSupportResponseBodyToAdminSupportPlatformSupport(v *SupportPlatformSupportResponseBody) *admin.SupportPlatformSupport {
+	res := &admin.SupportPlatformSupport{
+		Platform:      *v.Platform,
+		Applicability: *v.Applicability,
+		Note:          *v.Note,
+	}
+	res.Accounts = unmarshalSupportAccountsResponseBodyToAdminSupportAccounts(v.Accounts)
+	if v.Os != nil {
+		res.Os = unmarshalSupportOSResponseBodyToAdminSupportOS(v.Os)
+	}
+	res.Cells = make(map[string]*admin.SupportFact, len(v.Cells))
+	for key, val := range v.Cells {
+		tk := key
+		if val == nil {
+			res.Cells[tk] = nil
+			continue
+		}
+		res.Cells[tk] = unmarshalSupportFactResponseBodyToAdminSupportFact(val)
+	}
+
+	return res
+}
+
+// unmarshalSupportAccountsResponseBodyToAdminSupportAccounts builds a value of
+// type *admin.SupportAccounts from a value of type
+// *SupportAccountsResponseBody.
+func unmarshalSupportAccountsResponseBodyToAdminSupportAccounts(v *SupportAccountsResponseBody) *admin.SupportAccounts {
+	res := &admin.SupportAccounts{
+		Personal:   *v.Personal,
+		Team:       *v.Team,
+		Enterprise: *v.Enterprise,
+	}
+
+	return res
+}
+
+// unmarshalSupportOSResponseBodyToAdminSupportOS builds a value of type
+// *admin.SupportOS from a value of type *SupportOSResponseBody.
+func unmarshalSupportOSResponseBodyToAdminSupportOS(v *SupportOSResponseBody) *admin.SupportOS {
+	if v == nil {
+		return nil
+	}
+	res := &admin.SupportOS{
+		Mac:     v.Mac,
+		Windows: v.Windows,
+		Linux:   v.Linux,
 	}
 
 	return res

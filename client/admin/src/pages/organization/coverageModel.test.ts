@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Snapshot } from "@/pages/coverage/model";
+import type { PlatformSupport, Snapshot } from "@/pages/coverage/model";
 
 import type { CoverageCell } from "./coverageApi";
 import { cellKey, indexCells, methodFootprints } from "./coverageModel";
@@ -13,11 +13,31 @@ function cell(
   return { capability, surface, status, value: 0, detail: "", last_seen: "" };
 }
 
+function support(
+  platform: string,
+  applicability: PlatformSupport["applicability"],
+): PlatformSupport {
+  return {
+    platform,
+    applicability,
+    accounts: {
+      personal: "supported",
+      team: "supported",
+      enterprise: "supported",
+    },
+    note: "",
+    cells:
+      applicability === "applicable"
+        ? { session: { status: "supported", note: "", verify: false } }
+        : {},
+  };
+}
+
 const snapshot: Snapshot = {
-  methods: [
-    { id: "hooks", name: "Hooks", vendor: "Anthropic", plans: "", facts: {} },
+  capabilities: [
+    { id: "session", name: "Session tracking", group: "Observability" },
   ],
-  products: [
+  platforms: [
     {
       id: "claude-code-cli",
       name: "Claude Code · CLI",
@@ -33,29 +53,24 @@ const snapshot: Snapshot = {
       surface: "IDE",
     },
   ],
-  capabilities: [
-    { id: "session", name: "Session tracking", group: "Observability" },
-  ],
-  draft: {
-    mappings: {
-      "hooks/claude-code-cli": {
-        applicability: "applicable",
-        conditions: "",
-        facts: { session: { status: "supported", note: "", verify: false } },
-      },
-      "hooks/cursor-ide": {
-        applicability: "applicable",
-        conditions: "",
-        facts: { session: { status: "supported", note: "", verify: false } },
-      },
+  methods: [
+    {
+      id: "hooks",
+      name: "Hooks",
+      vendor: "Anthropic",
+      plans: "",
+      claims: {},
+      platforms: [
+        support("claude-code-cli", "applicable"),
+        support("cursor-ide", "applicable"),
+      ],
     },
-    references: {},
-  },
+  ],
   revision: "r1",
 };
 
 describe("coverage model", () => {
-  it("folds catalog product families onto surfaces", () => {
+  it("folds matrix platform families onto surfaces", () => {
     const [method] = methodFootprints(snapshot, new Map(), true);
 
     expect(method?.footprint).toContain(cellKey("session", "claude_code"));
@@ -82,7 +97,15 @@ describe("coverage model", () => {
   it("omits methods that claim nothing", () => {
     const empty: Snapshot = {
       ...snapshot,
-      draft: { mappings: {}, references: {} },
+      methods: [
+        {
+          ...snapshot.methods[0]!,
+          platforms: [
+            support("claude-code-cli", "na"),
+            support("cursor-ide", "unknown"),
+          ],
+        },
+      ],
     };
     expect(methodFootprints(empty, new Map(), true)).toHaveLength(0);
   });
