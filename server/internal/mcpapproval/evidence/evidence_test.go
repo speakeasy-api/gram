@@ -952,6 +952,7 @@ func (p *projectCatalogProbe) Lookup(_ context.Context, projectID uuid.UUID, _ s
 }
 
 func TestAssembleCatalogReceivesResearchProjectWithoutAuthContext(t *testing.T) {
+	t.Parallel()
 	probe := &projectCatalogProbe{}
 	assembler := evidence.NewAssembler(&fakePackages{}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{}, quietProbes{}, quietProbes{}, probe)
 	projectID := uuid.New()
