@@ -23,6 +23,7 @@ import (
 const (
 	testIdPIssuer       = "https://idp.example.test/tenant"
 	testResourceIssuer  = "https://as.resource.example.test"
+	testAudience        = "https://app.resource.example.test"
 	testResource        = "https://api.resource.example.test/"
 	testResourceClient  = "resource-client"
 	testUpstreamSubject = "00u-upstream-subject"
@@ -40,6 +41,7 @@ func testSelection() selection {
 		scopes:           []string{"read", "write"},
 		trustedIssuerID:  uuid.New(),
 		trustedClientID:  uuid.New(),
+		audience:         testAudience,
 	}
 }
 
@@ -80,7 +82,7 @@ func (p *recordingPoster) form(t *testing.T) url.Values {
 func testChainer(t *testing.T) (*Chainer, time.Time) {
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Second)
-	return &Chainer{logger: testenv.NewLogger(t), db: nil, enc: nil, challenges: nil, delegation: nil, keys: nil, locks: nil, observer: nil, now: func() time.Time { return now }}, now
+	return &Chainer{logger: testenv.NewLogger(t), db: nil, enc: nil, challenges: nil, delegation: nil, keys: nil, locks: nil, now: func() time.Time { return now }}, now
 }
 
 func TestExchange_RequestsIDJAGForTheResource(t *testing.T) {
@@ -95,7 +97,7 @@ func TestExchange_RequestsIDJAGForTheResource(t *testing.T) {
 	require.Equal(t, "id-token-value", form.Get("subject_token"))
 	require.Equal(t, oauthwire.TokenTypeIDToken, form.Get("subject_token_type"))
 	require.Equal(t, oauthwire.TokenTypeIDJAG, form.Get("requested_token_type"))
-	require.Equal(t, testResourceIssuer, form.Get("audience"), "audience is the resource authorization server issuer")
+	require.Equal(t, testAudience, form.Get("audience"), "audience is the selected ID-JAG audience, not the resource issuer")
 	require.Equal(t, testResource, form.Get("resource"), "the canonical resource keeps its trailing slash")
 	require.Equal(t, "read write", form.Get("scope"))
 	require.NotContains(t, form.Encode(), testResourceClient, "the resource client is never sent to the identity provider")
@@ -253,7 +255,7 @@ func (v claimsVerifier) VerifyAssertion(_ context.Context, _ string, dest ...any
 
 func validGrantClaims(sel selection, now time.Time) map[string]any {
 	return map[string]any{
-		"iss": testIdPIssuer, "sub": testUpstreamSubject, "aud": sel.issuer,
+		"iss": testIdPIssuer, "sub": testUpstreamSubject, "aud": sel.audience,
 		"client_id": sel.externalClientID, "resource": sel.resource, "scope": "read write",
 		"iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(), "jti": uuid.NewString(),
 	}
@@ -283,6 +285,7 @@ func TestValidateGrant_RejectsUnboundClaims(t *testing.T) {
 		{"plain jwt type", "JWT", func(map[string]any, time.Time) {}},
 		{"other issuer", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["iss"] = "https://attacker.example.test" }},
 		{"other audience", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["aud"] = "https://other-as.example.test" }},
+		{"resource issuer instead of confirmed audience", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["aud"] = testResourceIssuer }},
 		{"several audiences", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) {
 			c["aud"] = []string{testResourceIssuer, "https://other-as.example.test"}
 		}},

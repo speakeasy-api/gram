@@ -4690,11 +4690,14 @@ WHERE id = @id AND project_id = @project_id AND organization_id = @organization_
 -- Endpoint upstreams are recorded without a trailing slash while a binding
 -- keeps the exact RFC 9728 identifier, so both compare under the routing trim.
 -- Unlinked tombstones and unfinished preparations never select or conflict.
--- Two rows are enough to prove the selection ambiguous.
+-- A tunneled upstream passes its own derived issuer: its resource identifier is
+-- operator supplied, so only a binding for that issuer may serve it. Two rows
+-- are enough to prove the selection ambiguous.
 SELECT * FROM remote_session_ema_bindings
 WHERE project_id = @project_id AND organization_id = @organization_id
   AND user_session_issuer_id = @user_session_issuer_id
   AND rtrim(resource, '/') = @upstream_resource::text
+  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
 ORDER BY id
 LIMIT 2;
@@ -4886,3 +4889,22 @@ SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn,
 FROM remote_session_ema_credentials
 WHERE project_id = @project_id
 ORDER BY created_at, id;
+
+-- name: GetEMAChainingConfirmedAudience :one
+-- The ID-JAG audience an administrator confirmed for one upstream on the
+-- organization's live Okta connection to the trusted identity provider. Okta
+-- mints only for the resource app's Issuer URL, which can differ from the
+-- downstream authorization server's issuer. Confirmed resources are stored
+-- without a trailing slash.
+SELECT r.audience
+FROM okta_resource_connections AS r
+JOIN identity_provider_connections AS c
+  ON c.id = r.identity_provider_connection_id AND c.organization_id = r.organization_id
+ AND c.provider = 'okta' AND c.deleted IS FALSE
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE r.organization_id = @organization_id
+  AND o.remote_session_issuer_id = @trusted_issuer_id
+  AND r.remote_session_issuer_id = @remote_session_issuer_id
+  AND r.resource = rtrim(@resource::text, '/');

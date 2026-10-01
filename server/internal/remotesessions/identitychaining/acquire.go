@@ -20,9 +20,8 @@ import (
 )
 
 // acquire runs one exchange and redemption for an authorized selection.
-// Nothing here replays a request after an ambiguous submission. It also
-// reports whether an ID-JAG passed validation, so a redemption outcome is
-// known to be the resource authorization server's answer.
+// Nothing here replays a request after an ambiguous submission. The boolean
+// reports whether an ID-JAG passed validation before redemption.
 func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request, sel selection) (Token, Outcome, bool) {
 	var none Token
 	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
@@ -96,7 +95,7 @@ func exchange(ctx context.Context, idp tokenPoster, idToken string, sel selectio
 	form.Set(oauthwire.ParamSubjectToken, idToken)
 	form.Set(oauthwire.ParamSubjectTokenType, oauthwire.TokenTypeIDToken)
 	form.Set(oauthwire.ParamRequestedTokenType, oauthwire.TokenTypeIDJAG)
-	form.Set(oauthwire.ParamAudience, sel.issuer)
+	form.Set(oauthwire.ParamAudience, sel.audience)
 	form.Set(oauthwire.ParamResource, sel.resource)
 	if len(sel.scopes) > 0 {
 		form.Set(oauthwire.ParamScope, strings.Join(sel.scopes, " "))

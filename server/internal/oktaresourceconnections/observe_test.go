@@ -38,6 +38,7 @@ func confirmedUpstream(t *testing.T, ctx context.Context, si *instance, name str
 		TrustedIssuerID: si.oktaIssuerID,
 		RemoteIssuerID:  f.issuerID,
 		RemoteIssuer:    audience,
+		Audience:        audience,
 		Resource:        row.ResourceIndicator + "/",
 		Outcome:         identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false},
 		GrantValidated:  true,
@@ -196,6 +197,40 @@ func TestObserveAttempt_AuditsTransitionsAsTheSystem(t *testing.T) {
 	require.Nil(t, row.ObservedAt)
 }
 
+func TestObserveAttempt_ConfirmedAudienceDiffersFromIssuer(t *testing.T) {
+	t.Parallel()
+	for _, result := range []string{"verified", "connection_missing"} {
+		t.Run(result, func(t *testing.T) {
+			t.Parallel()
+			ctx, si := newTestService(t)
+			recordAgent(t, ctx, si, "wlp1")
+			f, obs := confirmedUpstream(t, ctx, si, "Different audience")
+			const selectedAudience = "https://auth.vendor.example"
+			_, err := confirm(t, ctx, si, selectedAudience, nil, f.serverID)
+			require.NoError(t, err)
+			row := observedRow(t, ctx, si, f.serverID)
+			require.Equal(t, "connected", row.State)
+			require.Nil(t, row.BrokenReason)
+			require.False(t, row.Pending)
+			obs.Audience = selectedAudience
+			obs.StartedAt = time.Now().Add(time.Second)
+			wantState := "verified"
+			if result == "connection_missing" {
+				obs.Outcome = failure(identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, false)
+				obs.GrantValidated = false
+				wantState = "needs_connection"
+			}
+			require.NotEqual(t, obs.RemoteIssuer, obs.Audience)
+			require.NoError(t, newObserver(t, si).ObserveAttempt(ctx, obs))
+			row = observedRow(t, ctx, si, f.serverID)
+			require.Equal(t, wantState, row.State)
+			require.Nil(t, row.BrokenReason)
+			require.Equal(t, result, conv.PtrValOr(row.ObservedResult, ""))
+			require.NotNil(t, row.ObservedAt)
+		})
+	}
+}
+
 func TestObserveAttempt_MismatchedAudienceDoesNotRecordMissingConnection(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
@@ -208,6 +243,7 @@ func TestObserveAttempt_MismatchedAudienceDoesNotRecordMissingConnection(t *test
 		TrustedIssuerID: si.oktaIssuerID,
 		RemoteIssuerID:  f.issuerID,
 		RemoteIssuer:    audience,
+		Audience:        audience,
 		Resource:        observedRow(t, ctx, si, f.serverID).ResourceIndicator,
 		Outcome:         failure(identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, false),
 		GrantValidated:  false,
@@ -215,8 +251,8 @@ func TestObserveAttempt_MismatchedAudienceDoesNotRecordMissingConnection(t *test
 	}
 	require.NoError(t, newObserver(t, si).ObserveAttempt(ctx, obs))
 	row := observedRow(t, ctx, si, f.serverID)
-	require.Equal(t, "broken", row.State)
-	require.Equal(t, "audience_mismatch", conv.PtrValOr(row.BrokenReason, ""))
+	require.Equal(t, "connected", row.State)
+	require.Nil(t, row.BrokenReason)
 	require.Nil(t, row.ObservedResult)
 	require.Nil(t, row.ObservedAt)
 }

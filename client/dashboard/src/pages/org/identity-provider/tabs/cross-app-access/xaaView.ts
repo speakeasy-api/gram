@@ -71,7 +71,7 @@ export function notApplicableReasonLabel(
 
 /** Short form for the table cell; the full sentence goes in the tooltip. */
 const BROKEN_REASON_SUMMARIES: Record<BrokenReason, string> = {
-  audience_mismatch: "Issuer URL does not match.",
+  audience_mismatch: "Requested audience does not match.",
   scope_not_allowed: "Scopes not allowed.",
   client_auth_failed: "Agent sign-in rejected.",
   downstream_rejected: "Server refused Okta's assertion.",
@@ -79,7 +79,7 @@ const BROKEN_REASON_SUMMARIES: Record<BrokenReason, string> = {
 
 const BROKEN_REASONS: Record<BrokenReason, string> = {
   audience_mismatch:
-    "The confirmed issuer URL is not this server's authorization server issuer, which Speakeasy requests the assertion for. If it was mistyped, confirm again with the issuer; otherwise Speakeasy cannot complete this exchange yet.",
+    "The requested audience did not match the confirmed Okta audience. Confirm the resource app's Cross App Access issuer URL in Okta and try again. This URL may differ from the server's authorization server issuer.",
   scope_not_allowed:
     "Okta refused the requested scopes. Allow them on the AI agent's resource connection.",
   client_auth_failed:

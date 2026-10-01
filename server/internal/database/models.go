@@ -1948,6 +1948,7 @@ type OrganizationMetadatum struct {
 	SsoEnabled         pgtype.Bool
 	VerifiedDomains    []string
 	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
@@ -2644,6 +2645,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	ClientIDMetadataUri             pgtype.Text
 	LegacyCallbackUrl               bool
+	CallbackBaseUrl                 pgtype.Text
 	ResourceIdentifier              pgtype.Text
 	ResourceName                    pgtype.Text
 	ResourceDocumentation           pgtype.Text

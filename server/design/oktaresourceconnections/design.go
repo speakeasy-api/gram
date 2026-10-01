@@ -26,7 +26,7 @@ var ResourceConnectionServer = Type("OktaResourceConnectionServer", func() {
 	Attribute("not_applicable_reason", String, "no_idjag: the server's authorization server metadata does not advertise the identity assertion grant.", func() {
 		Enum("no_idjag")
 	})
-	Attribute("broken_reason", String, "Present when state is broken. audience_mismatch: the confirmed audience is not the server's authorization server issuer, which Speakeasy requests; shown even after a successful exchange, since the recorded confirmation is wrong; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.", func() {
+	Attribute("broken_reason", String, "Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.", func() {
 		Enum("audience_mismatch", "scope_not_allowed", "client_auth_failed", "downstream_rejected")
 	})
 	Attribute("observed_result", String, "What the latest identity chaining exchange since confirmation showed. connection_missing is inferred from the identity provider's invalid_target error.", func() {

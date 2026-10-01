@@ -29,6 +29,11 @@ type selection struct {
 	// upstream identity provider registration, filled in by authorize.
 	trustedIssuerID uuid.UUID
 	trustedClientID uuid.UUID
+
+	// audience is the ID-JAG audience: an administrator-confirmed Okta
+	// resource app audience when one exists, else the resource authorization
+	// server's issuer. Filled in by authorize.
+	audience string
 }
 
 // selectBinding applies explicit binding selection: exactly one ready binding
@@ -38,10 +43,11 @@ type selection struct {
 func (c *Chainer) selectBinding(ctx context.Context, logger *slog.Logger, req Request) (selection, Outcome) {
 	var none selection
 	bindings, err := repo.New(c.db).ListEMAChainingBindings(ctx, repo.ListEMAChainingBindingsParams{
-		ProjectID:           req.ProjectID,
-		OrganizationID:      req.OrganizationID,
-		UserSessionIssuerID: req.UserSessionIssuerID,
-		UpstreamResource:    strings.TrimRight(req.UpstreamResource, "/"),
+		ProjectID:             req.ProjectID,
+		OrganizationID:        req.OrganizationID,
+		UserSessionIssuerID:   req.UserSessionIssuerID,
+		UpstreamResource:      strings.TrimRight(req.UpstreamResource, "/"),
+		RemoteSessionIssuerID: req.RemoteSessionIssuerID,
 	})
 	if err != nil {
 		// Unknown configuration keeps the upstream on the interactive path.
@@ -87,5 +93,6 @@ func (c *Chainer) selectBinding(ctx context.Context, logger *slog.Logger, req Re
 		scopes:           result.Scopes,
 		trustedIssuerID:  uuid.Nil,
 		trustedClientID:  uuid.Nil,
+		audience:         "",
 	}, success
 }

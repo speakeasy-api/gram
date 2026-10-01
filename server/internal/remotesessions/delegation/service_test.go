@@ -1240,3 +1240,46 @@ func TestDelegationRefusalRejectsInvalidPolicyWithoutMutation(t *testing.T) {
 		}
 	}
 }
+
+func TestDelegationServiceCheck(t *testing.T) {
+	t.Parallel()
+	t.Run("current registration", func(t *testing.T) {
+		t.Parallel()
+		s, _, p, b, allow := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+		require.NoError(t, s.Check(t.Context(), b, allow))
+	})
+	t.Run("expired assertion still belongs to the registration", func(t *testing.T) {
+		t.Parallel()
+		s, store, p, b, allow := newDelegationUnitFixture(t)
+		signedIn := s.now()
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, signedIn, "id", "refresh", 30*time.Second), true))
+		s.now = func() time.Time { return signedIn.Add(time.Minute) }
+		before, err := store.load(t.Context(), b)
+		require.NoError(t, err)
+		require.True(t, before.assertionExpiry.Before(s.now()), "the assertion has expired")
+		require.NoError(t, s.Check(t.Context(), b, allow), "Check never judges assertion lifetime")
+		after, err := store.load(t.Context(), b)
+		require.NoError(t, err)
+		require.Equal(t, before, after, "Check never renews or rewrites the credential")
+	})
+	t.Run("changed registration", func(t *testing.T) {
+		t.Parallel()
+		s, _, p, b, allow := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+		p.client.ClientID = "rotated-client"
+		require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrConfiguration)
+	})
+	t.Run("nothing retained", func(t *testing.T) {
+		t.Parallel()
+		s, _, _, b, allow := newDelegationUnitFixture(t)
+		require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrReauthentication)
+	})
+	t.Run("authority revoked", func(t *testing.T) {
+		t.Parallel()
+		s, _, p, b, _ := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+		deny := delegationTestAuthority(func(context.Context, Binding) error { return ErrReauthentication })
+		require.ErrorIs(t, s.Check(t.Context(), b, deny), ErrConfiguration)
+	})
+}

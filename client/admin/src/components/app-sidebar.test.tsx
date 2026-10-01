@@ -225,6 +225,7 @@ describe("AppSidebar", () => {
           { label: "MCP Registry", href: "/registry" },
           { label: "Support matrix", href: "/integration-coverage" },
           { label: "Steps", href: "/onboarding-steps" },
+          { label: "Use Cases & Playbooks", href: "/onboarding-playbooks" },
           { label: "Remote Session Issuers", href: "/remote-session-issuers" },
           { label: "Admin MCP", href: "/mcp-setup" },
           {

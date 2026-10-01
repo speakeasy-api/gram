@@ -58,6 +58,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	ClientIDMetadataUri             pgtype.Text
 	LegacyCallbackUrl               bool
+	CallbackBaseUrl                 pgtype.Text
 	ResourceIdentifier              pgtype.Text
 	ResourceName                    pgtype.Text
 	ResourceDocumentation           pgtype.Text

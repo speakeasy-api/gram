@@ -152,9 +152,9 @@ func supersedes(rc repo.OktaResourceConnection, result Result, startedAt time.Ti
 
 // applies reports whether result may be recorded on rc at all. invalid_target
 // for another audience does not establish that the confirmed connection is
-// missing; static readiness explains the mismatch.
-func applies(rc repo.OktaResourceConnection, result Result, remoteIssuer string) bool {
-	return result != ResultConnectionMissing || remotesessions.IssuerURLsEqual(rc.Audience, remoteIssuer)
+// missing. Compare the actual requested audience, not the downstream AS issuer.
+func applies(rc repo.OktaResourceConnection, result Result, audience string) bool {
+	return result != ResultConnectionMissing || remotesessions.IssuerURLsEqual(rc.Audience, audience)
 }
 
 // ObserveAttempt records the attempt's result on the confirmed resource
@@ -222,7 +222,7 @@ func (o *Observer) observe(ctx context.Context, obs identitychaining.Observation
 		return "", fmt.Errorf("read resource connection: %w", err)
 	}
 	// Unlocked first read: reject inapplicable or stale attempts before locking.
-	if !applies(rc, result, obs.RemoteIssuer) {
+	if !applies(rc, result, obs.Audience) {
 		return dispositionNotApplicable, nil
 	}
 	if !supersedes(rc, result, obs.StartedAt) {
@@ -247,7 +247,7 @@ func (o *Observer) observe(ctx context.Context, obs identitychaining.Observation
 	if err != nil {
 		return "", fmt.Errorf("lock resource connection: %w", err)
 	}
-	if !applies(locked, result, obs.RemoteIssuer) {
+	if !applies(locked, result, obs.Audience) {
 		return dispositionNotApplicable, nil
 	}
 	if !supersedes(locked, result, obs.StartedAt) {
@@ -280,8 +280,8 @@ func (o *Observer) observe(ctx context.Context, obs identitychaining.Observation
 			ResourceConnectionURN: urn.NewOktaResourceConnection(locked.ID),
 			ServerName:            locked.Resource,
 			ServerSlug:            "",
-			SnapshotBefore:        observedSnapshot(locked, obs.RemoteIssuer, agentRecorded),
-			SnapshotAfter:         observedSnapshot(after, obs.RemoteIssuer, agentRecorded),
+			SnapshotBefore:        observedSnapshot(locked, agentRecorded),
+			SnapshotAfter:         observedSnapshot(after, agentRecorded),
 		}); err != nil {
 			return "", fmt.Errorf("audit observation: %w", err)
 		}
@@ -303,7 +303,7 @@ func (o *Observer) observe(ctx context.Context, obs identitychaining.Observation
 
 // observedSnapshot is an audit snapshot of a confirmed resource connection
 // whose upstream is known to advertise ID-JAG, since an exchange ran for it.
-func observedSnapshot(rc repo.OktaResourceConnection, remoteIssuer string, agentRecorded bool) *audit.OktaResourceConnectionSnapshot {
+func observedSnapshot(rc repo.OktaResourceConnection, agentRecorded bool) *audit.OktaResourceConnectionSnapshot {
 	return &audit.OktaResourceConnectionSnapshot{
 		ConnectionID:      rc.IdentityProviderConnectionID.String(),
 		IssuerID:          rc.RemoteSessionIssuerID.String(),
@@ -312,11 +312,10 @@ func observedSnapshot(rc repo.OktaResourceConnection, remoteIssuer string, agent
 		OktaApplicationID: rc.OktaApplicationID.String,
 		ObservedResult:    rc.ObservedResult.String,
 		State: string(Derive(Inputs{
-			AdvertisesIDJAG:  true,
-			AgentRecorded:    agentRecorded,
-			Confirmed:        true,
-			AudienceMismatch: !remotesessions.IssuerURLsEqual(rc.Audience, remoteIssuer),
-			Observed:         Result(rc.ObservedResult.String),
+			AdvertisesIDJAG: true,
+			AgentRecorded:   agentRecorded,
+			Confirmed:       true,
+			Observed:        Result(rc.ObservedResult.String),
 		})),
 	}
 }

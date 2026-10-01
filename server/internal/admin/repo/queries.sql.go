@@ -404,6 +404,28 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 	return i, err
 }
 
+const adminGetOrganizationMemberCursor = `-- name: AdminGetOrganizationMemberCursor :one
+SELECT u.id
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id = $2
+`
+
+type AdminGetOrganizationMemberCursorParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) AdminGetOrganizationMemberCursor(ctx context.Context, arg AdminGetOrganizationMemberCursorParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminGetOrganizationMemberCursor, arg.OrganizationID, arg.UserID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const adminGetOrganizationStats = `-- name: AdminGetOrganizationStats :one
 WITH orgs AS (
     SELECT
@@ -564,6 +586,66 @@ func (q *Queries) AdminListOrganizationMembers(ctx context.Context, organization
 	var items []AdminListOrganizationMembersRow
 	for rows.Next() {
 		var i AdminListOrganizationMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.LastLogin,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListOrganizationMembersPage = `-- name: AdminListOrganizationMembersPage :many
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.last_login,
+    u.created_at,
+    u.updated_at
+FROM organization_user_relationships our
+JOIN users u ON u.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND u.deleted_at IS NULL
+  AND u.id > $2::text
+ORDER BY u.id ASC
+LIMIT $3
+`
+
+type AdminListOrganizationMembersPageParams struct {
+	OrganizationID string
+	AfterUserID    string
+	PageLimit      int32
+}
+
+type AdminListOrganizationMembersPageRow struct {
+	ID          string
+	Email       string
+	DisplayName string
+	LastLogin   pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListOrganizationMembersPage(ctx context.Context, arg AdminListOrganizationMembersPageParams) ([]AdminListOrganizationMembersPageRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationMembersPage, arg.OrganizationID, arg.AfterUserID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationMembersPageRow
+	for rows.Next() {
+		var i AdminListOrganizationMembersPageRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Email,
@@ -1427,6 +1509,33 @@ func (q *Queries) LockEnterpriseTrialInOrganizations(ctx context.Context, ids []
 	return organization_id, err
 }
 
+const lockOrganizationAccess = `-- name: LockOrganizationAccess :one
+SELECT id, name, slug, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+type LockOrganizationAccessRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+// Pin canonical identity and current access state before a guarded transition.
+func (q *Queries) LockOrganizationAccess(ctx context.Context, id string) (LockOrganizationAccessRow, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationAccess, id)
+	var i LockOrganizationAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
 SELECT id
 FROM organization_metadata
@@ -1591,6 +1700,45 @@ ON CONFLICT (integration_method_id, capability_id) DO NOTHING
 func (q *Queries) SeedSupportReferences(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportReferences, catalog)
 	return err
+}
+
+const setOrganizationAccess = `-- name: SetOrganizationAccess :one
+UPDATE organization_metadata
+SET disabled_at = CASE
+        WHEN $1::boolean THEN NULL
+        ELSE COALESCE(disabled_at, clock_timestamp())
+    END,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND disabled_at IS NOT DISTINCT FROM $3::timestamptz
+RETURNING id, name, slug, disabled_at
+`
+
+type SetOrganizationAccessParams struct {
+	Enabled            bool
+	ID                 string
+	ExpectedDisabledAt pgtype.Timestamptz
+}
+
+type SetOrganizationAccessRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+// Caller holds the metadata lock. Preserve disable timestamp semantics and the
+// WorkOS webhook cursor while checking that the expected state still matches.
+func (q *Queries) SetOrganizationAccess(ctx context.Context, arg SetOrganizationAccessParams) (SetOrganizationAccessRow, error) {
+	row := q.db.QueryRow(ctx, setOrganizationAccess, arg.Enabled, arg.ID, arg.ExpectedDisabledAt)
+	var i SetOrganizationAccessRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.DisabledAt,
+	)
+	return i, err
 }
 
 const upsertSupportCoverage = `-- name: UpsertSupportCoverage :exec

@@ -23,10 +23,14 @@ type Observation struct {
 	TrustedIssuerID uuid.UUID
 
 	// RemoteIssuerID, RemoteIssuer and Resource are the upstream the grant
-	// was for; RemoteIssuer is also the audience the exchange requested.
+	// was for; RemoteIssuer is the resource authorization server issuer.
 	RemoteIssuerID uuid.UUID
 	RemoteIssuer   string
 	Resource       string
+
+	// Audience is the selected ID-JAG audience requested by the exchange.
+	// A confirmed audience can differ from RemoteIssuer.
+	Audience string
 
 	Outcome Outcome
 

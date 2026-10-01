@@ -23,11 +23,15 @@ const (
 	ActionOrganizationHooksFailOpenEnabled  Action = "organization:hooks_fail_open_enabled"
 	ActionOrganizationHooksFailOpenDisabled Action = "organization:hooks_fail_open_disabled"
 
-	ActionOrganizationProductFeatureEnabled  Action = "organization:product_feature_enabled"
-	ActionOrganizationProductFeatureDisabled Action = "organization:product_feature_disabled"
-	ActionOrganizationSetupTaskUpdated       Action = "organization:setup_task_updated"
-	ActionOrganizationOnboardingUpdated      Action = "organization:onboarding_updated"
-	ActionOrganizationOnboardingStackUpdated Action = "organization:onboarding_stack_updated"
+	ActionOrganizationProductFeatureEnabled      Action = "organization:product_feature_enabled"
+	ActionOrganizationProductFeatureDisabled     Action = "organization:product_feature_disabled"
+	ActionOrganizationSetupTaskUpdated           Action = "organization:setup_task_updated"
+	ActionOrganizationOnboardingUpdated          Action = "organization:onboarding_updated"
+	ActionOrganizationOnboardingStackUpdated     Action = "organization:onboarding_stack_updated"
+	ActionOrganizationOnboardingPlaybookAssigned Action = "organization:onboarding_playbook_assigned"
+	// ActionOrganizationOnboardingPlaybookUnassigned records the assignment
+	// being cleared: the organization walks its saved selection again.
+	ActionOrganizationOnboardingPlaybookUnassigned Action = "organization:onboarding_playbook_unassigned"
 
 	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
 
@@ -40,6 +44,8 @@ const (
 	ActionOrganizationEnterpriseTrialStarted    Action = "organization:enterprise_trial_started"
 	ActionOrganizationEnterpriseTrialEndChanged Action = "organization:enterprise_trial_end_changed"
 
+	ActionOrganizationDisabled        Action = "organization:disabled"
+	ActionOrganizationEnabled         Action = "organization:enabled"
 	ActionOrganizationPaygActivated   Action = "organization:payg_activated"
 	ActionOrganizationPaygDeactivated Action = "organization:payg_deactivated"
 )
@@ -59,34 +65,43 @@ type LogOrganizationSetupTaskUpdatedEvent struct {
 	SetupTaskSnapshotAfter  *OrganizationSetupTaskSnapshot
 }
 
-type OrganizationOnboardingSnapshot struct {
-	Preset          *string  `json:"preset"`
-	VisibleTaskKeys []string `json:"visible_task_keys"`
+// OrganizationOnboardingPlaybookSnapshot is the playbook an organization walks.
+type OrganizationOnboardingPlaybookSnapshot struct {
+	PlaybookID string   `json:"playbook_id"`
+	Name       string   `json:"name"`
+	UseCase    string   `json:"use_case,omitempty"`
+	StepSlugs  []string `json:"step_slugs"`
 }
 
-type LogOrganizationOnboardingUpdatedEvent struct {
-	OrganizationID           string
-	Actor                    urn.Principal
-	ActorDisplayName         *string
-	OrganizationName         string
-	OrganizationSlug         string
-	OnboardingSnapshotBefore *OrganizationOnboardingSnapshot
-	OnboardingSnapshotAfter  *OrganizationOnboardingSnapshot
+type LogOrganizationOnboardingPlaybookAssignedEvent struct {
+	OrganizationID   string
+	Actor            urn.Principal
+	ActorDisplayName *string
+	OrganizationName string
+	OrganizationSlug string
+	// PlaybookSnapshotBefore is nil when no playbook was assigned.
+	PlaybookSnapshotBefore *OrganizationOnboardingPlaybookSnapshot
+	// PlaybookSnapshotAfter is nil when the assignment was cleared.
+	PlaybookSnapshotAfter *OrganizationOnboardingPlaybookSnapshot
 }
 
-func (l *Logger) LogOrganizationOnboardingUpdated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationOnboardingUpdatedEvent) error {
-	before, err := marshalAuditPayload(event.OnboardingSnapshotBefore)
+func (l *Logger) LogOrganizationOnboardingPlaybookAssigned(ctx context.Context, dbtx repo.DBTX, event LogOrganizationOnboardingPlaybookAssignedEvent) error {
+	before, err := marshalAuditPayload(event.PlaybookSnapshotBefore)
 	if err != nil {
-		return fmt.Errorf("marshal onboarding before snapshot: %w", err)
+		return fmt.Errorf("marshal onboarding playbook before snapshot: %w", err)
 	}
-	after, err := marshalAuditPayload(event.OnboardingSnapshotAfter)
+	after, err := marshalAuditPayload(event.PlaybookSnapshotAfter)
 	if err != nil {
-		return fmt.Errorf("marshal onboarding after snapshot: %w", err)
+		return fmt.Errorf("marshal onboarding playbook after snapshot: %w", err)
+	}
+	action := ActionOrganizationOnboardingPlaybookAssigned
+	if event.PlaybookSnapshotAfter == nil {
+		action = ActionOrganizationOnboardingPlaybookUnassigned
 	}
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
-		Action: string(ActionOrganizationOnboardingUpdated), SubjectID: event.OrganizationID, SubjectType: "organization",
+		Action: string(action), SubjectID: event.OrganizationID, SubjectType: "organization",
 		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName), SubjectSlug: conv.ToPGTextEmpty(event.OrganizationSlug),
 		Metadata: nil, BeforeSnapshot: before, AfterSnapshot: after,
 	}
@@ -972,6 +987,61 @@ type LogOrganizationPaygDeactivatedEvent struct {
 
 	OrganizationSnapshotBefore *OrganizationPaygActivationSnapshot
 	OrganizationSnapshotAfter  *OrganizationPaygActivationSnapshot
+}
+
+// OrganizationAccessSnapshot records whether the organization was disabled.
+type OrganizationAccessSnapshot struct {
+	DisabledAt *time.Time `json:"disabled_at"`
+}
+
+// LogOrganizationAccessEvent describes an organization access transition.
+type LogOrganizationAccessEvent struct {
+	OrganizationID             string
+	Actor                      urn.Principal
+	ActorDisplayName           *string
+	ActorSlug                  *string
+	OrganizationName           string
+	OrganizationSlug           string
+	OrganizationSnapshotBefore *OrganizationAccessSnapshot
+	OrganizationSnapshotAfter  *OrganizationAccessSnapshot
+}
+
+func (l *Logger) LogOrganizationEnabled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccessEvent) error {
+	return l.logOrganizationAccess(ctx, dbtx, event, ActionOrganizationEnabled)
+}
+
+func (l *Logger) LogOrganizationDisabled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccessEvent) error {
+	return l.logOrganizationAccess(ctx, dbtx, event, ActionOrganizationDisabled)
+}
+
+func (l *Logger) logOrganizationAccess(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccessEvent, action Action) error {
+	before, err := marshalAuditPayload(event.OrganizationSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	after, err := marshalAuditPayload(event.OrganizationSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+	entry := repo.InsertAuditLogParams{
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:          conv.PtrToPGTextEmpty(event.ActorSlug),
+		Action:             string(action),
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+		BeforeSnapshot:     before,
+		AfterSnapshot:      after,
+		Metadata:           nil,
+		ActingSurface:      conv.ToPGTextEmpty(""),
+		ActingClientID:     conv.ToPGTextEmpty(""),
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationAccessV1})
 }
 
 func (l *Logger) LogOrganizationPaygDeactivated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationPaygDeactivatedEvent) error {

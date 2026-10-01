@@ -14,6 +14,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
 import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 import { CrossAppAccessTab } from "./CrossAppAccessTab";
+import { makeChecklistItem, makeConnection } from "../setup/testFixtures";
 import { confirmedRow as savedRow, pendingRow as row } from "./xaaTestRows";
 
 const mocks = vi.hoisted(() => ({
@@ -53,6 +54,16 @@ vi.mock(
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
+vi.mock(
+  "@gram/client/react-query/recordIdentityProviderConnectionAgent.js",
+  () => ({
+    useRecordIdentityProviderConnectionAgentMutation: () => ({
+      mutate: vi.fn(),
+      isPending: false,
+      error: null,
+    }),
+  }),
+);
 vi.mock("../../identityProviderQueries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../identityProviderQueries")>()),
   invalidateIdentityProviderQueries: mocks.invalidate,
@@ -176,6 +187,64 @@ function clearConfirmation(serverName = "Server 0") {
 }
 
 const issuerInput = () => screen.getByLabelText<HTMLInputElement>("Issuer URL");
+
+describe("Enterprise Managed Auth setup", () => {
+  it("reopens the collapsed agent step when the alert link is followed", () => {
+    mocks.readiness.mockReturnValue({
+      data: {
+        servers: [],
+        totalCount: 0,
+        pendingCount: 0,
+        undiscoveredCount: 0,
+        agentRecorded: false,
+      },
+      isPlaceholderData: false,
+    });
+    const scrollIntoView = vi.fn<() => void>();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter
+          initialEntries={[
+            "/identity?tab=identity-providers&provider=okta&view=cross-app-access",
+          ]}
+        >
+          <TooltipProvider>
+            <CrossAppAccessTab
+              connection={makeConnection({
+                status: "verified",
+                checklist: [
+                  makeChecklistItem("record_ai_agent", "cross_app_access"),
+                ],
+              })}
+            />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const agentForm = () =>
+      screen.queryByRole("region", { name: "Save Okta AI agent" });
+    expect(agentForm()).toBeTruthy();
+    const toggle = screen.getByRole("button", {
+      name: "Cross App Access setup, 0 of 1 complete",
+    });
+    fireEvent.click(toggle);
+    expect(agentForm()).toBeNull();
+    const follow = () =>
+      fireEvent.click(
+        screen.getByRole("link", {
+          name: "Record it in the setup steps above",
+        }),
+      );
+    follow();
+    expect(agentForm()).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalled();
+    fireEvent.click(toggle);
+    expect(agentForm()).toBeNull();
+    follow();
+    expect(agentForm()).toBeTruthy();
+  });
+});
 
 describe("bulk confirmation", () => {
   it("freezes the selection and filter during confirmation", async () => {

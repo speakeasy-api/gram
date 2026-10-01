@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -157,6 +158,7 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 		ToolName:        event.ToolName,
 		ToolAnnotations: event.ToolAnnotations,
 		PlatformToolset: event.Surface == SurfacePlatformMCP,
+		Principal:       audiencePrincipal(event.Principal()),
 	})
 	if err != nil {
 		return p.resolveIndeterminate(ctx, fmt.Errorf("list MCP policies: %w", err))
@@ -183,6 +185,21 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 		return p.resolveIndeterminate(ctx, errors.Join(scanErr, scanCtx.Err()))
 	}
 	return Allow()
+}
+
+// audiencePrincipal maps validated provenance to the principal whose grants
+// select policies. Only user sessions and agents are authoritative; every
+// other caller is unattributed.
+func audiencePrincipal(identity mcpidentity.Identity) *policycore.MCPPrincipal {
+	principal := policycore.MCPPrincipal{UserID: "", AgentID: ""}
+	switch identity.Kind() {
+	case mcpidentity.KindUserSession:
+		principal.UserID = identity.UserID()
+	case mcpidentity.KindAgent:
+		principal.AgentID = identity.AgentID()
+	default:
+	}
+	return &principal
 }
 
 type blockMatch struct {

@@ -340,14 +340,12 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 
 func inputsFor(sv repo.ListEligibleServersRow, rc *record, agentRecorded bool) Inputs {
 	in := Inputs{
-		AdvertisesIDJAG:  AdvertisesIDJAG(sv.GrantTypesSupported, sv.AuthorizationGrantProfilesSupported),
-		AgentRecorded:    agentRecorded,
-		Confirmed:        rc != nil,
-		AudienceMismatch: false,
-		Observed:         "",
+		AdvertisesIDJAG: AdvertisesIDJAG(sv.GrantTypesSupported, sv.AuthorizationGrantProfilesSupported),
+		AgentRecorded:   agentRecorded,
+		Confirmed:       rc != nil,
+		Observed:        "",
 	}
 	if rc != nil {
-		in.AudienceMismatch = !remotesessions.IssuerURLsEqual(rc.Audience, sv.Issuer)
 		in.Observed = Result(rc.ObservedResult.String)
 	}
 	return in

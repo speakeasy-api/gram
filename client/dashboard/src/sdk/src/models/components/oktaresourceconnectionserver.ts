@@ -10,7 +10,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Present when state is broken. audience_mismatch: the confirmed audience is not the server's authorization server issuer, which Speakeasy requests; shown even after a successful exchange, since the recorded confirmation is wrong; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
+ * Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
  */
 export const BrokenReason = {
   AudienceMismatch: "audience_mismatch",
@@ -19,7 +19,7 @@ export const BrokenReason = {
   DownstreamRejected: "downstream_rejected",
 } as const;
 /**
- * Present when state is broken. audience_mismatch: the confirmed audience is not the server's authorization server issuer, which Speakeasy requests; shown even after a successful exchange, since the recorded confirmation is wrong; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
+ * Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
  */
 export type BrokenReason = ClosedEnum<typeof BrokenReason>;
 
@@ -90,7 +90,7 @@ export type OktaResourceConnectionServer = {
    */
   audience?: string | undefined;
   /**
-   * Present when state is broken. audience_mismatch: the confirmed audience is not the server's authorization server issuer, which Speakeasy requests; shown even after a successful exchange, since the recorded confirmation is wrong; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
+   * Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
    */
   brokenReason?: BrokenReason | undefined;
   /**

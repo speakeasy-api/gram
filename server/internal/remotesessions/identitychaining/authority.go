@@ -46,9 +46,26 @@ func (a authority) AuthorizeDelegation(ctx context.Context, b remotesessions.Del
 	return nil
 }
 
+// checkDelegation confirms the human's retained delegation still belongs to the
+// current trusted registration before any credential derived from it is
+// released, so a rotated or reconfigured registration retires stored tokens.
+func (c *Chainer) checkDelegation(ctx context.Context, req Request, sel selection) Outcome {
+	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
+	switch err := c.delegation.Check(ctx, binding, authority{chainer: c, req: req}); {
+	case err == nil:
+		return success
+	case errors.Is(err, remotesessions.ErrDelegationReauthentication):
+		return newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
+	case errors.Is(err, remotesessions.ErrDelegationConfiguration):
+		return newOutcome(StageDelegation, ReasonConfigurationRequired, ConfidenceVerified, false)
+	default:
+		return newOutcome(StageDelegation, ReasonTransientFailure, ConfidenceVerified, true)
+	}
+}
+
 // authorize rechecks the endpoint's trusted identity provider registration
 // and the human's live membership before any credential is released or
-// minted, and records the trusted registration on sel.
+// minted, and records the trusted registration and ID-JAG audience on sel.
 func (c *Chainer) authorize(ctx context.Context, logger *slog.Logger, req Request, sel *selection) Outcome {
 	issuer, err := repo.New(c.db).GetEMAChainingUserIssuer(ctx, repo.GetEMAChainingUserIssuerParams{ID: req.UserSessionIssuerID, OrganizationID: conv.ToPGText(req.OrganizationID)})
 	switch {
@@ -60,6 +77,18 @@ func (c *Chainer) authorize(ctx context.Context, logger *slog.Logger, req Reques
 	}
 	sel.trustedIssuerID = issuer.TrustedRemoteSessionIssuerID.UUID
 	sel.trustedClientID = issuer.TrustedRemoteSessionClientID.UUID
+	audience, err := repo.New(c.db).GetEMAChainingConfirmedAudience(ctx, repo.GetEMAChainingConfirmedAudienceParams{
+		OrganizationID: req.OrganizationID, TrustedIssuerID: sel.trustedIssuerID, RemoteSessionIssuerID: sel.remoteIssuerID, Resource: sel.resource,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		sel.audience = sel.issuer
+	case err != nil:
+		logger.ErrorContext(ctx, "read identity chaining confirmed audience", attr.SlogError(err))
+		return newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
+	default:
+		sel.audience = audience
+	}
 	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
 	if err := (authority{chainer: c, req: req}).AuthorizeDelegation(ctx, binding); err != nil {
 		if errors.Is(err, remotesessions.ErrDelegationConfiguration) {

@@ -25,6 +25,12 @@ type Request struct {
 	// UpstreamResource is the endpoint's upstream, compared to binding
 	// resources without a trailing slash.
 	UpstreamResource string
+
+	// RemoteSessionIssuerID, when valid, restricts selection to bindings for
+	// that issuer. Tunneled upstreams set their own derived issuer: their
+	// resource identifier is operator supplied, so a resource match alone
+	// could deliver a sibling upstream's token into the tunnel.
+	RemoteSessionIssuerID uuid.NullUUID
 }
 
 // complete reports whether every field needed to select a binding is set.

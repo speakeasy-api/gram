@@ -58,6 +58,20 @@ func readSupportMatrix(ctx context.Context, q *repo.Queries) (*gen.SupportMatrix
 	return &result, nil
 }
 
+// ReadSupportMatrixTx locks the global matrix and returns its complete current draft.
+// The caller owns the transaction and must keep it open through any dependent write.
+func ReadSupportMatrixTx(ctx context.Context, tx pgx.Tx) (*gen.SupportMatrix, error) {
+	if err := repo.New(tx).LockSupportMatrix(ctx); err != nil {
+		return nil, fmt.Errorf("lock support matrix: %w", err)
+	}
+	return readSupportMatrix(ctx, repo.New(tx))
+}
+
+// ValidateSupportDraft applies the same catalogue and content rules used by matrix saves.
+func ValidateSupportDraft(draft *gen.SupportDraft, catalog *gen.SupportMatrix) error {
+	return validateSupportDraft(draft, catalog)
+}
+
 func (s *Service) GetSupportMatrix(ctx context.Context, _ *gen.GetSupportMatrixPayload) (*gen.SupportMatrix, error) {
 	result, err := readSupportMatrix(ctx, repo.New(s.db))
 	if err != nil {

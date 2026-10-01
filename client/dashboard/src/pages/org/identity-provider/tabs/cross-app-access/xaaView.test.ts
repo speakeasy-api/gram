@@ -44,7 +44,7 @@ describe("exchange observations", () => {
 
   it("explains why a confirmed server is not working", () => {
     expect(brokenReasonSummary("audience_mismatch")).toBe(
-      "Issuer URL does not match.",
+      "Requested audience does not match.",
     );
     expect(brokenReasonLabel("downstream_rejected")).toMatch(/trust/);
     expect(brokenReasonSummary(undefined)).toBe("");

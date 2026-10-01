@@ -41,10 +41,18 @@ func (s *Service) SetIdentityChainer(chainer identityChainer) {
 // a caller that is not a validated user session (assistants, agents,
 // workloads and API keys never select a human's delegation). Whether chaining
 // applies to the upstream is then decided by its binding configuration.
-func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string) (identitychaining.Request, bool) {
+//
+// A tunneled upstream is identified by its own derived issuer, never by the
+// resource it claims, exactly as interactive routing treats it; one without a
+// derived issuer calls anonymously and so never chains.
+func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, tunneled bool, tunneledIssuerID uuid.NullUUID) (identitychaining.Request, bool) {
 	var none identitychaining.Request
-	if s.identityChainer == nil || userSessionIssuerID == uuid.Nil || strings.TrimRight(upstreamResource, "/") == "" {
+	if s.identityChainer == nil || userSessionIssuerID == uuid.Nil || strings.TrimRight(upstreamResource, "/") == "" || (tunneled && !tunneledIssuerID.Valid) {
 		return none, false
+	}
+	remoteIssuer := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if tunneled {
+		remoteIssuer = tunneledIssuerID
 	}
 	identity, ok := mcpidentity.FromContext(ctx)
 	if !ok || identity.Kind() != mcpidentity.KindUserSession || identity.UserID() == "" {
@@ -55,11 +63,12 @@ func (s *Service) identityChainingRequest(ctx context.Context, organizationID st
 		return none, false
 	}
 	return identitychaining.Request{
-		OrganizationID:      organizationID,
-		ProjectID:           projectID,
-		UserSessionIssuerID: userSessionIssuerID,
-		UserID:              identity.UserID(),
-		UpstreamResource:    upstreamResource,
+		OrganizationID:        organizationID,
+		ProjectID:             projectID,
+		UserSessionIssuerID:   userSessionIssuerID,
+		UserID:                identity.UserID(),
+		UpstreamResource:      upstreamResource,
+		RemoteSessionIssuerID: remoteIssuer,
 	}, true
 }
 
@@ -69,33 +78,35 @@ func (s *Service) identityChainingRequest(ctx context.Context, organizationID st
 // upstream is required: an interactive token for it wins, and identity
 // chaining supplies one otherwise. An upstream chaining does not govern gets
 // exactly the strict gate's answer, from the tokens already resolved.
-func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneledIssuerID uuid.NullUUID) (string, error) {
+func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, tunneledIssuerID uuid.NullUUID) (string, error) {
 	endpoint := authentication.endpoint
-	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource)
+	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, tunneledIssuerID)
 	if !chainable {
-		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneledIssuerID)
+		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, tunneledIssuerID)
 	}
 
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
-	unusable := errors.Is(err, remotesessions.ErrNoValidToken)
+	tokens, strictErr := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	unusable := errors.Is(strictErr, remotesessions.ErrNoValidToken)
+	var err error
 	switch {
 	case unusable:
-		// Another linked upstream is unusable. Only an upstream chaining
-		// governs is served without it.
+		// A linked upstream is unusable. Only an upstream chaining governs is
+		// served without it; otherwise the gate answers exactly as without
+		// chaining.
 		if !s.identityChainer.Governs(ctx, req) {
-			return "", s.rejectUnusableRemoteSession(ctx, w, authentication)
+			return "", s.rejectRemoteSession(ctx, w, authentication, strictErr)
 		}
 		tokens, err = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
 		if err != nil {
 			return "", oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
 		}
-		if upstreamTokenPresent(tokens, upstreamResource, tunneledIssuerID) {
-			return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneledIssuerID)
+		if upstreamTokenPresent(tokens, upstreamResource, tunneled, tunneledIssuerID) {
+			return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneled, tunneledIssuerID)
 		}
-	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
-	case upstreamTokenPresent(tokens, upstreamResource, tunneledIssuerID):
-		return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneledIssuerID)
+	case strictErr != nil:
+		return "", oops.E(oops.CodeUnexpected, strictErr, "resolve remote session").LogError(ctx, logger)
+	case upstreamTokenPresent(tokens, upstreamResource, tunneled, tunneledIssuerID):
+		return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneled, tunneledIssuerID)
 	}
 
 	chained, outcome := s.identityChainer.Acquire(ctx, req)
@@ -103,9 +114,9 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	case outcome.Succeeded():
 		return chained.Value(), nil
 	case !outcome.Applicable() && unusable:
-		return "", s.rejectUnusableRemoteSession(ctx, w, authentication)
+		return "", s.rejectRemoteSession(ctx, w, authentication, strictErr)
 	case !outcome.Applicable():
-		return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneledIssuerID)
+		return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneled, tunneledIssuerID)
 	case outcome.Reason == identitychaining.ReasonReauthenticationRequired:
 		endpoint.LogWith(logger).WarnContext(ctx, "mcp issuer gate rejected: identity chaining requires reauthentication",
 			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
@@ -113,25 +124,27 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			attr.SlogOAuthFailureReason(issuerGateReasonIdentityChainingReauthentication),
 		)
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonIdentityChainingReauthentication, authentication.mcpURL, authentication.surface)
-		return "", WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "")
+		// Reauthorizing signs the human in again, which retains a fresh
+		// delegation, so the challenge matches a missing upstream session.
+		return "", writeRemoteSessionReconnectChallenge(w, authentication)
 	}
 	return "", identityChainingError(outcome)
 }
 
 // resolveStrictUpstreamToken is the issuer gate's all-or-nothing resolution
 // followed by routing, the behavior without identity chaining.
-func (s *Service) resolveStrictUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneledIssuerID uuid.NullUUID) (string, error) {
+func (s *Service) resolveStrictUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, tunneledIssuerID uuid.NullUUID) (string, error) {
 	tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
 	if err != nil {
 		return "", fmt.Errorf("resolve issuer-gated upstream tokens: %w", err)
 	}
-	return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneledIssuerID)
+	return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneled, tunneledIssuerID)
 }
 
 // routeDirectUpstreamToken routes tokens to the backend, mapping a fail-closed
 // routing outcome to a precondition failure.
-func routeDirectUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneledIssuerID uuid.NullUUID) (string, error) {
-	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, upstreamResource, tunneledIssuerID)
+func routeDirectUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneled bool, tunneledIssuerID uuid.NullUUID) (string, error) {
+	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, upstreamResource, tunneled, tunneledIssuerID)
 	switch {
 	case errors.As(err, new(*upstreamRoutingError)):
 		// routeUpstreamToken already logged the structured detail.
@@ -145,9 +158,9 @@ func routeDirectUpstreamToken(ctx context.Context, logger *slog.Logger, tokens m
 // upstreamTokenPresent reports, without routing or logging, whether any
 // resolved token claims the backend's upstream. Duplicates count as present
 // so routing still fails closed on them rather than chaining around them.
-func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneledIssuerID uuid.NullUUID) bool {
+func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneled bool, tunneledIssuerID uuid.NullUUID) bool {
 	want := strings.TrimRight(upstreamResource, "/")
-	if tunneledIssuerID.Valid {
+	if tunneled {
 		return tunneledIssuerToken(tokens, tunneledIssuerID, want) != ""
 	}
 	for _, entry := range tokens {
@@ -175,7 +188,7 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember) fu
 		return nil
 	}
 	return func(ctx context.Context, upstreamResource string) (string, error) {
-		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, gate.projectID, gate.userSessionIssuerID, upstreamResource)
+		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, gate.projectID, gate.userSessionIssuerID, upstreamResource, member.tunneledServerID.Valid, member.remoteSessionIssuerID)
 		if !chainable {
 			return "", nil
 		}

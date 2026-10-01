@@ -81,13 +81,13 @@ type ResetResponseBody struct {
 	// no_idjag: the server's authorization server metadata does not advertise the
 	// identity assertion grant.
 	NotApplicableReason *string `form:"not_applicable_reason,omitempty" json:"not_applicable_reason,omitempty" xml:"not_applicable_reason,omitempty"`
-	// Present when state is broken. audience_mismatch: the confirmed audience is
-	// not the server's authorization server issuer, which Speakeasy requests;
-	// shown even after a successful exchange, since the recorded confirmation is
-	// wrong; scope_not_allowed: the connection does not allow the requested
-	// scopes; client_auth_failed: the identity provider rejected the agent app's
-	// client authentication; downstream_rejected: the identity provider issued the
-	// assertion but the server's authorization server refused it.
+	// Present when state is broken. audience_mismatch: legacy value, no longer
+	// emitted; the administrator-confirmed Okta audience may differ from the
+	// server's authorization server issuer; scope_not_allowed: the connection does
+	// not allow the requested scopes; client_auth_failed: the identity provider
+	// rejected the agent app's client authentication; downstream_rejected: the
+	// identity provider issued the assertion but the server's authorization server
+	// refused it.
 	BrokenReason *string `form:"broken_reason,omitempty" json:"broken_reason,omitempty" xml:"broken_reason,omitempty"`
 	// What the latest identity chaining exchange since confirmation showed.
 	// connection_missing is inferred from the identity provider's invalid_target
@@ -809,13 +809,13 @@ type OktaResourceConnectionServerResponseBody struct {
 	// no_idjag: the server's authorization server metadata does not advertise the
 	// identity assertion grant.
 	NotApplicableReason *string `form:"not_applicable_reason,omitempty" json:"not_applicable_reason,omitempty" xml:"not_applicable_reason,omitempty"`
-	// Present when state is broken. audience_mismatch: the confirmed audience is
-	// not the server's authorization server issuer, which Speakeasy requests;
-	// shown even after a successful exchange, since the recorded confirmation is
-	// wrong; scope_not_allowed: the connection does not allow the requested
-	// scopes; client_auth_failed: the identity provider rejected the agent app's
-	// client authentication; downstream_rejected: the identity provider issued the
-	// assertion but the server's authorization server refused it.
+	// Present when state is broken. audience_mismatch: legacy value, no longer
+	// emitted; the administrator-confirmed Okta audience may differ from the
+	// server's authorization server issuer; scope_not_allowed: the connection does
+	// not allow the requested scopes; client_auth_failed: the identity provider
+	// rejected the agent app's client authentication; downstream_rejected: the
+	// identity provider issued the assertion but the server's authorization server
+	// refused it.
 	BrokenReason *string `form:"broken_reason,omitempty" json:"broken_reason,omitempty" xml:"broken_reason,omitempty"`
 	// What the latest identity chaining exchange since confirmation showed.
 	// connection_missing is inferred from the identity provider's invalid_target

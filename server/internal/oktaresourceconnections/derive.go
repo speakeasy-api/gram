@@ -40,18 +40,11 @@ const (
 	ResultClientAuthFailed   Result = "client_auth_failed"
 )
 
-// Why a server is broken, beyond the observed results.
-const ReasonAudienceMismatch = "audience_mismatch"
-
 // Inputs are the facts the derivation consumes; none of them is a state.
 type Inputs struct {
 	AdvertisesIDJAG bool
 	AgentRecorded   bool
 	Confirmed       bool
-
-	// AudienceMismatch: the confirmed audience is not the upstream issuer,
-	// which the exchange always requests, so it cannot succeed.
-	AudienceMismatch bool
 
 	// Observed is the latest exchange result since confirmation, if any.
 	Observed Result
@@ -69,9 +62,6 @@ func Derive(in Inputs) State {
 	switch {
 	case !in.Confirmed:
 		return StateNeedsConnection
-	// A wrong audience also surfaces as a missing connection; name the cause.
-	case BrokenReason(in) == ReasonAudienceMismatch:
-		return StateBroken
 	case in.Observed == ResultVerified:
 		return StateVerified
 	case in.Observed == ResultConnectionMissing:
@@ -95,9 +85,6 @@ func NotApplicableReason(in Inputs) string {
 func BrokenReason(in Inputs) string {
 	if !in.Confirmed {
 		return ""
-	}
-	if in.AudienceMismatch {
-		return ReasonAudienceMismatch
 	}
 	switch in.Observed {
 	case ResultDownstreamRejected, ResultScopeNotAllowed, ResultClientAuthFailed:
