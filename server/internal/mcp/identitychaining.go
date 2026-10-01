@@ -85,14 +85,16 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, tunneledIssuerID)
 	}
 
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
-	unusable := errors.Is(err, remotesessions.ErrNoValidToken)
+	tokens, strictErr := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	unusable := errors.Is(strictErr, remotesessions.ErrNoValidToken)
+	var err error
 	switch {
 	case unusable:
-		// Another linked upstream is unusable. Only an upstream chaining
-		// governs is served without it.
+		// A linked upstream is unusable. Only an upstream chaining governs is
+		// served without it; otherwise the gate answers exactly as without
+		// chaining.
 		if !s.identityChainer.Governs(ctx, req) {
-			return "", s.rejectUnusableRemoteSession(ctx, w, authentication)
+			return "", s.rejectRemoteSession(ctx, w, authentication, strictErr)
 		}
 		tokens, err = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
 		if err != nil {
@@ -101,8 +103,8 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		if upstreamTokenPresent(tokens, upstreamResource, tunneled, tunneledIssuerID) {
 			return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneled, tunneledIssuerID)
 		}
-	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
+	case strictErr != nil:
+		return "", oops.E(oops.CodeUnexpected, strictErr, "resolve remote session").LogError(ctx, logger)
 	case upstreamTokenPresent(tokens, upstreamResource, tunneled, tunneledIssuerID):
 		return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneled, tunneledIssuerID)
 	}
@@ -112,7 +114,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	case outcome.Succeeded():
 		return chained.Value(), nil
 	case !outcome.Applicable() && unusable:
-		return "", s.rejectUnusableRemoteSession(ctx, w, authentication)
+		return "", s.rejectRemoteSession(ctx, w, authentication, strictErr)
 	case !outcome.Applicable():
 		return routeDirectUpstreamToken(ctx, logger, tokens, upstreamResource, tunneled, tunneledIssuerID)
 	case outcome.Reason == identitychaining.ReasonReauthenticationRequired:
@@ -122,7 +124,9 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			attr.SlogOAuthFailureReason(issuerGateReasonIdentityChainingReauthentication),
 		)
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonIdentityChainingReauthentication, authentication.mcpURL, authentication.surface)
-		return "", WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "")
+		// Reauthorizing signs the human in again, which retains a fresh
+		// delegation, so the challenge matches a missing upstream session.
+		return "", writeRemoteSessionReconnectChallenge(w, authentication)
 	}
 	return "", identityChainingError(outcome)
 }
