@@ -38,6 +38,18 @@ func TestParseOktaMapping(t *testing.T) {
 		require.Error(t, err, raw)
 		require.NotErrorIs(t, err, ErrNoOktaMapping, raw)
 	}
+	// Case-variant and unknown fields inside the namespace never decode.
+	for _, raw := range []string{
+		`{"_meta":{"com.speakeasy.ai/okta":{"OINNames":["linear"]}}}`,
+		`{"_meta":{"com.speakeasy.ai/okta":{"oinnames":["linear"]}}}`,
+		`{"_meta":{"com.speakeasy.ai/okta":{"oinNames":["linear"],"XAAISSUER":"https://auth.example.test"}}}`,
+		`{"_meta":{"com.speakeasy.ai/okta":{"oinNames":["linear"],"unknown":true}}}`,
+	} {
+		mapping, err = ParseOktaMapping(json.RawMessage(raw))
+		require.Error(t, err, raw)
+		require.NotErrorIs(t, err, ErrNoOktaMapping, raw)
+		require.Empty(t, mapping, raw)
+	}
 	// A case-variant root key is not the namespace, matching the SQL scan.
 	_, err = ParseOktaMapping(json.RawMessage(strings.Replace(oktaRecord("example.test/linear", "linear"), `"_meta"`, `"_Meta"`, 1)))
 	require.ErrorIs(t, err, ErrNoOktaMapping)

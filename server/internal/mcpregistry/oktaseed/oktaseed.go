@@ -6,6 +6,8 @@ package oktaseed
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -45,6 +47,27 @@ type Vendor struct {
 	Remotes []Remote
 	// Mapping is the Okta namespace written to the entry.
 	Mapping mcpregistry.OktaMapping
+}
+
+const (
+	// applyRevision is raised when Apply changes what it writes for the same
+	// Vendors, so that deployed environments apply the seed again.
+	applyRevision = 1
+
+	// versionHexLength keeps 48 bits of the content hash: enough to tell seed
+	// versions apart, short enough to read in a workflow ID.
+	versionHexLength = 12
+)
+
+// Version identifies what the seed would write. It changes when Vendors or
+// applyRevision does, and only then.
+func Version() string {
+	return versionOf(Vendors)
+}
+
+func versionOf(vendors []Vendor) string {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%d %#v", applyRevision, vendors))
+	return hex.EncodeToString(sum[:])[:versionHexLength]
 }
 
 // Vendors is the starter set. Keep entries alphabetical by Name. Okta names

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -174,4 +175,50 @@ func validJSONUnicode(raw []byte) bool {
 		i += 6
 	}
 	return true
+}
+
+// schemaPropertyNames lists every property name the contract declares.
+var schemaPropertyNames = sync.OnceValue(func() map[string]bool {
+	names := map[string]bool{}
+	var walk func(any)
+	walk = func(node any) {
+		switch n := node.(type) {
+		case map[string]any:
+			if props, ok := n["properties"].(map[string]any); ok {
+				for name := range props {
+					names[name] = true
+				}
+			}
+			for _, child := range n {
+				walk(child)
+			}
+		case []any:
+			for _, child := range n {
+				walk(child)
+			}
+		}
+	}
+	for _, raw := range [][]byte{contract.Schema, contract.SpeakeasyRegistrySchema} {
+		var doc any
+		if err := json.Unmarshal(raw, &doc); err == nil {
+			walk(doc)
+		}
+	}
+	return names
+})
+
+// LogPath masks every segment that is neither a declared property name nor an
+// array index, because validator paths echo submitted keys of open maps.
+func LogPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	segments := strings.Split(path[1:], "/")
+	for i, segment := range segments {
+		name := strings.ReplaceAll(strings.ReplaceAll(segment, "~1", "/"), "~0", "~")
+		if _, err := strconv.ParseUint(name, 10, 32); err != nil && !schemaPropertyNames()[name] {
+			segments[i] = "*"
+		}
+	}
+	return "/" + strings.Join(segments, "/")
 }
