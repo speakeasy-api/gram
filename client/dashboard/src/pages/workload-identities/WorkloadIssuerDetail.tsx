@@ -104,15 +104,19 @@ function admissionInitialValues(
  * share a URL across tiers.
  */
 export function WorkloadIssuerDetailPage(): JSX.Element {
+  const { issuerId = "" } = useParams<{ issuerId: string }>();
   return (
     <RequireScope scope={["workload:read", "workload:write"]} level="page">
-      <IssuerDetail />
+      {/* Remounted per platform. The router keeps this page mounted when only
+          the issuer in the URL changes, and an edit sheet or confirmation left
+          open would then act on the platform navigated to, with what was
+          entered for the one navigated from. */}
+      <IssuerDetail key={issuerId} issuerId={issuerId} />
     </RequireScope>
   );
 }
 
-function IssuerDetail(): JSX.Element {
-  const { issuerId = "" } = useParams<{ issuerId: string }>();
+function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [admitOpen, setAdmitOpen] = useState(false);

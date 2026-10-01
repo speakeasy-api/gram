@@ -716,3 +716,91 @@ it("reopens on values a refresh brought in after the sheet closed", async () => 
     },
   });
 });
+
+// Stands in for the browser's back and forward buttons, which still move the
+// page while a sheet or dialog is open. The dialog hides the link from the
+// accessibility tree, so it is found by its text.
+function goToOtherPlatform(): void {
+  fireEvent.click(screen.getByText("Other platform"));
+}
+
+it("drops an open platform edit when the page moves to another platform", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+
+  goToOtherPlatform();
+
+  // The edit was of the first platform, so it does not follow to the second.
+  expect(screen.queryByText("Edit platform")).toBeNull();
+  expect(mocks.updateIssuer).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+    "Other CI",
+  );
+  fireEvent.change(screen.getByLabelText("Description"), {
+    target: { value: "Nightly jobs" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenCalledTimes(1);
+  expect(mocks.updateIssuer).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadIssuerForm: {
+        id: OTHER_ISSUER_ID,
+        description: "Nightly jobs",
+      },
+    },
+  });
+});
+
+it("drops an open stop-trusting confirmation when the page moves to another platform", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Stop trusting" }));
+  expect(screen.getByText("Stop trusting this platform?")).toBeTruthy();
+
+  goToOtherPlatform();
+
+  expect(screen.getByText("Other CI")).toBeTruthy();
+  expect(screen.queryByText("Stop trusting this platform?")).toBeNull();
+});
+
+it("drops an open machine edit when the page moves to another platform", () => {
+  admissions = [admission(1), admission(1, [], OTHER_ISSUER_ID)];
+  renderPage();
+
+  chooseMachineAction("Edit");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+
+  goToOtherPlatform();
+
+  expect(screen.getByText("Other CI")).toBeTruthy();
+  expect(screen.queryByText("Edit access")).toBeNull();
+  expect(updateSubject).not.toHaveBeenCalled();
+
+  chooseMachineAction("Edit");
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-01");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Nightly bot" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledTimes(1);
+  expect(updateSubject).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: `admission-${OTHER_ISSUER_ID}-1`,
+        name: "Nightly bot",
+      },
+    },
+  });
+});
