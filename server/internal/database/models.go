@@ -1785,6 +1785,13 @@ type OktaResourceConnection struct {
 	UpdatedAt                    pgtype.Timestamptz
 }
 
+type OktaServerSuggestionDismissal struct {
+	OrganizationID  string
+	RegistryEntryID uuid.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type OnboardingPlaybook struct {
 	ID             uuid.UUID
 	UseCaseID      uuid.NullUUID
