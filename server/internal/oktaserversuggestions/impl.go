@@ -271,10 +271,11 @@ type record struct {
 	mapping mcpregistry.OktaMapping
 }
 
-// httpsIcon keeps an icon the dashboard may load: an absolute HTTPS URL.
-func httpsIcon(src string) string {
+// httpsURL keeps a URL the dashboard may load or install: absolute HTTPS
+// with a host and no userinfo.
+func httpsURL(src string) string {
 	u, err := url.Parse(src)
-	if err != nil || u.Scheme != "https" || u.Host == "" {
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
 		return ""
 	}
 	return src
@@ -314,6 +315,11 @@ func decodeRecord(data []byte) (record, error) {
 				return rec, fmt.Errorf("decode remote headers: %w", err)
 			}
 		}
+		// The record contract allows plain HTTP; the install flow must not be
+		// handed one.
+		if httpsURL(str(r, "url")) == "" {
+			continue
+		}
 		remote := &srv.OktaServerSuggestionRemote{Type: str(r, "type"), URL: str(r, "url"), Headers: make([]*srv.OktaServerSuggestionRemoteHeader, 0, len(headers))}
 		for _, h := range headers {
 			remote.Headers = append(remote.Headers, &srv.OktaServerSuggestionRemoteHeader{
@@ -330,7 +336,7 @@ func decodeRecord(data []byte) (record, error) {
 		_ = json.Unmarshal(raw, &icons)
 	}
 	if len(icons) > 0 {
-		rec.iconURL = httpsIcon(str(icons[0], "src"))
+		rec.iconURL = httpsURL(str(icons[0], "src"))
 	}
 	if raw, ok := root["_meta"]; ok {
 		_ = json.Unmarshal(raw, &meta)
