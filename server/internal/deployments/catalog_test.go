@@ -15,8 +15,10 @@ import (
 )
 
 func TestDeploymentsService_RejectNewCatalogSelection(t *testing.T) {
+	t.Parallel()
 	for _, method := range []string{"create", "evolve"} {
 		t.Run(method, func(t *testing.T) {
+			t.Parallel()
 			ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
 			require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
 			form := &gen.AddExternalMCPForm{RegistryID: new(externalmcp.NativeCatalogRegistryID.String()), Name: "Test", Slug: "test", RegistryServerSpecifier: "example/server"}
@@ -32,8 +34,10 @@ func TestDeploymentsService_RejectNewCatalogSelection(t *testing.T) {
 }
 
 func TestDeploymentsService_EvolveRetainsCatalogIdentityAfterFlip(t *testing.T) {
+	t.Parallel()
 	for _, upsert := range []bool{false, true} {
 		t.Run(map[bool]string{false: "carried", true: "matching upsert"}[upsert], func(t *testing.T) {
+			t.Parallel()
 			ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
 			require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
 			auth, ok := contextvalues.GetAuthContext(ctx)
@@ -69,8 +73,10 @@ func TestDeploymentsService_EvolveRetainsCatalogIdentityAfterFlip(t *testing.T) 
 }
 
 func TestDeploymentsService_RejectUnpublishedNativeAttachment(t *testing.T) {
+	t.Parallel()
 	for _, method := range []string{"create", "evolve"} {
 		t.Run(method, func(t *testing.T) {
+			t.Parallel()
 			ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
 			require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
 			auth, ok := contextvalues.GetAuthContext(ctx)
@@ -91,6 +97,7 @@ func TestDeploymentsService_RejectUnpublishedNativeAttachment(t *testing.T) {
 }
 
 func TestDeploymentsService_CatalogRetryKeepsAcceptedDeployment(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

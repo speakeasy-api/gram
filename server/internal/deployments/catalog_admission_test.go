@@ -9,6 +9,7 @@ import (
 )
 
 func TestCatalogAdmissionPreservesOnlyPersistedIdentity(t *testing.T) {
+	t.Parallel()
 	id := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	saved := []repo.ListDeploymentExternalMCPsRow{{RegistryID: id, Slug: "test", RegistryServerSpecifier: "example/server"}}
 	base := upsertExternalMCP{registryID: id, slug: "test", registryServerSpecifier: "example/server"}
@@ -30,6 +31,7 @@ func TestCatalogAdmissionPreservesOnlyPersistedIdentity(t *testing.T) {
 		{"direct attachment", func(v *upsertExternalMCP) { v.registryID = uuid.NullUUID{} }, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			candidate := base
 			tc.change(&candidate)
 			err := svc.admitExternalMCPSelections(t.Context(), "org-test", "test-org", []upsertExternalMCP{candidate}, saved, nil)
