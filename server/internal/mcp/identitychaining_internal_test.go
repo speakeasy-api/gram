@@ -109,11 +109,12 @@ func TestUpstreamTokenPresent(t *testing.T) {
 	tokens := map[uuid.UUID]remotesessions.UpstreamToken{
 		issuer: {Token: "t", Resource: "https://upstream.example.test/mcp/", RemoteSessionClientID: uuid.New(), RemoteSessionID: uuid.New()},
 	}
-	require.True(t, upstreamTokenPresent(tokens, "https://upstream.example.test/mcp", uuid.NullUUID{}))
-	require.False(t, upstreamTokenPresent(tokens, "https://other.example.test/mcp", uuid.NullUUID{}))
-	require.False(t, upstreamTokenPresent(nil, "https://upstream.example.test/mcp", uuid.NullUUID{}))
-	require.True(t, upstreamTokenPresent(tokens, "https://upstream.example.test/mcp", uuid.NullUUID{UUID: issuer, Valid: true}))
-	require.False(t, upstreamTokenPresent(tokens, "https://upstream.example.test/mcp", uuid.NullUUID{UUID: uuid.New(), Valid: true}))
+	require.True(t, upstreamTokenPresent(tokens, "https://upstream.example.test/mcp", false, uuid.NullUUID{}))
+	require.False(t, upstreamTokenPresent(tokens, "https://other.example.test/mcp", false, uuid.NullUUID{}))
+	require.False(t, upstreamTokenPresent(nil, "https://upstream.example.test/mcp", false, uuid.NullUUID{}))
+	require.True(t, upstreamTokenPresent(tokens, "https://upstream.example.test/mcp", true, uuid.NullUUID{UUID: issuer, Valid: true}))
+	require.False(t, upstreamTokenPresent(tokens, "https://upstream.example.test/mcp", true, uuid.NullUUID{UUID: uuid.New(), Valid: true}))
+	require.False(t, upstreamTokenPresent(tokens, "https://upstream.example.test/mcp", true, uuid.NullUUID{}), "a tunnel without a derived issuer holds no token")
 }
 
 func TestIdentityChainingError(t *testing.T) {

@@ -332,8 +332,9 @@ func hostedServingFromWrapper(mcpServer *mcpserversrepo.McpServer, callerGated b
 // the backend's own upstream resource. There is no lone-token shortcut: an
 // unmatched credential is never forwarded regardless of how few there are.
 //
-// tunneledIssuerID is a tunneled backend's own derived remote_session_issuer
-// (invalid for remote backends). A tunneled backend is routed by that identity
+// tunneled marks a tunneled backend and tunneledIssuerID is its own derived
+// remote_session_issuer (unused for remote backends). A tunneled backend is
+// routed by that identity
 // alone rather than by scanning recorded resources: its dial target is the
 // tunnel, decoupled from whatever resource its identifier claims, so an
 // operator-supplied identifier colliding with a sibling's upstream would
@@ -341,16 +342,16 @@ func hostedServingFromWrapper(mcpServer *mcpserversrepo.McpServer, callerGated b
 // routing key is the URL the proxy dials, so matching across the map returns
 // each credential to the audience it names.
 //
-// A tunneled backend with no usable entry calls anonymously; an unmatched or
-// ambiguous resource on a remote backend fails closed so a mismatched bearer
-// is never forwarded.
-func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneledIssuerID uuid.NullUUID) (string, error) {
+// A tunneled backend with no usable entry, or no derived issuer, calls
+// anonymously; an unmatched or ambiguous resource on a remote backend fails
+// closed so a mismatched bearer is never forwarded.
+func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneled bool, tunneledIssuerID uuid.NullUUID) (string, error) {
 	want := strings.TrimRight(upstreamResource, "/")
 	if len(tokens) == 0 {
 		return "", nil
 	}
 
-	if tunneledIssuerID.Valid {
+	if tunneled {
 		return tunneledIssuerToken(tokens, tunneledIssuerID, want), nil
 	}
 	if want == "" {

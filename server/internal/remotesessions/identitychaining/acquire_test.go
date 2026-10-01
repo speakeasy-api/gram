@@ -23,6 +23,7 @@ import (
 const (
 	testIdPIssuer       = "https://idp.example.test/tenant"
 	testResourceIssuer  = "https://as.resource.example.test"
+	testAudience        = "https://app.resource.example.test"
 	testResource        = "https://api.resource.example.test/"
 	testResourceClient  = "resource-client"
 	testUpstreamSubject = "00u-upstream-subject"
@@ -40,7 +41,7 @@ func testSelection() selection {
 		scopes:           []string{"read", "write"},
 		trustedIssuerID:  uuid.New(),
 		trustedClientID:  uuid.New(),
-		audience:         testResourceIssuer,
+		audience:         testAudience,
 	}
 }
 
@@ -96,7 +97,7 @@ func TestExchange_RequestsIDJAGForTheResource(t *testing.T) {
 	require.Equal(t, "id-token-value", form.Get("subject_token"))
 	require.Equal(t, oauthwire.TokenTypeIDToken, form.Get("subject_token_type"))
 	require.Equal(t, oauthwire.TokenTypeIDJAG, form.Get("requested_token_type"))
-	require.Equal(t, testResourceIssuer, form.Get("audience"), "audience is the selected ID-JAG audience")
+	require.Equal(t, testAudience, form.Get("audience"), "audience is the selected ID-JAG audience, not the resource issuer")
 	require.Equal(t, testResource, form.Get("resource"), "the canonical resource keeps its trailing slash")
 	require.Equal(t, "read write", form.Get("scope"))
 	require.NotContains(t, form.Encode(), testResourceClient, "the resource client is never sent to the identity provider")
@@ -284,6 +285,7 @@ func TestValidateGrant_RejectsUnboundClaims(t *testing.T) {
 		{"plain jwt type", "JWT", func(map[string]any, time.Time) {}},
 		{"other issuer", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["iss"] = "https://attacker.example.test" }},
 		{"other audience", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["aud"] = "https://other-as.example.test" }},
+		{"resource issuer instead of confirmed audience", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["aud"] = testResourceIssuer }},
 		{"several audiences", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) {
 			c["aud"] = []string{testResourceIssuer, "https://other-as.example.test"}
 		}},

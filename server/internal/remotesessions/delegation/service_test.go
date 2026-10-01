@@ -1251,9 +1251,17 @@ func TestDelegationServiceCheck(t *testing.T) {
 	})
 	t.Run("expired assertion still belongs to the registration", func(t *testing.T) {
 		t.Parallel()
-		s, _, p, b, allow := newDelegationUnitFixture(t)
-		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
-		require.NoError(t, s.Check(t.Context(), b, allow), "Check never judges assertion lifetime or renews")
+		s, store, p, b, allow := newDelegationUnitFixture(t)
+		signedIn := s.now()
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, signedIn, "id", "refresh", 30*time.Second), true))
+		s.now = func() time.Time { return signedIn.Add(time.Minute) }
+		before, err := store.load(t.Context(), b)
+		require.NoError(t, err)
+		require.True(t, before.assertionExpiry.Before(s.now()), "the assertion has expired")
+		require.NoError(t, s.Check(t.Context(), b, allow), "Check never judges assertion lifetime")
+		after, err := store.load(t.Context(), b)
+		require.NoError(t, err)
+		require.Equal(t, before, after, "Check never renews or rewrites the credential")
 	})
 	t.Run("changed registration", func(t *testing.T) {
 		t.Parallel()
