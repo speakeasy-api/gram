@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -207,6 +208,23 @@ func TestOrganizationToken_RefusesResourcesIndistinguishably(t *testing.T) {
 		requireTargetRefused(t, w)
 		require.NotContains(t, w.Body.String(), resource, name)
 	}
+	require.Empty(t, f.workloadSessions(t))
+}
+
+// A server reachable only through the organization's IP-allowlisted custom
+// domain is refused like any other unavailable resource.
+func TestOrganizationToken_CustomDomainLockdownRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newOrganizationGrantFixture(t)
+	_, err := customdomainsrepo.New(f.ti.conn).CreateCustomDomain(f.ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: f.fx.orgID,
+		Domain:         "org-token-lockdown-" + uuid.NewString()[:8] + ".example.com",
+		IpAllowlist:    []string{"203.0.113.0/24"},
+	})
+	require.NoError(t, err)
+
+	requireTargetRefused(t, f.exchangeAtOrganization(t, f.assertion(t, f.issuer), f.resource))
 	require.Empty(t, f.workloadSessions(t))
 }
 
@@ -425,8 +443,8 @@ func TestOrganizationToken_ServedOnTheAuthenticationHost(t *testing.T) {
 	w = harness.serve(t, http.MethodPost, "auth.example.com", "/o/"+f.orgSlug+"/token", workloadGrantForm(f.assertion(t, authIssuer+"/token"), f.resource))
 	f.requireOrganizationSession(t, w, authIssuer, f.resource)
 
-	// The platform host no longer serves it, and the platform-host issuer is
-	// no longer an accepted audience.
+	// The platform host does not serve it, and the platform-host issuer is
+	// not an accepted audience.
 	err = f.ti.service.HandleOrganizationToken(httptest.NewRecorder(), organizationRequest(t, http.MethodPost, "/o/"+f.orgSlug+"/token", f.orgSlug, workloadGrantForm(f.assertion(t, f.issuer), f.resource)))
 	requireNotFound(t, err)
 	w = harness.serve(t, http.MethodPost, "auth.example.com", "/o/"+f.orgSlug+"/token", workloadGrantForm(f.assertion(t, f.issuer), f.resource))

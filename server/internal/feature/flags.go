@@ -39,8 +39,8 @@ const (
 	// and the Access Hub's display of it. Evaluated server-side on both routes
 	// and in workloadIdentities.organizationConnectionDetails, and in the
 	// dashboard; targeted by PostHog organization group (org slug). Fails
-	// closed: off or indeterminate answers 404 on both routes. Removed once
-	// the organization endpoint is GA.
+	// closed: off, or indeterminate without an error, answers 404 on both
+	// routes; an evaluation error answers 503.
 	FlagOrgTokenEndpoint Flag = "gram-org-token-endpoint" //nolint:gosec // a feature flag key, not a credential
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a

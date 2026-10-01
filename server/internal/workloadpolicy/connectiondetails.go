@@ -114,9 +114,9 @@ func (s *Service) ConnectionDetails(ctx context.Context, payload *gen.Connection
 }
 
 // OrganizationConnectionDetails reads the organization's own token endpoint.
-// It is a sibling of ConnectionDetails rather than a mode of it: it names no
-// MCP server, so it needs no mcp:read and reads the same for every caller in
-// the organization, including one whose API key names a project.
+// It names no MCP server, so it needs no mcp:read and reads the same for
+// every caller in the organization, including one whose API key names a
+// project.
 func (s *Service) OrganizationConnectionDetails(ctx context.Context, _ *gen.OrganizationConnectionDetailsPayload) (*gen.WorkloadOrganizationConnectionDetails, error) {
 	t, err := s.resolve(ctx, authz.ScopeWorkloadRead)
 	if err != nil {

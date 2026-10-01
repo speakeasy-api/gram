@@ -353,6 +353,16 @@ func (s *Service) resolveOrganizationWorkloadTarget(ctx context.Context, logger 
 	if endpoint.OrganizationID != organizationID {
 		return nil, refuse("resource_other_organization", fmt.Errorf("resource belongs to organization %s", endpoint.OrganizationID))
 	}
+	// A session for a platform-host resource is useless once the
+	// organization's custom domain carries an IP allowlist: runtime dispatch
+	// on the platform host refuses every request for it.
+	lockedDown, err := s.organizationCustomDomainLockdown(ctx, logger, organizationID)
+	if err != nil {
+		return nil, workloadGrantStageUnavailable("resource_lockdown_unavailable", err)
+	}
+	if lockedDown {
+		return nil, refuse("resource_custom_domain_locked", errors.New("resource is only reachable through the organization's custom domain"))
+	}
 	canonical, err := endpoint.RootURL(platformBaseURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build workload grant resource identifier").LogError(ctx, logger)
