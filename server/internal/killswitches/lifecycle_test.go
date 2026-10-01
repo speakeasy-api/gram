@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestLifecycleVersionsSnapshotsAndStaleReferences(t *testing.T) {
@@ -202,9 +204,17 @@ func TestLifecycleConcurrentCreationAndCAS(t *testing.T) {
 	conn, orgID := newLifecycleDatabase(t, "killswitch_concurrency")
 	firstEntered := make(chan struct{})
 	releaseFirst := make(chan struct{})
+	release := sync.OnceFunc(func() { close(releaseFirst) })
+	t.Cleanup(release)
+	var holderPID atomic.Int32
 	var hookCalls atomic.Int64
-	hook := func(_ context.Context, _ LifecycleTransactionQueries, event MutationEvent) error {
+	hook := func(ctx context.Context, queries LifecycleTransactionQueries, event MutationEvent) error {
 		if event.Operation == MutationOperationActivate && hookCalls.Add(1) == 1 {
+			pid, err := testrepo.New(queries).BackendPIDFixture(ctx)
+			if err != nil {
+				return fmt.Errorf("observe lifecycle holder: %w", err)
+			}
+			holderPID.Store(pid)
 			close(firstEntered)
 			<-releaseFirst
 		}
@@ -226,13 +236,8 @@ func TestLifecycleConcurrentCreationAndCAS(t *testing.T) {
 		result, err := service.ActivatePrescription(t.Context(), request)
 		outcomes <- outcome{result: result, err: err}
 	}()
-	select {
-	case result := <-outcomes:
-		close(releaseFirst)
-		t.Fatalf("concurrent operation did not wait: %+v", result)
-	case <-time.After(100 * time.Millisecond):
-	}
-	close(releaseFirst)
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), conn, uint32(holderPID.Load()), 1)
+	release()
 	first, second := <-outcomes, <-outcomes
 	require.NoError(t, first.err)
 	require.NoError(t, second.err)
@@ -311,10 +316,18 @@ func TestLifecycleAuthoritativeValidationUsesMutationTransaction(t *testing.T) {
 	require.NoError(t, err)
 	beforeCommit := make(chan struct{})
 	releaseCommit := make(chan struct{})
-	hook := func(_ context.Context, queries LifecycleTransactionQueries, _ MutationEvent) error {
+	release := sync.OnceFunc(func() { close(releaseCommit) })
+	t.Cleanup(release)
+	var holderPID atomic.Int32
+	hook := func(ctx context.Context, queries LifecycleTransactionQueries, _ MutationEvent) error {
 		if _, canCommit := queries.(interface{ Commit(context.Context) error }); canCommit {
 			return errors.New("before-commit queries expose transaction completion")
 		}
+		pid, err := testrepo.New(queries).BackendPIDFixture(ctx)
+		if err != nil {
+			return fmt.Errorf("observe lifecycle holder: %w", err)
+		}
+		holderPID.Store(pid)
 		close(beforeCommit)
 		<-releaseCommit
 		return nil
@@ -345,13 +358,8 @@ func TestLifecycleAuthoritativeValidationUsesMutationTransaction(t *testing.T) {
 		`, orgID, orgID+":tool:a")
 		deleteDone <- err
 	}()
-	select {
-	case err := <-deleteDone:
-		close(releaseCommit)
-		t.Fatalf("authoritative resource delete did not wait for lifecycle commit: %v", err)
-	case <-time.After(100 * time.Millisecond):
-	}
-	close(releaseCommit)
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), conn, uint32(holderPID.Load()), 1)
+	release()
 	outcome := <-mutationDone
 	require.NoError(t, outcome.err)
 	require.NotEmpty(t, outcome.result.PrescriptionID)

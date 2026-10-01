@@ -122,7 +122,7 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 	}
 
 	if s.beforeClaim != nil {
-		s.beforeClaim(previousURL)
+		s.beforeClaim(dbtx.Conn().PgConn().PID(), previousURL)
 	}
 	claim := claimOn(resourceURL)
 	claimed := make([]resourceClient, 0, len(clients))

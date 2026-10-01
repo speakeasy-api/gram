@@ -485,19 +485,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, err
 	}
 
-	plugin := repo.Plugin{
-		ID:             pluginRow.ID,
-		OrganizationID: pluginRow.OrganizationID,
-		ProjectID:      pluginRow.ProjectID,
-		Name:           pluginRow.Name,
-		Slug:           pluginRow.Slug,
-		Description:    pluginRow.Description,
-		IsDefault:      pluginRow.IsDefault,
-		CreatedAt:      pluginRow.CreatedAt,
-		UpdatedAt:      pluginRow.UpdatedAt,
-		DeletedAt:      pluginRow.DeletedAt,
-		Deleted:        pluginRow.Deleted,
-	}
+	plugin := pluginRow.Plugin
 	result := pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug])
 	result.ServerCount = &pluginRow.ServerCount
 	result.SkillCount = &pluginRow.SkillCount

@@ -189,7 +189,11 @@ type OpenAIChatRequest struct {
 	// dropped from the wire and the provider would silently fall back to its
 	// non-zero default. initializeRequest always assigns a concrete value
 	// (defaulting to 1.0), so this field is always intentionally set.
-	Temperature    float32                            `json:"temperature"`
+	Temperature float32 `json:"temperature"`
+
+	// MaxTokens caps generated tokens, reasoning included. Inbound proxy
+	// requests decode into it but do not forward it.
+	MaxTokens      *int                               `json:"max_tokens,omitempty"`
 	ResponseFormat *or.ResponseFormat                 `json:"response_format,omitempty"`
 	Reasoning      *Reasoning                         `json:"reasoning,omitempty"`
 	CacheControl   *or.AnthropicCacheControlDirective `json:"cache_control,omitempty"`
@@ -201,6 +205,10 @@ type OpenAIChatRequest struct {
 	Trace     *TraceConfig      `json:"trace,omitempty"`
 	Plugins   []RequestPlugin   `json:"plugins,omitempty"`
 }
+
+// FinishReasonLength is the finish_reason for a completion stopped by
+// max_tokens. Its body is partial, not an answer.
+const FinishReasonLength = "length"
 
 // RequestPlugin is one entry in the outbound `plugins` array: the web-search
 // plugin ("web") and the response-healing plugin ("response-healing").

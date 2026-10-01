@@ -120,20 +120,14 @@ func TestLockProjectSerializesTransactions(t *testing.T) {
 	require.NoError(t, LockProject(ctx, first, fixture.projectID))
 
 	second := testenv.BeginTx(t, ctx, fixture.conn)
-	acquired := make(chan error, 1)
-	go func() {
-		acquired <- LockProject(ctx, second, fixture.projectID)
-	}()
-
-	require.Never(t, func() bool {
-		return len(acquired) > 0
-	}, 100*time.Millisecond, 10*time.Millisecond)
-
+	// The server-side timeout proves the exact advisory lock was reached.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, ctx, second, probeTimeout)
+	testenv.RequireLockNotAvailable(t, LockProject(ctx, second, fixture.projectID))
+	require.NoError(t, second.Rollback(ctx))
 	require.NoError(t, first.Rollback(ctx))
-	require.Eventually(t, func() bool {
-		return len(acquired) > 0
-	}, time.Second, 10*time.Millisecond)
-	require.NoError(t, <-acquired)
+	third := testenv.BeginTx(t, ctx, fixture.conn)
+	require.NoError(t, LockProject(ctx, third, fixture.projectID))
 }
 
 func seedBlockingPolicy(t *testing.T, fixture admissionFixture) {

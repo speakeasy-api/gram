@@ -529,11 +529,7 @@ func TestPostgresOAuthStoreGenerationRotationRevokesGenerationCommittedWhileWait
 		_, rotateErr := store.RotateConnectionGeneration(ctx, organizationID, connection.ID, finalGeneration.String(), now.Add(2*time.Minute))
 		rotationResult <- rotateErr
 	}()
-	select {
-	case rotateErr := <-rotationResult:
-		require.FailNow(t, "generation rotation did not wait for the connection lock", "error: %v", rotateErr)
-	case <-time.After(100 * time.Millisecond):
-	}
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(blockingTx), 1)
 
 	require.NoError(t, blockingTx.Commit(ctx))
 	require.NoError(t, <-rotationResult)

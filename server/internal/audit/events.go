@@ -54,6 +54,7 @@ const (
 	subjectTypePlugin                      subjectType = "plugin"
 	subjectTypeProject                     subjectType = "project"
 	subjectTypeQuery                       subjectType = "query"
+	subjectTypeWidget                      subjectType = "widget"
 	subjectTypeRemoteMcpServer             subjectType = "remote_mcp_server"
 	subjectTypeRemoteMcpServerHeader       subjectType = "remote_mcp_server_header"
 	subjectTypeRemoteSession               subjectType = "remote_session"
