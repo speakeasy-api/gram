@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import { afterEach, expect, it, vi } from "vitest";
-import { WithdrawSubjectDialog } from "./WithdrawSubjectDialog";
-import { withdrawConfirmation } from "./withdrawConfirmation";
+import { RemoveSubjectDialog } from "./RemoveSubjectDialog";
+import { removeConfirmation } from "./removeConfirmation";
 
 afterEach(cleanup);
 
@@ -32,7 +32,7 @@ function admission(
 function renderDialog(machine: WorkloadAdmission) {
   const onConfirm = vi.fn();
   render(
-    <WithdrawSubjectDialog
+    <RemoveSubjectDialog
       admission={machine}
       onOpenChange={() => {}}
       onConfirm={(machine) => {
@@ -41,46 +41,46 @@ function renderDialog(machine: WorkloadAdmission) {
       isPending={false}
     />,
   );
-  const withdraw = screen.getByRole("button", {
-    name: "Withdraw machine",
+  const remove = screen.getByRole("button", {
+    name: "Remove machine",
   }) as HTMLButtonElement;
   const field = screen.getByLabelText(/to confirm/);
-  return { onConfirm, withdraw, field };
+  return { onConfirm, remove, field };
 }
 
 it("asks for the subject, even where the machine has a label", () => {
-  expect(withdrawConfirmation(admission())).toBe(
+  expect(removeConfirmation(admission())).toBe(
     "repo:acme/payments-api:ref:refs/heads/main",
   );
-  expect(withdrawConfirmation(admission({ name: "" }))).toBe(
+  expect(removeConfirmation(admission({ name: "" }))).toBe(
     "repo:acme/payments-api:ref:refs/heads/main",
   );
 });
 
 it("stays locked until the confirmation is typed exactly", () => {
-  const { onConfirm, withdraw, field } = renderDialog(admission());
+  const { onConfirm, remove, field } = renderDialog(admission());
 
-  expect(withdraw.disabled).toBe(true);
+  expect(remove.disabled).toBe(true);
 
   // The label is not enough, and neither is a near miss on the subject.
   fireEvent.change(field, { target: { value: "Payments deploy" } });
-  expect(withdraw.disabled).toBe(true);
+  expect(remove.disabled).toBe(true);
 
   fireEvent.change(field, {
     target: { value: "repo:acme/payments-api:ref:refs/heads/mai" },
   });
-  expect(withdraw.disabled).toBe(true);
+  expect(remove.disabled).toBe(true);
 
   fireEvent.change(field, {
     target: { value: "repo:acme/payments-api:ref:refs/heads/main" },
   });
-  expect(withdraw.disabled).toBe(false);
+  expect(remove.disabled).toBe(false);
 
-  fireEvent.click(withdraw);
+  fireEvent.click(remove);
   expect(onConfirm).toHaveBeenCalledTimes(1);
 });
 
-it("warns that existing sessions survive the withdrawal", () => {
+it("warns that existing sessions survive the removal", () => {
   renderDialog(admission());
 
   expect(
@@ -89,9 +89,9 @@ it("warns that existing sessions survive the withdrawal", () => {
 });
 
 it("confirms a subject stored with surrounding whitespace", () => {
-  const { withdraw, field } = renderDialog(admission({ subject: " spaced " }));
+  const { remove, field } = renderDialog(admission({ subject: " spaced " }));
 
   fireEvent.change(field, { target: { value: " spaced " } });
 
-  expect(withdraw.disabled).toBe(false);
+  expect(remove.disabled).toBe(false);
 });
