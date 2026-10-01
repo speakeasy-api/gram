@@ -62,7 +62,7 @@ it("warns that the machines under it go too", () => {
   renderDialog(2);
 
   expect(
-    screen.getByText(/All 2 machines allowed under it are withdrawn too/),
+    screen.getByText(/All 2 machines allowed under it are removed too/),
   ).toBeTruthy();
 });
 

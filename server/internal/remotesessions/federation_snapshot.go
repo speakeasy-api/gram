@@ -26,6 +26,7 @@ type federatedClientSnapshot struct {
 	TokenEndpointAuthAudienceFormat pgtype.Text        `json:"TokenEndpointAuthAudienceFormat"`
 	ClientIDMetadataUri             pgtype.Text        `json:"ClientIDMetadataUri"`
 	LegacyCallbackUrl               bool               `json:"LegacyCallbackUrl"`
+	CallbackBaseUrl                 pgtype.Text        `json:"CallbackBaseUrl"`
 	ResourceIdentifier              pgtype.Text        `json:"ResourceIdentifier"`
 	ResourceName                    pgtype.Text        `json:"ResourceName"`
 	ResourceDocumentation           pgtype.Text        `json:"ResourceDocumentation"`

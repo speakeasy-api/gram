@@ -1,4 +1,4 @@
-h1:uW//n8VIGq/Q0LSRFY1bHlG8zi8f4cHxNP7TZCTlESE=
+h1:AS6MPvl/EfzdS88fT5Wy3D68CwtaLckt0apA/jkzz74=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -442,4 +442,9 @@ h1:uW//n8VIGq/Q0LSRFY1bHlG8zi8f4cHxNP7TZCTlESE=
 20260929165337_registry_publication_metadata.sql h1:CG9EpKlWCUA8Lkbc5qq05z985/Kf+b1pnHYCFnvS3O4=
 20260929233122_workload-issuer-description-admission-tags.sql h1:9QNIJVvQDeJanew7AygvbVVnezBmozfCw70qMYXSomY=
 20260930005350_onboarding-admin.sql h1:TMtD5eRhAvCiffV9dH38vUGSfTEEzGgLj3KJqWEKkQ8=
-20260930200626_okta-server-suggestion-dismissals.sql h1:9mcEgf/QHVxNC8vDa760spZHQiN/yaPNccx7eE6Tzs0=
+20260930185219_workload-issuers-wildcard-default-on.sql h1:8/lune+2zc2bTCGA5yRDHxXA12vfCEY8PbOik8G+KE0=
+20260930204740_risk-finding-evidence.sql h1:59z6LPvVI4NNvUFLp8d+XBoSDkDJ3YW11BA8eMvEITw=
+20260930225444_okta-resource-connections-observed-result.sql h1:DFJ+eUV/HPw4288p7uLvkrlHqaI/W5HsUdQ74JZDpHw=
+20261001114911_org-host-default-host-and-callback-base-url.sql h1:LJT5oqddEUimwKpqcf2S8/XGPSdWvuYbIQc06W4rAd8=
+20261001155203_widgets-add-table.sql h1:HRURtfT1QUCIYIB1V+sRceAA3p2ZATOHhaWAPp54X6A=
+20261001180720_okta-server-suggestion-dismissals.sql h1:XNLp2SFt684tMne7ilQ9Y6EVp7m7rMir2nZnnGtARoY=

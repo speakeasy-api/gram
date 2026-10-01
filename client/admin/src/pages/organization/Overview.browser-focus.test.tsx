@@ -29,6 +29,14 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   };
 });
 
+// The stack form has its own suite; it must not reach the network from here.
+vi.mock("@/pages/organization/OnboardingStack", () => ({
+  OnboardingStack: () => <p>Stack form</p>,
+}));
+vi.mock("@/pages/organization/OnboardingPlaybook", () => ({
+  OnboardingPlaybook: () => <p>Playbook view</p>,
+}));
+
 // Radix Presence keeps a closing dialog mounted through its exit animation.
 // FocusScope still owns focus during that interval, so an app timer can run too
 // early. Animation end then models close-autofocus immediately before the

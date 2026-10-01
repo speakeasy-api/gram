@@ -31,10 +31,10 @@ describe("catalogPresetState", () => {
     ]);
   });
 
-  it("warns on secrets and PII when no tool is destructive", () => {
+  it("logs secrets and PII when no tool is destructive", () => {
     const state = catalogPresetState([{ name: "read", destructive: false }]);
     expect(state.categories.has("destructive_tool")).toBe(false);
-    expect(effectiveAction(state)).toBe("warn");
+    expect(effectiveAction(state)).toBe("flag");
   });
 });
 
@@ -52,10 +52,18 @@ describe("isDestructiveTool", () => {
 describe("effectiveAction", () => {
   it("forces logging while a flag-only detector is selected", () => {
     const state = defaultServerGuardrailState();
-    state.action = "warn";
-    expect(effectiveAction(state)).toBe("warn");
+    state.action = "block";
+    expect(effectiveAction(state)).toBe("block");
     state.categories.add("destructive_tool");
     expect(effectiveAction(state)).toBe("flag");
+  });
+
+  it("maps warn and quarantine to block for MCP-scoped guardrails", () => {
+    const state = defaultServerGuardrailState();
+    state.action = "warn";
+    expect(effectiveAction(state)).toBe("block");
+    state.action = "quarantine";
+    expect(effectiveAction(state)).toBe("block");
   });
 });
 
