@@ -73867,6 +73867,113 @@ paths:
       x-speakeasy-name-override: admitSubject
       x-speakeasy-react-hook:
         name: AdmitWorkloadSubject
+  /rpc/workloadIdentities.connectionDetails:
+    get:
+      description: 'Read the values an external platform must be configured with to exchange its workload identity tokens at an MCP server: for each of the server''s addresses, the token endpoint, the authorization server''s issuer identifier, and the resource URL, as the address''s authorization server metadata serves them, plus whether an exchange there can succeed. Requires workload:read and mcp:read on the server. A caller that names a project can read only that project''s servers.'
+      operationId: getWorkloadConnectionDetails
+      parameters:
+        - allowEmptyValue: true
+          description: The MCP server the platform will call.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The MCP server the platform will call.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadConnectionDetails'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: connectionDetails workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: connectionDetails
+      x-speakeasy-react-hook:
+        name: WorkloadConnectionDetails
   /rpc/workloadIdentities.list:
     get:
       description: 'Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project''s tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.'
@@ -105141,6 +105248,73 @@ components:
         - wildcard_active
         - created_at
         - updated_at
+    WorkloadConnectionDetails:
+      type: object
+      properties:
+        endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadConnectionEndpoint'
+          description: The server's addresses, platform-host addresses first. Empty when the server has no address.
+        mcp_server_id:
+          type: string
+          description: The MCP server id.
+          format: uuid
+        mcp_server_name:
+          type: string
+          description: The MCP server's display name; empty when it has none.
+      description: The values a federating platform is configured with for one MCP server.
+      required:
+        - mcp_server_id
+        - mcp_server_name
+        - endpoints
+    WorkloadConnectionEndpoint:
+      type: object
+      properties:
+        api_host:
+          type: string
+          description: The host of resource_url, which a platform lists among the API hosts its token may be sent to.
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+          description: grant_types_supported as the authorization server metadata lists it. Empty when Gram is not this address's authorization server.
+        issuer:
+          type: string
+          description: The authorization server's issuer identifier. An assertion's aud must be exactly this or token_endpoint. Empty when Gram is not this address's authorization server.
+        not_ready_reason:
+          type: string
+          description: 'Why an exchange here cannot succeed; absent when ready. not_publicly_reachable: the address does not resolve publicly (disabled, or private network only). no_authorization_server: the server is not gated on a Gram user session issuer, or is an anonymous public tunnel, which serves no OAuth metadata even when it has one. workload_grant_unavailable: the metadata does not advertise the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.'
+          enum:
+            - not_publicly_reachable
+            - no_authorization_server
+            - workload_grant_unavailable
+            - agent_rollout_disabled
+        on_authentication_host:
+          type: boolean
+          description: Whether token_endpoint is on Gram's dedicated authentication host, a different host from api_host.
+        ready:
+          type: boolean
+          description: Whether nothing Gram knows of stops an exchange at this address. The platform's own configuration and the trust policy are not checked.
+        resource_url:
+          type: string
+          description: 'The MCP server URL: the resource the exchanged session is for.'
+        token_endpoint:
+          type: string
+          description: Where the platform sends its assertion. Empty when Gram is not this address's authorization server.
+        workload_grant_advertised:
+          type: boolean
+          description: Whether the metadata lists the jwt-bearer grant because the clientless workload assertion exchange is available here.
+      description: One address of an MCP server, with the values a federating platform is configured with. Issuer and token endpoint are the ones the address's authorization server metadata serves, so a client that discovers them reads the same values.
+      required:
+        - resource_url
+        - api_host
+        - issuer
+        - token_endpoint
+        - on_authentication_host
+        - grant_types_supported
+        - workload_grant_advertised
+        - ready
     WorkloadIdentityPolicy:
       type: object
       properties:

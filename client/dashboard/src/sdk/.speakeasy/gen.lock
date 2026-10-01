@@ -769,6 +769,7 @@ trackedFiles:
   src/funcs/widgetsList.ts: {}
   src/funcs/widgetsUpdate.ts: {}
   src/funcs/workloadIdentitiesAdmitSubject.ts: {}
+  src/funcs/workloadIdentitiesConnectionDetails.ts: {}
   src/funcs/workloadIdentitiesList.ts: {}
   src/funcs/workloadIdentitiesRegisterIssuer.ts: {}
   src/funcs/workloadIdentitiesUpdateIssuer.ts: {}
@@ -1899,6 +1900,8 @@ trackedFiles:
   src/models/components/verifyurlresult.ts: {}
   src/models/components/widget.ts: {}
   src/models/components/workloadadmission.ts: {}
+  src/models/components/workloadconnectiondetails.ts: {}
+  src/models/components/workloadconnectionendpoint.ts: {}
   src/models/components/workloadidentitypolicy.ts: {}
   src/models/components/workloadissuer.ts: {}
   src/models/components/workosdomainverificationintentoptions.ts: {}
@@ -2236,6 +2239,7 @@ trackedFiles:
   src/models/operations/getusersessionissuer.ts: {}
   src/models/operations/getusersessionissuercimdclient.ts: {}
   src/models/operations/getwidget.ts: {}
+  src/models/operations/getworkloadconnectiondetails.ts: {}
   src/models/operations/getworkunitstrend.ts: {}
   src/models/operations/hooksnumberclaude.ts: {}
   src/models/operations/hooksnumbercodex.ts: {}
@@ -3720,6 +3724,8 @@ trackedFiles:
   src/react-query/withdrawWorkloadSubject.ts: {}
   src/react-query/workUnitsTrend.core.ts: {}
   src/react-query/workUnitsTrend.ts: {}
+  src/react-query/workloadConnectionDetails.core.ts: {}
+  src/react-query/workloadConnectionDetails.ts: {}
   src/react-query/workloadIdentities.core.ts: {}
   src/react-query/workloadIdentities.ts: {}
   src/sdk/access.ts: {}
@@ -7842,6 +7848,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getWorkloadConnectionDetails:
+    speakeasy-default-get-workload-connection-details:
+      parameters:
+        query:
+          mcp_server_id: "7571d80f-0c31-4991-9312-eaea9c8d0dde"
+      responses:
+        "200":
+          application/json: {"endpoints": [], "mcp_server_id": "d9bcd670-6362-4d6e-b3da-ef09bfa6fa31", "mcp_server_name": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   hooks#claude:
     speakeasy-default-hooks#claude:
       requestBody:

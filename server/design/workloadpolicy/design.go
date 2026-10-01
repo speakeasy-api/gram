@@ -206,6 +206,35 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "withdrawSubject")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WithdrawWorkloadSubject"}`)
 	})
+
+	Method("connectionDetails", func() {
+		Description("Read the values an external platform must be configured with to exchange its workload identity tokens at an MCP server: for each of the server's addresses, the token endpoint, the authorization server's issuer identifier, and the resource URL, as the address's authorization server metadata serves them, plus whether an exchange there can succeed. Requires workload:read and mcp:read on the server. A caller that names a project can read only that project's servers.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The MCP server the platform will call.", func() {
+				Format(FormatUUID)
+			})
+			Required("mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadConnectionDetails)
+
+		HTTP(func() {
+			GET("/rpc/workloadIdentities.connectionDetails")
+			Param("mcp_server_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getWorkloadConnectionDetails")
+		Meta("openapi:extension:x-speakeasy-name-override", "connectionDetails")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkloadConnectionDetails"}`)
+	})
 })
 
 var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
@@ -372,4 +401,34 @@ var WorkloadIdentityPolicy = Type("WorkloadIdentityPolicy", func() {
 	Attribute("admissions", ArrayOf(WorkloadAdmission), "Admitted subjects.")
 
 	Required("issuers", "admissions")
+})
+
+var WorkloadConnectionEndpoint = Type("WorkloadConnectionEndpoint", func() {
+	Description("One address of an MCP server, with the values a federating platform is configured with. Issuer and token endpoint are the ones the address's authorization server metadata serves, so a client that discovers them reads the same values.")
+
+	Attribute("resource_url", String, "The MCP server URL: the resource the exchanged session is for.")
+	Attribute("api_host", String, "The host of resource_url, which a platform lists among the API hosts its token may be sent to.")
+	Attribute("issuer", String, "The authorization server's issuer identifier. An assertion's aud must be exactly this or token_endpoint. Empty when Gram is not this address's authorization server.")
+	Attribute("token_endpoint", String, "Where the platform sends its assertion. Empty when Gram is not this address's authorization server.")
+	Attribute("on_authentication_host", Boolean, "Whether token_endpoint is on Gram's dedicated authentication host, a different host from api_host.")
+	Attribute("grant_types_supported", ArrayOf(String), "grant_types_supported as the authorization server metadata lists it. Empty when Gram is not this address's authorization server.")
+	Attribute("workload_grant_advertised", Boolean, "Whether the metadata lists the jwt-bearer grant because the clientless workload assertion exchange is available here.")
+	Attribute("ready", Boolean, "Whether nothing Gram knows of stops an exchange at this address. The platform's own configuration and the trust policy are not checked.")
+	Attribute("not_ready_reason", String, "Why an exchange here cannot succeed; absent when ready. not_publicly_reachable: the address does not resolve publicly (disabled, or private network only). no_authorization_server: the server is not gated on a Gram user session issuer, or is an anonymous public tunnel, which serves no OAuth metadata even when it has one. workload_grant_unavailable: the metadata does not advertise the workload grant. agent_rollout_disabled: the organization is outside the agent authorization rollout the token endpoint requires.", func() {
+		Enum("not_publicly_reachable", "no_authorization_server", "workload_grant_unavailable", "agent_rollout_disabled")
+	})
+
+	Required("resource_url", "api_host", "issuer", "token_endpoint", "on_authentication_host", "grant_types_supported", "workload_grant_advertised", "ready")
+})
+
+var WorkloadConnectionDetails = Type("WorkloadConnectionDetails", func() {
+	Description("The values a federating platform is configured with for one MCP server.")
+
+	Attribute("mcp_server_id", String, "The MCP server id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_name", String, "The MCP server's display name; empty when it has none.")
+	Attribute("endpoints", ArrayOf(WorkloadConnectionEndpoint), "The server's addresses, platform-host addresses first. Empty when the server has no address.")
+
+	Required("mcp_server_id", "mcp_server_name", "endpoints")
 })

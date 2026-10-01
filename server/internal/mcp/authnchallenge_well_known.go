@@ -455,10 +455,11 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if !s.servesAuthorizationServerMetadata(ctx, endpoint, baseURL) {
 		return oops.E(oops.CodeNotFound, nil, "authorization server metadata is served on the issuer's host")
 	}
-	urls, err := endpoint.AuthorizationServerURLs(s.authorizationServerBaseURL(endpoint, baseURL))
+	discovery, err := s.discoverAuthorizationServer(endpoint, baseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
 	}
+	urls := discovery.urls
 	// Advertised only when the issuer admits at least some CIMD client. A
 	// `disabled` issuer omits the field: claiming support while admitting
 	// nothing would steer spec-compliant clients into a guaranteed-failure
@@ -480,25 +481,13 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if mode != admission.ModeDisabled {
 		cimdSupported = conv.PtrEmpty(true)
 	}
-	grantTypes := []string{
-		oauthwire.GrantTypeAuthorizationCode,
-		oauthwire.GrantTypeRefreshToken,
-	}
-	var grantProfiles []string
-	if endpoint.idJAGConfigured {
-		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
-		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
-	}
-	if !slices.Contains(grantTypes, oauthwire.GrantTypeJWTBearer) && s.workloadAssertionGrantAdvertised(endpoint) {
-		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
-	}
 	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{
 		AuthorizationEndpoint:                      urls.Authorize,
-		AuthorizationGrantProfilesSupported:        grantProfiles,
+		AuthorizationGrantProfilesSupported:        discovery.grantProfiles,
 		AuthorizationResponseIssParameterSupported: true,
 		ClientIDMetadataDocumentSupported:          cimdSupported,
 		CodeChallengeMethodsSupported:              usersessions.SupportedCodeChallengeMethods,
-		GrantTypesSupported:                        grantTypes,
+		GrantTypesSupported:                        discovery.grantTypes,
 		Issuer:                                     urls.Issuer,
 		RefreshTokenExpirationTypesSupported: []string{
 			"authorization",
@@ -511,6 +500,56 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		TokenEndpointAuthMethodsSupported:          usersessions.SupportedAuthMethods,
 		TokenEndpointAuthSigningAlgValuesSupported: clientAssertionSigningAlgorithms(),
 	})
+}
+
+// authorizationServerDiscovery is what an endpoint's RFC 8414 document tells a
+// client about obtaining a token: where the authorization server lives and
+// which grants it accepts. The document and the management API's connection
+// details both read it, so what an operator is told to configure is what a
+// client discovers.
+type authorizationServerDiscovery struct {
+	// urls are the endpoint's authorization server URLs on the issuer's host.
+	urls AuthorizationServerURLs
+
+	// grantTypes is grant_types_supported, in the order the document lists it.
+	grantTypes []string
+
+	// grantProfiles is authorization_grant_profiles_supported; nil when no
+	// profile is advertised.
+	grantProfiles []string
+
+	// workloadGrant reports whether jwt-bearer is listed because the
+	// clientless workload assertion grant is available at this endpoint, as
+	// opposed to only the client-authenticated ID-JAG exchange.
+	workloadGrant bool
+}
+
+// discoverAuthorizationServer resolves the discovery values for an endpoint
+// whose resource is served under resourceBaseURL.
+func (s *Service) discoverAuthorizationServer(endpoint *ResolvedMcpEndpoint, resourceBaseURL string) (authorizationServerDiscovery, error) {
+	urls, err := endpoint.AuthorizationServerURLs(s.authorizationServerBaseURL(endpoint, resourceBaseURL))
+	if err != nil {
+		return authorizationServerDiscovery{}, err
+	}
+	grantTypes := []string{
+		oauthwire.GrantTypeAuthorizationCode,
+		oauthwire.GrantTypeRefreshToken,
+	}
+	var grantProfiles []string
+	if endpoint.idJAGConfigured {
+		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
+		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
+	}
+	workloadGrant := s.workloadAssertionGrantAdvertised(endpoint)
+	if !slices.Contains(grantTypes, oauthwire.GrantTypeJWTBearer) && workloadGrant {
+		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
+	}
+	return authorizationServerDiscovery{
+		urls:          urls,
+		grantTypes:    grantTypes,
+		grantProfiles: grantProfiles,
+		workloadGrant: workloadGrant,
+	}, nil
 }
 
 // writeJSONMetadata is the shared write path for issuer-gated metadata

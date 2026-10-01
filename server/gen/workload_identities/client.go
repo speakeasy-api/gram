@@ -15,26 +15,28 @@ import (
 
 // Client is the "workloadIdentities" service client.
 type Client struct {
-	ListEndpoint            goa.Endpoint
-	RegisterIssuerEndpoint  goa.Endpoint
-	UpdateIssuerEndpoint    goa.Endpoint
-	WithdrawIssuerEndpoint  goa.Endpoint
-	AdmitSubjectEndpoint    goa.Endpoint
-	UpdateSubjectEndpoint   goa.Endpoint
-	WithdrawSubjectEndpoint goa.Endpoint
+	ListEndpoint              goa.Endpoint
+	RegisterIssuerEndpoint    goa.Endpoint
+	UpdateIssuerEndpoint      goa.Endpoint
+	WithdrawIssuerEndpoint    goa.Endpoint
+	AdmitSubjectEndpoint      goa.Endpoint
+	UpdateSubjectEndpoint     goa.Endpoint
+	WithdrawSubjectEndpoint   goa.Endpoint
+	ConnectionDetailsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "workloadIdentities" service client given the
 // endpoints.
-func NewClient(list, registerIssuer, updateIssuer, withdrawIssuer, admitSubject, updateSubject, withdrawSubject goa.Endpoint) *Client {
+func NewClient(list, registerIssuer, updateIssuer, withdrawIssuer, admitSubject, updateSubject, withdrawSubject, connectionDetails goa.Endpoint) *Client {
 	return &Client{
-		ListEndpoint:            list,
-		RegisterIssuerEndpoint:  registerIssuer,
-		UpdateIssuerEndpoint:    updateIssuer,
-		WithdrawIssuerEndpoint:  withdrawIssuer,
-		AdmitSubjectEndpoint:    admitSubject,
-		UpdateSubjectEndpoint:   updateSubject,
-		WithdrawSubjectEndpoint: withdrawSubject,
+		ListEndpoint:              list,
+		RegisterIssuerEndpoint:    registerIssuer,
+		UpdateIssuerEndpoint:      updateIssuer,
+		WithdrawIssuerEndpoint:    withdrawIssuer,
+		AdmitSubjectEndpoint:      admitSubject,
+		UpdateSubjectEndpoint:     updateSubject,
+		WithdrawSubjectEndpoint:   withdrawSubject,
+		ConnectionDetailsEndpoint: connectionDetails,
 	}
 }
 
@@ -196,4 +198,27 @@ func (c *Client) WithdrawSubject(ctx context.Context, p *WithdrawSubjectPayload)
 		return
 	}
 	return ires.(*WorkloadIdentityPolicy), nil
+}
+
+// ConnectionDetails calls the "connectionDetails" endpoint of the
+// "workloadIdentities" service.
+// ConnectionDetails may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ConnectionDetails(ctx context.Context, p *ConnectionDetailsPayload) (res *WorkloadConnectionDetails, err error) {
+	var ires any
+	ires, err = c.ConnectionDetailsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*WorkloadConnectionDetails), nil
 }

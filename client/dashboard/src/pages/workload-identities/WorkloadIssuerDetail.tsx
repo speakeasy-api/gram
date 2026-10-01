@@ -29,6 +29,7 @@ import { useUpdateWorkloadSubjectMutation } from "@gram/client/react-query/updat
 import { useWithdrawWorkloadIssuerMutation } from "@gram/client/react-query/withdrawWorkloadIssuer.js";
 import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/withdrawWorkloadSubject.js";
 import { WithdrawIssuerDialog } from "./WithdrawIssuerDialog";
+import { ConnectPlatformSection } from "./ConnectPlatformSection";
 import { RemoveSubjectDialog } from "./RemoveSubjectDialog";
 import { Pencil, Plus } from "lucide-react";
 import {
@@ -561,6 +562,7 @@ function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
         </Text>
       )}
       {machinesSection}
+      {issuer && <ConnectPlatformSection />}
       {issuer && stopTrustingSection}
       <RemoveSubjectDialog
         admission={removing}

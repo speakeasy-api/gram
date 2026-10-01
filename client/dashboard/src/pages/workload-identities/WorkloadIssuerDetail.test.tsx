@@ -43,6 +43,10 @@ vi.mock("@/components/page-templates", async (importOriginal) => ({
     </>
   ),
 }));
+// Covered by its own tests; stubbed so these stay about the platform's machines.
+vi.mock("./ConnectPlatformSection", () => ({
+  ConnectPlatformSection: () => <div data-testid="connect-platform" />,
+}));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     workloadIssuers: { href: () => "/access-hub" },
@@ -225,6 +229,12 @@ it("marks a platform's page as a preview", () => {
   renderPage();
 
   expect(screen.getByTestId("stage").textContent).toBe("preview");
+});
+
+it("offers to connect the platform to an MCP server", () => {
+  renderPage();
+
+  expect(screen.getByTestId("connect-platform")).toBeTruthy();
 });
 
 it("keeps the issuer URL on its own labeled line, apart from the description", () => {

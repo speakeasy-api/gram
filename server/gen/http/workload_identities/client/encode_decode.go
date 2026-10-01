@@ -1710,6 +1710,248 @@ func DecodeWithdrawSubjectResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildConnectionDetailsRequest instantiates a HTTP request object with method
+// and path set to call the "workloadIdentities" service "connectionDetails"
+// endpoint
+func (c *Client) BuildConnectionDetailsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ConnectionDetailsWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "connectionDetails", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeConnectionDetailsRequest returns an encoder for requests sent to the
+// workloadIdentities connectionDetails server.
+func EncodeConnectionDetailsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.ConnectionDetailsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "connectionDetails", "*workloadidentities.ConnectionDetailsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("mcp_server_id", p.McpServerID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeConnectionDetailsResponse returns a decoder for responses returned by
+// the workloadIdentities connectionDetails endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeConnectionDetailsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeConnectionDetailsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ConnectionDetailsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+			}
+			err = ValidateConnectionDetailsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+			}
+			res := NewConnectionDetailsWorkloadConnectionDetailsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ConnectionDetailsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+			}
+			err = ValidateConnectionDetailsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+			}
+			return nil, NewConnectionDetailsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ConnectionDetailsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+			}
+			err = ValidateConnectionDetailsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+			}
+			return nil, NewConnectionDetailsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ConnectionDetailsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+			}
+			err = ValidateConnectionDetailsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+			}
+			return nil, NewConnectionDetailsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ConnectionDetailsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+			}
+			err = ValidateConnectionDetailsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+			}
+			return nil, NewConnectionDetailsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ConnectionDetailsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+			}
+			err = ValidateConnectionDetailsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+			}
+			return nil, NewConnectionDetailsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ConnectionDetailsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+			}
+			err = ValidateConnectionDetailsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+			}
+			return nil, NewConnectionDetailsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ConnectionDetailsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+			}
+			err = ValidateConnectionDetailsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+			}
+			return nil, NewConnectionDetailsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ConnectionDetailsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+				}
+				err = ValidateConnectionDetailsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+				}
+				return nil, NewConnectionDetailsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ConnectionDetailsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+				}
+				err = ValidateConnectionDetailsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+				}
+				return nil, NewConnectionDetailsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "connectionDetails", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ConnectionDetailsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "connectionDetails", err)
+			}
+			err = ValidateConnectionDetailsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "connectionDetails", err)
+			}
+			return nil, NewConnectionDetailsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "connectionDetails", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalWorkloadIssuerResponseBodyToTypesWorkloadIssuer builds a value of
 // type *types.WorkloadIssuer from a value of type *WorkloadIssuerResponseBody.
 func unmarshalWorkloadIssuerResponseBodyToTypesWorkloadIssuer(v *WorkloadIssuerResponseBody) *types.WorkloadIssuer {
@@ -1756,6 +1998,28 @@ func unmarshalWorkloadAdmissionResponseBodyToTypesWorkloadAdmission(v *WorkloadA
 	res.Tags = make([]string, len(v.Tags))
 	for i, val := range v.Tags {
 		res.Tags[i] = val
+	}
+
+	return res
+}
+
+// unmarshalWorkloadConnectionEndpointResponseBodyToWorkloadidentitiesWorkloadConnectionEndpoint
+// builds a value of type *workloadidentities.WorkloadConnectionEndpoint from a
+// value of type *WorkloadConnectionEndpointResponseBody.
+func unmarshalWorkloadConnectionEndpointResponseBodyToWorkloadidentitiesWorkloadConnectionEndpoint(v *WorkloadConnectionEndpointResponseBody) *workloadidentities.WorkloadConnectionEndpoint {
+	res := &workloadidentities.WorkloadConnectionEndpoint{
+		ResourceURL:             *v.ResourceURL,
+		APIHost:                 *v.APIHost,
+		Issuer:                  *v.Issuer,
+		TokenEndpoint:           *v.TokenEndpoint,
+		OnAuthenticationHost:    *v.OnAuthenticationHost,
+		WorkloadGrantAdvertised: *v.WorkloadGrantAdvertised,
+		Ready:                   *v.Ready,
+		NotReadyReason:          v.NotReadyReason,
+	}
+	res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
+	for i, val := range v.GrantTypesSupported {
+		res.GrantTypesSupported[i] = val
 	}
 
 	return res

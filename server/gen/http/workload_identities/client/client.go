@@ -44,6 +44,10 @@ type Client struct {
 	// withdrawSubject endpoint.
 	WithdrawSubjectDoer goahttp.Doer
 
+	// ConnectionDetails Doer is the HTTP client used to make requests to the
+	// connectionDetails endpoint.
+	ConnectionDetailsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -65,18 +69,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListDoer:            doer,
-		RegisterIssuerDoer:  doer,
-		UpdateIssuerDoer:    doer,
-		WithdrawIssuerDoer:  doer,
-		AdmitSubjectDoer:    doer,
-		UpdateSubjectDoer:   doer,
-		WithdrawSubjectDoer: doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListDoer:              doer,
+		RegisterIssuerDoer:    doer,
+		UpdateIssuerDoer:      doer,
+		WithdrawIssuerDoer:    doer,
+		AdmitSubjectDoer:      doer,
+		UpdateSubjectDoer:     doer,
+		WithdrawSubjectDoer:   doer,
+		ConnectionDetailsDoer: doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
@@ -243,6 +248,30 @@ func (c *Client) WithdrawSubject() goa.Endpoint {
 		resp, err := c.WithdrawSubjectDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "withdrawSubject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ConnectionDetails returns an endpoint that makes HTTP requests to the
+// workloadIdentities service connectionDetails server.
+func (c *Client) ConnectionDetails() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeConnectionDetailsRequest(c.encoder)
+		decodeResponse = DecodeConnectionDetailsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildConnectionDetailsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ConnectionDetailsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "connectionDetails", err)
 		}
 		return decodeResponse(resp)
 	}

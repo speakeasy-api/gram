@@ -383,3 +383,42 @@ func BuildWithdrawSubjectPayload(workloadIdentitiesWithdrawSubjectID string, wor
 
 	return v, nil
 }
+
+// BuildConnectionDetailsPayload builds the payload for the workloadIdentities
+// connectionDetails endpoint from CLI flags.
+func BuildConnectionDetailsPayload(workloadIdentitiesConnectionDetailsMcpServerID string, workloadIdentitiesConnectionDetailsSessionToken string, workloadIdentitiesConnectionDetailsApikeyToken string, workloadIdentitiesConnectionDetailsProjectSlugInput string) (*workloadidentities.ConnectionDetailsPayload, error) {
+	var err error
+	var mcpServerID string
+	{
+		mcpServerID = workloadIdentitiesConnectionDetailsMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if workloadIdentitiesConnectionDetailsSessionToken != "" {
+			sessionToken = &workloadIdentitiesConnectionDetailsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if workloadIdentitiesConnectionDetailsApikeyToken != "" {
+			apikeyToken = &workloadIdentitiesConnectionDetailsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if workloadIdentitiesConnectionDetailsProjectSlugInput != "" {
+			projectSlugInput = &workloadIdentitiesConnectionDetailsProjectSlugInput
+		}
+	}
+	v := &workloadidentities.ConnectionDetailsPayload{}
+	v.McpServerID = mcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

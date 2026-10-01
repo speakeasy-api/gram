@@ -21,6 +21,7 @@ import { Link, Outlet } from "react-router";
 import { useOrgRoutes } from "@/routes";
 import { toast } from "sonner";
 import { issuerMatches } from "./search";
+import { TokenEndpointPicker } from "./TokenEndpointPicker";
 import {
   RegisterIssuerSheet,
   type RegisterIssuerValues,
@@ -112,6 +113,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
         stage="preview"
         description="Let agents on other platforms (CI jobs, cloud services, AI agents) sign in to Gram without a stored secret."
         primaryAction={registerButton}
+        belowHeader={<TokenEndpointPicker className="mb-6" />}
       >
         <Stack
           direction="horizontal"

@@ -171,6 +171,18 @@ type WithdrawSubjectResponseBody struct {
 	Admissions []*WorkloadAdmissionResponseBody `form:"admissions" json:"admissions" xml:"admissions"`
 }
 
+// ConnectionDetailsResponseBody is the type of the "workloadIdentities"
+// service "connectionDetails" endpoint HTTP response body.
+type ConnectionDetailsResponseBody struct {
+	// The MCP server id.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The MCP server's display name; empty when it has none.
+	McpServerName string `form:"mcp_server_name" json:"mcp_server_name" xml:"mcp_server_name"`
+	// The server's addresses, platform-host addresses first. Empty when the server
+	// has no address.
+	Endpoints []*WorkloadConnectionEndpointResponseBody `form:"endpoints" json:"endpoints" xml:"endpoints"`
+}
+
 // ListUnauthorizedResponseBody is the type of the "workloadIdentities" service
 // "list" endpoint HTTP response body for the "unauthorized" error.
 type ListUnauthorizedResponseBody struct {
@@ -1480,6 +1492,196 @@ type WithdrawSubjectGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ConnectionDetailsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "unauthorized" error.
+type ConnectionDetailsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConnectionDetailsForbiddenResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "forbidden" error.
+type ConnectionDetailsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConnectionDetailsBadRequestResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "bad_request" error.
+type ConnectionDetailsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConnectionDetailsNotFoundResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "not_found" error.
+type ConnectionDetailsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConnectionDetailsConflictResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "conflict" error.
+type ConnectionDetailsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConnectionDetailsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ConnectionDetailsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConnectionDetailsInvalidResponseBody is the type of the "workloadIdentities"
+// service "connectionDetails" endpoint HTTP response body for the "invalid"
+// error.
+type ConnectionDetailsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConnectionDetailsInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ConnectionDetailsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConnectionDetailsUnexpectedResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "unexpected" error.
+type ConnectionDetailsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ConnectionDetailsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "connectionDetails" endpoint HTTP response body
+// for the "gateway_error" error.
+type ConnectionDetailsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // WorkloadIssuerResponseBody is used to define fields on response body types.
 type WorkloadIssuerResponseBody struct {
 	// The workload issuer id.
@@ -1541,6 +1743,44 @@ type WorkloadAdmissionResponseBody struct {
 	WildcardActive bool   `form:"wildcard_active" json:"wildcard_active" xml:"wildcard_active"`
 	CreatedAt      string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt      string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// WorkloadConnectionEndpointResponseBody is used to define fields on response
+// body types.
+type WorkloadConnectionEndpointResponseBody struct {
+	// The MCP server URL: the resource the exchanged session is for.
+	ResourceURL string `form:"resource_url" json:"resource_url" xml:"resource_url"`
+	// The host of resource_url, which a platform lists among the API hosts its
+	// token may be sent to.
+	APIHost string `form:"api_host" json:"api_host" xml:"api_host"`
+	// The authorization server's issuer identifier. An assertion's aud must be
+	// exactly this or token_endpoint. Empty when Gram is not this address's
+	// authorization server.
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Where the platform sends its assertion. Empty when Gram is not this
+	// address's authorization server.
+	TokenEndpoint string `form:"token_endpoint" json:"token_endpoint" xml:"token_endpoint"`
+	// Whether token_endpoint is on Gram's dedicated authentication host, a
+	// different host from api_host.
+	OnAuthenticationHost bool `form:"on_authentication_host" json:"on_authentication_host" xml:"on_authentication_host"`
+	// grant_types_supported as the authorization server metadata lists it. Empty
+	// when Gram is not this address's authorization server.
+	GrantTypesSupported []string `form:"grant_types_supported" json:"grant_types_supported" xml:"grant_types_supported"`
+	// Whether the metadata lists the jwt-bearer grant because the clientless
+	// workload assertion exchange is available here.
+	WorkloadGrantAdvertised bool `form:"workload_grant_advertised" json:"workload_grant_advertised" xml:"workload_grant_advertised"`
+	// Whether nothing Gram knows of stops an exchange at this address. The
+	// platform's own configuration and the trust policy are not checked.
+	Ready bool `form:"ready" json:"ready" xml:"ready"`
+	// Why an exchange here cannot succeed; absent when ready.
+	// not_publicly_reachable: the address does not resolve publicly (disabled, or
+	// private network only). no_authorization_server: the server is not gated on a
+	// Gram user session issuer, or is an anonymous public tunnel, which serves no
+	// OAuth metadata even when it has one. workload_grant_unavailable: the
+	// metadata does not advertise the workload grant. agent_rollout_disabled: the
+	// organization is outside the agent authorization rollout the token endpoint
+	// requires.
+	NotReadyReason *string `form:"not_ready_reason,omitempty" json:"not_ready_reason,omitempty" xml:"not_ready_reason,omitempty"`
 }
 
 // NewListResponseBody builds the HTTP response body from the result of the
@@ -1756,6 +1996,29 @@ func NewWithdrawSubjectResponseBody(res *workloadidentities.WorkloadIdentityPoli
 		}
 	} else {
 		body.Admissions = []*WorkloadAdmissionResponseBody{}
+	}
+	return body
+}
+
+// NewConnectionDetailsResponseBody builds the HTTP response body from the
+// result of the "connectionDetails" endpoint of the "workloadIdentities"
+// service.
+func NewConnectionDetailsResponseBody(res *workloadidentities.WorkloadConnectionDetails) *ConnectionDetailsResponseBody {
+	body := &ConnectionDetailsResponseBody{
+		McpServerID:   res.McpServerID,
+		McpServerName: res.McpServerName,
+	}
+	if res.Endpoints != nil {
+		body.Endpoints = make([]*WorkloadConnectionEndpointResponseBody, len(res.Endpoints))
+		for i, val := range res.Endpoints {
+			if val == nil {
+				body.Endpoints[i] = nil
+				continue
+			}
+			body.Endpoints[i] = marshalWorkloadidentitiesWorkloadConnectionEndpointToWorkloadConnectionEndpointResponseBody(val)
+		}
+	} else {
+		body.Endpoints = []*WorkloadConnectionEndpointResponseBody{}
 	}
 	return body
 }
@@ -2777,6 +3040,156 @@ func NewWithdrawSubjectGatewayErrorResponseBody(res *goa.ServiceError) *Withdraw
 	return body
 }
 
+// NewConnectionDetailsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "connectionDetails" endpoint of the
+// "workloadIdentities" service.
+func NewConnectionDetailsUnauthorizedResponseBody(res *goa.ServiceError) *ConnectionDetailsUnauthorizedResponseBody {
+	body := &ConnectionDetailsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConnectionDetailsForbiddenResponseBody builds the HTTP response body from
+// the result of the "connectionDetails" endpoint of the "workloadIdentities"
+// service.
+func NewConnectionDetailsForbiddenResponseBody(res *goa.ServiceError) *ConnectionDetailsForbiddenResponseBody {
+	body := &ConnectionDetailsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConnectionDetailsBadRequestResponseBody builds the HTTP response body
+// from the result of the "connectionDetails" endpoint of the
+// "workloadIdentities" service.
+func NewConnectionDetailsBadRequestResponseBody(res *goa.ServiceError) *ConnectionDetailsBadRequestResponseBody {
+	body := &ConnectionDetailsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConnectionDetailsNotFoundResponseBody builds the HTTP response body from
+// the result of the "connectionDetails" endpoint of the "workloadIdentities"
+// service.
+func NewConnectionDetailsNotFoundResponseBody(res *goa.ServiceError) *ConnectionDetailsNotFoundResponseBody {
+	body := &ConnectionDetailsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConnectionDetailsConflictResponseBody builds the HTTP response body from
+// the result of the "connectionDetails" endpoint of the "workloadIdentities"
+// service.
+func NewConnectionDetailsConflictResponseBody(res *goa.ServiceError) *ConnectionDetailsConflictResponseBody {
+	body := &ConnectionDetailsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConnectionDetailsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "connectionDetails" endpoint of the
+// "workloadIdentities" service.
+func NewConnectionDetailsUnsupportedMediaResponseBody(res *goa.ServiceError) *ConnectionDetailsUnsupportedMediaResponseBody {
+	body := &ConnectionDetailsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConnectionDetailsInvalidResponseBody builds the HTTP response body from
+// the result of the "connectionDetails" endpoint of the "workloadIdentities"
+// service.
+func NewConnectionDetailsInvalidResponseBody(res *goa.ServiceError) *ConnectionDetailsInvalidResponseBody {
+	body := &ConnectionDetailsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConnectionDetailsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "connectionDetails" endpoint of the
+// "workloadIdentities" service.
+func NewConnectionDetailsInvariantViolationResponseBody(res *goa.ServiceError) *ConnectionDetailsInvariantViolationResponseBody {
+	body := &ConnectionDetailsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConnectionDetailsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "connectionDetails" endpoint of the
+// "workloadIdentities" service.
+func NewConnectionDetailsUnexpectedResponseBody(res *goa.ServiceError) *ConnectionDetailsUnexpectedResponseBody {
+	body := &ConnectionDetailsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewConnectionDetailsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "connectionDetails" endpoint of the
+// "workloadIdentities" service.
+func NewConnectionDetailsGatewayErrorResponseBody(res *goa.ServiceError) *ConnectionDetailsGatewayErrorResponseBody {
+	body := &ConnectionDetailsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListPayload builds a workloadIdentities service list endpoint payload.
 func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListPayload {
 	v := &workloadidentities.ListPayload{}
@@ -2910,6 +3323,18 @@ func NewUpdateSubjectPayload(body *UpdateSubjectRequestBody, sessionToken *strin
 func NewWithdrawSubjectPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.WithdrawSubjectPayload {
 	v := &workloadidentities.WithdrawSubjectPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewConnectionDetailsPayload builds a workloadIdentities service
+// connectionDetails endpoint payload.
+func NewConnectionDetailsPayload(mcpServerID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ConnectionDetailsPayload {
+	v := &workloadidentities.ConnectionDetailsPayload{}
+	v.McpServerID = mcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

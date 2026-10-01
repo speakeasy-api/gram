@@ -18,6 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -52,11 +54,25 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service   *workloadpolicy.Service
-	conn      *pgxpool.Pool
-	orgID     string
-	projectID uuid.UUID
-	userID    string
+	service    *workloadpolicy.Service
+	conn       *pgxpool.Pool
+	orgID      string
+	projectID  uuid.UUID
+	userID     string
+	federation *fakeFederation
+}
+
+// fakeFederation stands in for the MCP service's federation resolver, which
+// the mcp package tests against the discovery document it shares a derivation
+// with. It records the server each call resolved and answers with endpoints.
+type fakeFederation struct {
+	endpoints []mcp.FederationEndpoint
+	resolved  []uuid.UUID
+}
+
+func (f *fakeFederation) FederationEndpoints(_ context.Context, _ string, server *mcpservers_repo.McpServer) ([]mcp.FederationEndpoint, error) {
+	f.resolved = append(f.resolved, server.ID)
+	return f.endpoints, nil
 }
 
 // newTestService builds the service against a cloned database and a dashboard
@@ -82,14 +98,16 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger())
+	federation := &fakeFederation{endpoints: nil, resolved: nil}
+	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), federation)
 
 	return ctx, &testInstance{
-		service:   service,
-		conn:      conn,
-		orgID:     authCtx.ActiveOrganizationID,
-		projectID: *authCtx.ProjectID,
-		userID:    authCtx.UserID,
+		service:    service,
+		conn:       conn,
+		orgID:      authCtx.ActiveOrganizationID,
+		projectID:  *authCtx.ProjectID,
+		userID:     authCtx.UserID,
+		federation: federation,
 	}
 }
 

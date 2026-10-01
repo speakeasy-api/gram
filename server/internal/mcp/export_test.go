@@ -91,3 +91,9 @@ func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32
 func (s *Service) SetRiskScanEvaluator(evaluator *mcpriskscan.Evaluator) {
 	s.scanEvaluator = evaluator
 }
+
+// DisableWorkloadGrant makes the service a surface without the workload
+// assertion grant, as one without Redis is.
+func (s *Service) DisableWorkloadGrant() {
+	s.workloadGrant = nil
+}
