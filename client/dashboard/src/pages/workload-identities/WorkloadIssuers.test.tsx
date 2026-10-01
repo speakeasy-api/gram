@@ -18,11 +18,14 @@ vi.mock("@/components/page-templates", () => ({
   ResourceListPage: ({
     children,
     primaryAction,
+    stage,
   }: {
     children: ReactNode;
     primaryAction: ReactNode;
+    stage?: string;
   }) => (
     <>
+      {stage && <span data-testid="stage">{stage}</span>}
       {primaryAction}
       {children}
     </>
@@ -113,6 +116,12 @@ async function search(query: string, expected: string[]) {
   await waitFor(() => expect(visiblePlatforms()).toEqual(expected));
 }
 
+it("marks the Access Hub as a preview", () => {
+  renderPage();
+
+  expect(screen.getByTestId("stage").textContent).toBe("preview");
+});
+
 it("finds platforms by free-text search, with no per-tag filter controls", () => {
   renderPage();
 
@@ -132,12 +141,14 @@ it("narrows the platforms to the ones matching a tag", async () => {
   await search("production", ["build"]);
 });
 
-it("matches the name, description and issuer URL, ignoring case", async () => {
+it.each([
+  ["a name, ignoring case", "LEG", ["legacy"]],
+  ["a description", "pull request", ["staging"]],
+  ["an issuer URL", "build.example.com", ["build"]],
+])("matches %s", async (_, query, expected) => {
   renderPage();
 
-  await search("LEG", ["legacy"]);
-  await search("pull request", ["staging"]);
-  await search("build.example.com", ["build"]);
+  await search(query, expected);
 });
 
 it("restores every platform when the search is cleared", async () => {
@@ -166,14 +177,21 @@ it("shows a platform's description in place of its issuer URL", () => {
   expect(staging.textContent).toContain(
     "Preview deploys for every pull request",
   );
-  // With a description, the URL sits on a labeled line beside the keys.
-  expect(staging.textContent).toContain("Issuer: https://staging.example.com");
+  expect(staging.textContent).not.toContain("https://staging.example.com");
 
-  // Without a description the issuer URL stays where the description would be,
-  // so it is not repeated on a labeled line.
+  // Without a description the issuer URL stands where the description would be.
   const build = screen.getByRole("link", { name: /^build/ });
-  expect(build.textContent).not.toContain("Issuer:");
   expect(build.textContent).toContain("https://build.example.com");
+});
+
+it("leaves the issuer and keys URLs to the platform's own page", () => {
+  renderPage();
+
+  for (const link of screen.getAllByRole("link")) {
+    expect(link.textContent).not.toContain("Issuer:");
+    expect(link.textContent).not.toContain("Keys:");
+    expect(link.textContent).not.toContain("/jwks");
+  }
 });
 
 it("opens on the catalog, which is empty until presets exist", () => {

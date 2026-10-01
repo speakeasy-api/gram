@@ -48,7 +48,8 @@ type RiskPolicy struct {
 	Enabled bool
 	// Policy action: flag (log only), warn (challenge: warn the user and require
 	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
-	// and freeze the hook session).
+	// and freeze the hook session). MCP-scoped policies support flag and block
+	// only.
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -56,7 +57,7 @@ type RiskPolicy struct {
 	// is everyone.
 	AudiencePrincipalUrns []string
 	// Optional MCP server and tool restriction. Null applies the policy to every
-	// MCP server.
+	// MCP server. When set, the action must be flag or block.
 	McpScope *RiskMCPScope
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Gram-hosted server unless allowed, allow_all permits every server unless

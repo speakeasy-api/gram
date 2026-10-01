@@ -23,6 +23,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   flagResult: vi.fn(),
+  step: "scope",
 }));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -62,7 +63,7 @@ vi.mock("@/routes", () => ({
 
 vi.mock("nuqs", () => ({
   useQueryState: (name: string) =>
-    name === "step" ? ["scope", vi.fn()] : [null, vi.fn()],
+    name === "step" ? [mocks.step, vi.fn()] : [null, vi.fn()],
 }));
 
 vi.mock("@/components/shadow-mcp/ShadowMCPPolicyServerSelector", () => ({
@@ -220,7 +221,9 @@ vi.mock("./use-cel-engine", () => ({
 }));
 
 vi.mock("./PolicyCenter", () => ({
-  ActionPicker: () => null,
+  ActionPicker: ({ formAction }: { formAction: string }) => (
+    <output data-testid="selected-policy-action">{formAction}</output>
+  ),
   CustomizeRulesSheet: () => null,
   PolicyAudiencePicker: () => null,
   RuleSelectList: () => null,
@@ -340,6 +343,7 @@ describe("StandardPolicyEditor scope rows", () => {
 
   beforeEach(() => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.step = "scope";
     vi.mocked(useSdkClient).mockReturnValue({
       access: { listShadowMCPInventory: vi.fn() },
     } as unknown as ReturnType<typeof useSdkClient>);
@@ -419,6 +423,22 @@ describe("StandardPolicyEditor scope rows", () => {
           .getAttribute("aria-checked"),
       ).toBe("true");
     });
+  });
+  it("coerces warn to block when switching to MCP scope", () => {
+    renderEditor(
+      policy({
+        action: "warn",
+        sources: ["gitleaks"],
+        mcpScope: undefined,
+      }),
+    );
+
+    mocks.step = "action";
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+
+    expect(screen.getByTestId("selected-policy-action").textContent).toBe(
+      "block",
+    );
   });
 
   it("renders one inspect row for every enabled detector", () => {

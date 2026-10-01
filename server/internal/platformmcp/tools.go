@@ -217,6 +217,22 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
 		}, "\n\n"),
 		PageSize: 32,
+		// Declared rather than inferred. Left unset, the SDK advertises
+		// listChanged for tools and resources because some are registered, which
+		// is a promise this runtime cannot keep: it serves POSTs statelessly, so
+		// every request is its own session and there is no session alive to
+		// receive a list_changed notification. A client that believes the promise
+		// opens a subscriptions/listen stream (protocol 2026-07-28, SEP-2575),
+		// which the SDK answers by blocking on the request context until the peer
+		// goes away — an idle connection the proxy eventually reads as an upstream
+		// timeout. Advertising false lets that stream return immediately instead.
+		Capabilities: &mcp.ServerCapabilities{
+			Tools:     &mcp.ToolCapabilities{ListChanged: false},
+			Resources: &mcp.ResourceCapabilities{ListChanged: false},
+			// Preserved because the SDK only supplies its logging default when
+			// Capabilities is nil, and this server advertised it before.
+			Logging: &mcp.LoggingCapabilities{},
+		},
 	})
 
 	reg := newRegistrar(server)

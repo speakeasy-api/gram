@@ -15,6 +15,7 @@ import (
 	gentypes "github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // ErrLoadPolicy identifies a failure while loading the policy row, before
@@ -40,6 +41,20 @@ type MCPTarget struct {
 
 	// PlatformToolset bypasses persisted server ownership and gateway lookup.
 	PlatformToolset bool
+
+	// Principal limits results to policies whose audience covers the caller.
+	// Nil lists policies for every audience; enforcement seams always set it.
+	Principal *MCPPrincipal
+}
+
+// MCPPrincipal is the caller an MCP-scoped policy is evaluated for. The zero
+// value is unattributed and matches only everyone-audience policies.
+type MCPPrincipal struct {
+	// UserID is set only for an authoritative acting user.
+	UserID string
+
+	// AgentID is set for an agent principal; its roles are resolved too.
+	AgentID string
 }
 
 // Core provides transport-neutral policy reads and projections. Authorization
@@ -167,6 +182,12 @@ func (c *Core) ListEnabledForMCP(
 		matchedRows = append(matchedRows, row)
 		policyIDs = append(policyIDs, row.ID.String())
 	}
+	if len(matchedRows) > 0 && target.Principal != nil {
+		matchedRows, policyIDs, err = c.filterByAudience(ctx, organizationID, *target.Principal, matchedRows)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if len(matchedRows) == 0 {
 		return []Policy{}, nil
 	}
@@ -276,6 +297,39 @@ func audiencePrincipalURNs(ctx context.Context, db repo.DBTX, organizationID, po
 	}
 	slices.Sort(principalURNs)
 	return slices.Compact(principalURNs), nil
+}
+
+// filterByAudience keeps the policies the principal's grants apply, using the
+// same rule as chat and hook enforcement.
+func (c *Core) filterByAudience(ctx context.Context, organizationID string, principal MCPPrincipal, rows []repo.RiskPolicy) ([]repo.RiskPolicy, []string, error) {
+	var principals []urn.Principal
+	var err error
+	if principal.AgentID != "" {
+		principals, err = authz.ResolveAgentPrincipals(ctx, c.db, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, principal.AgentID))
+	} else {
+		principals, err = authz.ResolveUserPrincipals(ctx, c.db, organizationID, principal.UserID)
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve risk policy audience principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, c.db, organizationID, principals)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load risk policy audience grants: %w", err)
+	}
+
+	applicable := make([]repo.RiskPolicy, 0, len(rows))
+	policyIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		application, err := authz.RiskPolicyApplies(row.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		if err != nil {
+			return nil, nil, fmt.Errorf("evaluate risk policy application: %w", err)
+		}
+		if application.Satisfied {
+			applicable = append(applicable, row)
+			policyIDs = append(policyIDs, row.ID.String())
+		}
+	}
+	return applicable, policyIDs, nil
 }
 
 func (c *Core) audienceURNsByPolicy(ctx context.Context, organizationID string, policyIDs []string) (map[string][]string, error) {

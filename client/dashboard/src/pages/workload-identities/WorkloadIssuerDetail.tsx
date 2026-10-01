@@ -1,12 +1,17 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
-import { ResourceListPage } from "@/components/page-templates";
+import {
+  DangerSettingsSection,
+  ResourceListPage,
+} from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagedRows } from "@/components/ui/TablePagination/usePagedRows";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { admissionMatches } from "./search";
@@ -21,7 +26,7 @@ import { useAgents } from "@gram/client/react-query/agents.js";
 import { useWithdrawWorkloadIssuerMutation } from "@gram/client/react-query/withdrawWorkloadIssuer.js";
 import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/withdrawWorkloadSubject.js";
 import { WithdrawIssuerDialog } from "./WithdrawIssuerDialog";
-import { WithdrawSubjectDialog } from "./WithdrawSubjectDialog";
+import { RemoveSubjectDialog } from "./RemoveSubjectDialog";
 import { Plus } from "lucide-react";
 import {
   AdmitSubjectSheet,
@@ -32,6 +37,42 @@ import { type ReactNode, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { toast } from "sonner";
 
+const MACHINES_PAGE_SIZE = 10;
+
+// The identifiers sit on labeled lines of their own, apart from the
+// description, because they are what an administrator copies into the
+// platform's console.
+function IssuerIdentifiers({
+  issuer,
+}: {
+  issuer: WorkloadIssuer;
+}): JSX.Element {
+  return (
+    <dl className="mb-6 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1">
+      <dt>
+        <Text muted small>
+          Issuer URL
+        </Text>
+      </dt>
+      <dd>
+        <Text small className="font-mono break-all">
+          {issuer.issuer}
+        </Text>
+      </dd>
+      <dt>
+        <Text muted small>
+          Keys URL
+        </Text>
+      </dt>
+      <dd>
+        <Text small className="font-mono break-all">
+          {issuer.jwksUri}
+        </Text>
+      </dd>
+    </dl>
+  );
+}
+
 /**
  * One issuer, and the subjects admitted under it.
  *
@@ -40,20 +81,6 @@ import { toast } from "sonner";
  * what makes "this issuer's workloads" a well-defined set even where two issuers
  * share a URL across tiers.
  */
-// The operator's description leads when there is one; the identifiers follow
-// because they are what an administrator copies into the platform's console.
-function issuerSummary(issuer: WorkloadIssuer): string {
-  const identifiers = `Issuer ${issuer.issuer}, keys at ${issuer.jwksUri}.`;
-  const description = issuer.description.trim();
-  if (description === "") {
-    return identifiers;
-  }
-  // An operator's description need not end in punctuation, and without it the
-  // identifiers would read as part of the same sentence.
-  const separator = /[.!?]$/.test(description) ? " " : ". ";
-  return `${description}${separator}${identifiers}`;
-}
-
 export function WorkloadIssuerDetailPage(): JSX.Element {
   return (
     <RequireScope scope={["workload:read", "workload:write"]} level="page">
@@ -69,9 +96,7 @@ function IssuerDetail(): JSX.Element {
   const [admitOpen, setAdmitOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [withdrawing, setWithdrawing] = useState<WorkloadAdmission | null>(
-    null,
-  );
+  const [removing, setRemoving] = useState<WorkloadAdmission | null>(null);
   const { data, isPending, isError, refetch } = useWorkloadIdentities({});
   // throwOnError because the whole agents service 404s where the agent
   // management rollout is off, and the global query policy suppresses only 401
@@ -96,6 +121,12 @@ function IssuerDetail(): JSX.Element {
     [admissions, search],
   );
 
+  const { page, pageRows, setPage } = usePagedRows({
+    rows: visibleAdmissions,
+    pageSize: MACHINES_PAGE_SIZE,
+    resetOn: [issuerId, search],
+  });
+
   const agents = useMemo(
     () =>
       (agentsQuery.data ?? [])
@@ -114,11 +145,11 @@ function IssuerDetail(): JSX.Element {
   const allowUnavailableReason = agentsQuery.isPending
     ? null
     : agentsQuery.isError
-      ? "Agents are unavailable right now, so no machine can be allowed."
+      ? "Agents are unavailable right now, so access can't be allowed."
       : (agentsQuery.data ?? []).length === 0
         ? "Create an agent first: every machine acts under an agent's policy."
         : agents.length === 0
-          ? "Every agent is suspended, revoked or waiting for a new owner. Reactivate or reassign one to allow a machine."
+          ? "Every agent is suspended, revoked or waiting for a new owner. Reactivate or reassign one to allow access."
           : null;
 
   const admitSubject = useAdmitWorkloadSubjectMutation({
@@ -160,14 +191,12 @@ function IssuerDetail(): JSX.Element {
       await invalidateAllWorkloadIdentities(queryClient, {
         refetchType: "all",
       });
-      setWithdrawing(null);
-      toast.success("Machine withdrawn");
+      setRemoving(null);
+      toast.success("Machine removed");
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to withdraw the machine",
+        error instanceof Error ? error.message : "Failed to remove the machine",
       );
     },
   });
@@ -177,7 +206,7 @@ function IssuerDetail(): JSX.Element {
   // behind the list.
   if (isError) {
     return (
-      <ResourceListPage title="Trusted platform">
+      <ResourceListPage title="Trusted platform" stage="preview">
         <InlineEmptyState
           icon="triangle-alert"
           heading="Couldn't load this platform"
@@ -222,17 +251,25 @@ function IssuerDetail(): JSX.Element {
               rule matches nothing.
             </Text>
           )}
-          {admission.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {admission.tags.map((tag) => (
-                <Badge key={tag} variant="information">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          )}
         </Stack>
       ),
+    },
+    {
+      key: "tags",
+      header: "Tags",
+      width: "200px",
+      render: (admission) =>
+        admission.tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {admission.tags.map((tag) => (
+              <Badge key={tag} variant="information">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <Text muted>None</Text>
+        ),
     },
     {
       key: "agent",
@@ -255,9 +292,9 @@ function IssuerDetail(): JSX.Element {
             size="sm"
             variant="tertiary"
             disabled={withdrawSubject.isPending}
-            onClick={() => setWithdrawing(admission)}
+            onClick={() => setRemoving(admission)}
           >
-            <Button.Text>Withdraw</Button.Text>
+            <Button.Text>Remove</Button.Text>
           </Button>
         </RequireScope>
       ),
@@ -274,7 +311,7 @@ function IssuerDetail(): JSX.Element {
       <InlineEmptyState
         icon="cpu"
         heading="No machines allowed from this platform"
-        description="Trusting a platform allows nothing on its own. Allow a machine so it can exchange its identity token for a Gram session."
+        description="Trusting a platform allows nothing on its own. Allow access for a machine so it can exchange its identity token for a Gram session."
       />
     );
   } else {
@@ -290,9 +327,15 @@ function IssuerDetail(): JSX.Element {
         </Page.Toolbar>
         <Table
           columns={columns}
-          data={visibleAdmissions}
+          data={pageRows}
           rowKey={(row) => row.id}
           noResultsMessage={<Text>No machines match that search.</Text>}
+        />
+        <TablePagination
+          page={page}
+          pageSize={MACHINES_PAGE_SIZE}
+          totalItems={visibleAdmissions.length}
+          onPageChange={setPage}
         />
       </>
     );
@@ -310,21 +353,40 @@ function IssuerDetail(): JSX.Element {
         <Button.LeftIcon>
           <Plus className="h-4 w-4" />
         </Button.LeftIcon>
-        <Button.Text>Allow a machine</Button.Text>
+        <Button.Text>Allow access</Button.Text>
       </Button>
     </RequireScope>
   );
 
-  const withdrawButton = (
+  const stopTrustingSection = (
     <RequireScope scope="workload:write" level="component">
-      <Button
-        size="sm"
-        variant="tertiary"
-        onClick={() => setWithdrawOpen(true)}
-        disabled={issuer === undefined || withdrawIssuer.isPending}
-      >
-        <Button.Text>Stop trusting</Button.Text>
-      </Button>
+      <div className="mt-10">
+        <DangerSettingsSection>
+          <DangerSettingsSection.Header>
+            <DangerSettingsSection.Title>
+              Stop trusting this platform
+            </DangerSettingsSection.Title>
+            <DangerSettingsSection.Description>
+              Removes the platform and every machine allowed under it. Its
+              identity tokens are no longer accepted, though sessions already
+              issued are not revoked.
+            </DangerSettingsSection.Description>
+          </DangerSettingsSection.Header>
+          <DangerSettingsSection.Panel>
+            <DangerSettingsSection.Body>
+              <div>
+                <Button
+                  variant="destructive-primary"
+                  onClick={() => setWithdrawOpen(true)}
+                  disabled={withdrawIssuer.isPending}
+                >
+                  <Button.Text>Stop trusting</Button.Text>
+                </Button>
+              </div>
+            </DangerSettingsSection.Body>
+          </DangerSettingsSection.Panel>
+        </DangerSettingsSection>
+      </div>
     </RequireScope>
   );
 
@@ -349,14 +411,11 @@ function IssuerDetail(): JSX.Element {
 
   return (
     <ResourceListPage
-      primaryAction={
-        <Stack direction="horizontal" gap={2} align="center">
-          {withdrawButton}
-          {allowButton}
-        </Stack>
-      }
+      primaryAction={allowButton}
       title={issuer?.name ?? "Trusted platform"}
-      description={issuer ? issuerSummary(issuer) : undefined}
+      stage="preview"
+      description={issuer?.description.trim() || undefined}
+      belowHeader={issuer && <IssuerIdentifiers issuer={issuer} />}
     >
       {allowUnavailableReason !== null && (
         <Text muted small className="mb-4">
@@ -364,10 +423,11 @@ function IssuerDetail(): JSX.Element {
         </Text>
       )}
       {machinesSection}
-      <WithdrawSubjectDialog
-        admission={withdrawing}
+      {issuer && stopTrustingSection}
+      <RemoveSubjectDialog
+        admission={removing}
         onOpenChange={(open) => {
-          if (!open) setWithdrawing(null);
+          if (!open) setRemoving(null);
         }}
         onConfirm={(admission) =>
           withdrawSubject.mutate({ request: { id: admission.id } })
