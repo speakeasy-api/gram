@@ -79,7 +79,7 @@ const CHECKLIST_GROUPS: Record<
   cross_app_access: {
     title: "Cross App Access setup",
     description:
-      "Required for Enterprise Managed Auth: connecting Okta and syncing applications alone does not give AI agents access to your MCP servers. Register the Speakeasy AI agent once, then connect it to each MCP server.",
+      "Connecting Okta and syncing applications alone does not give AI agents access to your MCP servers.",
   },
 };
 

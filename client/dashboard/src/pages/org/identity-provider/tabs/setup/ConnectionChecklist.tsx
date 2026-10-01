@@ -171,15 +171,20 @@ function GroupSection({
   );
 }
 
-/** The phase the connection is in is expanded until the admin toggles a group; a later #agent navigation wins again. */
+/** The phase the connection is in is expanded until the admin toggles a group; a later #agent navigation wins again. A tab that hides the active phase expands its first incomplete group instead. */
 export function ConnectionChecklist({
   connection,
   affordances = {},
+  groups: groupIds,
 }: {
   connection: LiveConnection;
   affordances?: StepAffordances;
+  /** Which groups to show; each tab renders the phase it owns. Defaults to all. */
+  groups?: ChecklistGroupId[];
 }): JSX.Element {
-  const groups = groupChecklist(connection.checklist);
+  const groups = groupChecklist(connection.checklist).filter(
+    (group) => groupIds === undefined || groupIds.includes(group.id),
+  );
   const location = useLocation();
   const checklistRef = useRef<HTMLDivElement>(null);
   const agentHash = `#${AGENT_SECTION_ID}`;
@@ -187,9 +192,17 @@ export function ConnectionChecklist({
     group: ChecklistGroupId | null;
     locationKey: string;
   }>();
+  const rendered = new Set(groups.map((group) => group.id));
   const agentRequested =
-    location.hash === agentHash && override?.locationKey !== location.key;
+    location.hash === agentHash &&
+    rendered.has("cross_app_access") &&
+    override?.locationKey !== location.key;
   let expanded = activeChecklistGroup(connection);
+  if (expanded !== null && !rendered.has(expanded)) {
+    expanded =
+      groups.find((group) => group.completedCount < group.items.length)?.id ??
+      null;
+  }
   if (agentRequested) expanded = "cross_app_access";
   else if (override) expanded = override.group;
 
