@@ -10152,37 +10152,9 @@ CREATE TABLE IF NOT EXISTS organization_onboarding_vendors (
   CONSTRAINT organization_onboarding_vendors_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES support_matrix_plans (id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS organization_onboarding_vendors_plan_id_idx ON organization_onboarding_vendors (plan_id) WHERE plan_id IS NOT NULL;
--- Queries are Explore's one server-side object: a named, saved question
--- against a catalog dataset, kept with the builder state it was built with.
--- Columns are what the server reasons about (scope, listing, impact checks);
--- everything only the client interprets lives in spec. dataset is hoisted out
--- of spec so a catalog change can be impact-checked without deserialising
--- every row.
-CREATE TABLE IF NOT EXISTS queries (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
-  organization_id TEXT NOT NULL,
-  created_by_user_id TEXT,
-
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 200),
-  dataset TEXT NOT NULL CHECK (dataset <> ''),
-  spec jsonb NOT NULL,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT queries_pkey PRIMARY KEY (id),
-  CONSTRAINT queries_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS queries_project_id_updated_at_idx
-ON queries (project_id, updated_at DESC) WHERE deleted IS FALSE;
-
 -- Widgets are Explore's saved objects: a named question against a catalog
 -- dataset together with how it is drawn, so they can later be placed on
--- dashboards. They supersede queries, which is dropped once nothing reads it.
+-- dashboards. They replaced Explore's saved queries.
 -- query is the semantic question the server plans against the catalog;
 -- visualization is the chart the client draws it with. dataset is hoisted out
 -- of query so a catalog change can be impact-checked without deserialising

@@ -54,6 +54,15 @@ func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, erro
 	if err != nil {
 		return Entry{}, err
 	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return Entry{}, fmt.Errorf("begin registry create: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	q := repo.New(tx)
+	if err := checkOktaMappingConflicts(ctx, q, uuid.Nil, data); err != nil {
+		return Entry{}, err
+	}
 	params := repo.CreateEntryParams{
 		Data: data,
 		PublishedAt: pgtype.Timestamptz{
@@ -63,7 +72,7 @@ func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, erro
 		},
 		StoredRecordLimit: StoredRecordByteLimit,
 	}
-	row, err := repo.New(s.db).CreateEntry(ctx, params)
+	row, err := q.CreateEntry(ctx, params)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Entry{}, storedSizeError()
 	}
@@ -71,7 +80,14 @@ func (s *Service) Create(ctx context.Context, data json.RawMessage) (Entry, erro
 	if errors.As(err, &pgerr) && pgerr.Code == pgerrcode.UniqueViolation && pgerr.ConstraintName == "mcp_registry_entries_name_key" {
 		return Entry{}, ErrConflict
 	}
-	return entry(row, err)
+	created, err := entry(row, err)
+	if err != nil {
+		return Entry{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Entry{}, fmt.Errorf("commit registry create: %w", err)
+	}
+	return created, nil
 }
 
 func (s *Service) Save(ctx context.Context, id uuid.UUID, token string, data json.RawMessage) (Entry, error) {
@@ -112,6 +128,9 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 		if err := checkStructure(old.Data, data); err != nil {
 			return Entry{}, err
 		}
+		if err := checkOktaMappingConflicts(ctx, q, id, data); err != nil {
+			return Entry{}, err
+		}
 	}
 	if published != nil && *published {
 		if len(old.Data) > StoredRecordByteLimit {
@@ -119,6 +138,9 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 		}
 		if issues := s.validator.ValidateStored(old.Data); len(issues) > 0 {
 			return Entry{}, &InvalidError{Issues: issues}
+		}
+		if err := checkOktaMappingConflicts(ctx, q, id, old.Data); err != nil {
+			return Entry{}, err
 		}
 	}
 
