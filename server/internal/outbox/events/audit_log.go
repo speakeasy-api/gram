@@ -73,6 +73,7 @@ var (
 	PluginV1                               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.plugin_event_v1", "Emitted when changes to plugins are made")
 	ProjectV1                              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.project_event_v1", "Emitted when changes to projects are made")
 	QueryV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.query_event_v1", "Emitted when changes to saved queries are made")
+	WidgetV1                               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.widget_event_v1", "Emitted when changes to widgets are made")
 	RemoteMcpServerV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_event_v1", "Emitted when changes to remote MCP servers are made")
 	RemoteMcpServerHeaderV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_header_event_v1", "Emitted when changes to remote MCP server headers are made")
 	RemoteSessionClientV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_client_event_v1", "Emitted when changes to remote session clients are made")

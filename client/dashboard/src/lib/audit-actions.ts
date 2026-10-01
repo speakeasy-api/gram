@@ -282,6 +282,9 @@ export const AUDIT_ACTIONS = [
   "wake:cancelled",
   "wake:fired",
   "wake:scheduled",
+  "widget:create",
+  "widget:delete",
+  "widget:update",
   "workload-admission:admit",
   "workload-admission:update",
   "workload-admission:withdraw",
@@ -696,6 +699,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated saved query";
     case "query:delete":
       return "deleted saved query";
+    case "widget:create":
+      return "created widget";
+    case "widget:update":
+      return "updated widget";
+    case "widget:delete":
+      return "deleted widget";
 
     case "remote-mcp:create":
       return "added remote MCP server";
