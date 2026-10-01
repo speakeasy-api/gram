@@ -1547,6 +1547,9 @@ func ValidateDismissResponseBody(body *DismissResponseBody) (err error) {
 	if body.RegistryEntryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_entry_id", *body.RegistryEntryID, goa.FormatUUID))
 	}
+	if body.IconURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
+	}
 	for _, e := range body.Remotes {
 		if e != nil {
 			if err2 := ValidateOktaServerSuggestionRemoteResponseBody(e); err2 != nil {
@@ -1598,6 +1601,9 @@ func ValidateRestoreResponseBody(body *RestoreResponseBody) (err error) {
 	}
 	if body.RegistryEntryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_entry_id", *body.RegistryEntryID, goa.FormatUUID))
+	}
+	if body.IconURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
 	}
 	for _, e := range body.Remotes {
 		if e != nil {
@@ -2514,6 +2520,9 @@ func ValidateOktaServerSuggestionResponseBody(body *OktaServerSuggestionResponse
 	}
 	if body.RegistryEntryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_entry_id", *body.RegistryEntryID, goa.FormatUUID))
+	}
+	if body.IconURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
 	}
 	for _, e := range body.Remotes {
 		if e != nil {

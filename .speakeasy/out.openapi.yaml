@@ -90157,6 +90157,7 @@ components:
         icon_url:
           type: string
           description: HTTPS URL of the entry's icon when it has one.
+          format: uri
         installed_urls:
           type: array
           items:

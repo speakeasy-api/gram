@@ -392,6 +392,27 @@ func TestListSkipsInvalidRecords(t *testing.T) {
 	require.Equal(t, 0, result.TotalCount)
 }
 
+func TestListIconScheme(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	withIcon := func(name, oin, src string) {
+		record := strings.Replace(entryRecord(name, []string{"https://mcp." + oin + ".example/mcp"}, `{"oinNames":["`+oin+`"]}`), "https://icons.example.test/icon.png", src, 1)
+		createEntry(t, ctx, si, record, true)
+		createApp(t, ctx, si, "0oa-"+oin, oin, oin, "SAML_2_0", true)
+	}
+	withIcon("example.test/upper", "upper", "HTTPS://icons.example.test/icon.png")
+	withIcon("example.test/plain", "plain", "http://icons.example.test/icon.png")
+
+	icons := map[string]string{}
+	for _, sg := range list(t, ctx, si, false).Suggestions {
+		icons[sg.ServerName] = conv.PtrValOrEmpty(sg.IconURL, "")
+	}
+	require.Equal(t, map[string]string{
+		"example.test/upper": "HTTPS://icons.example.test/icon.png",
+		"example.test/plain": "",
+	}, icons)
+}
+
 func TestPreconditionsAndAuthorization(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
