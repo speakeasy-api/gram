@@ -22,6 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 )
 
+// maxInlineConversationBodyBytes leaves 1 MiB for event metadata below the
+// outbox's 9 MiB serialized-message limit before spilling the body to an asset.
+const maxInlineConversationBodyBytes = 8 << 20 // 8 MiB
+
 // enqueueMessages publishes inserted rows and successful correlated promotions.
 // Callers exclude conflict no-ops and pass the mutation transaction.
 // The snapshot's text precedes tool calls because storage does not retain their
@@ -187,7 +191,7 @@ func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, o
 		msg.SetBody(body)
 		// Keep normal events inline. Exceptional large bodies are immutable blobs,
 		// leaving ample room below the outbox's 9 MiB serialized-message limit.
-		if proto.Size(body) > 1024*1024 {
+		if proto.Size(body) > maxInlineConversationBodyBytes {
 			var marshalOptions proto.MarshalOptions
 			marshalOptions.Deterministic = true
 			data, err := marshalOptions.Marshal(body)
