@@ -410,6 +410,9 @@
         });
       }
       syncAgentSelection();
+      // Agent mode requires these handlers; leave it unavailable if the script
+      // cannot load or initialize rather than silently approving as Myself.
+      if (agentMode) agentMode.disabled = false;
     }
 
     form.addEventListener("submit", function (event) {

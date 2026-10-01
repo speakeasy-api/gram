@@ -8,10 +8,10 @@ const script = readFileSync(
   "utf8",
 );
 const fetchMock = vi.fn();
-function page(withProvider = true) {
+function page(withProvider = true, initialize = true) {
   document.body.innerHTML = `
     <input type="radio" data-agent-mode name="consent_actor" value="self" checked data-subject-display="person@example.com">
-    <input type="radio" data-agent-mode name="consent_actor" value="agent">
+    <input type="radio" data-agent-mode name="consent_actor" value="agent" disabled>
     <input type="hidden" data-agent-self name="agent_id" value="" form="approve">
     <div data-agent-picker hidden>
       <input type="search" data-agent-search>
@@ -33,13 +33,14 @@ function page(withProvider = true) {
     </div>`;
   if (!withProvider)
     document.querySelector("[data-service-connections]")!.remove();
-  runInNewContext(script, {
-    window,
-    document,
-    sessionStorage,
-    URLSearchParams,
-    fetch: fetchMock,
-  });
+  if (initialize)
+    runInNewContext(script, {
+      window,
+      document,
+      sessionStorage,
+      URLSearchParams,
+      fetch: fetchMock,
+    });
   return document.querySelector<HTMLButtonElement>("form button")!;
 }
 function mode(value: "self" | "agent") {
@@ -72,6 +73,22 @@ afterEach(() => {
 });
 
 describe("consent agent connections", () => {
+  it("keeps Agent mode unavailable until its script initializes", () => {
+    page(false, false);
+    const agentMode = document.querySelector<HTMLInputElement>(
+      'input[data-agent-mode][value="agent"]',
+    )!;
+    expect(agentMode.disabled).toBe(true);
+    agentMode.click();
+    expect(agentMode.checked).toBe(false);
+    page(false);
+    expect(
+      document.querySelector<HTMLInputElement>(
+        'input[data-agent-mode][value="agent"]',
+      )!.disabled,
+    ).toBe(false);
+  });
+
   it.each([false, true])(
     "reuses the canonical combined account label (attached=%s)",
     async (attached) => {

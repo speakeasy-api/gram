@@ -738,6 +738,7 @@ func TestConsentTemplateAgentSelectionShowsFixedPolicyAndSetupOnly(t *testing.T)
 	// Mode is UI-only; the form still carries exactly one agent_id (empty for self).
 	require.Contains(t, html, `class="grid grid-cols-2 border"`)
 	require.Regexp(t, `name="consent_actor"\s+value="self"\s+checked`, html)
+	require.Regexp(t, `name="consent_actor"\s+value="agent"\s+disabled\s+data-agent-mode`, html)
 	require.Contains(t, html, `data-agent-picker hidden`)
 	require.Contains(t, html, `data-agent-search`)
 	require.Contains(t, html, `max-h-64 overflow-y-auto`)
