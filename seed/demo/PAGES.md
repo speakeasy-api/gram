@@ -351,4 +351,4 @@ Browser verification: [~] — follow check 30 in `seed/demo/verify.md`.
 
 The seeded gateway uses Progressive discovery. Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.
 
-Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, linked count, and no-agent state.
+Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, and no-agent state.

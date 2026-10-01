@@ -1,4 +1,10 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TunneledMcpServerConnections } from "@gram/client/models/components/tunneledmcpserverconnections.js";
@@ -50,6 +56,7 @@ describe("tunnel status evidence", () => {
           connections={legacy}
           loading={false}
           error={false}
+          logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
           agentSetupHref="/settings#agent"
         />
       </MemoryRouter>,
@@ -77,6 +84,7 @@ describe("tunnel status evidence", () => {
           connections={cached}
           loading={false}
           error={true}
+          logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
           agentSetupHref="/settings#agent"
         />
       </MemoryRouter>,
@@ -95,6 +103,7 @@ describe("tunnel status evidence", () => {
           connections={{ ...legacy, activeConnectionCount: 0, connections: [] }}
           loading={false}
           error={false}
+          logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
           agentSetupHref="/settings#agent"
         />
       </MemoryRouter>,
@@ -125,7 +134,7 @@ it("does not color unavailable history green using cached successful responses",
         connections={legacy}
         loading={false}
         error={false}
-        linkedServers={1}
+        logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
         agentSetupHref="/settings#agent"
       />
     </MemoryRouter>,
@@ -142,6 +151,7 @@ it.each([
     {
       state: "available",
       requestsTotal: 0,
+      lastHttpStatus: 0,
       httpProgress: { waitingHeaders: 0, openResponses: 0 },
     },
     "HTTP / MCP: Not observed. No traffic has reached this agent.",
@@ -176,11 +186,17 @@ it.each([
         }}
         loading={false}
         error={false}
+        logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
         agentSetupHref="/settings#agent"
       />
     </MemoryRouter>,
   );
   expect(screen.getByText(text)).toBeTruthy();
+  if (_name === "idle") {
+    const details = screen.getByText("Connection details").closest("details")!;
+    expect(within(details).queryByText("0", { exact: true })).toBeNull();
+    expect(within(details).queryByText(/Last HTTP response/)).toBeNull();
+  }
   expect(screen.queryByText("Waiting for response headers")).toBeNull();
 });
 
@@ -206,6 +222,7 @@ it("shows aggregate HTTP phases without calling an open stream a failure", () =>
         }}
         loading={false}
         error={false}
+        logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
         agentSetupHref="/settings#agent"
       />
     </MemoryRouter>,
@@ -223,7 +240,7 @@ it("shows aggregate HTTP phases without calling an open stream a failure", () =>
 
 it.each([
   ["reachable", "Reachable"],
-  ["unreachable", "1 unreachable"],
+  ["unreachable", "Unreachable"],
   ["unknown", "Not checked"],
 ] as const)("represents %s transport state", (targetState, summary) => {
   render(
@@ -241,12 +258,13 @@ it.each([
         }}
         loading={false}
         error={false}
+        logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
         agentSetupHref="/settings"
       />
     </MemoryRouter>,
   );
   expect(
-    within(screen.getByRole("group", { name: "Target transport" })).getByText(
+    within(screen.getByRole("group", { name: "Transport status" })).getByText(
       summary,
     ),
   ).toBeTruthy();
@@ -280,6 +298,7 @@ it("renders completion-only history and its charts", () => {
         connections={legacy}
         loading={false}
         error={false}
+        logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
         agentSetupHref="/settings"
       />
     </MemoryRouter>,
@@ -303,6 +322,7 @@ it("keeps live diagnostics visible when the history range is too large", () => {
         connections={legacy}
         loading={false}
         error={false}
+        logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
         agentSetupHref="/settings"
       />
     </MemoryRouter>,
@@ -321,6 +341,7 @@ it("does not claim disconnection when collection is unavailable", () => {
         connections={{ ...legacy, collectionState: "unavailable" }}
         loading={false}
         error={false}
+        logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
         agentSetupHref="/settings"
       />
     </MemoryRouter>,
@@ -328,3 +349,135 @@ it("does not claim disconnection when collection is unavailable", () => {
   expect(screen.getByText("Live status is unavailable")).toBeTruthy();
   expect(screen.queryByText("No connected agents")).toBeNull();
 });
+
+it("keeps failure guidance visible and reveals dependent checks and HTTP details on demand", () => {
+  render(
+    <MemoryRouter>
+      <TunnelObservability
+        id="source"
+        loading={false}
+        error={false}
+        agentSetupHref="/settings"
+        logsHref="/logs?af=tunnel-filter"
+        connections={{
+          ...legacy,
+          connections: [
+            {
+              ...legacy.connections[0]!,
+              diagnostics: {
+                state: "available",
+                targetState: "unreachable",
+                requestsTotal: 5,
+                dns: { state: "fail", failure: "dns_not_found", durationMs: 1 },
+                tcp: { state: "not_tested", failure: "", durationMs: 0 },
+                tls: { state: "not_applicable", failure: "", durationMs: 0 },
+                httpProgress: { waitingHeaders: 2, openResponses: 0 },
+                lastHttpStatus: 200,
+                lastHttpResponseAgeMs: 7_866_000,
+              },
+            },
+          ],
+        }}
+      />
+    </MemoryRouter>,
+  );
+  expect(
+    screen.getByText(/Hostname was not found/).closest("details"),
+  ).toBeNull();
+  expect(
+    screen.getByRole("link", { name: "View tool logs" }).getAttribute("href"),
+  ).toBe("/logs?af=tunnel-filter");
+  const details = screen.getByText("Connection details").closest("details")!;
+  expect(details.open).toBe(false);
+  expect(
+    screen.getByText("Waiting for response headers").closest("details"),
+  ).toBe(details);
+  expect(screen.getByText(/Last HTTP response: 200/).closest("details")).toBe(
+    details,
+  );
+  expect(screen.queryByText(/7866s ago/)).toBeNull();
+  fireEvent.click(screen.getByText("Connection details"));
+  expect(details.open).toBe(true);
+  expect(screen.getByText("Not checked (DNS failed)")).toBeTruthy();
+  expect(screen.queryByText("Linked MCP servers")).toBeNull();
+});
+
+it("distinguishes agents that disagree about target reachability", () => {
+  render(
+    <MemoryRouter>
+      <TunnelObservability
+        id="source"
+        loading={false}
+        error={false}
+        agentSetupHref="/settings"
+        logsHref="/logs"
+        connections={{
+          ...legacy,
+          activeConnectionCount: 2,
+          connections: [
+            {
+              ...legacy.connections[0]!,
+              diagnostics: { state: "available", targetState: "reachable" },
+            },
+            {
+              ...legacy.connections[0]!,
+              gatewaySessionId: "another-session",
+              diagnostics: { state: "available", targetState: "unreachable" },
+            },
+          ],
+        }}
+      />
+    </MemoryRouter>,
+  );
+  expect(
+    within(screen.getByRole("group", { name: "Transport status" })).getByText(
+      "Partially reachable",
+    ),
+  ).toBeTruthy();
+  expect(screen.getByText("Network reachable")).toBeTruthy();
+  expect(screen.getByText("Target unreachable")).toBeTruthy();
+});
+
+it.each([
+  undefined,
+  { state: "stale", targetState: "reachable" },
+  { state: "available", targetState: "unknown" },
+] as const)(
+  "does not treat an agent with unknown checks as unreachable (%j)",
+  (diagnostics) => {
+    render(
+      <MemoryRouter>
+        <TunnelObservability
+          id="source"
+          loading={false}
+          error={false}
+          agentSetupHref="/settings"
+          logsHref="/logs"
+          connections={{
+            ...legacy,
+            activeConnectionCount: 2,
+            connections: [
+              {
+                ...legacy.connections[0]!,
+                diagnostics: { state: "available", targetState: "unreachable" },
+              },
+              {
+                ...legacy.connections[0]!,
+                gatewaySessionId: "another-session",
+                diagnostics,
+              },
+            ],
+          }}
+        />
+      </MemoryRouter>,
+    );
+    const status = screen.getByRole("group", { name: "Transport status" });
+    expect(within(status).getByText("Some checks failed")).toBeTruthy();
+    expect(
+      within(status).queryByText("Unreachable", { exact: true }),
+    ).toBeNull();
+    expect(
+      within(status).getByRole("link", { name: "View tool logs" }),
+    ).toBeTruthy();
+  },
+);
