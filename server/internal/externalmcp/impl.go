@@ -233,7 +233,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		if lookupErr != nil {
 			err = lookupErr
 		} else {
-			details, err = decodeDashboardDetails(entry.Data)
+			details, err = decodeDashboardDetails(entry.Data, true)
 		}
 	} else {
 		err = ErrUnknownRegistrySource
@@ -367,10 +367,10 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry Registry, ser
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	return decodeDashboardDetails(body)
+	return decodeDashboardDetails(body, false)
 }
 
-func decodeDashboardDetails(body []byte) (*serverDetailsResult, error) {
+func decodeDashboardDetails(body []byte, nativeSelection bool) (*serverDetailsResult, error) {
 	var enrichment struct {
 		Server struct {
 			Title *string `json:"title"`
@@ -428,12 +428,12 @@ func decodeDashboardDetails(body []byte) (*serverDetailsResult, error) {
 			Headers:       toExternalMCPRemoteHeaders(r.Headers),
 			Variables:     toExternalMCPRemoteVariables(r.Variables),
 		})
-		// Prefer first streamable-http; fall back to first sse.
+		// Prefer first streamable-http; native falls back to last SSE, Pulse to first.
 		// Can't break early because we need all remotes in the slice.
 		if r.Type == "streamable-http" && !foundStreamable {
 			preferredIndex = i
 			foundStreamable = true
-		} else if r.Type == "sse" && preferredIndex == -1 {
+		} else if r.Type == "sse" && !foundStreamable && (nativeSelection || preferredIndex == -1) {
 			preferredIndex = i
 		}
 	}

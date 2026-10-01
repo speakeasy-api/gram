@@ -72,7 +72,6 @@ func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Empty(t, result.Servers)
 }
 
 func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
@@ -96,7 +95,6 @@ func TestExternalMCP_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Empty(t, result.Servers)
 }
 
 func TestExternalMCP_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {

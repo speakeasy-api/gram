@@ -1,16 +1,17 @@
 package externalmcp_test
 
 import (
-	gen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	registryrepo "github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
-	"github.com/stretchr/testify/require"
 )
 
 func TestNativeNamespaceBootstrap(t *testing.T) {
