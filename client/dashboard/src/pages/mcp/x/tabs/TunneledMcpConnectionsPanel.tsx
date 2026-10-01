@@ -1,6 +1,5 @@
 import { useTelemetry } from "@/contexts/Telemetry";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { TunnelObservability } from "./TunnelObservability";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Badge } from "@/components/ui/Badge";
@@ -123,18 +122,16 @@ const columns: Column<TunneledMcpConnection>[] = [
 export function TunneledMcpConnectionsPanel({
   tunneledMcpServerId,
   agentSetupHref,
+  logsHref,
 }: {
   tunneledMcpServerId: string;
   /** Settings anchor with the agent snippets, offered when nothing is connected. */
   agentSetupHref: string;
+  logsHref: string;
 }): JSX.Element {
   const telemetry = useTelemetry();
   const enhanced =
     telemetry.isFeatureEnabled(FEATURE_FLAGS.tunnelObservability) === true;
-  const linked = useMcpServers({ tunneledMcpServerId }, undefined, {
-    enabled: enhanced,
-    throwOnError: false,
-  });
   // The status badge and last-seen come from the source row, so it polls on
   // the same cadence as the connections table or it would go stale as agents
   // come and go.
@@ -165,9 +162,7 @@ export function TunneledMcpConnectionsPanel({
         connections={data}
         loading={isLoading}
         error={isError}
-        linkedServers={
-          linked.isError ? undefined : linked.data?.mcpServers.length
-        }
+        logsHref={logsHref}
         agentSetupHref={agentSetupHref}
       />
     );

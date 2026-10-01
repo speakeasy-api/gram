@@ -332,4 +332,4 @@ demo intentionally shows no box; component and Stripe transport fixtures cover
 verified gateway terms, safe monetary/percentage fallback, expiration, and absence.
 No Stripe subscription, promotion, or local billing settings are seeded for it.
 
-Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, linked count, and no-agent state.
+Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, and no-agent state.

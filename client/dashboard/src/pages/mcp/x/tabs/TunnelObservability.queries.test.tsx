@@ -27,9 +27,6 @@ vi.mock(
     }),
   }),
 );
-vi.mock("@gram/client/react-query/mcpServers.js", () => ({
-  useMcpServers: () => ({ data: { mcpServers: [] }, isError: false }),
-}));
 vi.mock("@gram/client/react-query/getTunneledMcpServer.js", () => ({
   useGetTunneledMcpServer: () => ({}),
 }));
@@ -95,6 +92,7 @@ function renderPanel() {
         <ErrorBoundary fallback={<p>Overview crashed</p>}>
           <TunneledMcpConnectionsPanel
             tunneledMcpServerId="source"
+            logsHref="/logs?af=gram.tunneled_mcp_server.id%3Aeq%3Asource"
             agentSetupHref="/settings#agent"
           />
         </ErrorBoundary>
