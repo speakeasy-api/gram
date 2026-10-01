@@ -248,7 +248,6 @@ describe("useRemoteMcpInstallWorkflow", () => {
     const servers = [makeServer()];
     const beforeInstall = vi.fn().mockResolvedValue(true);
     mockCreatePolicy.mockImplementation(async () => {
-      expect(mockMcpServersCreate).toHaveBeenCalledOnce();
       throw new Error("Policy unavailable");
     });
     const { result } = renderHook(() =>
@@ -268,6 +267,10 @@ describe("useRemoteMcpInstallWorkflow", () => {
     });
     expect(beforeInstall).toHaveBeenCalledOnce();
     expect(mockCreatePolicy).toHaveBeenCalledOnce();
+    expect(mockMcpServersCreate).toHaveBeenCalledOnce();
+    expect(mockMcpServersCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCreatePolicy.mock.invocationCallOrder[0]!,
+    );
     expect(mockDeleteServer).not.toHaveBeenCalled();
     expect(result.current.phase).toBe("complete");
     if (result.current.phase === "complete") {
