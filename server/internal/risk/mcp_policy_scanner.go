@@ -24,9 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-// MCPScanRequest is one materialized MCP request passed to policy detectors.
+// MCPScanRequest is one materialized MCP request or response passed to policy detectors.
 type MCPScanRequest struct {
-	// Text is the complete request payload.
+	// Text is the complete phase payload.
 	Text string
 
 	// ToolName is the called MCP tool.
@@ -40,6 +40,9 @@ type MCPScanRequest struct {
 
 	// UserID is trusted user provenance from mcpidentity.
 	UserID string
+
+	// MessageType selects the request or response policy surface.
+	MessageType message.Type
 }
 
 // MCPPolicyScanner shares the synchronous detector registry used by Scanner.
@@ -62,13 +65,18 @@ func NewMCPPolicyScanner(scanner *Scanner, resolver destructivetool.Resolver) *M
 	}
 }
 
-// ScanMCPPolicy runs one policy against a tool_request message view.
+// ScanMCPPolicy runs one policy against the request's message view.
 func (s *MCPPolicyScanner) ScanMCPPolicy(ctx context.Context, policy policycore.Policy, request MCPScanRequest) ([]scanners.Finding, error) {
 	if s == nil || s.scanner == nil {
 		return nil, errors.New("MCP policy scanner is unavailable")
 	}
 
-	view := realtimeMessageView(request.Text, message.ToolRequest, request.ToolName)
+	messageType := request.MessageType
+	if messageType == "" {
+		messageType = message.ToolRequest
+	}
+	request.MessageType = messageType
+	view := realtimeMessageView(request.Text, messageType, request.ToolName)
 	specs := make([]risk_analysis.DetectionScopeConfig, 0, len(policy.DetectionScopes))
 	for _, scope := range policy.DetectionScopes {
 		specs = append(specs, risk_analysis.DetectionScopeConfig{
@@ -140,7 +148,7 @@ func (s *MCPPolicyScanner) ScanMCPPolicy(ctx context.Context, policy policycore.
 				scanErr = errors.Join(scanErr, completionError(source, err))
 			}
 		case risk_analysis.SourcePromptInjection:
-			result, _, err := s.scanner.piScanner.ScanWithVerdict(ctx, request.Text, policy.OrganizationID, policy.ProjectID.String(), request.UserID, judgemessage.New(message.ToolRequest, request.ToolName, request.Text))
+			result, _, err := s.scanner.piScanner.ScanWithVerdict(ctx, request.Text, policy.OrganizationID, policy.ProjectID.String(), request.UserID, judgemessage.New(messageType, request.ToolName, request.Text))
 			findings = append(findings, filter(source, result.Findings)...)
 			if err != nil || !result.Completed {
 				scanErr = errors.Join(scanErr, completionError(source, err))
@@ -213,7 +221,7 @@ func (s *MCPPolicyScanner) scanPromptPolicy(ctx context.Context, policy policyco
 	if policy.Prompt != nil {
 		prompt = *policy.Prompt
 	}
-	result, _ := s.scanner.promptPolicy.ScanWithVerdict(ctx, policy.OrganizationID, policy.ProjectID.String(), request.UserID, prompt, config, judgemessage.New(message.ToolRequest, request.ToolName, request.Text))
+	result, _ := s.scanner.promptPolicy.ScanWithVerdict(ctx, policy.OrganizationID, policy.ProjectID.String(), request.UserID, prompt, config, judgemessage.New(request.MessageType, request.ToolName, request.Text))
 	findings := scope.FilterFindings(view, risk_analysis.NewDisabledRuleSet(policy.DisabledRules).FilterFindings(result.Findings))
 	if !result.Completed {
 		return findings, completionError(promptpolicy.Source, nil)
