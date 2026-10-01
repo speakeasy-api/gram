@@ -81,6 +81,8 @@ func TestVendorsAreValidRecords(t *testing.T) {
 		require.Equal(t, vendor.Mapping, mapping)
 		require.NotEmpty(t, vendor.IconURL, vendor.Name)
 		require.Contains(t, string(e.Data), vendor.IconURL)
+		recorded, _ := storedSupportsDCR(t, e.Data)
+		require.Equal(t, vendor.SupportsDCR, recorded, vendor.Name)
 	}
 
 	// A second run changes nothing.
@@ -170,7 +172,7 @@ func TestApplyKeepsExistingIcon(t *testing.T) {
 	const chosen = "https://icons.example.test/chosen.png"
 	stored, err := json.Marshal(map[string]any{
 		"server": map[string]any{"name": first.Name, "description": "Curated", "version": "1", "remotes": remotes, "icons": []map[string]string{{"src": chosen}}},
-		"_meta":  map[string]any{mcpregistry.OktaNamespace: first.Mapping},
+		"_meta":  map[string]any{mcpregistry.OktaNamespace: first.Mapping, "com.speakeasy.ai/catalog": map[string]any{"supportsDcr": false}},
 	})
 	require.NoError(t, err)
 	_, err = svc.Create(ctx, stored)
@@ -183,4 +185,24 @@ func TestApplyKeepsExistingIcon(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(e.Data), chosen)
 	require.NotContains(t, string(e.Data), first.IconURL)
+	require.True(t, first.SupportsDCR)
+	recorded, present := storedSupportsDCR(t, e.Data)
+	require.True(t, present)
+	require.False(t, recorded)
+}
+
+// storedSupportsDCR reads the catalog flag and whether the record sets it.
+func storedSupportsDCR(t *testing.T, data json.RawMessage) (bool, bool) {
+	t.Helper()
+	var root struct {
+		Meta map[string]map[string]json.RawMessage `json:"_meta"`
+	}
+	require.NoError(t, json.Unmarshal(data, &root))
+	raw, ok := root.Meta["com.speakeasy.ai/catalog"]["supportsDcr"]
+	if !ok {
+		return false, false
+	}
+	var value bool
+	require.NoError(t, json.Unmarshal(raw, &value))
+	return value, true
 }

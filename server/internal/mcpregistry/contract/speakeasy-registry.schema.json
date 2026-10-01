@@ -28,6 +28,10 @@
               "format": "uri",
               "pattern": "^[hH][tT][tT][pP][sS]?://[^/?#@:\\s][^/?#@\\s]*([/?#]\\S*)?$",
               "description": "Public documentation URL. HTTP and HTTPS are supported; HTTPS is recommended. Never include secrets."
+            },
+            "supportsDcr": {
+              "type": "boolean",
+              "description": "Whether the server's authorization server publishes an OAuth dynamic client registration endpoint. Install flows default to per-user OAuth when true. Absent means false."
             }
           }
         },
