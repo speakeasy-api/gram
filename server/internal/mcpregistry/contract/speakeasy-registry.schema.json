@@ -71,7 +71,7 @@
               "type": "string",
               "format": "uri",
               "maxLength": 512,
-              "pattern": "^https://[^/?#@\\s]+(/[^?#\\s]*)?$",
+              "pattern": "^https://[^:/?#@\\s][^/?#@\\s]*(/[^?#\\s]*)?$",
               "description": "Vendor Issuer URL entered in Okta's Cross App Access setup for this integration. HTTPS, host, optional path; no query, fragment or userinfo."
             }
           },

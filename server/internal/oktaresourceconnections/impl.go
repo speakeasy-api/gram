@@ -545,7 +545,7 @@ func normalizeAudience(raw string) (string, error) {
 		return "", oops.E(oops.CodeBadRequest, nil, "audience must be at most 512 characters")
 	}
 	audience := strings.TrimSpace(raw)
-	if err := oktaissuer.Validate(audience); err != nil {
+	if err := oktaissuer.ValidateAudience(audience); err != nil {
 		return "", oops.E(oops.CodeBadRequest, nil, "audience must be an https URL without query or fragment")
 	}
 	return audience, nil

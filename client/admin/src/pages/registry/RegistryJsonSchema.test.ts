@@ -166,6 +166,7 @@ it("validates and completes the Okta OIN mapping namespace", async () => {
     { oinNames: ["linear"], xaaSignOnModes: ["SWA"] },
     { oinNames: ["linear"], xaaIssuer: "http://auth.example.test" },
     { oinNames: ["linear"], xaaIssuer: "https://auth.example.test?x=1" },
+    { oinNames: ["linear"], xaaIssuer: "https://:443" },
     { oinNames: ["linear"], unknown: true },
     { oin_names: ["linear"] },
   ]) {
