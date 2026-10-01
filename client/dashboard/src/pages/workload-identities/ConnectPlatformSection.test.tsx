@@ -65,9 +65,7 @@ it("shows the organization's token endpoint, issuer and audience rule", () => {
   expect(
     screen.getByText(/aud must be exactly this issuer or the token endpoint/),
   ).toBeTruthy();
-  expect(
-    screen.getByText(/names the MCP server it wants as resource/),
-  ).toBeTruthy();
+  expect(screen.getByText(/allowed API hosts/)).toBeTruthy();
 });
 
 it("offers no MCP server picker", () => {

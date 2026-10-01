@@ -1,8 +1,8 @@
 import type { WorkloadOrganizationConnectionDetails } from "@gram/client/models/components/workloadorganizationconnectiondetails.js";
 import { useWorkloadOrganizationConnectionDetails } from "@gram/client/react-query/workloadOrganizationConnectionDetails.js";
 
-export const RESOURCE_HINT =
-  "The platform names the MCP server it wants as resource: that server's MCP URL.";
+export const TOKEN_ENDPOINT_HINT =
+  "The authorization server’s token endpoint the issuer must use";
 
 export const AUDIENCE_RULE =
   "The assertion's aud must be exactly this issuer or the token endpoint URL. Nothing else on that host is accepted.";

@@ -10,7 +10,6 @@ import type { ReactNode } from "react";
 import {
   AUDIENCE_RULE,
   notReadyWarning,
-  RESOURCE_HINT,
   unavailableMessage,
   useOrganizationConnection,
 } from "./organizationConnection";
@@ -93,8 +92,8 @@ function ConnectionValues({
         note={AUDIENCE_RULE}
       />
       <Text muted small>
-        {RESOURCE_HINT} List that server&apos;s host among the platform&apos;s
-        allowed API hosts.
+        List each MCP server&apos;s host among the platform&apos;s allowed API
+        hosts.
       </Text>
     </Stack>
   );

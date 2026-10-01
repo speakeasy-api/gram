@@ -60,7 +60,9 @@ it("shows the organization's token endpoint with a copy button and the resource 
     screen.getByRole("button", { name: "Copy token endpoint" }),
   ).toBeTruthy();
   expect(
-    screen.getByText(/names the MCP server it wants as resource/),
+    screen.getByText(
+      /The authorization server’s token endpoint the issuer must use/,
+    ),
   ).toBeTruthy();
 });
 
@@ -90,7 +92,7 @@ it("says the endpoint isn't enabled instead of showing a URL", () => {
   expect(
     screen.queryByRole("button", { name: "Copy token endpoint" }),
   ).toBeNull();
-  expect(screen.queryByText(/names the MCP server it wants/)).toBeNull();
+  expect(screen.queryByText(/token endpoint the issuer must use/)).toBeNull();
 });
 
 it("says the deployment accepts no workload tokens when the grant is unavailable", () => {

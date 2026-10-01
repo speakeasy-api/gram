@@ -9,7 +9,7 @@ import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import {
   notReadyWarning,
-  RESOURCE_HINT,
+  TOKEN_ENDPOINT_HINT,
   unavailableMessage,
   useOrganizationConnection,
 } from "./organizationConnection";
@@ -127,7 +127,7 @@ export function OrganizationTokenEndpoint({
       </div>
       {hasEndpoint(data) && (
         <Text muted small>
-          {RESOURCE_HINT}
+          {TOKEN_ENDPOINT_HINT}
         </Text>
       )}
     </div>
