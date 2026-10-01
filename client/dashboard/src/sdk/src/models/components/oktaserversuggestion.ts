@@ -46,6 +46,10 @@ export type OktaServerSuggestion = {
    */
   documentationUrl?: string | undefined;
   /**
+   * HTTPS URL of the entry's icon when it has one.
+   */
+  iconUrl?: string | undefined;
+  /**
    * The entry URLs the organization already fronts with a live MCP server.
    */
   installedUrls: Array<string>;
@@ -95,6 +99,7 @@ export const OktaServerSuggestion$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     documentation_url: z.optional(z.string()),
+    icon_url: z.optional(z.string()),
     installed_urls: z.array(z.string()),
     okta_applications: z.array(OktaServerSuggestionApplication$inboundSchema),
     registry_entry_id: z.string(),
@@ -108,6 +113,7 @@ export const OktaServerSuggestion$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "dismissed_at": "dismissedAt",
       "documentation_url": "documentationUrl",
+      "icon_url": "iconUrl",
       "installed_urls": "installedUrls",
       "okta_applications": "oktaApplications",
       "registry_entry_id": "registryEntryId",

@@ -56,6 +56,8 @@ type DismissResponseBody struct {
 	Description string  `form:"description" json:"description" xml:"description"`
 	// Public documentation URL when the entry has one.
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	// HTTPS URL of the entry's icon when it has one.
+	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes" json:"remotes" xml:"remotes"`
 	// Matching Okta application instances, by label.
@@ -87,6 +89,8 @@ type RestoreResponseBody struct {
 	Description string  `form:"description" json:"description" xml:"description"`
 	// Public documentation URL when the entry has one.
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	// HTTPS URL of the entry's icon when it has one.
+	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes" json:"remotes" xml:"remotes"`
 	// Matching Okta application instances, by label.
@@ -774,6 +778,8 @@ type OktaServerSuggestionResponseBody struct {
 	Description string  `form:"description" json:"description" xml:"description"`
 	// Public documentation URL when the entry has one.
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	// HTTPS URL of the entry's icon when it has one.
+	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes" json:"remotes" xml:"remotes"`
 	// Matching Okta application instances, by label.
@@ -865,6 +871,7 @@ func NewDismissResponseBody(res *oktaserversuggestions.OktaServerSuggestion) *Di
 		Title:            res.Title,
 		Description:      res.Description,
 		DocumentationURL: res.DocumentationURL,
+		IconURL:          res.IconURL,
 		XaaIssuer:        res.XaaIssuer,
 		State:            res.State,
 		DismissedAt:      res.DismissedAt,
@@ -913,6 +920,7 @@ func NewRestoreResponseBody(res *oktaserversuggestions.OktaServerSuggestion) *Re
 		Title:            res.Title,
 		Description:      res.Description,
 		DocumentationURL: res.DocumentationURL,
+		IconURL:          res.IconURL,
 		XaaIssuer:        res.XaaIssuer,
 		State:            res.State,
 		DismissedAt:      res.DismissedAt,

@@ -748,6 +748,7 @@ func marshalOktaserversuggestionsOktaServerSuggestionToOktaServerSuggestionRespo
 		Title:            v.Title,
 		Description:      v.Description,
 		DocumentationURL: v.DocumentationURL,
+		IconURL:          v.IconURL,
 		XaaIssuer:        v.XaaIssuer,
 		State:            v.State,
 		DismissedAt:      v.DismissedAt,

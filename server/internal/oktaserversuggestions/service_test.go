@@ -168,7 +168,7 @@ func entryRecord(name string, remotes []string, okta string) string {
 	for _, u := range remotes {
 		quoted = append(quoted, `{"type":"streamable-http","url":"`+u+`","headers":[{"name":"Authorization","description":"Bearer token","isRequired":true,"isSecret":true}]}`)
 	}
-	record := `{"server":{"name":"` + name + `","title":"` + strings.TrimPrefix(name, "example.test/") + `","description":"Demo","version":"1.0.0","remotes":[` + strings.Join(quoted, ",") + `]}`
+	record := `{"server":{"name":"` + name + `","title":"` + strings.TrimPrefix(name, "example.test/") + `","description":"Demo","version":"1.0.0","icons":[{"src":"https://icons.example.test/icon.png"}],"remotes":[` + strings.Join(quoted, ",") + `]}`
 	if okta != "" {
 		record += `,"_meta":{"com.speakeasy.ai/catalog":{"documentationUrl":"https://docs.example.test"},"com.speakeasy.ai/okta":` + okta + `}`
 	}
@@ -242,6 +242,7 @@ func TestListMatchesAssignedActiveApplications(t *testing.T) {
 	require.Equal(t, "example.test/linear", sg.ServerName)
 	require.Equal(t, "linear", conv.PtrValOrEmpty(sg.Title, ""))
 	require.Equal(t, "https://docs.example.test", conv.PtrValOrEmpty(sg.DocumentationURL, ""))
+	require.Equal(t, "https://icons.example.test/icon.png", conv.PtrValOrEmpty(sg.IconURL, ""))
 	require.Equal(t, "https://auth.linear.example", conv.PtrValOrEmpty(sg.XaaIssuer, ""))
 	require.Equal(t, oktaserversuggestions.StateOpen, sg.State)
 	require.Len(t, sg.Remotes, 2)

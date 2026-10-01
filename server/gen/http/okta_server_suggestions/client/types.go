@@ -56,6 +56,8 @@ type DismissResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Public documentation URL when the entry has one.
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	// HTTPS URL of the entry's icon when it has one.
+	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// Matching Okta application instances, by label.
@@ -87,6 +89,8 @@ type RestoreResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Public documentation URL when the entry has one.
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	// HTTPS URL of the entry's icon when it has one.
+	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// Matching Okta application instances, by label.
@@ -774,6 +778,8 @@ type OktaServerSuggestionResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Public documentation URL when the entry has one.
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+	// HTTPS URL of the entry's icon when it has one.
+	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// Matching Okta application instances, by label.
@@ -1060,6 +1066,7 @@ func NewDismissOktaServerSuggestionOK(body *DismissResponseBody) *oktaserversugg
 		Title:            body.Title,
 		Description:      *body.Description,
 		DocumentationURL: body.DocumentationURL,
+		IconURL:          body.IconURL,
 		XaaIssuer:        body.XaaIssuer,
 		State:            *body.State,
 		DismissedAt:      body.DismissedAt,
@@ -1277,6 +1284,7 @@ func NewRestoreOktaServerSuggestionOK(body *RestoreResponseBody) *oktaserversugg
 		Title:            body.Title,
 		Description:      *body.Description,
 		DocumentationURL: body.DocumentationURL,
+		IconURL:          body.IconURL,
 		XaaIssuer:        body.XaaIssuer,
 		State:            *body.State,
 		DismissedAt:      body.DismissedAt,

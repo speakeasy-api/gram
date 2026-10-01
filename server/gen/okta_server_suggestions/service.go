@@ -101,6 +101,8 @@ type OktaServerSuggestion struct {
 	Description string
 	// Public documentation URL when the entry has one.
 	DocumentationURL *string
+	// HTTPS URL of the entry's icon when it has one.
+	IconURL *string
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemote
 	// Matching Okta application instances, by label.
