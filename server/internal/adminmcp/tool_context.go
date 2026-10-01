@@ -51,7 +51,7 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 			workflows = append(workflows, "inspect global issuers and bounded duplicate/migration preflights")
 		}
 		if matrixReadsAvailable {
-			workflows = append(workflows, "inspect global support matrix facts without operator notes", "inspect one exact support matrix entry with bounded editable fields and revision")
+			workflows = append(workflows, "inspect global support matrix facts without operator notes", "inspect one exact support matrix entry with its notes, operating systems, verification flags and the file revision")
 		}
 		if onboardingReadsAvailable {
 			workflows = append(workflows, "inspect the onboarding playbook assigned to an organization")

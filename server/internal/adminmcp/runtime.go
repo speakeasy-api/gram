@@ -126,7 +126,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	registerCoverageTools(server, reader, coverageReader)
 	registerIssuerTools(server, issuerReader)
 	registerSupportMatrixTools(server, matrixReader)
-	registerSupportMatrixEntryTool(server, matrixReader)
+	registerSupportMatrixEntryTool(server, matrixReader != nil)
 	registerDiagnosticTools(server, reader, projectReader, onboardingReader, projectMCPReader)
 	registerBillingDiagnosticTools(server, reader, billingDiagnosticsReader)
 	registerOrganizationDetailTools(server, reader, organizationStatsReader, organizationMemberReader)
