@@ -491,4 +491,4 @@ In shared Explore Demo, verify the mapping dialog shows its read-only notice and
 
 ## Tunnel observability
 
-With `gram-tunnel-observability` enabled, open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, one MCP server is linked, and the current agent count is zero. Check 1 hour / 24 hours / 7 days and the activity data table. The synthetic source must not initiate any network connection.
+With `gram-tunnel-observability` enabled, open MCP Servers → Private inventory → Overview. Verify request, connection and latency charts contain history, the latest missing intervals stay gaps, and the current agent count is zero. The marketplace callout appears above the tunnel status; Transport status is Unknown without a connected agent. Check 1 hour / 24 hours / 7 days and the activity data table. The synthetic source must not initiate any network connection.

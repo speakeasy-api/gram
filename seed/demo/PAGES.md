@@ -250,4 +250,4 @@ Enter through `/explore-demo` using an ordinary browser session, then open Amara
 
 Shared Explore Demo is read-only for Slack connections, syncing and mappings. The retargeted local organization remains writable.
 
-Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, linked count, and no-agent state.
+Tunnel observability: [x] seeded and browser-verified for all three ranges, the data table, gaps, and no-agent state.

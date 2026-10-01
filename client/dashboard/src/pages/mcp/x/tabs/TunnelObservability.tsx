@@ -53,14 +53,14 @@ export function TunnelObservability({
   connections,
   loading,
   error,
-  linkedServers,
+  logsHref,
   agentSetupHref,
 }: {
   id: string;
   connections?: TunneledMcpServerConnections;
   loading: boolean;
   error: boolean;
-  linkedServers?: number;
+  logsHref: string;
   agentSetupHref: string;
 }): JSX.Element {
   const [window, setWindow] = useState<Window>("day");
@@ -87,9 +87,13 @@ export function TunnelObservability({
   let target = "Unknown";
   if (!unavailable && live.length > 0) {
     target = "Not checked";
-    if (fresh.length) target = `${reachable.length}/${live.length} reachable`;
+    if (fresh.length) target = "Checks incomplete";
     if (reachable.length === live.length) target = "Reachable";
-    if (failing.length) target = `${failing.length} unreachable`;
+    if (failing.length) {
+      target = "Some checks failed";
+      if (reachable.length) target = "Partially reachable";
+      if (failing.length === live.length) target = "Unreachable";
+    }
   }
   let targetTone: "warning" | "success" | "destructive" = "warning";
   if (reachable.length > 0 && reachable.length === live.length)
@@ -115,7 +119,7 @@ export function TunnelObservability({
   return (
     <section className="mb-8 space-y-6" aria-label="Tunnel health and activity">
       <StatRow
-        className="grid grid-cols-1 divide-x-0 divide-y md:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-y-0"
+        className="grid grid-cols-1 divide-x-0 divide-y md:grid-cols-3 md:divide-x md:divide-y-0"
         isLoading={loading}
         metrics={[
           {
@@ -128,11 +132,20 @@ export function TunnelObservability({
               : "Connected agents",
           },
           {
-            label: "Target transport",
+            label: "Transport status",
             value: target,
             size: "sm",
             tone: targetTone,
-            description: "Network reachability from each agent",
+            description: (
+              <span className="flex flex-col gap-1">
+                Network reachability from each agent
+                {!unavailable && failing.length > 0 && (
+                  <Link to={logsHref} className="underline underline-offset-4">
+                    View tool logs
+                  </Link>
+                )}
+              </span>
+            ),
           },
           {
             label: "MCP responses",
@@ -142,14 +155,6 @@ export function TunnelObservability({
                 ? "success"
                 : "neutral",
             description: "Successful completions in selected range",
-          },
-          {
-            label: "Linked MCP servers",
-            value: linkedServers ?? "—",
-            tone: "information",
-            description: historyReady
-              ? `${history.data?.activeServers ?? 0} with requests in selected range`
-              : "Servers using this tunnel",
           },
         ]}
       />
@@ -174,9 +179,8 @@ export function TunnelObservability({
       <div className="space-y-3">
         <h2 className="text-display-xs">Agents & target checks</h2>
         <p className="text-muted-foreground text-sm">
-          DNS, TCP, and TLS checks run about every 30 seconds while polling is
-          active. HTTP progress is sampled from normal traffic; checks never
-          invoke MCP methods or tools.
+          Network checks refresh about every 30 seconds. MCP activity comes from
+          normal traffic.
         </p>
         <AgentList
           live={live}
@@ -512,38 +516,57 @@ function DiagnosticDetails({ value: d }: { value: TunnelDiagnostics }) {
   const failure = steps.find(([, s]) => s?.failure)?.[1]?.failure;
   return (
     <>
-      <dl className="grid grid-cols-3 gap-4">
-        {steps.map(([label, s]) => (
-          <div key={label}>
-            <dt className="text-eyebrow">{label}</dt>
-            <dd className="mt-1 text-sm">{stepLabel(s)}</dd>
-          </div>
-        ))}
-      </dl>
-      {failure ? (
+      {failure && d.state === "available" && (
         <p className="text-sm">
           {failures[failure] ?? "Transport check unavailable."}
         </p>
-      ) : null}
-      <HttpProgress value={d} />
-      {d.lastHttpStatus ? (
-        <p className="text-muted-foreground text-sm">
-          Last HTTP response: {d.lastHttpStatus}
-          {Number(d.lastHttpResponseAgeMs ?? -1) >= 0
-            ? ` · ${Math.floor(Number(d.lastHttpResponseAgeMs) / 1000)}s ago`
-            : ""}
-          {d.lastHttpStatus === 401 || d.lastHttpStatus === 403
-            ? ". Target responded; credentials may be needed."
-            : "."}
-        </p>
-      ) : null}
-      {d.state !== "available" && d.receivedAt ? (
+      )}
+      {d.state !== "available" && d.receivedAt && (
         <p className="text-muted-foreground text-sm">
           Last report{" "}
           {formatDistanceToNow(new Date(d.receivedAt), { addSuffix: true })}.
           These results may no longer reflect the target.
         </p>
-      ) : null}
+      )}
+      <details>
+        <summary className="cursor-pointer text-sm font-medium">
+          Connection details
+        </summary>
+        <div className="mt-4 space-y-4">
+          <dl className="space-y-2">
+            {steps.map(([label, step], index) => {
+              const blockedBy = steps
+                .slice(0, index)
+                .find(([, previous]) => previous?.state === "fail");
+              const blocked =
+                blockedBy && (!step || step.state === "not_tested");
+              return (
+                <div
+                  key={label}
+                  className="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+                >
+                  <dt className="w-8 font-mono">{label}</dt>
+                  <dd>
+                    {blocked
+                      ? `Not checked (${blockedBy[0]} failed)`
+                      : stepLabel(step)}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+          <HttpProgress value={d} />
+          {Boolean(d.lastHttpStatus) && (
+            <p className="text-muted-foreground text-sm">
+              Last HTTP response: {d.lastHttpStatus}
+              {Number(d.lastHttpResponseAgeMs ?? -1) >= 0 &&
+                ` · ${formatDistanceToNow(new Date(Date.now() - Number(d.lastHttpResponseAgeMs)), { addSuffix: true })}`}
+              {(d.lastHttpStatus === 401 || d.lastHttpStatus === 403) &&
+                ". Target responded; credentials may be needed."}
+            </p>
+          )}
+        </div>
+      </details>
     </>
   );
 }
