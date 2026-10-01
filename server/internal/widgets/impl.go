@@ -123,6 +123,17 @@ func (s *Service) validate(ctx context.Context, dataset string, query, visualiza
 	return reason
 }
 
+// problem returns what is wrong with a widget about to be written, or "". A
+// failure that is not the widget's fault is a server error rather than a
+// rejection the caller could fix.
+func (s *Service) problem(ctx context.Context, dataset string, query, visualization []byte) (string, error) {
+	reason, err := validate(s.catalog, dataset, query, visualization, s.now())
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "validate widget").LogError(ctx, s.logger)
+	}
+	return reason, nil
+}
+
 // ListWidgets lists the project's widgets, most recently updated first, each
 // validated as it is read.
 func (s *Service) ListWidgets(ctx context.Context, _ *gen.ListWidgetsPayload) (*gen.ListWidgetsResult, error) {
@@ -211,7 +222,11 @@ func (s *Service) DuplicateWidget(ctx context.Context, payload *gen.DuplicateWid
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "load widget").LogError(ctx, s.logger)
 	}
-	if reason := s.validate(ctx, source.Dataset, source.Query, source.Visualization, s.now()); reason != "" {
+	reason, err := s.problem(ctx, source.Dataset, source.Query, source.Visualization)
+	if err != nil {
+		return nil, err
+	}
+	if reason != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "widget cannot be duplicated until it is fixed: %s", reason)
 	}
 
@@ -389,7 +404,11 @@ func (s *Service) checkWidget(ctx context.Context, dataset string, query, visual
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeBadRequest, err, "visualization is not encodable as JSON")
 	}
-	if reason := s.validate(ctx, dataset, encodedQuery, encodedVisualization, s.now()); reason != "" {
+	reason, err := s.problem(ctx, dataset, encodedQuery, encodedVisualization)
+	if err != nil {
+		return nil, nil, err
+	}
+	if reason != "" {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
 	return encodedQuery, encodedVisualization, nil

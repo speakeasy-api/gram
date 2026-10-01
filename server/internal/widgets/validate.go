@@ -88,8 +88,8 @@ var windows = map[string]time.Duration{
 // the question. Used on save, so a mistake is rejected immediately, and on
 // read, so a catalog change is visible breakage naming what went missing
 // instead of quietly wrong numbers. An error is a failure that is not the
-// widget's fault; the reason then says only that it could not be validated,
-// and the caller logs the error.
+// widget's fault: a write fails with it as a server error, and a read logs
+// it and reports only that the widget could not be validated.
 func validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) (string, error) {
 	query, err := decodeQuery(rawQuery)
 	if err != nil {
