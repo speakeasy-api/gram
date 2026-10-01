@@ -79,7 +79,7 @@ const CHECKLIST_GROUPS: Record<
   cross_app_access: {
     title: "Cross App Access setup",
     description:
-      "Connecting Okta and syncing applications alone does not give AI agents access to your MCP servers. Register the Speakeasy AI agent in Okta once, then connect it to each MCP server below.",
+      "Connecting Okta and syncing applications alone does not give AI agents access to your MCP servers.",
   },
 };
 

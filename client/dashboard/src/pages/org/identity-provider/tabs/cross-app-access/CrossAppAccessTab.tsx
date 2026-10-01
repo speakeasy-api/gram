@@ -198,10 +198,7 @@ function ReadinessChecklist({
   const reviewDeepLink = reviewTarget?.row.deepLink ?? data.deepLink;
 
   return (
-    <div
-      id={READINESS_SECTION_ID}
-      className="flex min-w-0 flex-col gap-6 scroll-mt-6"
-    >
+    <div className="flex min-w-0 flex-col gap-6">
       {readiness.isError && <ApiErrorAlert error={readiness.error} />}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <Text className="max-w-2xl">
@@ -462,7 +459,9 @@ export function CrossAppAccessTab({
     >
       <div className="flex min-w-0 flex-col gap-10">
         <EnterpriseManagedAuthSetup connection={connection} />
-        <ReadinessChecklist connection={connection} />
+        <div id={READINESS_SECTION_ID} className="scroll-mt-6">
+          <ReadinessChecklist connection={connection} />
+        </div>
       </div>
     </ConnectionGate>
   );

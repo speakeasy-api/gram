@@ -171,7 +171,7 @@ function GroupSection({
   );
 }
 
-/** The phase the connection is in is expanded until the admin toggles a group; a later #agent navigation wins again. */
+/** The phase the connection is in is expanded until the admin toggles a group; a later #agent navigation wins again. A tab that hides the active phase expands its first incomplete group instead. */
 export function ConnectionChecklist({
   connection,
   affordances = {},
@@ -192,9 +192,17 @@ export function ConnectionChecklist({
     group: ChecklistGroupId | null;
     locationKey: string;
   }>();
+  const rendered = new Set(groups.map((group) => group.id));
   const agentRequested =
-    location.hash === agentHash && override?.locationKey !== location.key;
+    location.hash === agentHash &&
+    rendered.has("cross_app_access") &&
+    override?.locationKey !== location.key;
   let expanded = activeChecklistGroup(connection);
+  if (expanded !== null && !rendered.has(expanded)) {
+    expanded =
+      groups.find((group) => group.completedCount < group.items.length)?.id ??
+      null;
+  }
   if (agentRequested) expanded = "cross_app_access";
   else if (override) expanded = override.group;
 

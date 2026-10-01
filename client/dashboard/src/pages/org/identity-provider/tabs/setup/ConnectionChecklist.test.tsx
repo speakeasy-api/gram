@@ -236,6 +236,38 @@ describe("ConnectionChecklist", () => {
     expect(screen.getByRole("button", { name: /^Connect, / })).toBeTruthy();
   });
 
+  it("expands an incomplete Connect group when the active phase is not rendered", () => {
+    renderChecklist(
+      connectionWith("degraded", [
+        item("grant_scopes", "connect", false),
+        item("record_ai_agent", "cross_app_access"),
+      ]),
+      ["connect"],
+      "/identity#agent",
+    );
+    const connect = screen.getByRole("button", {
+      name: "Connect, 0 of 1 complete",
+    });
+    expect(connect.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Step grant_scopes")).toBeTruthy();
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("keeps a complete Connect group collapsed when it is the only group", () => {
+    renderChecklist(
+      connectionWith("verified", [
+        item("submit_client_id", "connect", true),
+        item("record_ai_agent", "cross_app_access"),
+      ]),
+      ["connect"],
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Connect, 1 of 1 complete" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+  });
+
   it("places the save form inside the agent checklist step and preserves drafts when collapsed", () => {
     renderChecklist(connectionWith("verified", pendingChecklist));
     const step = screen.getByText("Step record_ai_agent").closest("li")!;
