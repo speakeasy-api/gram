@@ -341,7 +341,9 @@ describe("catalog admission", () => {
         <AddServerDialog
           servers={[catalogServer]}
           open
-          onOpenChange={mocks.onOpenChange}
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
         />
       </TooltipProvider>,
     );
