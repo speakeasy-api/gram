@@ -1,4 +1,4 @@
-h1:zL0NryL7n9wfnZ4JX13Ni7PrtnvedEtS83NIjum2ajo=
+h1:tXJ0ZK6hKPhzN9RuzTPgntDahQmgYGx6PtRDxYK76kc=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -446,3 +446,4 @@ h1:zL0NryL7n9wfnZ4JX13Ni7PrtnvedEtS83NIjum2ajo=
 20260930204740_risk-finding-evidence.sql h1:59z6LPvVI4NNvUFLp8d+XBoSDkDJ3YW11BA8eMvEITw=
 20260930225444_okta-resource-connections-observed-result.sql h1:DFJ+eUV/HPw4288p7uLvkrlHqaI/W5HsUdQ74JZDpHw=
 20261001114911_org-host-default-host-and-callback-base-url.sql h1:LJT5oqddEUimwKpqcf2S8/XGPSdWvuYbIQc06W4rAd8=
+20261001145406_widgets-add-table.sql h1:f+E47rKTbzzhv3eJ5Rx7q8wdpKUmJ+9ORDRaCGOABQ0=

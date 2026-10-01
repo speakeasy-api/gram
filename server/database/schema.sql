@@ -10158,3 +10158,34 @@ CREATE TABLE IF NOT EXISTS queries (
 
 CREATE INDEX IF NOT EXISTS queries_project_id_updated_at_idx
 ON queries (project_id, updated_at DESC) WHERE deleted IS FALSE;
+
+-- Widgets are Explore's saved objects: a named question against a catalog
+-- dataset together with how it is drawn, so they can later be placed on
+-- dashboards. They supersede queries, which is dropped once nothing reads it.
+-- query is the semantic question the server plans against the catalog;
+-- visualization is the chart the client draws it with. dataset is hoisted out
+-- of query so a catalog change can be impact-checked without deserialising
+-- every row.
+CREATE TABLE IF NOT EXISTS widgets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  created_by_user_id TEXT,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 200),
+  description TEXT CHECK (CHAR_LENGTH(description) <= 2000),
+  dataset TEXT NOT NULL CHECK (dataset <> ''),
+  query jsonb NOT NULL,
+  visualization jsonb NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT widgets_pkey PRIMARY KEY (id),
+  CONSTRAINT widgets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS widgets_project_id_updated_at_idx
+ON widgets (project_id, updated_at DESC) WHERE deleted IS FALSE;
