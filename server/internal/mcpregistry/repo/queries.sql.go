@@ -514,6 +514,20 @@ func (q *Queries) SetEntryPublished(ctx context.Context, arg SetEntryPublishedPa
 	return i, err
 }
 
+const setRegistryEntryPublishedFixture = `-- name: SetRegistryEntryPublishedFixture :exec
+UPDATE mcp_registry_entries SET published = $1 WHERE id = $2
+`
+
+type SetRegistryEntryPublishedFixtureParams struct {
+	Published bool
+	ID        uuid.UUID
+}
+
+func (q *Queries) SetRegistryEntryPublishedFixture(ctx context.Context, arg SetRegistryEntryPublishedFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRegistryEntryPublishedFixture, arg.Published, arg.ID)
+	return err
+}
+
 const updateEntry = `-- name: UpdateEntry :one
 UPDATE mcp_registry_entries
 SET

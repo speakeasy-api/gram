@@ -201,3 +201,6 @@ WHERE published
 AND data #>> '{server,name}' = sqlc.arg(name)::text
 AND (sqlc.arg(include_deleted)::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
 AND (sqlc.arg(version)::text = 'latest' OR data #>> '{server,version}' = sqlc.arg(version)::text);
+
+-- name: SetRegistryEntryPublishedFixture :exec
+UPDATE mcp_registry_entries SET published = @published WHERE id = @id;

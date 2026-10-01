@@ -4,11 +4,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_registries"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	externalrepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	registryrepo "github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
@@ -19,17 +21,23 @@ func TestNativeNamespaceBootstrap(t *testing.T) {
 	ctx, ti := newTestExternalMCPService(t)
 	require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
 	require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
+	repository := externalrepo.New(ti.conn)
+	rows, err := repository.ListMCPRegistries(ctx)
+	require.NoError(t, err)
 	var count int
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_registries WHERE id=$1 AND url=$2`, externalmcp.NativeCatalogRegistryID, externalmcp.NativeCatalogRegistryURL).Scan(&count))
+	for _, row := range rows {
+		if row.ID == externalmcp.NativeCatalogRegistryID && row.Url == externalmcp.NativeCatalogRegistryURL {
+			count++
+		}
+	}
 	require.Equal(t, 1, count)
-	_, err := ti.conn.Exec(ctx, `UPDATE mcp_registries SET enabled=false WHERE id=$1`, externalmcp.NativeCatalogRegistryID)
-	require.NoError(t, err)
+	require.NoError(t, repository.SetMCPRegistryEnabledFixture(ctx, externalrepo.SetMCPRegistryEnabledFixtureParams{ID: externalmcp.NativeCatalogRegistryID, Enabled: pgtype.Bool{Bool: false, Valid: true}}))
 	require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
-	var enabled bool
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT enabled FROM mcp_registries WHERE id=$1`, externalmcp.NativeCatalogRegistryID).Scan(&enabled))
-	require.False(t, enabled)
-	_, err = ti.conn.Exec(ctx, `UPDATE mcp_registries SET url='https://wrong.example' WHERE id=$1`, externalmcp.NativeCatalogRegistryID)
+	row, err := repository.GetMCPRegistryByID(ctx, externalmcp.NativeCatalogRegistryID)
 	require.NoError(t, err)
+	require.True(t, row.Enabled.Valid)
+	require.False(t, row.Enabled.Bool)
+	require.NoError(t, repository.SetMCPRegistryURLFixture(ctx, externalrepo.SetMCPRegistryURLFixtureParams{ID: externalmcp.NativeCatalogRegistryID, Url: "https://wrong.example"}))
 	require.Error(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
 }
 
@@ -56,12 +64,18 @@ func TestNativeRetainedEvidenceNotDiscovery(t *testing.T) {
 func TestNativeNamespaceBootstrapConflictingURL(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestExternalMCPService(t)
-	id := uuid.New()
-	_, err := ti.conn.Exec(ctx, `INSERT INTO mcp_registries (id,name,url) VALUES ($1,'Existing',$2)`, id, externalmcp.NativeCatalogRegistryURL)
+	repository := externalrepo.New(ti.conn)
+	id, err := repository.CreateMCPRegistry(ctx, externalrepo.CreateMCPRegistryParams{Name: "Existing", Url: externalmcp.NativeCatalogRegistryURL})
 	require.NoError(t, err)
 	require.Error(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
+	rows, err := repository.ListMCPRegistries(ctx)
+	require.NoError(t, err)
 	var actual uuid.UUID
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT id FROM mcp_registries WHERE url=$1`, externalmcp.NativeCatalogRegistryURL).Scan(&actual))
+	for _, row := range rows {
+		if row.Url == externalmcp.NativeCatalogRegistryURL {
+			actual = row.ID
+		}
+	}
 	require.Equal(t, id, actual)
 }
 
@@ -78,7 +92,7 @@ func TestNativeDashboardDetailsRejectUnpublishedSelection(t *testing.T) {
 	payload := &gen.GetServerDetailsPayload{RegistryID: externalmcp.NativeCatalogRegistryID.String(), ServerSpecifier: "io.example/selection"}
 	_, err := ti.service.GetServerDetails(ctx, payload)
 	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `UPDATE mcp_registry_entries SET published=false WHERE id=$1`, id)
+	err = registryrepo.New(ti.conn).SetRegistryEntryPublishedFixture(ctx, registryrepo.SetRegistryEntryPublishedFixtureParams{ID: id, Published: false})
 	require.NoError(t, err)
 	_, err = ti.service.GetServerDetails(ctx, payload)
 	require.Error(t, err, "new preinstall details must recheck publication")
