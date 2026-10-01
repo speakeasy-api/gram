@@ -2056,6 +2056,7 @@ func newStartCommand() *cli.Command {
 						WorkOSClient:                 backgroundWorkOSClient,
 						ProductFeatures:              productFeatures,
 						PluginPublisher:              pluginPublisher,
+						PublicationRequests:          plugins.PublicationRequests{Enabled: publicationEmit},
 						Publishers:                   publishers,
 						TrialEmailsService:           trialEmailsService,
 						TrialFixtureHandler:          newTrialFixtureHandler(c.String("environment"), db, productFeatures),

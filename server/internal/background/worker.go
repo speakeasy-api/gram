@@ -113,21 +113,22 @@ type WorkerOptions struct {
 	TelemetryLogger     *telemetry.Logger
 	ClickhouseConn      clickhouse.Conn
 	// MeterReadConn uses the least-privilege ClickHouse reader for billing summaries.
-	MeterReadConn     clickhouse.Conn
-	TelemetryRepo     *telemetryrepo.Queries
-	TriggersApp       *bgtriggers.App
-	AssistantsCore    *assistants.ServiceCore
-	TemporalEnv       *tenv.Environment
-	PIIScanner        risk_analysis.PIIScanner
-	PIScanner         *promptinjection.Scanner
-	CustomRuleScanner *customruleanalyzer.Scanner
-	BuiltinPresets    *presetlib.Library
-	ShadowMCPClient   *shadowmcp.Client
-	AuditLogger       *audit.Logger
-	WorkOSClient      activitiespkg.WorkOSClient
-	ProductFeatures   *productfeatures.Client
-	PluginPublisher   *plugins.Service
-	Publishers        *Publishers
+	MeterReadConn       clickhouse.Conn
+	TelemetryRepo       *telemetryrepo.Queries
+	TriggersApp         *bgtriggers.App
+	AssistantsCore      *assistants.ServiceCore
+	TemporalEnv         *tenv.Environment
+	PIIScanner          risk_analysis.PIIScanner
+	PIScanner           *promptinjection.Scanner
+	CustomRuleScanner   *customruleanalyzer.Scanner
+	BuiltinPresets      *presetlib.Library
+	ShadowMCPClient     *shadowmcp.Client
+	AuditLogger         *audit.Logger
+	WorkOSClient        activitiespkg.WorkOSClient
+	ProductFeatures     *productfeatures.Client
+	PluginPublisher     *plugins.Service
+	PublicationRequests plugins.PublicationRequests
+	Publishers          *Publishers
 
 	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
 	// the constructing caller owns it and must call Wait after those producers stop.
@@ -181,6 +182,7 @@ func ForDeploymentProcessing(
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	return &WorkerOptions{
+		PublicationRequests:          plugins.PublicationRequests{Enabled: false},
 		DB:                           db,
 		GuardianPolicy:               guardianPolicy,
 		TunnelHTTPClient:             nil,
@@ -275,6 +277,7 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) *Workers {
 	opts := &WorkerOptions{
+		PublicationRequests:          plugins.PublicationRequests{Enabled: false},
 		GuardianPolicy:               nil,
 		TunnelHTTPClient:             nil,
 		DB:                           nil,
@@ -377,6 +380,7 @@ func NewTemporalWorker(
 			ProductFeatures:              conv.Default(o.ProductFeatures, opts.ProductFeatures),
 			ClickhouseConn:               conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:              conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			PublicationRequests:          conv.Default(o.PublicationRequests, opts.PublicationRequests),
 			Publishers:                   conv.Default(o.Publishers, opts.Publishers),
 			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
 			TrialFixtureHandler: func() func(context.Context, string) (bool, error) {

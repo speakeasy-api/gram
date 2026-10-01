@@ -147,6 +147,24 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 	return i, err
 }
 
+const ageDeletedRoleSetupProjectFixture = `-- name: AgeDeletedRoleSetupProjectFixture :exec
+UPDATE projects SET created_at = '1990-01-01', deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) AgeDeletedRoleSetupProjectFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, ageDeletedRoleSetupProjectFixture, id)
+	return err
+}
+
+const ageRoleSetupProjectFixture = `-- name: AgeRoleSetupProjectFixture :exec
+UPDATE projects SET created_at = '2000-01-01' WHERE id = $1
+`
+
+func (q *Queries) AgeRoleSetupProjectFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, ageRoleSetupProjectFixture, id)
+	return err
+}
+
 const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
 VALUES ($1, $2, 'Default', 'default', TRUE)
@@ -224,6 +242,81 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 	return i, err
 }
 
+const createRoleSetupCatalogRegistrationFixture = `-- name: CreateRoleSetupCatalogRegistrationFixture :exec
+INSERT INTO platform_mcp_catalog_registrations (organization_id,project_id,source_kind,catalog_provider,catalog_reference,status,mcp_server_id) VALUES ($1,$2,'remote','direct-remote-url-v1','https://example.com/mcp','active',$3)
+`
+
+type CreateRoleSetupCatalogRegistrationFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.NullUUID
+}
+
+func (q *Queries) CreateRoleSetupCatalogRegistrationFixture(ctx context.Context, arg CreateRoleSetupCatalogRegistrationFixtureParams) error {
+	_, err := q.db.Exec(ctx, createRoleSetupCatalogRegistrationFixture, arg.OrganizationID, arg.ProjectID, arg.McpServerID)
+	return err
+}
+
+const createRoleSetupGlobalRoleFixture = `-- name: CreateRoleSetupGlobalRoleFixture :exec
+INSERT INTO global_roles (id, workos_slug, workos_name, workos_created_at, workos_updated_at) VALUES ($1,'setup-global','Global Engineering',clock_timestamp(),clock_timestamp())
+`
+
+func (q *Queries) CreateRoleSetupGlobalRoleFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, createRoleSetupGlobalRoleFixture, id)
+	return err
+}
+
+const createRoleSetupPauseAllTriggerFixture = `-- name: CreateRoleSetupPauseAllTriggerFixture :exec
+CREATE TRIGGER test_pause_plugin_write BEFORE INSERT OR UPDATE ON plugins FOR EACH ROW EXECUTE FUNCTION test_pause_plugin_write('')
+`
+
+func (q *Queries) CreateRoleSetupPauseAllTriggerFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRoleSetupPauseAllTriggerFixture)
+	return err
+}
+
+const createRoleSetupPauseFunctionFixture = `-- name: CreateRoleSetupPauseFunctionFixture :exec
+CREATE FUNCTION test_pause_plugin_write() RETURNS trigger LANGUAGE plpgsql AS $$
+ BEGIN
+   IF TG_ARGV[0] = '' OR NEW.slug = TG_ARGV[0] THEN
+     PERFORM pg_advisory_xact_lock(8241243);
+   END IF;
+   RETURN NEW;
+ END $$
+`
+
+func (q *Queries) CreateRoleSetupPauseFunctionFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRoleSetupPauseFunctionFixture)
+	return err
+}
+
+const createRoleSetupPauseSalesTriggerFixture = `-- name: CreateRoleSetupPauseSalesTriggerFixture :exec
+CREATE TRIGGER test_pause_plugin_write BEFORE INSERT OR UPDATE ON plugins FOR EACH ROW EXECUTE FUNCTION test_pause_plugin_write('sales-team')
+`
+
+func (q *Queries) CreateRoleSetupPauseSalesTriggerFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRoleSetupPauseSalesTriggerFixture)
+	return err
+}
+
+const createRoleSetupPublicationFailureFunctionFixture = `-- name: CreateRoleSetupPublicationFailureFunctionFixture :exec
+CREATE FUNCTION reject_setup_publication() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.topic = 'gram.plugins.v1.PublicationRequested' THEN RAISE EXCEPTION 'injected publication failure'; END IF; RETURN NEW; END $$
+`
+
+func (q *Queries) CreateRoleSetupPublicationFailureFunctionFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRoleSetupPublicationFailureFunctionFixture)
+	return err
+}
+
+const createRoleSetupPublicationFailureTriggerFixture = `-- name: CreateRoleSetupPublicationFailureTriggerFixture :exec
+CREATE TRIGGER reject_setup_publication BEFORE INSERT ON publish_outbox FOR EACH ROW EXECUTE FUNCTION reject_setup_publication()
+`
+
+func (q *Queries) CreateRoleSetupPublicationFailureTriggerFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createRoleSetupPublicationFailureTriggerFixture)
+	return err
+}
+
 const deleteGitHubConnection = `-- name: DeleteGitHubConnection :exec
 DELETE FROM plugin_github_connections WHERE project_id = $1
 `
@@ -255,6 +348,97 @@ type DeletePluginParams struct {
 
 func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) error {
 	_, err := q.db.Exec(ctx, deletePlugin, arg.ID, arg.OrganizationID, arg.ProjectID)
+	return err
+}
+
+const deleteRoleSetupCatalogRegistrationFixture = `-- name: DeleteRoleSetupCatalogRegistrationFixture :exec
+DELETE FROM platform_mcp_catalog_registrations WHERE mcp_server_id = $1 AND project_id = $2
+`
+
+type DeleteRoleSetupCatalogRegistrationFixtureParams struct {
+	McpServerID uuid.NullUUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) DeleteRoleSetupCatalogRegistrationFixture(ctx context.Context, arg DeleteRoleSetupCatalogRegistrationFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteRoleSetupCatalogRegistrationFixture, arg.McpServerID, arg.ProjectID)
+	return err
+}
+
+const deleteRoleSetupProjectFixture = `-- name: DeleteRoleSetupProjectFixture :exec
+UPDATE projects SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) DeleteRoleSetupProjectFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRoleSetupProjectFixture, id)
+	return err
+}
+
+const deleteRoleSetupRoleFixture = `-- name: DeleteRoleSetupRoleFixture :exec
+UPDATE organization_roles SET deleted_at = clock_timestamp() WHERE 'role:organization:' || id::text = $1::text AND organization_id = $2
+`
+
+type DeleteRoleSetupRoleFixtureParams struct {
+	RoleUrn        string
+	OrganizationID string
+}
+
+func (q *Queries) DeleteRoleSetupRoleFixture(ctx context.Context, arg DeleteRoleSetupRoleFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteRoleSetupRoleFixture, arg.RoleUrn, arg.OrganizationID)
+	return err
+}
+
+const deleteRoleSetupWorkOSRoleFixture = `-- name: DeleteRoleSetupWorkOSRoleFixture :exec
+UPDATE organization_roles SET workos_deleted_at = clock_timestamp() WHERE 'role:organization:' || id::text = $1::text AND organization_id = $2
+`
+
+type DeleteRoleSetupWorkOSRoleFixtureParams struct {
+	RoleUrn        string
+	OrganizationID string
+}
+
+func (q *Queries) DeleteRoleSetupWorkOSRoleFixture(ctx context.Context, arg DeleteRoleSetupWorkOSRoleFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteRoleSetupWorkOSRoleFixture, arg.RoleUrn, arg.OrganizationID)
+	return err
+}
+
+const disableRoleSetupFeatureFixture = `-- name: DisableRoleSetupFeatureFixture :exec
+UPDATE organization_features SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution'
+`
+
+func (q *Queries) DisableRoleSetupFeatureFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, disableRoleSetupFeatureFixture, organizationID)
+	return err
+}
+
+const disableRoleSetupOrganizationFixture = `-- name: DisableRoleSetupOrganizationFixture :exec
+UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) DisableRoleSetupOrganizationFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, disableRoleSetupOrganizationFixture, id)
+	return err
+}
+
+const dropRoleSetupPublicationFailureTriggerFixture = `-- name: DropRoleSetupPublicationFailureTriggerFixture :exec
+DO $$ BEGIN
+  DROP TRIGGER reject_setup_publication ON publish_outbox;
+END $$
+`
+
+func (q *Queries) DropRoleSetupPublicationFailureTriggerFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, dropRoleSetupPublicationFailureTriggerFixture)
+	return err
+}
+
+const enableRoleSetupFeatureFixture = `-- name: EnableRoleSetupFeatureFixture :exec
+
+INSERT INTO organization_features (organization_id, feature_name) VALUES ($1, 'automatic-role-distribution') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// Test fixtures for role setup lifecycle and transactional fault injection.
+func (q *Queries) EnableRoleSetupFeatureFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, enableRoleSetupFeatureFixture, organizationID)
 	return err
 }
 
@@ -750,6 +934,17 @@ func (q *Queries) GetProspectiveDefaultPlugin(ctx context.Context, arg GetProspe
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getRoleSetupBlockedPIDFixture = `-- name: GetRoleSetupBlockedPIDFixture :one
+SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = current_database() AND $1::int = ANY(pg_blocking_pids(pid)) ORDER BY pid LIMIT 1), 0)::integer AS pid
+`
+
+func (q *Queries) GetRoleSetupBlockedPIDFixture(ctx context.Context, blocker int32) (int32, error) {
+	row := q.db.QueryRow(ctx, getRoleSetupBlockedPIDFixture, blocker)
+	var pid int32
+	err := row.Scan(&pid)
+	return pid, err
 }
 
 const hasPluginGithubConnectionForProject = `-- name: HasPluginGithubConnectionForProject :one
@@ -1932,6 +2127,15 @@ func (q *Queries) LockMarketplaceSettings(ctx context.Context, projectID uuid.UU
 	return i, err
 }
 
+const lockRoleSetupPauseFixture = `-- name: LockRoleSetupPauseFixture :exec
+SELECT pg_advisory_xact_lock(8241243)
+`
+
+func (q *Queries) LockRoleSetupPauseFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockRoleSetupPauseFixture)
+	return err
+}
+
 const pluginServerDisplayNameExists = `-- name: PluginServerDisplayNameExists :one
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers
@@ -2130,6 +2334,24 @@ func (q *Queries) ResolvePluginPublishActor(ctx context.Context, arg ResolvePlug
 	return user_id, err
 }
 
+const restoreRoleSetupFeatureFixture = `-- name: RestoreRoleSetupFeatureFixture :exec
+UPDATE organization_features SET deleted_at = NULL WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution'
+`
+
+func (q *Queries) RestoreRoleSetupFeatureFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, restoreRoleSetupFeatureFixture, organizationID)
+	return err
+}
+
+const restoreRoleSetupProjectFixture = `-- name: RestoreRoleSetupProjectFixture :exec
+UPDATE projects SET deleted_at = NULL WHERE id = $1
+`
+
+func (q *Queries) RestoreRoleSetupProjectFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, restoreRoleSetupProjectFixture, id)
+	return err
+}
+
 const revokeSkillDistributionsByPlugin = `-- name: RevokeSkillDistributionsByPlugin :many
 UPDATE skill_distributions sd
 SET revoked_at = clock_timestamp(),
@@ -2218,6 +2440,22 @@ func (q *Queries) RevokeSkillDistributionsByPlugin(ctx context.Context, arg Revo
 		return nil, err
 	}
 	return items, nil
+}
+
+const setPluginAutoCreatedFixture = `-- name: SetPluginAutoCreatedFixture :exec
+UPDATE plugins SET auto_created = $1 WHERE id = $2 AND project_id = $3
+`
+
+type SetPluginAutoCreatedFixtureParams struct {
+	AutoCreated bool
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Fixture for verifying read-only plugin origin metadata in inventory responses.
+func (q *Queries) SetPluginAutoCreatedFixture(ctx context.Context, arg SetPluginAutoCreatedFixtureParams) error {
+	_, err := q.db.Exec(ctx, setPluginAutoCreatedFixture, arg.AutoCreated, arg.ID, arg.ProjectID)
+	return err
 }
 
 const softDeletePluginServers = `-- name: SoftDeletePluginServers :exec

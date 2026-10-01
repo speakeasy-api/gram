@@ -300,23 +300,8 @@ func (q *Queries) CreateOnboardingUseCase(ctx context.Context, arg CreateOnboard
 	return i, err
 }
 
-const createOrganizationMetadata = `-- name: CreateOrganizationMetadata :exec
-INSERT INTO organization_metadata (id, name, slug)
-VALUES ($1, $2, $3)
-`
-
-type CreateOrganizationMetadataParams struct {
-	ID   string
-	Name string
-	Slug string
-}
-
-func (q *Queries) CreateOrganizationMetadata(ctx context.Context, arg CreateOrganizationMetadataParams) error {
-	_, err := q.db.Exec(ctx, createOrganizationMetadata, arg.ID, arg.Name, arg.Slug)
-	return err
-}
-
-const createOrganizationMetadataFromWorkOS = `-- name: CreateOrganizationMetadataFromWorkOS :one
+const createOrganizationMetadataFromWorkOSWithRequests = `-- name: CreateOrganizationMetadataFromWorkOSWithRequests :one
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
@@ -334,10 +319,38 @@ INSERT INTO organization_metadata (
     $6,
     $7::text[]
 )
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written
 `
 
-type CreateOrganizationMetadataFromWorkOSParams struct {
+type CreateOrganizationMetadataFromWorkOSWithRequestsParams struct {
 	ID                string
 	Name              string
 	Slug              string
@@ -347,11 +360,35 @@ type CreateOrganizationMetadataFromWorkOSParams struct {
 	VerifiedDomains   []string
 }
 
+type CreateOrganizationMetadataFromWorkOSWithRequestsRow struct {
+	Requests           []byte
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
 // Create a Gram organization row from a WorkOS organization event. The caller
 // chooses the Gram org ID from WorkOS external_id or a deterministic fallback.
 // Slug is a Gram-owned initial value and is never updated by WorkOS sync.
-func (q *Queries) CreateOrganizationMetadataFromWorkOS(ctx context.Context, arg CreateOrganizationMetadataFromWorkOSParams) (OrganizationMetadatum, error) {
-	row := q.db.QueryRow(ctx, createOrganizationMetadataFromWorkOS,
+func (q *Queries) CreateOrganizationMetadataFromWorkOSWithRequests(ctx context.Context, arg CreateOrganizationMetadataFromWorkOSWithRequestsParams) (CreateOrganizationMetadataFromWorkOSWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationMetadataFromWorkOSWithRequests,
 		arg.ID,
 		arg.Name,
 		arg.Slug,
@@ -360,8 +397,103 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		arg.WorkosLastEventID,
 		arg.VerifiedDomains,
 	)
-	var i OrganizationMetadatum
+	var i CreateOrganizationMetadataFromWorkOSWithRequestsRow
 	err := row.Scan(
+		&i.Requests,
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const createOrganizationMetadataWithRequests = `-- name: CreateOrganizationMetadataWithRequests :one
+WITH written AS (
+INSERT INTO organization_metadata (id, name, slug)
+VALUES ($1, $2, $3)
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, TRUE AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written
+`
+
+type CreateOrganizationMetadataWithRequestsParams struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+type CreateOrganizationMetadataWithRequestsRow struct {
+	Requests           []byte
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+func (q *Queries) CreateOrganizationMetadataWithRequests(ctx context.Context, arg CreateOrganizationMetadataWithRequestsParams) (CreateOrganizationMetadataWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationMetadataWithRequests, arg.ID, arg.Name, arg.Slug)
+	var i CreateOrganizationMetadataWithRequestsRow
+	err := row.Scan(
+		&i.Requests,
 		&i.ID,
 		&i.Name,
 		&i.Slug,
@@ -3311,7 +3443,135 @@ func (q *Queries) UpsertOnboardingStep(ctx context.Context, arg UpsertOnboarding
 	return id, err
 }
 
-const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one
+const upsertOrganizationMetadataFromWorkOSWithRequests = `-- name: UpsertOrganizationMetadataFromWorkOSWithRequests :one
+WITH written AS (
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    workos_id,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    workos_id = EXCLUDED.workos_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    updated_at = clock_timestamp()
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written
+`
+
+type UpsertOrganizationMetadataFromWorkOSWithRequestsParams struct {
+	ID                string
+	Name              string
+	Slug              string
+	WorkosID          pgtype.Text
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+type UpsertOrganizationMetadataFromWorkOSWithRequestsRow struct {
+	Requests           []byte
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+// Upsert a Gram organization row from a WorkOS organization event.
+// The caller must only use this when WorkOS external_id is set and is the Gram
+// org ID. Slug is a Gram-owned initial value chosen by the caller and is never
+// updated by WorkOS sync after creation.
+func (q *Queries) UpsertOrganizationMetadataFromWorkOSWithRequests(ctx context.Context, arg UpsertOrganizationMetadataFromWorkOSWithRequestsParams) (UpsertOrganizationMetadataFromWorkOSWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationMetadataFromWorkOSWithRequests,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.WorkosID,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	var i UpsertOrganizationMetadataFromWorkOSWithRequestsRow
+	err := row.Scan(
+		&i.Requests,
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.DefaultHost,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const upsertOrganizationMetadataWithRequests = `-- name: UpsertOrganizationMetadataWithRequests :one
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
@@ -3343,10 +3603,38 @@ ON CONFLICT (id) DO UPDATE SET
     -- upsert from an unrelated path cannot erase the flow that created the row.
     creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written
 `
 
-type UpsertOrganizationMetadataParams struct {
+type UpsertOrganizationMetadataWithRequestsParams struct {
 	ID             string
 	Name           string
 	Slug           string
@@ -3355,8 +3643,32 @@ type UpsertOrganizationMetadataParams struct {
 	CreationSource pgtype.Text
 }
 
-func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrganizationMetadataParams) (OrganizationMetadatum, error) {
-	row := q.db.QueryRow(ctx, upsertOrganizationMetadata,
+type UpsertOrganizationMetadataWithRequestsRow struct {
+	Requests           []byte
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertOrganizationMetadataWithRequests(ctx context.Context, arg UpsertOrganizationMetadataWithRequestsParams) (UpsertOrganizationMetadataWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationMetadataWithRequests,
 		arg.ID,
 		arg.Name,
 		arg.Slug,
@@ -3364,81 +3676,9 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		arg.Whitelisted,
 		arg.CreationSource,
 	)
-	var i OrganizationMetadatum
+	var i UpsertOrganizationMetadataWithRequestsRow
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.GramAccountType,
-		&i.WorkosID,
-		&i.WorkosUpdatedAt,
-		&i.WorkosLastEventID,
-		&i.SvixAppID,
-		&i.WebhooksEnabled,
-		&i.Whitelisted,
-		&i.FreeTrialStartedAt,
-		&i.FreeTrialEndsAt,
-		&i.ScimEnabled,
-		&i.SsoEnabled,
-		&i.VerifiedDomains,
-		&i.CreationSource,
-		&i.DefaultHost,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DisabledAt,
-	)
-	return i, err
-}
-
-const upsertOrganizationMetadataFromWorkOS = `-- name: UpsertOrganizationMetadataFromWorkOS :one
-INSERT INTO organization_metadata (
-    id,
-    name,
-    slug,
-    workos_id,
-    workos_updated_at,
-    workos_last_event_id
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6
-)
-ON CONFLICT (id) DO UPDATE SET
-    name = EXCLUDED.name,
-    workos_id = EXCLUDED.workos_id,
-    workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = EXCLUDED.workos_last_event_id,
-    updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at
-`
-
-type UpsertOrganizationMetadataFromWorkOSParams struct {
-	ID                string
-	Name              string
-	Slug              string
-	WorkosID          pgtype.Text
-	WorkosUpdatedAt   pgtype.Timestamptz
-	WorkosLastEventID pgtype.Text
-}
-
-// Upsert a Gram organization row from a WorkOS organization event.
-// The caller must only use this when WorkOS external_id is set and is the Gram
-// org ID. Slug is a Gram-owned initial value chosen by the caller and is never
-// updated by WorkOS sync after creation.
-func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg UpsertOrganizationMetadataFromWorkOSParams) (OrganizationMetadatum, error) {
-	row := q.db.QueryRow(ctx, upsertOrganizationMetadataFromWorkOS,
-		arg.ID,
-		arg.Name,
-		arg.Slug,
-		arg.WorkosID,
-		arg.WorkosUpdatedAt,
-		arg.WorkosLastEventID,
-	)
-	var i OrganizationMetadatum
-	err := row.Scan(
+		&i.Requests,
 		&i.ID,
 		&i.Name,
 		&i.Slug,
