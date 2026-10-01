@@ -463,6 +463,17 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     **+ Allow a machine** and type a subject ending in `*`: the warning appears
     in destructive red under the field and **Allow machine** stays disabled.
 
+26. **Explore widgets** — open `/<org>/projects/default/explore` and click
+    the **Widgets** tab, which shows a count of 5. Five widgets, most
+    recently updated first, starting with Amara Okafor's "Sessions by
+    surface" with its description beneath; Hana Sato's widget of the same
+    name sits further down with her name beside it. Each row shows its
+    dataset and chart type, and none carries the broken-widget warning.
+    Clicking "Slowest MCP tools" switches to the Explore tab with the
+    tool_calls dataset, a 7-day window and a table ordered by p95 duration,
+    runs it, and returns rows; the bar names the widget with Priya Raman as
+    its creator and **Save** stays disabled until something is edited.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns

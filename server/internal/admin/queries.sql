@@ -908,3 +908,6 @@ ORDER BY (data #>> '{server,name}') COLLATE "C";
 SELECT id, issuer
 FROM remote_session_issuers
 WHERE id = @id;
+
+-- name: RejectOrganizationEntitlementsFixture :exec
+ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (feature_name = 'automatic-role-distribution') NOT VALID;

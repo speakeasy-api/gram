@@ -20320,384 +20320,6 @@ paths:
       x-speakeasy-name-override: updateBySlug
       x-speakeasy-react-hook:
         name: UpdateEnvironment
-  /rpc/explore.createQuery:
-    post:
-      description: Save a query. Any member of the project can. The spec is validated against the catalog before it is stored.
-      operationId: createExploreQuery
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateQueryRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExploreQuery'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: createQuery explore
-      tags:
-        - explore
-      x-speakeasy-name-override: createQuery
-      x-speakeasy-react-hook:
-        name: CreateExploreQuery
-  /rpc/explore.deleteQuery:
-    delete:
-      description: Delete a saved query. Its creator can; deleting someone else's needs project write access.
-      operationId: deleteExploreQuery
-      parameters:
-        - allowEmptyValue: true
-          description: The query to delete
-          in: query
-          name: id
-          required: true
-          schema:
-            description: The query to delete
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: deleteQuery explore
-      tags:
-        - explore
-      x-speakeasy-name-override: deleteQuery
-      x-speakeasy-react-hook:
-        name: DeleteExploreQuery
-  /rpc/explore.listQueries:
-    get:
-      description: List the project's saved queries, most recently updated first. Each is validated against the catalog on read, so a query a catalog change broke says so.
-      operationId: listExploreQueries
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExploreListQueriesResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: listQueries explore
-      tags:
-        - explore
-      x-speakeasy-name-override: listQueries
-      x-speakeasy-react-hook:
-        name: ExploreQueries
-        type: query
-  /rpc/explore.updateQuery:
-    post:
-      description: Replace a saved query's name, dataset and spec. Any member of the project can.
-      operationId: updateExploreQuery
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateQueryRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExploreQuery'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: updateQuery explore
-      tags:
-        - explore
-      x-speakeasy-name-override: updateQuery
-      x-speakeasy-react-hook:
-        name: UpdateExploreQuery
   /rpc/external.receiveWorkOSWebhook:
     post:
       description: Receive and enqueue a WorkOS webhook event.
@@ -65861,8 +65483,8 @@ paths:
           name: slug
           required: true
           schema:
-            description: A short url-friendly label that uniquely identifies a resource.
-            maxLength: 40
+            description: The slug of the toolset
+            maxLength: 60
             pattern: ^[a-z0-9_-]{1,128}$
             type: string
         - allowEmptyValue: true
@@ -74450,6 +74072,216 @@ paths:
       x-speakeasy-name-override: registerIssuer
       x-speakeasy-react-hook:
         name: RegisterWorkloadIssuer
+  /rpc/workloadIdentities.updateIssuer:
+    post:
+      description: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      operationId: updateWorkloadIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkloadIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateIssuer workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: updateIssuer
+      x-speakeasy-react-hook:
+        name: UpdateWorkloadIssuer
+  /rpc/workloadIdentities.updateSubject:
+    post:
+      description: Edit an admitted subject's label, tags, or assigned agent. Omitted fields are left unchanged. The subject, match kind, issuer, and tier are fixed at admission. The agent assignment is shared by every admission of the same subject under the same issuer, at either tier, so reassigning it through one admission reassigns it for both. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      operationId: updateWorkloadSubject
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkloadSubjectForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateSubject workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: updateSubject
+      x-speakeasy-react-hook:
+        name: UpdateWorkloadSubject
   /rpc/workloadIdentities.withdrawIssuer:
     delete:
       description: Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.
@@ -79729,26 +79561,6 @@ components:
           $ref: '#/components/schemas/PromptTemplate'
       required:
         - template
-    CreateQueryRequestBody:
-      type: object
-      properties:
-        dataset:
-          type: string
-          description: Catalog dataset the query asks
-          minLength: 1
-        name:
-          type: string
-          description: Display name, at most 200 characters
-          minLength: 1
-          maxLength: 200
-        spec:
-          type: object
-          description: Builder state. Validated against the catalog on save.
-          additionalProperties: true
-      required:
-        - name
-        - dataset
-        - spec
     CreateRemoteSessionClientForm:
       type: object
       properties:
@@ -81717,6 +81529,9 @@ components:
     DistributionPlugin:
       type: object
       properties:
+        auto_created:
+          type: boolean
+          description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
         description:
           type: string
         id:
@@ -81731,6 +81546,7 @@ components:
         - id
         - name
         - is_default
+        - auto_created
     DomainDNSConfig:
       type: object
       properties:
@@ -82192,60 +82008,6 @@ components:
           example: dev@acme.corp
       required:
         - email
-    ExploreListQueriesResult:
-      type: object
-      properties:
-        queries:
-          type: array
-          items:
-            $ref: '#/components/schemas/ExploreQuery'
-          description: Queries in the project, most recently updated first
-      required:
-        - queries
-    ExploreQuery:
-      type: object
-      properties:
-        created_at:
-          type: string
-          format: date-time
-        created_by_user_id:
-          type: string
-          description: Who saved it, when known
-        dataset:
-          type: string
-          description: The catalog dataset the query asks
-          example: sessions
-        id:
-          type: string
-          format: uuid
-        invalid_reason:
-          type: string
-          description: Present when the saved spec no longer compiles against the catalog, naming what is wrong, so a catalog change fails visibly rather than returning wrong numbers.
-        name:
-          type: string
-          description: 'Display name. Not unique: two people saving the same name is normal.'
-        organization_id:
-          type: string
-        project_id:
-          type: string
-          format: uuid
-        spec:
-          type: object
-          description: 'Builder state: chart type, window, dimensions, measures, filters, grain, sort and limit. The client interprets it; the server validates the parts the catalog knows.'
-          additionalProperties: true
-        updated_at:
-          type: string
-          format: date-time
-      description: A named, saved question against a catalog dataset, kept with the builder state it was built with. Belongs to a project and is visible to everyone in the organization.
-      required:
-        - id
-        - project_id
-        - organization_id
-        - name
-        - dataset
-        - spec
-        - created_at
-        - updated_at
     ExportMcpMetadataRequestBody:
       type: object
       properties:
@@ -91568,6 +91330,9 @@ components:
           items:
             $ref: '#/components/schemas/PluginAssignment'
           description: Role/user assignments.
+        auto_created:
+          type: boolean
+          description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
         created_at:
           type: string
           format: date-time
@@ -91607,6 +91372,7 @@ components:
         - id
         - name
         - slug
+        - auto_created
         - agent_plugins_v1_compatible
         - created_at
         - updated_at
@@ -91969,6 +91735,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        automatic_role_distribution:
+          type: boolean
+          description: Whether the staff rollout for automatic role plugin setup is enabled
         consent_tool_filtering_enabled:
           type: boolean
           description: Whether MCP consent screens offer the tool filtering picker for the organization
@@ -92043,6 +91812,7 @@ components:
         - consent_tool_filtering_enabled
         - session_portability_enabled
         - network_ingress_enabled
+        - automatic_role_distribution
         - device_agent
     Project:
       type: object
@@ -97256,6 +97026,7 @@ components:
             - consent_tool_filtering
             - session_portability
             - network_ingress
+            - automatic-role-distribution
           maxLength: 60
         organization_id:
           type: string
@@ -103285,31 +103056,6 @@ components:
           $ref: '#/components/schemas/PromptTemplate'
       required:
         - template
-    UpdateQueryRequestBody:
-      type: object
-      properties:
-        dataset:
-          type: string
-          description: Catalog dataset the query asks
-          minLength: 1
-        id:
-          type: string
-          description: The query to update
-          format: uuid
-        name:
-          type: string
-          description: Display name, at most 200 characters
-          minLength: 1
-          maxLength: 200
-        spec:
-          type: object
-          description: Builder state. Validated against the catalog on save.
-          additionalProperties: true
-      required:
-        - id
-        - name
-        - dataset
-        - spec
     UpdateRemoteSessionClientForm:
       type: object
       properties:
@@ -104037,6 +103783,55 @@ components:
         - dataset
         - query
         - visualization
+    UpdateWorkloadIssuerForm:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.
+        id:
+          type: string
+          description: The workload issuer id.
+          format: uuid
+        jwks_uri:
+          type: string
+          description: Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.
+          format: uri
+        name:
+          type: string
+          description: The label an operator works with. Unique within its tier.
+          minLength: 1
+          maxLength: 100
+        tags:
+          type: array
+          items:
+            type: string
+          description: Replaces the issuer's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
+      description: Form for editing a trusted workload issuer. Every field but id is optional; an omitted field is left unchanged.
+      required:
+        - id
+    UpdateWorkloadSubjectForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent whose policy the admitted workload inherits. Shared with any admission of the same subject under the same issuer at the other tier.
+          format: uuid
+        id:
+          type: string
+          description: The admission id.
+          format: uuid
+        name:
+          type: string
+          description: Optional label, for platforms whose subjects are not self-describing. Trimmed on write; blank clears it.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Replaces the admission's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
+      description: Form for editing an admitted workload subject. Every field but id is optional; an omitted field is left unchanged.
+      required:
+        - id
     UploadChatAttachmentResult:
       type: object
       properties:
@@ -105577,8 +105372,6 @@ tags:
     description: Manage custom domains for gram.
   - name: environments
     description: Managing toolset environments.
-  - name: explore
-    description: 'Queries: the saved questions Explore keeps. Explore''s only server-side surface; everything it shows comes from the analytics service.'
   - name: externalCredentials
     description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
   - name: externalKeys

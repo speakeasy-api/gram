@@ -82,7 +82,7 @@ func TestToolsetsService_PrivateMCPNeverRetainsExternalOAuthDuringConcurrentUpda
 				require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 			}
 
-			got, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: toolset.Slug})
+			got, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 			require.NoError(t, err)
 			require.False(t, *got.McpIsPublic)
 			require.Nil(t, got.ExternalOauthServer)

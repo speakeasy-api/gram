@@ -7,6 +7,7 @@ import {
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MoreActions } from "@/components/ui/MoreActions";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
@@ -23,13 +24,22 @@ import {
 } from "@gram/client/react-query/workloadIdentities.js";
 import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitWorkloadSubject.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
+import { useUpdateWorkloadIssuerMutation } from "@gram/client/react-query/updateWorkloadIssuer.js";
+import { useUpdateWorkloadSubjectMutation } from "@gram/client/react-query/updateWorkloadSubject.js";
 import { useWithdrawWorkloadIssuerMutation } from "@gram/client/react-query/withdrawWorkloadIssuer.js";
 import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/withdrawWorkloadSubject.js";
 import { WithdrawIssuerDialog } from "./WithdrawIssuerDialog";
 import { RemoveSubjectDialog } from "./RemoveSubjectDialog";
-import { Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
+import {
+  RegisterIssuerSheet,
+  type RegisterIssuerValues,
+} from "./RegisterIssuerSheet";
+import { changedIssuerFields } from "./issuerEdit";
+import { changedAdmissionFields } from "./admissionEdit";
 import {
   AdmitSubjectSheet,
+  type AdmitSubjectInitialValues,
   type AdmitSubjectValues,
 } from "./AdmitSubjectSheet";
 import { useQueryClient } from "@tanstack/react-query";
@@ -73,6 +83,18 @@ function IssuerIdentifiers({
   );
 }
 
+function admissionInitialValues(
+  admission: WorkloadAdmission,
+): AdmitSubjectInitialValues {
+  return {
+    subject: admission.subject,
+    name: admission.name,
+    tags: admission.tags,
+    agentId: admission.agentId,
+    agentName: admission.agentName,
+  };
+}
+
 /**
  * One issuer, and the subjects admitted under it.
  *
@@ -82,21 +104,31 @@ function IssuerIdentifiers({
  * share a URL across tiers.
  */
 export function WorkloadIssuerDetailPage(): JSX.Element {
+  const { issuerId = "" } = useParams<{ issuerId: string }>();
   return (
     <RequireScope scope={["workload:read", "workload:write"]} level="page">
-      <IssuerDetail />
+      {/* Remounted per platform. The router keeps this page mounted when only
+          the issuer in the URL changes, and an edit sheet or confirmation left
+          open would then act on the platform navigated to, with what was
+          entered for the one navigated from. */}
+      <IssuerDetail key={issuerId} issuerId={issuerId} />
     </RequireScope>
   );
 }
 
-function IssuerDetail(): JSX.Element {
-  const { issuerId = "" } = useParams<{ issuerId: string }>();
+function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
   const routes = useRoutes();
   const queryClient = useQueryClient();
   const [admitOpen, setAdmitOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [removing, setRemoving] = useState<WorkloadAdmission | null>(null);
+  // Held apart from the open flag so the sheet keeps the machine it is editing
+  // while it animates closed.
+  const [editingAdmission, setEditingAdmission] =
+    useState<WorkloadAdmission | null>(null);
+  const [editAdmissionOpen, setEditAdmissionOpen] = useState(false);
   const { data, isPending, isError, refetch } = useWorkloadIdentities({});
   // throwOnError because the whole agents service 404s where the agent
   // management rollout is off, and the global query policy suppresses only 401
@@ -106,6 +138,20 @@ function IssuerDetail(): JSX.Element {
   const issuer = useMemo(
     () => data?.issuers?.find((candidate) => candidate.id === issuerId),
     [data, issuerId],
+  );
+
+  // Memoized so the edit sheet resets only when the stored issuer changes, not
+  // on every render.
+  const editValues = useMemo<RegisterIssuerValues | undefined>(
+    () =>
+      issuer && {
+        name: issuer.name,
+        description: issuer.description,
+        issuer: issuer.issuer,
+        jwksUri: issuer.jwksUri,
+        tags: issuer.tags,
+      },
+    [issuer],
   );
 
   const admissions = useMemo(
@@ -163,6 +209,38 @@ function IssuerDetail(): JSX.Element {
     onError: (error) => {
       toast.error(
         error instanceof Error ? error.message : "Failed to allow the machine",
+      );
+    },
+  });
+
+  const updateIssuer = useUpdateWorkloadIssuerMutation({
+    onSuccess: async () => {
+      await invalidateAllWorkloadIdentities(queryClient, {
+        refetchType: "all",
+      });
+      setEditOpen(false);
+      toast.success("Platform updated");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update the platform",
+      );
+    },
+  });
+
+  const updateSubject = useUpdateWorkloadSubjectMutation({
+    onSuccess: async () => {
+      await invalidateAllWorkloadIdentities(queryClient, {
+        refetchType: "all",
+      });
+      setEditAdmissionOpen(false);
+      toast.success("Access updated");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update access",
       );
     },
   });
@@ -285,17 +363,29 @@ function IssuerDetail(): JSX.Element {
     {
       key: "actions",
       header: "",
-      width: "120px",
+      width: "56px",
       render: (admission) => (
         <RequireScope scope="workload:write" level="component">
-          <Button
-            size="sm"
-            variant="tertiary"
-            disabled={withdrawSubject.isPending}
-            onClick={() => setRemoving(admission)}
-          >
-            <Button.Text>Remove</Button.Text>
-          </Button>
+          <MoreActions
+            triggerAriaLabel={`Actions for ${admission.name || admission.subject}`}
+            actions={[
+              {
+                label: "Edit",
+                icon: "pencil",
+                onClick: () => {
+                  setEditingAdmission(admission);
+                  setEditAdmissionOpen(true);
+                },
+              },
+              {
+                label: "Remove",
+                icon: "trash",
+                destructive: true,
+                disabled: withdrawSubject.isPending,
+                onClick: () => setRemoving(admission),
+              },
+            ]}
+          />
         </RequireScope>
       ),
     },
@@ -340,6 +430,22 @@ function IssuerDetail(): JSX.Element {
       </>
     );
   }
+
+  const editButton = (
+    <RequireScope scope="workload:write" level="component">
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => setEditOpen(true)}
+        disabled={issuer === undefined}
+      >
+        <Button.LeftIcon>
+          <Pencil className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>Edit</Button.Text>
+      </Button>
+    </RequireScope>
+  );
 
   const allowButton = (
     <RequireScope scope="workload:write" level="component">
@@ -390,6 +496,36 @@ function IssuerDetail(): JSX.Element {
     </RequireScope>
   );
 
+  const handleEdit = (
+    values: RegisterIssuerValues,
+    baseline: RegisterIssuerValues | undefined,
+  ) => {
+    if (issuer === undefined || baseline === undefined) return;
+    updateIssuer.mutate({
+      request: {
+        updateWorkloadIssuerForm: {
+          id: issuer.id,
+          ...changedIssuerFields(baseline, values),
+        },
+      },
+    });
+  };
+
+  const handleEditAdmission = (
+    values: AdmitSubjectValues,
+    baseline: AdmitSubjectInitialValues | undefined,
+  ) => {
+    if (editingAdmission === null || baseline === undefined) return;
+    updateSubject.mutate({
+      request: {
+        updateWorkloadSubjectForm: {
+          id: editingAdmission.id,
+          ...changedAdmissionFields(baseline, values),
+        },
+      },
+    });
+  };
+
   const handleAllow = (values: AdmitSubjectValues) => {
     const label = values.name.trim();
     admitSubject.mutate({
@@ -411,7 +547,12 @@ function IssuerDetail(): JSX.Element {
 
   return (
     <ResourceListPage
-      primaryAction={allowButton}
+      primaryAction={
+        <Stack direction="horizontal" gap={2}>
+          {editButton}
+          {allowButton}
+        </Stack>
+      }
       title={issuer?.name ?? "Trusted platform"}
       stage="preview"
       description={issuer?.description.trim() || undefined}
@@ -445,6 +586,16 @@ function IssuerDetail(): JSX.Element {
         machineCount={admissions.length}
       />
 
+      {editValues && (
+        <RegisterIssuerSheet
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          onSubmit={handleEdit}
+          isPending={updateIssuer.isPending}
+          initial={editValues}
+        />
+      )}
+
       {issuer && (
         <AdmitSubjectSheet
           open={admitOpen}
@@ -453,6 +604,18 @@ function IssuerDetail(): JSX.Element {
           isPending={admitSubject.isPending}
           issuer={issuer}
           agents={agents}
+        />
+      )}
+
+      {issuer && editingAdmission && (
+        <AdmitSubjectSheet
+          open={editAdmissionOpen}
+          onOpenChange={setEditAdmissionOpen}
+          onSubmit={handleEditAdmission}
+          isPending={updateSubject.isPending}
+          issuer={issuer}
+          agents={agents}
+          initial={admissionInitialValues(editingAdmission)}
         />
       )}
     </ResourceListPage>

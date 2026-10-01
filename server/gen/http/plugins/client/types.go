@@ -111,7 +111,10 @@ type GetDistributionPluginResponseBody struct {
 	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Name        *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   *bool   `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	IsDefault   *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 }
 
 // ListPluginsResponseBody is the type of the "plugins" service "listPlugins"
@@ -134,6 +137,9 @@ type GetPluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -164,6 +170,9 @@ type CreatePluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -194,6 +203,9 @@ type UpdatePluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4492,7 +4504,10 @@ type DistributionPluginResponseBody struct {
 	ID          *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Name        *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   *bool   `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
+	IsDefault   *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 }
 
 // PluginResponseBody is used to define fields on response body types.
@@ -4507,6 +4522,9 @@ type PluginResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated *bool `form:"auto_created,omitempty" json:"auto_created,omitempty" xml:"auto_created,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
 	// Number of active skills in this plugin.
@@ -4909,6 +4927,7 @@ func NewGetDistributionPluginDistributionPluginOK(body *GetDistributionPluginRes
 		ID:          *body.ID,
 		Name:        *body.Name,
 		Description: body.Description,
+		AutoCreated: *body.AutoCreated,
 		IsDefault:   *body.IsDefault,
 	}
 
@@ -5270,6 +5289,7 @@ func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
 		Slug:                     *body.Slug,
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
+		AutoCreated:              *body.AutoCreated,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -5475,6 +5495,7 @@ func NewCreatePluginPluginCreated(body *CreatePluginResponseBody) *plugins.Plugi
 		Slug:                     *body.Slug,
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
+		AutoCreated:              *body.AutoCreated,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -5680,6 +5701,7 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 		Slug:                     *body.Slug,
 		Description:              body.Description,
 		IsDefault:                body.IsDefault,
+		AutoCreated:              *body.AutoCreated,
 		ServerCount:              body.ServerCount,
 		SkillCount:               body.SkillCount,
 		AssignmentCount:          body.AssignmentCount,
@@ -8406,6 +8428,9 @@ func ValidateGetDistributionPluginResponseBody(body *GetDistributionPluginRespon
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -8439,6 +8464,9 @@ func ValidateGetPluginResponseBody(body *GetPluginResponseBody) (err error) {
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
@@ -8487,6 +8515,9 @@ func ValidateCreatePluginResponseBody(body *CreatePluginResponseBody) (err error
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
 	}
@@ -8533,6 +8564,9 @@ func ValidateUpdatePluginResponseBody(body *UpdatePluginResponseBody) (err error
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))
@@ -14113,6 +14147,9 @@ func ValidateDistributionPluginResponseBody(body *DistributionPluginResponseBody
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -14129,6 +14166,9 @@ func ValidatePluginResponseBody(body *PluginResponseBody) (err error) {
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AutoCreated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_created", "body"))
 	}
 	if body.AgentPluginsV1Compatible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_plugins_v1_compatible", "body"))

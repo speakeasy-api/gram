@@ -152,6 +152,9 @@ type DistributionPlugin struct {
 	ID          string
 	Name        string
 	Description *string
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool
 	IsDefault   bool
 }
 
@@ -303,6 +306,9 @@ type Plugin struct {
 	Description *string
 	// Whether this is the project's fallback plugin that new servers attach to.
 	IsDefault *bool
+	// Whether automatic role distribution created this plugin. Read-only;
+	// preserved after edits and reuse.
+	AutoCreated bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
 	// Number of active skills in this plugin.
