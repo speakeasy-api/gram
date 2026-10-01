@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -260,10 +261,21 @@ type record struct {
 	description string
 	// documentationURL comes from the catalog metadata namespace.
 	documentationURL string
+	// iconURL is the entry's first icon.
+	iconURL string
 	// remotes are the endpoints in catalog order.
 	remotes []*srv.OktaServerSuggestionRemote
 	// mapping is the Okta namespace that matched.
 	mapping mcpregistry.OktaMapping
+}
+
+// httpsIcon keeps an icon the dashboard may load: an absolute HTTPS URL.
+func httpsIcon(src string) string {
+	u, err := url.Parse(src)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return ""
+	}
+	return src
 }
 
 func decodeRecord(data []byte) (record, error) {
@@ -310,6 +322,13 @@ func decodeRecord(data []byte) (record, error) {
 			})
 		}
 		rec.remotes = append(rec.remotes, remote)
+	}
+	var icons []map[string]json.RawMessage
+	if raw, ok := server["icons"]; ok {
+		_ = json.Unmarshal(raw, &icons)
+	}
+	if len(icons) > 0 {
+		rec.iconURL = httpsIcon(str(icons[0], "src"))
 	}
 	if raw, ok := root["_meta"]; ok {
 		_ = json.Unmarshal(raw, &meta)
@@ -507,6 +526,7 @@ func (snap *snapshot) build(sg suggestion) *srv.OktaServerSuggestion {
 		Title:            conv.PtrEmpty(sg.record.title),
 		Description:      sg.record.description,
 		DocumentationURL: conv.PtrEmpty(sg.record.documentationURL),
+		IconURL:          conv.PtrEmpty(sg.record.iconURL),
 		Remotes:          sg.record.remotes,
 		OktaApplications: sg.apps,
 		XaaIssuer:        conv.PtrEmpty(sg.record.mapping.XAAIssuer),

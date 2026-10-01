@@ -49,6 +49,7 @@ var Suggestion = Type("OktaServerSuggestion", func() {
 	Attribute("title", String, "Catalog display title when the entry has one.")
 	Attribute("description", String)
 	Attribute("documentation_url", String, "Public documentation URL when the entry has one.")
+	Attribute("icon_url", String, "HTTPS URL of the entry's icon when it has one.")
 	Attribute("remotes", ArrayOf(Remote), "Remote endpoints in catalog order.")
 	Attribute("okta_applications", ArrayOf(Application), "Matching Okta application instances, by label.")
 	Attribute("xaa_issuer", String, "Vendor Issuer URL for Cross App Access when the catalog knows it.")

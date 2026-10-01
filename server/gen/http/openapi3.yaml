@@ -96669,6 +96669,9 @@ components:
                 documentation_url:
                     type: string
                     description: Public documentation URL when the entry has one.
+                icon_url:
+                    type: string
+                    description: HTTPS URL of the entry's icon when it has one.
                 installed_urls:
                     type: array
                     items:
