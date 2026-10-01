@@ -191,6 +191,43 @@ func TestApplyKeepsExistingIcon(t *testing.T) {
 	require.False(t, recorded)
 }
 
+func TestApplyRefusesUndecodableCatalogMetadata(t *testing.T) {
+	t.Parallel()
+	v, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "oktaseedcatalogtestdb")
+	require.NoError(t, err)
+	svc := mcpregistry.New(db, v)
+
+	var vendor oktaseed.Vendor
+	for _, candidate := range oktaseed.Vendors {
+		if candidate.SupportsDCR {
+			vendor = candidate
+			break
+		}
+	}
+	require.NotEmpty(t, vendor.Name)
+	remotes := make([]map[string]string, 0, len(vendor.Remotes))
+	for _, r := range vendor.Remotes {
+		remotes = append(remotes, map[string]string{"type": r.Type, "url": r.URL})
+	}
+	// A legacy row whose catalog namespace is not an object is left alone
+	// rather than replaced with only the seeded flag.
+	legacy, err := json.Marshal(map[string]any{
+		"server": map[string]any{"name": vendor.Name, "description": "Legacy", "version": "1", "remotes": remotes},
+		"_meta":  map[string]any{"com.speakeasy.ai/catalog": "kept"},
+	})
+	require.NoError(t, err)
+	require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: legacy, Published: true}))
+
+	_, err = oktaseed.Apply(ctx, testenv.NewLogger(t), svc, false)
+	require.ErrorContains(t, err, "decode catalog metadata")
+	e, err := svc.GetByName(ctx, vendor.Name)
+	require.NoError(t, err)
+	require.JSONEq(t, string(legacy), string(e.Data))
+}
+
 // storedSupportsDCR reads the catalog flag and whether the record sets it.
 func storedSupportsDCR(t *testing.T, data json.RawMessage) (bool, bool) {
 	t.Helper()

@@ -402,7 +402,9 @@ func withIcon(data json.RawMessage, iconURL string) (json.RawMessage, bool, erro
 	}
 	var icons []json.RawMessage
 	if raw, ok := server["icons"]; ok {
-		_ = json.Unmarshal(raw, &icons)
+		if err := json.Unmarshal(raw, &icons); err != nil {
+			return nil, false, fmt.Errorf("decode icons: %w", err)
+		}
 	}
 	if len(icons) > 0 {
 		return data, false, nil
@@ -433,13 +435,17 @@ func withSupportsDCR(data json.RawMessage, supported bool) (json.RawMessage, boo
 		return nil, false, fmt.Errorf("decode record: %w", err)
 	}
 	if raw, ok := root["_meta"]; ok {
-		_ = json.Unmarshal(raw, &meta)
+		if err := json.Unmarshal(raw, &meta); err != nil {
+			return nil, false, fmt.Errorf("decode metadata: %w", err)
+		}
 	}
 	if meta == nil {
 		meta = map[string]json.RawMessage{}
 	}
 	if raw, ok := meta[catalogNamespace]; ok {
-		_ = json.Unmarshal(raw, &catalog)
+		if err := json.Unmarshal(raw, &catalog); err != nil {
+			return nil, false, fmt.Errorf("decode catalog metadata: %w", err)
+		}
 	}
 	if catalog == nil {
 		catalog = map[string]json.RawMessage{}
