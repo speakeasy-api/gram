@@ -25,6 +25,7 @@ const mutations = vi.hoisted(() => ({
   create: vi.fn(),
   visibility: vi.fn(),
 }));
+const okta = vi.hoisted(() => ({ candidates: [] as unknown[] }));
 vi.mock("@gram/admin-client/react-query/adminSaveRegistryEntry", () => ({
   buildAdminSaveRegistryEntryMutation: () => ({
     mutationKey: ["save"],
@@ -54,7 +55,7 @@ vi.mock(
       request: { id: string },
     ) => ({
       queryKey: ["okta-candidates", request.id],
-      queryFn: async () => ({ candidates: [] }),
+      queryFn: async () => ({ candidates: okta.candidates }),
     }),
   }),
 );
@@ -75,6 +76,7 @@ const entry = {
 let client: QueryClient;
 beforeEach(() => {
   vi.clearAllMocks();
+  okta.candidates = [];
   client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -167,6 +169,67 @@ it("retains edits after conflict and only reloads after confirmation", async () 
     (screen.getByLabelText("Record JSON") as HTMLTextAreaElement).value,
   ).toBe(raw + " ");
   expect(mutations.save).toHaveBeenCalledTimes(1);
+});
+
+const candidate = {
+  oinName: "example_app",
+  organizations: 1,
+  signOnModes: ["SAML_2_0"],
+  reason: "domain",
+  integrator: false,
+};
+
+it("keeps the conflict explanation and disabled Save when an Okta name is added", async () => {
+  okta.candidates = [candidate];
+  mutations.save.mockRejectedValue(
+    Object.assign(new Error("Stale entry"), { statusCode: 409 }),
+  );
+  await mount();
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: raw + " " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("alert");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Add example_app" }),
+  );
+  expect(
+    (screen.getByLabelText("Record JSON") as HTMLTextAreaElement).value,
+  ).toContain('"example_app"');
+  const alert = screen.getByRole("alert").textContent;
+  expect(alert).toContain("Stale entry");
+  expect(alert).toContain("Reload explicitly before retrying.");
+  expect(
+    (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(screen.getByRole("button", { name: "Reload" })).toBeTruthy();
+  expect(mutations.save).toHaveBeenCalledTimes(1);
+});
+
+it("clears a non-conflict failure when an Okta name is added", async () => {
+  okta.candidates = [candidate];
+  mutations.save.mockRejectedValue(
+    Object.assign(new Error("Request unavailable"), { statusCode: 503 }),
+  );
+  await mount();
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: raw + " " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("alert");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Add example_app" }),
+  );
+  expect(
+    (screen.getByLabelText("Record JSON") as HTMLTextAreaElement).value,
+  ).toContain('"example_app"');
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(
+    (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(false);
+  expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
 });
 
 it("confirms dirty cancel and performs no save", async () => {
