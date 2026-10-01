@@ -81,8 +81,8 @@ function hasEndpoint(
 }
 
 /**
- * The organization's one token endpoint, which a platform exchanges its
- * workloads' identity tokens at for any of the organization's MCP servers.
+ * The organization's one token endpoint, where a platform exchanges its
+ * workloads' identity tokens for sessions as their assigned agents.
  */
 export function OrganizationTokenEndpoint({
   className,

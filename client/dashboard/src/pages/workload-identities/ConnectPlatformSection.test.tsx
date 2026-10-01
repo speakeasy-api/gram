@@ -65,7 +65,7 @@ it("shows the organization's token endpoint, issuer and audience rule", () => {
   expect(
     screen.getByText(/aud must be exactly this issuer or the token endpoint/),
   ).toBeTruthy();
-  expect(screen.getByText(/allowed API hosts/)).toBeTruthy();
+  expect(screen.queryByText(/MCP/)).toBeNull();
 });
 
 it("offers no MCP server picker", () => {
@@ -111,7 +111,7 @@ it("says where the token endpoint lives", () => {
   mocks.details.data = { ...ready, onAuthenticationHost: false };
   renderSection();
 
-  expect(screen.getByText(/On the platform host/)).toBeTruthy();
+  expect(screen.getByText("On Gram's platform host.")).toBeTruthy();
 });
 
 it("offers a retry when the connection details fail to load", async () => {

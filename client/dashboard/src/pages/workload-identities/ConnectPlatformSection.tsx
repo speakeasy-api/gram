@@ -50,9 +50,9 @@ function tokenEndpointNote(
   details: WorkloadOrganizationConnectionDetails,
 ): string {
   if (details.onAuthenticationHost) {
-    return "On Gram's authentication host, deliberately a different host from the MCP servers' API host: some platforms require the token endpoint to be separate from the hosts the token is sent to.";
+    return "On Gram's authentication host, deliberately separate from the hosts the token is later sent to: some platforms require that.";
   }
-  return "On the platform host, the same host the MCP servers answer on.";
+  return "On Gram's platform host.";
 }
 
 function ConnectionValues({
@@ -91,17 +91,13 @@ function ConnectionValues({
         value={details.issuer}
         note={AUDIENCE_RULE}
       />
-      <Text muted small>
-        List each MCP server&apos;s host among the platform&apos;s allowed API
-        hosts.
-      </Text>
     </Stack>
   );
 }
 
 /**
  * What to enter in the platform's own console so its workloads can exchange
- * their identity tokens for sessions on the organization's MCP servers.
+ * their identity tokens for sessions as their assigned agents.
  */
 export function ConnectPlatformSection(): JSX.Element {
   const { data, isPending, isError, refetch } = useOrganizationConnection();

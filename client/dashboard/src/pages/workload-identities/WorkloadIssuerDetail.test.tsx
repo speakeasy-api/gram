@@ -224,7 +224,7 @@ it("marks a platform's page as a preview", () => {
   expect(screen.getByTestId("stage").textContent).toBe("preview");
 });
 
-it("offers to connect the platform to an MCP server", () => {
+it("shows how to connect the platform", () => {
   renderPage();
 
   expect(screen.getByTestId("connect-platform")).toBeTruthy();
