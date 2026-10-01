@@ -148,7 +148,7 @@ type DeleteToolsetPayload struct {
 // method.
 type GetToolsetPayload struct {
 	// The slug of the toolset
-	Slug             types.Slug
+	Slug             string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

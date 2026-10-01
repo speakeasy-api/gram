@@ -71820,8 +71820,8 @@ paths:
                   name: slug
                   required: true
                   schema:
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    maxLength: 40
+                    description: The slug of the toolset
+                    maxLength: 60
                     pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true

@@ -1243,7 +1243,7 @@ func EncodeGetToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("slug", string(p.Slug))
+		values.Add("slug", p.Slug)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
