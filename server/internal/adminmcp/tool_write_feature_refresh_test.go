@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func newRefreshFeatureWriter(t *testing.T, f proposalFixture) (*featureWriter, *writeTools, *productfeatures.Client) {
+func newFeatureWriterFixture(t *testing.T, f proposalFixture) (*featureWriter, *writeTools, *productfeatures.Client) {
 	t.Helper()
 	redisContainer, newRedisClient, err := testenv.NewTestRedis(t.Context())
 	require.NoError(t, err)
@@ -33,7 +33,7 @@ func newRefreshFeatureWriter(t *testing.T, f proposalFixture) (*featureWriter, *
 func TestFeatureWriteRefreshEnablesDisablesAndReplays(t *testing.T) {
 	t.Parallel()
 	f := newProposalFixture(t, "admin_mcp_refresh_feature")
-	writer, tools, features := newRefreshFeatureWriter(t, f)
+	writer, tools, features := newFeatureWriterFixture(t, f)
 	ctx := writeContext(t, f)
 	q := featurerepo.New(f.db)
 	_, err := q.EnableFeature(t.Context(), featurerepo.EnableFeatureParams{OrganizationID: f.orgA, FeatureName: string(productfeatures.FeatureConsentToolFiltering)})
@@ -136,7 +136,7 @@ func TestFeatureWriteRefreshRejectsEnforcementDriftAtApproval(t *testing.T) {
 func TestFeatureWriteRefreshRejectsEnforcementDriftAtExecution(t *testing.T) {
 	t.Parallel()
 	f := newProposalFixture(t, "admin_mcp_refresh_stale_execution")
-	writer, tools, _ := newRefreshFeatureWriter(t, f)
+	writer, tools, _ := newFeatureWriterFixture(t, f)
 	ctx := writeContext(t, f)
 	prepared, err := writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgA, Feature: string(productfeatures.FeatureRemoteSessionAutoRefresh), Enabled: true, RetryKey: "stale-enforcement"})
 	require.NoError(t, err)
