@@ -61,3 +61,22 @@ func TestApplyStartupSeed_ReturnsTheApplyError(t *testing.T) {
 	err := a.Do(t.Context(), activities.ApplyStartupSeedArgs{Name: "reference-data", Version: "v1"})
 	require.ErrorIs(t, err, failure)
 }
+
+func TestApplyStartupSeed_RefusesARepeatedName(t *testing.T) {
+	t.Parallel()
+
+	applied := 0
+	apply := func(context.Context) error { applied++; return nil }
+	seeds := []activities.StartupSeed{
+		{Name: "reference-data", Version: "v1", Apply: apply},
+		{Name: "reference-data", Version: "v2", Apply: apply},
+	}
+	require.ErrorContains(t, activities.ValidateStartupSeeds(seeds), `startup seed "reference-data": declared more than once`)
+
+	a := activities.NewApplyStartupSeed(seeds)
+	for _, version := range []string{"v1", "v2"} {
+		err := a.Do(t.Context(), activities.ApplyStartupSeedArgs{Name: "reference-data", Version: version})
+		require.ErrorContains(t, err, "declared more than once")
+	}
+	require.Zero(t, applied, "neither seed may shadow the other")
+}
