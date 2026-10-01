@@ -72,6 +72,31 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RegisterWorkloadIssuer"}`)
 	})
 
+	Method("updateIssuer", func() {
+		Description("Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.")
+
+		Payload(func() {
+			Extend(UpdateWorkloadIssuerForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadIdentityPolicy)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.updateIssuer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateWorkloadIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "updateIssuer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateWorkloadIssuer"}`)
+	})
+
 	Method("withdrawIssuer", func() {
 		Description("Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.")
 
@@ -182,6 +207,29 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	})
 
 	Required("name", "issuer", "jwks_uri")
+})
+
+var UpdateWorkloadIssuerForm = Type("UpdateWorkloadIssuerForm", func() {
+	Description("Form for editing a trusted workload issuer. Every field but id is optional; an omitted field is left unchanged.")
+
+	Attribute("id", String, "The workload issuer id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The label an operator works with. Unique within its tier.", func() {
+		MinLength(1)
+		MaxLength(100)
+	})
+	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.", func() {
+		Format(FormatURI)
+	})
+	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.")
+	Attribute("tags", ArrayOf(String), "Replaces the issuer's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.", func() {
+		// omitzero, not omitempty: an empty list is the instruction to clear
+		// the tags and has to reach the wire, while a nil one stays omitted.
+		Meta("struct:tag:json", "tags,omitzero")
+	})
+
+	Required("id")
 })
 
 var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {

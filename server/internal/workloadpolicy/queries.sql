@@ -49,6 +49,23 @@ INSERT INTO workload_issuers (organization_id, project_id, name, description, ta
 VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission)
 RETURNING *;
 
+-- name: UpdateWorkloadIssuer :one
+-- Writes every editable field, so the caller merges an edit into the row it
+-- read under LockWorkloadIssuerForWrite. Scoped as GetWorkloadIssuer is: a row
+-- the caller cannot list is a row it cannot edit. The issuer URL and the
+-- wildcard setting are deliberately absent.
+UPDATE workload_issuers
+SET name = @name,
+    description = sqlc.narg(description),
+    tags = @tags,
+    jwks_uri = @jwks_uri,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND (project_id IS NULL OR project_id = @project_id)
+  AND id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: SoftDeleteWorkloadIssuer :one
 -- Carries the same project predicate as the read above rather than trusting the
 -- caller to have gone through it: the withdrawal is the destructive half, and a

@@ -289,6 +289,7 @@ export const AUDIT_ACTIONS = [
   "workload-admission:withdraw",
   "workload-issuer:create",
   "workload-issuer:delete",
+  "workload-issuer:update",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -912,6 +913,8 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "workload-issuer:create":
       return "started trusting workload issuer";
+    case "workload-issuer:update":
+      return "updated workload issuer";
     case "workload-issuer:delete":
       return "stopped trusting workload issuer";
     // Named for what they do, because the row is the grant of machine access
