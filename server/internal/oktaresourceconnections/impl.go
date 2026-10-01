@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oktaissuer"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -544,8 +545,7 @@ func normalizeAudience(raw string) (string, error) {
 		return "", oops.E(oops.CodeBadRequest, nil, "audience must be at most 512 characters")
 	}
 	audience := strings.TrimSpace(raw)
-	u, err := url.Parse(audience)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.ForceQuery || strings.ContainsAny(audience, "?#") || u.Opaque != "" {
+	if err := oktaissuer.ValidateAudience(audience); err != nil {
 		return "", oops.E(oops.CodeBadRequest, nil, "audience must be an https URL without query or fragment")
 	}
 	return audience, nil
