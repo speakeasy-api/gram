@@ -117,7 +117,9 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 
 func TestApproveAndRevokePolicyBypassRequestWaitForShadowAdmissionLock(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestRiskService(t)
+	// probeTimeout bounds acquisition of the held admission lock.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestRiskService(t, func(ti *testInstance) { ti.conn = testenv.NewLockTimeoutPool(t, ti.conn, probeTimeout) })
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
 		Scope:    authz.ScopeOrgAdmin,
@@ -131,35 +133,21 @@ func TestApproveAndRevokePolicyBypassRequestWaitForShadowAdmissionLock(t *testin
 
 	lockTx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, shadowadmission.LockProject(ctx, lockTx, *authCtx.ProjectID))
-	type result struct {
-		request *gen.RiskPolicyBypassRequest
-		err     error
-	}
-	completed := make(chan result, 1)
-	go func() {
-		approved, approveErr := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{ID: request.ID})
-		completed <- result{request: approved, err: approveErr}
-	}()
-	require.Never(t, func() bool { return len(completed) > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	_, err = ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{ID: request.ID})
+	testenv.RequireLockNotAvailable(t, err)
 	require.NoError(t, lockTx.Rollback(ctx))
-	require.Eventually(t, func() bool { return len(completed) > 0 }, 10*time.Second, 10*time.Millisecond)
-	got := <-completed
-	require.NoError(t, got.err)
-	require.Equal(t, "approved", got.request.Status)
+	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{ID: request.ID})
+	require.NoError(t, err)
+	require.Equal(t, "approved", approved.Status)
 
 	lockTx = testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, shadowadmission.LockProject(ctx, lockTx, *authCtx.ProjectID))
-	completed = make(chan result, 1)
-	go func() {
-		revoked, revokeErr := ti.service.RevokeRiskPolicyBypassRequest(ctx, &gen.RevokeRiskPolicyBypassRequestPayload{ID: request.ID})
-		completed <- result{request: revoked, err: revokeErr}
-	}()
-	require.Never(t, func() bool { return len(completed) > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	_, err = ti.service.RevokeRiskPolicyBypassRequest(ctx, &gen.RevokeRiskPolicyBypassRequestPayload{ID: request.ID})
+	testenv.RequireLockNotAvailable(t, err)
 	require.NoError(t, lockTx.Rollback(ctx))
-	require.Eventually(t, func() bool { return len(completed) > 0 }, 10*time.Second, 10*time.Millisecond)
-	got = <-completed
-	require.NoError(t, got.err)
-	require.Equal(t, "revoked", got.request.Status)
+	revoked, err := ti.service.RevokeRiskPolicyBypassRequest(ctx, &gen.RevokeRiskPolicyBypassRequestPayload{ID: request.ID})
+	require.NoError(t, err)
+	require.Equal(t, "revoked", revoked.Status)
 }
 
 func TestCreateApprovePolicyBypassRequest_AddsServerIdentityGrant(t *testing.T) {

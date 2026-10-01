@@ -399,6 +399,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"register_catalog_mcp":                  {},
 	"get_setup_handoff":                     {},
 	"get_mcp_readiness":                     {},
+	"get_xaa_readiness":                     {},
 	"get_mcp_repair_plan":                   {},
 	"register_remote_mcp":                   {},
 	"attach_platform_mcp_identity_provider": {},

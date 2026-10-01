@@ -77,7 +77,7 @@ func TestUpdateProjectWaitsForConcurrentDeleteAndReturnsNotFound(t *testing.T) {
 		renameErr <- err
 	}()
 
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(lockTx), 1)
 
 	_, err = projectRepo.DeleteProject(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)

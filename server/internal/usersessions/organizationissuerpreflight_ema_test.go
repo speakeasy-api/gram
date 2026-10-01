@@ -104,10 +104,7 @@ func TestOrganizationIssuerMutationWaitsForEMAPreparation(t *testing.T) {
 			if mutation == "update" {
 				pattern = "%LockOrganizationUserSessionIssuer :one%"
 			}
-			require.Eventually(t, func() bool {
-				blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(ctx, pattern)
-				return err == nil && blocked
-			}, 10*time.Second, 10*time.Millisecond)
+			testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), pattern)
 			require.Empty(t, done, "mutation must not pass the preparation row lock")
 			require.NoError(t, q.EnsureEMABinding(ctx, remoterepo.EnsureEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: user, RemoteSessionIssuerID: remote, Resource: "https://resource.example.com/"}))
 			require.NoError(t, tx.Commit(ctx))

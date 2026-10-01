@@ -272,8 +272,7 @@ func TestHandleRemoteLoginCallback_WaitsForIssuerMigrationThenRejectsRetiredIssu
 	go func() {
 		done <- fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "migrate-code"))
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, fx.ti.conn)
-	require.Never(t, func() bool { return len(done) > 0 }, 250*time.Millisecond, 10*time.Millisecond, "the callback waits behind the migration's issuer lock instead of writing under it")
+	testenv.WaitForBackendsBlockedBy(t, ctx, fx.ti.conn, testenv.BackendPID(tx), 1)
 
 	// The migration retires the source and commits.
 	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
