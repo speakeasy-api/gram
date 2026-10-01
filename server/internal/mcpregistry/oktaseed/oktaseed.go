@@ -48,10 +48,10 @@ type Vendor struct {
 }
 
 // Vendors is the starter set. Keep entries alphabetical by Name. Okta names
-// were read from a tenant's application list; integrator-prefixed names are
-// the keys of instances created from an integrator listing and may differ
-// from the vendor's public OIN listing. Issuers are the authorization server
-// Okta accepted as the identity assertion audience.
+// are the keys of the public OIN catalog listings, checked in the catalog;
+// integrator-prefixed keys belong to listings published from an integrator
+// account and are just as public. Issuers are the authorization server Okta
+// accepted as the identity assertion audience.
 var Vendors = []Vendor{
 	{
 		Name:             "ai.granola/mcp",
