@@ -3,13 +3,17 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -30,7 +34,29 @@ func (s *Service) readIdentityChaining(ctx context.Context, in PreparationInput)
 		return nil, oops.E(oops.CodeUnexpected, err, "read preparation")
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	q := repo.New(tx)
+	return readIdentityChainingSnapshot(ctx, repo.New(tx), project, org, in)
+}
+
+// ReadIdentityChainingForTenant recomputes a binding's readiness exactly as
+// the preparation API reports it, for a tenant the caller already authorized
+// from its own request context rather than an HTTP auth context.
+func ReadIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, project uuid.UUID, org string, in PreparationInput) (*PreparationResult, error) {
+	in, err := normalizePreparationInput(in)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return nil, fmt.Errorf("begin identity chaining snapshot: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
+	return readIdentityChainingSnapshot(ctx, repo.New(tx), project, org, in)
+}
+
+// readIdentityChainingSnapshot recomputes a binding's readiness for an already
+// authorized tenant. q must be bound to a read-only snapshot transaction.
+func readIdentityChainingSnapshot(ctx context.Context, q *repo.Queries, project uuid.UUID, org string, in PreparationInput) (*PreparationResult, error) {
+	var err error
 	if _, err = q.ReadEMAProject(ctx, repo.ReadEMAProjectParams{ProjectID: project, OrganizationID: org}); err != nil {
 		return nil, preparationLookupError(err, "project not found")
 	}

@@ -151,7 +151,8 @@ type Service struct {
 	// findingsCH reads the ClickHouse risk_findings table: always for the
 	// project-wide listing and reveal, and for the overview endpoint when
 	// FlagRiskOverviewFromClickHouse is on for the org.
-	findingsCH *chrepo.Queries
+	findingsCH      *chrepo.Queries
+	findingEvidence *MCPFindingEvidenceStore
 	// assetStorage reads chat content part assets for the ClickHouse reveal
 	// path, the same store the batch analysis activity hydrates parts from.
 	// Optional: when nil, content-part findings are not reconstructible.
@@ -203,6 +204,7 @@ func NewObserver(
 		builtinPresets:               nil,
 		promptJudge:                  nil,
 		findingsCH:                   nil,
+		findingEvidence:              nil,
 		assetStorage:                 nil,
 	}
 }
@@ -230,6 +232,7 @@ func NewService(
 	promptJudge promptpolicy.Evaluator,
 	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler,
 	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
+	findingEvidence *MCPFindingEvidenceStore,
 	findingsCH *chrepo.Queries,
 	assetStorage blobio.Reader,
 	riskRecorder *metering.RiskRecorder,
@@ -282,6 +285,7 @@ func NewService(
 		builtinPresets:               builtinPresets,
 		promptJudge:                  promptJudge,
 		findingsCH:                   findingsCH,
+		findingEvidence:              findingEvidence,
 		assetStorage:                 assetStorage,
 		riskRecorder:                 riskRecorder,
 		platformToolsets:             platformToolsets,
@@ -625,6 +629,7 @@ func (s *Service) ListRiskPoliciesForMcpServer(ctx context.Context, payload *gen
 		ToolName:        conv.PtrValOr(payload.ToolName, ""),
 		ToolAnnotations: nil,
 		PlatformToolset: false,
+		Principal:       nil,
 	}
 	if toolset, ok := s.platformToolsetByID(serverID); ok {
 		target.PlatformToolset = true
@@ -1508,10 +1513,10 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 	}, nil
 }
 
-// UnmaskRiskResult returns the plaintext match for a single risk result, on
-// demand. Unlike ListRiskResults it is gated solely on chat:read for the
-// result's chat — not org:admin — so a reveal is a discrete, audited access
-// event distinct from browsing the redacted list.
+// UnmaskRiskResult returns the plaintext match for one risk result. Chat-backed
+// findings reconstruct it from chat data; MCP findings read encrypted evidence.
+// Both require chat:read for the result's chat, and successful reveals are
+// audited as discrete access events.
 func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskResultPayload) (*gen.RiskUnmaskResultResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -1523,8 +1528,8 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 		return nil, oops.C(oops.CodeInvalid)
 	}
 
-	// The reveal resolves against ClickHouse, the store the listing serves
-	// ids from, reconstructing the raw match from the original chat data.
+	// Resolve against ClickHouse first so mediation_surface selects the
+	// chat-reconstruction or encrypted MCP-evidence path.
 	return s.unmaskRiskResultFromClickHouse(ctx, authCtx, id)
 }
 
@@ -2844,6 +2849,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 
 	temperature := 0.2
 	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
+		MaxTokens:    nil,
 		OrgID:        orgID,
 		ProjectID:    projectID,
 		Model:        "",
@@ -3032,6 +3038,7 @@ func (s *Service) requestExclusionSuggestion(ctx context.Context, orgID, project
 
 	temperature := 0.2
 	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
+		MaxTokens:    nil,
 		OrgID:        orgID,
 		ProjectID:    projectID,
 		Model:        "",
@@ -3768,6 +3775,7 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 	defer cancel()
 
 	response, err := s.completionClient.GetCompletion(nameCtx, openrouter.CompletionRequest{
+		MaxTokens: nil,
 		OrgID:     orgID,
 		ProjectID: projectID,
 		ChatID:    uuid.Nil,
@@ -3922,6 +3930,7 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 	defer cancel()
 
 	response, err := s.completionClient.GetCompletion(nameCtx, openrouter.CompletionRequest{
+		MaxTokens: nil,
 		OrgID:     orgID,
 		ProjectID: projectID,
 		ChatID:    uuid.Nil,

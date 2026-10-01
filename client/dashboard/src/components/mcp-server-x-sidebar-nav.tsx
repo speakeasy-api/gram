@@ -220,48 +220,45 @@ export function SidebarUrlRow({
   const display = url.replace(/^https?:\/\//, "");
   return (
     <div className="flex flex-col gap-1">
-      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
-      <div className="flex items-start gap-1">
-        <div className="min-w-0 flex-1">
-          {/* No delay: this is a reveal of text already on screen, not a
-            disclosure of extra information. */}
-          <HoverCard openDelay={0}>
-            <HoverCardTrigger asChild>
-              {/* The padding belongs to the trigger, not the text inside it:
-                the card aligns to the trigger's box, and matching insets are
-                what land the two texts on each other. The negative margin
-                cancels the indent so the URL stays flush with its label. */}
-              <span className="-mx-2 block px-2 py-1">
-                <Text
-                  variant="small"
-                  muted
-                  data-slot="sidebar-url-line"
-                  className="block truncate font-mono text-xs"
-                >
-                  {display}
-                </Text>
-              </span>
-            </HoverCardTrigger>
-            {/* The card carries the same insets as the line, so aligning their
-              boxes aligns their text: pull up by exactly the trigger's height
-              and the two land on each other. */}
-            <HoverCardContent
-              align="start"
-              side="bottom"
-              sideOffset={-24}
-              data-slot="sidebar-url-full"
-              className="w-auto max-w-none px-2 py-1 font-mono text-xs whitespace-nowrap duration-75"
-            >
-              {display}
-            </HoverCardContent>
-          </HoverCard>
-        </div>
-        <CopyButton
-          text={url}
-          size="xs"
-          tooltip={copyTooltip}
-          className="mt-[-2px] shrink-0"
-        />
+      {/* The copy button sits beside the label, not the URL: the hover card
+        that reveals the full URL would otherwise cover it. */}
+      <div className="flex items-center gap-1">
+        <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
+        <CopyButton text={url} size="xs" tooltip={copyTooltip} />
+      </div>
+      <div className="min-w-0">
+        {/* No delay: this is a reveal of text already on screen, not a
+          disclosure of extra information. */}
+        <HoverCard openDelay={0}>
+          <HoverCardTrigger asChild>
+            {/* The padding belongs to the trigger, not the text inside it:
+              the card aligns to the trigger's box, and matching insets are
+              what land the two texts on each other. The negative margin
+              cancels the indent so the URL stays flush with its label. */}
+            <span className="-mx-2 block px-2 py-1">
+              <Text
+                variant="small"
+                muted
+                data-slot="sidebar-url-line"
+                className="block truncate font-mono text-xs"
+              >
+                {display}
+              </Text>
+            </span>
+          </HoverCardTrigger>
+          {/* The card carries the same insets as the line, so aligning their
+            boxes aligns their text: pull up by exactly the trigger's height
+            and the two land on each other. */}
+          <HoverCardContent
+            align="start"
+            side="bottom"
+            sideOffset={-24}
+            data-slot="sidebar-url-full"
+            className="w-auto max-w-none px-2 py-1 font-mono text-xs whitespace-nowrap duration-75"
+          >
+            {display}
+          </HoverCardContent>
+        </HoverCard>
       </div>
     </div>
   );

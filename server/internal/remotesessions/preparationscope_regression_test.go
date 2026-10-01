@@ -66,10 +66,7 @@ func TestPreparationScope_DetachRevalidatesOwnershipAfterLockWait(t *testing.T) 
 				_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
 				done <- err
 			}()
-			require.Eventually(t, func() bool {
-				blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(ctx, pattern)
-				return err == nil && blocked
-			}, 5*time.Second, 10*time.Millisecond, "detach must reach the lifecycle lock before ownership changes")
+			testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), pattern)
 			if kind == "client" {
 				_, err = testrepo.New(tx).MovePreparationFixtureClientProject(ctx, testrepo.MovePreparationFixtureClientProjectParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
 			} else {
@@ -144,10 +141,7 @@ func TestPreparationScope_LocksRevalidateProjectAfterWait(t *testing.T) {
 			require.NoError(t, lock(tq))
 			done := make(chan error, 1)
 			go func() { done <- lock(repo.New(ti.conn)) }()
-			require.Eventually(t, func() bool {
-				blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(ctx, "%LockEMA% :one%")
-				return err == nil && blocked
-			}, 5*time.Second, 10*time.Millisecond)
+			testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), "%LockEMA% :one%")
 			switch kind {
 			case "client":
 				_, err = testrepo.New(tx).MovePreparationFixtureClientProject(ctx, testrepo.MovePreparationFixtureClientProjectParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), TargetProjectID: conv.ToNullUUID(sibling)})
@@ -183,10 +177,7 @@ func TestPreparationScope_FirstBindingWaitsForProjectDeletion(t *testing.T) {
 	require.NoError(t, err)
 	done := make(chan error, 1)
 	go func() { _, err := ti.service.PrepareIdentityChaining(ctx, in); done <- err }()
-	require.Eventually(t, func() bool {
-		blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(ctx, "%LockEMAProject :one%")
-		return err == nil && blocked
-	}, 5*time.Second, 10*time.Millisecond)
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), "%LockEMAProject :one%")
 	_, err = q.DeleteProject(ctx, *auth.ProjectID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))

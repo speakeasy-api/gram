@@ -26,12 +26,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -100,6 +102,16 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	if err != nil {
 		return nil, fmt.Errorf("initialize MCP service: %w", err)
 	}
-	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)))
+	delegation := remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)
+	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(delegation))
+	// Identity-assertion grants are verified against the trusted IdP's keys
+	// under the same fetch budgets as its ID tokens.
+	assertionKeys, err := remotesessions.NewIDTokenKeyResolver(d.Logger, d.Guardian, d.Meter, ratelimit.NewRedisStore(d.Redis))
+	if err != nil {
+		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
+	}
+	chainer := identitychaining.New(d.Logger, d.DB, d.Encryption, d.Challenges, delegation, assertionKeys, cacheImpl)
+	chainer.SetObserver(oktaresourceconnections.NewObserver(d.Logger, d.Meter, d.DB, d.Audit))
+	service.SetIdentityChainer(chainer)
 	return service, nil
 }

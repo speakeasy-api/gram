@@ -252,7 +252,9 @@ func TestUpdateIssuerRejectsCapabilitiesThatInvalidateTrustedClient(t *testing.T
 func TestDeleteIssuer_SerializedAgainstClientBinding(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	// probeTimeout bounds the server lock probe, independently of goroutine scheduling.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{lockTimeout: probeTimeout})
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "admin-delissuer-lock", "")
 
@@ -262,23 +264,19 @@ func TestDeleteIssuer_SerializedAgainstClientBinding(t *testing.T) {
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, repo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, parsed))
 
-	done := make(chan error, 1)
-	go func() {
-		done <- ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
-			ID:           issuerID,
-			SessionToken: nil,
-			ApikeyToken:  nil,
-		})
-	}()
-
-	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
-		"delete completed while another transaction held the client-binding lock")
-
+	probeErr := ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
+		ID:           issuerID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	testenv.RequireLockNotAvailable(t, probeErr)
 	require.NoError(t, tx.Rollback(ctx))
-
-	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
-		"delete did not complete after the client-binding lock was released")
-	require.NoError(t, <-done)
+	probeErr = ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
+		ID:           issuerID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, probeErr)
 }
 
 // TestDeleteIssuer_CrossOrgNotFound proves an issuer owned by another

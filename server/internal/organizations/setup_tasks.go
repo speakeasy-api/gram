@@ -35,6 +35,19 @@ const (
 	setupTaskStatusDone            = "done"
 )
 
+// setupTaskCompletion says how a task's effective status reaches done.
+type setupTaskCompletion string
+
+const (
+	// setupTaskCompletionManual: an admin marks the task done.
+	setupTaskCompletionManual setupTaskCompletion = "manual"
+	// setupTaskCompletionFact: organization facts force the task done.
+	setupTaskCompletionFact setupTaskCompletion = "fact"
+	// setupTaskCompletionChildren: a group is done once every visible card
+	// under it is done. Groups are never marked by hand.
+	setupTaskCompletionChildren setupTaskCompletion = "children"
+)
+
 type setupTaskDefinition struct {
 	Key           string
 	Title         string
@@ -43,32 +56,61 @@ type setupTaskDefinition struct {
 	// HiddenByDefault preserves legacy selection until staff explicitly save
 	// visibility. New tasks must not expand untouched organizations' boards.
 	HiddenByDefault bool
+
+	// Parent is the setupTaskGroups key this card sits under, or empty for a
+	// top-level card. Cards of one group are contiguous in the catalog.
+	Parent string
+
+	// Methods are the support matrix integration method slugs the card
+	// configures. A card with none, such as identity, applies to every stack.
+	Methods []string
+
+	// Completion is manual or fact; groups derive theirs from their cards.
+	Completion setupTaskCompletion
+}
+
+// setupTaskGroup nests cards one level. A group has no card of its own: it is
+// hidden when every card under it is, done when every visible card is, and
+// it cannot be assigned or marked by hand.
+type setupTaskGroup struct {
+	Key         string
+	Title       string
+	Description string
+}
+
+// setupTaskGroups lists the groups cards may name as Parent. A group appears
+// in the wizard where its first card does.
+var setupTaskGroups = []setupTaskGroup{
+	{Key: "agent-observability", Title: "Set up agent observability", Description: "Connect coding agents to Speakeasy hook telemetry and confirm traffic arrives."},
+	{Key: "mcp-distribution", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it."},
 }
 
 // setupTaskCatalog lists every setup card in wizard order. To add a card:
-//  1. Add an entry here (usually HiddenByDefault: true).
+//  1. Add an entry here, under a group if it belongs to one and next to that
+//     group's other cards. Only an optional card is HiddenByDefault.
 //  2. Add its content to SETUP_CARDS in client/dashboard/src/pages/setup/setup-cards.tsx.
-//  3. Add its key to any onboardingPresets entry that should show it.
+//  3. Add it to the playbooks that should walk it, from the admin dashboard.
 //  4. Optionally mark it done from organization facts in projectSetupTasks.
 //
-// Tests on both sides fail if the catalog, SETUP_CARDS, and presets disagree.
+// Tests on both sides fail if the catalog, SETUP_CARDS, groups, and presets
+// disagree. The catalog is mirrored into onboarding_steps at start-up.
 var setupTaskCatalog = []setupTaskDefinition{
 	// Identity
-	{Key: "identity-provider", Title: "Set up identity provider", Description: "Verify a domain, connect single sign-on, and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "identity-provider", Title: "Set up identity provider", Description: "Verify a domain, connect single sign-on, and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionFact},
 	// Observe
-	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: false},
+	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionFact},
+	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"inference"}, Completion: setupTaskCompletionManual},
+	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "agent-observability", Methods: nil, Completion: setupTaskCompletionManual},
+	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: false, Parent: "agent-observability", Methods: nil, Completion: setupTaskCompletionManual},
+	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true, Parent: "", Methods: []string{"litellm"}, Completion: setupTaskCompletionManual},
+	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"anthropic-api", "cursor-api", "openai-api", "conversations"}, Completion: setupTaskCompletionManual},
 	// Distribute
-	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: false},
-	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: false, Parent: "mcp-distribution", Methods: []string{"plugins"}, Completion: setupTaskCompletionFact},
+	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Distribute approved MCP servers through the plugin marketplace.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: false, Parent: "mcp-distribution", Methods: []string{"plugins"}, Completion: setupTaskCompletionManual},
+	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionManual},
 	// Secure
-	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"settings", "plugins"}, Completion: setupTaskCompletionManual},
+	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionManual},
 }
 
 var validSetupTaskStatuses = []string{
@@ -304,6 +346,16 @@ func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationI
 	for _, row := range rows {
 		stateByKey[row.TaskKey] = row
 	}
+	// An assigned playbook decides what the wizard walks and in what order;
+	// without one, the saved visibility and the catalog defaults do.
+	playbookOrder, followPlaybook, err := assignedPlaybookOrder(ctx, repo, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	selected := make(map[string]bool, len(playbookOrder))
+	for _, key := range playbookOrder {
+		selected[key] = true
+	}
 	membersByID := make(map[string]orgrepo.ListOrganizationUsersRow, len(members))
 	membersByEmail := make(map[string]orgrepo.ListOrganizationUsersRow, len(members))
 	slices.SortFunc(members, func(a, b orgrepo.ListOrganizationUsersRow) int {
@@ -345,22 +397,14 @@ func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationI
 			hidden = state.HiddenAt.Valid
 			assignee = setupTaskAssigneeView(state, membersByID, membersByEmail)
 		}
-		// The identity provider card covers both single sign-on and directory
-		// sync, so it only completes by fact once both are configured; an admin
-		// who skips directory sync marks the card done by hand.
-		var completedByFact bool
-		switch definition.Key {
-		case "identity-provider":
-			completedByFact = facts.SsoConfigured && facts.DsyncConfigured
-		case "create-marketplace":
-			completedByFact = facts.MarketplacePublished
-		case "enable-logging":
-			completedByFact = facts.LoggingEnabled
+		if followPlaybook {
+			hidden = !selected[definition.Key]
 		}
+		completedByFact := definition.Completion == setupTaskCompletionFact && setupTaskFact(definition.Key, facts)
 		if completedByFact {
 			status = setupTaskStatusDone
 		}
-		tasks = append(tasks, &gen.SetupTask{Key: definition.Key, Title: definition.Title, Description: definition.Description, Status: status, CompletedByFact: completedByFact, Assignee: assignee, BlockedBy: []string{}, Hidden: hidden})
+		tasks = append(tasks, &gen.SetupTask{Key: definition.Key, Title: definition.Title, Description: definition.Description, Status: status, CompletedByFact: completedByFact, Assignee: assignee, BlockedBy: []string{}, Hidden: hidden, ParentKey: conv.PtrEmpty(definition.Parent), Group: false})
 	}
 
 	for index, definition := range setupTaskCatalog {
@@ -373,7 +417,118 @@ func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationI
 		}
 	}
 
-	return tasks, nil
+	if followPlaybook {
+		tasks = inPlaybookOrder(tasks, playbookOrder)
+	}
+	return withSetupTaskGroups(tasks), nil
+}
+
+// assignedPlaybookOrder returns the cards of the organization's playbook in
+// walking order, and whether a playbook is assigned at all.
+func assignedPlaybookOrder(ctx context.Context, repo *orgrepo.Queries, organizationID string) ([]string, bool, error) {
+	assignment, err := repo.GetOrganizationOnboardingPlaybookID(ctx, organizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, oops.E(oops.CodeUnexpected, err, "load onboarding playbook assignment")
+	}
+	if !assignment.PlaybookID.Valid {
+		return nil, false, nil
+	}
+	topLevel, err := repo.ListOrganizationOnboardingPlaybookSteps(ctx, organizationID)
+	if err != nil {
+		return nil, false, oops.E(oops.CodeUnexpected, err, "list onboarding playbook steps")
+	}
+	if len(topLevel) == 0 {
+		// The playbook was retired: back to the saved selection.
+		return nil, false, nil
+	}
+	return playbookCards(topLevel), true, nil
+}
+
+// inPlaybookOrder puts the playbook's cards first, in its order, and the rest
+// after in catalog order.
+func inPlaybookOrder(cards []*gen.SetupTask, order []string) []*gen.SetupTask {
+	sorted := make([]*gen.SetupTask, 0, len(cards))
+	for _, key := range order {
+		if card := setupTaskByKey(cards, key); card != nil {
+			sorted = append(sorted, card)
+		}
+	}
+	for _, card := range cards {
+		if !slices.Contains(order, card.Key) {
+			sorted = append(sorted, card)
+		}
+	}
+	return sorted
+}
+
+// setupTaskFact reports whether organization facts complete a fact-completed
+// card.
+func setupTaskFact(key string, facts orgrepo.GetSetupTaskCompletionFactsRow) bool {
+	switch key {
+	case "identity-provider":
+		// The identity provider card covers domain verification, single
+		// sign-on and directory sync, so it only completes by fact once single
+		// sign-on and directory sync are configured; an admin who skips
+		// directory sync marks the card done by hand.
+		return facts.SsoConfigured && facts.DsyncConfigured
+	case "create-marketplace":
+		return facts.MarketplacePublished
+	case "enable-logging":
+		return facts.LoggingEnabled
+	default:
+		return false
+	}
+}
+
+// withSetupTaskGroups places each group ahead of its first card and derives
+// the group's state from its cards: hidden when every card is, done when
+// every visible card is, and complete by fact only when every visible card is.
+func withSetupTaskGroups(cards []*gen.SetupTask) []*gen.SetupTask {
+	tasks := make([]*gen.SetupTask, 0, len(cards)+len(setupTaskGroups))
+	placed := make(map[string]bool, len(setupTaskGroups))
+	for _, card := range cards {
+		parent := conv.PtrValOr(card.ParentKey, "")
+		if parent != "" && !placed[parent] {
+			placed[parent] = true
+			tasks = append(tasks, setupTaskGroupView(parent, cards))
+		}
+		tasks = append(tasks, card)
+	}
+	return tasks
+}
+
+func setupTaskGroupView(key string, cards []*gen.SetupTask) *gen.SetupTask {
+	group := setupTaskGroupForKey(key)
+	hidden, done, byFact := true, true, true
+	for _, card := range cards {
+		if conv.PtrValOr(card.ParentKey, "") != key || card.Hidden {
+			continue
+		}
+		hidden = false
+		if card.Status != setupTaskStatusDone {
+			done = false
+		}
+		if !card.CompletedByFact {
+			byFact = false
+		}
+	}
+	status := setupTaskStatusTodo
+	if !hidden && done {
+		status = setupTaskStatusDone
+	}
+	return &gen.SetupTask{Key: group.Key, Title: group.Title, Description: group.Description, Status: status, CompletedByFact: !hidden && byFact, Assignee: nil, BlockedBy: []string{}, Hidden: hidden, ParentKey: nil, Group: true}
+}
+
+func setupTaskGroupForKey(key string) *setupTaskGroup {
+	for index := range setupTaskGroups {
+		if setupTaskGroups[index].Key == key {
+			return &setupTaskGroups[index]
+		}
+	}
+	return nil
 }
 
 func setupTaskDefinitionForKey(key string) *setupTaskDefinition {
@@ -458,9 +613,9 @@ func setupTaskAuditSnapshot(task *gen.SetupTask) *audit.OrganizationSetupTaskSna
 	}
 }
 
-// SubmitOnboardingSurvey applies the default playbook for the survey's use
-// case through the same path staff use in the admin dashboard. Callers never
-// pick tasks.
+// SubmitOnboardingSurvey assigns the default playbook of the survey's use
+// case, checked against the recorded stack like any assignment. Callers
+// never pick steps.
 func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.SubmitOnboardingSurveyPayload) (*gen.ListSetupTasksResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -469,13 +624,23 @@ func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.Submi
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	preset := defaultPlaybookForUseCase(payload.UseCase)
-	if preset == nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "unknown onboarding use case").LogError(ctx, s.logger)
+	queries := orgrepo.New(s.db)
+	useCase, err := queries.GetOnboardingUseCaseBySlug(ctx, payload.UseCase)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "unknown onboarding use case").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load onboarding use case").LogError(ctx, s.logger)
 	}
-	presetKey := preset.Key
+	playbook, err := queries.GetOnboardingDefaultPlaybook(ctx, conv.ToNullUUID(useCase.ID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "use case %q has no default playbook yet", payload.UseCase).LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load default onboarding playbook").LogError(ctx, s.logger)
+	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
-	if _, err := SaveOnboardingConfiguration(ctx, s.db, s.audit, ac.ActiveOrganizationID, preset.TaskKeys, &presetKey, actor, ac.Email); err != nil {
+	if _, err := AssignOrganizationOnboardingPlaybook(ctx, s.db, s.audit, ac.ActiveOrganizationID, &playbook.ID, actor, ac.Email); err != nil {
 		return nil, fmt.Errorf("save onboarding survey result: %w", err)
 	}
 	return s.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: nil, SessionToken: payload.SessionToken})

@@ -474,7 +474,7 @@ func handleToolsCall(
 	if plan.Kind == gateway.ToolKindExternalMCP {
 		toolName = descriptor.URN.Name
 	}
-	decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:         mcpriskscan.SurfaceHostedMCP,
 		Method:          mcpriskscan.MethodToolsCall,
 		OrganizationID:  descriptor.OrganizationID,
@@ -487,7 +487,8 @@ func handleToolsCall(
 		PromptName:      "",
 		ChatID:          payload.chatID,
 		ToolAnnotations: nil,
-	}, mcpriskscan.BorrowPayload(params.Arguments)))
+	}, mcpriskscan.BorrowPayload(params.Arguments))
+	decision := scan.Scan(ctx, requestSubject)
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)
@@ -536,6 +537,17 @@ func handleToolsCall(
 
 	// External MCP tools and MCP passthrough tools already return properly formatted responses
 	if plan.Kind == gateway.ToolKindExternalMCP || isMCPPassthrough(meta) {
+		responsePayload, parseErr := mcpriskscan.ParseToolResultPayload(rw.body.Bytes())
+		if parseErr != nil {
+			responsePayload = mcpriskscan.Payload{}
+		}
+		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+		if decision.Denied() {
+			discardWithheldBody(rw.body)
+			failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+			recordToolCallErrorStatus(ctx, rw, failure)
+			return nil, failure
+		}
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -553,11 +565,25 @@ func handleToolsCall(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
 	}
+	responseContent := []json.RawMessage{chunk}
+	if plan.Kind != gateway.ToolKindPrompt {
+		responsePayload, parseErr := mcpriskscan.ToolResultPayload(responseContent, structured)
+		if parseErr != nil {
+			responsePayload = mcpriskscan.Payload{}
+		}
+		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+		if decision.Denied() {
+			discardWithheldBody(rw.body)
+			failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+			recordToolCallErrorStatus(ctx, rw, failure)
+			return nil, failure
+		}
+	}
 
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
-			Content:           []json.RawMessage{chunk},
+			Content:           responseContent,
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
@@ -759,6 +785,10 @@ func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
 	}
 
 	return n, nil
+}
+
+func discardWithheldBody(body *bytes.Buffer) {
+	body.Reset()
 }
 
 // formatResult turns a tool's raw HTTP response body into an MCP content
