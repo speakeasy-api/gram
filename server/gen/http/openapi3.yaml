@@ -79451,6 +79451,574 @@ paths:
             x-speakeasy-name-override: upsertGlobal
             x-speakeasy-react-hook:
                 name: UpsertGlobalVariation
+    /rpc/widgets.create:
+        post:
+            description: Save a widget. Any member of the project can. The question is validated against the catalog, and the chart against the question, before it is stored.
+            operationId: createWidget
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateWidgetRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Widget'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createWidget widgets
+            tags:
+                - widgets
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateWidget
+    /rpc/widgets.delete:
+        delete:
+            description: Delete a widget. Its creator can; deleting someone else's needs project write access.
+            operationId: deleteWidget
+            parameters:
+                - allowEmptyValue: true
+                  description: The widget to delete
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The widget to delete
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deleteWidget widgets
+            tags:
+                - widgets
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: DeleteWidget
+    /rpc/widgets.duplicate:
+        post:
+            description: 'Copy a widget into a new one the caller owns, named "<name> (copy)". This is how a widget is shared: a teammate duplicates it rather than editing it. Like every save, the copy is validated, so a broken widget cannot be duplicated until it is fixed.'
+            operationId: duplicateWidget
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DuplicateWidgetRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Widget'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: duplicateWidget widgets
+            tags:
+                - widgets
+            x-speakeasy-name-override: duplicate
+            x-speakeasy-react-hook:
+                name: DuplicateWidget
+    /rpc/widgets.get:
+        get:
+            description: Get one widget by id, validated as it is read.
+            operationId: getWidget
+            parameters:
+                - allowEmptyValue: true
+                  description: The widget to get
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The widget to get
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Widget'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getWidget widgets
+            tags:
+                - widgets
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: Widget
+                type: query
+    /rpc/widgets.list:
+        get:
+            description: List the project's widgets, most recently updated first. Each is validated as it is read, so a widget a catalog change broke says so.
+            operationId: listWidgets
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListWidgetsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listWidgets widgets
+            tags:
+                - widgets
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: Widgets
+                type: query
+    /rpc/widgets.update:
+        post:
+            description: Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.
+            operationId: updateWidget
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateWidgetRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Widget'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateWidget widgets
+            tags:
+                - widgets
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateWidget
     /rpc/workloadIdentities.admitSubject:
         post:
             description: 'Admit a subject one of the trusted issuers asserts, and assign the agent it inherits its policy from. Both happen in one transaction: a subject admitted without an agent is refused at the token endpoint, so that half-configured state is not reachable. Requires workload:write.'
@@ -87448,6 +88016,35 @@ components:
                 - slug
                 - authn_challenge_mode
                 - session_duration_hours
+        CreateWidgetRequestBody:
+            type: object
+            properties:
+                dataset:
+                    type: string
+                    description: Catalog dataset the widget asks
+                    minLength: 1
+                description:
+                    type: string
+                    description: What the widget is for, at most 2000 characters
+                    maxLength: 2000
+                name:
+                    type: string
+                    description: Display name, at most 200 characters
+                    minLength: 1
+                    maxLength: 200
+                query:
+                    type: object
+                    description: The question. Validated against the catalog on save.
+                    additionalProperties: true
+                visualization:
+                    type: object
+                    description: How the question is drawn. Checked against the question on save.
+                    additionalProperties: true
+            required:
+                - name
+                - dataset
+                - query
+                - visualization
         CreditUsageResponseBody:
             type: object
             properties:
@@ -88689,6 +89286,15 @@ components:
                     description: The CNAME target subdomain custom domains should point at, if configured
             required:
                 - a_records
+        DuplicateWidgetRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The widget to copy
+                    format: uuid
+            required:
+                - id
         EmployeeDataFlowEdge:
             type: object
             properties:
@@ -95767,6 +96373,16 @@ components:
             required:
                 - package
                 - versions
+        ListWidgetsResult:
+            type: object
+            properties:
+                widgets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Widget'
+                    description: Widgets in the project, most recently updated first
+            required:
+                - widgets
         LiteLLMInstance:
             type: object
             properties:
@@ -112295,6 +112911,40 @@ components:
             description: Form for updating a user_session_issuer. All non-id fields are optional patches.
             required:
                 - id
+        UpdateWidgetRequestBody:
+            type: object
+            properties:
+                dataset:
+                    type: string
+                    description: Catalog dataset the widget asks
+                    minLength: 1
+                description:
+                    type: string
+                    description: What the widget is for, at most 2000 characters
+                    maxLength: 2000
+                id:
+                    type: string
+                    description: The widget to update
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name, at most 200 characters
+                    minLength: 1
+                    maxLength: 200
+                query:
+                    type: object
+                    description: The question. Validated against the catalog on save.
+                    additionalProperties: true
+                visualization:
+                    type: object
+                    description: How the question is drawn. Checked against the question on save.
+                    additionalProperties: true
+            required:
+                - id
+                - name
+                - dataset
+                - query
+                - visualization
         UpdateWorkloadIssuerForm:
             type: object
             properties:
@@ -113549,6 +114199,58 @@ components:
             required:
                 - verified
                 - message
+        Widget:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                created_by_user_id:
+                    type: string
+                    description: Who saved it, when known
+                dataset:
+                    type: string
+                    description: The catalog dataset the widget asks
+                    example: sessions
+                description:
+                    type: string
+                    description: What the widget is for, when its creator said
+                id:
+                    type: string
+                    format: uuid
+                invalid_reason:
+                    type: string
+                    description: 'Present when the widget no longer works, naming what is wrong: a field the catalog dropped, or a chart that cannot draw the question. A catalog change fails visibly rather than returning wrong numbers.'
+                name:
+                    type: string
+                    description: 'Display name. Not unique: two people saving the same name is normal.'
+                organization_id:
+                    type: string
+                project_id:
+                    type: string
+                    format: uuid
+                query:
+                    type: object
+                    description: 'The question: window, grain, dimensions, measures, filters, order and limit. Planned against the catalog on save and on read.'
+                    additionalProperties: true
+                updated_at:
+                    type: string
+                    format: date-time
+                visualization:
+                    type: object
+                    description: 'How the question is drawn: a chart type and its options. The client owns the chart vocabulary; the server checks only that the chart can draw the question.'
+                    additionalProperties: true
+            description: A named question against a catalog dataset together with how it is drawn. Belongs to a project and is visible to everyone in the organization. Widgets are the building block dashboards will place.
+            required:
+                - id
+                - project_id
+                - organization_id
+                - name
+                - dataset
+                - query
+                - visualization
+                - created_at
+                - updated_at
         WorkOSDomainVerificationIntentOptions:
             type: object
             properties:
@@ -113973,6 +114675,8 @@ tags:
       description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
     - name: userSessions
       description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+    - name: widgets
+      description: 'Widgets: Explore''s saved questions, each kept with the chart that draws it.'
     - name: workloadIdentities
       description: 'Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.'
     - name: variations

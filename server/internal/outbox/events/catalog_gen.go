@@ -92,6 +92,7 @@ var All = []outbox.EventRegistration{
 	UserSessionIssuerV1,
 	UserSessionV1,
 	VariationV1,
+	WidgetV1,
 	WorkloadAdmissionV1,
 	WorkloadIssuerV1,
 }
