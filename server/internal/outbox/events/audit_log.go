@@ -57,6 +57,7 @@ var (
 	OktaServerSuggestionV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.okta_server_suggestion_event_v1", "Emitted when an organization dismisses or restores an MCP server suggestion derived from its Okta applications")
 	OpenRouterAPIKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.openrouter_api_key_event_v1", "Emitted when changes to the organization's platform OpenRouter key are made")
 	OrganizationHooksFailOpenV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_hooks_fail_open_event_v1", "Emitted when the organization's hooks fail-open setting is toggled")
+	OrganizationAccessV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_access_event_v1", "Emitted when staff enable or disable organization access")
 	OrganizationBillingV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_billing_event_v1", "Emitted when the organization's billing state changes")
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
 	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, started, extended, given a new end date, demoted, re-armed, or converted")

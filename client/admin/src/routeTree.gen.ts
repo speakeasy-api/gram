@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
+import { Route as OnboardingPlaybooksRouteImport } from './routes/onboarding-playbooks'
+import { Route as OnboardingStepsRouteImport } from './routes/onboarding-steps'
 import { Route as OrganizationsRouteImport } from './routes/organizations'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as RegistryRouteImport } from './routes/registry'
@@ -51,6 +53,16 @@ const IntegrationCoverageRoute = IntegrationCoverageRouteImport.update({
 const McpSetupRoute = McpSetupRouteImport.update({
   id: '/mcp-setup',
   path: '/mcp-setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingPlaybooksRoute = OnboardingPlaybooksRouteImport.update({
+  id: '/onboarding-playbooks',
+  path: '/onboarding-playbooks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingStepsRoute = OnboardingStepsRouteImport.update({
+  id: '/onboarding-steps',
+  path: '/onboarding-steps',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrganizationsRoute = OrganizationsRouteImport.update({
@@ -197,6 +209,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
+  '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
+  '/onboarding-steps': typeof OnboardingStepsRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRoute
@@ -227,6 +241,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
+  '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
+  '/onboarding-steps': typeof OnboardingStepsRoute
   '/registry': typeof RegistryRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
@@ -252,6 +268,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
+  '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
+  '/onboarding-steps': typeof OnboardingStepsRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRoute
@@ -284,6 +302,8 @@ export interface FileRouteTypes {
     | '/'
     | '/integration-coverage'
     | '/mcp-setup'
+    | '/onboarding-playbooks'
+    | '/onboarding-steps'
     | '/organizations'
     | '/projects'
     | '/registry'
@@ -314,6 +334,8 @@ export interface FileRouteTypes {
     | '/'
     | '/integration-coverage'
     | '/mcp-setup'
+    | '/onboarding-playbooks'
+    | '/onboarding-steps'
     | '/registry'
     | '/stoken-calculator'
     | '/projects/$idOrSlug'
@@ -338,6 +360,8 @@ export interface FileRouteTypes {
     | '/'
     | '/integration-coverage'
     | '/mcp-setup'
+    | '/onboarding-playbooks'
+    | '/onboarding-steps'
     | '/organizations'
     | '/projects'
     | '/registry'
@@ -369,6 +393,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   McpSetupRoute: typeof McpSetupRoute
+  OnboardingPlaybooksRoute: typeof OnboardingPlaybooksRoute
+  OnboardingStepsRoute: typeof OnboardingStepsRoute
   OrganizationsRoute: typeof OrganizationsRouteWithChildren
   ProjectsRoute: typeof ProjectsRouteWithChildren
   RegistryRoute: typeof RegistryRoute
@@ -398,6 +424,20 @@ declare module '@tanstack/react-router' {
       path: '/mcp-setup'
       fullPath: '/mcp-setup'
       preLoaderRoute: typeof McpSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding-playbooks': {
+      id: '/onboarding-playbooks'
+      path: '/onboarding-playbooks'
+      fullPath: '/onboarding-playbooks'
+      preLoaderRoute: typeof OnboardingPlaybooksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding-steps': {
+      id: '/onboarding-steps'
+      path: '/onboarding-steps'
+      fullPath: '/onboarding-steps'
+      preLoaderRoute: typeof OnboardingStepsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/organizations': {
@@ -686,6 +726,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   McpSetupRoute: McpSetupRoute,
+  OnboardingPlaybooksRoute: OnboardingPlaybooksRoute,
+  OnboardingStepsRoute: OnboardingStepsRoute,
   OrganizationsRoute: OrganizationsRouteWithChildren,
   ProjectsRoute: ProjectsRouteWithChildren,
   RegistryRoute: RegistryRoute,

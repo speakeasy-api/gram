@@ -249,6 +249,7 @@ func TestResolveAssignedAgent_WildcardIsInertWhenTheIssuerDoesNotPermitIt(t *tes
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 	f := newAssignmentFixture(t, conn)
+	allowWildcardAdmission(t, conn, f.issuerID, false)
 	seedAssignmentRule(t, conn, f.tenant.organizationID, f.issuerID, fleetRule, workloadidentity.MatchKindWildcard, f.agentID)
 
 	params := f.params()

@@ -132,6 +132,7 @@ export function ServerGuardrailsForm({
       <ActionStep
         action={state.action}
         setAction={patchSetter("action", onChange)}
+        mcpScoped
         audienceType={state.audienceType}
         setAudienceType={patchSetter("audienceType", onChange)}
         audiencePrincipalUrns={state.audiencePrincipalUrns}

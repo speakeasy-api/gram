@@ -139,6 +139,9 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 		if issues := s.validator.ValidateStored(old.Data); len(issues) > 0 {
 			return Entry{}, &InvalidError{Issues: issues}
 		}
+		if err := checkOktaMappingConflicts(ctx, q, id, old.Data); err != nil {
+			return Entry{}, err
+		}
 	}
 
 	publishedAt := old.PublishedAt

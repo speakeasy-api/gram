@@ -24,7 +24,6 @@ import {
 } from "@/lib/gramAdminApi";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { FeatureName } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
-import { Onboarding } from "./Onboarding";
 
 type EnabledProductFeatureKey = Extract<
   keyof ProductFeatures,
@@ -167,7 +166,6 @@ export function Features({ org }: { org: AdminOrganization }): JSX.Element {
   return (
     <div className="space-y-6">
       <ProductFeatures org={org} />
-      <Onboarding organizationId={org.id} />
       <ChatAnalysis org={org} />
     </div>
   );

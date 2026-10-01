@@ -56,7 +56,7 @@ export function WithdrawIssuerDialog({
             <Alert variant="warning" alignTop>
               {machineCount === 0
                 ? "No machines are allowed under it, so nothing else changes. Existing sessions are not revoked."
-                : `${machinesPhrase(machineCount)} allowed under it ${machineCount === 1 ? "is" : "are"} withdrawn too, and registering the platform again will not bring ${machineCount === 1 ? "it" : "them"} back. Existing sessions are not revoked.`}
+                : `${machinesPhrase(machineCount)} allowed under it ${machineCount === 1 ? "is" : "are"} removed too, and registering the platform again will not bring ${machineCount === 1 ? "it" : "them"} back. Existing sessions are not revoked.`}
             </Alert>
             <TypeToConfirmField
               id="withdraw-issuer-confirm"

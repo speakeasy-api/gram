@@ -4,6 +4,7 @@ import type { PolicyAction, RuleCategory } from "../policy-data";
 import {
   categoriesToPayload,
   FLAG_ONLY_CATEGORIES,
+  mcpCompatibleAction,
   type DetectorMode,
 } from "../policy-form";
 
@@ -56,15 +57,17 @@ export function hasFlagOnlyCategory(categories: Set<RuleCategory>): boolean {
   return [...categories].some((category) => FLAG_ONLY_CATEGORIES.has(category));
 }
 
-/** The action to submit: flag-only detectors force logging. */
+/** The action to submit: flag-only detectors force logging, and server
+ *  guardrails are MCP-scoped, so they support flag and block only. */
 export function effectiveAction(state: ServerGuardrailState): PolicyAction {
-  return hasFlagOnlyCategory(state.categories) ? "flag" : state.action;
+  return hasFlagOnlyCategory(state.categories)
+    ? "flag"
+    : mcpCompatibleAction(state.action);
 }
 
 /** Pre-fills a catalog install from the tools' annotations: secrets and PII
- *  warn and ask for confirmation, and destructive tools are inspected when the
- *  server has any. The destructive detector only supports logging, so a preset
- *  that includes it logs. */
+ *  are logged for review, and destructive tools are inspected when the server
+ *  has any. */
 export function catalogPresetState(tools: ServerTool[]): ServerGuardrailState {
   const categories = new Set<RuleCategory>(["secrets", "pii"]);
   const destructive = tools.some((tool) => tool.destructive);
@@ -74,7 +77,7 @@ export function catalogPresetState(tools: ServerTool[]): ServerGuardrailState {
   return {
     ...defaultServerGuardrailState(),
     categories,
-    action: destructive ? "flag" : "warn",
+    action: "flag",
   };
 }
 

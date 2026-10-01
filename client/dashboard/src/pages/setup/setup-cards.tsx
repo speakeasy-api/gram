@@ -105,19 +105,37 @@ export const SETUP_CARDS: Record<string, SetupCard> = {
   },
 };
 
+/**
+ * URL names for the server's groups (setupTaskGroups). A group has no card;
+ * a link to one opens its first open card.
+ */
+const SETUP_GROUP_SLUGS: Record<string, string> = {
+  "agent-observability": "agent-observability",
+  "mcp-distribution": "mcp-distribution",
+};
+
 export function setupCard(taskKey: string): SetupCard | undefined {
   return Object.hasOwn(SETUP_CARDS, taskKey) ? SETUP_CARDS[taskKey] : undefined;
 }
 
-export function setupTaskSlug(taskKey: string): string {
-  return setupCard(taskKey)?.slug ?? taskKey;
+function setupGroupSlug(taskKey: string): string | undefined {
+  return Object.hasOwn(SETUP_GROUP_SLUGS, taskKey)
+    ? SETUP_GROUP_SLUGS[taskKey]
+    : undefined;
 }
 
-/** Resolves a ?task= value. Task keys still work, so older links resolve. */
+export function setupTaskSlug(taskKey: string): string {
+  return setupCard(taskKey)?.slug ?? setupGroupSlug(taskKey) ?? taskKey;
+}
+
+/**
+ * Resolves a ?task= value to a card or group key. Keys still work, so older
+ * links resolve.
+ */
 export function setupTaskKeyForSlug(slug: string): string | undefined {
-  const match = Object.entries(SETUP_CARDS).find(
-    ([, card]) => card.slug === slug,
-  );
-  if (match) return match[0];
-  return setupCard(slug) ? slug : undefined;
+  const card = Object.entries(SETUP_CARDS).find(([, c]) => c.slug === slug);
+  if (card) return card[0];
+  const group = Object.entries(SETUP_GROUP_SLUGS).find(([, s]) => s === slug);
+  if (group) return group[0];
+  return setupCard(slug) || setupGroupSlug(slug) ? slug : undefined;
 }
