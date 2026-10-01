@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,9 +12,10 @@ import (
 )
 
 // Query is the part of a widget the server plans: the question, in catalog
-// vocabulary, plus the relative window it is asked over. Decoding is
-// deliberately tolerant of keys this code does not know, so an old row fails
-// validation with a readable message rather than failing to decode at all.
+// vocabulary, plus the relative window it is asked over. A save refuses keys
+// this code does not know (see decodeQueryStrict), but reading a stored row
+// stays tolerant of them, so an old row fails validation with a readable
+// message rather than failing to decode at all.
 type Query struct {
 	Window     string         `json:"window"`
 	Grain      string         `json:"grain"`
@@ -150,10 +152,14 @@ func validateVisualization(visualization Visualization, query Query) string {
 	grained := query.Grain != "" && query.Grain != string(analytics.TimeGrainNone)
 	aggregated := !query.Ungrouped && len(query.Measures) > 0
 
-	switch visualization.Type {
+	// Compared lowercased, so "Line" gets the same checks as "line" rather
+	// than passing as an unknown type and drawing an empty frame. Saving
+	// stores the type lowercased.
+	chart := strings.ToLower(visualization.Type)
+	switch chart {
 	case "line", "area", "bar":
 		if !grained || !aggregated {
-			return fmt.Sprintf("unsatisfiable: a %s chart draws a timeseries, so its query needs a grain and at least one measure", visualization.Type)
+			return fmt.Sprintf("unsatisfiable: a %s chart draws a timeseries, so its query needs a grain and at least one measure", chart)
 		}
 	case "number":
 		if !aggregated || grained || len(query.Dimensions) > 0 {
@@ -161,10 +167,23 @@ func validateVisualization(visualization Visualization, query Query) string {
 		}
 	case "ranked":
 		if !aggregated || grained || len(query.Dimensions) == 0 {
-			return "unsatisfiable: a ranked chart ranks groups over the whole window, so its query needs at least one measure, no grain and one dimension"
+			return "unsatisfiable: a ranked chart ranks groups over the whole window, so its query needs at least one measure, no grain and at least one dimension"
 		}
 	}
 	return ""
+}
+
+// decodeQueryStrict refuses a query carrying a key Query does not know. A
+// misspelled key or an absolute from/to would otherwise be dropped by the
+// tolerant decode, pass validation, and be stored and replayed as sent.
+func decodeQueryStrict(raw []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var query Query
+	if err := dec.Decode(&query); err != nil {
+		return fmt.Errorf("decode query: %w", err)
+	}
+	return nil
 }
 
 // canonical returns why an enum value cannot be saved: it is not in the

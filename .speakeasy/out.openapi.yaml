@@ -74047,7 +74047,7 @@ paths:
         type: query
   /rpc/widgets.update:
     post:
-      description: Replace a widget's name, description, dataset, query and visualization. Any member of the project can.
+      description: Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.
       operationId: updateWidget
       parameters:
         - allowEmptyValue: true

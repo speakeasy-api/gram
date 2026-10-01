@@ -137,7 +137,7 @@ export class Widgets extends ClientSDK {
    * updateWidget widgets
    *
    * @remarks
-   * Replace a widget's name, description, dataset, query and visualization. Any member of the project can.
+   * Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.
    */
   async update(
     request: UpdateWidgetRequest,

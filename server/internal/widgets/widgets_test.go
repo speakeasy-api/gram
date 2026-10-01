@@ -3,18 +3,23 @@ package widgets_test
 import (
 	"encoding/json"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
+	widgetssrv "github.com/speakeasy-api/gram/server/gen/http/widgets/server"
 	gen "github.com/speakeasy-api/gram/server/gen/widgets"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/widgets"
 	widgetsrepo "github.com/speakeasy-api/gram/server/internal/widgets/repo"
 )
 
@@ -138,7 +143,7 @@ func TestCreateWidget(t *testing.T) {
 			{name: "a timeseries with no grain", query: withQuery(validQuery(), "grain", "none"), chart: "line", reason: "timeseries"},
 			{name: "a timeseries of rows", query: rowsQuery(), chart: "area", reason: "timeseries"},
 			{name: "a number broken down by a dimension", query: withQuery(validQuery(), "grain", "none"), chart: "number", reason: "no dimensions"},
-			{name: "a ranking with nothing to rank by", query: withQuery(withQuery(validQuery(), "grain", "none"), "dimensions", []any{}), chart: "ranked", reason: "one dimension"},
+			{name: "a ranking with nothing to rank by", query: withQuery(withQuery(validQuery(), "grain", "none"), "dimensions", []any{}), chart: "ranked", reason: "at least one dimension"},
 			{name: "a number over time buckets", query: withQuery(validQuery(), "dimensions", []any{}), chart: "number", reason: "no grain"},
 			{name: "a ranking over time buckets", query: validQuery(), chart: "ranked", reason: "no grain"},
 		}
@@ -154,6 +159,74 @@ func TestCreateWidget(t *testing.T) {
 		ctx, ti := newTestService(t)
 		_, err := ti.service.CreateWidget(ctx, createPayload("rows", rowsQuery(), map[string]any{"type": "table"}))
 		require.NoError(t, err)
+
+		for _, chart := range []string{"line", "area", "bar", "number", "ranked"} {
+			_, err := ti.service.CreateWidget(ctx, createPayload("rows as "+chart, rowsQuery(), map[string]any{"type": chart}))
+			requireOopsCode(t, err, oops.CodeBadRequest)
+			require.ErrorContains(t, err, "unsatisfiable", chart)
+		}
+	})
+
+	t.Run("it ranks by more than one dimension", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		query := withQuery(withQuery(validQuery(), "grain", "none"), "dimensions", []any{"user", "surface"})
+		_, err := ti.service.CreateWidget(ctx, createPayload("ranked pairs", query, map[string]any{"type": "ranked"}))
+		require.NoError(t, err)
+	})
+
+	t.Run("it checks and stores a chart type in any case as lowercase", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+
+		_, err := ti.service.CreateWidget(ctx, createPayload("ungrained Line", withQuery(validQuery(), "grain", "none"), map[string]any{"type": "Line"}))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "timeseries")
+
+		created, err := ti.service.CreateWidget(ctx, createPayload("Bar", validQuery(), map[string]any{"type": "Bar"}))
+		require.NoError(t, err)
+		require.Equal(t, "bar", created.Visualization["type"])
+		got, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Equal(t, "bar", got.Visualization["type"])
+	})
+
+	t.Run("it rejects a query key it does not know, naming it", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+
+		misspelled := withQuery(validQuery(), "mesures", []any{map[string]any{"op": "count"}})
+		_, err := ti.service.CreateWidget(ctx, createPayload("typo", misspelled, barChart()))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "mesures")
+
+		absolute := withQuery(validQuery(), "from", "2026-09-01T00:00:00Z")
+		_, err = ti.service.CreateWidget(ctx, createPayload("absolute", absolute, barChart()))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, `"from"`)
+	})
+
+	t.Run("it keeps numbers in a request body exact", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+
+		// Decoded the way the HTTP server decodes it, since calling the
+		// service directly would skip request decoding.
+		body := `{"name":"big","dataset":"sessions",` +
+			`"query":{"window":"7d","grain":"day","dimensions":["user"],"measures":[{"op":"count"}],"limit":50},` +
+			`"visualization":{"type":"bar","options":{"seed":9007199254740993}}}`
+		req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/rpc/widgets.create", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		payload, err := widgetssrv.DecodeCreateWidgetRequest(goahttp.NewMuxer(), widgets.RequestDecoder)(req)
+		require.NoError(t, err)
+
+		created, err := ti.service.CreateWidget(ctx, payload)
+		require.NoError(t, err, "the limit still decodes into the query")
+		got, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		encoded, err := json.Marshal(got.Visualization)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), `"seed":9007199254740993`)
 	})
 
 	t.Run("it rejects a visualization with no type", func(t *testing.T) {
@@ -256,6 +329,38 @@ func TestUpdateWidget(t *testing.T) {
 		snapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
 		require.NoError(t, err)
 		require.Equal(t, "before", snapshot["Name"], "snapshot keys are the view's Go field names")
+	})
+
+	t.Run("its creator can update it with membership alone", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		ownerCtx := asMember(t, ctx, ti, "user_owner_"+uuid.NewString())
+		created, err := ti.service.CreateWidget(ownerCtx, createPayload("mine", validQuery(), barChart()))
+		require.NoError(t, err)
+
+		updated, err := ti.service.UpdateWidget(ownerCtx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "still mine", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Equal(t, "still mine", updated.Name)
+	})
+
+	t.Run("another member cannot update it without project write", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		created, err := ti.service.CreateWidget(ctx, createPayload("theirs", validQuery(), barChart()))
+		require.NoError(t, err)
+
+		otherCtx := asMember(t, ctx, ti, "user_other_"+uuid.NewString())
+		_, err = ti.service.UpdateWidget(otherCtx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "hijacked", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+		requireOopsCode(t, err, oops.CodeForbidden)
+
+		got, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Equal(t, "theirs", got.Name, "a refused update changes nothing")
+
+		writerCtx := asMember(t, ctx, ti, "user_writer_"+uuid.NewString(), authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String()))
+		updated, err := ti.service.UpdateWidget(writerCtx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "edited", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Equal(t, "edited", updated.Name)
 	})
 
 	t.Run("it rejects a chart that cannot draw the new question", func(t *testing.T) {

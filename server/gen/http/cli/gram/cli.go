@@ -31602,7 +31602,7 @@ func widgetsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-widgets: List the project's widgets, most recently updated first. Each is validated as it is read, so a widget a catalog change broke says so.`)
 	fmt.Fprintln(os.Stderr, `    get-widget: Get one widget by id, validated as it is read.`)
 	fmt.Fprintln(os.Stderr, `    create-widget: Save a widget. Any member of the project can. The question is validated against the catalog, and the chart against the question, before it is stored.`)
-	fmt.Fprintln(os.Stderr, `    update-widget: Replace a widget's name, description, dataset, query and visualization. Any member of the project can.`)
+	fmt.Fprintln(os.Stderr, `    update-widget: Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.`)
 	fmt.Fprintln(os.Stderr, `    duplicate-widget: Copy a widget into a new one the caller owns, named "<name> (copy)". This is how a widget is shared: a teammate duplicates it rather than editing it. Like every save, the copy is validated, so a broken widget cannot be duplicated until it is fixed.`)
 	fmt.Fprintln(os.Stderr, `    delete-widget: Delete a widget. Its creator can; deleting someone else's needs project write access.`)
 	fmt.Fprintln(os.Stderr)
@@ -31683,7 +31683,7 @@ func widgetsUpdateWidgetUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace a widget's name, description, dataset, query and visualization. Any member of the project can.`)
+	fmt.Fprintln(os.Stderr, `Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

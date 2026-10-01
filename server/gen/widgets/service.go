@@ -24,8 +24,8 @@ type Service interface {
 	// Save a widget. Any member of the project can. The question is validated
 	// against the catalog, and the chart against the question, before it is stored.
 	CreateWidget(context.Context, *CreateWidgetPayload) (res *Widget, err error)
-	// Replace a widget's name, description, dataset, query and visualization. Any
-	// member of the project can.
+	// Replace a widget's name, description, dataset, query and visualization. Its
+	// creator can; editing someone else's needs project write access.
 	UpdateWidget(context.Context, *UpdateWidgetPayload) (res *Widget, err error)
 	// Copy a widget into a new one the caller owns, named "<name> (copy)". This is
 	// how a widget is shared: a teammate duplicates it rather than editing it.

@@ -39,7 +39,7 @@ import { Result } from "../types/fp.js";
  * updateWidget widgets
  *
  * @remarks
- * Replace a widget's name, description, dataset, query and visualization. Any member of the project can.
+ * Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.
  */
 export function widgetsUpdate(
   client: GramCore,

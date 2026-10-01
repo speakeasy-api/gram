@@ -111,7 +111,7 @@ var _ = Service("widgets", func() {
 	})
 
 	Method("updateWidget", func() {
-		Description("Replace a widget's name, description, dataset, query and visualization. Any member of the project can.")
+		Description("Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.")
 		Payload(func() {
 			widgetID("The widget to update")
 			widgetForm()

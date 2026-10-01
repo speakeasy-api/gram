@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"maps"
+	"net/http"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -73,7 +76,19 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+	srv.Mount(mux, srv.New(endpoints, mux, requestDecoder, goahttp.ResponseEncoder, nil, nil))
+}
+
+// requestDecoder decodes JSON request bodies keeping numbers as written. A
+// widget's query and visualization are free-form maps, and the default
+// decoder routes every number in them through float64, rounding anything
+// past 2^53 before it is stored.
+func requestDecoder(r *http.Request) goahttp.Decoder {
+	dec := goahttp.RequestDecoder(r)
+	if jsonDec, ok := dec.(*json.Decoder); ok {
+		jsonDec.UseNumber()
+	}
+	return dec
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -232,7 +247,8 @@ func (s *Service) insert(ctx context.Context, authCtx *contextvalues.AuthContext
 }
 
 // UpdateWidget replaces a widget's name, description, dataset, query and
-// visualization.
+// visualization. Its creator can always update it; updating someone else's
+// needs project write access, as deleting it does.
 func (s *Service) UpdateWidget(ctx context.Context, payload *gen.UpdateWidgetPayload) (*gen.Widget, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
 	if err != nil {
@@ -261,6 +277,9 @@ func (s *Service) UpdateWidget(ctx context.Context, payload *gen.UpdateWidgetPay
 			return nil, oops.E(oops.CodeNotFound, err, "widget not found")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "load widget").LogError(ctx, s.logger)
+	}
+	if err := s.requireOwnerOrWrite(ctx, authCtx, before); err != nil {
+		return nil, err
 	}
 
 	row, err := queries.UpdateWidget(ctx, repo.UpdateWidgetParams{
@@ -315,10 +334,8 @@ func (s *Service) DeleteWidget(ctx context.Context, payload *gen.DeleteWidgetPay
 		}
 		return oops.E(oops.CodeUnexpected, err, "load widget").LogError(ctx, s.logger)
 	}
-	if creator := conv.FromPGText[string](existing.CreatedByUserID); creator == nil || *creator != authCtx.UserID {
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-			return err
-		}
+	if err := s.requireOwnerOrWrite(ctx, authCtx, existing); err != nil {
+		return err
 	}
 
 	row, err := queries.DeleteWidget(ctx, repo.DeleteWidgetParams{ProjectID: *authCtx.ProjectID, ID: id})
@@ -337,6 +354,15 @@ func (s *Service) DeleteWidget(ctx context.Context, payload *gen.DeleteWidgetPay
 	return nil
 }
 
+// requireOwnerOrWrite lets a widget's creator change it with membership
+// alone; anyone else needs project write access.
+func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalues.AuthContext, widget repo.Widget) error {
+	if creator := conv.FromPGText[string](widget.CreatedByUserID); creator != nil && *creator == authCtx.UserID {
+		return nil
+	}
+	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+}
+
 // checkWidget validates a widget's query against the catalog and its
 // visualization against the query, and returns both encoded for storage.
 func (s *Service) checkWidget(dataset string, query, visualization map[string]any) ([]byte, []byte, error) {
@@ -347,7 +373,14 @@ func (s *Service) checkWidget(dataset string, query, visualization map[string]an
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeBadRequest, err, "query is not encodable as JSON")
 	}
-	encodedVisualization, err := json.Marshal(visualization)
+	// Saving is strict about the query's keys while reading stays tolerant.
+	// The payload bytes are what is stored, not a re-encoding of the decoded
+	// struct, which would add zero values the client reads as a different
+	// query.
+	if err := decodeQueryStrict(encodedQuery); err != nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid query: %s", err.Error())
+	}
+	encodedVisualization, err := json.Marshal(lowercaseChartType(visualization))
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeBadRequest, err, "visualization is not encodable as JSON")
 	}
@@ -355,6 +388,18 @@ func (s *Service) checkWidget(dataset string, query, visualization map[string]an
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
 	return encodedQuery, encodedVisualization, nil
+}
+
+// lowercaseChartType returns visualization with a string type lowercased, so
+// the stored type is always in the form the client reads.
+func lowercaseChartType(visualization map[string]any) map[string]any {
+	chart, ok := visualization["type"].(string)
+	if !ok {
+		return visualization
+	}
+	out := maps.Clone(visualization)
+	out["type"] = strings.ToLower(chart)
+	return out
 }
 
 func (s *Service) auditBase(authCtx *contextvalues.AuthContext, row repo.Widget) audit.WidgetEventBase {

@@ -59,8 +59,9 @@ func decodeWidgetObject(name string, raw []byte) (map[string]any, string) {
 // decodeKeepingNumbers reads a stored object keeping its numbers as written.
 // Plain json.Unmarshal routes every number through float64, which silently
 // rounds anything past that type's exact integer range, and these objects
-// are client-owned so they must come back as they went in. Trailing input is
-// still refused, as Unmarshal would refuse it.
+// are client-owned so they must come back as they went in. The widgets
+// service decodes request bodies the same way, so numbers stay exact on the
+// way in too. Trailing input is still refused, as Unmarshal would refuse it.
 func decodeKeepingNumbers(raw []byte, into *map[string]any) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
