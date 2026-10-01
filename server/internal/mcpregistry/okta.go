@@ -35,7 +35,8 @@ type OktaMapping struct {
 }
 
 // ParseOktaMapping decodes the namespace. Keys are matched exactly, like the
-// SQL conflict scan, so a case-variant root key never reads as a claim.
+// SQL conflict scan, so a case-variant key never reads as a claim; any other
+// key inside the namespace is an error.
 func ParseOktaMapping(data json.RawMessage) (OktaMapping, error) {
 	var mapping OktaMapping
 	var root, meta map[string]json.RawMessage
@@ -51,14 +52,25 @@ func ParseOktaMapping(data json.RawMessage) (OktaMapping, error) {
 	if !ok {
 		return mapping, ErrNoOktaMapping
 	}
-	var decoded *OktaMapping
-	if err := json.Unmarshal(raw, &decoded); err != nil {
+	// encoding/json folds case on struct fields, so keys are checked first.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
 		return mapping, fmt.Errorf("decode registry okta mapping: %w", err)
 	}
-	if decoded == nil {
+	if fields == nil {
 		return mapping, errors.New("decode registry okta mapping: namespace must be an object")
 	}
-	return *decoded, nil
+	for key := range fields {
+		switch key {
+		case "oinNames", "oinIntegrationId", "xaaSignOnModes", "xaaIssuer":
+		default:
+			return mapping, errors.New("decode registry okta mapping: unknown field")
+		}
+	}
+	if err := json.Unmarshal(raw, &mapping); err != nil {
+		return OktaMapping{}, fmt.Errorf("decode registry okta mapping: %w", err)
+	}
+	return mapping, nil
 }
 
 // validateOktaMapping applies the checks the schema cannot express.
