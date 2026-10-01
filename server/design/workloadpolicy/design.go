@@ -250,7 +250,11 @@ var UpdateWorkloadIssuerForm = Type("UpdateWorkloadIssuerForm", func() {
 		Format(FormatURI)
 	})
 	Attribute("description", String, "What the platform is and what runs on it, in the operator's words. Trimmed on write; blank clears it. At most 500 characters after trimming.")
-	Attribute("tags", ArrayOf(String), "Replaces the issuer's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
+	Attribute("tags", ArrayOf(String), "Replaces the issuer's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.", func() {
+		// omitzero, not omitempty: an empty list is the instruction to clear
+		// the tags and has to reach the wire, while a nil one stays omitted.
+		Meta("struct:tag:json", "tags,omitzero")
+	})
 
 	Required("id")
 })
@@ -287,7 +291,11 @@ var UpdateWorkloadSubjectForm = Type("UpdateWorkloadSubjectForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "Optional label, for platforms whose subjects are not self-describing. Trimmed on write; blank clears it.")
-	Attribute("tags", ArrayOf(String), "Replaces the admission's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.")
+	Attribute("tags", ArrayOf(String), "Replaces the admission's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.", func() {
+		// omitzero, not omitempty: an empty list is the instruction to clear
+		// the tags and has to reach the wire, while a nil one stays omitted.
+		Meta("struct:tag:json", "tags,omitzero")
+	})
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits. Shared with any admission of the same subject under the same issuer at the other tier.", func() {
 		Format(FormatUUID)
 	})
