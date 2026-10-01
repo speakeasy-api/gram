@@ -14,23 +14,26 @@ const mocks = vi.hoisted(() => ({
   dismiss: vi.fn(),
   restore: vi.fn(),
   dialog: vi.fn(),
+  invalidate: vi.fn(() => Promise.resolve()),
+  dismissOptions: vi.fn(),
+  restoreOptions: vi.fn(),
   projects: [{ id: "p1", slug: "default", name: "Default" }],
 }));
 vi.mock("@gram/client/react-query/oktaServerSuggestions.js", () => ({
   useOktaServerSuggestions: mocks.list,
-  invalidateAllOktaServerSuggestions: () => Promise.resolve(),
+  invalidateAllOktaServerSuggestions: mocks.invalidate,
 }));
 vi.mock("@gram/client/react-query/dismissOktaServerSuggestion.js", () => ({
-  useDismissOktaServerSuggestionMutation: () => ({
-    isPending: false,
-    mutate: mocks.dismiss,
-  }),
+  useDismissOktaServerSuggestionMutation: (options: unknown) => {
+    mocks.dismissOptions(options);
+    return { isPending: false, mutate: mocks.dismiss };
+  },
 }));
 vi.mock("@gram/client/react-query/restoreOktaServerSuggestion.js", () => ({
-  useRestoreOktaServerSuggestionMutation: () => ({
-    isPending: false,
-    mutate: mocks.restore,
-  }),
+  useRestoreOktaServerSuggestionMutation: (options: unknown) => {
+    mocks.restoreOptions(options);
+    return { isPending: false, mutate: mocks.restore };
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org", slug: "org", projects: mocks.projects }),
@@ -93,7 +96,11 @@ type QueryState = {
   error?: unknown;
 };
 
-function show(suggestions: OktaServerSuggestion[], state: QueryState = {}) {
+function show(
+  suggestions: OktaServerSuggestion[],
+  state: QueryState = {},
+): QueryClient {
+  const queryClient = new QueryClient();
   const settled = !state.isPending && !state.isError;
   mocks.list.mockReturnValue({
     data: settled
@@ -109,12 +116,13 @@ function show(suggestions: OktaServerSuggestion[], state: QueryState = {}) {
     error: state.error,
   });
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <OktaServerSuggestions />
       </TooltipProvider>
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 it("opens the install dialog for the suggested server with the project", () => {
@@ -159,6 +167,33 @@ it("dismisses and restores by registry entry id", () => {
       },
     }),
   );
+});
+
+it("refreshes suggestions after a dismiss or restore succeeds", () => {
+  const queryClient = show([suggestion()]);
+  const dismiss = mocks.dismissOptions.mock.lastCall?.[0] as {
+    onSuccess: () => void;
+  };
+  const restore = mocks.restoreOptions.mock.lastCall?.[0] as {
+    onSuccess: () => void;
+  };
+  expect(mocks.invalidate).not.toHaveBeenCalled();
+  dismiss.onSuccess();
+  expect(mocks.invalidate).toHaveBeenCalledTimes(1);
+  restore.onSuccess();
+  expect(mocks.invalidate).toHaveBeenCalledTimes(2);
+  expect(mocks.invalidate).toHaveBeenLastCalledWith(queryClient);
+});
+
+it("refreshes suggestions when the install dialog finishes", () => {
+  const queryClient = show([suggestion()]);
+  fireEvent.click(screen.getByRole("button", { name: "Add server" }));
+  const props = mocks.dialog.mock.lastCall?.[0] as {
+    onInstallFinished: () => void;
+  };
+  expect(mocks.invalidate).not.toHaveBeenCalled();
+  props.onInstallFinished();
+  expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith(queryClient);
 });
 
 it("shows the entry icon and falls back to an initial without one", () => {
