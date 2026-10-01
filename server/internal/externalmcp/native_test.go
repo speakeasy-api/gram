@@ -37,6 +37,7 @@ func (s *nativeTestSource) GetByName(_ context.Context, name string) (mcpregistr
 const nativeRecord = `{"server":{"name":"io.example/native","title":"Native","description":"Synthetic registry server","version":"1","repository":{"url":"https://example.com/repo"},"remotes":[{"type":"sse","url":"https://example.com/first"},{"type":"sse","url":"https://example.com/last"},{"type":"streamable-http","url":"https://example.com/mcp","headers":[{"name":"X-Key","isSecret":true}],"variables":{"tenant":{"description":"Tenant"}}}]},"_meta":{"custom.example/metadata":{"keep":true},"io.modelcontextprotocol.registry/official":{"status":"deprecated"},"com.pulsemcp/server-version":{"remotes[0]":{"tools":[{"name":"read","annotations":{"readOnlyHint":true}}]},"remotes[1]":{"tools":[]}}}}`
 
 func TestNativeList(t *testing.T) {
+	t.Parallel()
 	source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{NextCursor: "next"}, {Records: []json.RawMessage{json.RawMessage(nativeRecord)}}}}
 	registry := Registry{ID: uuid.New()}
 	search := "Native"
@@ -50,12 +51,13 @@ func TestNativeList(t *testing.T) {
 	require.NotNil(t, row.Repository)
 	require.Equal(t, 1, row.ToolCount)
 	require.True(t, row.IsReadOnly)
-	require.Equal(t, map[string]any{"keep": true}, row.Meta.(map[string]any)["custom.example/metadata"])
+	require.Equal(t, map[string]any{"keep": true}, nativeTestMap(t, row.Meta)["custom.example/metadata"])
 	require.Equal(t, "next", source.options[1].Cursor)
 	require.False(t, source.options[0].IncludeDeleted)
 }
 
 func TestNativeDetailsRetainedRemoteSelection(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name       string
 		allowed    []string
@@ -68,6 +70,7 @@ func TestNativeDetailsRetainedRemoteSelection(t *testing.T) {
 		{name: "first tools", allowed: []string{"https://example.com/first"}, url: "https://example.com/first"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			source := &nativeTestSource{entry: mcpregistry.Entry{ID: uuid.New(), Data: json.RawMessage(nativeRecord), Published: false}}
 			details, err := NewNativeRegistryReader(source).GetServerDetails(t.Context(), Registry{ID: uuid.New()}, "io.example/native", tc.allowed)
 			require.NoError(t, err)
@@ -90,6 +93,7 @@ func TestNativeDetailsRetainedRemoteSelection(t *testing.T) {
 }
 
 func TestNativeErrors(t *testing.T) {
+	t.Parallel()
 	source := &nativeTestSource{err: mcpregistry.ErrNotFound}
 	reader := NewNativeRegistryReader(source)
 	_, err := reader.GetServerDetails(t.Context(), Registry{}, "missing", nil)
@@ -104,20 +108,22 @@ func TestNativeErrors(t *testing.T) {
 }
 
 func TestNativeListIgnoresStalePulseLifecycle(t *testing.T) {
+	t.Parallel()
 	raw := strings.Replace(nativeRecord, `"status":"deprecated"`, `"status":"active"`, 1)
 	raw = strings.Replace(raw, `"com.pulsemcp/server-version":{`, `"com.pulsemcp/server-version":{"status":"deleted",`, 1)
 	source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{json.RawMessage(raw)}}}}
 	result, err := NewNativeRegistryReader(source).ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{})
 	require.NoError(t, err)
 	require.Len(t, result.Servers, 1)
-	require.Equal(t, "deleted", result.Servers[0].Meta.(map[string]any)["com.pulsemcp/server-version"].(map[string]any)["status"])
+	require.Equal(t, "deleted", nativeTestMap(t, nativeTestMap(t, result.Servers[0].Meta)["com.pulsemcp/server-version"])["status"])
 }
 
 func TestNativeListPrunesToolsPreservingMetadata(t *testing.T) {
+	t.Parallel()
 	var record map[string]any
 	require.NoError(t, json.Unmarshal([]byte(nativeRecord), &record))
-	meta := record["_meta"].(map[string]any)
-	version := meta["com.pulsemcp/server-version"].(map[string]any)
+	meta := nativeTestMap(t, record["_meta"])
+	version := nativeTestMap(t, meta["com.pulsemcp/server-version"])
 	auth := []any{map[string]any{"type": "oauth", "detail": map[string]any{"authorizationServerMetadata": map[string]any{"registration_endpoint": "https://example.com/register"}, "custom": true}}}
 	for _, key := range []string{"remotes[0]", "remotes[1]", "remotes[2]", "remotes[3]", "remotes[4]", "remotes[5]", "remotes[12]"} {
 		version[key] = map[string]any{"tools": []any{map[string]any{"name": "read", "inputSchema": map[string]any{"type": "object"}, "annotations": map[string]any{"readOnlyHint": true}}}, "authOptions": auth, "custom": "retained"}
@@ -132,11 +138,11 @@ func TestNativeListPrunesToolsPreservingMetadata(t *testing.T) {
 	require.Equal(t, 1, row.ToolCount)
 	require.True(t, row.IsReadOnly)
 	require.True(t, row.SupportsDcr)
-	got := row.Meta.(map[string]any)
+	got := nativeTestMap(t, row.Meta)
 	require.Equal(t, meta["custom.example/metadata"], got["custom.example/metadata"])
 	require.Equal(t, meta["io.modelcontextprotocol.registry/official"], got["io.modelcontextprotocol.registry/official"])
 	for _, key := range []string{"remotes[0]", "remotes[1]", "remotes[2]", "remotes[3]", "remotes[4]", "remotes[5]", "remotes[12]"} {
-		remote := got["com.pulsemcp/server-version"].(map[string]any)[key].(map[string]any)
+		remote := nativeTestMap(t, nativeTestMap(t, got["com.pulsemcp/server-version"])[key])
 		require.Empty(t, remote["tools"], key)
 		require.Equal(t, auth, remote["authOptions"])
 		require.Equal(t, "retained", remote["custom"])
@@ -144,6 +150,7 @@ func TestNativeListPrunesToolsPreservingMetadata(t *testing.T) {
 }
 
 func TestNativeListSearch(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		search string
 		count  int
@@ -151,6 +158,7 @@ func TestNativeListSearch(t *testing.T) {
 		{"IO.EXAMPLE", 1}, {"NATIVE", 1}, {"synthetic registry", 1}, {"not present", 0},
 	} {
 		t.Run(tc.search, func(t *testing.T) {
+			t.Parallel()
 			source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{json.RawMessage(nativeRecord)}}}}
 			result, err := NewNativeRegistryReader(source).ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{Search: &tc.search})
 			require.NoError(t, err)
@@ -218,4 +226,11 @@ func TestNativeListEvidenceServers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func nativeTestMap(t *testing.T, value any) map[string]any {
+	t.Helper()
+	result, ok := value.(map[string]any)
+	require.True(t, ok)
+	return result
 }

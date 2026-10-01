@@ -30,7 +30,7 @@ func NewNativeRegistryReader(source nativeRegistrySource) *NativeRegistryReader 
 
 func (r *NativeRegistryReader) ListServers(ctx context.Context, registry Registry, params ListServersParams) (ListServersResult, error) {
 	var result ListServersResult
-	opts := mcpregistry.DiscoveryOptions{Limit: 100}
+	opts := mcpregistry.DiscoveryOptions{Search: "", Version: "", IncludeDeleted: false, UpdatedSince: nil, Cursor: "", Limit: 100}
 	// Apply the same name/title/description search as the existing reader after
 	// conversion; the discovery service's search is narrower.
 	for {
@@ -104,10 +104,10 @@ func (r *NativeRegistryReader) ListEvidenceServers(ctx context.Context, registry
 	}
 	validator, err := mcpregistry.LoadValidator()
 	if err != nil {
-		return ListServersResult{}, err
+		return ListServersResult{}, fmt.Errorf("load native registry validator: %w", err)
 	}
-	result := ListServersResult{}
-	opts := mcpregistry.ListOptions{Limit: 50}
+	var result ListServersResult
+	opts := mcpregistry.ListOptions{Query: "", Published: nil, Cursor: "", Limit: 50}
 	for {
 		page, err := source.List(ctx, opts)
 		if err != nil {
@@ -126,13 +126,13 @@ func (r *NativeRegistryReader) ListEvidenceServers(ctx context.Context, registry
 			}
 			var record serverEntry
 			if err := json.Unmarshal(entry.Data, &record); err != nil {
-				return ListServersResult{}, err
+				return ListServersResult{}, fmt.Errorf("decode retained record: %w", err)
 			}
 			var meta struct {
 				Meta map[string]any `json:"_meta"`
 			}
 			if err := json.Unmarshal(entry.Data, &meta); err != nil {
-				return ListServersResult{}, err
+				return ListServersResult{}, fmt.Errorf("decode retained metadata: %w", err)
 			}
 			if official, ok := meta.Meta["io.modelcontextprotocol.registry/official"].(map[string]any); ok && official["status"] == "deleted" {
 				continue
