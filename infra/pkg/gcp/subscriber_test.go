@@ -295,6 +295,44 @@ func TestHandleBatch_AllBadMessagesHandlerNotCalled(t *testing.T) {
 	require.True(t, cbad.nacked)
 }
 
+func TestDiscardMalformedPreservesValidRetry(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"single", "batch", "results"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			s := newPanicSubscriber(slog.New(slog.DiscardHandler))
+			s.discardMalformed = true
+			good, valid := newBatchMessage("valid", nil, nil)
+			bad, invalid := newBatchMessage("invalid", []byte{0xff}, nil)
+			retry := errors.New("transient insertion error")
+			switch mode {
+			case "single":
+				s.handle(t.Context(), bad, func(context.Context, *emptypb.Empty, MessageMetadata) error {
+					t.Fatal("malformed message reached handler")
+					return nil
+				})
+				s.handle(t.Context(), good, func(context.Context, *emptypb.Empty, MessageMetadata) error { return retry })
+			case "batch":
+				s.handleBatch(t.Context(), []incomingMessage{bad, good}, func(_ context.Context, msgs []*emptypb.Empty, _ []MessageMetadata) error {
+					require.Len(t, msgs, 1)
+					return retry
+				})
+			case "results":
+				s.handleBatchWithResult(t.Context(), []incomingMessage{bad, good}, func(_ context.Context, msgs []BatchMessage[*emptypb.Empty]) error {
+					require.Len(t, msgs, 1)
+					require.True(t, invalid.acked)
+					require.False(t, valid.acked, "valid payload cannot acknowledge before insertion")
+					msgs[0].Fail(retry)
+					return nil
+				})
+			}
+			require.True(t, invalid.acked)
+			require.False(t, invalid.nacked)
+			require.True(t, valid.nacked)
+		})
+	}
+}
+
 func TestHandleBatchWithResult_FailedMessageNackedIndividually(t *testing.T) {
 	t.Parallel()
 

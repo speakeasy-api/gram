@@ -1,0 +1,379 @@
+package productmetrics
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"math/big"
+	"time"
+
+	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"go.opentelemetry.io/otel/attribute"
+)
+
+const (
+	// QueryMaxRows bounds returned groups without truncating aggregate results.
+	QueryMaxRows = 10000
+	// QueryMaxReadRows bounds scans to ten million rollup rows per request.
+	QueryMaxReadRows = 10000000
+	// QueryMaxReadBytes bounds uncompressed scan work to 1 GiB.
+	QueryMaxReadBytes = 1 << 30
+	// QueryMaxMemory bounds aggregate state memory to 256 MiB.
+	QueryMaxMemory = 256 << 20
+	// QueryMaxSeconds caps execution at ten seconds; exceeding it returns an error.
+	QueryMaxSeconds = 10
+	// QueryMaxDimensions bounds query expression size, not stored series cardinality.
+	QueryMaxDimensions = 32
+)
+
+// Namespace selects an attribute namespace without interpolating SQL identifiers.
+type Namespace string
+
+const (
+	// Resource selects resource attributes.
+	Resource Namespace = "resource"
+	// Scope selects instrumentation scope attributes.
+	Scope Namespace = "scope"
+	// Point selects point attributes.
+	Point Namespace = "point"
+)
+
+// Dimension identifies an arbitrary producer-owned attribute.
+type Dimension struct {
+	// Namespace disambiguates resource, scope and point attributes.
+	Namespace Namespace
+
+	// Key is the exact attribute name, bound as a query parameter.
+	Key string
+}
+
+func (d Dimension) column() (string, error) {
+	if d.Key == "" {
+		return "", fmt.Errorf("attribute key is required")
+	}
+	switch d.Namespace {
+	case Resource:
+		return "resource_attributes", nil
+	case Scope:
+		return "scope_attributes", nil
+	case Point:
+		return "point_attributes", nil
+	default:
+		return "", fmt.Errorf("unsupported attribute namespace")
+	}
+}
+
+// Filter matches an exact typed scalar/array value or an absent attribute.
+type Filter struct {
+	// Dimension identifies the attribute namespace and key.
+	Dimension Dimension
+
+	// Value is the exact typed value when Missing is false.
+	Value attribute.Value
+
+	// Missing selects absent keys rather than the empty string/array.
+	Missing bool
+}
+
+// Query scopes every read by tenant, full descriptor and a half-open UTC range.
+type Query struct {
+	// Tenant prevents implicit cross-tenant/project aggregation.
+	Tenant Tenant
+
+	// Definition selects one registered descriptor meaning.
+	Definition Definition
+
+	// Start is an inclusive whole-minute boundary.
+	Start time.Time
+
+	// End is an exclusive whole-minute boundary, at most the next minute.
+	End time.Time
+
+	// Interval is a whole-minute bucket width, aligned to the Unix epoch.
+	Interval time.Duration
+
+	// Filters are ANDed typed equality or missing-key predicates.
+	Filters []Filter
+
+	// GroupBy selects arbitrary retained dimensions; omitted dimensions collapse.
+	GroupBy []Dimension
+}
+
+// GroupValue distinguishes missing attributes from every present typed value.
+type GroupValue struct {
+	// Present is false only when the attribute key is absent.
+	Present bool
+
+	// Type is the OTel value type when present.
+	Type string
+
+	// Value contains exact canonical JSON, including quoted strings.
+	Value json.RawMessage
+}
+
+// Aggregate is one bucket/group and numeric representation. Integer and floating
+// series remain separate rather than silently converting integers to float64.
+type Aggregate struct {
+	// Start is the bucket's inclusive lower boundary.
+	Start time.Time
+
+	// End is its exclusive upper boundary clipped to the query range.
+	End time.Time
+
+	// Partial reports a bucket whose query coverage is clipped or still current.
+	Partial bool
+
+	// Groups follows the Query.GroupBy order.
+	Groups []GroupValue
+
+	// NumberKind is integer or floating.
+	NumberKind string
+
+	// Count is delivered increments for Counter, observations for Histogram.
+	Count uint64
+
+	// IntegerSum preserves the Int128 aggregate exactly.
+	IntegerSum *big.Int
+
+	// FloatingSum is the IEEE-754 sum for floating series.
+	FloatingSum float64
+
+	// Min is the histogram minimum; unset for Counters.
+	Min Number
+
+	// Max is the histogram maximum; unset for Counters.
+	Max Number
+}
+
+// Mean returns the delivery-weighted arithmetic mean as a rational number.
+// For floating observations it represents the computed floating sum exactly.
+func (a Aggregate) Mean() *big.Rat {
+	if a.Count == 0 {
+		return nil
+	}
+	var sum *big.Rat
+	if a.NumberKind == "integer" {
+		sum = new(big.Rat).SetInt(a.IntegerSum)
+	} else {
+		sum = new(big.Rat).SetFloat64(a.FloatingSum)
+	}
+	if sum == nil {
+		return nil
+	}
+	return sum.Quo(sum, new(big.Rat).SetInt(new(big.Int).SetUint64(a.Count)))
+}
+
+func buildQuery(q Query, now time.Time) (string, []any, error) {
+	return buildResolvedQuery(q, now, nil)
+}
+
+func buildResolvedQuery(q Query, now time.Time, ids []string) (string, []any, error) {
+	if q.Tenant.OrganizationID == "" || q.Tenant.ProjectID == uuid.Nil {
+		return "", nil, fmt.Errorf("tenant and project are required")
+	}
+	if _, err := NewRegistry(q.Definition); err != nil {
+		return "", nil, err
+	}
+	if q.Interval < time.Minute || q.Interval > RollupRetention || q.Interval%time.Minute != 0 {
+		return "", nil, fmt.Errorf("interval must be whole minutes within retention")
+	}
+	if !q.Start.Equal(q.Start.Truncate(time.Minute)) || !q.End.Equal(q.End.Truncate(time.Minute)) || !q.End.After(q.Start) || q.Start.Before(EarliestBucket(now)) || q.End.After(now.UTC().Truncate(time.Minute).Add(time.Minute)) {
+		return "", nil, fmt.Errorf("range must use retained whole minutes, ending no later than the current minute end")
+	}
+	if len(q.Filters)+len(q.GroupBy) > QueryMaxDimensions {
+		return "", nil, fmt.Errorf("query exceeds dimension expression bound")
+	}
+	source, sourceArgs, err := rollupSource(q, "*", ids)
+	if err != nil {
+		return "", nil, err
+	}
+	metadata := squirrel.Select("series_id").From("product_metric_series").Where(descriptorScope(q)).Where(squirrel.Eq{"instrument": string(q.Definition.Instrument)}).GroupBy("series_id")
+	if ids != nil {
+		metadata = metadata.Where("series_id IN (SELECT series_id FROM metric_series_ids)")
+	}
+	metadata, err = applyAttributeFilters(metadata, q.Filters)
+	if err != nil {
+		return "", nil, err
+	}
+	for i, d := range q.GroupBy {
+		col, err := d.column()
+		if err != nil {
+			return "", nil, err
+		}
+		metadata = metadata.Column("any(toJSONString(tuple(arrayExists(a -> a.key = ?, "+col+"), arrayFirst(a -> a.key = ?, "+col+").type, arrayFirst(a -> a.key = ?, "+col+").value))) AS "+fmt.Sprintf("dimension_%d", i), d.Key, d.Key, d.Key)
+	}
+	metadataSQL, metadataArgs, err := metadata.ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("build metric catalogue join: %w", err)
+	}
+	b := squirrel.Select().Column("toDateTime(intDiv(toUInt64(bucket), ?) * ?, 'UTC') AS window_start", int64(q.Interval/time.Second), int64(q.Interval/time.Second)).
+		Columns("number_kind", "sum(contributions) AS total_count", "toString(sum(integer_sum)) AS total_integer", "sum(floating_sum) AS total_floating").
+		Prefix("WITH points AS ("+source+")", sourceArgs...).From("points").
+		JoinClause("INNER JOIN ("+metadataSQL+") AS metadata USING (series_id)", metadataArgs...).
+		GroupBy("window_start", "number_kind").OrderBy("window_start", "number_kind")
+	if q.Definition.Instrument == Histogram {
+		b = b.Columns("min(integer_min)", "max(integer_max)", "min(floating_min)", "max(floating_max)")
+	}
+	for i := range q.GroupBy {
+		alias := fmt.Sprintf("dimension_%d", i)
+		b = b.Column(alias).GroupBy(alias).OrderBy(alias)
+	}
+	sql, args, err := b.ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("build metric query: %w", err)
+	}
+	return sql, args, nil
+}
+
+func applyAttributeFilters(b squirrel.SelectBuilder, filters []Filter) (squirrel.SelectBuilder, error) {
+	for _, f := range filters {
+		col, err := f.Dimension.column()
+		if err != nil {
+			return b, err
+		}
+		if f.Missing {
+			b = b.Where("NOT arrayExists(a -> a.key = ?, "+col+")", f.Dimension.Key)
+			continue
+		}
+		canonical, err := CanonicalAttributes([]attribute.KeyValue{{Key: attribute.Key(f.Dimension.Key), Value: f.Value}})
+		if err != nil {
+			return b, err
+		}
+		var attrs []EncodedAttribute
+		if err := json.Unmarshal([]byte(canonical), &attrs); err != nil {
+			return b, fmt.Errorf("decode filter: %w", err)
+		}
+		b = b.Where("has("+col+", tuple(?, ?, ?))", attrs[0].Key, attrs[0].Type, string(attrs[0].Value))
+	}
+	return b, nil
+}
+
+type queryRequestKey struct{}
+
+func boundedQuerySettings(ctx context.Context) clickhouse.Settings {
+	settings := clickhouse.Settings{
+		"max_result_rows": QueryMaxRows, "max_result_bytes": 16 << 20, "result_overflow_mode": "throw",
+		"max_rows_to_read": QueryMaxReadRows, "max_bytes_to_read": QueryMaxReadBytes, "read_overflow_mode": "throw",
+		"max_memory_usage": QueryMaxMemory, "max_execution_time": QueryMaxSeconds, "timeout_overflow_mode": "throw",
+		"max_rows_to_group_by": QueryMaxSeries, "group_by_overflow_mode": "throw", "max_threads": 2,
+		"max_rows_in_set": QueryMaxActiveSeries, "max_bytes_in_set": QueryMaxIdentityBytes, "set_overflow_mode": "throw",
+		"max_rows_in_join": QueryMaxSeries, "max_bytes_in_join": QueryMaxIdentityBytes, "join_overflow_mode": "throw",
+		"max_rows_in_distinct": QueryMaxActiveSeries, "max_bytes_in_distinct": QueryMaxIdentityBytes, "distinct_overflow_mode": "throw",
+	}
+	if id, ok := ctx.Value(queryRequestKey{}).(string); ok {
+		settings["log_comment"] = id
+	}
+	return settings
+}
+
+func boundedQueryContext(ctx context.Context) context.Context {
+	// Every phase needs a fresh server query ID. Reusing a caller's ID can race
+	// server-side cleanup of the preceding phase even after its rows are closed.
+	return clickhouse.Context(ctx, clickhouse.WithQueryID(""), clickhouse.WithSettings(boundedQuerySettings(ctx)))
+}
+
+// Query reads compact rollups without FINAL or per-event winners. Missing data
+// yields no result rows, not automatic zeros. Exceeding a bound fails the read.
+func (r *Repository) Query(ctx context.Context, q Query) ([]Aggregate, error) {
+	if ctx.Value(queryRequestKey{}) == nil {
+		ctx = context.WithValue(ctx, queryRequestKey{}, uuid.NewString())
+	}
+	ctx, cancel := context.WithTimeout(ctx, QueryMaxSeconds*time.Second)
+	defer cancel()
+	if err := querySlots.Acquire(ctx, 1); err != nil {
+		return nil, fmt.Errorf("metric query capacity: %w", err)
+	}
+	defer querySlots.Release(1)
+	now := r.now().UTC()
+	_, _, err := buildQuery(q, now)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := r.resolveSeries(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return []Aggregate{}, nil
+	}
+	ctx, err = withSeriesIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	sql, args, err := buildResolvedQuery(q, now, ids)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := r.conn.Query(boundedQueryContext(ctx), sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query product metrics: %w", err)
+	}
+	defer o11y.NoLogDefer(rows.Close)
+	result := make([]Aggregate, 0)
+	for rows.Next() {
+		var a Aggregate
+		var integer string
+		var imin, imax int64
+		var fmin, fmax float64
+		groups := make([]string, len(q.GroupBy))
+		dest := []any{&a.Start, &a.NumberKind, &a.Count, &integer, &a.FloatingSum}
+		if q.Definition.Instrument == Histogram {
+			dest = append(dest, &imin, &imax, &fmin, &fmax)
+		}
+		for i := range groups {
+			dest = append(dest, &groups[i])
+		}
+		if err := rows.Scan(dest...); err != nil {
+			return nil, fmt.Errorf("scan product metrics: %w", err)
+		}
+		var ok bool
+		a.IntegerSum, ok = new(big.Int).SetString(integer, 10)
+		if !ok || !finite(a.FloatingSum) {
+			return nil, fmt.Errorf("invalid or overflowing aggregate")
+		}
+		if q.Definition.Instrument == Histogram {
+			if a.NumberKind == "integer" {
+				a.Min, a.Max = Integer(imin), Integer(imax)
+			} else {
+				a.Min, a.Max = Float(fmin), Float(fmax)
+			}
+		}
+		a.End = a.Start.Add(q.Interval)
+		a.Partial = a.Start.Before(q.Start) || a.End.After(q.End) || a.End.After(now)
+		if a.Start.Before(q.Start) {
+			a.Start = q.Start
+		}
+		if a.End.After(q.End) {
+			a.End = q.End
+		}
+		for _, raw := range groups {
+			var tuple []json.RawMessage
+			if err := json.Unmarshal([]byte(raw), &tuple); err != nil || len(tuple) != 3 {
+				return nil, fmt.Errorf("invalid grouping tuple")
+			}
+			var present int
+			var typ, value string
+			if err := json.Unmarshal(tuple[0], &present); err != nil {
+				return nil, fmt.Errorf("decode grouping presence: %w", err)
+			}
+			if err := json.Unmarshal(tuple[1], &typ); err != nil {
+				return nil, fmt.Errorf("decode grouping type: %w", err)
+			}
+			if err := json.Unmarshal(tuple[2], &value); err != nil {
+				return nil, fmt.Errorf("decode grouping value: %w", err)
+			}
+			a.Groups = append(a.Groups, GroupValue{Present: present != 0, Type: typ, Value: json.RawMessage(value)})
+		}
+		result = append(result, a)
+		if len(result) > QueryMaxRows {
+			return nil, fmt.Errorf("metric result exceeds row bound")
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read product metrics: %w", err)
+	}
+	return result, nil
+}
