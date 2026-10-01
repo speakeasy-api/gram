@@ -58,6 +58,10 @@ type DismissResponseBody struct {
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	// HTTPS URL of the entry's icon when it has one.
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
+	// Whether the catalog records that the server's authorization server supports
+	// OAuth dynamic client registration; install flows default to per-user OAuth
+	// when true.
+	SupportsDcr *bool `form:"supports_dcr,omitempty" json:"supports_dcr,omitempty" xml:"supports_dcr,omitempty"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// Matching Okta application instances, by label.
@@ -91,6 +95,10 @@ type RestoreResponseBody struct {
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	// HTTPS URL of the entry's icon when it has one.
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
+	// Whether the catalog records that the server's authorization server supports
+	// OAuth dynamic client registration; install flows default to per-user OAuth
+	// when true.
+	SupportsDcr *bool `form:"supports_dcr,omitempty" json:"supports_dcr,omitempty" xml:"supports_dcr,omitempty"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// Matching Okta application instances, by label.
@@ -780,6 +788,10 @@ type OktaServerSuggestionResponseBody struct {
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	// HTTPS URL of the entry's icon when it has one.
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
+	// Whether the catalog records that the server's authorization server supports
+	// OAuth dynamic client registration; install flows default to per-user OAuth
+	// when true.
+	SupportsDcr *bool `form:"supports_dcr,omitempty" json:"supports_dcr,omitempty" xml:"supports_dcr,omitempty"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 	// Matching Okta application instances, by label.
@@ -1067,6 +1079,7 @@ func NewDismissOktaServerSuggestionOK(body *DismissResponseBody) *oktaserversugg
 		Description:      *body.Description,
 		DocumentationURL: body.DocumentationURL,
 		IconURL:          body.IconURL,
+		SupportsDcr:      *body.SupportsDcr,
 		XaaIssuer:        body.XaaIssuer,
 		State:            *body.State,
 		DismissedAt:      body.DismissedAt,
@@ -1285,6 +1298,7 @@ func NewRestoreOktaServerSuggestionOK(body *RestoreResponseBody) *oktaserversugg
 		Description:      *body.Description,
 		DocumentationURL: body.DocumentationURL,
 		IconURL:          body.IconURL,
+		SupportsDcr:      *body.SupportsDcr,
 		XaaIssuer:        body.XaaIssuer,
 		State:            *body.State,
 		DismissedAt:      body.DismissedAt,
@@ -1544,6 +1558,9 @@ func ValidateDismissResponseBody(body *DismissResponseBody) (err error) {
 	if body.InstalledUrls == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("installed_urls", "body"))
 	}
+	if body.SupportsDcr == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("supports_dcr", "body"))
+	}
 	if body.RegistryEntryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_entry_id", *body.RegistryEntryID, goa.FormatUUID))
 	}
@@ -1598,6 +1615,9 @@ func ValidateRestoreResponseBody(body *RestoreResponseBody) (err error) {
 	}
 	if body.InstalledUrls == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("installed_urls", "body"))
+	}
+	if body.SupportsDcr == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("supports_dcr", "body"))
 	}
 	if body.RegistryEntryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_entry_id", *body.RegistryEntryID, goa.FormatUUID))
@@ -2517,6 +2537,9 @@ func ValidateOktaServerSuggestionResponseBody(body *OktaServerSuggestionResponse
 	}
 	if body.InstalledUrls == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("installed_urls", "body"))
+	}
+	if body.SupportsDcr == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("supports_dcr", "body"))
 	}
 	if body.RegistryEntryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_entry_id", *body.RegistryEntryID, goa.FormatUUID))

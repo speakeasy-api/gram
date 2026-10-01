@@ -263,6 +263,8 @@ type record struct {
 	documentationURL string
 	// iconURL is the entry's first icon.
 	iconURL string
+	// supportsDCR comes from the catalog metadata namespace.
+	supportsDCR bool
 	// remotes are the endpoints in catalog order.
 	remotes []*srv.OktaServerSuggestionRemote
 	// mapping is the Okta namespace that matched.
@@ -336,6 +338,7 @@ func decodeRecord(data []byte) (record, error) {
 	if raw, ok := meta["com.speakeasy.ai/catalog"]; ok {
 		_ = json.Unmarshal(raw, &catalog)
 		rec.documentationURL = str(catalog, "documentationUrl")
+		rec.supportsDCR = boolean(catalog, "supportsDcr")
 	}
 	mapping, err := mcpregistry.ParseOktaMapping(data)
 	if err != nil {
@@ -527,6 +530,7 @@ func (snap *snapshot) build(sg suggestion) *srv.OktaServerSuggestion {
 		Description:      sg.record.description,
 		DocumentationURL: conv.PtrEmpty(sg.record.documentationURL),
 		IconURL:          conv.PtrEmpty(sg.record.iconURL),
+		SupportsDcr:      sg.record.supportsDCR,
 		Remotes:          sg.record.remotes,
 		OktaApplications: sg.apps,
 		XaaIssuer:        conv.PtrEmpty(sg.record.mapping.XAAIssuer),

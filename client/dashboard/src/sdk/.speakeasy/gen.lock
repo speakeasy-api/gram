@@ -5954,7 +5954,7 @@ examples:
         application/json: {"registry_entry_id": "c7a44d8e-6ac8-4399-9ea4-ea62dc717471"}
       responses:
         "200":
-          application/json: {"description": "unique near consequently inure sonnet pish worriedly haversack omelet", "installed_urls": ["<value 1>", "<value 2>", "<value 3>"], "okta_applications": [{"group_assignments": 546554, "label": "<value>", "name": "<value>", "okta_app_id": "<id>", "sign_on_mode": "<value>", "user_assignments": 173146, "xaa_supported": false}], "registry_entry_id": "00ce000c-3283-4a12-8d40-b3374dd521b1", "remotes": [{"headers": [{"is_required": true, "is_secret": true, "name": "<value>"}], "type": "<value>", "url": "https://well-worn-brush.info/"}], "server_name": "<value>", "state": "dismissed"}
+          application/json: {"description": "unique near consequently inure sonnet pish worriedly haversack omelet", "installed_urls": ["<value 1>", "<value 2>", "<value 3>"], "okta_applications": [{"group_assignments": 546554, "label": "<value>", "name": "<value>", "okta_app_id": "<id>", "sign_on_mode": "<value>", "user_assignments": 173146, "xaa_supported": false}], "registry_entry_id": "00ce000c-3283-4a12-8d40-b3374dd521b1", "remotes": [{"headers": [{"is_required": true, "is_secret": true, "name": "<value>"}], "type": "<value>", "url": "https://well-worn-brush.info/"}], "server_name": "<value>", "state": "dismissed", "supports_dcr": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -10665,7 +10665,7 @@ examples:
         application/json: {"registry_entry_id": "66799221-8c93-4e30-8c25-8e6fdac33d51"}
       responses:
         "200":
-          application/json: {"description": "closely actually turret indeed where scamper", "installed_urls": [], "okta_applications": [], "registry_entry_id": "03143ebd-f676-469c-a8fd-8f37a512a007", "remotes": [], "server_name": "<value>", "state": "installed"}
+          application/json: {"description": "closely actually turret indeed where scamper", "installed_urls": [], "okta_applications": [], "registry_entry_id": "03143ebd-f676-469c-a8fd-8f37a512a007", "remotes": [], "server_name": "<value>", "state": "installed", "supports_dcr": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

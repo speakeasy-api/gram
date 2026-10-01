@@ -74,6 +74,10 @@ export type OktaServerSuggestion = {
    */
   state: OktaServerSuggestionState;
   /**
+   * Whether the catalog records that the server's authorization server supports OAuth dynamic client registration; install flows default to per-user OAuth when true.
+   */
+  supportsDcr: boolean;
+  /**
    * Catalog display title when the entry has one.
    */
   title?: string | undefined;
@@ -106,6 +110,7 @@ export const OktaServerSuggestion$inboundSchema: z.ZodMiniType<
     remotes: z.array(OktaServerSuggestionRemote$inboundSchema),
     server_name: z.string(),
     state: OktaServerSuggestionState$inboundSchema,
+    supports_dcr: z.boolean(),
     title: z.optional(z.string()),
     xaa_issuer: z.optional(z.string()),
   }),
@@ -118,6 +123,7 @@ export const OktaServerSuggestion$inboundSchema: z.ZodMiniType<
       "okta_applications": "oktaApplications",
       "registry_entry_id": "registryEntryId",
       "server_name": "serverName",
+      "supports_dcr": "supportsDcr",
       "xaa_issuer": "xaaIssuer",
     });
   }),

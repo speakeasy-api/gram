@@ -58,6 +58,10 @@ type DismissResponseBody struct {
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	// HTTPS URL of the entry's icon when it has one.
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
+	// Whether the catalog records that the server's authorization server supports
+	// OAuth dynamic client registration; install flows default to per-user OAuth
+	// when true.
+	SupportsDcr bool `form:"supports_dcr" json:"supports_dcr" xml:"supports_dcr"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes" json:"remotes" xml:"remotes"`
 	// Matching Okta application instances, by label.
@@ -91,6 +95,10 @@ type RestoreResponseBody struct {
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	// HTTPS URL of the entry's icon when it has one.
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
+	// Whether the catalog records that the server's authorization server supports
+	// OAuth dynamic client registration; install flows default to per-user OAuth
+	// when true.
+	SupportsDcr bool `form:"supports_dcr" json:"supports_dcr" xml:"supports_dcr"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes" json:"remotes" xml:"remotes"`
 	// Matching Okta application instances, by label.
@@ -780,6 +788,10 @@ type OktaServerSuggestionResponseBody struct {
 	DocumentationURL *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	// HTTPS URL of the entry's icon when it has one.
 	IconURL *string `form:"icon_url,omitempty" json:"icon_url,omitempty" xml:"icon_url,omitempty"`
+	// Whether the catalog records that the server's authorization server supports
+	// OAuth dynamic client registration; install flows default to per-user OAuth
+	// when true.
+	SupportsDcr bool `form:"supports_dcr" json:"supports_dcr" xml:"supports_dcr"`
 	// Remote endpoints in catalog order.
 	Remotes []*OktaServerSuggestionRemoteResponseBody `form:"remotes" json:"remotes" xml:"remotes"`
 	// Matching Okta application instances, by label.
@@ -872,6 +884,7 @@ func NewDismissResponseBody(res *oktaserversuggestions.OktaServerSuggestion) *Di
 		Description:      res.Description,
 		DocumentationURL: res.DocumentationURL,
 		IconURL:          res.IconURL,
+		SupportsDcr:      res.SupportsDcr,
 		XaaIssuer:        res.XaaIssuer,
 		State:            res.State,
 		DismissedAt:      res.DismissedAt,
@@ -921,6 +934,7 @@ func NewRestoreResponseBody(res *oktaserversuggestions.OktaServerSuggestion) *Re
 		Description:      res.Description,
 		DocumentationURL: res.DocumentationURL,
 		IconURL:          res.IconURL,
+		SupportsDcr:      res.SupportsDcr,
 		XaaIssuer:        res.XaaIssuer,
 		State:            res.State,
 		DismissedAt:      res.DismissedAt,
