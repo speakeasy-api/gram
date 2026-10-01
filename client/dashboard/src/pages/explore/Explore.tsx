@@ -2,12 +2,15 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { WorkbenchPage } from "@/components/page-templates";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
+import type { ExploreQuery } from "@gram/client/models/components/explorequery.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
+import { useExploreQueries } from "@gram/client/react-query/exploreQueries.js";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import {
   findDataset,
@@ -19,6 +22,8 @@ import {
 import { encodeSpec } from "./exploreUrl";
 import { ExploreResults } from "./ExploreResults";
 import { QueryBuilder } from "./QueryBuilder";
+import { SavedQueryBar } from "./SavedQueries";
+import { differsFromSaved, specFromSavedSpec } from "./savedSpec";
 import { useQueryUrl } from "./useQueryUrl";
 import { useRunQuery } from "./useRunQuery";
 
@@ -125,7 +130,19 @@ function ExploreWorkbench({
   // Without a query in the URL — or with one the catalog can no longer
   // answer — the builder opens on the catalog's first dataset.
   const opening = useMemo(() => initialSpec(datasets), [datasets]);
-  const spec = url.spec ?? opening;
+  // A saved query the catalog has since broken stays open for editing, so
+  // it can be fixed and saved again; a plain link that broke just opens
+  // the default view.
+  const broken = url.savedId !== null ? url.stale : null;
+  const spec = url.spec ?? broken?.spec ?? opening;
+
+  const saved = useExploreQueries();
+  const openSaved = url.savedId
+    ? saved.data?.queries.find((query) => query.id === url.savedId)
+    : undefined;
+  const problem = savedQueryProblem(spec, openSaved) || (broken?.problem ?? "");
+  const openQuery = (query: ExploreQuery) =>
+    url.open(specFromSavedSpec(query.dataset, query.spec), query.id);
   const ran =
     submitted && findDataset(datasets, submitted.dataset) ? submitted : null;
   const chartBody = useMemo(
@@ -171,6 +188,18 @@ function ExploreWorkbench({
   }
   return (
     <>
+      <SavedQueryBar
+        spec={spec}
+        savedId={url.savedId}
+        onOpen={openQuery}
+        onSavedIdChange={url.setSavedId}
+      />
+      {problem ? (
+        <Alert variant="error" dismissible={false}>
+          This query no longer runs: {problem}. Edit it below, then save it
+          again.
+        </Alert>
+      ) : null}
       <QueryBuilder
         datasets={datasets}
         spec={spec}
@@ -190,6 +219,22 @@ function ExploreWorkbench({
       )}
     </>
   );
+}
+
+/**
+ * Why the open saved query cannot run, as the server said when it last read
+ * it — while the builder still holds what was saved, so a fix in progress
+ * is not reported as broken.
+ */
+function savedQueryProblem(
+  spec: ExploreSpec | null,
+  query: ExploreQuery | undefined,
+): string {
+  if (!spec || !query?.invalidReason) return "";
+  const unreadable = specFromSavedSpec(query.dataset, query.spec) === null;
+  return unreadable || !differsFromSaved(spec, query)
+    ? query.invalidReason
+    : "";
 }
 
 // The results panel before the first run: the same frame, waiting.

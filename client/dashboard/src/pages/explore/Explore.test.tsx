@@ -9,10 +9,12 @@ import {
   screen,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Explore from "./Explore";
 import { encodeSpec } from "./exploreUrl";
+import { savedSpecFromSpec } from "./savedSpec";
 import type { ExploreSpec } from "./exploreModel";
 
 const testState = vi.hoisted(() => ({
@@ -28,8 +30,83 @@ const testState = vi.hoisted(() => ({
   bodies: [] as (AnalyticsQueryPayload | null)[],
   /** Whether a query that runs comes back answered, rather than pending. */
   answers: false,
+  /** The project's saved queries, as the list endpoint returns them. */
+  savedQueries: [] as unknown[],
+  /** Every saved-query write, in call order. */
+  writes: [] as { kind: string; request: Record<string, unknown> }[],
 }));
 
+// Each write succeeds at once and is applied to the list, as the refetch
+// after it would show.
+function mockWrite(kind: "create" | "update" | "delete") {
+  return (options: { onSuccess?: (data: unknown) => unknown }) => ({
+    isPending: false,
+    mutate: ({ request }: { request: Record<string, unknown> }) => {
+      testState.writes.push({ kind, request });
+      const now = new Date();
+      let result: unknown;
+      if (kind === "create") {
+        const body = request.createQueryRequestBody as Record<string, unknown>;
+        result = {
+          ...body,
+          id: `created-${testState.writes.length}`,
+          projectId: "project",
+          organizationId: "org",
+          createdByUserId: "member-1",
+          createdAt: now,
+          updatedAt: now,
+        };
+        testState.savedQueries = [result, ...testState.savedQueries];
+      } else if (kind === "update") {
+        const body = request.updateQueryRequestBody as Record<string, unknown>;
+        testState.savedQueries = testState.savedQueries.map((query) => {
+          const current = query as Record<string, unknown>;
+          return current.id === body.id
+            ? (result = { ...current, ...body, updatedAt: now })
+            : query;
+        });
+      } else {
+        testState.savedQueries = testState.savedQueries.filter(
+          (query) => (query as { id: string }).id !== request.id,
+        );
+      }
+      void options.onSuccess?.(result);
+    },
+  });
+}
+
+vi.mock("@gram/client/react-query/exploreQueries.js", () => ({
+  useExploreQueries: () => ({
+    isPending: false,
+    isError: false,
+    data: { queries: testState.savedQueries },
+  }),
+  invalidateAllExploreQueries: () => Promise.resolve(),
+}));
+vi.mock("@gram/client/react-query/createExploreQuery.js", () => ({
+  useCreateExploreQueryMutation: mockWrite("create"),
+}));
+vi.mock("@gram/client/react-query/updateExploreQuery.js", () => ({
+  useUpdateExploreQueryMutation: mockWrite("update"),
+}));
+vi.mock("@gram/client/react-query/deleteExploreQuery.js", () => ({
+  useDeleteExploreQueryMutation: mockWrite("delete"),
+}));
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({
+    data: {
+      members: [
+        {
+          id: "member-1",
+          name: "Test Member",
+          email: "member@example.invalid",
+        },
+      ],
+    },
+  }),
+}));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: testState.flagStatus }),
 }));
@@ -193,6 +270,8 @@ describe("Explore", () => {
     testState.refetch.mockClear();
     testState.bodies = [];
     testState.answers = false;
+    testState.savedQueries = [];
+    testState.writes = [];
   });
 
   afterEach(() => {
@@ -487,6 +566,241 @@ describe("Explore", () => {
       ).toBe("sessions");
       expect(screen.getByText("Nothing has run yet")).toBeTruthy();
       expect(testState.bodies.every((body) => body === null)).toBe(true);
+    });
+  });
+
+  describe("saved queries", () => {
+    const p95ByTool: ExploreSpec = {
+      dataset: "tool_calls",
+      measures: [{ op: "p95", field: "duration_ms" }],
+      filters: [],
+      dimensions: ["tool_name"],
+      orderBy: "p95_duration_ms",
+      limit: 0,
+      window: "7d",
+      chartType: "table",
+    };
+
+    function savedQuery(
+      id: string,
+      name: string,
+      spec: ExploreSpec,
+      extra: Record<string, unknown> = {},
+    ) {
+      return {
+        id,
+        name,
+        dataset: spec.dataset,
+        spec: savedSpecFromSpec(spec),
+        projectId: "project",
+        organizationId: "org",
+        createdByUserId: "member-1",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...extra,
+      };
+    }
+
+    function openList() {
+      fireEvent.click(screen.getByRole("button", { name: "Saved queries" }));
+    }
+
+    function openSaved(name: string) {
+      openList();
+      fireEvent.click(screen.getByText(name));
+    }
+
+    it("lists the project's queries with who saved each", () => {
+      testState.savedQueries = [
+        savedQuery("q-1", "Slow tools", p95ByTool),
+        savedQuery("q-2", "Slow tools", p95ByTool, {
+          createdByUserId: "departed",
+        }),
+      ];
+      renderExplore();
+      openList();
+
+      // Names repeat freely; the creator tells them apart.
+      expect(screen.getAllByText("Slow tools")).toHaveLength(2);
+      expect(screen.getByText(/Test Member/)).toBeTruthy();
+      expect(screen.getByText(/A former member/)).toBeTruthy();
+    });
+
+    it("says so when the project has none", () => {
+      renderExplore();
+      openList();
+
+      expect(
+        screen.getByText(/No saved queries in this project yet/),
+      ).toBeTruthy();
+    });
+
+    it("restores a query into the builder exactly, and runs it", () => {
+      testState.savedQueries = [savedQuery("q-1", "Slow tools", p95ByTool)];
+      renderExplore();
+      openSaved("Slow tools");
+
+      expect(
+        screen.getByRole("combobox", { name: "Dataset" }).textContent,
+      ).toBe("tool_calls");
+      expect(screen.getByRole("combobox", { name: "Window" }).textContent).toBe(
+        "Last 7 days",
+      );
+      expect(urlSpec()).toMatchObject(p95ByTool);
+      expect(new URLSearchParams(nav.search).get("query")).toBe("q-1");
+
+      const summary = testState.bodies.findLast((body) => body !== null);
+      expect(summary?.dataset).toBe("tool_calls");
+      expect(summary?.orderBy).toEqual([
+        { measure: "p95_duration_ms", direction: "desc" },
+      ]);
+      // Open, unedited: nothing to save.
+      expect(screen.getByRole("button", { name: "Save" })).toHaveProperty(
+        "disabled",
+        true,
+      );
+    });
+
+    it("saves the builder under a name, then has it open", () => {
+      renderExplore();
+      fireEvent.click(screen.getByRole("button", { name: "Table" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save query" }));
+      fireEvent.change(screen.getByRole("textbox", { name: "Query name" }), {
+        target: { value: "  Sessions by user  " },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      const [write] = testState.writes;
+      expect(write?.kind).toBe("create");
+      expect(write?.request.createQueryRequestBody).toEqual({
+        name: "Sessions by user",
+        dataset: "sessions",
+        spec: {
+          chart_type: "table",
+          window: "24h",
+          grain: "none",
+          ungrouped: false,
+          dimensions: ["user"],
+          measures: [{ op: "count", field: "", alias: "count" }],
+          filters: [],
+          order_by: [],
+          limit: 0,
+        },
+      });
+      expect(new URLSearchParams(nav.search).get("query")).toBe("created-1");
+      expect(screen.getByText("Sessions by user")).toBeTruthy();
+    });
+
+    it("saves edits to the open query in place", () => {
+      testState.savedQueries = [savedQuery("q-1", "Slow tools", p95ByTool)];
+      renderExplore();
+      openSaved("Slow tools");
+
+      fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+      expect(screen.getByText(/Unsaved changes/)).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      const [write] = testState.writes;
+      expect(write?.kind).toBe("update");
+      expect(write?.request.updateQueryRequestBody).toMatchObject({
+        id: "q-1",
+        name: "Slow tools",
+        dataset: "tool_calls",
+        spec: { chart_type: "bar", grain: "day" },
+      });
+    });
+
+    it("renames without saving the builder's edits", async () => {
+      const user = userEvent.setup();
+      const stored = savedQuery("q-1", "Slow tools", p95ByTool);
+      testState.savedQueries = [stored];
+      renderExplore();
+      openSaved("Slow tools");
+      fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+
+      await user.click(screen.getByRole("button", { name: "Query actions" }));
+      await user.click(screen.getByRole("menuitem", { name: /Rename/ }));
+      const field = screen.getByRole("textbox", { name: "Query name" });
+      expect(field).toHaveProperty("value", "Slow tools");
+      await user.clear(field);
+      await user.type(field, "Slowest tools");
+      await user.click(screen.getByRole("button", { name: "Rename" }));
+
+      expect(testState.writes[0]?.request.updateQueryRequestBody).toEqual({
+        id: "q-1",
+        name: "Slowest tools",
+        dataset: "tool_calls",
+        spec: stored.spec,
+      });
+      expect(screen.getByText(/Unsaved changes/)).toBeTruthy();
+    });
+
+    it("deletes the open query and keeps the builder", async () => {
+      const user = userEvent.setup();
+      testState.savedQueries = [savedQuery("q-1", "Slow tools", p95ByTool)];
+      renderExplore();
+      openSaved("Slow tools");
+
+      await user.click(screen.getByRole("button", { name: "Query actions" }));
+      await user.click(screen.getByRole("menuitem", { name: /Delete/ }));
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      expect(testState.writes[0]).toEqual({
+        kind: "delete",
+        request: { id: "q-1" },
+      });
+      expect(new URLSearchParams(nav.search).get("query")).toBeNull();
+      expect(screen.getByText("Unsaved query")).toBeTruthy();
+      expect(
+        screen.getByRole("combobox", { name: "Dataset" }).textContent,
+      ).toBe("tool_calls");
+    });
+
+    it("opens a query the catalog broke for editing, naming what is gone", () => {
+      const reason = 'unknown_field: field "retired_field" does not exist';
+      testState.savedQueries = [
+        savedQuery(
+          "q-1",
+          "Old breakdown",
+          { ...p95ByTool, dimensions: ["retired_field"] },
+          { invalidReason: reason },
+        ),
+      ];
+      renderExplore();
+      openSaved("Old breakdown");
+
+      expect(
+        screen.getByText(/This query no longer runs/).textContent,
+      ).toContain(reason);
+      // The builder holds the saved query, unrun, ready to be fixed.
+      expect(
+        screen.getByRole("combobox", { name: "Dataset" }).textContent,
+      ).toBe("tool_calls");
+      expect(screen.getByText("Nothing has run yet")).toBeTruthy();
+      expect(testState.bodies.every((body) => body === null)).toBe(true);
+
+      // An edit that keeps the missing field still names it.
+      fireEvent.click(screen.getByRole("button", { name: "Number" }));
+      expect(
+        screen.getByText(/This query no longer runs/).textContent,
+      ).toContain("retired_field");
+    });
+
+    it("names the problem when a saved query cannot be read at all", () => {
+      testState.savedQueries = [
+        {
+          ...savedQuery("q-1", "Unreadable", p95ByTool),
+          spec: { window: "1y" },
+          invalidReason: 'window "1y" is not one of 1h, 24h, 7d, 30d, 90d',
+        },
+      ];
+      renderExplore();
+      openSaved("Unreadable");
+
+      expect(
+        screen.getByText(/This query no longer runs/).textContent,
+      ).toContain('window "1y"');
+      expect(screen.getByRole("combobox", { name: "Dataset" })).toBeTruthy();
     });
   });
 });

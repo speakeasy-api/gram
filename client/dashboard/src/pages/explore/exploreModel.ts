@@ -200,8 +200,18 @@ export const FILTER_OPERATOR_LABELS: Record<FilterOperator, string> = {
   in: "is any of",
 };
 
-function isFilterOperator(operator: string): operator is FilterOperator {
-  return operator in FILTER_OPERATOR_LABELS;
+export function isFilterOperator(value: unknown): value is FilterOperator {
+  return (
+    typeof value === "string" && Object.hasOwn(FILTER_OPERATOR_LABELS, value)
+  );
+}
+
+export function isWindowPreset(value: unknown): value is WindowPreset {
+  return WINDOW_OPTIONS.some((option) => option.value === value);
+}
+
+export function isChartType(value: unknown): value is ChartType {
+  return CHART_TYPE_OPTIONS.some((option) => option.value === value);
 }
 
 /**
