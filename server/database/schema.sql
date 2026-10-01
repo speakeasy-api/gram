@@ -10184,7 +10184,7 @@ CREATE TABLE IF NOT EXISTS widgets (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT widgets_pkey PRIMARY KEY (id),
-  CONSTRAINT widgets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  CONSTRAINT widgets_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS widgets_project_id_updated_at_idx

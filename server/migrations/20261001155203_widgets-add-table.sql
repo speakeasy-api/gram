@@ -14,7 +14,7 @@ CREATE TABLE "widgets" (
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
-  CONSTRAINT "widgets_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "widgets_organization_id_project_id_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "widgets_dataset_check" CHECK (dataset <> ''::text),
   CONSTRAINT "widgets_description_check" CHECK (char_length(description) <= 2000),
   CONSTRAINT "widgets_name_check" CHECK ((name <> ''::text) AND (char_length(name) <= 200))
