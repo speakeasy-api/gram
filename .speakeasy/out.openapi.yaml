@@ -73781,7 +73781,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RiskIDRequestBody'
+              $ref: '#/components/schemas/DuplicateWidgetRequestBody'
         required: true
       responses:
         "200":
@@ -81744,6 +81744,15 @@ components:
           description: The CNAME target subdomain custom domains should point at, if configured
       required:
         - a_records
+    DuplicateWidgetRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The widget to copy
+          format: uuid
+      required:
+        - id
     EmployeeDataFlowEdge:
       type: object
       properties:

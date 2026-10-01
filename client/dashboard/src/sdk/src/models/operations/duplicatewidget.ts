@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  RiskIDRequestBody,
-  RiskIDRequestBody$Outbound,
-  RiskIDRequestBody$outboundSchema,
-} from "../components/riskidrequestbody.js";
+  DuplicateWidgetRequestBody,
+  DuplicateWidgetRequestBody$Outbound,
+  DuplicateWidgetRequestBody$outboundSchema,
+} from "../components/duplicatewidgetrequestbody.js";
 
 export type DuplicateWidgetSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -24,7 +24,7 @@ export type DuplicateWidgetRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  riskIDRequestBody: RiskIDRequestBody;
+  duplicateWidgetRequestBody: DuplicateWidgetRequestBody;
 };
 
 /** @internal */
@@ -62,7 +62,7 @@ export function duplicateWidgetSecurityToJSON(
 export type DuplicateWidgetRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  RiskIDRequestBody: RiskIDRequestBody$Outbound;
+  DuplicateWidgetRequestBody: DuplicateWidgetRequestBody$Outbound;
 };
 
 /** @internal */
@@ -73,13 +73,13 @@ export const DuplicateWidgetRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    riskIDRequestBody: RiskIDRequestBody$outboundSchema,
+    duplicateWidgetRequestBody: DuplicateWidgetRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
-      riskIDRequestBody: "RiskIDRequestBody",
+      duplicateWidgetRequestBody: "DuplicateWidgetRequestBody",
     });
   }),
 );

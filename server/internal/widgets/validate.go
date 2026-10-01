@@ -156,12 +156,12 @@ func validateVisualization(visualization Visualization, query Query) string {
 			return fmt.Sprintf("unsatisfiable: a %s chart draws a timeseries, so its query needs a grain and at least one measure", visualization.Type)
 		}
 	case "number":
-		if !aggregated || len(query.Dimensions) > 0 {
-			return "unsatisfiable: a number chart draws whole-window totals, so its query needs at least one measure and no dimensions"
+		if !aggregated || grained || len(query.Dimensions) > 0 {
+			return "unsatisfiable: a number chart draws whole-window totals, so its query needs at least one measure, no grain and no dimensions"
 		}
 	case "ranked":
-		if !aggregated || len(query.Dimensions) == 0 {
-			return "unsatisfiable: a ranked chart ranks groups, so its query needs at least one measure and one dimension"
+		if !aggregated || grained || len(query.Dimensions) == 0 {
+			return "unsatisfiable: a ranked chart ranks groups over the whole window, so its query needs at least one measure, no grain and one dimension"
 		}
 	}
 	return ""

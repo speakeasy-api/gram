@@ -59,6 +59,9 @@ func TestWidgetRejectsInvalidValues(t *testing.T) {
 	_, err = urn.ParseWidget("widget:not-a-uuid")
 	require.ErrorIs(t, err, urn.ErrInvalid)
 
+	_, err = urn.ParseWidget("widget:00000000-0000-0000-0000-000000000000")
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
 	_, err = urn.NewWidget(uuid.Nil).MarshalJSON()
 	require.ErrorIs(t, err, urn.ErrInvalid)
 }

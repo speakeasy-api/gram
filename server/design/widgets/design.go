@@ -138,6 +138,9 @@ var _ = Service("widgets", func() {
 			Required("id")
 			security.SessionPayload()
 			security.ProjectPayload()
+			// Named explicitly: an id-only body otherwise dedupes onto an
+			// unrelated schema of the same shape in the generated SDK.
+			Meta("openapi:typename", "DuplicateWidgetRequestBody")
 		})
 		Result(Widget)
 		HTTP(func() {

@@ -139,6 +139,8 @@ func TestCreateWidget(t *testing.T) {
 			{name: "a timeseries of rows", query: rowsQuery(), chart: "area", reason: "timeseries"},
 			{name: "a number broken down by a dimension", query: withQuery(validQuery(), "grain", "none"), chart: "number", reason: "no dimensions"},
 			{name: "a ranking with nothing to rank by", query: withQuery(withQuery(validQuery(), "grain", "none"), "dimensions", []any{}), chart: "ranked", reason: "one dimension"},
+			{name: "a number over time buckets", query: withQuery(validQuery(), "dimensions", []any{}), chart: "number", reason: "no grain"},
+			{name: "a ranking over time buckets", query: validQuery(), chart: "ranked", reason: "no grain"},
 		}
 		for _, tc := range cases {
 			_, err := ti.service.CreateWidget(ctx, createPayload(tc.name, tc.query, map[string]any{"type": tc.chart}))
