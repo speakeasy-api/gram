@@ -1,0 +1,69 @@
+edition = "2024";
+
+package gram.productmetrics.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/productmetrics/v1;productmetricsv1";
+
+// Contribution is one Counter increment or Histogram observation, not an OTLP point.
+message Contribution {
+  string organization_id = 1;
+  string project_id = 2;
+  Definition definition = 3;
+  // UTC Unix nanoseconds, preserving source observation time.
+  int64 event_time_unix_nano = 4;
+  int64 observed_at_unix_nano = 5;
+  repeated Attribute resource_attributes = 6;
+  repeated Attribute scope_attributes = 7;
+  repeated Attribute point_attributes = 8;
+  Number value = 9;
+  // Stable per observation within a tenant and instrumentation scope. Retry unchanged.
+  string contribution_id = 10;
+
+  message Definition {
+    string scope_name = 1;
+    string scope_version = 2;
+    string name = 3;
+    string description = 4;
+    string unit = 5;
+    // Only counter and histogram are supported.
+    string instrument = 6;
+    // Must be delta. Cumulative and preaggregated inputs are not supported.
+    string temporality = 7;
+  }
+
+  message Number {
+    oneof value {
+      int64 integer = 1;
+      double floating = 2;
+    }
+  }
+
+  message Attribute {
+    string key = 1;
+    Value value = 2;
+  }
+
+  // Arrays are homogeneous scalar arrays. Empty arrays retain their element type.
+  message Value {
+    oneof value {
+      string text = 1;
+      bool boolean = 2;
+      int64 integer = 3;
+      double floating = 4;
+      StringArray strings = 5;
+      BoolArray booleans = 6;
+      IntArray integers = 7;
+      DoubleArray doubles = 8;
+    }
+  }
+  message StringArray { repeated string values = 1; }
+  message BoolArray { repeated bool values = 1; }
+  message IntArray { repeated int64 values = 1; }
+  message DoubleArray { repeated double values = 1; }
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: { seconds: 345600 /* 4 days */ }
+  };
+}

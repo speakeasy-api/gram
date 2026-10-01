@@ -1,0 +1,21 @@
+edition = "2024";
+
+package gram.productmetrics.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/productmetrics/v1;productmetricsv1";
+
+// Processor stores generic metric contributions and incrementally rolls them up.
+message Processor {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.productmetrics.v1.Contribution"
+    retention: { seconds: 345600 /* 4 days */ }
+    retain_acked_messages: false
+    ack_deadline: { seconds: 60 }
+    retry_policy: {
+      minimum_backoff: { seconds: 10 }
+      maximum_backoff: { seconds: 600 }
+    }
+  };
+}

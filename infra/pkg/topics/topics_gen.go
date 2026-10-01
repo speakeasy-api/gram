@@ -14,6 +14,7 @@ import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	pluginsv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
+	productmetricsv1 "github.com/speakeasy-api/gram/infra/gen/gram/productmetrics/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
@@ -51,6 +52,8 @@ const (
 	GramPluginsV1OrganizationPublicationRequested Topic = "gram.plugins.v1.OrganizationPublicationRequested"
 	// GramPluginsV1PublicationRequested publishes to gram-plugins-v1-publication-requested.
 	GramPluginsV1PublicationRequested Topic = "gram.plugins.v1.PublicationRequested"
+	// GramProductmetricsV1Contribution publishes to gram-productmetrics-v1-contribution.
+	GramProductmetricsV1Contribution Topic = "gram.productmetrics.v1.Contribution"
 	// GramRiskV1CustomRulesAnalysis publishes to gram-risk-v1-custom-rules-analysis.
 	GramRiskV1CustomRulesAnalysis Topic = "gram.risk.v1.CustomRulesAnalysis"
 	// GramRiskV1Finding publishes to gram-risk-v1-finding.
@@ -94,6 +97,7 @@ func All() []Topic {
 		GramPingV2Message,
 		GramPluginsV1OrganizationPublicationRequested,
 		GramPluginsV1PublicationRequested,
+		GramProductmetricsV1Contribution,
 		GramRiskV1CustomRulesAnalysis,
 		GramRiskV1Finding,
 		GramRiskV1GitleaksAnalysis,
@@ -137,6 +141,8 @@ func Lookup(name string) (Topic, bool) {
 		return GramPluginsV1OrganizationPublicationRequested, true
 	case GramPluginsV1PublicationRequested:
 		return GramPluginsV1PublicationRequested, true
+	case GramProductmetricsV1Contribution:
+		return GramProductmetricsV1Contribution, true
 	case GramRiskV1CustomRulesAnalysis:
 		return GramRiskV1CustomRulesAnalysis, true
 	case GramRiskV1Finding:
@@ -198,6 +204,8 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &pluginsv1.OrganizationPublicationRequested{}, gcp.WithEncodedPublishSettings(settings))
 	case GramPluginsV1PublicationRequested:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &pluginsv1.PublicationRequested{}, gcp.WithEncodedPublishSettings(settings))
+	case GramProductmetricsV1Contribution:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &productmetricsv1.Contribution{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1CustomRulesAnalysis:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.CustomRulesAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRiskV1Finding:
