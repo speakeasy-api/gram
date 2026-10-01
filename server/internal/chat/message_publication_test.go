@@ -42,7 +42,11 @@ func (a *publicationAssetGuard) Write(ctx context.Context, path, media string, s
 	}
 	conn.Release()
 	a.uploads++
-	return a.BlobStore.Write(ctx, path, media, size)
+	w, u, err := a.BlobStore.Write(ctx, path, media, size)
+	if err != nil {
+		return nil, nil, fmt.Errorf("write guarded publication asset: %w", err)
+	}
+	return w, u, nil
 }
 
 func TestPublicationUploadsBeforeWriterTransactions(t *testing.T) {

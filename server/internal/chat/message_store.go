@@ -875,7 +875,8 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	readings = append(readings, assistantReadings...)
 	pendingParams := messageWriteParams(pendingWrites)
 	assistantParams := messageWriteParams(assistants)
-	writes := append(pendingWrites, assistants...)
+	writes := pendingWrites
+	writes = append(writes, assistants...)
 	prepared, err := w.PreparePublications(ctx, projectID, writes)
 	if err != nil {
 		return err
