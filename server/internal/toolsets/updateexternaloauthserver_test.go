@@ -190,7 +190,7 @@ func TestToolsetsService_AddExternalOAuthServer_FailedDiscoveryDoesNotPersist(t 
 	})
 	require.ErrorContains(t, err, "invalid authorization server issuer")
 
-	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: toolset.Slug})
+	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 	require.NoError(t, err)
 	require.Nil(t, unchanged.ExternalOauthServer)
 }
@@ -258,7 +258,7 @@ func TestToolsetsService_UpdateExternalOAuthServer_FailedDiscoveryIsAtomic(t *te
 	})
 	require.ErrorContains(t, err, "invalid authorization server issuer")
 
-	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: toolset.Slug})
+	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 	require.NoError(t, err)
 	require.Equal(t, created.ExternalOauthServer, unchanged.ExternalOauthServer)
 }
@@ -289,7 +289,7 @@ func TestToolsetsService_ExternalOAuthServer_RequiresExactlyOneSource(t *testing
 		require.Error(t, err)
 	}
 
-	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: toolset.Slug})
+	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 	require.NoError(t, err)
 	require.Equal(t, created.ExternalOauthServer, unchanged.ExternalOauthServer)
 }
