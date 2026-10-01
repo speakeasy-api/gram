@@ -523,18 +523,18 @@ func httpMessage(res ingestResult) string {
 func causeMessage(cause failureCause) string {
 	switch cause {
 	case causeDNS:
-		return "Speakeasy hooks could not resolve the Gram control plane host (dns)."
+		return "Speakeasy hooks could not resolve the Speakeasy AI Control Plane host (dns)."
 	case causeTLS:
-		return "Speakeasy hooks could not establish a secure connection to the Gram control plane; a TLS-inspecting proxy may be intercepting it (tls)."
+		return "Speakeasy hooks could not establish a secure connection to the Speakeasy AI Control Plane; a TLS-inspecting proxy may be intercepting it (tls)."
 	case causeTimeout:
-		return "Speakeasy hooks timed out reaching the Gram control plane (timeout)."
+		return "Speakeasy hooks timed out reaching the Speakeasy AI Control Plane (timeout)."
 	case causeCanceled:
-		return "Speakeasy hooks were interrupted before the Gram control plane answered (canceled)."
+		return "Speakeasy hooks were interrupted before the Speakeasy AI Control Plane answered (canceled)."
 	case causeConnection:
-		return "Speakeasy hooks could not connect to the Gram control plane (connection)."
+		return "Speakeasy hooks could not connect to the Speakeasy AI Control Plane (connection)."
 	case causeUnreadable:
 		return "Speakeasy hooks could not read the server's verdict (unreadable-response)."
 	default:
-		return "Speakeasy hooks could not reach the Gram control plane (unknown)."
+		return "Speakeasy hooks could not reach the Speakeasy AI Control Plane (unknown)."
 	}
 }
