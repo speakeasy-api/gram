@@ -91,6 +91,7 @@ import { UserSessionIssuers } from "./usersessionissuers.js";
 import { UserSessionIssuersCimdClients } from "./usersessionissuerscimdclients.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
+import { Widgets } from "./widgets.js";
 import { WorkloadIdentities } from "./workloadidentities.js";
 
 export class Gram extends ClientSDK {
@@ -556,6 +557,11 @@ export class Gram extends ClientSDK {
   private _variations?: Variations;
   get variations(): Variations {
     return (this._variations ??= new Variations(this._options));
+  }
+
+  private _widgets?: Widgets;
+  get widgets(): Widgets {
+    return (this._widgets ??= new Widgets(this._options));
   }
 
   private _workloadIdentities?: WorkloadIdentities;

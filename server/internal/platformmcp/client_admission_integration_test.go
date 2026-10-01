@@ -148,10 +148,7 @@ func TestClientAdmissionProtectsActiveEMABindings(t *testing.T) {
 					_, err := service.Set(ctx, principal, project, registrationID, "disabled")
 					done <- err
 				}()
-				require.Eventually(t, func() bool {
-					blocked, err := testrepo.New(conn).IsQueryBlockedOnLockFixture(ctx, "%LockEMAUserIssuer :one%")
-					return err == nil && blocked
-				}, 10*time.Second, 10*time.Millisecond)
+				testenv.WaitForQueryBlockedBy(t, ctx, conn, testenv.BackendPID(tx), "%LockEMAUserIssuer :one%")
 				require.Empty(t, done, "mode change must wait for preparation")
 				require.NoError(t, txq.EnsureEMABinding(ctx, bindingParams))
 				require.NoError(t, tx.Commit(ctx))

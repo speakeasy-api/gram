@@ -1,8 +1,10 @@
 import type { BadgeProps } from "@/components/ui/Badge";
 import { chunk } from "@/lib/utils";
 import type {
+  BrokenReason,
   ClientBinding,
   NotApplicableReason,
+  ObservedResult,
   OktaResourceConnectionServerState,
 } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
@@ -12,7 +14,9 @@ const XAA_STATE_LABELS: Record<OktaResourceConnectionServerState, string> = {
   not_applicable: "Not applicable",
   needs_agent: "Needs agent",
   needs_connection: "Not confirmed",
+  broken: "Not working",
   connected: "Confirmed",
+  verified: "Verified",
 };
 
 const XAA_STATE_VARIANTS: Record<
@@ -22,7 +26,9 @@ const XAA_STATE_VARIANTS: Record<
   not_applicable: "neutral",
   needs_agent: "warning",
   needs_connection: "warning",
+  broken: "destructive",
   connected: "success",
+  verified: "success",
 };
 
 export function xaaStateLabel(
@@ -61,6 +67,67 @@ export function notApplicableReasonLabel(
     return "No Okta connection is needed for this server.";
   }
   return NOT_APPLICABLE_REASONS[reason];
+}
+
+/** Short form for the table cell; the full sentence goes in the tooltip. */
+const BROKEN_REASON_SUMMARIES: Record<BrokenReason, string> = {
+  audience_mismatch: "Requested audience does not match.",
+  scope_not_allowed: "Scopes not allowed.",
+  client_auth_failed: "Agent sign-in rejected.",
+  downstream_rejected: "Server refused Okta's assertion.",
+};
+
+const BROKEN_REASONS: Record<BrokenReason, string> = {
+  audience_mismatch:
+    "The requested audience did not match the confirmed Okta audience. Confirm the resource app's Cross App Access issuer URL in Okta and try again. This URL may differ from the server's authorization server issuer.",
+  scope_not_allowed:
+    "Okta refused the requested scopes. Allow them on the AI agent's resource connection.",
+  client_auth_failed:
+    "Okta rejected the AI agent app's client authentication. Check the agent app's credentials in Okta.",
+  downstream_rejected:
+    "Okta issued the assertion, but this server's authorization server refused it. The server's own workspace must trust your Okta organization.",
+};
+
+export function brokenReasonSummary(reason: BrokenReason | undefined): string {
+  if (reason === undefined) return "";
+  return BROKEN_REASON_SUMMARIES[reason];
+}
+
+export function brokenReasonLabel(reason: BrokenReason | undefined): string {
+  if (reason === undefined) return "";
+  return BROKEN_REASONS[reason];
+}
+
+/** States in which a recorded confirmation is shown and can be reviewed or cleared. */
+const CONFIRMED_STATES: ReadonlySet<OktaResourceConnectionServerState> =
+  new Set(["connected", "verified", "broken", "needs_connection"]);
+
+/** A confirmation is recorded for the row's upstream, whatever the exchange later showed. */
+export function hasConfirmation(row: {
+  state: OktaResourceConnectionServerState;
+  confirmedAt?: Date | undefined;
+}): boolean {
+  return row.confirmedAt !== undefined && CONFIRMED_STATES.has(row.state);
+}
+
+export type StateNoteCopy = { summary: string; tooltip: string };
+
+/** Why a confirmed row reads as not connected again, if an exchange said so. */
+export function observedNote(row: {
+  state: OktaResourceConnectionServerState;
+  observedResult?: ObservedResult | undefined;
+}): StateNoteCopy | undefined {
+  if (
+    row.state === "needs_connection" &&
+    row.observedResult === "connection_missing"
+  ) {
+    return {
+      summary: "Okta rejected the exchange.",
+      tooltip:
+        "Okta rejected the last exchange. Check that the connection exists in Okta, then confirm again.",
+    };
+  }
+  return undefined;
 }
 
 const CLIENT_BINDING_NOTES: Record<ClientBinding, string | undefined> = {

@@ -104,6 +104,7 @@ import (
 	usersessionissuerscimdclientsc "github.com/speakeasy-api/gram/server/gen/http/user_session_issuers_cimd_clients/client"
 	usersessionsc "github.com/speakeasy-api/gram/server/gen/http/user_sessions/client"
 	variationsc "github.com/speakeasy-api/gram/server/gen/http/variations/client"
+	widgetsc "github.com/speakeasy-api/gram/server/gen/http/widgets/client"
 	workloadidentitiesc "github.com/speakeasy-api/gram/server/gen/http/workload_identities/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
@@ -204,6 +205,7 @@ func UsageCommands() []string {
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
+		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|register-issuer|withdraw-issuer|admit-subject|withdraw-subject)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
@@ -4656,6 +4658,37 @@ func ParseEndpoint(
 		userSessionsRevokeUserSessionApikeyTokenFlag      = userSessionsRevokeUserSessionFlags.String("apikey-token", "", "")
 		userSessionsRevokeUserSessionProjectSlugInputFlag = userSessionsRevokeUserSessionFlags.String("project-slug-input", "", "")
 
+		widgetsFlags = flag.NewFlagSet("widgets", flag.ContinueOnError)
+
+		widgetsListWidgetsFlags                = flag.NewFlagSet("list-widgets", flag.ExitOnError)
+		widgetsListWidgetsSessionTokenFlag     = widgetsListWidgetsFlags.String("session-token", "", "")
+		widgetsListWidgetsProjectSlugInputFlag = widgetsListWidgetsFlags.String("project-slug-input", "", "")
+
+		widgetsGetWidgetFlags                = flag.NewFlagSet("get-widget", flag.ExitOnError)
+		widgetsGetWidgetIDFlag               = widgetsGetWidgetFlags.String("id", "REQUIRED", "")
+		widgetsGetWidgetSessionTokenFlag     = widgetsGetWidgetFlags.String("session-token", "", "")
+		widgetsGetWidgetProjectSlugInputFlag = widgetsGetWidgetFlags.String("project-slug-input", "", "")
+
+		widgetsCreateWidgetFlags                = flag.NewFlagSet("create-widget", flag.ExitOnError)
+		widgetsCreateWidgetBodyFlag             = widgetsCreateWidgetFlags.String("body", "REQUIRED", "")
+		widgetsCreateWidgetSessionTokenFlag     = widgetsCreateWidgetFlags.String("session-token", "", "")
+		widgetsCreateWidgetProjectSlugInputFlag = widgetsCreateWidgetFlags.String("project-slug-input", "", "")
+
+		widgetsUpdateWidgetFlags                = flag.NewFlagSet("update-widget", flag.ExitOnError)
+		widgetsUpdateWidgetBodyFlag             = widgetsUpdateWidgetFlags.String("body", "REQUIRED", "")
+		widgetsUpdateWidgetSessionTokenFlag     = widgetsUpdateWidgetFlags.String("session-token", "", "")
+		widgetsUpdateWidgetProjectSlugInputFlag = widgetsUpdateWidgetFlags.String("project-slug-input", "", "")
+
+		widgetsDuplicateWidgetFlags                = flag.NewFlagSet("duplicate-widget", flag.ExitOnError)
+		widgetsDuplicateWidgetBodyFlag             = widgetsDuplicateWidgetFlags.String("body", "REQUIRED", "")
+		widgetsDuplicateWidgetSessionTokenFlag     = widgetsDuplicateWidgetFlags.String("session-token", "", "")
+		widgetsDuplicateWidgetProjectSlugInputFlag = widgetsDuplicateWidgetFlags.String("project-slug-input", "", "")
+
+		widgetsDeleteWidgetFlags                = flag.NewFlagSet("delete-widget", flag.ExitOnError)
+		widgetsDeleteWidgetIDFlag               = widgetsDeleteWidgetFlags.String("id", "REQUIRED", "")
+		widgetsDeleteWidgetSessionTokenFlag     = widgetsDeleteWidgetFlags.String("session-token", "", "")
+		widgetsDeleteWidgetProjectSlugInputFlag = widgetsDeleteWidgetFlags.String("project-slug-input", "", "")
+
 		workloadIdentitiesFlags = flag.NewFlagSet("workload-identities", flag.ContinueOnError)
 
 		workloadIdentitiesListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
@@ -5708,6 +5741,14 @@ func ParseEndpoint(
 	userSessionsMintUserSessionFlags.Usage = userSessionsMintUserSessionUsage
 	userSessionsRevokeUserSessionFlags.Usage = userSessionsRevokeUserSessionUsage
 
+	widgetsFlags.Usage = widgetsUsage
+	widgetsListWidgetsFlags.Usage = widgetsListWidgetsUsage
+	widgetsGetWidgetFlags.Usage = widgetsGetWidgetUsage
+	widgetsCreateWidgetFlags.Usage = widgetsCreateWidgetUsage
+	widgetsUpdateWidgetFlags.Usage = widgetsUpdateWidgetUsage
+	widgetsDuplicateWidgetFlags.Usage = widgetsDuplicateWidgetUsage
+	widgetsDeleteWidgetFlags.Usage = widgetsDeleteWidgetUsage
+
 	workloadIdentitiesFlags.Usage = workloadIdentitiesUsage
 	workloadIdentitiesListFlags.Usage = workloadIdentitiesListUsage
 	workloadIdentitiesRegisterIssuerFlags.Usage = workloadIdentitiesRegisterIssuerUsage
@@ -5917,6 +5958,8 @@ func ParseEndpoint(
 			svcf = organizationUserSessionIssuersFlags
 		case "user-sessions":
 			svcf = userSessionsFlags
+		case "widgets":
+			svcf = widgetsFlags
 		case "workload-identities":
 			svcf = workloadIdentitiesFlags
 		case "variations":
@@ -8729,6 +8772,28 @@ func ParseEndpoint(
 
 			case "revoke-user-session":
 				epf = userSessionsRevokeUserSessionFlags
+
+			}
+
+		case "widgets":
+			switch epn {
+			case "list-widgets":
+				epf = widgetsListWidgetsFlags
+
+			case "get-widget":
+				epf = widgetsGetWidgetFlags
+
+			case "create-widget":
+				epf = widgetsCreateWidgetFlags
+
+			case "update-widget":
+				epf = widgetsUpdateWidgetFlags
+
+			case "duplicate-widget":
+				epf = widgetsDuplicateWidgetFlags
+
+			case "delete-widget":
+				epf = widgetsDeleteWidgetFlags
 
 			}
 
@@ -11616,6 +11681,28 @@ func ParseEndpoint(
 			case "revoke-user-session":
 				endpoint = c.RevokeUserSession()
 				data, err = usersessionsc.BuildRevokeUserSessionPayload(*userSessionsRevokeUserSessionIDFlag, *userSessionsRevokeUserSessionSessionTokenFlag, *userSessionsRevokeUserSessionApikeyTokenFlag, *userSessionsRevokeUserSessionProjectSlugInputFlag)
+			}
+		case "widgets":
+			c := widgetsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-widgets":
+				endpoint = c.ListWidgets()
+				data, err = widgetsc.BuildListWidgetsPayload(*widgetsListWidgetsSessionTokenFlag, *widgetsListWidgetsProjectSlugInputFlag)
+			case "get-widget":
+				endpoint = c.GetWidget()
+				data, err = widgetsc.BuildGetWidgetPayload(*widgetsGetWidgetIDFlag, *widgetsGetWidgetSessionTokenFlag, *widgetsGetWidgetProjectSlugInputFlag)
+			case "create-widget":
+				endpoint = c.CreateWidget()
+				data, err = widgetsc.BuildCreateWidgetPayload(*widgetsCreateWidgetBodyFlag, *widgetsCreateWidgetSessionTokenFlag, *widgetsCreateWidgetProjectSlugInputFlag)
+			case "update-widget":
+				endpoint = c.UpdateWidget()
+				data, err = widgetsc.BuildUpdateWidgetPayload(*widgetsUpdateWidgetBodyFlag, *widgetsUpdateWidgetSessionTokenFlag, *widgetsUpdateWidgetProjectSlugInputFlag)
+			case "duplicate-widget":
+				endpoint = c.DuplicateWidget()
+				data, err = widgetsc.BuildDuplicateWidgetPayload(*widgetsDuplicateWidgetBodyFlag, *widgetsDuplicateWidgetSessionTokenFlag, *widgetsDuplicateWidgetProjectSlugInputFlag)
+			case "delete-widget":
+				endpoint = c.DeleteWidget()
+				data, err = widgetsc.BuildDeleteWidgetPayload(*widgetsDeleteWidgetIDFlag, *widgetsDeleteWidgetSessionTokenFlag, *widgetsDeleteWidgetProjectSlugInputFlag)
 			}
 		case "workload-identities":
 			c := workloadidentitiesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -31627,6 +31714,151 @@ func userSessionsRevokeUserSessionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions revoke-user-session --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// widgetsUsage displays the usage of the widgets command and its subcommands.
+func widgetsUsage() {
+	fmt.Fprintln(os.Stderr, `Widgets: Explore's saved questions, each kept with the chart that draws it.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] widgets COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-widgets: List the project's widgets, most recently updated first. Each is validated as it is read, so a widget a catalog change broke says so.`)
+	fmt.Fprintln(os.Stderr, `    get-widget: Get one widget by id, validated as it is read.`)
+	fmt.Fprintln(os.Stderr, `    create-widget: Save a widget. Any member of the project can. The question is validated against the catalog, and the chart against the question, before it is stored.`)
+	fmt.Fprintln(os.Stderr, `    update-widget: Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.`)
+	fmt.Fprintln(os.Stderr, `    duplicate-widget: Copy a widget into a new one the caller owns, named "<name> (copy)". This is how a widget is shared: a teammate duplicates it rather than editing it. Like every save, the copy is validated, so a broken widget cannot be duplicated until it is fixed.`)
+	fmt.Fprintln(os.Stderr, `    delete-widget: Delete a widget. Its creator can; deleting someone else's needs project write access.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s widgets COMMAND --help\n", os.Args[0])
+}
+func widgetsListWidgetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] widgets list-widgets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the project's widgets, most recently updated first. Each is validated as it is read, so a widget a catalog change broke says so.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "widgets list-widgets --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func widgetsGetWidgetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] widgets get-widget", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get one widget by id, validated as it is read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "widgets get-widget --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func widgetsCreateWidgetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] widgets create-widget", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Save a widget. Any member of the project can. The question is validated against the catalog, and the chart against the question, before it is stored.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "widgets create-widget --body '{\n      \"dataset\": \"aa\",\n      \"description\": \"aaa\",\n      \"name\": \"aa\",\n      \"query\": {\n         \"abc123\": \"abc123\"\n      },\n      \"visualization\": {\n         \"abc123\": \"abc123\"\n      }\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func widgetsUpdateWidgetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] widgets update-widget", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a widget's name, description, dataset, query and visualization. Its creator can; editing someone else's needs project write access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "widgets update-widget --body '{\n      \"dataset\": \"aa\",\n      \"description\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"query\": {\n         \"abc123\": \"abc123\"\n      },\n      \"visualization\": {\n         \"abc123\": \"abc123\"\n      }\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func widgetsDuplicateWidgetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] widgets duplicate-widget", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Copy a widget into a new one the caller owns, named "<name> (copy)". This is how a widget is shared: a teammate duplicates it rather than editing it. Like every save, the copy is validated, so a broken widget cannot be duplicated until it is fixed.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "widgets duplicate-widget --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func widgetsDeleteWidgetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] widgets delete-widget", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a widget. Its creator can; deleting someone else's needs project write access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "widgets delete-widget --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // workloadIdentitiesUsage displays the usage of the workload-identities

@@ -519,7 +519,7 @@ func TestCommitServerIdentityConfigurationLocksUserSessionIssuerBeforeReplacingB
 		done <- err
 	}()
 
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
 	select {
 	case err := <-done:
 		require.Fail(t, "atomic configuration completed while another transaction held the user-session-issuer binding lock", "%v", err)
@@ -794,7 +794,7 @@ func TestCommitServerIdentityConfigurationLocksProviderBeforeCommitting(t *testi
 		done <- err
 	}()
 
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
 	select {
 	case err := <-done:
 		require.Fail(t, "atomic configuration completed while another transaction held the provider row", "%v", err)

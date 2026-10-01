@@ -959,43 +959,35 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	// remote session behind it is not. The specific broken upstream and the
 	// answer its token endpoint gave are logged by remotesessions.
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	if err != nil {
+		return nil, s.rejectRemoteSession(ctx, w, authentication, err)
+	}
+	return tokens, nil
+}
+
+// rejectRemoteSession answers a ResolveAccessTokens failure. The Gram
+// credential is valid in every rejection; only an upstream remote session
+// behind it is not.
+func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, err error) error {
 	switch {
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
 		// The upstream token endpoint failed in a way that clears on its own.
 		// A 401 would send the user through reauthorization over an outage, so
 		// the client is told to retry the same request instead.
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate deferred: upstream remote session temporarily unavailable", issuerGateReasonRemoteSessionUnavailable)
-		return nil, remoteSessionUnavailableError(w, err)
+		return remoteSessionUnavailableError(w, err)
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
 		// Reauthorizing goes through the same broken issuer or client
 		// configuration, so the challenge omits invalid_token and names who
 		// can repair it instead.
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session misconfigured", issuerGateReasonRemoteSessionMisconfigured)
 		header := bearerErrorChallengeHeader(authentication.protectedResourceURL, "", remoteSessionMisconfiguredDescription)
-		return nil, writeChallenge(w, header, remoteSessionMisconfiguredDescription)
+		return writeChallenge(w, header, remoteSessionMisconfiguredDescription)
 	case errors.Is(err, remotesessions.ErrNoValidToken):
-		// A required upstream remote session is missing or its grant is gone,
-		// and only the user reconnecting it at {routeBase}/{slug}/connect
-		// repairs that. RFC 6750 reads a 401 without an error code as "no
-		// credentials presented", so clients replay the token they hold
-		// indefinitely; invalid_token makes them refresh, which the token
-		// endpoint refuses for the same reason, and then reauthorize through
-		// the consent page that reconnects the upstream. Only a user session
-		// from a refreshable grant can follow that path. Every other caller
-		// keeps the bare challenge, since telling it to discard a credential
-		// it cannot replace, or an agent session whose attached credential
-		// belongs to someone else, would strand it.
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession)
-		errorCode := ""
-		if authentication.refreshableUserSession && authentication.subject.Kind == urn.SessionSubjectKindUser {
-			errorCode = oautherr.CodeInvalidToken
-		}
-		header := bearerErrorChallengeHeader(authentication.protectedResourceURL, errorCode, remoteSessionReconnectDescription)
-		return nil, writeChallenge(w, header, remoteSessionReconnectDescription)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
+		return writeRemoteSessionReconnectChallenge(w, authentication)
 	default:
-		return tokens, nil
+		return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 	}
 }
 
@@ -1020,6 +1012,26 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 		attr.SlogOAuthFailureReason(reason),
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
+}
+
+// writeRemoteSessionReconnectChallenge answers a request whose required
+// upstream remote session is missing or its grant is gone, which only the user
+// reconnecting it at {routeBase}/{slug}/connect repairs. RFC 6750 reads a 401
+// without an error code as "no credentials presented", so clients replay the
+// token they hold indefinitely; invalid_token makes them refresh, which the
+// token endpoint refuses for the same reason, and then reauthorize through the
+// consent page that reconnects the upstream. Only a user session from a
+// refreshable grant can follow that path. Every other caller keeps the bare
+// challenge, since telling it to discard a credential it cannot replace, or an
+// agent session whose attached credential belongs to someone else, would
+// strand it.
+func writeRemoteSessionReconnectChallenge(w http.ResponseWriter, authentication *issuerGateAuthentication) error {
+	errorCode := ""
+	if authentication.refreshableUserSession && authentication.subject.Kind == urn.SessionSubjectKindUser {
+		errorCode = oautherr.CodeInvalidToken
+	}
+	header := bearerErrorChallengeHeader(authentication.protectedResourceURL, errorCode, remoteSessionReconnectDescription)
+	return writeChallenge(w, header, remoteSessionReconnectDescription)
 }
 
 // ApplyIssuerGate authenticates and immediately resolves upstream credentials.

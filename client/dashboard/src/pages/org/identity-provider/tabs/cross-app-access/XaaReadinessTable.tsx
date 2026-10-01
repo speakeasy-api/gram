@@ -20,10 +20,14 @@ import type { OktaResourceConnectionServer } from "@gram/client/models/component
 import { OktaLinkButton } from "./OktaLinkButton";
 import { oktaConnectionsUrl } from "../../oktaConsoleLinks";
 import {
+  brokenReasonLabel,
+  brokenReasonSummary,
   clientBindingNote,
+  hasConfirmation,
   isConfirmable,
   notApplicableReasonLabel,
   notApplicableReasonSummary,
+  observedNote,
   xaaStateLabel,
   xaaStateVariant,
 } from "./xaaView";
@@ -82,29 +86,50 @@ function ServerCell({
   );
 }
 
+function StateNote({
+  tooltip,
+  summary,
+}: {
+  tooltip: string;
+  summary: string;
+}): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={tooltip}>
+      <Text
+        muted
+        small
+        className="line-clamp-3 text-xs leading-5 whitespace-normal"
+      >
+        {summary}
+      </Text>
+    </SimpleTooltip>
+  );
+}
+
 function StateCell({
   row,
 }: {
   row: OktaResourceConnectionServer;
 }): JSX.Element {
+  const note = observedNote(row);
   return (
     <div className="flex min-w-0 flex-col items-start gap-2 pt-1">
       <Badge variant={xaaStateVariant(row.state)} size="sm">
         {xaaStateLabel(row.state)}
       </Badge>
       {row.state === "not_applicable" && (
-        <SimpleTooltip
+        <StateNote
           tooltip={notApplicableReasonLabel(row.notApplicableReason)}
-        >
-          <Text
-            muted
-            small
-            className="line-clamp-3 text-xs leading-5 whitespace-normal"
-          >
-            {notApplicableReasonSummary(row.notApplicableReason)}
-          </Text>
-        </SimpleTooltip>
+          summary={notApplicableReasonSummary(row.notApplicableReason)}
+        />
       )}
+      {row.state === "broken" && (
+        <StateNote
+          tooltip={brokenReasonLabel(row.brokenReason)}
+          summary={brokenReasonSummary(row.brokenReason)}
+        />
+      )}
+      {note && <StateNote tooltip={note.tooltip} summary={note.summary} />}
     </div>
   );
 }
@@ -114,7 +139,7 @@ function ConfirmationCell({
 }: {
   row: OktaResourceConnectionServer;
 }): JSX.Element {
-  if (row.state !== "connected") return <EmptyCell />;
+  if (!hasConfirmation(row)) return <EmptyCell />;
   const app = row.oktaApplicationLabel ?? row.oktaApplicationId;
   return (
     <div className="flex w-full min-w-0 flex-col gap-1">
@@ -189,7 +214,7 @@ function RowActions({
   onReview: (row: OktaResourceConnectionServer) => void;
   onClear: (row: OktaResourceConnectionServer) => void;
 }): JSX.Element | null {
-  const confirmed = row.state === "connected";
+  const confirmed = hasConfirmation(row);
   if (!confirmed && !isConfirmable(row)) return null;
   return (
     <div className="flex w-full items-center justify-end gap-1">

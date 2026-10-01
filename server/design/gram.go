@@ -91,6 +91,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/usersessionissuerscimdclients"
 	_ "github.com/speakeasy-api/gram/server/design/usersessions"
 	_ "github.com/speakeasy-api/gram/server/design/variations"
+	_ "github.com/speakeasy-api/gram/server/design/widgets"
 	_ "github.com/speakeasy-api/gram/server/design/workloadpolicy"
 )
 

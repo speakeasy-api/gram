@@ -164,6 +164,7 @@ export const AUDIT_ACTIONS = [
   "otel_destination:delete",
   "okta-resource-connection:confirm",
   "okta-resource-connection:reset",
+  "okta-resource-connection:observe",
   "okta-server-suggestion:dismiss",
   "okta-server-suggestion:restore",
   "otel_destination:update",
@@ -283,6 +284,9 @@ export const AUDIT_ACTIONS = [
   "wake:cancelled",
   "wake:fired",
   "wake:scheduled",
+  "widget:create",
+  "widget:delete",
+  "widget:update",
   "workload-admission:admit",
   "workload-admission:withdraw",
   "workload-issuer:create",
@@ -420,6 +424,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "confirmed the Cross App Access connection for";
     case "okta-resource-connection:reset":
       return "reset the Cross App Access connection for";
+    case "okta-resource-connection:observe":
+      return "observed a Cross App Access exchange result for";
     case "okta-server-suggestion:dismiss":
       return "dismissed a suggestion for";
     case "okta-server-suggestion:restore":
@@ -697,6 +703,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated saved query";
     case "query:delete":
       return "deleted saved query";
+    case "widget:create":
+      return "created widget";
+    case "widget:update":
+      return "updated widget";
+    case "widget:delete":
+      return "deleted widget";
 
     case "remote-mcp:create":
       return "added remote MCP server";
