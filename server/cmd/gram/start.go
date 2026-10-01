@@ -2048,6 +2048,7 @@ func newStartCommand() *cli.Command {
 						CacheAdapter:                 cache.NewRedisCacheAdapter(redisClient),
 						IssuerMetadataRefresher:      issuerMetadataRefresher,
 						RemoteSessionAssertionSigner: clientAssertionSigner,
+						StartupSeeds:                 startupSeeds(logger, db),
 						EmailService:                 emailService,
 						AssistantsCore:               assistantsCore,
 						TemporalEnv:                  temporalEnv,
