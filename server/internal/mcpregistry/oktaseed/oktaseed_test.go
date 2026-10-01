@@ -50,26 +50,21 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	svc := mcpregistry.New(db, v)
 	logger := testenv.NewLogger(t)
 
-	// A dry run reports the creates and writes nothing.
+	// A name another entry already claims stops the seed before it writes.
 	require.NotEmpty(t, oktaseed.Vendors)
-	result, err := oktaseed.Apply(ctx, logger, svc, true)
-	require.NoError(t, err)
-	require.Equal(t, oktaseed.Result{Created: len(oktaseed.Vendors), Updated: 0, Unchanged: 0}, result)
-	_, err = svc.GetByName(ctx, oktaseed.Vendors[0].Name)
-	require.ErrorIs(t, err, mcpregistry.ErrNotFound)
-
-	// A dry run reports the conflict a real create would hit.
 	claim := `{"server":{"name":"example.test/squatter","description":"Squatter","version":"1","remotes":[{"type":"streamable-http","url":"https://mcp.example.test/mcp"}]},"_meta":{"com.speakeasy.ai/okta":{"oinNames":[` + strconv.Quote(oktaseed.Vendors[0].Mapping.OINNames[0]) + `]}}}`
 	squatter, err := svc.Create(ctx, json.RawMessage(claim))
 	require.NoError(t, err)
-	_, err = oktaseed.Apply(ctx, logger, svc, true)
+	_, err = oktaseed.Apply(ctx, logger, svc)
 	var invalid *mcpregistry.InvalidError
 	require.ErrorAs(t, err, &invalid)
 	require.Contains(t, invalid.Issues[0].Message, "example.test/squatter")
+	_, err = svc.GetByName(ctx, oktaseed.Vendors[0].Name)
+	require.ErrorIs(t, err, mcpregistry.ErrNotFound)
 	_, err = svc.Save(ctx, squatter.ID, mcpregistry.Token(squatter), json.RawMessage(`{"server":{"name":"example.test/squatter","description":"Squatter","version":"1","remotes":[{"type":"streamable-http","url":"https://mcp.example.test/mcp"}]}}`))
 	require.NoError(t, err)
 
-	result, err = oktaseed.Apply(ctx, logger, svc, false)
+	result, err := oktaseed.Apply(ctx, logger, svc)
 	require.NoError(t, err)
 	require.Equal(t, oktaseed.Result{Created: len(oktaseed.Vendors), Updated: 0, Unchanged: 0}, result)
 	for _, vendor := range oktaseed.Vendors {
@@ -87,7 +82,7 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	}
 
 	// A second run changes nothing.
-	result, err = oktaseed.Apply(ctx, logger, svc, false)
+	result, err = oktaseed.Apply(ctx, logger, svc)
 	require.NoError(t, err)
 	require.Equal(t, oktaseed.Result{Created: 0, Updated: 0, Unchanged: len(oktaseed.Vendors)}, result)
 
@@ -110,7 +105,7 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	_, err = svc.Save(ctx, e.ID, mcpregistry.Token(e), edited)
 	require.NoError(t, err)
 
-	result, err = oktaseed.Apply(ctx, logger, svc, false)
+	result, err = oktaseed.Apply(ctx, logger, svc)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Updated)
 	e, err = svc.GetByName(ctx, first.Name)
@@ -144,7 +139,7 @@ func TestApplyRepairsNullMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: legacy, Published: true}))
 
-	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc, false)
+	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Updated)
 	e, err := svc.GetByName(ctx, first.Name)
@@ -179,7 +174,7 @@ func TestApplyKeepsExistingIcon(t *testing.T) {
 	_, err = svc.Create(ctx, stored)
 	require.NoError(t, err)
 
-	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc, false)
+	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Unchanged)
 	e, err := svc.GetByName(ctx, first.Name)
@@ -222,7 +217,7 @@ func TestApplyRefusesUndecodableCatalogMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: legacy, Published: true}))
 
-	_, err = oktaseed.Apply(ctx, testenv.NewLogger(t), svc, false)
+	_, err = oktaseed.Apply(ctx, testenv.NewLogger(t), svc)
 	require.ErrorContains(t, err, "decode catalog metadata")
 	e, err := svc.GetByName(ctx, vendor.Name)
 	require.NoError(t, err)
