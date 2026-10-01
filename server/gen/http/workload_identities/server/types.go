@@ -58,7 +58,7 @@ type UpdateIssuerRequestBody struct {
 	// Replaces the issuer's tags; an empty list clears them. Trimmed and
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
-	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	Tags []string `json:"tags,omitzero"`
 }
 
 // AdmitSubjectRequestBody is the type of the "workloadIdentities" service
