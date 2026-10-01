@@ -345,6 +345,7 @@ describe("server table", () => {
     const server = {
       ...row(1),
       state: "connected" as const,
+      confirmedAt: new Date("2026-09-01T00:00:00Z"),
       resourceIndicator: `https://resource.example.com/${"resource".repeat(12)}`,
       clientId: `client-${"id".repeat(40)}`,
       scopes: ["read", `urn:example:${"scope".repeat(20)}`],
