@@ -629,6 +629,7 @@ func (s *Service) ListRiskPoliciesForMcpServer(ctx context.Context, payload *gen
 		ToolName:        conv.PtrValOr(payload.ToolName, ""),
 		ToolAnnotations: nil,
 		PlatformToolset: false,
+		Principal:       nil,
 	}
 	if toolset, ok := s.platformToolsetByID(serverID); ok {
 		target.PlatformToolset = true

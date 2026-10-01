@@ -15,6 +15,7 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
@@ -444,6 +445,40 @@ func TestPolicyEvaluator_BlockPoliciesScanConcurrently(t *testing.T) {
 	require.Less(t, time.Since(started), time.Second)
 	<-slowCancelled
 	require.Len(t, publisher.snapshot(), 1)
+}
+
+func TestPolicyEvaluator_PassesAudiencePrincipalFromIdentity(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	serverID := uuid.New()
+	agentID := uuid.New()
+	boundary := mcpidentity.NewValidatorBoundary()
+
+	cases := map[string]struct {
+		stamp func(context.Context) context.Context
+		want  policycore.MCPPrincipal
+	}{
+		"unstamped": {stamp: func(ctx context.Context) context.Context { return ctx }, want: policycore.MCPPrincipal{UserID: "", AgentID: ""}},
+		"assistant": {stamp: boundary.StampAssistant, want: policycore.MCPPrincipal{UserID: "", AgentID: ""}},
+		"agent":     {stamp: func(ctx context.Context) context.Context { return boundary.StampAgent(ctx, agentID) }, want: policycore.MCPPrincipal{UserID: "", AgentID: agentID.String()}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var got *policycore.MCPPrincipal
+			evaluator := newPolicyEvaluator(t, policyLookupFunc(func(_ context.Context, _ string, _ uuid.UUID, target policycore.MCPTarget) ([]policycore.Policy, error) {
+				got = target.Principal
+				return nil, nil
+			}), policyDetectorFunc(func(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
+				return nil, nil
+			}), &findingPublisher{}, mcpriskscan.DefaultPolicyConfig)
+
+			ctx := tc.stamp(t.Context())
+			require.False(t, evaluator.Scan(ctx, requestSubject(ctx, projectID, serverID, `{}`)).Denied())
+			require.NotNil(t, got, "seams always filter by audience")
+			require.Equal(t, tc.want, *got)
+		})
+	}
 }
 
 func TestPolicyEvaluator_DropsFlagLaneWhenCapacityIsFull(t *testing.T) {
