@@ -36,6 +36,8 @@ type Vendor struct {
 	WebsiteURL string
 	// DocumentationURL is the public documentation for the MCP server.
 	DocumentationURL string
+	// IconURL is a PNG the vendor hosts for its own product.
+	IconURL string
 	// Remotes are the endpoints in preference order; immutable once created.
 	Remotes []Remote
 	// Mapping is the Okta namespace written to the entry.
@@ -54,6 +56,7 @@ var Vendors = []Vendor{
 		Description:      "Granola's hosted MCP server for meeting notes.",
 		WebsiteURL:       "https://www.granola.ai",
 		DocumentationURL: "https://www.granola.ai/docs/mcp",
+		IconURL:          "https://www.granola.ai/favicon/apple-touch-icon.png",
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.granola.ai/mcp"},
 		},
@@ -70,6 +73,7 @@ var Vendors = []Vendor{
 		Description:      "Linear's hosted MCP server for issues, projects, and cycles.",
 		WebsiteURL:       "https://linear.app",
 		DocumentationURL: "https://linear.app/docs/mcp",
+		IconURL:          "https://linear.app/static/apple-touch-icon.png",
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.linear.app/mcp"},
 			{Type: "sse", URL: "https://mcp.linear.app/sse"},
@@ -87,6 +91,7 @@ var Vendors = []Vendor{
 		Description:      "Atlassian's hosted MCP server for Jira and Confluence Cloud.",
 		WebsiteURL:       "https://www.atlassian.com",
 		DocumentationURL: "https://support.atlassian.com/atlassian-rovo-mcp-server/",
+		IconURL:          "https://wac-cdn.atlassian.com/assets/img/favicons/atlassian/favicon.png",
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.atlassian.com/v1/mcp"},
 			{Type: "sse", URL: "https://mcp.atlassian.com/v1/sse"},
@@ -104,6 +109,7 @@ var Vendors = []Vendor{
 		Description:      "Canva's hosted MCP server for designs and brand assets.",
 		WebsiteURL:       "https://www.canva.com",
 		DocumentationURL: "https://www.canva.dev/docs/apps/mcp-server/",
+		IconURL:          "https://static.canva.com/domain-assets/canva/static/images/apple-touch-180x180-1.png",
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.canva.com/mcp"},
 		},
@@ -120,6 +126,7 @@ var Vendors = []Vendor{
 		Description:      "Datadog's hosted MCP server for monitors, logs, and incidents.",
 		WebsiteURL:       "https://www.datadoghq.com",
 		DocumentationURL: "https://docs.datadoghq.com/bits_ai/mcp_server/",
+		IconURL:          "https://corp.dd-static.net/img/favicons/apple-touch-icon.png",
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.datadoghq.com/v1/mcp"},
 		},
@@ -136,6 +143,7 @@ var Vendors = []Vendor{
 		Description:      "GitHub's hosted MCP server for repositories, issues, and pull requests.",
 		WebsiteURL:       "https://github.com",
 		DocumentationURL: "https://docs.github.com/en/copilot/how-tos/context/model-context-protocol/using-the-github-mcp-server",
+		IconURL:          "https://github.com/fluidicon.png",
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://api.githubcopilot.com/mcp/"},
 		},
@@ -152,6 +160,7 @@ var Vendors = []Vendor{
 		Description:      "Notion's hosted MCP server for pages and databases.",
 		WebsiteURL:       "https://www.notion.com",
 		DocumentationURL: "https://developers.notion.com/docs/mcp",
+		IconURL:          "https://www.notion.com/front-static/logo-ios.png",
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.notion.com/mcp"},
 		},
@@ -168,6 +177,7 @@ var Vendors = []Vendor{
 		Description:      "Slack's hosted MCP server for channels, messages, and search.",
 		WebsiteURL:       "https://slack.com",
 		DocumentationURL: "https://docs.slack.dev/ai/mcp-server/",
+		IconURL:          "https://a.slack-edge.com/80588/marketing/img/meta/slack_hash_256.png",
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.slack.com/mcp"},
 		},
@@ -184,6 +194,7 @@ var Vendors = []Vendor{
 		Description:      "Supabase's hosted MCP server for projects, databases, and edge functions.",
 		WebsiteURL:       "https://supabase.com",
 		DocumentationURL: "https://supabase.com/docs/guides/getting-started/mcp",
+		IconURL:          "https://supabase.com/favicon/favicon-196x196.png",
 		Remotes: []Remote{
 			{Type: "streamable-http", URL: "https://mcp.supabase.com/mcp"},
 		},
@@ -246,7 +257,11 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor, dryRun bool)
 		return "", fmt.Errorf("lookup: %w", err)
 	}
 	current, err := mcpregistry.ParseOktaMapping(existing.Data)
-	if err == nil && equalMapping(current, v.Mapping) {
+	iconed, iconAdded, iconErr := withIcon(existing.Data, v.IconURL)
+	if iconErr != nil {
+		return "", iconErr
+	}
+	if err == nil && equalMapping(current, v.Mapping) && !iconAdded {
 		// Nothing to write, but a stored record that no longer meets the
 		// contract is reported rather than silently left alone.
 		if issues := svc.ValidateStored(existing.Data); len(issues) > 0 {
@@ -254,7 +269,7 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor, dryRun bool)
 		}
 		return "unchanged", nil
 	}
-	data, err := withMapping(existing.Data, v.Mapping)
+	data, err := withMapping(iconed, v.Mapping)
 	if err != nil {
 		return "", err
 	}
@@ -294,6 +309,9 @@ func (v Vendor) record() (json.RawMessage, error) {
 	}
 	if v.WebsiteURL != "" {
 		server["websiteUrl"] = v.WebsiteURL
+	}
+	if v.IconURL != "" {
+		server["icons"] = []map[string]any{iconEntry(v.IconURL)}
 	}
 	meta := map[string]any{mcpregistry.OktaNamespace: v.Mapping}
 	if v.DocumentationURL != "" {
@@ -338,6 +356,45 @@ func withMapping(data json.RawMessage, mapping mcpregistry.OktaMapping) (json.Ra
 		return nil, fmt.Errorf("encode record: %w", err)
 	}
 	return out, nil
+}
+
+func iconEntry(src string) map[string]any {
+	return map[string]any{"src": src, "mimeType": "image/png"}
+}
+
+// withIcon gives a stored record the seed icon only when it has none, so an
+// icon staff chose is never replaced.
+func withIcon(data json.RawMessage, iconURL string) (json.RawMessage, bool, error) {
+	if iconURL == "" {
+		return data, false, nil
+	}
+	var root, server map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, false, fmt.Errorf("decode record: %w", err)
+	}
+	if err := json.Unmarshal(root["server"], &server); err != nil {
+		return nil, false, fmt.Errorf("decode server: %w", err)
+	}
+	var icons []json.RawMessage
+	if raw, ok := server["icons"]; ok {
+		_ = json.Unmarshal(raw, &icons)
+	}
+	if len(icons) > 0 {
+		return data, false, nil
+	}
+	encoded, err := json.Marshal([]map[string]any{iconEntry(iconURL)})
+	if err != nil {
+		return nil, false, fmt.Errorf("encode icons: %w", err)
+	}
+	server["icons"] = encoded
+	if root["server"], err = json.Marshal(server); err != nil {
+		return nil, false, fmt.Errorf("encode server: %w", err)
+	}
+	out, err := json.Marshal(root)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode record: %w", err)
+	}
+	return out, true, nil
 }
 
 func equalMapping(a, b mcpregistry.OktaMapping) bool {
