@@ -10,7 +10,6 @@ import {
   SupportCapability,
   SupportCapability$inboundSchema,
 } from "./supportcapability.js";
-import { SupportDraft, SupportDraft$inboundSchema } from "./supportdraft.js";
 import { SupportMethod, SupportMethod$inboundSchema } from "./supportmethod.js";
 import {
   SupportPlatform,
@@ -19,9 +18,11 @@ import {
 
 export type SupportMatrix = {
   capabilities: Array<SupportCapability>;
-  draft: SupportDraft;
   methods: Array<SupportMethod>;
-  products: Array<SupportPlatform>;
+  platforms: Array<SupportPlatform>;
+  /**
+   * Hex SHA-256 of the deployed matrix file.
+   */
   revision: string;
 };
 
@@ -31,9 +32,8 @@ export const SupportMatrix$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   capabilities: z.array(SupportCapability$inboundSchema),
-  draft: SupportDraft$inboundSchema,
   methods: z.array(SupportMethod$inboundSchema),
-  products: z.array(SupportPlatform$inboundSchema),
+  platforms: z.array(SupportPlatform$inboundSchema),
   revision: z.string(),
 });
 

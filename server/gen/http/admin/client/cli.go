@@ -1952,51 +1952,6 @@ func BuildGetSupportMatrixPayload(adminGetSupportMatrixAdminSessionToken string)
 	return v, nil
 }
 
-// BuildUpdateSupportMatrixPayload builds the payload for the admin
-// updateSupportMatrix endpoint from CLI flags.
-func BuildUpdateSupportMatrixPayload(adminUpdateSupportMatrixBody string, adminUpdateSupportMatrixAdminSessionToken string) (*admin.UpdateSupportMatrixPayload, error) {
-	var err error
-	var body UpdateSupportMatrixRequestBody
-	{
-		err = json.Unmarshal([]byte(adminUpdateSupportMatrixBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"draft\": {\n         \"mappings\": {\n            \"abc123\": {\n               \"applicability\": \"applicable\",\n               \"conditions\": \"aaa\",\n               \"facts\": {\n                  \"abc123\": {\n                     \"note\": \"aaa\",\n                     \"status\": \"partial\",\n                     \"verify\": false\n                  }\n               }\n            }\n         },\n         \"references\": {\n            \"abc123\": {\n               \"abc123\": {\n                  \"note\": \"aaa\",\n                  \"status\": \"partial\",\n                  \"verify\": false\n               }\n            }\n         }\n      },\n      \"revision\": \"aaa\"\n   }'")
-		}
-		if body.Draft == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("draft", "body"))
-		}
-		if utf8.RuneCountInString(body.Revision) < 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.revision", body.Revision, utf8.RuneCountInString(body.Revision), 64, true))
-		}
-		if utf8.RuneCountInString(body.Revision) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.revision", body.Revision, utf8.RuneCountInString(body.Revision), 64, false))
-		}
-		if body.Draft != nil {
-			if err2 := ValidateSupportDraftRequestBody(body.Draft); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var adminSessionToken *string
-	{
-		if adminUpdateSupportMatrixAdminSessionToken != "" {
-			adminSessionToken = &adminUpdateSupportMatrixAdminSessionToken
-		}
-	}
-	v := &admin.UpdateSupportMatrixPayload{
-		Revision: body.Revision,
-	}
-	if body.Draft != nil {
-		v.Draft = marshalSupportDraftRequestBodyToAdminSupportDraft(body.Draft)
-	}
-	v.AdminSessionToken = adminSessionToken
-
-	return v, nil
-}
-
 // BuildGetSupportCoveragePayload builds the payload for the admin
 // getSupportCoverage endpoint from CLI flags.
 func BuildGetSupportCoveragePayload(adminGetSupportCoverageOrganizationID string, adminGetSupportCoverageWindowDays string, adminGetSupportCoverageAdminSessionToken string) (*admin.GetSupportCoveragePayload, error) {

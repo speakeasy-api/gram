@@ -106,7 +106,6 @@ trackedFiles:
   src/funcs/adminUpdateOnboardingPlaybook.ts: {}
   src/funcs/adminUpdateOnboardingUseCase.ts: {}
   src/funcs/adminUpdateOrganization.ts: {}
-  src/funcs/adminUpdateSupportMatrix.ts: {}
   src/funcs/adminUploadPlatformImage.ts: {}
   src/hooks/hooks.ts: {}
   src/hooks/types.ts: {}
@@ -223,22 +222,22 @@ trackedFiles:
   src/models/components/spendbucket.ts: {}
   src/models/components/spendproduct.ts: {}
   src/models/components/starttrialrequestbody.ts: {}
+  src/models/components/supportaccounts.ts: {}
   src/models/components/supportcapability.ts: {}
   src/models/components/supportcoveragecell.ts: {}
   src/models/components/supportcoverageresult.ts: {}
   src/models/components/supportcoverageunmapped.ts: {}
-  src/models/components/supportdraft.ts: {}
   src/models/components/supportfact.ts: {}
-  src/models/components/supportmapping.ts: {}
   src/models/components/supportmatrix.ts: {}
   src/models/components/supportmethod.ts: {}
+  src/models/components/supportos.ts: {}
   src/models/components/supportplatform.ts: {}
+  src/models/components/supportplatformsupport.ts: {}
   src/models/components/triggerorganizationchatanalysisrequestbody.ts: {}
   src/models/components/updateonboardingplaybookrequestbody.ts: {}
   src/models/components/updateonboardingusecaserequestbody.ts: {}
   src/models/components/updateorganizationrequestbody.ts: {}
   src/models/components/updateremotesessionissuerform.ts: {}
-  src/models/components/updatesupportmatrixrequestbody.ts: {}
   src/models/components/uploadimageresult.ts: {}
   src/models/errors/apierror.ts: {}
   src/models/errors/gramerror.ts: {}
@@ -381,7 +380,6 @@ trackedFiles:
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
   src/react-query/adminUpdateGlobalIssuer.ts: {}
   src/react-query/adminUpdateOrganization.ts: {}
-  src/react-query/adminUpdateSupportMatrix.ts: {}
   src/react-query/adminUploadPlatformImage.ts: {}
   src/react-query/assignAdminOrganizationOnboardingPlaybook.ts: {}
   src/react-query/cloneAdminOnboardingPlaybook.ts: {}
@@ -951,7 +949,7 @@ examples:
     speakeasy-default-admin-get-support-matrix:
       responses:
         "200":
-          application/json: {"capabilities": [], "draft": {"mappings": {}, "references": {}}, "methods": [{"facts": {"key": {"note": "<value>", "status": "supported", "verify": true}}, "id": "<id>", "name": "<value>", "plans": "<value>", "vendor": "<value>"}], "products": [{"family": "<value>", "id": "<id>", "name": "<value>", "surface": "<value>", "vendor": "<value>"}], "revision": "<value>"}
+          application/json: {"capabilities": [], "methods": [{"claims": {}, "id": "<id>", "name": "<value>", "plans": "<value>", "platforms": [], "vendor": "<value>"}], "platforms": [], "revision": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

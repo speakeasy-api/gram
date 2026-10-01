@@ -33,7 +33,7 @@ import { Result } from "../types/fp.js";
  * getSupportMatrix admin
  *
  * @remarks
- * Read the shared support catalog and product coverage.
+ * Read the support matrix the server was built with. It is code, changed by pull request: server/internal/supportmatrix/matrix.yaml.
  */
 export function adminGetSupportMatrix(
   client: GramCore,
