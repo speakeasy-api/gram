@@ -1,6 +1,9 @@
 package feature
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // GramMCPCatalogEnabled evaluates the temporary catalog rollout using a stable
 // organization ID as distinct identity and the canonical organization slug group.
@@ -14,5 +17,8 @@ func GramMCPCatalogEnabled(ctx context.Context, provider Provider, organizationI
 	enabled, err := provider.IsFlagEnabled(ctx, FlagGramMCPCatalog, organizationID, map[string]string{
 		"organization": organizationSlug,
 	})
-	return enabled && err == nil, err
+	if err != nil {
+		return false, fmt.Errorf("evaluate catalog feature flag: %w", err)
+	}
+	return enabled, nil
 }
