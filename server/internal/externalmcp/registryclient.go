@@ -610,7 +610,7 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 	}
 
 	// A server supports DCR when any remote's OAuth auth option carries a
-	// non-empty registration endpoint in the legacy catalog’s embedded discovery
+	// non-empty registration endpoint in the legacy catalog's embedded discovery
 	// result. Computed in the same pass that strips per-remote tools.
 	supportsDCR := false
 	for _, remote := range []*serverRemoteMeta{
