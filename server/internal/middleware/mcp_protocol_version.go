@@ -137,6 +137,10 @@ func isSlugSiblingRoute(seg string) bool {
 	// same, for the remote-session login flow that writes remote_sessions.
 	case "remote_login_callback":
 		return true
+	// GET /mcp/remote_login_bind: the remote login browser hop. The consent
+	// page or the bind stop on another platform host navigates here.
+	case "remote_login_bind":
+		return true
 	}
 
 	// /mcp/install-page-{hash}.js, /mcp/consent-page-{hash}.js and

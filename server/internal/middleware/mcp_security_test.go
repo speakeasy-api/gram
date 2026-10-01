@@ -233,6 +233,7 @@ func TestMCPSecurity_AllowsOAuthCallbackNavigation(t *testing.T) {
 	for _, path := range []string{
 		"/mcp/idp_callback",
 		"/mcp/remote_login_callback",
+		"/mcp/remote_login_bind",
 		"/x/mcp/idp_callback",
 		"/x/mcp/remote_login_callback",
 	} {

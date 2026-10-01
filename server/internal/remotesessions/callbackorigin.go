@@ -79,6 +79,16 @@ func (o CallbackOrigins) ClientCallbackURL(stored pgtype.Text) string {
 	return RemoteLoginCallbackURL(o.ForClient(stored))
 }
 
+// RemoteLoginCallbackOrigin is the origin whose remote-login callback a login
+// with client lands on. A legacy client's /oauth/callback forwards to the
+// pinned outbound origin.
+func (m *ChallengeManager) RemoteLoginCallbackOrigin(client Client) *url.URL {
+	if client.LegacyCallbackUrl {
+		return m.origins.Outbound
+	}
+	return m.origins.ForClient(client.CallbackBaseURL)
+}
+
 func trimOrigin(origin *url.URL) string {
 	return strings.TrimRight(origin.String(), "/")
 }

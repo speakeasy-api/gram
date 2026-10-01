@@ -102,6 +102,11 @@ type ParentChallenge struct {
 	// Authority carries only provider-neutral mint-time request authority. It
 	// never contains advisory network identity or provider credentials.
 	Authority networkingress.Authority
+	// BrowserCookieID and BrowserHash bind the login to a host-only browser
+	// cookie on the client's callback host. Set only when that host differs
+	// from the host holding the parent challenge's callback cookie.
+	BrowserCookieID string
+	BrowserHash     string
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -153,8 +158,13 @@ type RemoteLoginState struct {
 	// ExpectedIssuer is what the RFC 9207 iss parameter must equal; empty skips the check.
 	ExpectedIssuer string `json:"expected_issuer,omitempty"`
 	// Nonce is echoed by the ID token; empty for states minted before it existed.
-	Nonce     string    `json:"nonce,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	Nonce string `json:"nonce,omitempty"`
+	// BrowserCookieID and BrowserHash replace the parent challenge's callback
+	// cookie check when the login lands on a different callback host. Empty
+	// for same-host logins and states minted before they existed.
+	BrowserCookieID string    `json:"browser_cookie_id,omitempty"`
+	BrowserHash     string    `json:"browser_hash,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // parent rebuilds the ParentChallenge this state was minted from, so the
@@ -174,6 +184,8 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		MetaMcpServerID:     s.MetaMcpServerID,
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
+		BrowserCookieID:     s.BrowserCookieID,
+		BrowserHash:         s.BrowserHash,
 	}
 }
 
@@ -956,6 +968,8 @@ func (m *ChallengeManager) mintAuthorization(
 		ResourceRetried:       retry,
 		ExpectedIssuer:        expectedIssuer,
 		Nonce:                 nonce,
+		BrowserCookieID:       parent.BrowserCookieID,
+		BrowserHash:           parent.BrowserHash,
 		CreatedAt:             time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
