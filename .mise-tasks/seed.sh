@@ -19,9 +19,10 @@ set -euo pipefail
 cd server
 go run . demo-seed --local "$@"
 
-# The Gram-owned catalog is global; seed the Okta-mapped vendors so server
-# suggestions have something to match locally. Only the database override is
-# shared with the demo seed; its other flags do not apply here.
+# Workers apply the startup seeds themselves, once per version. Apply them
+# here too, so a database reset under a running stack has them straight away.
+# Only the database override is shared with the demo seed; its other flags do
+# not apply here.
 catalog_args=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -30,4 +31,4 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-exec go run . registry-okta-seed ${catalog_args[@]+"${catalog_args[@]}"}
+exec go run . app-seed ${catalog_args[@]+"${catalog_args[@]}"}
