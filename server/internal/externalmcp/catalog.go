@@ -59,6 +59,8 @@ type CatalogService struct {
 	adapters map[string]RegistryReader
 }
 
+// NewCatalogService temporarily accepts both RegistryReader implementations for
+// the organization-targeted catalog cutover. Remove the legacy reader after rollout.
 func NewCatalogService(db *pgxpool.Pool, legacy RegistryReader, native RegistryReader, providers ...feature.Provider) *CatalogService {
 	adapters := make(map[string]RegistryReader, 2)
 	if legacy != nil {
