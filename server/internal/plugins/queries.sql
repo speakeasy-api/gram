@@ -88,7 +88,7 @@ WHERE id = @id
 
 -- name: GetPluginWithCounts :one
 SELECT
-  p.*,
+  sqlc.embed(p),
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (
     SELECT count(*)
