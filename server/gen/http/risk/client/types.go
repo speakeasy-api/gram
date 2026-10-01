@@ -790,6 +790,9 @@ type UnmaskRiskResultResponseBody struct {
 	// The plaintext matched secret or sensitive data for this result. Empty string
 	// when the finding has no top-level match (e.g. a spans-only finding).
 	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
+	// Whether plaintext was revealed or the MCP finding evidence is unavailable or
+	// expired.
+	RevealState *string `form:"reveal_state,omitempty" json:"reveal_state,omitempty" xml:"reveal_state,omitempty"`
 }
 
 // ListRiskResultsByChatResponseBody is the type of the "risk" service
@@ -14840,8 +14843,9 @@ func NewListRiskResultsForAgentGatewayError(body *ListRiskResultsForAgentGateway
 // "unmaskRiskResult" endpoint result from a HTTP "OK" response.
 func NewUnmaskRiskResultRiskUnmaskResultResultOK(body *UnmaskRiskResultResponseBody) *risk.RiskUnmaskResultResult {
 	v := &risk.RiskUnmaskResultResult{
-		ID:    *body.ID,
-		Match: *body.Match,
+		ID:          *body.ID,
+		Match:       *body.Match,
+		RevealState: *body.RevealState,
 	}
 
 	return v
@@ -22180,8 +22184,16 @@ func ValidateUnmaskRiskResultResponseBody(body *UnmaskRiskResultResponseBody) (e
 	if body.Match == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("match", "body"))
 	}
+	if body.RevealState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reveal_state", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RevealState != nil {
+		if !(*body.RevealState == "available" || *body.RevealState == "evidence_not_stored") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reveal_state", *body.RevealState, []any{"available", "evidence_not_stored"}))
+		}
 	}
 	return
 }

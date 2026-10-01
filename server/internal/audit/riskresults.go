@@ -38,6 +38,10 @@ type LogRiskResultUnmaskEvent struct {
 // no surrounding transaction to be atomic with.
 func (l *Logger) LogRiskResultUnmask(ctx context.Context, dbtx repo.DBTX, event LogRiskResultUnmaskEvent) error {
 	action := ActionRiskResultUnmask
+	subjectSlug := ""
+	if event.ChatID != uuid.Nil {
+		subjectSlug = event.ChatID.String()
+	}
 
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -53,7 +57,7 @@ func (l *Logger) LogRiskResultUnmask(ctx context.Context, dbtx repo.DBTX, event 
 		SubjectID:          event.RiskResultID.String(),
 		SubjectType:        string(subjectTypeRiskResult),
 		SubjectDisplayName: conv.ToPGTextEmpty(""),
-		SubjectSlug:        conv.ToPGTextEmpty(event.ChatID.String()),
+		SubjectSlug:        conv.ToPGTextEmpty(subjectSlug),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,

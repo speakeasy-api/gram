@@ -8,11 +8,14 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	dockercontainer "github.com/moby/moby/api/types/container"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	clickhousecontainer "github.com/testcontainers/testcontainers-go/modules/clickhouse"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+const clickhouseTestHostname = "clickhouse"
 
 type ClickhouseClientFunc func(t *testing.T) (clickhouse.Conn, error)
 
@@ -28,15 +31,19 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 		return nil, nil, fmt.Errorf("wait for docker: %w", err)
 	}
 
-	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd",
+	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:26.4.5.143-distroless@sha256:d7c4cf5575c3d0d49cf1beb7ce8d938d64f707789d9fa3fa538c7d3f898b0649",
 		clickhousecontainer.WithUsername("gram"),
 		clickhousecontainer.WithPassword("gram"),
 		clickhousecontainer.WithInitScripts(filepath.Join(root, "server", "clickhouse", "schema.sql")),
+		// The image initializes through a localhost-only bootstrap server, so
+		// readiness dials the container hostname to require the final network
+		// listener. The distroless image has no shell to resolve $(hostname),
+		// so pin a hostname that the runtime maps in /etc/hosts.
+		testcontainers.WithConfigModifier(func(config *dockercontainer.Config) {
+			config.Hostname = clickhouseTestHostname
+		}),
 		testcontainers.WithWaitStrategy(
-			// The image initializes through a localhost-only bootstrap server.
-			// Dial its hostname so readiness requires the final network listener.
-			// Podman exec does not always populate the HOSTNAME environment variable.
-			wait.ForExec([]string{"sh", "-c", `clickhouse-client --host "$(hostname)" --user gram --password gram --query "SELECT 1"`}),
+			wait.ForExec([]string{"clickhouse-client", "--host", clickhouseTestHostname, "--user", "gram", "--password", "gram", "--query", "SELECT 1"}),
 		),
 		WithPublishedPortWait("9000/tcp"),
 		WithoutPublishedPorts(),

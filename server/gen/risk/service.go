@@ -49,9 +49,10 @@ type Service interface {
 	// `match` value — a non-sensitive server URL or command identifier — is passed
 	// through verbatim.
 	ListRiskResultsForAgent(context.Context, *ListRiskResultsForAgentPayload) (res *ListRiskResultsForAgentResult, err error)
-	// Return the plaintext match for a single risk result, on demand. Gated on the
-	// chat:read scope for the result's chat (not org:admin) — reveal is a
-	// discrete, audited access event distinct from listing redacted results.
+	// Return the plaintext match for a single risk result on demand. Every finding
+	// requires chat:read for its attributed chat. MCP findings with an empty or
+	// invalid chat ID require an unrestricted chat:read grant and use encrypted
+	// stored evidence. Every successful reveal is audited.
 	UnmaskRiskResult(context.Context, *UnmaskRiskResultPayload) (res *RiskUnmaskResultResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
@@ -1385,6 +1386,9 @@ type RiskUnmaskResultResult struct {
 	// The plaintext matched secret or sensitive data for this result. Empty string
 	// when the finding has no top-level match (e.g. a spans-only finding).
 	Match string
+	// Whether plaintext was revealed or the MCP finding evidence is unavailable or
+	// expired.
+	RevealState string
 }
 
 // RiskUserBreakdownResult is the result type of the risk service

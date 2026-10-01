@@ -892,28 +892,28 @@
     },
     {
       "id": "opencode-app",
-      "vendor": "Others",
+      "vendor": "OpenCode",
       "family": "OpenCode",
       "surface": "App",
       "name": "OpenCode"
     },
     {
       "id": "gemini-cli-cli",
-      "vendor": "Others",
+      "vendor": "Google",
       "family": "Gemini CLI",
       "surface": "CLI",
       "name": "Gemini CLI · CLI"
     },
     {
       "id": "openclaw-app",
-      "vendor": "Others",
+      "vendor": "OpenClaw",
       "family": "OpenClaw",
       "surface": "App",
       "name": "OpenClaw"
     },
     {
       "id": "github-copilot-app",
-      "vendor": "Others",
+      "vendor": "GitHub",
       "family": "GitHub Copilot",
       "surface": "App",
       "name": "GitHub Copilot"
@@ -979,6 +979,58 @@
       "id": "shadow-ai",
       "name": "Shadow AI",
       "group": "Shadow AI"
+    }
+  ],
+  "plans": [
+    {
+      "id": "anthropic-team",
+      "vendor": "Anthropic",
+      "name": "Team"
+    },
+    {
+      "id": "anthropic-enterprise",
+      "vendor": "Anthropic",
+      "name": "Enterprise"
+    },
+    {
+      "id": "openai-business",
+      "vendor": "OpenAI",
+      "name": "Business"
+    },
+    {
+      "id": "openai-enterprise",
+      "vendor": "OpenAI",
+      "name": "Enterprise"
+    },
+    {
+      "id": "cursor-teams",
+      "vendor": "Cursor",
+      "name": "Teams"
+    },
+    {
+      "id": "cursor-enterprise",
+      "vendor": "Cursor",
+      "name": "Enterprise"
+    },
+    {
+      "id": "google-gemini-code-assist-standard",
+      "vendor": "Google",
+      "name": "Gemini Code Assist Standard"
+    },
+    {
+      "id": "google-gemini-code-assist-enterprise",
+      "vendor": "Google",
+      "name": "Gemini Code Assist Enterprise"
+    },
+    {
+      "id": "github-copilot-business",
+      "vendor": "GitHub",
+      "name": "Copilot Business"
+    },
+    {
+      "id": "github-copilot-enterprise",
+      "vendor": "GitHub",
+      "name": "Copilot Enterprise"
     }
   ]
 }

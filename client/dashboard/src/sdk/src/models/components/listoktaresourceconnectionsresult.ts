@@ -30,7 +30,7 @@ export type ListOktaResourceConnectionsResult = {
    */
   pendingCount: number;
   /**
-   * Pending servers first, then by name. By default only servers with a step left; include_all adds connected and not-applicable ones.
+   * Pending servers first, then by name. By default only servers with a step left; include_all adds connected, verified and not-applicable ones.
    */
   servers: Array<OktaResourceConnectionServer>;
   /**

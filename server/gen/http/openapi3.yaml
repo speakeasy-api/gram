@@ -463,6 +463,846 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/onboarding.playbooks:
+        get:
+            description: Read every playbook, or, when an organization is named, the shared ones and its own.
+            operationId: adminListOnboardingPlaybooks
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: organization_id
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingPlaybookList'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listOnboardingPlaybooks admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOnboardingPlaybooks
+    /admin/onboarding.playbooks.clone:
+        post:
+            description: Copy a playbook into a custom one for an organization, so staff can edit it for that organization alone.
+            operationId: adminCloneOnboardingPlaybook
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CloneOnboardingPlaybookRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingPlaybook'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: cloneOnboardingPlaybook admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: CloneAdminOnboardingPlaybook
+    /admin/onboarding.playbooks.create:
+        post:
+            description: Create a playbook from top-level steps, for a use case or for one organization, not both. Every prerequisite of a step must be in the playbook, before it. Marking a default replaces the use case's previous default.
+            operationId: adminCreateOnboardingPlaybook
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateOnboardingPlaybookRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingPlaybook'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: createOnboardingPlaybook admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: CreateAdminOnboardingPlaybook
+    /admin/onboarding.playbooks.delete:
+        post:
+            description: Retire a playbook. Organizations assigned it fall back to their setup task selection.
+            operationId: adminDeleteOnboardingPlaybook
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteOnboardingPlaybookRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingPlaybookList'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: deleteOnboardingPlaybook admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: DeleteAdminOnboardingPlaybook
+    /admin/onboarding.playbooks.update:
+        post:
+            description: Replace a playbook's name, description, default mark and steps. A custom playbook is also checked against its organization's stack.
+            operationId: adminUpdateOnboardingPlaybook
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateOnboardingPlaybookRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingPlaybook'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: updateOnboardingPlaybook admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: UpdateAdminOnboardingPlaybook
+    /admin/onboarding.stackOptions:
+        get:
+            description: Read the vendors, plans and platforms the stack form offers, from the support matrix catalog.
+            operationId: adminGetOnboardingStackOptions
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingStackOptions'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getOnboardingStackOptions admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOnboardingStackOptions
+    /admin/onboarding.steps:
+        get:
+            description: Read the onboarding steps the code defines, mirrored into the database, with their groups, methods and prerequisites.
+            operationId: adminListOnboardingSteps
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingStepList'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listOnboardingSteps admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOnboardingSteps
+    /admin/onboarding.useCases:
+        get:
+            description: Read the use cases staff defined, each with its default playbook.
+            operationId: adminListOnboardingUseCases
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingUseCaseList'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listOnboardingUseCases admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOnboardingUseCases
+    /admin/onboarding.useCases.create:
+        post:
+            description: Define a use case.
+            operationId: adminCreateOnboardingUseCase
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateOnboardingUseCaseRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingUseCase'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: createOnboardingUseCase admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: CreateAdminOnboardingUseCase
+    /admin/onboarding.useCases.delete:
+        post:
+            description: Retire a use case and its playbooks. Organizations assigned one of them fall back to their setup task selection.
+            operationId: adminDeleteOnboardingUseCase
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteOnboardingUseCaseRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingUseCaseList'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: deleteOnboardingUseCase admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: DeleteAdminOnboardingUseCase
+    /admin/onboarding.useCases.update:
+        post:
+            description: Rename or describe a use case. The slug never changes.
+            operationId: adminUpdateOnboardingUseCase
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateOnboardingUseCaseRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingUseCase'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: updateOnboardingUseCase admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: UpdateAdminOnboardingUseCase
     /admin/organization.activity:
         get:
             description: Lists activity belonging to an organization for admin operators.
@@ -1562,9 +2402,10 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
-    /admin/organization.onboarding:
+    /admin/organization.onboardingPlaybook:
         get:
-            operationId: adminGetOrganizationOnboarding
+            description: Read the playbook assigned to an organization and how each of its steps fares against the recorded stack.
+            operationId: adminGetOrganizationOnboardingPlaybook
             parameters:
                 - allowEmptyValue: true
                   in: query
@@ -1577,7 +2418,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/AdminOnboardingConfiguration'
+                                $ref: '#/components/schemas/AdminOrganizationOnboardingPlaybook'
                     description: OK response.
                 "400":
                     content:
@@ -1635,25 +2476,26 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - admin_auth_header_Authorization: []
-            summary: getOrganizationOnboarding admin
+            summary: getOrganizationOnboardingPlaybook admin
             tags:
                 - admin
             x-speakeasy-react-hook:
-                name: AdminOrganizationOnboarding
+                name: AdminOrganizationOnboardingPlaybook
         post:
-            operationId: adminSetOrganizationOnboarding
+            description: Assign a playbook to an organization, or clear it. Rejected when a step's methods do not apply to the recorded stack; the error names the steps.
+            operationId: adminAssignOrganizationOnboardingPlaybook
             requestBody:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetOrganizationOnboardingRequestBody'
+                            $ref: '#/components/schemas/AssignOrganizationOnboardingPlaybookRequestBody'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/AdminOnboardingConfiguration'
+                                $ref: '#/components/schemas/AdminOrganizationOnboardingPlaybook'
                     description: OK response.
                 "400":
                     content:
@@ -1711,11 +2553,167 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - admin_auth_header_Authorization: []
-            summary: setOrganizationOnboarding admin
+            summary: assignOrganizationOnboardingPlaybook admin
             tags:
                 - admin
             x-speakeasy-react-hook:
-                name: SetAdminOrganizationOnboarding
+                name: AssignAdminOrganizationOnboardingPlaybook
+    /admin/organization.onboardingStack:
+        get:
+            description: 'Read the stack staff recorded for an organization: its vendors with plans and its device management.'
+            operationId: adminGetOrganizationOnboardingStack
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingStack'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getOrganizationOnboardingStack admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOrganizationOnboardingStack
+        post:
+            description: Replace the stack recorded for an organization. Vendors and plans must come from the catalog; other needs a name and none clears it.
+            operationId: adminSetOrganizationOnboardingStack
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetOrganizationOnboardingStackRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingStack'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setOrganizationOnboardingStack admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: SetAdminOrganizationOnboardingStack
     /admin/organization.open-dashboard:
         post:
             tags:
@@ -39132,12 +40130,12 @@ paths:
             operationId: listOktaResourceConnections
             parameters:
                 - allowEmptyValue: true
-                  description: Include connected and not-applicable servers.
+                  description: Include connected, verified and not-applicable servers.
                   in: query
                   name: include_all
                   schema:
                     default: false
-                    description: Include connected and not-applicable servers.
+                    description: Include connected, verified and not-applicable servers.
                     type: boolean
                 - allowEmptyValue: true
                   description: Session header
@@ -59977,7 +60975,7 @@ paths:
                 type: mutation
     /rpc/risk.unmaskResult:
         post:
-            description: Return the plaintext match for a single risk result, on demand. Gated on the chat:read scope for the result's chat (not org:admin) — reveal is a discrete, audited access event distinct from listing redacted results.
+            description: Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.
             operationId: unmaskRiskResult
             parameters:
                 - allowEmptyValue: true
@@ -80509,6 +81507,16 @@ components:
                 - visibility
                 - source
                 - created_at
+        AdminMdmVendorOption:
+            type: object
+            properties:
+                name:
+                    type: string
+                slug:
+                    type: string
+            required:
+                - slug
+                - name
         AdminMeterUsageBucket:
             type: object
             properties:
@@ -80571,57 +81579,245 @@ components:
                 - buckets
                 - queried_at
                 - measurement_method
-        AdminOnboardingConfiguration:
+        AdminOnboardingPlan:
             type: object
             properties:
-                organization_id:
+                name:
                     type: string
-                preset:
+                slug:
                     type: string
-                    description: Absent for legacy organizations.
-                presets:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AdminOnboardingPreset'
-                tasks:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AdminOnboardingTask'
             required:
-                - organization_id
-                - tasks
-                - presets
-        AdminOnboardingPreset:
+                - slug
+                - name
+        AdminOnboardingPlatform:
             type: object
             properties:
-                key:
+                family:
                     type: string
-                title:
+                name:
                     type: string
-                visible_task_keys:
-                    type: array
-                    items:
-                        type: string
+                slug:
+                    type: string
+                surface:
+                    type: string
             required:
-                - key
-                - title
-                - visible_task_keys
-        AdminOnboardingTask:
+                - slug
+                - name
+                - family
+                - surface
+        AdminOnboardingPlaybook:
             type: object
             properties:
                 description:
                     type: string
-                hidden:
+                id:
+                    type: string
+                is_default:
                     type: boolean
-                key:
+                    description: The default playbook of its use case. Only a shared playbook can be one.
+                name:
+                    type: string
+                organization_id:
+                    type: string
+                    description: 'Set for a custom playbook: the one organization it belongs to. A playbook has a use case or an organization, never both.'
+                organization_name:
+                    type: string
+                    description: That organization's name.
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingPlaybookStep'
+                    description: Top-level steps in walking order; a group brings its cards.
+                use_case_id:
+                    type: string
+                    description: 'Set for a shared playbook: the use case it belongs to.'
+                use_case_name:
+                    type: string
+                use_case_slug:
+                    type: string
+            required:
+                - id
+                - name
+                - description
+                - is_default
+                - steps
+        AdminOnboardingPlaybookList:
+            type: object
+            properties:
+                playbooks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingPlaybook'
+            required:
+                - playbooks
+        AdminOnboardingPlaybookStep:
+            type: object
+            properties:
+                slug:
                     type: string
                 title:
                     type: string
             required:
-                - key
+                - slug
+                - title
+        AdminOnboardingStack:
+            type: object
+            properties:
+                mdm_vendor:
+                    type: string
+                    description: jamf, intune, iru, other or none. Absent until staff record the stack.
+                mdm_vendor_name:
+                    type: string
+                    description: The software's name when mdm_vendor is other.
+                organization_id:
+                    type: string
+                vendors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingStackVendor'
+                    description: The vendors the organization uses. Empty until staff record the stack.
+            required:
+                - organization_id
+                - vendors
+        AdminOnboardingStackOptions:
+            type: object
+            properties:
+                mdm_vendors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminMdmVendorOption'
+                    description: Device management software the form offers, ending with other.
+                vendors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingVendorOption'
+                    description: From the support matrix catalog, in catalog order.
+            required:
+                - vendors
+                - mdm_vendors
+        AdminOnboardingStackVendor:
+            type: object
+            properties:
+                plan_slug:
+                    type: string
+                    description: The plan the organization is on with this vendor. Absent for a vendor with no plans.
+                vendor:
+                    type: string
+            required:
+                - vendor
+        AdminOnboardingStep:
+            type: object
+            properties:
+                completion:
+                    type: string
+                    description: 'How the step completes: manual, fact, or children for a group.'
+                description:
+                    type: string
+                hidden_by_default:
+                    type: boolean
+                    description: Whether an organization that never saved a selection sees the step.
+                method_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: Support matrix integration methods the step configures. Empty means the step applies to every stack.
+                parent_slug:
+                    type: string
+                    description: The group this card sits under. Absent for a top-level step.
+                requires:
+                    type: array
+                    items:
+                        type: string
+                    description: Slugs of the steps that must be done before this one.
+                slug:
+                    type: string
+                title:
+                    type: string
+            required:
+                - slug
                 - title
                 - description
-                - hidden
+                - completion
+                - hidden_by_default
+                - method_slugs
+                - requires
+        AdminOnboardingStepApplicability:
+            type: object
+            properties:
+                applies:
+                    type: boolean
+                    description: Whether the recorded stack supports the step.
+                reason:
+                    type: string
+                    description: Why not, when it does not.
+                slug:
+                    type: string
+                title:
+                    type: string
+            required:
+                - slug
+                - title
+                - applies
+                - reason
+        AdminOnboardingStepList:
+            type: object
+            properties:
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingStep'
+                    description: Every step in wizard order; a group precedes its cards.
+            required:
+                - steps
+        AdminOnboardingUseCase:
+            type: object
+            properties:
+                default_playbook_id:
+                    type: string
+                    description: The default playbook, once one is marked.
+                description:
+                    type: string
+                id:
+                    type: string
+                name:
+                    type: string
+                slug:
+                    type: string
+                    description: Stable name the onboarding survey uses.
+            required:
+                - id
+                - slug
+                - name
+                - description
+        AdminOnboardingUseCaseList:
+            type: object
+            properties:
+                use_cases:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingUseCase'
+            required:
+                - use_cases
+        AdminOnboardingVendorOption:
+            type: object
+            properties:
+                plans:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingPlan'
+                    description: Plans the vendor sells. Empty for a vendor with no plans.
+                platforms:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingPlatform'
+                    description: The vendor's products, all implied when the vendor is selected.
+                vendor:
+                    type: string
+                    description: Vendor name as the support matrix spells it.
+            required:
+                - vendor
+                - plans
+                - platforms
         AdminOpenRouterKey:
             type: object
             properties:
@@ -80785,6 +81981,21 @@ components:
                 - display_name
                 - created_at
                 - updated_at
+        AdminOrganizationOnboardingPlaybook:
+            type: object
+            properties:
+                applicability:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingStepApplicability'
+                    description: Each step of the assigned playbook against the recorded stack.
+                organization_id:
+                    type: string
+                playbook:
+                    $ref: '#/components/schemas/AdminOnboardingPlaybook'
+            required:
+                - organization_id
+                - applicability
         AdminOrganizationStats:
             type: object
             properties:
@@ -82199,6 +83410,16 @@ components:
                 - content_length
                 - created_at
                 - updated_at
+        AssignOrganizationOnboardingPlaybookRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                playbook_id:
+                    type: string
+                    description: Omit to clear the assignment.
+            required:
+                - organization_id
         Assistant:
             type: object
             properties:
@@ -84119,6 +85340,19 @@ components:
                     description: The name for the new cloned environment
             required:
                 - new_name
+        CloneOnboardingPlaybookRequestBody:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Defaults to the source name.
+                organization_id:
+                    type: string
+                playbook_id:
+                    type: string
+            required:
+                - organization_id
+                - playbook_id
         CodexHookPayload:
             type: object
             properties:
@@ -85112,6 +86346,42 @@ components:
                         - private
             description: Form for creating a new meta MCP server. URL addressability is managed separately through MCP endpoints.
             required:
+                - name
+        CreateOnboardingPlaybookRequestBody:
+            type: object
+            properties:
+                description:
+                    type: string
+                is_default:
+                    type: boolean
+                name:
+                    type: string
+                organization_id:
+                    type: string
+                    description: The one organization a custom playbook belongs to.
+                step_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: Top-level step slugs in walking order.
+                use_case_id:
+                    type: string
+                    description: The use case a shared playbook belongs to.
+            required:
+                - name
+                - step_slugs
+        CreateOnboardingUseCaseRequestBody:
+            type: object
+            properties:
+                description:
+                    type: string
+                name:
+                    type: string
+                slug:
+                    type: string
+                    description: Lowercase letters, digits and dashes.
+            required:
+                - slug
                 - name
         CreateOrganizationRemoteSessionClientForm:
             type: object
@@ -86674,6 +87944,20 @@ components:
                     description: The ID of the variation that was deleted
             required:
                 - variation_id
+        DeleteOnboardingPlaybookRequestBody:
+            type: object
+            properties:
+                playbook_id:
+                    type: string
+            required:
+                - playbook_id
+        DeleteOnboardingUseCaseRequestBody:
+            type: object
+            properties:
+                use_case_id:
+                    type: string
+            required:
+                - use_case_id
         DeleteRequestBody:
             type: object
             properties:
@@ -93406,7 +94690,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/OktaResourceConnectionServer'
-                    description: Pending servers first, then by name. By default only servers with a step left; include_all adds connected and not-applicable ones.
+                    description: Pending servers first, then by name. By default only servers with a step left; include_all adds connected, verified and not-applicable ones.
                 total_count:
                     type: integer
                     description: Eligible servers before filtering.
@@ -93973,7 +95257,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SetupTask'
-                    description: Setup tasks in catalog order.
+                    description: Setup tasks in catalog order. A group precedes the cards under it.
             required:
                 - tasks
         ListShadowMCPInventoryResult:
@@ -96443,6 +97727,14 @@ components:
                 audience:
                     type: string
                     description: The resource app's Cross App Access issuer URL as configured in the identity provider; the audience of the identity assertion. Present once confirmed.
+                broken_reason:
+                    type: string
+                    description: 'Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server''s authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app''s client authentication; downstream_rejected: the identity provider issued the assertion but the server''s authorization server refused it.'
+                    enum:
+                        - audience_mismatch
+                        - scope_not_allowed
+                        - client_auth_failed
+                        - downstream_rejected
                 client_binding:
                     type: string
                     description: 'bound: an explicit identity chaining binding selects the client; single: the one client attached to the authorization server; ambiguous: more than one candidate and no single binding; missing: no client registered yet.'
@@ -96474,6 +97766,19 @@ components:
                     description: 'no_idjag: the server''s authorization server metadata does not advertise the identity assertion grant.'
                     enum:
                         - no_idjag
+                observed_at:
+                    type: string
+                    description: When the exchange behind observed_result started.
+                    format: date-time
+                observed_result:
+                    type: string
+                    description: What the latest identity chaining exchange since confirmation showed. connection_missing is inferred from the identity provider's invalid_target error.
+                    enum:
+                        - verified
+                        - downstream_rejected
+                        - connection_missing
+                        - scope_not_allowed
+                        - client_auth_failed
                 okta_application_id:
                     type: string
                     description: The identity provider app instance the administrator picked for this upstream, when recorded.
@@ -96504,12 +97809,14 @@ components:
                     type: string
                 state:
                     type: string
-                    description: 'Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server''s upstream; connected: the administrator confirmed it. Whether the exchange works is not known here.'
+                    description: 'Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server''s upstream, or an exchange since confirmation found it missing; broken: confirmed but known not to work, see broken_reason; connected: the administrator confirmed it and no conclusive exchange has run since; verified: an exchange since confirmation succeeded.'
                     enum:
                         - not_applicable
                         - needs_agent
                         - needs_connection
+                        - broken
                         - connected
+                        - verified
             description: One MCP server and the Okta resource connection recorded for its upstream, with the derived Cross App Access state and the exact values the administrator enters in the identity provider console. Servers that share an upstream resource share one Okta resource connection.
             required:
                 - mcp_server_id
@@ -101857,9 +103164,16 @@ components:
                 match:
                     type: string
                     description: The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).
+                reveal_state:
+                    type: string
+                    description: Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+                    enum:
+                        - available
+                        - evidence_not_stored
             required:
                 - id
                 - match
+                - reveal_state
         RiskUserBreakdownResult:
             type: object
             properties:
@@ -103534,22 +104848,26 @@ components:
                 - organization_id
                 - feature_name
                 - enabled
-        SetOrganizationOnboardingRequestBody:
+        SetOrganizationOnboardingStackRequestBody:
             type: object
             properties:
+                mdm_vendor:
+                    type: string
+                    description: jamf, intune, iru, other or none.
+                mdm_vendor_name:
+                    type: string
+                    description: Required when mdm_vendor is other, ignored otherwise.
                 organization_id:
                     type: string
-                preset:
-                    type: string
-                    description: A key from presets. Omit to preserve the saved preset. Null/reset is not supported.
-                visible_task_keys:
+                vendors:
                     type: array
                     items:
-                        type: string
-                    description: Complete explicit selection; an empty array selects no tasks.
+                        $ref: '#/components/schemas/AdminOnboardingStackVendor'
+                    description: Complete explicit list; an empty array records no vendors.
             required:
                 - organization_id
-                - visible_task_keys
+                - vendors
+                - mdm_vendor
         SetOrganizationWhitelistRequestBody:
             type: object
             properties:
@@ -103991,12 +105309,18 @@ components:
                 description:
                     type: string
                     description: Task description.
+                group:
+                    type: boolean
+                    description: 'True for a group that nests cards. A group has no card of its own: it is hidden when every card under it is, done when every visible card is, and cannot be assigned or marked by hand.'
                 hidden:
                     type: boolean
                     description: Whether a platform administrator hid the task.
                 key:
                     type: string
                     description: Stable code-owned task key.
+                parent_key:
+                    type: string
+                    description: Key of the group this card sits under. Absent for a top-level card or a group.
                 status:
                     type: string
                     description: Effective task status.
@@ -104016,6 +105340,7 @@ components:
                 - completed_by_fact
                 - blocked_by
                 - hidden
+                - group
         SetupTaskAssignee:
             type: object
             properties:
@@ -109985,6 +111310,37 @@ components:
             description: Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility or network_access_mode preserves the respective stored value.
             required:
                 - id
+                - name
+        UpdateOnboardingPlaybookRequestBody:
+            type: object
+            properties:
+                description:
+                    type: string
+                is_default:
+                    type: boolean
+                name:
+                    type: string
+                playbook_id:
+                    type: string
+                step_slugs:
+                    type: array
+                    items:
+                        type: string
+            required:
+                - playbook_id
+                - name
+                - step_slugs
+        UpdateOnboardingUseCaseRequestBody:
+            type: object
+            properties:
+                description:
+                    type: string
+                name:
+                    type: string
+                use_case_id:
+                    type: string
+            required:
+                - use_case_id
                 - name
         UpdateOrganizationRequestBody:
             type: object

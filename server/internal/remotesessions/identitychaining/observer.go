@@ -1,0 +1,74 @@
+package identitychaining
+
+import (
+	"context"
+	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+)
+
+// observeTimeout bounds an observer call so readiness bookkeeping never
+// holds up a proxied request for long.
+const observeTimeout = 2 * time.Second
+
+// Observation is one fresh acquisition attempt. It carries no tokens, claims
+// or provider response content.
+type Observation struct {
+	OrganizationID string
+
+	// TrustedIssuerID is the identity provider the exchange was sent to.
+	TrustedIssuerID uuid.UUID
+
+	// RemoteIssuerID, RemoteIssuer and Resource are the upstream the grant
+	// was for; RemoteIssuer is the resource authorization server issuer.
+	RemoteIssuerID uuid.UUID
+	RemoteIssuer   string
+	Resource       string
+
+	// Audience is the selected ID-JAG audience requested by the exchange.
+	// A confirmed audience can differ from RemoteIssuer.
+	Audience string
+
+	Outcome Outcome
+
+	// GrantValidated reports that the identity provider issued an ID-JAG that
+	// passed validation, so a redemption outcome is the resource
+	// authorization server's answer.
+	GrantValidated bool
+
+	// StartedAt is when the attempt began, before any provider call.
+	StartedAt time.Time
+}
+
+// Observer receives every fresh acquisition attempt; never credential-store
+// hits, cached failures or a concurrent holder's result. The context still
+// carries the proxied request's identity; an observer that audits must not
+// act as it.
+type Observer interface {
+	ObserveAttempt(ctx context.Context, o Observation) error
+}
+
+// SetObserver registers an observer for fresh attempts, or clears it with nil.
+// It is safe to call concurrently with acquisition and observer callbacks.
+func (c *Chainer) SetObserver(o Observer) {
+	c.observerMu.Lock()
+	c.observer = o
+	c.observerMu.Unlock()
+}
+
+func (c *Chainer) observe(ctx context.Context, logger *slog.Logger, o Observation) {
+	c.observerMu.RLock()
+	observer := c.observer
+	c.observerMu.RUnlock()
+	if observer == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), observeTimeout)
+	defer cancel()
+	if err := observer.ObserveAttempt(ctx, o); err != nil {
+		logger.WarnContext(ctx, "observe identity chaining attempt", attr.SlogError(err))
+	}
+}

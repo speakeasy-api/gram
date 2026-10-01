@@ -128,7 +128,7 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				}()
 				// No attachment or assistant row lock exists yet: deletion must
 				// be waiting specifically on the resolver's target lock.
-				testenv.WaitForBlockedBackend(t, ctx, conn)
+				testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(tx), 1)
 
 				queries := assistantrepo.New(tx)
 				if mutation == "create" {

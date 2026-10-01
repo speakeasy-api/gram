@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
-import type { AppInstanceOption } from "./xaaView";
+import { hasConfirmation, type AppInstanceOption } from "./xaaView";
 
 /** Confirmations are shared only by servers with the same issuer ID and resource. */
 export function sharedConfirmationKey(
@@ -48,7 +48,7 @@ export function useClearedConfirmations(
   const { servers, isPlaceholderData } = readiness;
   useEffect(() => {
     if (isPlaceholderData) return;
-    retire((servers ?? []).filter((row) => row.state === "connected"));
+    retire((servers ?? []).filter(hasConfirmation));
   }, [servers, isPlaceholderData, retire]);
 
   const remember = useCallback(

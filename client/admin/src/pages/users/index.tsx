@@ -117,31 +117,22 @@ function UsersPage({
   return (
     <div className="flex h-full flex-col">
       <section className="flex min-h-0 flex-1 flex-col">
-        <div className="mb-4 flex items-start gap-2">
+        {/* The layout's scroll box starts flush with the search field, so the
+            focus ring needs its own room above it or the top edge is clipped. */}
+        <div className="mb-4 flex items-start gap-2 pt-1">
           <div className="min-w-0 flex-1">
             <UserSearchInput
               value={draft}
               onChange={changeDraft}
               error={parsed.ok ? undefined : parsed.message}
+              onClear={() => {
+                clearTimeout(timer.current);
+                setDraft("");
+                commit("");
+              }}
             />
           </div>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              clearTimeout(timer.current);
-              setDraft("");
-              commit("");
-            }}
-          >
-            Clear search
-          </Button>
         </div>
-        {stale && lastValid && (
-          <p role="status" className="text-muted-foreground mb-2 text-sm">
-            Showing last valid results for {lastValid.q || "all users"} (page{" "}
-            {lastValid.page}).
-          </p>
-        )}
         {query.isError && (
           <p role="alert">
             Could not refresh users: {errorMessage(query.error)}{" "}
@@ -154,10 +145,13 @@ function UsersPage({
             </Button>
           </p>
         )}
-        <div className="flex min-h-0 flex-1 flex-col rounded-lg border">
+        <div className="flex min-h-0 flex-1 flex-col overflow-clip rounded-lg border">
+          {/* Retained last-valid rows are marked busy rather than announced in a
+              banner, which would push the table down on every invalid keystroke. */}
           <div
             role="region"
             aria-label="Users table"
+            aria-busy={(stale && Boolean(lastValid)) || undefined}
             className="min-h-0 flex-1 overflow-auto"
           >
             <Table>
