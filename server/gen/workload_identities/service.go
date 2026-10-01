@@ -181,7 +181,7 @@ type UpdateSubjectPayload struct {
 	// Replaces the admission's tags; an empty list clears them. Trimmed and
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
-	Tags []string
+	Tags []string `json:"tags,omitzero"`
 	// The agent whose policy the admitted workload inherits. Shared with any
 	// admission of the same subject under the same issuer at the other tier.
 	AgentID *string

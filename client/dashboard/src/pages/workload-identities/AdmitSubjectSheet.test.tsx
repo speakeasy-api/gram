@@ -252,3 +252,54 @@ it("requires an agent before allowing new access", () => {
   });
   expect(allow.disabled).toBe(true);
 });
+
+it("starts a new admission empty each time the sheet opens", () => {
+  const sheet = (open: boolean) => (
+    <AdmitSubjectSheet
+      open={open}
+      onOpenChange={() => {}}
+      onSubmit={() => {}}
+      isPending={false}
+      issuer={issuer()}
+      agents={[{ id: "22222222-2222-2222-2222-222222222222", name: "poc" }]}
+    />
+  );
+  const { rerender } = render(sheet(true));
+  fireEvent.change(subjectField(), {
+    target: { value: "wimse://identity.example.com/org/acme/agent/a-1" },
+  });
+
+  rerender(sheet(false));
+  rerender(sheet(true));
+
+  expect((subjectField() as HTMLInputElement).value).toBe("");
+});
+
+it("takes the values handed over in the render that reopens it", () => {
+  const sheet = (open: boolean, name: string) => (
+    <AdmitSubjectSheet
+      open={open}
+      onOpenChange={() => {}}
+      onSubmit={() => {}}
+      isPending={false}
+      issuer={issuer()}
+      agents={[{ id: "22222222-2222-2222-2222-222222222222", name: "poc" }]}
+      initial={{
+        subject: "wimse://identity.example.com/org/acme/agent/a-1",
+        name,
+        tags: [],
+        agentId: "22222222-2222-2222-2222-222222222222",
+        agentName: "poc",
+      }}
+    />
+  );
+  const { rerender } = render(sheet(true, "Deploy bot"));
+
+  rerender(sheet(false, "Deploy bot"));
+  rerender(sheet(true, "Release bot"));
+
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("Release bot");
+  expect(saveButton().disabled).toBe(true);
+});

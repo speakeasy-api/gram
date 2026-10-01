@@ -100,7 +100,7 @@ type UpdateSubjectRequestBody struct {
 	// Replaces the admission's tags; an empty list clears them. Trimmed and
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
-	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	Tags []string `json:"tags,omitzero"`
 	// The agent whose policy the admitted workload inherits. Shared with any
 	// admission of the same subject under the same issuer at the other tier.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`

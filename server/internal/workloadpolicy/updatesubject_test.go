@@ -2,12 +2,17 @@ package workloadpolicy_test
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
+	genclient "github.com/speakeasy-api/gram/server/gen/http/workload_identities/client"
+	genserver "github.com/speakeasy-api/gram/server/gen/http/workload_identities/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
@@ -146,6 +151,90 @@ func TestUpdateSubject_ClearsTheTagsWithAnEmptyList(t *testing.T) {
 	updated := onlyAdmission(t, policy)
 	require.NotNil(t, updated.Tags)
 	require.Empty(t, updated.Tags)
+}
+
+// encodeUpdateSubjectRequest runs a payload through the generated Go client's
+// request encoder, giving the request a Go caller or the CLI puts on the wire.
+func encodeUpdateSubjectRequest(t *testing.T, payload *gen.UpdateSubjectPayload) *http.Request {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, genclient.UpdateSubjectWorkloadIdentitiesPath(), nil)
+	require.NoError(t, err)
+	require.NoError(t, genclient.EncodeUpdateSubjectRequest(goahttp.RequestEncoder)(req, payload))
+
+	return req
+}
+
+func TestUpdateSubject_ClientRequestKeepsAnEmptyTagListAndOmitsANilOne(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.NewString()
+	tests := []struct {
+		name string
+		tags []string
+		want string
+	}{
+		{name: "empty list is sent", tags: []string{}, want: `{"id":"` + id + `","tags":[]}`},
+		{name: "nil list is omitted", tags: nil, want: `{"id":"` + id + `"}`},
+		{name: "tags are sent", tags: []string{"ci"}, want: `{"id":"` + id + `","tags":["ci"]}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			payload := updateSubjectPayload(id)
+			payload.Tags = tc.tags
+			body, err := io.ReadAll(encodeUpdateSubjectRequest(t, payload).Body)
+			require.NoError(t, err)
+
+			require.JSONEq(t, tc.want, string(body))
+		})
+	}
+}
+
+func TestUpdateSubject_ClearsTheTagsThroughTheGoClient(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+	original := admitLabelled(t, ctx, ti, agentID)
+	require.NotEmpty(t, original.Tags)
+
+	payload := updateSubjectPayload(original.ID)
+	payload.Tags = []string{}
+	decoded, err := genserver.DecodeUpdateSubjectRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(encodeUpdateSubjectRequest(t, payload))
+	require.NoError(t, err)
+
+	policy, err := ti.service.UpdateSubject(ctx, decoded)
+	require.NoError(t, err)
+
+	updated := onlyAdmission(t, policy)
+	require.Empty(t, updated.Tags)
+	require.Equal(t, original.Name, updated.Name)
+	require.Equal(t, original.AgentID, updated.AgentID)
+}
+
+func TestUpdateSubject_KeepsTheTagsWhenTheGoClientOmitsThem(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+	original := admitLabelled(t, ctx, ti, agentID)
+
+	payload := updateSubjectPayload(original.ID)
+	payload.Name = new("Release channel")
+	decoded, err := genserver.DecodeUpdateSubjectRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(encodeUpdateSubjectRequest(t, payload))
+	require.NoError(t, err)
+
+	policy, err := ti.service.UpdateSubject(ctx, decoded)
+	require.NoError(t, err)
+
+	updated := onlyAdmission(t, policy)
+	require.Equal(t, "Release channel", updated.Name)
+	require.Equal(t, original.Tags, updated.Tags)
 }
 
 func TestUpdateSubject_WithNoFieldsLeavesTheAdmissionUnchanged(t *testing.T) {
