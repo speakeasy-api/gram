@@ -97,6 +97,13 @@ const PRODUCT_FEATURES = {
     description:
       "Enables agent session portability for the device agent: session sharing links, move reporting with lineage, and picker title enrichment.",
   },
+  signals_intelligence: {
+    kind: "toggle",
+    enabledKey: "signalsIntelligenceEnabled",
+    label: "Signals Intelligence",
+    description:
+      "Enables the Signals intelligence configuration dashboard for this organization.",
+  },
   sso: {
     kind: "toggle",
     enabledKey: "ssoEnabled",
