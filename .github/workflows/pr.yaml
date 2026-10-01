@@ -761,7 +761,7 @@ jobs:
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     services:
       clickhouse:
-        image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
+        image: clickhouse/clickhouse-server:26.4.5.143-distroless@sha256:d7c4cf5575c3d0d49cf1beb7ce8d938d64f707789d9fa3fa538c7d3f898b0649
         env:
           CLICKHOUSE_DB: gram
           CLICKHOUSE_USER: gram
@@ -769,12 +769,6 @@ jobs:
           CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
         ports:
           - 9000:9000
-        options: >-
-          --health-cmd "clickhouse-client --user gram --password gram --query 'SELECT 1'"
-          --health-interval 10s
-          --health-start-period 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -787,6 +781,25 @@ jobs:
           cache: true
           cache_key_prefix: mise-blacksmith-v1
           env: false
+
+      # The distroless image has no shell for a service --health-cmd, and its
+      # init runs a localhost-only bootstrap server first. Dial the container
+      # hostname so readiness requires the final network listener.
+      - name: Wait for ClickHouse
+        env:
+          CLICKHOUSE_CONTAINER: ${{ job.services.clickhouse.id }}
+        run: |
+          host="$(docker inspect --format '{{.Config.Hostname}}' "$CLICKHOUSE_CONTAINER")"
+          for _ in $(seq 1 60); do
+            if docker exec "$CLICKHOUSE_CONTAINER" \
+              clickhouse-client --host "$host" --user gram --password gram --query 'SELECT 1' >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::ClickHouse did not become ready"
+          docker logs "$CLICKHOUSE_CONTAINER"
+          exit 1
 
       - name: Bootstrap local ClickHouse principals
         env:

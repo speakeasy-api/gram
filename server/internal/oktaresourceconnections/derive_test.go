@@ -29,6 +29,12 @@ func TestDerive(t *testing.T) {
 		{"agent first", with(func(i *Inputs) { i.AgentRecorded = false; i.Confirmed = false }), StateNeedsAgent},
 		{"unconfirmed connection", with(func(i *Inputs) { i.Confirmed = false }), StateNeedsConnection},
 		{"confirmation is connected", ready, StateConnected},
+		{"exchange success is verified", with(func(i *Inputs) { i.Observed = ResultVerified }), StateVerified},
+		{"missing connection overrides confirmation", with(func(i *Inputs) { i.Observed = ResultConnectionMissing }), StateNeedsConnection},
+		{"scope not allowed is broken", with(func(i *Inputs) { i.Observed = ResultScopeNotAllowed }), StateBroken},
+		{"client auth failure is broken", with(func(i *Inputs) { i.Observed = ResultClientAuthFailed }), StateBroken},
+		{"downstream rejection is broken", with(func(i *Inputs) { i.Observed = ResultDownstreamRejected }), StateBroken},
+		{"agent still first", with(func(i *Inputs) { i.AgentRecorded = false; i.Observed = ResultVerified }), StateNeedsAgent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -38,15 +44,17 @@ func TestDerive(t *testing.T) {
 	}
 	require.Equal(t, ReasonNoIDJAG, NotApplicableReason(with(func(i *Inputs) { i.AdvertisesIDJAG = false })))
 	require.Empty(t, NotApplicableReason(ready))
+	require.Equal(t, string(ResultScopeNotAllowed), BrokenReason(with(func(i *Inputs) { i.Observed = ResultScopeNotAllowed })))
+	require.Empty(t, BrokenReason(with(func(i *Inputs) { i.Observed = ResultVerified })))
 }
 
 func TestStatePending(t *testing.T) {
 	t.Parallel()
 
-	for _, s := range []State{StateNeedsAgent, StateNeedsConnection} {
+	for _, s := range []State{StateNeedsAgent, StateNeedsConnection, StateBroken} {
 		require.True(t, s.Pending(), string(s))
 	}
-	for _, s := range []State{StateNotApplicable, StateConnected} {
+	for _, s := range []State{StateNotApplicable, StateConnected, StateVerified} {
 		require.False(t, s.Pending(), string(s))
 	}
 }

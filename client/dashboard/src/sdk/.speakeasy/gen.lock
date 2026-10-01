@@ -11497,7 +11497,7 @@ examples:
         application/json: {"use_case": "<value>"}
       responses:
         "200":
-          application/json: {"tasks": [{"blocked_by": ["<value 1>", "<value 2>", "<value 3>"], "completed_by_fact": true, "description": "lace actually tabulate blah instead", "hidden": true, "key": "<key>", "status": "todo", "title": "<value>"}]}
+          application/json: {"tasks": [{"blocked_by": ["<value 1>", "<value 2>", "<value 3>"], "completed_by_fact": true, "description": "lace actually tabulate blah instead", "group": false, "hidden": true, "key": "<key>", "status": "todo", "title": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -11731,7 +11731,7 @@ examples:
         application/json: {"id": "62812167-ce5a-438e-bcc0-10d7ab10b11f"}
       responses:
         "200":
-          application/json: {"id": "19916053-7fed-4f9c-be0d-51f5fa499d5d", "match": "<value>"}
+          application/json: {"id": "19916053-7fed-4f9c-be0d-51f5fa499d5d", "match": "<value>", "reveal_state": "available"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -12244,7 +12244,7 @@ examples:
         application/json: {"task_key": "<value>"}
       responses:
         "200":
-          application/json: {"blocked_by": [], "completed_by_fact": true, "description": "ecliptic woot quarrelsomely destock wisely", "hidden": true, "key": "<key>", "status": "awaiting_support", "title": "<value>"}
+          application/json: {"blocked_by": [], "completed_by_fact": true, "description": "ecliptic woot quarrelsomely destock wisely", "group": true, "hidden": true, "key": "<key>", "status": "awaiting_support", "title": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

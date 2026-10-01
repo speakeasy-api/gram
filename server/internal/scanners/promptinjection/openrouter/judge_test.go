@@ -245,6 +245,43 @@ func drainLimiter(t *testing.T, c *Engine) {
 	}
 }
 
+// TestClassifyCapsGeneratedTokens pins the output cap. Without it OpenRouter
+// reserves the model's full ceiling against the key's limit and refuses every
+// call, silently failing the scanner open.
+func TestClassifyCapsGeneratedTokens(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeCompletionClient{responder: func(string) string { return safeVerdictJSON }}
+	engine := newEngine(t, client)
+
+	_, err := engine.Classify(t.Context(), req("hello"))
+	require.NoError(t, err)
+
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	require.Len(t, client.requests, 1)
+	require.NotNil(t, client.requests[0].MaxTokens, "judge must cap generated tokens")
+	require.Equal(t, MaxVerdictTokens, *client.requests[0].MaxTokens)
+}
+
+// TestClassifyFailsOpenOnTruncatedVerdict covers the risk the cap introduces:
+// a truncated completion can still parse as a valid verdict.
+func TestClassifyFailsOpenOnTruncatedVerdict(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeCompletionClient{
+		responder:    func(string) string { return injectionVerdictJSON("cut off mid-answer") },
+		finishReason: new(openrouter.FinishReasonLength),
+	}
+	engine := newEngine(t, client)
+
+	results, err := engine.Classify(t.Context(), req("hello"))
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label, "a truncated completion is not a verdict")
+	require.False(t, results[0].Completed)
+}
+
 // fakeCompletionClient returns a programmed assistant verdict (or an error) and
 // records the last prompt it saw so tests can assert the injection-resistant
 // payload shape.
@@ -252,6 +289,8 @@ type fakeCompletionClient struct {
 	calls              atomic.Int64
 	err                error
 	responder          func(text string) string
+	finishReason       *string
+	completionTokens   int
 	blockUntilCanceled bool
 	onCompletion       func(context.Context)
 
@@ -306,7 +345,11 @@ func (c *fakeCompletionClient) GetCompletion(ctx context.Context, request openro
 		Role:    or.ChatAssistantMessageRoleAssistant,
 		Content: optionalnullable.From(&content),
 	})
-	return &openrouter.CompletionResponse{Message: &msg}, nil
+	return &openrouter.CompletionResponse{
+		Message:      &msg,
+		FinishReason: c.finishReason,
+		Usage:        openrouter.Usage{CompletionTokens: c.completionTokens},
+	}, nil
 }
 
 func (c *fakeCompletionClient) GetObjectCompletion(_ context.Context, _ openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {

@@ -1,19 +1,20 @@
 package organizations_test
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/audit"
+	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -45,8 +46,7 @@ func TestSetupCallbackUsesVisibleConfiguredTask(t *testing.T) {
 			ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ac.ActiveOrganizationID))
 			org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 			require.NoError(t, err)
-			_, err = organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), org.ID, tc.visible, nil, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
-			require.NoError(t, err)
+			setVisibleSetupTasks(t, ctx, ti, org.ID, tc.visible)
 			mux := goahttp.NewMuxer()
 			organizations.Attach(mux, ti.service)
 			rec := httptest.NewRecorder()
@@ -90,8 +90,7 @@ func TestSetupCallbackDomainVerification(t *testing.T) {
 			repo := orgrepo.New(ti.conn)
 			org, err := repo.GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 			require.NoError(t, err)
-			_, err = organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), org.ID, tc.visible, nil, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
-			require.NoError(t, err)
+			setVisibleSetupTasks(t, ctx, ti, org.ID, tc.visible)
 			if tc.stored {
 				require.NoError(t, repo.SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: org.ID, VerifiedDomains: []string{"example.com"}}))
 			} else {
@@ -160,8 +159,8 @@ func TestSetupCallbackRequiresActiveOrganizationAdmin(t *testing.T) {
 					repo := orgrepo.New(ti.conn)
 					org, err := repo.GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 					require.NoError(t, err)
-					config, err := organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), org.ID, []string{"identity-provider"}, nil, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
-					require.NoError(t, err)
+					setVisibleSetupTasks(t, ctx, ti, org.ID, []string{"identity-provider"})
+					before := listAllSetupTasks(t, ctx, ti)
 					// Make a regressed domain refresh observable without an unexpected mock call.
 					ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, org.WorkosID.String).Return(&workos.OrganizationDomainPolicy{Domains: []workos.OrganizationDomain{{Domain: "example.com", State: workos.OrganizationDomainStateVerified}}}, nil).Maybe()
 					mux := goahttp.NewMuxer()
@@ -175,11 +174,36 @@ func TestSetupCallbackRequiresActiveOrganizationAdmin(t *testing.T) {
 					afterOrg, err := repo.GetOrganizationMetadata(ctx, org.ID)
 					require.NoError(t, err)
 					require.Equal(t, org.VerifiedDomains, afterOrg.VerifiedDomains)
-					afterConfig, err := organizations.LoadOnboardingConfiguration(ctx, ti.conn, org.ID)
-					require.NoError(t, err)
-					require.Equal(t, config, afterConfig)
+					require.Equal(t, before, listAllSetupTasks(t, ctx, ti), "denied callbacks must not change the selection")
 				})
 			}
 		}
 	}
+}
+
+// setVisibleSetupTasks makes exactly the given cards visible, the way a staff
+// selection would, so a test controls which task the callback may open.
+func setVisibleSetupTasks(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, visible []string) {
+	t.Helper()
+	repo := orgrepo.New(ti.conn)
+	for _, task := range listAllSetupTasks(t, ctx, ti) {
+		if task.Group {
+			continue
+		}
+		require.NoError(t, repo.SetOrganizationSetupTaskVisibility(ctx, orgrepo.SetOrganizationSetupTaskVisibilityParams{OrganizationID: organizationID, TaskKey: task.Key, Hidden: !slices.Contains(visible, task.Key)}))
+	}
+}
+
+// listAllSetupTasks reads the whole catalog, hidden cards included, as a
+// platform admin would.
+func listAllSetupTasks(t *testing.T, ctx context.Context, ti *testInstance) []*gen.SetupTask {
+	t.Helper()
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	platformAuth := *ac
+	platformAuth.IsAdmin = true
+	includeHidden := true
+	result, err := ti.service.ListSetupTasks(contextvalues.SetAuthContext(ctx, &platformAuth), &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
+	require.NoError(t, err)
+	return result.Tasks
 }

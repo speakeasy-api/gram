@@ -43,7 +43,7 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 
 	_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgA, Feature: "logs", Enabled: true})
 	require.Error(t, err, "retry keys are mandatory")
-	for _, unreviewed := range []string{"sso", "remote_session_auto_refresh", "skills", ""} {
+	for _, unreviewed := range []string{"sso", "remote_session_auto_refresh_enforced", "session_portability", "platform_mcp", "skills", ""} {
 		_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgA, Feature: unreviewed, Enabled: true, RetryKey: "not-supported-" + unreviewed})
 		require.Error(t, err, "unreviewed feature %q stays disabled", unreviewed)
 	}
@@ -56,13 +56,13 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 	approval.operations = map[WriteOperation]approvableOperation{OperationSetOrganizationFeature: writer} //nolint:exhaustive // Only selected write operations are enabled by this test.
 	handler := middleware.AdminOriginCheck(nil)(approval.Handler())
 
-	// Sequential, not subtests: both features share one organisation so each
-	// run can check that the other feature is left alone.
-	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureConsentToolFiltering}
-	for i, feature := range writable {
+	// Sequential, not subtests: the features share one organisation so each
+	// run can check that the other features are left alone.
+	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureRemoteSessionAutoRefresh}
+	for _, feature := range writable {
 		func() {
 			t.Logf("feature %s", feature)
-			untouched := writable[1-i]
+
 			input := PrepareFeatureInput{OrganizationID: f.orgA, Feature: string(feature), Enabled: true, RetryKey: "feature-" + string(feature)}
 			prepared, err := writer.prepare(ctx, input)
 			require.NoError(t, err)
@@ -104,7 +104,11 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 			require.JSONEq(t, `{"changed":true}`, string(result.Result))
 			require.True(t, state(f.orgA, feature))
 			require.False(t, state(f.orgB, feature), "execution cannot affect a second tenant")
-			require.False(t, state(f.orgA, untouched), "execution changes only the stored feature")
+			for _, untouched := range writable {
+				if untouched != feature {
+					require.False(t, state(f.orgA, untouched), "execution changes only the stored feature")
+				}
+			}
 			cached, err := features.IsFeatureEnabled(ctx, f.orgA, feature)
 			require.NoError(t, err)
 			require.True(t, cached)

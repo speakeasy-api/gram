@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -29,8 +32,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // Rebuild the service with the same database and no process-local preparation
@@ -475,12 +476,11 @@ func TestPreparationDCRIntegration_UnlinkWaitsForDurableSubmission(t *testing.T)
 	claim, err := repo.New(ti.conn).GetEMABinding(ctx, repo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource})
 	require.NoError(t, err)
 	require.Equal(t, "in_progress", claim.State.String)
-	// Another service cannot cancel the incarnation while its provider write is
-	// in flight. Its lock wait must time out, not unlink and orphan the response.
-	waitCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
-	defer cancel()
-	_, err = restartPreparationService(t, ti).UnlinkIdentityChaining(waitCtx, in)
-	require.Error(t, err)
+	// The competing service must reach the registration lock while the provider write is in flight.
+	contender := *ti
+	contender.conn = testenv.NewLockTimeoutPool(t, ti.conn, 50*time.Millisecond)
+	_, err = restartPreparationService(t, &contender).UnlinkIdentityChaining(ctx, in)
+	testenv.RequireLockNotAvailable(t, err)
 	releaseOnce.Do(func() { close(release) })
 	completed := <-finished
 	require.NoError(t, completed.err)
