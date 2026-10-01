@@ -52,6 +52,11 @@ export function SavedQueryBar({
   const list = useExploreQueries();
   const queries = list.data?.queries ?? [];
   const open = savedId ? queries.find((query) => query.id === savedId) : null;
+  // A saved query the list has not caught up with yet — just created, or
+  // linked while the list loads — is not an unsaved one, so it cannot be
+  // saved again as new until it resolves.
+  const resolving =
+    savedId !== null && !open && (list.isPending || list.isFetching);
   const creator = useCreatorName();
 
   const [naming, setNaming] = useState<"create" | "rename" | null>(null);
@@ -187,6 +192,7 @@ export function SavedQueryBar({
           variant="secondary"
           size="sm"
           icon="save"
+          disabled={resolving}
           onClick={() => setNaming("create")}
         >
           Save query

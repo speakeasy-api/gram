@@ -141,8 +141,12 @@ function ExploreWorkbench({
     ? saved.data?.queries.find((query) => query.id === url.savedId)
     : undefined;
   const problem = savedQueryProblem(spec, openSaved) || (broken?.problem ?? "");
-  const openQuery = (query: ExploreQuery) =>
+  // The last answer belongs to the query being left, so it goes; a query
+  // that still runs brings its own as it opens.
+  const openQuery = (query: ExploreQuery) => {
+    setSubmitted(null);
     url.open(specFromSavedSpec(query.dataset, query.spec), query.id);
+  };
   const ran =
     submitted && findDataset(datasets, submitted.dataset) ? submitted : null;
   const chartBody = useMemo(

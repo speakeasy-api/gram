@@ -32,6 +32,8 @@ const testState = vi.hoisted(() => ({
   answers: false,
   /** The project's saved queries, as the list endpoint returns them. */
   savedQueries: [] as unknown[],
+  /** Whether the saved-query list is still loading. */
+  listPending: false,
   /** Every saved-query write, in call order. */
   writes: [] as { kind: string; request: Record<string, unknown> }[],
 }));
@@ -77,9 +79,12 @@ function mockWrite(kind: "create" | "update" | "delete") {
 
 vi.mock("@gram/client/react-query/exploreQueries.js", () => ({
   useExploreQueries: () => ({
-    isPending: false,
+    isPending: testState.listPending,
+    isFetching: testState.listPending,
     isError: false,
-    data: { queries: testState.savedQueries },
+    data: testState.listPending
+      ? undefined
+      : { queries: testState.savedQueries },
   }),
   invalidateAllExploreQueries: () => Promise.resolve(),
 }));
@@ -271,6 +276,7 @@ describe("Explore", () => {
     testState.bodies = [];
     testState.answers = false;
     testState.savedQueries = [];
+    testState.listPending = false;
     testState.writes = [];
   });
 
@@ -784,6 +790,35 @@ describe("Explore", () => {
       expect(
         screen.getByText(/This query no longer runs/).textContent,
       ).toContain("retired_field");
+    });
+
+    it("drops the last run's results when opening a query the catalog broke", () => {
+      testState.answers = true;
+      testState.savedQueries = [
+        savedQuery(
+          "q-1",
+          "Old breakdown",
+          { ...p95ByTool, dimensions: ["retired_field"] },
+          { invalidReason: 'field "retired_field" does not exist' },
+        ),
+      ];
+      renderExplore();
+      fireEvent.click(screen.getByRole("button", { name: "Run query" }));
+      expect(screen.queryByText("Nothing has run yet")).toBeNull();
+
+      openSaved("Old breakdown");
+
+      expect(screen.getByText("Nothing has run yet")).toBeTruthy();
+    });
+
+    it("offers no save as new while a linked saved query is still loading", () => {
+      testState.listPending = true;
+      renderExplore(`${linkTo(p95ByTool)}&query=q-1`);
+
+      expect(screen.getByRole("button", { name: "Save query" })).toHaveProperty(
+        "disabled",
+        true,
+      );
     });
 
     it("names the problem when a saved query cannot be read at all", () => {
