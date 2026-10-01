@@ -14,7 +14,7 @@ type Key = attribute.Key
 const (
 	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
 	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
-	RegistryIssuePathsKey            = attribute.Key("gram.registry.entry.issue_paths")
+	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -3199,6 +3199,6 @@ func SlogInferenceAcceptedMessages(v int) slog.Attr {
 
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }
 func SlogRegistryUpdatedAt(v string) slog.Attr { return slog.String(string(RegistryUpdatedAtKey), v) }
-func SlogRegistryIssuePaths(v []string) slog.Attr {
-	return slog.Any(string(RegistryIssuePathsKey), v)
+func SlogRegistryInvalidPaths(v []string) slog.Attr {
+	return slog.Any(string(RegistryInvalidPathsKey), v)
 }
