@@ -87,27 +87,29 @@ var windows = map[string]time.Duration{
 // question is planned against the catalog, then the chart is checked against
 // the question. Used on save, so a mistake is rejected immediately, and on
 // read, so a catalog change is visible breakage naming what went missing
-// instead of quietly wrong numbers.
-func validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) string {
+// instead of quietly wrong numbers. An error is a failure that is not the
+// widget's fault; the reason then says only that it could not be validated,
+// and the caller logs the error.
+func validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) (string, error) {
 	query, err := decodeQuery(rawQuery)
 	if err != nil {
-		return "invalid query: " + err.Error()
+		return "invalid query: " + err.Error(), nil
 	}
-	if reason := validateQuery(catalog, dataset, query, now); reason != "" {
-		return reason
+	if reason, err := validateQuery(catalog, dataset, query, now); reason != "" || err != nil {
+		return reason, err
 	}
 
 	var visualization Visualization
 	if err := json.Unmarshal(rawVisualization, &visualization); err != nil {
-		return "visualization is not a JSON object: " + err.Error()
+		return "visualization is not a JSON object: " + err.Error(), nil
 	}
-	return validateVisualization(visualization, query)
+	return validateVisualization(visualization, query), nil
 }
 
-func validateQuery(catalog *analytics.Catalog, dataset string, query Query, now time.Time) string {
+func validateQuery(catalog *analytics.Catalog, dataset string, query Query, now time.Time) (string, error) {
 	window, ok := windows[query.Window]
 	if !ok {
-		return fmt.Sprintf("window %q is not one of 1h, 24h, 7d, 30d, 90d", query.Window)
+		return fmt.Sprintf("window %q is not one of 1h, 24h, 7d, 30d, 90d", query.Window), nil
 	}
 
 	req := analytics.Request{
@@ -127,19 +129,19 @@ func validateQuery(catalog *analytics.Catalog, dataset string, query Query, now 
 	// Only the canonical lowercase form is saved.
 	for i, m := range query.Measures {
 		if reason := canonical(fmt.Sprintf("measures[%d].op", i), m.Op); reason != "" {
-			return reason
+			return reason, nil
 		}
 		req.Measures = append(req.Measures, analytics.Measure{Op: m.Op, Field: m.Field, Alias: m.Alias})
 	}
 	for i, f := range query.Filters {
 		if reason := canonical(fmt.Sprintf("filters[%d].operator", i), f.Operator); reason != "" {
-			return reason
+			return reason, nil
 		}
 		req.Filters = append(req.Filters, analytics.Filter{Field: f.Field, Operator: f.Operator, Values: f.Values})
 	}
 	for i, o := range query.OrderBy {
 		if reason := canonical(fmt.Sprintf("order_by[%d].direction", i), o.Direction); reason != "" {
-			return reason
+			return reason, nil
 		}
 		req.OrderBy = append(req.OrderBy, analytics.OrderBy{Measure: o.Measure, Direction: o.Direction})
 	}
@@ -148,11 +150,11 @@ func validateQuery(catalog *analytics.Catalog, dataset string, query Query, now 
 	// placeholder validates the shape.
 	if _, err := analytics.Compile(catalog, "validate", "validate", req); err != nil {
 		if invalid, ok := errors.AsType[*analytics.Error](err); ok {
-			return invalid.Error()
+			return invalid.Error(), nil
 		}
-		return err.Error()
+		return "query could not be validated", fmt.Errorf("plan widget query: %w", err)
 	}
-	return ""
+	return "", nil
 }
 
 // validateVisualization returns why a chart cannot draw the question, or "".

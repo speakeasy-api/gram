@@ -270,13 +270,7 @@ func TestListAndGetWidgets(t *testing.T) {
 
 	// A row the catalog no longer accepts, as a catalog change would leave
 	// behind. Written directly, since the service refuses it.
-	stale, err := json.Marshal(map[string]any{"window": "7d", "dimensions": []string{"department"}, "measures": []map[string]any{{"op": "count"}}})
-	require.NoError(t, err)
-	staleRow, err := widgetsrepo.New(ti.conn).CreateWidget(ctx, widgetsrepo.CreateWidgetParams{
-		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
-		Name: "stale", Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions", Query: stale, Visualization: []byte(`{"type":"table"}`),
-	})
-	require.NoError(t, err)
+	staleRow := insertBrokenWidget(t, ti)
 
 	result, err := ti.service.ListWidgets(ctx, &gen.ListWidgetsPayload{SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
@@ -298,12 +292,7 @@ func TestListAndGetWidgets(t *testing.T) {
 	require.NotNil(t, gotStale.InvalidReason, "get validates on read too")
 
 	// A stored key the query does not know is named on read, not ignored.
-	unknownKey, err := widgetsrepo.New(ti.conn).CreateWidget(ctx, widgetsrepo.CreateWidgetParams{
-		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
-		Name: "unknown key", Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions",
-		Query: []byte(`{"window":"7d","measures":[{"op":"count"}],"from":"2026-09-01T00:00:00Z"}`), Visualization: []byte(`{"type":"table"}`),
-	})
-	require.NoError(t, err)
+	unknownKey := insertStoredWidget(t, ti, "unknown key", []byte(`{"window":"7d","measures":[{"op":"count"}],"from":"2026-09-01T00:00:00Z"}`))
 	gotUnknown, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: unknownKey.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.NotNil(t, gotUnknown.InvalidReason)
@@ -460,15 +449,9 @@ func TestDuplicateWidget(t *testing.T) {
 	t.Run("it refuses a widget the catalog has broken, naming the field", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
-		stale, err := json.Marshal(map[string]any{"window": "7d", "dimensions": []string{"department"}, "measures": []map[string]any{{"op": "count"}}})
-		require.NoError(t, err)
-		row, err := widgetsrepo.New(ti.conn).CreateWidget(ctx, widgetsrepo.CreateWidgetParams{
-			ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
-			Name: "stale", Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions", Query: stale, Visualization: []byte(`{"type":"table"}`),
-		})
-		require.NoError(t, err)
+		row := insertBrokenWidget(t, ti)
 
-		_, err = ti.service.DuplicateWidget(ctx, &gen.DuplicateWidgetPayload{ID: row.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
+		_, err := ti.service.DuplicateWidget(ctx, &gen.DuplicateWidgetPayload{ID: row.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "department")
 	})
@@ -518,6 +501,28 @@ func TestDeleteWidget(t *testing.T) {
 		writerCtx := asMember(t, ctx, ti, "user_writer_"+uuid.NewString(), authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String()))
 		require.NoError(t, ti.service.DeleteWidget(writerCtx, &gen.DeleteWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil}))
 	})
+}
+
+// insertBrokenWidget stores a widget the catalog no longer accepts, as a
+// catalog change would leave behind: it asks for a dimension, "department",
+// the sessions dataset does not have.
+func insertBrokenWidget(t *testing.T, ti *testInstance) widgetsrepo.Widget {
+	t.Helper()
+	stale, err := json.Marshal(map[string]any{"window": "7d", "dimensions": []string{"department"}, "measures": []map[string]any{{"op": "count"}}})
+	require.NoError(t, err)
+	return insertStoredWidget(t, ti, "stale", stale)
+}
+
+// insertStoredWidget writes a sessions table widget straight to the
+// database, since the service refuses a query it cannot plan.
+func insertStoredWidget(t *testing.T, ti *testInstance, name string, query []byte) widgetsrepo.Widget {
+	t.Helper()
+	row, err := widgetsrepo.New(ti.conn).CreateWidget(t.Context(), widgetsrepo.CreateWidgetParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
+		Name: name, Description: pgtype.Text{String: "", Valid: false}, Dataset: "sessions", Query: query, Visualization: []byte(`{"type":"table"}`),
+	})
+	require.NoError(t, err)
+	return row
 }
 
 // withQuery returns query with one key replaced.

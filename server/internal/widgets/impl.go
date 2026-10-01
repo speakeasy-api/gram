@@ -109,8 +109,18 @@ func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextval
 }
 
 // view renders a stored widget, validating it as it is read.
-func (s *Service) view(row repo.Widget, now time.Time) *gen.Widget {
-	return mv.BuildWidgetView(row, validate(s.catalog, row.Dataset, row.Query, row.Visualization, now))
+func (s *Service) view(ctx context.Context, row repo.Widget, now time.Time) *gen.Widget {
+	return mv.BuildWidgetView(row, s.validate(ctx, row.Dataset, row.Query, row.Visualization, now))
+}
+
+// validate returns what is wrong with a widget, or "", logging a failure
+// that is not the widget's fault rather than returning its detail.
+func (s *Service) validate(ctx context.Context, dataset string, query, visualization []byte, now time.Time) string {
+	reason, err := validate(s.catalog, dataset, query, visualization, now)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "validate widget", attr.SlogError(err))
+	}
+	return reason
 }
 
 // ListWidgets lists the project's widgets, most recently updated first, each
@@ -129,7 +139,7 @@ func (s *Service) ListWidgets(ctx context.Context, _ *gen.ListWidgetsPayload) (*
 	now := s.now()
 	result := &gen.ListWidgetsResult{Widgets: make([]*gen.Widget, 0, len(rows))}
 	for _, row := range rows {
-		result.Widgets = append(result.Widgets, s.view(row, now))
+		result.Widgets = append(result.Widgets, s.view(ctx, row, now))
 	}
 	return result, nil
 }
@@ -152,7 +162,7 @@ func (s *Service) GetWidget(ctx context.Context, payload *gen.GetWidgetPayload) 
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get widget").LogError(ctx, s.logger)
 	}
-	return s.view(row, s.now()), nil
+	return s.view(ctx, row, s.now()), nil
 }
 
 // CreateWidget saves a widget after validating its query against the
@@ -163,7 +173,7 @@ func (s *Service) CreateWidget(ctx context.Context, payload *gen.CreateWidgetPay
 		return nil, err
 	}
 
-	query, visualization, err := s.checkWidget(payload.Dataset, payload.Query, payload.Visualization)
+	query, visualization, err := s.checkWidget(ctx, payload.Dataset, payload.Query, payload.Visualization)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +211,7 @@ func (s *Service) DuplicateWidget(ctx context.Context, payload *gen.DuplicateWid
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "load widget").LogError(ctx, s.logger)
 	}
-	if reason := validate(s.catalog, source.Dataset, source.Query, source.Visualization, s.now()); reason != "" {
+	if reason := s.validate(ctx, source.Dataset, source.Query, source.Visualization, s.now()); reason != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "widget cannot be duplicated until it is fixed: %s", reason)
 	}
 
@@ -258,7 +268,7 @@ func (s *Service) UpdateWidget(ctx context.Context, payload *gen.UpdateWidgetPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid widget id")
 	}
 
-	query, visualization, err := s.checkWidget(payload.Dataset, payload.Query, payload.Visualization)
+	query, visualization, err := s.checkWidget(ctx, payload.Dataset, payload.Query, payload.Visualization)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +308,7 @@ func (s *Service) UpdateWidget(ctx context.Context, payload *gen.UpdateWidgetPay
 	}
 
 	view := mv.BuildWidgetView(row, "")
-	if err := s.audit.LogWidgetUpdate(ctx, dbtx, audit.LogWidgetUpdateEvent{WidgetEventBase: s.auditBase(authCtx, row), Before: s.view(before, s.now()), After: view}); err != nil {
+	if err := s.audit.LogWidgetUpdate(ctx, dbtx, audit.LogWidgetUpdateEvent{WidgetEventBase: s.auditBase(authCtx, row), Before: s.view(ctx, before, s.now()), After: view}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit widget update").LogError(ctx, s.logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
@@ -367,7 +377,7 @@ func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalue
 // query key the server does not know is refused. The payload bytes are what
 // is stored, not a re-encoding of the decoded query, which would add zero
 // values the client reads as a different query.
-func (s *Service) checkWidget(dataset string, query, visualization map[string]any) ([]byte, []byte, error) {
+func (s *Service) checkWidget(ctx context.Context, dataset string, query, visualization map[string]any) ([]byte, []byte, error) {
 	if _, ok := s.catalog.Dataset(dataset); !ok {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "unknown_dataset: dataset %q does not exist", dataset)
 	}
@@ -379,7 +389,7 @@ func (s *Service) checkWidget(dataset string, query, visualization map[string]an
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeBadRequest, err, "visualization is not encodable as JSON")
 	}
-	if reason := validate(s.catalog, dataset, encodedQuery, encodedVisualization, s.now()); reason != "" {
+	if reason := s.validate(ctx, dataset, encodedQuery, encodedVisualization, s.now()); reason != "" {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
 	return encodedQuery, encodedVisualization, nil
