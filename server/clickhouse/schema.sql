@@ -1,3 +1,180 @@
+-- Generic tenant metrics. Duplicate deliveries contribute again across batches.
+-- Infrastructure provisions the database and application principal before DDL.
+-- No marts grants: these tables have no customer-facing reporting view.
+-- A contribution is one producer-owned measurement added to an aggregate:
+-- a Counter delta increment or a single Histogram observation.
+-- Retries/reprocessing preserve contribution_id, event_time and the payload.
+-- Replacement deduplicates raw copies within an event-month partition only.
+-- It does not retract MV increments. Manual rebuilds read deduplicated raw data.
+CREATE TABLE product_metric_contributions (
+    organization_id String,
+    project_id UUID,
+    metric_name String,
+    scope_name String,
+    scope_version String,
+    unit String,
+    instrument LowCardinality(String),
+    description String,
+    number_kind LowCardinality(String),
+    resource_attributes Array(Tuple(key String, type String, value String)),
+    scope_attributes Array(Tuple(key String, type String, value String)),
+    point_attributes Array(Tuple(key String, type String, value String)),
+    contribution_id String COMMENT 'Producer-selected immutable observation ID, unique within organization, project and instrumentation scope/version',
+    event_time DateTime64(9, 'UTC'),
+    observed_at DateTime64(9, 'UTC'),
+    ingested_at DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'Selects the latest retained delivery copy, not a producer correction version',
+    integer_value Int64,
+    floating_value Float64,
+    series_id String MATERIALIZED hex(SHA256(toJSONString(tuple(organization_id, project_id, metric_name, scope_name, scope_version, unit, instrument, number_kind, resource_attributes, scope_attributes, point_attributes))))
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(event_time)
+ORDER BY (organization_id, project_id, scope_name, scope_version, contribution_id)
+TTL toStartOfMinute(event_time) + INTERVAL 90 DAY
+COMMENT 'Immutable producer-ID contributions retained 90 days by event minute for debugging and manual deduplicated rollup rebuilds. Raw replacement does not deduplicate live rollups';
+
+CREATE TABLE product_metric_sums_1m (
+    organization_id String,
+    project_id UUID,
+    metric_name String,
+    bucket DateTime('UTC'),
+    scope_name String,
+    scope_version String,
+    unit String,
+    number_kind LowCardinality(String),
+    series_id String,
+    integer_sum SimpleAggregateFunction(sum, Int128),
+    floating_sum SimpleAggregateFunction(sum, Float64),
+    contributions SimpleAggregateFunction(sum, UInt64)
+) ENGINE = AggregatingMergeTree
+PARTITION BY toYYYYMM(bucket)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
+TTL bucket + INTERVAL 90 DAY
+COMMENT 'Monotonic delta sums over half-open UTC minute windows. Explicit sum reads are correct before merges. Late arrivals update retained buckets and current windows are partial';
+
+CREATE TABLE product_metric_histograms_1m (
+    organization_id String,
+    project_id UUID,
+    metric_name String,
+    bucket DateTime('UTC'),
+    scope_name String,
+    scope_version String,
+    unit String,
+    number_kind LowCardinality(String),
+    series_id String,
+    integer_sum SimpleAggregateFunction(sum, Int128),
+    floating_sum SimpleAggregateFunction(sum, Float64),
+    contributions SimpleAggregateFunction(sum, UInt64),
+    integer_min SimpleAggregateFunction(min, Int64),
+    integer_max SimpleAggregateFunction(max, Int64),
+    floating_min SimpleAggregateFunction(min, Float64),
+    floating_max SimpleAggregateFunction(max, Float64)
+) ENGINE = AggregatingMergeTree
+PARTITION BY toYYYYMM(bucket)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
+TTL bucket + INTERVAL 90 DAY
+COMMENT 'Delivery-weighted histogram observations without buckets or quantiles. Mean is total sum divided by total count. No automatic zeros for missing minutes';
+
+CREATE MATERIALIZED VIEW product_metric_sums_1m_mv TO product_metric_sums_1m AS
+SELECT organization_id, project_id, metric_name, toStartOfMinute(event_time) AS bucket,
+    scope_name, scope_version, unit, number_kind, series_id,
+    sum(toInt128(integer_value)) AS integer_sum, sum(floating_value) AS floating_sum,
+    count() AS contributions
+FROM product_metric_contributions
+WHERE instrument = 'counter'
+GROUP BY organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit,
+    number_kind, series_id;
+
+CREATE MATERIALIZED VIEW product_metric_histograms_1m_mv TO product_metric_histograms_1m AS
+SELECT organization_id, project_id, metric_name, toStartOfMinute(event_time) AS bucket,
+    scope_name, scope_version, unit, number_kind, series_id,
+    sum(toInt128(integer_value)) AS integer_sum, sum(floating_value) AS floating_sum,
+    count() AS contributions, min(integer_value) AS integer_min, max(integer_value) AS integer_max,
+    min(floating_value) AS floating_min, max(floating_value) AS floating_max
+FROM product_metric_contributions
+WHERE instrument = 'histogram'
+GROUP BY organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit,
+    number_kind, series_id;
+
+-- Full identity stays in the catalogue key so a digest collision cannot discard
+-- metadata. Readers reject IDs with multiple canonical identities before joining.
+CREATE TABLE product_metric_series (
+    organization_id String,
+    project_id UUID,
+    metric_name String,
+    scope_name String,
+    scope_version String,
+    unit String,
+    instrument LowCardinality(String),
+    number_kind LowCardinality(String),
+    series_id String,
+    resource_attributes Array(Tuple(key String, type String, value String)),
+    scope_attributes Array(Tuple(key String, type String, value String)),
+    point_attributes Array(Tuple(key String, type String, value String)),
+    first_seen SimpleAggregateFunction(min, DateTime64(9, 'UTC')),
+    last_seen SimpleAggregateFunction(max, DateTime64(9, 'UTC'))
+) ENGINE = AggregatingMergeTree
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, instrument, series_id, number_kind, resource_attributes, scope_attributes, point_attributes)
+TTL toDateTime(last_seen) + INTERVAL 91 DAY
+COMMENT 'Typed series identities retained beyond every supported serving window. Duplicate catalogue inserts are idempotent';
+
+CREATE MATERIALIZED VIEW product_metric_series_mv TO product_metric_series AS
+SELECT organization_id, project_id, metric_name, scope_name, scope_version, unit, instrument, number_kind,
+    series_id, resource_attributes, scope_attributes, point_attributes,
+    min(event_time) AS first_seen, max(event_time) AS last_seen
+FROM product_metric_contributions
+GROUP BY organization_id, project_id, metric_name, scope_name, scope_version, unit, instrument, number_kind,
+    series_id, resource_attributes, scope_attributes, point_attributes;
+
+CREATE TABLE product_metric_sums_1h AS product_metric_sums_1m
+ENGINE = AggregatingMergeTree PARTITION BY toYYYYMM(bucket)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
+TTL bucket + INTERVAL 91 DAY;
+
+CREATE TABLE product_metric_sums_1d AS product_metric_sums_1m
+ENGINE = AggregatingMergeTree PARTITION BY toYYYYMM(bucket)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
+TTL bucket + INTERVAL 91 DAY;
+
+CREATE TABLE product_metric_histograms_1h AS product_metric_histograms_1m
+ENGINE = AggregatingMergeTree PARTITION BY toYYYYMM(bucket)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
+TTL bucket + INTERVAL 91 DAY;
+
+CREATE TABLE product_metric_histograms_1d AS product_metric_histograms_1m
+ENGINE = AggregatingMergeTree PARTITION BY toYYYYMM(bucket)
+ORDER BY (organization_id, project_id, metric_name, scope_name, scope_version, unit, bucket, series_id, number_kind)
+TTL bucket + INTERVAL 91 DAY;
+
+CREATE MATERIALIZED VIEW product_metric_sums_1h_mv TO product_metric_sums_1h AS
+SELECT organization_id, project_id, metric_name, toStartOfHour(event_time) AS bucket,
+    scope_name, scope_version, unit, number_kind, series_id,
+    sum(toInt128(integer_value)) AS integer_sum, sum(floating_value) AS floating_sum, count() AS contributions
+FROM product_metric_contributions WHERE instrument = 'counter'
+GROUP BY organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit, number_kind, series_id;
+
+CREATE MATERIALIZED VIEW product_metric_sums_1d_mv TO product_metric_sums_1d AS
+SELECT organization_id, project_id, metric_name, toStartOfDay(event_time, 'UTC') AS bucket,
+    scope_name, scope_version, unit, number_kind, series_id,
+    sum(toInt128(integer_value)) AS integer_sum, sum(floating_value) AS floating_sum, count() AS contributions
+FROM product_metric_contributions WHERE instrument = 'counter'
+GROUP BY organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit, number_kind, series_id;
+
+CREATE MATERIALIZED VIEW product_metric_histograms_1h_mv TO product_metric_histograms_1h AS
+SELECT organization_id, project_id, metric_name, toStartOfHour(event_time) AS bucket,
+    scope_name, scope_version, unit, number_kind, series_id,
+    sum(toInt128(integer_value)) AS integer_sum, sum(floating_value) AS floating_sum, count() AS contributions,
+    min(integer_value) AS integer_min, max(integer_value) AS integer_max, min(floating_value) AS floating_min, max(floating_value) AS floating_max
+FROM product_metric_contributions WHERE instrument = 'histogram'
+GROUP BY organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit, number_kind, series_id;
+
+CREATE MATERIALIZED VIEW product_metric_histograms_1d_mv TO product_metric_histograms_1d AS
+SELECT organization_id, project_id, metric_name, toStartOfDay(event_time, 'UTC') AS bucket,
+    scope_name, scope_version, unit, number_kind, series_id,
+    sum(toInt128(integer_value)) AS integer_sum, sum(floating_value) AS floating_sum, count() AS contributions,
+    min(integer_value) AS integer_min, max(integer_value) AS integer_max, min(floating_value) AS floating_min, max(floating_value) AS floating_max
+FROM product_metric_contributions WHERE instrument = 'histogram'
+GROUP BY organization_id, project_id, metric_name, bucket, scope_name, scope_version, unit, number_kind, series_id;
+
 CREATE TABLE IF NOT EXISTS telemetry_logs (
     -- OTel Log Record Identity
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the log entry.',
