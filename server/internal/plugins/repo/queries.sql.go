@@ -650,17 +650,7 @@ type GetPluginWithCountsParams struct {
 }
 
 type GetPluginWithCountsRow struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	Name            string
-	Slug            string
-	Description     pgtype.Text
-	IsDefault       pgtype.Bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	Plugin          Plugin
 	ServerCount     int64
 	SkillCount      int64
 	AssignmentCount int64
@@ -670,17 +660,17 @@ func (q *Queries) GetPluginWithCounts(ctx context.Context, arg GetPluginWithCoun
 	row := q.db.QueryRow(ctx, getPluginWithCounts, arg.ID, arg.OrganizationID, arg.ProjectID)
 	var i GetPluginWithCountsRow
 	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Slug,
-		&i.Description,
-		&i.IsDefault,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
+		&i.Plugin.ID,
+		&i.Plugin.OrganizationID,
+		&i.Plugin.ProjectID,
+		&i.Plugin.Name,
+		&i.Plugin.Slug,
+		&i.Plugin.Description,
+		&i.Plugin.IsDefault,
+		&i.Plugin.CreatedAt,
+		&i.Plugin.UpdatedAt,
+		&i.Plugin.DeletedAt,
+		&i.Plugin.Deleted,
 		&i.ServerCount,
 		&i.SkillCount,
 		&i.AssignmentCount,
