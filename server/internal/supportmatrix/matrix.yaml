@@ -177,10 +177,22 @@ plans:
   - { id: openai-enterprise, vendor: "OpenAI", name: "Enterprise" }
   - { id: cursor-teams, vendor: "Cursor", name: "Teams" }
   - { id: cursor-enterprise, vendor: "Cursor", name: "Enterprise" }
-  - { id: google-gemini-code-assist-standard, vendor: "Google", name: "Gemini Code Assist Standard" }
-  - { id: google-gemini-code-assist-enterprise, vendor: "Google", name: "Gemini Code Assist Enterprise" }
+  - {
+      id: google-gemini-code-assist-standard,
+      vendor: "Google",
+      name: "Gemini Code Assist Standard",
+    }
+  - {
+      id: google-gemini-code-assist-enterprise,
+      vendor: "Google",
+      name: "Gemini Code Assist Enterprise",
+    }
   - { id: github-copilot-business, vendor: "GitHub", name: "Copilot Business" }
-  - { id: github-copilot-enterprise, vendor: "GitHub", name: "Copilot Enterprise" }
+  - {
+      id: github-copilot-enterprise,
+      vendor: "GitHub",
+      name: "Copilot Enterprise",
+    }
 methods:
   - id: device
     name: "Device Agent"
