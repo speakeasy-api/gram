@@ -532,3 +532,18 @@ func TestStore_RemovedMemberRejectsPendingToken(t *testing.T) {
 	require.ErrorIs(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("stale-token")), errStale)
 	require.Empty(t, f.credentials(t))
 }
+
+func TestStore_SelectBindingRestrictedToTunnelIssuer(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	other := f.req
+	other.RemoteSessionIssuerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), other)
+	require.Equal(t, notApplicable, outcome, "a tunnel claiming the resource of another issuer's binding selects nothing")
+
+	own := f.req
+	own.RemoteSessionIssuerID = uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}
+	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), own)
+	require.Equal(t, success, outcome)
+	require.Equal(t, f.sel.bindingID, sel.bindingID)
+}

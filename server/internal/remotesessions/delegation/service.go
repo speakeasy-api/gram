@@ -354,6 +354,44 @@ func (s *Service) RecordOfflineRefusal(ctx context.Context, p Provider, humanID 
 	return ErrTemporary
 }
 
+// Check reports whether the retained credential still belongs to the current
+// trusted registration, after the caller proves current authority. It neither
+// renews nor returns the credential and never contacts the provider. Callers
+// releasing state derived from an earlier assertion use it so a changed
+// registration revokes that state too.
+func (s *Service) Check(ctx context.Context, b Binding, authority Authorizer) error {
+	if authority == nil || !validDelegationBinding(b) {
+		return ErrConfiguration
+	}
+	if err := authority.AuthorizeDelegation(ctx, b); err != nil {
+		if definitiveDelegationFailure(err) {
+			return ErrConfiguration
+		}
+		return ErrTemporary
+	}
+	p, err := s.loadBinding(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
+	if err != nil {
+		if definitiveDelegationFailure(err) {
+			return ErrConfiguration
+		}
+		return ErrTemporary
+	}
+	if p == nil || p.DelegationConfigurationHash() == "" {
+		return ErrConfiguration
+	}
+	c, err := s.store.load(ctx, b)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrReauthentication
+	}
+	if err != nil {
+		return ErrTemporary
+	}
+	if c.config != p.DelegationConfigurationHash() || c.status == "configuration_failure" {
+		return ErrConfiguration
+	}
+	return nil
+}
+
 // Resolve returns an assertion only after the caller proves current authority.
 // It performs no proactive refresh and never falls back to another provider.
 func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) (Assertion, error) {

@@ -256,7 +256,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	case mcpServer.RemoteMcpServerID.Valid, mcpServer.TunneledMcpServerID.Valid:
 		var upstreamToken string
 		if pendingIssuerGate != nil {
-			upstreamToken, err = s.resolveDirectUpstreamToken(ctx, w, logger, pendingIssuerGate, upstreamResource, tunneledBackendIssuer(mcpServer))
+			upstreamToken, err = s.resolveDirectUpstreamToken(ctx, w, logger, pendingIssuerGate, upstreamResource, mcpServer.TunneledMcpServerID.Valid, tunneledBackendIssuer(mcpServer))
 			if err != nil {
 				return err
 			}

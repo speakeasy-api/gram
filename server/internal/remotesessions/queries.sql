@@ -4690,11 +4690,14 @@ WHERE id = @id AND project_id = @project_id AND organization_id = @organization_
 -- Endpoint upstreams are recorded without a trailing slash while a binding
 -- keeps the exact RFC 9728 identifier, so both compare under the routing trim.
 -- Unlinked tombstones and unfinished preparations never select or conflict.
--- Two rows are enough to prove the selection ambiguous.
+-- A tunneled upstream passes its own derived issuer: its resource identifier is
+-- operator supplied, so only a binding for that issuer may serve it. Two rows
+-- are enough to prove the selection ambiguous.
 SELECT * FROM remote_session_ema_bindings
 WHERE project_id = @project_id AND organization_id = @organization_id
   AND user_session_issuer_id = @user_session_issuer_id
   AND rtrim(resource, '/') = @upstream_resource::text
+  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
 ORDER BY id
 LIMIT 2;

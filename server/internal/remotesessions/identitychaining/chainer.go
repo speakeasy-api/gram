@@ -132,6 +132,9 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 	if outcome = c.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
 		return none, outcome
 	}
+	if outcome = c.checkDelegation(ctx, req, sel); !outcome.Succeeded() {
+		return none, outcome
+	}
 
 	if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
 		return token, success

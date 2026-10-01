@@ -1240,3 +1240,38 @@ func TestDelegationRefusalRejectsInvalidPolicyWithoutMutation(t *testing.T) {
 		}
 	}
 }
+
+func TestDelegationServiceCheck(t *testing.T) {
+	t.Parallel()
+	t.Run("current registration", func(t *testing.T) {
+		t.Parallel()
+		s, _, p, b, allow := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+		require.NoError(t, s.Check(t.Context(), b, allow))
+	})
+	t.Run("expired assertion still belongs to the registration", func(t *testing.T) {
+		t.Parallel()
+		s, _, p, b, allow := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", 30*time.Second), true))
+		require.NoError(t, s.Check(t.Context(), b, allow), "Check never judges assertion lifetime or renews")
+	})
+	t.Run("changed registration", func(t *testing.T) {
+		t.Parallel()
+		s, _, p, b, allow := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+		p.client.ClientID = "rotated-client"
+		require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrConfiguration)
+	})
+	t.Run("nothing retained", func(t *testing.T) {
+		t.Parallel()
+		s, _, _, b, allow := newDelegationUnitFixture(t)
+		require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrReauthentication)
+	})
+	t.Run("authority revoked", func(t *testing.T) {
+		t.Parallel()
+		s, _, p, b, _ := newDelegationUnitFixture(t)
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+		deny := delegationTestAuthority(func(context.Context, Binding) error { return ErrReauthentication })
+		require.ErrorIs(t, s.Check(t.Context(), b, deny), ErrConfiguration)
+	})
+}

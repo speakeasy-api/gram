@@ -38,10 +38,11 @@ type selection struct {
 func (c *Chainer) selectBinding(ctx context.Context, logger *slog.Logger, req Request) (selection, Outcome) {
 	var none selection
 	bindings, err := repo.New(c.db).ListEMAChainingBindings(ctx, repo.ListEMAChainingBindingsParams{
-		ProjectID:           req.ProjectID,
-		OrganizationID:      req.OrganizationID,
-		UserSessionIssuerID: req.UserSessionIssuerID,
-		UpstreamResource:    strings.TrimRight(req.UpstreamResource, "/"),
+		ProjectID:             req.ProjectID,
+		OrganizationID:        req.OrganizationID,
+		UserSessionIssuerID:   req.UserSessionIssuerID,
+		UpstreamResource:      strings.TrimRight(req.UpstreamResource, "/"),
+		RemoteSessionIssuerID: req.RemoteSessionIssuerID,
 	})
 	if err != nil {
 		// Unknown configuration keeps the upstream on the interactive path.

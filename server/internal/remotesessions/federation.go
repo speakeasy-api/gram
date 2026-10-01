@@ -128,11 +128,6 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	if err != nil || jwksURL.Scheme != "https" {
 		return nil, ErrFederatedConfiguration
 	}
-	// A shared callback needs response issuer identification before code exchange
-	// (RFC 9700 section 4.4.2); a state-selected provider alone is insufficient.
-	if !doc.AuthorizationResponseIssParameterSupported {
-		return nil, ErrFederatedConfiguration
-	}
 	if doc.ResponseTypesSupported != nil && !slices.Contains(doc.ResponseTypesSupported, "code") {
 		return nil, ErrFederatedConfiguration
 	}
@@ -186,9 +181,23 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	return &FederatedProvider{organizationID: organizationID, client: client, issuer: issuer, metadata: doc, fingerprint: hex.EncodeToString(digest[:]), signingKeyRevision: ""}, nil
 }
 
+// RequireLoginRedirect reports whether the provider can serve federated login.
+// A shared callback needs response issuer identification before code exchange
+// (RFC 9700 section 4.4.2); a state-selected provider alone is insufficient.
+// Token exchange and refresh never receive a redirect, so only login requires it.
+func (p *FederatedProvider) RequireLoginRedirect() error {
+	if p == nil || !p.metadata.AuthorizationResponseIssParameterSupported {
+		return ErrFederatedConfiguration
+	}
+	return nil
+}
+
 func (p *FederatedProvider) BuildAuthorizationURL(callbackURL, state, nonce, verifier string) (*url.URL, error) {
 	if p == nil || state == "" || nonce == "" || !validFederatedVerifier(verifier) {
 		return nil, ErrFederatedIdentity
+	}
+	if err := p.RequireLoginRedirect(); err != nil {
+		return nil, err
 	}
 	callback, err := url.Parse(callbackURL)
 	if err != nil || !validIssuerDiscoveryURL(callback) || callback.Fragment != "" {

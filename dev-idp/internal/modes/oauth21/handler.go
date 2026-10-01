@@ -170,11 +170,6 @@ type asMetadata struct {
 	// handleAuthorize instead of requiring DCR/pre-registration.
 	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
 
-	// AuthorizationResponseIssParameterSupported advertises RFC 9207: every
-	// authorization response carries this issuer's `iss`, so a client sharing
-	// one callback across issuers can detect mix-up before redeeming the code.
-	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
-
 	// IdentityChainingRequestedTokenTypesSupported advertises which
 	// `requested_token_type` values the token-exchange grant honors. Listing
 	// the ID-JAG type is how a client learns this IdP can mint cross-app
@@ -205,8 +200,6 @@ func (h *Handler) baseMetadata() asMetadata {
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "private_key_jwt", "none"},
 		ScopesSupported:                   []string{"openid", "email", "profile"},
 		ClientIDMetadataDocumentSupported: true,
-
-		AuthorizationResponseIssParameterSupported: true,
 
 		IdentityChainingRequestedTokenTypesSupported: []string{ema.TokenTypeIDJAG},
 	}
@@ -421,8 +414,6 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	if state != "" {
 		rq.Set("state", state)
 	}
-	// RFC 9207 §2: identify the issuer on every authorization response.
-	rq.Set("iss", h.issuer())
 	target.RawQuery = rq.Encode()
 	http.Redirect(w, r, target.String(), http.StatusFound)
 }

@@ -41,10 +41,18 @@ func (s *Service) SetIdentityChainer(chainer identityChainer) {
 // a caller that is not a validated user session (assistants, agents,
 // workloads and API keys never select a human's delegation). Whether chaining
 // applies to the upstream is then decided by its binding configuration.
-func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string) (identitychaining.Request, bool) {
+//
+// A tunneled upstream is identified by its own derived issuer, never by the
+// resource it claims, exactly as interactive routing treats it; one without a
+// derived issuer calls anonymously and so never chains.
+func (s *Service) identityChainingRequest(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, tunneled bool, tunneledIssuerID uuid.NullUUID) (identitychaining.Request, bool) {
 	var none identitychaining.Request
-	if s.identityChainer == nil || userSessionIssuerID == uuid.Nil || strings.TrimRight(upstreamResource, "/") == "" {
+	if s.identityChainer == nil || userSessionIssuerID == uuid.Nil || strings.TrimRight(upstreamResource, "/") == "" || (tunneled && !tunneledIssuerID.Valid) {
 		return none, false
+	}
+	remoteIssuer := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if tunneled {
+		remoteIssuer = tunneledIssuerID
 	}
 	identity, ok := mcpidentity.FromContext(ctx)
 	if !ok || identity.Kind() != mcpidentity.KindUserSession || identity.UserID() == "" {
@@ -55,11 +63,12 @@ func (s *Service) identityChainingRequest(ctx context.Context, organizationID st
 		return none, false
 	}
 	return identitychaining.Request{
-		OrganizationID:      organizationID,
-		ProjectID:           projectID,
-		UserSessionIssuerID: userSessionIssuerID,
-		UserID:              identity.UserID(),
-		UpstreamResource:    upstreamResource,
+		OrganizationID:        organizationID,
+		ProjectID:             projectID,
+		UserSessionIssuerID:   userSessionIssuerID,
+		UserID:                identity.UserID(),
+		UpstreamResource:      upstreamResource,
+		RemoteSessionIssuerID: remoteIssuer,
 	}, true
 }
 
@@ -69,9 +78,9 @@ func (s *Service) identityChainingRequest(ctx context.Context, organizationID st
 // upstream is required: an interactive token for it wins, and identity
 // chaining supplies one otherwise. An upstream chaining does not govern gets
 // exactly the strict gate's answer, from the tokens already resolved.
-func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneledIssuerID uuid.NullUUID) (string, error) {
+func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, tunneledIssuerID uuid.NullUUID) (string, error) {
 	endpoint := authentication.endpoint
-	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource)
+	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, tunneledIssuerID)
 	if !chainable {
 		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneledIssuerID)
 	}
@@ -175,7 +184,7 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember) fu
 		return nil
 	}
 	return func(ctx context.Context, upstreamResource string) (string, error) {
-		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, gate.projectID, gate.userSessionIssuerID, upstreamResource)
+		req, chainable := s.identityChainingRequest(ctx, gate.organizationID, gate.projectID, gate.userSessionIssuerID, upstreamResource, member.tunneledServerID.Valid, member.remoteSessionIssuerID)
 		if !chainable {
 			return "", nil
 		}

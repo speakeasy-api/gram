@@ -10,6 +10,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
@@ -40,9 +41,12 @@ const (
 // devIDPFixture is a Gram tenant whose trusted identity provider and resource
 // authorization server are both one real dev-idp instance.
 type devIDPFixture struct {
-	idp     *devidptest.Instance
-	chainer *Chainer
-	req     Request
+	idp         *devidptest.Instance
+	chainer     *Chainer
+	req         Request
+	db          *pgxpool.Pool
+	enc         *encryption.Client
+	idpClientID uuid.UUID
 }
 
 // newDevIDPFixture wires a human with a retained dev-idp ID token, a ready
@@ -141,9 +145,12 @@ func newDevIDPFixture(t *testing.T, assigned bool) devIDPFixture {
 	require.NoError(t, err)
 	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, policy, nil, locks, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(keys)))
 	return devIDPFixture{
-		idp:     idp,
-		chainer: New(logger, db, enc, challenges, remotesessions.NewDelegationService(db, enc, challenges), keys, locks),
-		req:     req,
+		idp:         idp,
+		chainer:     New(logger, db, enc, challenges, remotesessions.NewDelegationService(db, enc, challenges), keys, locks),
+		req:         req,
+		db:          db,
+		enc:         enc,
+		idpClientID: idpClient.ID,
 	}
 }
 
@@ -204,5 +211,25 @@ func TestDevIDP_UnassignedHumanIsDeniedAndCached(t *testing.T) {
 	_, outcome = f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Cached, "a provider rejection is not repeated immediately")
 	require.Equal(t, ReasonAccessDenied, outcome.Reason)
+	require.Equal(t, requests, f.idp.Requests())
+}
+
+func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
+	t.Parallel()
+	f := newDevIDPFixture(t, true)
+	_, outcome := f.chainer.Acquire(t.Context(), f.req)
+	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
+
+	rotated, err := f.enc.Encrypt([]byte("rotated-secret"))
+	require.NoError(t, err)
+	_, err = repo.New(f.db).UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
+		ClientSecretEncrypted: pgtype.Text{String: rotated, Valid: true}, ID: f.idpClientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	requests := f.idp.Requests()
+	_, outcome = f.chainer.Acquire(t.Context(), f.req)
+	require.Equal(t, Outcome{Stage: StageDelegation, Reason: ReasonConfigurationRequired, Confidence: ConfidenceVerified, Retryable: false, Cached: false}, outcome,
+		"a token acquired under the previous trusted registration is never released")
 	require.Equal(t, requests, f.idp.Requests())
 }

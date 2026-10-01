@@ -46,6 +46,23 @@ func (a authority) AuthorizeDelegation(ctx context.Context, b remotesessions.Del
 	return nil
 }
 
+// checkDelegation confirms the human's retained delegation still belongs to the
+// current trusted registration before any credential derived from it is
+// released, so a rotated or reconfigured registration retires stored tokens.
+func (c *Chainer) checkDelegation(ctx context.Context, req Request, sel selection) Outcome {
+	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
+	switch err := c.delegation.Check(ctx, binding, authority{chainer: c, req: req}); {
+	case err == nil:
+		return success
+	case errors.Is(err, remotesessions.ErrDelegationReauthentication):
+		return newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
+	case errors.Is(err, remotesessions.ErrDelegationConfiguration):
+		return newOutcome(StageDelegation, ReasonConfigurationRequired, ConfidenceVerified, false)
+	default:
+		return newOutcome(StageDelegation, ReasonTransientFailure, ConfidenceVerified, true)
+	}
+}
+
 // authorize rechecks the endpoint's trusted identity provider registration
 // and the human's live membership before any credential is released or
 // minted, and records the trusted registration on sel.
