@@ -41,6 +41,17 @@ function goAuditActions(): string[] {
 }
 
 describe("AUDIT_ACTIONS", () => {
+  it("describes organization access changes", () => {
+    expect(isAuditAction("organization:enabled")).toBe(true);
+    expect(isAuditAction("organization:disabled")).toBe(true);
+    expect(staticActionPhrase("organization:enabled")).toBe(
+      "enabled organization access for",
+    );
+    expect(staticActionPhrase("organization:disabled")).toBe(
+      "disabled organization access for",
+    );
+  });
+
   it("describes changed trial end dates", () => {
     expect(
       staticActionPhrase("organization:enterprise_trial_end_changed"),

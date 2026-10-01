@@ -16,10 +16,15 @@ import type { OktaResourceConnectionServer } from "@gram/client/models/component
 import { useIdentityProviderConnectionApplications } from "@gram/client/react-query/identityProviderConnectionApplications.js";
 import { useOktaResourceConnections } from "@gram/client/react-query/oktaResourceConnections.js";
 
+import { SettingsSection } from "@/components/detail/settings-section";
+
 import { ClearConfirmationDialog } from "./ClearConfirmationDialog";
+import { ConnectionChecklist } from "../setup/ConnectionChecklist";
+import { STEP_AFFORDANCES } from "../setup/checklistAffordances";
 import { ClearedConfirmationNotice } from "./ClearedConfirmationNotice";
 import { ConnectionGate } from "../../ConnectionGate";
 import { SESSION_SECURITY } from "../../identityProviderQueries";
+import { isConnected } from "../../connectionView";
 import { OktaLinkButton } from "./OktaLinkButton";
 import {
   oktaApplicationsUrl,
@@ -240,10 +245,10 @@ function ReadinessChecklist({
             Save the Okta AI agent details first. The Okta links and connections
             below need the agent&apos;s ID.{" "}
             <Link
-              to={oktaViewHref("setup", AGENT_SECTION_ID)}
+              to={oktaViewHref("cross-app-access", AGENT_SECTION_ID)}
               className="underline underline-offset-2"
             >
-              Record it on the Okta Setup tab
+              Record it in the setup steps above
             </Link>
             .
           </Text>
@@ -403,6 +408,44 @@ function ReadinessChecklist({
   );
 }
 
+const READINESS_SECTION_ID = "readiness";
+
+/** The Enterprise Managed Auth phase of the Okta checklist: register the agent, then connect it to each server. */
+function EnterpriseManagedAuthSetup({
+  connection,
+}: {
+  connection: OktaIdentityProviderConnection;
+}): JSX.Element | null {
+  // Older fixtures and partially loaded connections carry no checklist;
+  // there is nothing to show until it arrives.
+  if (!isConnected(connection) || !connection.checklist?.length) {
+    return null;
+  }
+  return (
+    <SettingsSection id="enterprise-managed-auth">
+      <SettingsSection.Header>
+        <SettingsSection.Title>
+          Enterprise Managed Auth setup
+        </SettingsSection.Title>
+        <SettingsSection.Description>
+          Let your AI agents reach MCP servers with the identity Okta gives
+          them. Register the Speakeasy AI agent in Okta once, then connect it to
+          each server below.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <ConnectionChecklist
+            connection={connection}
+            affordances={STEP_AFFORDANCES}
+            groups={["cross_app_access"]}
+          />
+        </SettingsSection.Body>
+      </SettingsSection.Panel>
+    </SettingsSection>
+  );
+}
+
 export function CrossAppAccessTab({
   connection,
 }: {
@@ -415,7 +458,12 @@ export function CrossAppAccessTab({
       icon="route"
       purpose="to set up Cross App Access"
     >
-      <ReadinessChecklist connection={connection} />
+      <div className="flex min-w-0 flex-col gap-10">
+        <EnterpriseManagedAuthSetup connection={connection} />
+        <div id={READINESS_SECTION_ID} className="scroll-mt-6">
+          <ReadinessChecklist connection={connection} />
+        </div>
+      </div>
     </ConnectionGate>
   );
 }

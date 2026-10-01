@@ -94,6 +94,25 @@ func (q *Queries) DeleteProjectEMATombstones(ctx context.Context, arg DeleteProj
 	return err
 }
 
+const deleteProjectRiskFindingEvidence = `-- name: DeleteProjectRiskFindingEvidence :execrows
+DELETE FROM risk_finding_evidence
+WHERE project_id = $1
+  AND organization_id = $2
+`
+
+type DeleteProjectRiskFindingEvidenceParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteProjectRiskFindingEvidence(ctx context.Context, arg DeleteProjectRiskFindingEvidenceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteProjectRiskFindingEvidence, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getFirstProject = `-- name: GetFirstProject :one
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
@@ -276,7 +295,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.verified_domains, om.creation_source, om.created_at, om.updated_at, om.disabled_at
+    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.verified_domains, om.creation_source, om.default_host, om.created_at, om.updated_at, om.disabled_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -304,6 +323,7 @@ type GetProjectWithOrganizationMetadataRow struct {
 	SsoEnabled         pgtype.Bool
 	VerifiedDomains    []string
 	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
@@ -332,6 +352,7 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.SsoEnabled,
 		&i.VerifiedDomains,
 		&i.CreationSource,
+		&i.DefaultHost,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,

@@ -204,7 +204,7 @@ func (c *Core) CreatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input C
 }
 
 func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input CreateMutation, deps *MutationDependencies) (MutationResult, error) {
-	if err := validateStoredMCPScopeSources(input.Params.McpScope, input.Params.Sources); err != nil {
+	if err := validateStoredMCPScope(input.Params.McpScope, input.Params.Sources, input.Params.Action); err != nil {
 		return MutationResult{}, err
 	}
 	if err := shadowadmission.LockProject(ctx, tx, input.Params.ProjectID); err != nil {
@@ -325,7 +325,7 @@ func (c *Core) UpdatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 }
 
 func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input UpdateMutation, deps *MutationDependencies) (MutationResult, error) {
-	if err := validateStoredMCPScopeSources(input.Params.McpScope, input.Params.Sources); err != nil {
+	if err := validateStoredMCPScope(input.Params.McpScope, input.Params.Sources, input.Params.Action); err != nil {
 		return MutationResult{}, err
 	}
 	if err := shadowadmission.LockProject(ctx, tx, input.Params.ProjectID); err != nil {
@@ -589,9 +589,10 @@ func mutationError(message string, cause error) error {
 	return &MutationError{Message: message, Cause: cause}
 }
 
-// validateStoredMCPScopeSources guards callers that change sources while keeping a stored scope.
-func validateStoredMCPScopeSources(rawScope []byte, sources []string) error {
-	if err := ValidateMCPScopeSources(unmarshalMCPScope(rawScope), sources); err != nil {
+// validateStoredMCPScope guards callers that change constrained fields while
+// keeping a stored scope.
+func validateStoredMCPScope(rawScope []byte, sources []string, action string) error {
+	if err := ValidateMCPScope(unmarshalMCPScope(rawScope), sources, action); err != nil {
 		return &ValidationError{Message: err.Error(), Cause: err}
 	}
 	return nil

@@ -1,7 +1,7 @@
 {
   "name": "admin",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.6.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -53,8 +53,8 @@
     "@types/tr46": "^5.0.1",
     "@vitejs/plugin-react": "catalog:",
     "happy-dom": "^20.11.2",
-    "oxlint": "^1.83.0",
-    "oxlint-tsgolint": "^7.0.2001",
+    "oxlint": "^1.85.0",
+    "oxlint-tsgolint": "^7.0.2002",
     "react-grab": "^0.2.0",
     "typescript": "catalog:",
     "vite": "catalog:",
