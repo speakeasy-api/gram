@@ -11,6 +11,7 @@ import (
 	admingen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/supportmatrix"
 )
 
 // onboardingStepRecord is one row of the step mirror: a group or a card from
@@ -49,14 +50,35 @@ func onboardingStepRecords() []onboardingStepRecord {
 	return records
 }
 
+// onboardingStepMethods lists each step's integration methods from the code
+// catalog: an empty list for a group or a card that needs none.
+func onboardingStepMethods() map[string][]string {
+	methods := make(map[string][]string)
+	for _, record := range onboardingStepRecords() {
+		methods[record.Slug] = append([]string{}, record.Methods...)
+	}
+	return methods
+}
+
 // SyncOnboardingSteps mirrors the setup task catalog and its groups into
 // onboarding_steps so playbooks can reference them and staff can read them.
 // Code owns every column: a slug the code no longer defines is retired, and
-// methods and prerequisites are replaced. Runs at start-up under an advisory
-// lock so several replicas can start at once. Integration methods come from
-// the support matrix, so the matrix is seeded first.
+// prerequisites are replaced. Runs at start-up under an advisory lock so
+// several replicas can start at once. A card's integration methods live in
+// code and are checked against the support matrix in code, never mirrored.
 func SyncOnboardingSteps(ctx context.Context, db *pgxpool.Pool) error {
-	err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
+	matrix, err := supportmatrix.Current()
+	if err != nil {
+		return fmt.Errorf("load support matrix: %w", err)
+	}
+	for _, record := range onboardingStepRecords() {
+		for _, method := range record.Methods {
+			if _, ok := matrix.Method(method); !ok {
+				return fmt.Errorf("onboarding step %q names integration method %q that the support matrix does not define", record.Slug, method)
+			}
+		}
+	}
+	err = pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		q := repo.New(tx)
 		if err := q.LockOnboardingSteps(ctx); err != nil {
 			return fmt.Errorf("lock onboarding steps: %w", err)
@@ -91,18 +113,6 @@ func SyncOnboardingSteps(ctx context.Context, db *pgxpool.Pool) error {
 			if err := q.SetOnboardingStepParent(ctx, repo.SetOnboardingStepParentParams{ID: id, ParentStepID: parent}); err != nil {
 				return fmt.Errorf("set onboarding step parent %q: %w", record.Slug, err)
 			}
-			if err := q.DeleteOnboardingStepMethods(ctx, id); err != nil {
-				return fmt.Errorf("clear onboarding step methods %q: %w", record.Slug, err)
-			}
-			for _, method := range record.Methods {
-				inserted, err := q.InsertOnboardingStepMethod(ctx, repo.InsertOnboardingStepMethodParams{StepID: id, MethodSlug: method})
-				if err != nil {
-					return fmt.Errorf("insert onboarding step method %q for %q: %w", method, record.Slug, err)
-				}
-				if inserted == 0 {
-					return fmt.Errorf("onboarding step %q names integration method %q that the support matrix does not define", record.Slug, method)
-				}
-			}
 			if err := q.DeleteOnboardingStepDependencies(ctx, id); err != nil {
 				return fmt.Errorf("clear onboarding step dependencies %q: %w", record.Slug, err)
 			}
@@ -128,6 +138,7 @@ func ListOnboardingSteps(ctx context.Context, db repo.DBTX) ([]*admingen.AdminOn
 		return nil, fmt.Errorf("list onboarding steps: %w", err)
 	}
 	steps := make([]*admingen.AdminOnboardingStep, 0, len(rows))
+	methodsBySlug := onboardingStepMethods()
 	for _, row := range rows {
 		steps = append(steps, &admingen.AdminOnboardingStep{
 			Slug:            row.Slug,
@@ -136,7 +147,7 @@ func ListOnboardingSteps(ctx context.Context, db repo.DBTX) ([]*admingen.AdminOn
 			ParentSlug:      conv.FromPGText[string](row.ParentSlug),
 			Completion:      row.Completion,
 			HiddenByDefault: row.HiddenByDefault,
-			MethodSlugs:     row.MethodSlugs,
+			MethodSlugs:     methodsBySlug[row.Slug],
 			Requires:        row.RequiresSlugs,
 		})
 	}

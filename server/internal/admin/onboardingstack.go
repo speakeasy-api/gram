@@ -25,7 +25,7 @@ func (s *Service) GetOnboardingStackOptions(ctx context.Context, _ *gen.GetOnboa
 	if _, ok := contextvalues.GetAdminAuthContext(ctx); !ok {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	options, err := organizations.LoadOnboardingStackOptions(ctx, s.db)
+	options, err := organizations.LoadOnboardingStackOptions()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load onboarding stack options").LogError(ctx, s.logger)
 	}

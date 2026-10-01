@@ -2,77 +2,11 @@ package admin
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
-	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/supportmatrix"
 )
-
-// SeedSupportMatrix inserts the matrix's platforms, plans, methods and
-// capabilities as rows, so tables that reference them by id have something to
-// point at, and retires plans the matrix no longer names. The matrix itself is
-// code (supportmatrix.Current) and nothing edits these rows.
-func SeedSupportMatrix(ctx context.Context, db *pgxpool.Pool) error {
-	matrix, err := supportmatrix.Current()
-	if err != nil {
-		return fmt.Errorf("load support matrix: %w", err)
-	}
-	catalog, err := json.Marshal(seedCatalog(matrix))
-	if err != nil {
-		return fmt.Errorf("encode support matrix seed: %w", err)
-	}
-	err = pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
-		q := repo.New(tx)
-		if err := q.LockSupportMatrix(ctx); err != nil {
-			return fmt.Errorf("lock support catalog: %w", err)
-		}
-		for _, seed := range []func(context.Context, []byte) error{q.SeedSupportPlatforms, q.SeedSupportPlans, q.RetireSupportPlans, q.SeedSupportMethods, q.SeedSupportCapabilities} {
-			if err := seed(ctx, catalog); err != nil {
-				return fmt.Errorf("seed support catalog: %w", err)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("seed support matrix transaction: %w", err)
-	}
-	return nil
-}
-
-// seedEntry carries every field the seed queries read; an empty string stays
-// a string, since the columns it lands in are not nullable.
-type seedEntry struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Vendor  string `json:"vendor"`
-	Family  string `json:"family"`
-	Surface string `json:"surface"`
-	Plans   string `json:"plans"`
-	Group   string `json:"group"`
-}
-
-// seedCatalog is the shape the seed queries read: the axes, in matrix order.
-func seedCatalog(matrix *supportmatrix.Matrix) map[string][]seedEntry {
-	catalog := map[string][]seedEntry{"products": {}, "plans": {}, "methods": {}, "capabilities": {}}
-	for _, p := range matrix.Platforms {
-		catalog["products"] = append(catalog["products"], seedEntry{ID: p.ID, Name: p.Name, Vendor: p.Vendor, Family: p.Family, Surface: p.Surface, Plans: "", Group: ""})
-	}
-	for _, p := range matrix.Plans {
-		catalog["plans"] = append(catalog["plans"], seedEntry{ID: p.ID, Name: p.Name, Vendor: p.Vendor, Family: "", Surface: "", Plans: "", Group: ""})
-	}
-	for _, m := range matrix.Methods {
-		catalog["methods"] = append(catalog["methods"], seedEntry{ID: m.ID, Name: m.Name, Vendor: m.Vendor, Family: "", Surface: "", Plans: m.Plans, Group: ""})
-	}
-	for _, c := range matrix.Capabilities {
-		catalog["capabilities"] = append(catalog["capabilities"], seedEntry{ID: c.ID, Name: c.Name, Vendor: "", Family: "", Surface: "", Plans: "", Group: c.Group})
-	}
-	return catalog
-}
 
 // GetSupportMatrix serves the matrix the server was built with.
 func (s *Service) GetSupportMatrix(ctx context.Context, _ *gen.GetSupportMatrixPayload) (*gen.SupportMatrix, error) {

@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
-	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -36,7 +35,6 @@ type playbookSeeds struct {
 func seedPlaybooks(t *testing.T, f proposalFixture) playbookSeeds {
 	t.Helper()
 	ctx := t.Context()
-	require.NoError(t, admin.SeedSupportMatrix(ctx, f.db))
 	require.NoError(t, organizations.SyncOnboardingSteps(ctx, f.db))
 	useCase, err := organizations.CreateOnboardingUseCase(ctx, f.db, "distribution", "Distribution", "Ship MCP servers to agents")
 	require.NoError(t, err)

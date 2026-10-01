@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
-	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -19,7 +18,6 @@ import (
 func distributionUseCase(t *testing.T, ti *testInstance) uuid.UUID {
 	t.Helper()
 	ctx := t.Context()
-	require.NoError(t, admin.SeedSupportMatrix(ctx, ti.conn))
 	require.NoError(t, organizations.SyncOnboardingSteps(ctx, ti.conn))
 	useCase, err := organizations.CreateOnboardingUseCase(ctx, ti.conn, "identity", "Identity", "Know who is using AI.")
 	require.NoError(t, err)

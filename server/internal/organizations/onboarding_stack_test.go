@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	admingen "github.com/speakeasy-api/gram/server/gen/admin"
-	"github.com/speakeasy-api/gram/server/internal/admin"
-	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -17,47 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOnboardingStackOptionsFollowTheCatalogPlans(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestOrganizationsService(t)
-	require.NoError(t, admin.SeedSupportMatrix(ctx, ti.conn))
-
-	// A plan the catalog no longer names is retired on the next start, and a
-	// catalog plan that was retired comes back.
-	q := adminrepo.New(ti.conn)
-	require.NoError(t, q.SeedSupportPlans(ctx, []byte(`{"plans":[{"id":"anthropic-pro","vendor":"Anthropic","name":"Pro"}]}`)))
-	require.NoError(t, q.RetireSupportPlans(ctx, []byte(`{"plans":[]}`)))
-	retired, err := organizations.LoadOnboardingStackOptions(ctx, ti.conn)
-	require.NoError(t, err)
-	for _, vendor := range retired.Vendors {
-		require.Empty(t, vendor.Plans, vendor.Vendor)
-	}
-
-	require.NoError(t, admin.SeedSupportMatrix(ctx, ti.conn))
-	options, err := organizations.LoadOnboardingStackOptions(ctx, ti.conn)
-	require.NoError(t, err)
-	plans := make(map[string][]string, len(options.Vendors))
-	for _, vendor := range options.Vendors {
-		for _, plan := range vendor.Plans {
-			plans[vendor.Vendor] = append(plans[vendor.Vendor], plan.Slug)
-		}
-	}
-	require.Equal(t, map[string][]string{
-		"Anthropic": {"anthropic-team", "anthropic-enterprise"},
-		"OpenAI":    {"openai-business", "openai-enterprise"},
-		"Cursor":    {"cursor-teams", "cursor-enterprise"},
-		"Google":    {"google-gemini-code-assist-standard", "google-gemini-code-assist-enterprise"},
-		"GitHub":    {"github-copilot-business", "github-copilot-enterprise"},
-	}, plans, "organizational plans only, in catalog order, and the stray plan stays retired")
-}
-
 func TestOnboardingStackOptionsComeFromTheSupportMatrix(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestOrganizationsService(t)
-	require.NoError(t, admin.SeedSupportMatrix(ctx, ti.conn))
-	options, err := organizations.LoadOnboardingStackOptions(ctx, ti.conn)
+	options, err := organizations.LoadOnboardingStackOptions()
 	require.NoError(t, err)
 
 	vendors := make(map[string]*admingen.AdminOnboardingVendorOption, len(options.Vendors))
@@ -86,7 +47,6 @@ func TestSaveOnboardingStackRecordsVendorsPlansAndDeviceManagement(t *testing.T)
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	require.NoError(t, admin.SeedSupportMatrix(ctx, ti.conn))
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationOnboardingStackUpdated)
@@ -146,7 +106,6 @@ func TestSaveOnboardingStackRejectsWhatTheCatalogDoesNotOffer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	require.NoError(t, admin.SeedSupportMatrix(ctx, ti.conn))
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test")

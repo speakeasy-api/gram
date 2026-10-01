@@ -384,10 +384,10 @@ BEGIN
   -- Plans resolve by slug from the support matrix catalog the admin server
   -- seeds; a plan the catalog does not hold yet leaves the vendor planless.
   DELETE FROM organization_onboarding_vendors WHERE organization_id = demo_org;
-  INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_id)
+  INSERT INTO organization_onboarding_vendors (organization_id, vendor, plan_slug)
   VALUES
-    (demo_org, 'Anthropic', (SELECT id FROM support_matrix_plans WHERE slug = 'anthropic-enterprise' AND deleted_at IS NULL)),
-    (demo_org, 'Cursor', (SELECT id FROM support_matrix_plans WHERE slug = 'cursor-teams' AND deleted_at IS NULL));
+    (demo_org, 'Anthropic', 'anthropic-enterprise'),
+    (demo_org, 'Cursor', 'cursor-teams');
 
   -- Killswitch aggregates retain canonical MCP server keys in immutable
   -- snapshots. Clear every org-scoped aggregate and replay receipt before the
