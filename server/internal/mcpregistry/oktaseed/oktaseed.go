@@ -19,32 +19,33 @@ import (
 
 // Remote is one endpoint of a vendor's MCP server.
 type Remote struct {
-	Type string
-	URL  string
+	Type string `json:"type"`
+	URL  string `json:"url"`
 }
 
 // Vendor is one seeded catalog entry with its Okta mapping. Every value is
-// public vendor data verified against a tenant or the vendor's metadata.
+// public vendor data verified against a tenant or the vendor's metadata. The
+// JSON form is hashed into Version and is not what the catalog stores.
 type Vendor struct {
 	// Name is the catalog server name; it is immutable once created.
-	Name string
+	Name string `json:"name"`
 	// Title is the display title.
-	Title string
+	Title string `json:"title"`
 	// Description is the catalog description.
-	Description string
+	Description string `json:"description"`
 	// WebsiteURL is the vendor's site.
-	WebsiteURL string
+	WebsiteURL string `json:"websiteUrl"`
 	// DocumentationURL is the public documentation for the MCP server.
-	DocumentationURL string
+	DocumentationURL string `json:"documentationUrl"`
 	// IconURL is a PNG the vendor hosts for its own product.
-	IconURL string
+	IconURL string `json:"iconUrl"`
 	// SupportsDCR records that the vendor's authorization server metadata
 	// publishes a registration endpoint.
-	SupportsDCR bool
+	SupportsDCR bool `json:"supportsDcr"`
 	// Remotes are the endpoints in preference order; immutable once created.
-	Remotes []Remote
+	Remotes []Remote `json:"remotes"`
 	// Mapping is the Okta namespace written to the entry.
-	Mapping mcpregistry.OktaMapping
+	Mapping mcpregistry.OktaMapping `json:"mapping"`
 }
 
 const (
@@ -63,8 +64,22 @@ func Version() string {
 	return versionOf(Vendors)
 }
 
+// versionInput is the hashed encoding; changing it changes every version.
+type versionInput struct {
+	// Revision is applyRevision.
+	Revision int `json:"revision"`
+
+	// Vendors is the table Apply would write.
+	Vendors []Vendor `json:"vendors"`
+}
+
 func versionOf(vendors []Vendor) string {
-	sum := sha256.Sum256(fmt.Appendf(nil, "%d %#v", applyRevision, vendors))
+	encoded, err := json.Marshal(versionInput{Revision: applyRevision, Vendors: vendors})
+	if err != nil {
+		// Strings, bools and slices of them always encode.
+		panic(fmt.Errorf("encode okta seed version input: %w", err))
+	}
+	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])[:versionHexLength]
 }
 
@@ -629,6 +644,8 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor) (string, err
 	case err != nil:
 		return "", fmt.Errorf("lookup: %w", err)
 	}
+	// The seed owns the namespace: one that is missing, stale or undecodable
+	// is replaced below.
 	current, err := mcpregistry.ParseOktaMapping(existing.Data)
 	iconed, iconAdded, iconErr := withIcon(existing.Data, v.IconURL)
 	if iconErr != nil {
