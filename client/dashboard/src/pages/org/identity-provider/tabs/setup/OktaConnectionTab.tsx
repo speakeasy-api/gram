@@ -237,9 +237,10 @@ function ChecklistSection({
       <SettingsSection.Header>
         <SettingsSection.Title>Okta setup checklist</SettingsSection.Title>
         <SettingsSection.Description>
-          Follow these steps in the Okta Admin Console. Speakeasy marks steps
-          complete when it has evidence from the connection check. Review any
-          steps marked Not checked yourself.
+          Follow these steps in the Okta Admin Console to connect Okta.
+          Speakeasy marks steps complete when it has evidence from the
+          connection check. Review any steps marked Not checked yourself.
+          Enterprise Managed Auth has its own steps on the Cross App Access tab.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -247,6 +248,7 @@ function ChecklistSection({
           <ConnectionChecklist
             connection={connection}
             affordances={STEP_AFFORDANCES}
+            groups={["connect"]}
           />
         </SettingsSection.Body>
       </SettingsSection.Panel>

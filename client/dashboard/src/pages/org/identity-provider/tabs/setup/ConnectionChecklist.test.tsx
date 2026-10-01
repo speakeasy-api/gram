@@ -13,7 +13,7 @@ import type { IdentityProviderConnectionChecklistItem } from "@gram/client/model
 
 import { STEP_AFFORDANCES } from "./checklistAffordances";
 import { ConnectionChecklist } from "./ConnectionChecklist";
-import type { LiveConnection } from "../../connectionView";
+import type { ChecklistGroupId, LiveConnection } from "../../connectionView";
 import { makeChecklistItem, makeConnection } from "./testFixtures";
 
 const scrollIntoView = vi.fn();
@@ -72,17 +72,22 @@ const pendingChecklist = [
   item("record_ai_agent", "cross_app_access"),
 ];
 
-function renderChecklist(connection: LiveConnection, route = "/identity") {
+function renderChecklist(
+  connection: LiveConnection,
+  groups?: ChecklistGroupId[],
+  route = "/identity",
+) {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <QueryClientProvider client={new QueryClient()}>
         <TooltipProvider>
-          <Link to="?tab=enterprise-managed-auth&provider=okta&view=setup#agent">
+          <Link to="?tab=identity-providers&provider=okta&view=setup#agent">
             Set up agent
           </Link>
           <ConnectionChecklist
             connection={connection}
             affordances={STEP_AFFORDANCES}
+            groups={groups}
           />
         </TooltipProvider>
       </QueryClientProvider>
@@ -202,7 +207,7 @@ describe("ConnectionChecklist", () => {
     ).toBeNull();
   });
 
-  it("links the first connection step to the Cross App Access tab", () => {
+  it("links the first connection step to the server readiness table on the same tab", () => {
     renderChecklist(
       connectionWith("verified", [
         ...pendingChecklist,
@@ -214,11 +219,21 @@ describe("ConnectionChecklist", () => {
       .closest("li")!;
     expect(
       within(step)
-        .getByRole("link", { name: "Configure Cross App Access" })
+        .getByRole("link", { name: "Review server readiness below" })
         .getAttribute("href"),
-    ).toBe(
-      "/identity?tab=enterprise-managed-auth&provider=okta&view=cross-app-access",
+    ).toBe("#readiness");
+  });
+
+  it("renders only the requested groups", () => {
+    renderChecklist(
+      connectionWith("verified", [
+        ...pendingChecklist,
+        item("first_resource_connection", "cross_app_access"),
+      ]),
+      ["connect"],
     );
+    expect(screen.queryByText("Step first_resource_connection")).toBeNull();
+    expect(screen.getByRole("button", { name: /^Connect, / })).toBeTruthy();
   });
 
   it("places the save form inside the agent checklist step and preserves drafts when collapsed", () => {
@@ -280,6 +295,7 @@ describe("ConnectionChecklist", () => {
   it("opens the agent step for an initial hash link even while pending", () => {
     renderChecklist(
       connectionWith("pending", pendingChecklist),
+      undefined,
       "/identity#agent",
     );
     expect(

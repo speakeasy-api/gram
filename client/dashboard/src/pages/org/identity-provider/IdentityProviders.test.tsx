@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { EnterpriseManagedAuth } from "./EnterpriseManagedAuth";
+import { IdentityProviders } from "./IdentityProviders";
 
 const mocks = vi.hoisted(() => ({
   query: {
@@ -43,9 +43,9 @@ vi.mock("@/components/api-error-alert", () => ({
 function show(query = "") {
   render(
     <MemoryRouter
-      initialEntries={[`/example/identity?tab=enterprise-managed-auth${query}`]}
+      initialEntries={[`/example/identity?tab=identity-providers${query}`]}
     >
-      <EnterpriseManagedAuth />
+      <IdentityProviders />
     </MemoryRouter>,
   );
 }
@@ -58,19 +58,17 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe("Enterprise Managed Auth", () => {
+describe("Identity providers", () => {
   it("offers supported integrations rather than a global provider selection", () => {
     show();
     expect(
-      screen.getByRole("heading", { name: "Enterprise Managed Auth" }),
+      screen.getByRole("heading", { name: "Identity providers" }),
     ).toBeTruthy();
-    expect(screen.getByText(/separate from employee sign-in/)).toBeTruthy();
+    expect(screen.getByText(/live on the Single sign-on tab/)).toBeTruthy();
     expect(screen.getByText("Not connected")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Connect Okta" }).getAttribute("href"),
-    ).toBe(
-      "/example/identity?tab=enterprise-managed-auth&provider=okta&view=setup",
-    );
+    ).toBe("/example/identity?tab=identity-providers&provider=okta&view=setup");
     expect(screen.queryByRole("radio")).toBeNull();
     expect(screen.queryByRole("tab", { name: "Applications" })).toBeNull();
   });
@@ -134,13 +132,13 @@ describe("Enterprise Managed Auth", () => {
       screen.getByRole("link", { name: "All identity providers" }),
     );
     expect(
-      screen.getByRole("heading", { name: "Enterprise Managed Auth" }),
+      screen.getByRole("heading", { name: "Identity providers" }),
     ).toBeTruthy();
   });
   it("shows the provider list for unknown providers", () => {
     show("&provider=unsupported");
     expect(
-      screen.getByRole("heading", { name: "Enterprise Managed Auth" }),
+      screen.getByRole("heading", { name: "Identity providers" }),
     ).toBeTruthy();
     expect(screen.queryByText(/Okta content:/)).toBeNull();
   });

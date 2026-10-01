@@ -175,11 +175,16 @@ function GroupSection({
 export function ConnectionChecklist({
   connection,
   affordances = {},
+  groups: groupIds,
 }: {
   connection: LiveConnection;
   affordances?: StepAffordances;
+  /** Which groups to show; each tab renders the phase it owns. Defaults to all. */
+  groups?: ChecklistGroupId[];
 }): JSX.Element {
-  const groups = groupChecklist(connection.checklist);
+  const groups = groupChecklist(connection.checklist).filter(
+    (group) => groupIds === undefined || groupIds.includes(group.id),
+  );
   const location = useLocation();
   const checklistRef = useRef<HTMLDivElement>(null);
   const agentHash = `#${AGENT_SECTION_ID}`;
