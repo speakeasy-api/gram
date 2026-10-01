@@ -144,13 +144,15 @@ export function SavedQueryBar({
             <span className="truncate text-sm font-medium" title={open.name}>
               {open.name}
             </span>
+            {changed ? (
+              <UnsavedDot label="Unsaved changes" tooltip="Unsaved changes" />
+            ) : null}
             <span className="text-muted-foreground shrink-0 text-xs">
               by {creator(open.createdByUserId)}
-              {changed ? " · Unsaved changes" : ""}
             </span>
           </>
         ) : (
-          <span className="text-muted-foreground text-sm">Unsaved query</span>
+          <UnsavedDot label="Unsaved query" tooltip="Not saved yet" />
         )}
       </div>
       {open ? (
@@ -255,6 +257,25 @@ export function SavedQueryBar({
         </Dialog>
       ) : null}
     </div>
+  );
+}
+
+// The editor's usual mark for work not yet saved.
+function UnsavedDot({
+  label,
+  tooltip,
+}: {
+  label: string;
+  tooltip: string;
+}): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={tooltip}>
+      <span
+        role="img"
+        aria-label={label}
+        className="bg-warning-default size-2 shrink-0 self-center rounded-full"
+      />
+    </SimpleTooltip>
   );
 }
 

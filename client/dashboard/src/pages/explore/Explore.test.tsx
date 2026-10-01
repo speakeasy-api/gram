@@ -701,9 +701,10 @@ describe("Explore", () => {
       testState.savedQueries = [savedQuery("q-1", "Slow tools", p95ByTool)];
       renderExplore();
       openSaved("Slow tools");
+      expect(screen.queryByRole("img", { name: "Unsaved changes" })).toBeNull();
 
       fireEvent.click(screen.getByRole("button", { name: "Bar" }));
-      expect(screen.getByText(/Unsaved changes/)).toBeTruthy();
+      expect(screen.getByRole("img", { name: "Unsaved changes" })).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
       const [write] = testState.writes;
@@ -738,7 +739,7 @@ describe("Explore", () => {
         dataset: "tool_calls",
         spec: stored.spec,
       });
-      expect(screen.getByText(/Unsaved changes/)).toBeTruthy();
+      expect(screen.getByRole("img", { name: "Unsaved changes" })).toBeTruthy();
     });
 
     it("deletes the open query and keeps the builder", async () => {
@@ -756,7 +757,7 @@ describe("Explore", () => {
         request: { id: "q-1" },
       });
       expect(new URLSearchParams(nav.search).get("query")).toBeNull();
-      expect(screen.getByText("Unsaved query")).toBeTruthy();
+      expect(screen.getByRole("img", { name: "Unsaved query" })).toBeTruthy();
       expect(
         screen.getByRole("combobox", { name: "Dataset" }).textContent,
       ).toBe("tool_calls");

@@ -305,10 +305,6 @@ export function QueryBuilder({
           </Button>
         </div>
       </div>
-      <p className="text-muted-foreground text-xs">
-        Buckets are sized from the window. Order and limit shape the summary
-        table.
-      </p>
     </div>
   );
 }
