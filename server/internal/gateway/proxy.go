@@ -958,7 +958,7 @@ func (tp *ToolProxy) doExternalMCP(
 		if authErr, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
 			upstreamReportedError = true
 			responseStatusCode = http.StatusOK
-			logger.WarnContext(ctx, "external MCP authentication rejected", slog.Int("upstream_status_code", authErr.StatusCode))
+			logger.WarnContext(ctx, "external MCP authentication rejected", attr.SlogHTTPResponseStatusCode(authErr.StatusCode))
 			return writeExternalMCPAuthRejection(w, plan.RequiresOAuth)
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").LogError(ctx, logger)
@@ -971,7 +971,7 @@ func (tp *ToolProxy) doExternalMCP(
 		if authErr, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
 			upstreamReportedError = true
 			responseStatusCode = http.StatusOK
-			logger.WarnContext(ctx, "external MCP authentication rejected", slog.Int("upstream_status_code", authErr.StatusCode))
+			logger.WarnContext(ctx, "external MCP authentication rejected", attr.SlogHTTPResponseStatusCode(authErr.StatusCode))
 			return writeExternalMCPAuthRejection(w, plan.RequiresOAuth)
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").LogError(ctx, logger)
