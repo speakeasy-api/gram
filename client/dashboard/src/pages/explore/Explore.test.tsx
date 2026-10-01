@@ -444,6 +444,27 @@ describe("Explore", () => {
       );
     });
 
+    it("runs a linked query once a refreshed catalog can answer it", () => {
+      testState.datasets = [sessions];
+      const view = renderExplore(linkTo(toolCallsTable));
+      expect(screen.getByText("Nothing has run yet")).toBeTruthy();
+
+      testState.datasets = [sessions, toolCalls];
+      view.rerender(
+        <MemoryRouter initialEntries={["/before"]}>
+          <RouterProbe />
+          <TooltipProvider>
+            <Explore />
+          </TooltipProvider>
+        </MemoryRouter>,
+      );
+
+      expect(
+        screen.getByRole("combobox", { name: "Dataset" }).textContent,
+      ).toBe("tool_calls");
+      expect(screen.queryByText("Nothing has run yet")).toBeNull();
+    });
+
     it.each([
       ["text that is not JSON", "/explore?q=%7Bnot-json"],
       [
