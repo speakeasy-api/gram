@@ -692,6 +692,8 @@ export function staticActionPhrase(action: AuditAction): string {
     case "project:delete":
       return "deleted project";
 
+    // Saved queries were replaced by widgets; these stay so audit rows
+    // written before the change still read well.
     case "query:create":
       return "created saved query";
     case "query:update":
