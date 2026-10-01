@@ -45,7 +45,7 @@ export function suggestionToCatalogServer(
     iconUrl: suggestion.iconUrl,
     remotes,
     isReadOnly: false,
-    supportsDcr: false,
+    supportsDcr: suggestion.supportsDcr,
     toolCount: 0,
     version: "",
     meta: {},

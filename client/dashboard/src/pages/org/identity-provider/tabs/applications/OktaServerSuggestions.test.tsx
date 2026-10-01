@@ -85,6 +85,7 @@ function suggestion(
       },
     ],
     state: "open",
+    supportsDcr: false,
     installedUrls: [],
     ...overrides,
   };
@@ -322,4 +323,11 @@ it("keeps only remotes the install flow can create", () => {
   });
   expect(suggestionToCatalogServer(sseOnly).remotes).toEqual([]);
   expect(isSuggestionInstallable(sseOnly)).toBe(false);
+});
+
+it("carries the catalog's OAuth registration support to the install dialog", () => {
+  expect(suggestionToCatalogServer(suggestion()).supportsDcr).toBe(false);
+  expect(
+    suggestionToCatalogServer(suggestion({ supportsDcr: true })).supportsDcr,
+  ).toBe(true);
 });
