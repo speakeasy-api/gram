@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -85,15 +86,16 @@ func WithMCPFindingEvidenceWriter(writer MCPFindingEvidenceWriter) PolicyEvaluat
 }
 
 type policyEvaluator struct {
-	logger         *slog.Logger
-	lookup         PolicyLookup
-	detector       PolicyDetector
-	publisher      gcp.Publisher[*riskv1.Finding]
-	evidenceWriter MCPFindingEvidenceWriter
-	config         PolicyConfig
-	flagSlots      chan struct{}
-	flagScans      sync.WaitGroup
-	onFlagDrop     func(context.Context, Event)
+	logger          *slog.Logger
+	lookup          PolicyLookup
+	detector        PolicyDetector
+	publisher       gcp.Publisher[*riskv1.Finding]
+	evidenceWriter  MCPFindingEvidenceWriter
+	config          PolicyConfig
+	flagSlots       chan struct{}
+	flagScans       sync.WaitGroup
+	onFlagDrop      func(context.Context, Event)
+	onFlagOversized func(context.Context, Event)
 }
 
 // NewPolicyEvaluator creates an evaluator that enforces block policies inline
@@ -119,20 +121,22 @@ func NewPolicyEvaluator(
 	}
 	evaluator := newInstrumentedEvaluator(nil, tracerProvider, meterProvider, logger)
 	policy := &policyEvaluator{
-		logger:         logger,
-		lookup:         lookup,
-		detector:       detector,
-		publisher:      publisher,
-		evidenceWriter: nil,
-		config:         config,
-		flagSlots:      make(chan struct{}, config.FlagConcurrency),
-		flagScans:      sync.WaitGroup{},
-		onFlagDrop:     nil,
+		logger:          logger,
+		lookup:          lookup,
+		detector:        detector,
+		publisher:       publisher,
+		evidenceWriter:  nil,
+		config:          config,
+		flagSlots:       make(chan struct{}, config.FlagConcurrency),
+		flagScans:       sync.WaitGroup{},
+		onFlagDrop:      nil,
+		onFlagOversized: nil,
 	}
 	for _, option := range options {
 		option(policy)
 	}
 	policy.onFlagDrop = evaluator.metrics.recordFlagDrop
+	policy.onFlagOversized = evaluator.metrics.recordFlagOversized
 	evaluator.policy = policy
 	return evaluator
 }
@@ -141,13 +145,13 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 	event := subject.Event
 	projectID, err := uuid.Parse(event.ProjectID)
 	if err != nil {
-		return p.resolveIndeterminate(ctx, fmt.Errorf("parse project id: %w", err))
+		return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("parse project id: %w", err))
 	}
 	serverID := uuid.Nil
 	if event.ServerID != "" {
 		serverID, err = uuid.Parse(event.ServerID)
 		if err != nil {
-			return p.resolveIndeterminate(ctx, fmt.Errorf("parse MCP server id: %w", err))
+			return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("parse MCP server id: %w", err))
 		}
 	}
 
@@ -161,7 +165,7 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 		Principal:       audiencePrincipal(event.Principal()),
 	})
 	if err != nil {
-		return p.resolveIndeterminate(ctx, fmt.Errorf("list MCP policies: %w", err))
+		return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("list MCP policies: %w", err))
 	}
 	if len(policies) == 0 {
 		return Allow()
@@ -173,16 +177,20 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 		return Allow()
 	}
 	if subject.Payload.Availability() != PayloadAvailable {
-		return p.resolveIndeterminate(ctx, fmt.Errorf("MCP payload is %s", subject.Payload.Availability()))
+		return p.resolveIndeterminate(ctx, event.Phase(), fmt.Errorf("MCP payload is %s", subject.Payload.Availability()))
 	}
 
 	match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, policyScanRequest(subject, subject.Payload.Bytes()))
 	if match != nil {
-		p.publish(scanCtx, subject.Event, match.policy, match.findings, riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED)
-		return deniedDecision(match.policy, match.findings[0])
+		outcome := riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED
+		if event.Phase() == PhaseResponse {
+			outcome = riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD
+		}
+		p.publish(scanCtx, subject.Event, match.policy, match.findings, outcome)
+		return deniedDecision(subject.Event.Phase(), match.policy, match.findings[0])
 	}
 	if scanErr != nil || scanCtx.Err() != nil {
-		return p.resolveIndeterminate(ctx, errors.Join(scanErr, scanCtx.Err()))
+		return p.resolveIndeterminate(ctx, event.Phase(), errors.Join(scanErr, scanCtx.Err()))
 	}
 	return Allow()
 }
@@ -238,7 +246,16 @@ func (p *policyEvaluator) scanBlockPolicies(ctx context.Context, policies []poli
 }
 
 func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subject, policies []policycore.Policy) {
-	if len(policies) == 0 || subject.Payload.Availability() != PayloadAvailable {
+	if len(policies) == 0 {
+		return
+	}
+	if subject.Payload.Availability() == PayloadOversized {
+		if p.onFlagOversized != nil {
+			p.onFlagOversized(parent, subject.Event)
+		}
+		return
+	}
+	if subject.Payload.Availability() != PayloadAvailable || len(subject.Payload.Bytes()) == 0 {
 		return
 	}
 	select {
@@ -350,16 +367,20 @@ func (p *policyEvaluator) publish(ctx context.Context, event Event, policy polic
 	}
 }
 
-func (p *policyEvaluator) resolveIndeterminate(ctx context.Context, err error) Decision {
+func (p *policyEvaluator) resolveIndeterminate(ctx context.Context, phase string, err error) Decision {
 	p.logger.WarnContext(ctx, "MCP block policy evaluation was indeterminate", attr.SlogError(err), attr.SlogRiskEnforcementFailMode(string(p.config.FailMode)))
 	if p.config.FailMode == FailClosed {
+		userMessage := "This MCP request was blocked because its risk policy evaluation did not complete."
+		if phase == PhaseResponse {
+			userMessage = "This MCP result was withheld because its risk policy evaluation did not complete."
+		}
 		return Decision{
 			Disposition:   DispositionDeny,
 			PolicyID:      "",
 			PolicyName:    "",
 			RuleID:        "",
 			Description:   "MCP risk policy evaluation did not complete",
-			UserMessage:   "This MCP request was blocked because its risk policy evaluation did not complete.",
+			UserMessage:   userMessage,
 			Indeterminate: true,
 		}
 	}
@@ -381,8 +402,11 @@ func partitionPolicies(policies []policycore.Policy) (block, flag []policycore.P
 	return block, flag
 }
 
-func deniedDecision(policy policycore.Policy, finding scanners.Finding) Decision {
+func deniedDecision(phase string, policy policycore.Policy, finding scanners.Finding) Decision {
 	userMessage := fmt.Sprintf("This MCP request was blocked by risk policy %q.", policy.Name)
+	if phase == PhaseResponse {
+		userMessage = fmt.Sprintf("This MCP result was withheld by risk policy %q.", policy.Name)
+	}
 	if policy.UserMessage != nil && *policy.UserMessage != "" {
 		userMessage = *policy.UserMessage
 	}
@@ -399,11 +423,16 @@ func deniedDecision(policy policycore.Policy, finding scanners.Finding) Decision
 
 func policyScanRequest(subject Subject, payload []byte) risk.MCPScanRequest {
 	principal := subject.Event.Principal()
+	messageType := message.ToolRequest
+	if subject.Event.Phase() == PhaseResponse {
+		messageType = message.ToolResponse
+	}
 	return risk.MCPScanRequest{
-		Text:      string(payload),
-		ToolName:  subject.Event.ToolName,
-		ToolsetID: subject.Event.ToolsetID,
-		ServerID:  subject.Event.ServerID,
-		UserID:    principal.UserID(),
+		Text:        string(payload),
+		ToolName:    subject.Event.ToolName,
+		ToolsetID:   subject.Event.ToolsetID,
+		ServerID:    subject.Event.ServerID,
+		UserID:      principal.UserID(),
+		MessageType: messageType,
 	}
 }

@@ -3880,6 +3880,22 @@ type UserSessionIssuerCimdClient struct {
 	Deleted             bool
 }
 
+type Widget struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Description     pgtype.Text
+	Dataset         string
+	Query           []byte
+	Visualization   []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type WorkloadAgentAssignment struct {
 	ID               uuid.UUID
 	OrganizationID   string

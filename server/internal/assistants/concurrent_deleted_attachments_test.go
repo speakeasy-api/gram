@@ -115,7 +115,7 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 						finished <- err
 					}
 				}()
-				testenv.WaitForBlockedBackend(t, ctx, conn)
+				testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(tx), 1)
 				require.NoError(t, tx.Commit(ctx))
 				select {
 				case err := <-finished:
@@ -205,7 +205,7 @@ func TestServiceMixedAttachmentsConcurrentMCPBackendUpdate(t *testing.T) {
 		finished <- err
 	}()
 	// The assistant has locked the target toolset and now waits on this server.
-	testenv.WaitForBlockedBackend(t, ctx, conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(tx), 1)
 	updateCtx, cancelUpdate := context.WithTimeout(ctx, 5*time.Second)
 	defer cancelUpdate()
 	// Switching from a distinct backend forces the FK's KEY SHARE check on

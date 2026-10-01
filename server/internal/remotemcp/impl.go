@@ -56,7 +56,7 @@ type Service struct {
 	provisioning          *RemoteMCPProvisioningService
 	distributionAdmission *admission.Guard
 	// beforeClaim runs between the claim's list and re-read with the locked previous URL; tests only.
-	beforeClaim func(previousURL string)
+	beforeClaim func(holderPID uint32, previousURL string)
 }
 
 var _ gen.Service = (*Service)(nil)
