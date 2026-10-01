@@ -229,9 +229,16 @@ function OrgHomeInner() {
 
   const isSearching = search.length > 0;
 
-  // The `default` project is always pinned above favorites.
+  // The `default` project is always pinned above favorites. With no
+  // favorites it stays in the main list, where the sort already puts it
+  // first, so the list and grid read as one continuous container.
   const { pinnedProjects, favoriteProjects, otherProjects } = useMemo(() => {
-    if (isSearching) {
+    const favs = isSearching
+      ? []
+      : filteredProjects.filter(
+          (p) => p.slug !== "default" && favoriteSet.has(p.id),
+        );
+    if (favs.length === 0) {
       return {
         pinnedProjects: [],
         favoriteProjects: [],
@@ -239,12 +246,10 @@ function OrgHomeInner() {
       };
     }
     const pinned: OrgProject[] = [];
-    const favs: OrgProject[] = [];
     const rest: OrgProject[] = [];
     for (const p of filteredProjects) {
       if (p.slug === "default") pinned.push(p);
-      else if (favoriteSet.has(p.id)) favs.push(p);
-      else rest.push(p);
+      else if (!favoriteSet.has(p.id)) rest.push(p);
     }
     return {
       pinnedProjects: pinned,
