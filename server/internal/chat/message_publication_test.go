@@ -342,6 +342,8 @@ func TestConversationPublicationPreservesImportedPartsAndRawContent(t *testing.T
 	part.ParentChatMessageID = uuid.NullUUID{UUID: params.ID, Valid: true}
 	part.ContentAssetUrl = assetURL
 	part.Kind = "text"
+	part.ExternalID = conv.ToPGText("source-file-1")
+	part.Metadata = []byte(`{"display_path":"notes/example.txt"}`)
 	part.CreatedAt = conv.ToPGTimestamptz(time.Now())
 	writes := []chat.ExternalMessageWrite{{Params: params, BillingUserID: "import-billing-user"}}
 	attached := map[uuid.UUID][]repo.CreateChatContentPartParams{params.ID: {part}}
@@ -357,4 +359,6 @@ func TestConversationPublicationPreservesImportedPartsAndRawContent(t *testing.T
 	require.Len(t, body.GetParts(), 2)
 	require.Equal(t, params.Content, body.GetParts()[0].GetText())
 	require.Equal(t, assetURL, body.GetParts()[1].GetContentReference().GetUri())
+	require.Equal(t, "source-file-1", body.GetParts()[1].GetContentReference().GetExternalId())
+	require.Equal(t, "notes/example.txt", body.GetParts()[1].GetContentReference().GetFilename())
 }

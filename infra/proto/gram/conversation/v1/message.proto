@@ -137,6 +137,13 @@ message Message {
 
     // SHA-256 of the referenced bytes, when known; exactly 32 bytes.
     bytes sha256 = 4;
+
+    // Source-assigned attachment identity, when supplied. Opaque and scoped to
+    // the producer/source conversation; not a Gram content-part UUID.
+    string external_id = 5;
+
+    // Source-observed filename or display path. A label, not a trusted local path.
+    string filename = 6;
   }
 
   // Persisted Gram message UUID; identifies the logical message across snapshots.

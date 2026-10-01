@@ -68,6 +68,11 @@ type ExternalMessageWrite struct {
 	// Params contains the SQLc parameters persisted for the imported message.
 	Params repo.CreateExternalChatMessageParams
 
+	// PublishRowLocalContent excludes archival source JSON/assets from the
+	// publication when one source message is split into multiple persisted rows.
+	// Text, tool calls, and attached parts still describe this row only.
+	PublishRowLocalContent bool
+
 	// BillingUserID is the Gram user to whom this import explicitly allocates usage.
 	BillingUserID string
 

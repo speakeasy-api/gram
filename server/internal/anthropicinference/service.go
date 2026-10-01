@@ -524,13 +524,16 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 					Generation:        0,
 					CreatedAt:         createdAt,
 				},
-				BillingUserID:  userID,
-				WorkloadSource: metering.WorkloadSourceHook,
-				UserEmail:      frame.Actor.EmailAddress,
-				Provider:       "anthropic",
-				HookHostname:   "",
-				AccountType:    "team",
-				BillingMode:    "unknown",
+				// Each row owns one block plus any attachments anchored to it.
+				// The full raw message remains archival, not repeated classifier input.
+				PublishRowLocalContent: true,
+				BillingUserID:          userID,
+				WorkloadSource:         metering.WorkloadSourceHook,
+				UserEmail:              frame.Actor.EmailAddress,
+				Provider:               "anthropic",
+				HookHostname:           "",
+				AccountType:            "team",
+				BillingMode:            "unknown",
 			})
 		}
 	}

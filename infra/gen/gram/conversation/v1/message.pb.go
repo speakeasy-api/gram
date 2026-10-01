@@ -2029,6 +2029,8 @@ type Message_ContentReference struct {
 	xxx_hidden_MediaType   *string                `protobuf:"bytes,2,opt,name=media_type,json=mediaType"`
 	xxx_hidden_SizeBytes   uint64                 `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes"`
 	xxx_hidden_Sha256      []byte                 `protobuf:"bytes,4,opt,name=sha256"`
+	xxx_hidden_ExternalId  *string                `protobuf:"bytes,5,opt,name=external_id,json=externalId"`
+	xxx_hidden_Filename    *string                `protobuf:"bytes,6,opt,name=filename"`
 	XXX_raceDetectHookData protoimpl.RaceDetectHookData
 	XXX_presence           [1]uint32
 	unknownFields          protoimpl.UnknownFields
@@ -2094,19 +2096,39 @@ func (x *Message_ContentReference) GetSha256() []byte {
 	return nil
 }
 
+func (x *Message_ContentReference) GetExternalId() string {
+	if x != nil {
+		if x.xxx_hidden_ExternalId != nil {
+			return *x.xxx_hidden_ExternalId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_ContentReference) GetFilename() string {
+	if x != nil {
+		if x.xxx_hidden_Filename != nil {
+			return *x.xxx_hidden_Filename
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Message_ContentReference) SetUri(v string) {
 	x.xxx_hidden_Uri = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 4)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 6)
 }
 
 func (x *Message_ContentReference) SetMediaType(v string) {
 	x.xxx_hidden_MediaType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 4)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 6)
 }
 
 func (x *Message_ContentReference) SetSizeBytes(v uint64) {
 	x.xxx_hidden_SizeBytes = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 4)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 6)
 }
 
 func (x *Message_ContentReference) SetSha256(v []byte) {
@@ -2114,7 +2136,17 @@ func (x *Message_ContentReference) SetSha256(v []byte) {
 		v = []byte{}
 	}
 	x.xxx_hidden_Sha256 = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 4)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 6)
+}
+
+func (x *Message_ContentReference) SetExternalId(v string) {
+	x.xxx_hidden_ExternalId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 6)
+}
+
+func (x *Message_ContentReference) SetFilename(v string) {
+	x.xxx_hidden_Filename = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 6)
 }
 
 func (x *Message_ContentReference) HasUri() bool {
@@ -2145,6 +2177,20 @@ func (x *Message_ContentReference) HasSha256() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
 }
 
+func (x *Message_ContentReference) HasExternalId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *Message_ContentReference) HasFilename() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+}
+
 func (x *Message_ContentReference) ClearUri() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Uri = nil
@@ -2165,6 +2211,16 @@ func (x *Message_ContentReference) ClearSha256() {
 	x.xxx_hidden_Sha256 = nil
 }
 
+func (x *Message_ContentReference) ClearExternalId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_ExternalId = nil
+}
+
+func (x *Message_ContentReference) ClearFilename() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
+	x.xxx_hidden_Filename = nil
+}
+
 type Message_ContentReference_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -2175,6 +2231,11 @@ type Message_ContentReference_builder struct {
 	SizeBytes *uint64
 	// SHA-256 of the referenced bytes, when known; exactly 32 bytes.
 	Sha256 []byte
+	// Source-assigned attachment identity, when supplied. Opaque and scoped to
+	// the producer/source conversation; not a Gram content-part UUID.
+	ExternalId *string
+	// Source-observed filename or display path. A label, not a trusted local path.
+	Filename *string
 }
 
 func (b0 Message_ContentReference_builder) Build() *Message_ContentReference {
@@ -2182,20 +2243,28 @@ func (b0 Message_ContentReference_builder) Build() *Message_ContentReference {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Uri != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 4)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 6)
 		x.xxx_hidden_Uri = b.Uri
 	}
 	if b.MediaType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 4)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 6)
 		x.xxx_hidden_MediaType = b.MediaType
 	}
 	if b.SizeBytes != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 4)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 6)
 		x.xxx_hidden_SizeBytes = *b.SizeBytes
 	}
 	if b.Sha256 != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 4)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 6)
 		x.xxx_hidden_Sha256 = b.Sha256
+	}
+	if b.ExternalId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 6)
+		x.xxx_hidden_ExternalId = b.ExternalId
+	}
+	if b.Filename != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 6)
+		x.xxx_hidden_Filename = b.Filename
 	}
 	return m0
 }
@@ -2204,7 +2273,7 @@ var File_gram_conversation_v1_message_proto protoreflect.FileDescriptor
 
 const file_gram_conversation_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"\"gram/conversation/v1/message.proto\x12\x14gram.conversation.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xc2\x11\n" +
+	"\"gram/conversation/v1/message.proto\x12\x14gram.conversation.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x80\x12\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x1d\n" +
@@ -2268,14 +2337,17 @@ const file_gram_conversation_v1_message_proto_rawDesc = "" +
 	"\bToolCall\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
-	"\x0earguments_json\x18\x03 \x01(\tR\rargumentsJson\x1az\n" +
+	"\x0earguments_json\x18\x03 \x01(\tR\rargumentsJson\x1a\xb7\x01\n" +
 	"\x10ContentReference\x12\x10\n" +
 	"\x03uri\x18\x01 \x01(\tR\x03uri\x12\x1d\n" +
 	"\n" +
 	"media_type\x18\x02 \x01(\tR\tmediaType\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x03 \x01(\x04R\tsizeBytes\x12\x16\n" +
-	"\x06sha256\x18\x04 \x01(\fR\x06sha256\"s\n" +
+	"\x06sha256\x18\x04 \x01(\fR\x06sha256\x12\x1f\n" +
+	"\vexternal_id\x18\x05 \x01(\tR\n" +
+	"externalId\x12\x1a\n" +
+	"\bfilename\x18\x06 \x01(\tR\bfilename\"s\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vROLE_SYSTEM\x10\x01\x12\x12\n" +

@@ -120,6 +120,8 @@ pubsub:
             string media_type = 2;
             uint64 size_bytes = 3;
             bytes sha256 = 4;
+            string external_id = 5;
+            string filename = 6;
           }
           string id = 1;
           string organization_id = 2;
