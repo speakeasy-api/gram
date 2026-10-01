@@ -105,15 +105,19 @@ function admissionInitialValues(
  * share a URL across tiers.
  */
 export function WorkloadIssuerDetailPage(): JSX.Element {
+  const { issuerId = "" } = useParams<{ issuerId: string }>();
   return (
     <RequireScope scope={["workload:read", "workload:write"]} level="page">
-      <IssuerDetail />
+      {/* Remounted per platform. The router keeps this page mounted when only
+          the issuer in the URL changes, and an edit sheet or confirmation left
+          open would then act on the platform navigated to, with what was
+          entered for the one navigated from. */}
+      <IssuerDetail key={issuerId} issuerId={issuerId} />
     </RequireScope>
   );
 }
 
-function IssuerDetail(): JSX.Element {
-  const { issuerId = "" } = useParams<{ issuerId: string }>();
+function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [admitOpen, setAdmitOpen] = useState(false);
@@ -149,13 +153,6 @@ function IssuerDetail(): JSX.Element {
         tags: issuer.tags,
       },
     [issuer],
-  );
-
-  // Memoized so the edit sheet resets only when the machine being edited
-  // changes, not on every render.
-  const admissionEditValues = useMemo(
-    () => editingAdmission && admissionInitialValues(editingAdmission),
-    [editingAdmission],
   );
 
   const admissions = useMemo(
@@ -515,13 +512,16 @@ function IssuerDetail(): JSX.Element {
     });
   };
 
-  const handleEditAdmission = (values: AdmitSubjectValues) => {
-    if (editingAdmission === null || admissionEditValues === null) return;
+  const handleEditAdmission = (
+    values: AdmitSubjectValues,
+    baseline: AdmitSubjectInitialValues | undefined,
+  ) => {
+    if (editingAdmission === null || baseline === undefined) return;
     updateSubject.mutate({
       request: {
         updateWorkloadSubjectForm: {
           id: editingAdmission.id,
-          ...changedAdmissionFields(admissionEditValues, values),
+          ...changedAdmissionFields(baseline, values),
         },
       },
     });
@@ -606,19 +606,15 @@ function IssuerDetail(): JSX.Element {
         />
       )}
 
-      {issuer && admissionEditValues && (
+      {issuer && editingAdmission && (
         <AdmitSubjectSheet
-          // Remounted per machine: opening a different machine's edit changes
-          // the values in the same render as it opens the sheet, which the
-          // sheet's reset-on-close never sees.
-          key={editingAdmission?.id}
           open={editAdmissionOpen}
           onOpenChange={setEditAdmissionOpen}
           onSubmit={handleEditAdmission}
           isPending={updateSubject.isPending}
           issuer={issuer}
           agents={agents}
-          initial={admissionEditValues}
+          initial={admissionInitialValues(editingAdmission)}
         />
       )}
     </ResourceListPage>

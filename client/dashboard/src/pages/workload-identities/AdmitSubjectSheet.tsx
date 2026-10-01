@@ -21,7 +21,7 @@ import { Stack } from "@/components/ui/Stack";
 import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { admissionValuesDiffer } from "./admissionEdit";
 import {
   buildAdmitValues,
@@ -64,15 +64,23 @@ export interface AdmitSubjectInitialValues extends AdmitSubjectFormValues {
 interface AdmitSubjectSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: AdmitSubjectValues) => void;
+  /**
+   * Called with the submitted values and, when editing, the machine's values as
+   * they stood when the sheet opened, which is what the edit is diffed against.
+   */
+  onSubmit: (
+    values: AdmitSubjectValues,
+    baseline: AdmitSubjectInitialValues | undefined,
+  ) => void;
   isPending: boolean;
   /** The platform whose page opened the sheet; every machine allowed here is admitted under it. */
   issuer: WorkloadIssuer;
   agents: { id: string; name: string }[];
   /**
    * An allowed machine's current values. When set, the sheet edits that
-   * machine: the form opens prefilled and the subject is read-only, because the
-   * server fixes it, and its match kind, at admission.
+   * machine: every time it opens the form is prefilled from them, and the
+   * subject is read-only, because the server fixes it, and its match kind, at
+   * admission.
    */
   initial?: AdmitSubjectInitialValues;
 }
@@ -173,26 +181,27 @@ export function AdmitSubjectSheet({
   initial,
 }: AdmitSubjectSheetProps): JSX.Element {
   const isEditing = initial !== undefined;
-  const resetTo = formValues(initial);
-  const [values, setValues] = useState<AdmitSubjectFormValues>(resetTo);
+  const [values, setValues] = useState<AdmitSubjectFormValues>(() =>
+    formValues(initial),
+  );
+  // The machine as it stood when the sheet opened. A query refresh can replace
+  // `initial` mid-edit, and diffing against that would turn fields the operator
+  // never touched into changes that overwrite the newer values.
+  const [baseline, setBaseline] = useState(initial);
 
-  // A successful submit closes the sheet through the parent's own state, which
-  // never reaches handleOpenChange — so without this the next admission opens
-  // prefilled with the previous workload, and the next edit with values that
-  // were never saved. The sheet stays mounted, so there is no unmount to do it
-  // for us.
-  useEffect(() => {
-    if (!open) {
+  // The sheet stays mounted between uses, so each opening starts the form over
+  // from what is stored now. It is done as the sheet opens, during render,
+  // because the page hands over a machine's values in the same render that
+  // opens the sheet: a reset on close would keep what the form held before
+  // them, and the next save would write those stale values back.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
       setValues(formValues(initial));
+      setBaseline(initial);
     }
-  }, [open, initial]);
-
-  const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      setValues(resetTo);
-    }
-    onOpenChange(next);
-  };
+  }
 
   const wildcardAvailable = issuer.allowWildcardAdmission;
 
@@ -216,7 +225,7 @@ export function AdmitSubjectSheet({
     matchKind === "wildcard" && storedSubject.endsWith("*")
       ? storedSubject.slice(0, -1)
       : "";
-  const agentOptions = withAssignedAgent(agents, initial);
+  const agentOptions = withAssignedAgent(agents, baseline);
   const selectedAgentName =
     agentOptions.find((agent) => agent.id === values.agentId)?.name ?? "";
   const showCaution = wildcardStem.length > 0 && warning === null;
@@ -230,10 +239,10 @@ export function AdmitSubjectSheet({
   // assigned agent needs no such check.
   const agentStillActive =
     agents.some((agent) => agent.id === values.agentId) ||
-    (initial !== undefined && values.agentId === initial.agentId);
+    (baseline !== undefined && values.agentId === baseline.agentId);
 
   const hasChanges =
-    initial === undefined || admissionValuesDiffer(initial, values);
+    baseline === undefined || admissionValuesDiffer(baseline, values);
 
   const canSubmit =
     hasChanges &&
@@ -250,11 +259,11 @@ export function AdmitSubjectSheet({
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     if (!canSubmit || isPending) return;
-    onSubmit(buildAdmitValues(values, issuer.issuer));
+    onSubmit(buildAdmitValues(values, issuer.issuer), baseline);
   };
 
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
         className="flex w-[560px] max-w-[calc(100vw-2rem)] flex-col sm:max-w-[560px]"
@@ -382,7 +391,7 @@ export function AdmitSubjectSheet({
             <Button
               type="button"
               variant="secondary"
-              onClick={() => handleOpenChange(false)}
+              onClick={() => onOpenChange(false)}
               disabled={isPending}
             >
               <Button.Text>Cancel</Button.Text>

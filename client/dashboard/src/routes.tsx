@@ -1635,10 +1635,24 @@ const ORG_ROUTE_STRUCTURE = {
 type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
 type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
 
-/** The URL segments used by org-level routes (for redirect logic). */
-export const orgRoutePaths = Object.values(ORG_ROUTE_STRUCTURE)
-  .map((r) => r.url)
-  .filter(Boolean);
+function routePaths(
+  routes: Record<string, RouteEntry>,
+  parent?: string,
+): string[] {
+  return Object.values(routes).flatMap((route) => {
+    if (!route.url) return [];
+    const path = parent ? `${parent}/${route.url}` : route.url;
+    return [path, ...routePaths(route.subPages ?? {}, path)];
+  });
+}
+
+/**
+ * The org-relative path of every org-level route, nested pages included (for
+ * redirect logic). A detail page such as "access-hub/:issuerId" has to be
+ * listed with its parent, or its URL reads as a path inside a project that
+ * happens to share the parent's slug.
+ */
+export const orgRoutePaths = routePaths(ORG_ROUTE_STRUCTURE);
 
 export const useOrgRoutes = (): OrgRoutesWithGoTo => {
   const location = useLocation();

@@ -202,6 +202,10 @@ describe("Access Hub", () => {
     );
   }
 
+  it("lists its detail page among the organization route paths", () => {
+    expect(orgRoutePaths).toContain("access-hub/:issuerId");
+  });
+
   it("is an organization route with no project in its path", () => {
     expect(orgRoutePaths).toContain("access-hub");
     render(
@@ -241,6 +245,14 @@ describe("Access Hub", () => {
 
     expect(await within(container).findByText(destination)).toBeTruthy();
   });
+});
+
+it("lists nested organization pages at every depth, under their parents", () => {
+  expect(orgRoutePaths).toContain("signing-keys/:setId");
+  expect(orgRoutePaths).toContain("signing-keys/:setId/overview");
+  expect(orgRoutePaths).toContain("access/roles");
+  expect(orgRoutePaths).not.toContain(":issuerId");
+  expect(orgRoutePaths).not.toContain("");
 });
 
 it("removes platform issuer management while preserving tenant and other admin routes", () => {
