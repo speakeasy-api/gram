@@ -660,8 +660,10 @@ func TestRegistrationServiceReturnsCatalogInspectionErrors(t *testing.T) {
 }
 
 func TestRegistrationRetainsAcceptedCatalogIdentity(t *testing.T) {
+	t.Parallel()
 	for _, status := range []string{receiptStatusPending, receiptStatusSucceeded} {
 		t.Run(status, func(t *testing.T) {
+			t.Parallel()
 			id := uuid.New()
 			receipt := OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: id, Valid: true}, Status: status, Replayed: true}
 			store := &retainedReceiptStore{recordingRegistrationStore: recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}, converged: receipt, completed: receipt}, receipt: receipt}

@@ -955,6 +955,15 @@ func (q *Queries) DeleteOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const deleteRetainedCatalogSourcesFixture = `-- name: DeleteRetainedCatalogSourcesFixture :exec
+DELETE FROM mcp_registries
+`
+
+func (q *Queries) DeleteRetainedCatalogSourcesFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteRetainedCatalogSourcesFixture)
+	return err
+}
+
 const detachRemoteSessionClientFromUserSessionIssuer = `-- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
 DELETE FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = $1
@@ -2605,6 +2614,15 @@ func (q *Queries) InsertRemoteSessionEMABindingFixture(ctx context.Context, arg 
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertRetainedCatalogSourcesFixture = `-- name: InsertRetainedCatalogSourcesFixture :exec
+INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ('7de663c2-4975-4a3d-a7d4-707866aaf1be','Native','https://registry.speakeasy.com','native_v1','none',true,'certified','native'), ($1,'Pulse','https://api.pulsemcp.com','pulse_v0_1','pulse_server_credentials',true,'certified','pulse')
+`
+
+func (q *Queries) InsertRetainedCatalogSourcesFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, insertRetainedCatalogSourcesFixture, id)
+	return err
 }
 
 const insertUserFixture = `-- name: InsertUserFixture :exec

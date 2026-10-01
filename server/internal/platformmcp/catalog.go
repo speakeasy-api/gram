@@ -447,11 +447,11 @@ func (c *DynamicRegistryCatalog) InspectIdentity(ctx context.Context, providerKe
 	}
 	source, err := c.identity.IdentitySource(ctx, id)
 	if err != nil {
-		return CatalogDetails{}, err
+		return CatalogDetails{}, fmt.Errorf("resolve retained catalog source: %w", err)
 	}
 	reader, err := c.identity.ReaderFor(source)
 	if err != nil {
-		return CatalogDetails{}, err
+		return CatalogDetails{}, fmt.Errorf("resolve retained catalog reader: %w", err)
 	}
 	// Persistence authorized this exact identity before entry lookup. Published
 	// discovery membership is required only for new inspection/admission.

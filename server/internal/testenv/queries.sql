@@ -1737,3 +1737,8 @@ WHERE locks.locktype = 'advisory' AND locks.granted
 -- name: BackendPIDFixture :one
 -- Identify a holder exposed only through a transaction-enlisted query interface.
 SELECT pg_backend_pid();
+-- name: DeleteRetainedCatalogSourcesFixture :exec
+DELETE FROM mcp_registries;
+
+-- name: InsertRetainedCatalogSourcesFixture :exec
+INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ('7de663c2-4975-4a3d-a7d4-707866aaf1be','Native','https://registry.speakeasy.com','native_v1','none',true,'certified','native'), ($1,'Pulse','https://api.pulsemcp.com','pulse_v0_1','pulse_server_credentials',true,'certified','pulse');
