@@ -13,7 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const createOrganizationRole = `-- name: CreateOrganizationRole :one
+const createOrganizationRoleWithRequests = `-- name: CreateOrganizationRoleWithRequests :one
+WITH created AS (
 INSERT INTO organization_roles (
     organization_id,
     workos_slug,
@@ -40,7 +41,10 @@ ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
 WHERE organization_roles.deleted_at IS NOT NULL
-RETURNING
+RETURNING id, organization_id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('organization_id', organization_id, 'role_urn', 'role:organization:' || id::text)), '[]'::jsonb) FROM created)::jsonb AS requests,
     id,
     ('role:organization:' || id::text)::text AS role_urn,
     workos_slug,
@@ -49,9 +53,10 @@ RETURNING
     workos_created_at,
     workos_updated_at,
     0::bigint AS member_count
+FROM created
 `
 
-type CreateOrganizationRoleParams struct {
+type CreateOrganizationRoleWithRequestsParams struct {
 	OrganizationID    string
 	WorkosSlug        string
 	WorkosName        string
@@ -61,7 +66,8 @@ type CreateOrganizationRoleParams struct {
 	WorkosLastEventID pgtype.Text
 }
 
-type CreateOrganizationRoleRow struct {
+type CreateOrganizationRoleWithRequestsRow struct {
+	Requests          []byte
 	ID                uuid.UUID
 	RoleUrn           string
 	WorkosSlug        string
@@ -73,8 +79,8 @@ type CreateOrganizationRoleRow struct {
 }
 
 // Creates an org-scoped role, reactivating a soft-deleted row for the same slug.
-func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganizationRoleParams) (CreateOrganizationRoleRow, error) {
-	row := q.db.QueryRow(ctx, createOrganizationRole,
+func (q *Queries) CreateOrganizationRoleWithRequests(ctx context.Context, arg CreateOrganizationRoleWithRequestsParams) (CreateOrganizationRoleWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationRoleWithRequests,
 		arg.OrganizationID,
 		arg.WorkosSlug,
 		arg.WorkosName,
@@ -83,8 +89,9 @@ func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganiza
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
-	var i CreateOrganizationRoleRow
+	var i CreateOrganizationRoleWithRequestsRow
 	err := row.Scan(
+		&i.Requests,
 		&i.ID,
 		&i.RoleUrn,
 		&i.WorkosSlug,
@@ -3164,7 +3171,8 @@ func (q *Queries) UpsertDirectoryGroupRoleMapping(ctx context.Context, arg Upser
 	return i, err
 }
 
-const upsertGlobalRole = `-- name: UpsertGlobalRole :exec
+const upsertGlobalRoleWithRequests = `-- name: UpsertGlobalRoleWithRequests :one
+WITH upserted AS (
 INSERT INTO global_roles (
     workos_slug,
     workos_name,
@@ -3188,9 +3196,12 @@ ON CONFLICT (workos_slug) DO UPDATE SET
     deleted_at = NULL,
     workos_deleted_at = NULL,
     updated_at = clock_timestamp()
+RETURNING id, (xmax = 0) AS inserted
+)
+SELECT (SELECT COALESCE(jsonb_agg(jsonb_build_object('global_role_id', id)), '[]'::jsonb) FROM upserted WHERE inserted)::jsonb AS requests
 `
 
-type UpsertGlobalRoleParams struct {
+type UpsertGlobalRoleWithRequestsParams struct {
 	WorkosSlug        string
 	WorkosName        string
 	WorkosDescription pgtype.Text
@@ -3201,8 +3212,9 @@ type UpsertGlobalRoleParams struct {
 
 // Upsert an environment-level role. WorkOS sync callers pass an event ID;
 // local/bootstrap callers pass NULL so an existing WorkOS event cursor is preserved.
-func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRoleParams) error {
-	_, err := q.db.Exec(ctx, upsertGlobalRole,
+// Only inserts emit fanout requests; the outbox consumer paginates organizations.
+func (q *Queries) UpsertGlobalRoleWithRequests(ctx context.Context, arg UpsertGlobalRoleWithRequestsParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, upsertGlobalRoleWithRequests,
 		arg.WorkosSlug,
 		arg.WorkosName,
 		arg.WorkosDescription,
@@ -3210,108 +3222,9 @@ func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRolePara
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
 	)
-	return err
-}
-
-const upsertOrganizationRole = `-- name: UpsertOrganizationRole :one
-WITH upserted AS (
-INSERT INTO organization_roles (
-    organization_id,
-    workos_slug,
-    workos_name,
-    workos_description,
-    workos_created_at,
-    workos_updated_at,
-    workos_last_event_id
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7
-)
-ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
-    workos_name = EXCLUDED.workos_name,
-    workos_description = EXCLUDED.workos_description,
-    workos_updated_at = EXCLUDED.workos_updated_at,
-    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_roles.workos_last_event_id),
-    deleted_at = NULL,
-    workos_deleted_at = NULL,
-    updated_at = clock_timestamp()
-RETURNING
-    id,
-    organization_id,
-    workos_slug,
-    workos_name,
-    workos_description,
-    workos_created_at,
-    workos_updated_at
-)
-SELECT
-  upserted.id,
-  ('role:organization:' || upserted.id::text)::text AS role_urn,
-  upserted.workos_slug,
-  upserted.workos_name,
-  upserted.workos_description,
-  upserted.workos_created_at,
-  upserted.workos_updated_at,
-  COUNT(ora.id)::bigint AS member_count
-FROM upserted
-LEFT JOIN organization_role_assignments AS ora
-  ON ora.organization_id = upserted.organization_id
-  AND ora.role_urn = 'role:organization:' || upserted.id::text
-  AND ora.user_id IS NOT NULL
-  AND ora.deleted_at IS NULL
-GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at
-`
-
-type UpsertOrganizationRoleParams struct {
-	OrganizationID    string
-	WorkosSlug        string
-	WorkosName        string
-	WorkosDescription pgtype.Text
-	WorkosCreatedAt   pgtype.Timestamptz
-	WorkosUpdatedAt   pgtype.Timestamptz
-	WorkosLastEventID pgtype.Text
-}
-
-type UpsertOrganizationRoleRow struct {
-	ID                uuid.UUID
-	RoleUrn           string
-	WorkosSlug        string
-	WorkosName        string
-	WorkosDescription pgtype.Text
-	WorkosCreatedAt   pgtype.Timestamptz
-	WorkosUpdatedAt   pgtype.Timestamptz
-	MemberCount       int64
-}
-
-// Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
-// lifecycle callers pass NULL so an existing WorkOS event cursor is preserved.
-func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganizationRoleParams) (UpsertOrganizationRoleRow, error) {
-	row := q.db.QueryRow(ctx, upsertOrganizationRole,
-		arg.OrganizationID,
-		arg.WorkosSlug,
-		arg.WorkosName,
-		arg.WorkosDescription,
-		arg.WorkosCreatedAt,
-		arg.WorkosUpdatedAt,
-		arg.WorkosLastEventID,
-	)
-	var i UpsertOrganizationRoleRow
-	err := row.Scan(
-		&i.ID,
-		&i.RoleUrn,
-		&i.WorkosSlug,
-		&i.WorkosName,
-		&i.WorkosDescription,
-		&i.WorkosCreatedAt,
-		&i.WorkosUpdatedAt,
-		&i.MemberCount,
-	)
-	return i, err
+	var requests []byte
+	err := row.Scan(&requests)
+	return requests, err
 }
 
 const upsertOrganizationRoleAssignment = `-- name: UpsertOrganizationRoleAssignment :execrows
@@ -3385,6 +3298,112 @@ func (q *Queries) UpsertOrganizationRoleAssignment(ctx context.Context, arg Upse
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertOrganizationRoleWithRequests = `-- name: UpsertOrganizationRoleWithRequests :one
+WITH upserted AS (
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_roles.workos_last_event_id),
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING
+    id,
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    (xmax = 0) AS inserted
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('organization_id', organization_id, 'role_urn', 'role:organization:' || id::text)), '[]'::jsonb) FROM upserted WHERE inserted)::jsonb AS requests,
+  upserted.id,
+  ('role:organization:' || upserted.id::text)::text AS role_urn,
+  upserted.workos_slug,
+  upserted.workos_name,
+  upserted.workos_description,
+  upserted.workos_created_at,
+  upserted.workos_updated_at,
+  COUNT(ora.id)::bigint AS member_count
+FROM upserted
+LEFT JOIN organization_role_assignments AS ora
+  ON ora.organization_id = upserted.organization_id
+  AND ora.role_urn = 'role:organization:' || upserted.id::text
+  AND ora.user_id IS NOT NULL
+  AND ora.deleted_at IS NULL
+GROUP BY upserted.id, upserted.workos_slug, upserted.workos_name, upserted.workos_description, upserted.workos_created_at, upserted.workos_updated_at
+`
+
+type UpsertOrganizationRoleWithRequestsParams struct {
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+type UpsertOrganizationRoleWithRequestsRow struct {
+	Requests          []byte
+	ID                uuid.UUID
+	RoleUrn           string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	MemberCount       int64
+}
+
+// Upsert an org-scoped role. WorkOS sync callers pass an event ID; local role
+// lifecycle callers pass NULL so an existing WorkOS event cursor is preserved.
+// Ordinary sync updates do not create distribution setup requests.
+func (q *Queries) UpsertOrganizationRoleWithRequests(ctx context.Context, arg UpsertOrganizationRoleWithRequestsParams) (UpsertOrganizationRoleWithRequestsRow, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationRoleWithRequests,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	var i UpsertOrganizationRoleWithRequestsRow
+	err := row.Scan(
+		&i.Requests,
+		&i.ID,
+		&i.RoleUrn,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.MemberCount,
+	)
+	return i, err
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one

@@ -270,6 +270,80 @@ func normalizeTags(tags []string) ([]string, error) {
 	return normalized, nil
 }
 
+// validateJWKSURI applies the rules a JWKS URI is held to wherever one is
+// written. It is the only field the verification path reads, so an http
+// spelling would put key retrieval on the network in the clear.
+func validateJWKSURI(raw string) error {
+	if _, err := issuerurl.ParseHTTPSOnly(raw); err != nil {
+		return oops.E(oops.CodeInvalid, err, "jwks_uri must be an https URL")
+	}
+	return requireTrustDomain(raw, "jwks_uri")
+}
+
+// normalizeIssuerName trims a name and refuses one that is blank after it or
+// holds a NUL byte, which Postgres text cannot store.
+func normalizeIssuerName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return "", oops.E(oops.CodeInvalid, nil, "name must not be blank")
+	}
+	if strings.ContainsRune(name, 0) {
+		return "", oops.E(oops.CodeInvalid, nil, "name must not contain a NUL character")
+	}
+	return name, nil
+}
+
+// normalizeIssuerDescription trims a description and checks it as it will be
+// stored. An empty result is stored as none.
+func normalizeIssuerDescription(raw string) (string, error) {
+	description := strings.TrimSpace(raw)
+	if utf8.RuneCountInString(description) > maxIssuerDescriptionLen {
+		return "", oops.E(oops.CodeInvalid, nil, "description must be at most %d characters", maxIssuerDescriptionLen)
+	}
+	if strings.ContainsRune(description, 0) {
+		return "", oops.E(oops.CodeInvalid, nil, "description must not contain a NUL character")
+	}
+	return description, nil
+}
+
+// normalizeAdmissionName trims an admission's label. An empty result is stored
+// as none, which is how an edit clears it.
+func normalizeAdmissionName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if strings.ContainsRune(name, 0) {
+		return "", oops.E(oops.CodeInvalid, nil, "name must not contain a NUL character")
+	}
+	return name, nil
+}
+
+// issuerSnapshot is the audited state of an issuer row.
+func issuerSnapshot(row repo.WorkloadIssuer) *audit.WorkloadIssuerSnapshot {
+	return &audit.WorkloadIssuerSnapshot{
+		Name:                   row.Name,
+		Issuer:                 row.Issuer,
+		JwksURI:                row.JwksUri,
+		Description:            conv.FromPGTextOrEmpty[string](row.Description),
+		Tags:                   conv.DefaultSlice(row.Tags, []string{}),
+		AllowWildcardAdmission: row.AllowWildcardAdmission,
+		Tier:                   tier(row.ProjectID),
+	}
+}
+
+// admissionSnapshot is the audited state of an admission row, under the issuer
+// it names and the agent its (issuer, match_kind, subject) tuple is assigned.
+func admissionSnapshot(row repo.WorkloadIdentityAdmission, issuer repo.WorkloadIssuer, assignedAgentID string) *audit.WorkloadAdmissionSnapshot {
+	return &audit.WorkloadAdmissionSnapshot{
+		Issuer:          issuer.Issuer,
+		IssuerName:      issuer.Name,
+		Subject:         row.Subject,
+		MatchKind:       row.MatchKind,
+		Name:            conv.FromPGTextOrEmpty[string](row.Name),
+		Tags:            conv.DefaultSlice(row.Tags, []string{}),
+		AssignedAgentID: assignedAgentID,
+		Tier:            tier(row.ProjectID),
+	}
+}
+
 func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
 	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
 	if err != nil {
@@ -287,28 +361,21 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 	if _, err := issuerurl.ParseHTTPSOnly(payload.Issuer); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "issuer must be an https URL with no query or fragment")
 	}
-	if _, err := issuerurl.ParseHTTPSOnly(payload.JwksURI); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "jwks_uri must be an https URL")
-	}
 	if err := requireTrustDomain(payload.Issuer, "issuer"); err != nil {
 		return nil, err
 	}
-	if err := requireTrustDomain(payload.JwksURI, "jwks_uri"); err != nil {
+	if err := validateJWKSURI(payload.JwksURI); err != nil {
 		return nil, err
 	}
 
-	name := strings.TrimSpace(payload.Name)
-	if name == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "name must not be blank")
+	name, err := normalizeIssuerName(payload.Name)
+	if err != nil {
+		return nil, err
 	}
 
-	// Checked after trimming, as it is stored.
-	description := strings.TrimSpace(conv.PtrValOr(payload.Description, ""))
-	if utf8.RuneCountInString(description) > maxIssuerDescriptionLen {
-		return nil, oops.E(oops.CodeInvalid, nil, "description must be at most %d characters", maxIssuerDescriptionLen)
-	}
-	if strings.ContainsRune(description, 0) {
-		return nil, oops.E(oops.CodeInvalid, nil, "description must not contain a NUL character")
+	description, err := normalizeIssuerDescription(conv.PtrValOr(payload.Description, ""))
+	if err != nil {
+		return nil, err
 	}
 
 	// Defaulted here rather than in the design: a Goa default on a bool makes the
@@ -335,7 +402,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		OrganizationID:         t.organizationID,
 		ProjectID:              projectID,
 		Name:                   name,
-		Description:            conv.PtrToPGTextTrimmed(payload.Description),
+		Description:            conv.ToPGTextEmpty(description),
 		Tags:                   tags,
 		Issuer:                 strings.TrimSpace(payload.Issuer),
 		JwksUri:                strings.TrimSpace(payload.JwksURI),
@@ -349,24 +416,164 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 	}
 
 	if err := s.audit.LogWorkloadIssuerCreate(ctx, dbtx, audit.LogWorkloadIssuerCreateEvent{
-		OrganizationID:   t.organizationID,
-		ProjectID:        projectID,
-		Actor:            t.actor,
-		ActorDisplayName: t.actorEmail,
-		ActorSlug:        nil,
-		IssuerURN:        urn.NewWorkloadIssuer(row.ID),
-		IssuerName:       row.Name,
-		IssuerSnapshotAfter: &audit.WorkloadIssuerSnapshot{
-			Name:                   row.Name,
-			Issuer:                 row.Issuer,
-			JwksURI:                row.JwksUri,
-			Description:            conv.FromPGTextOrEmpty[string](row.Description),
-			Tags:                   conv.DefaultSlice(row.Tags, []string{}),
-			AllowWildcardAdmission: row.AllowWildcardAdmission,
-			Tier:                   tier(projectID),
-		},
+		OrganizationID:      t.organizationID,
+		ProjectID:           projectID,
+		Actor:               t.actor,
+		ActorDisplayName:    t.actorEmail,
+		ActorSlug:           nil,
+		IssuerURN:           urn.NewWorkloadIssuer(row.ID),
+		IssuerName:          row.Name,
+		IssuerSnapshotAfter: issuerSnapshot(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer registration").LogError(ctx, s.logger)
+	}
+
+	policy, err := s.loadPolicy(ctx, dbtx, t)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, s.logger)
+	}
+
+	return policy, nil
+}
+
+func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "id is not a valid uuid")
+	}
+
+	// Every supplied field is validated before any row is read, so a bad edit is
+	// refused the same way whether or not the issuer exists.
+	var name *string
+	if payload.Name != nil {
+		normalized, err := normalizeIssuerName(*payload.Name)
+		if err != nil {
+			return nil, err
+		}
+		name = &normalized
+	}
+
+	var jwksURI *string
+	if payload.JwksURI != nil {
+		if err := validateJWKSURI(*payload.JwksURI); err != nil {
+			return nil, err
+		}
+		trimmed := strings.TrimSpace(*payload.JwksURI)
+		jwksURI = &trimmed
+	}
+
+	var description *string
+	if payload.Description != nil {
+		normalized, err := normalizeIssuerDescription(*payload.Description)
+		if err != nil {
+			return nil, err
+		}
+		description = &normalized
+	}
+
+	// A nil slice is an omitted field; an empty one clears the tags.
+	var tags []string
+	if payload.Tags != nil {
+		tags, err = normalizeTags(payload.Tags)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error starting transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	q := repo.New(dbtx)
+
+	getParams := repo.GetWorkloadIssuerParams{
+		OrganizationID: t.organizationID,
+		ProjectID:      t.projectID,
+		ID:             id,
+	}
+
+	// Tenancy-scoped, and read before the organization-wide lock, so a caller
+	// cannot contend on a sibling project's issuer row it has no access to.
+	if _, err := q.GetWorkloadIssuer(ctx, getParams); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "workload issuer not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading workload issuer").LogError(ctx, s.logger)
+	}
+
+	if _, err := q.LockWorkloadIssuerForWrite(ctx, repo.LockWorkloadIssuerForWriteParams{
+		OrganizationID: t.organizationID,
+		ID:             id,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "workload issuer not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
+	}
+
+	// Read again under the lock, so the fields this edit leaves alone are merged
+	// from the row as it stands rather than one a concurrent edit has replaced.
+	existing, err := q.GetWorkloadIssuer(ctx, getParams)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "workload issuer not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading workload issuer").LogError(ctx, s.logger)
+	}
+
+	params := repo.UpdateWorkloadIssuerParams{
+		Name:           existing.Name,
+		Description:    existing.Description,
+		Tags:           conv.DefaultSlice(existing.Tags, []string{}),
+		JwksUri:        existing.JwksUri,
+		OrganizationID: t.organizationID,
+		ProjectID:      t.projectID,
+		ID:             id,
+	}
+	if name != nil {
+		params.Name = *name
+	}
+	if description != nil {
+		params.Description = conv.ToPGTextEmpty(*description)
+	}
+	if tags != nil {
+		params.Tags = tags
+	}
+	if jwksURI != nil {
+		params.JwksUri = *jwksURI
+	}
+
+	row, err := q.UpdateWorkloadIssuer(ctx, params)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, oops.E(oops.CodeConflict, err, "an issuer named %q already exists at this tier", params.Name)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating workload issuer").LogError(ctx, s.logger)
+	}
+
+	if err := s.audit.LogWorkloadIssuerUpdate(ctx, dbtx, audit.LogWorkloadIssuerUpdateEvent{
+		OrganizationID:       t.organizationID,
+		ProjectID:            row.ProjectID,
+		Actor:                t.actor,
+		ActorDisplayName:     t.actorEmail,
+		ActorSlug:            nil,
+		IssuerURN:            urn.NewWorkloadIssuer(row.ID),
+		IssuerName:           row.Name,
+		IssuerSnapshotBefore: issuerSnapshot(existing),
+		IssuerSnapshotAfter:  issuerSnapshot(row),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer update").LogError(ctx, s.logger)
 	}
 
 	policy, err := s.loadPolicy(ctx, dbtx, t)
@@ -459,21 +666,14 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 		}
 
 		if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
-			OrganizationID:       t.organizationID,
-			ProjectID:            admission.ProjectID,
-			Actor:                t.actor,
-			ActorDisplayName:     t.actorEmail,
-			ActorSlug:            nil,
-			AdmissionURN:         urn.NewWorkloadAdmission(admission.ID),
-			AdmissionDisplayName: admission.Subject,
-			AdmissionSnapshotBefore: &audit.WorkloadAdmissionSnapshot{
-				Issuer:          existing.Issuer,
-				IssuerName:      existing.Name,
-				Subject:         admission.Subject,
-				MatchKind:       admission.MatchKind,
-				AssignedAgentID: assignedAgent,
-				Tier:            tier(admission.ProjectID),
-			},
+			OrganizationID:          t.organizationID,
+			ProjectID:               admission.ProjectID,
+			Actor:                   t.actor,
+			ActorDisplayName:        t.actorEmail,
+			ActorSlug:               nil,
+			AdmissionURN:            urn.NewWorkloadAdmission(admission.ID),
+			AdmissionDisplayName:    admission.Subject,
+			AdmissionSnapshotBefore: admissionSnapshot(admission, existing, assignedAgent),
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error recording cascaded workload withdrawal").LogError(ctx, s.logger)
 		}
@@ -489,22 +689,14 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 	}
 
 	if err := s.audit.LogWorkloadIssuerDelete(ctx, dbtx, audit.LogWorkloadIssuerDeleteEvent{
-		OrganizationID:   t.organizationID,
-		ProjectID:        deleted.ProjectID,
-		Actor:            t.actor,
-		ActorDisplayName: t.actorEmail,
-		ActorSlug:        nil,
-		IssuerURN:        urn.NewWorkloadIssuer(deleted.ID),
-		IssuerName:       deleted.Name,
-		IssuerSnapshotBefore: &audit.WorkloadIssuerSnapshot{
-			Name:                   deleted.Name,
-			Issuer:                 deleted.Issuer,
-			JwksURI:                deleted.JwksUri,
-			Description:            conv.FromPGTextOrEmpty[string](deleted.Description),
-			Tags:                   conv.DefaultSlice(deleted.Tags, []string{}),
-			AllowWildcardAdmission: deleted.AllowWildcardAdmission,
-			Tier:                   tier(deleted.ProjectID),
-		},
+		OrganizationID:       t.organizationID,
+		ProjectID:            deleted.ProjectID,
+		Actor:                t.actor,
+		ActorDisplayName:     t.actorEmail,
+		ActorSlug:            nil,
+		IssuerURN:            urn.NewWorkloadIssuer(deleted.ID),
+		IssuerName:           deleted.Name,
+		IssuerSnapshotBefore: issuerSnapshot(deleted),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer withdrawal").LogError(ctx, s.logger)
 	}
@@ -665,23 +857,212 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 	}
 
 	if err := s.audit.LogWorkloadAdmissionAdmit(ctx, dbtx, audit.LogWorkloadAdmissionAdmitEvent{
-		OrganizationID:       t.organizationID,
-		ProjectID:            projectID,
-		Actor:                t.actor,
-		ActorDisplayName:     t.actorEmail,
-		ActorSlug:            nil,
-		AdmissionURN:         urn.NewWorkloadAdmission(admission.ID),
-		AdmissionDisplayName: admission.Subject,
-		AdmissionSnapshotAfter: &audit.WorkloadAdmissionSnapshot{
-			Issuer:          issuerRow.Issuer,
-			IssuerName:      issuerRow.Name,
-			Subject:         admission.Subject,
-			MatchKind:       admission.MatchKind,
-			AssignedAgentID: agent.ID.String(),
-			Tier:            tier(projectID),
-		},
+		OrganizationID:         t.organizationID,
+		ProjectID:              projectID,
+		Actor:                  t.actor,
+		ActorDisplayName:       t.actorEmail,
+		ActorSlug:              nil,
+		AdmissionURN:           urn.NewWorkloadAdmission(admission.ID),
+		AdmissionDisplayName:   admission.Subject,
+		AdmissionSnapshotAfter: admissionSnapshot(admission, issuerRow, agent.ID.String()),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload admission").LogError(ctx, s.logger)
+	}
+
+	policy, err := s.loadPolicy(ctx, dbtx, t)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, s.logger)
+	}
+
+	return policy, nil
+}
+
+func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
+	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "id is not a valid uuid")
+	}
+
+	// Every supplied field is validated before any row is read, so a bad edit is
+	// refused the same way whether or not the admission exists.
+	var name *string
+	if payload.Name != nil {
+		normalized, err := normalizeAdmissionName(*payload.Name)
+		if err != nil {
+			return nil, err
+		}
+		name = &normalized
+	}
+
+	// A nil slice is an omitted field; an empty one clears the tags.
+	var tags []string
+	if payload.Tags != nil {
+		tags, err = normalizeTags(payload.Tags)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var agentID *uuid.UUID
+	if payload.AgentID != nil {
+		parsed, err := uuid.Parse(*payload.AgentID)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "agent_id is not a valid uuid")
+		}
+		agentID = &parsed
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error starting transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	q := repo.New(dbtx)
+
+	// Read once to learn which issuer to lock. Tenancy-scoped, so another
+	// organization's or a sibling project's admission is a not-found.
+	located, err := q.GetWorkloadAdmission(ctx, repo.GetWorkloadAdmissionParams{
+		OrganizationID: t.organizationID,
+		ID:             id,
+		ProjectID:      t.projectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "admission not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading admission").LogError(ctx, s.logger)
+	}
+
+	// Every write under this issuer serializes here, so the fields this edit
+	// leaves alone are merged from the row as it stands, and a concurrent
+	// withdrawal cannot strip the assignment this edit repoints.
+	if _, err := q.LockWorkloadIssuerForWrite(ctx, repo.LockWorkloadIssuerForWriteParams{
+		OrganizationID: t.organizationID,
+		ID:             located.WorkloadIssuerID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "admission not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
+	}
+
+	// Re-read under the lock: the first read may predate a withdrawal or an edit
+	// that committed while this transaction waited.
+	existing, err := q.GetWorkloadAdmission(ctx, repo.GetWorkloadAdmissionParams{
+		OrganizationID: t.organizationID,
+		ID:             id,
+		ProjectID:      t.projectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "admission not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading admission").LogError(ctx, s.logger)
+	}
+
+	issuerRow, err := q.GetWorkloadIssuer(ctx, repo.GetWorkloadIssuerParams{
+		OrganizationID: t.organizationID,
+		ProjectID:      t.projectID,
+		ID:             existing.WorkloadIssuerID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "the admission's issuer no longer exists")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading the admission's issuer").LogError(ctx, s.logger)
+	}
+
+	live, err := q.GetWorkloadAgentAssignmentForSubject(ctx, repo.GetWorkloadAgentAssignmentForSubjectParams{
+		OrganizationID:   t.organizationID,
+		WorkloadIssuerID: existing.WorkloadIssuerID,
+		MatchKind:        existing.MatchKind,
+		Subject:          existing.Subject,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading the workload's agent assignment").LogError(ctx, s.logger)
+	}
+
+	// Resolved exactly as admission resolves it: another organization's agent
+	// is a not-found, not a rejected write.
+	var agent *repo.GetOrganizationAgentRow
+	if agentID != nil {
+		row, err := q.GetOrganizationAgent(ctx, repo.GetOrganizationAgentParams{
+			OrganizationID: t.organizationID,
+			ID:             *agentID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "agent not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
+		}
+		agent = &row
+	}
+
+	agentBefore := ""
+	if len(live) > 0 {
+		agentBefore = live[0].AgentID.String()
+	}
+	agentAfter := agentBefore
+
+	params := repo.UpdateWorkloadAdmissionParams{
+		Name:           existing.Name,
+		Tags:           conv.DefaultSlice(existing.Tags, []string{}),
+		OrganizationID: t.organizationID,
+		ID:             id,
+		ProjectID:      t.projectID,
+	}
+	if name != nil {
+		params.Name = conv.ToPGTextEmpty(*name)
+	}
+	if tags != nil {
+		params.Tags = tags
+	}
+
+	updated, err := q.UpdateWorkloadAdmission(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating the admitted subject").LogError(ctx, s.logger)
+	}
+
+	if agent != nil {
+		// Repointed in place, in the same transaction as the admission, so the
+		// workload is never without an agent. The assignment is keyed on the
+		// (issuer, match_kind, subject) tuple rather than on this admission, so an
+		// admission of the same subject at the other tier follows it too.
+		if _, err := q.UpsertWorkloadAgentAssignment(ctx, repo.UpsertWorkloadAgentAssignmentParams{
+			OrganizationID:   t.organizationID,
+			WorkloadIssuerID: existing.WorkloadIssuerID,
+			Subject:          existing.Subject,
+			MatchKind:        existing.MatchKind,
+			AgentID:          agent.ID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error reassigning the workload's agent").LogError(ctx, s.logger)
+		}
+		agentAfter = agent.ID.String()
+	}
+
+	if err := s.audit.LogWorkloadAdmissionUpdate(ctx, dbtx, audit.LogWorkloadAdmissionUpdateEvent{
+		OrganizationID:          t.organizationID,
+		ProjectID:               updated.ProjectID,
+		Actor:                   t.actor,
+		ActorDisplayName:        t.actorEmail,
+		ActorSlug:               nil,
+		AdmissionURN:            urn.NewWorkloadAdmission(updated.ID),
+		AdmissionDisplayName:    updated.Subject,
+		AdmissionSnapshotBefore: admissionSnapshot(existing, issuerRow, agentBefore),
+		AdmissionSnapshotAfter:  admissionSnapshot(updated, issuerRow, agentAfter),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload admission update").LogError(ctx, s.logger)
 	}
 
 	policy, err := s.loadPolicy(ctx, dbtx, t)
@@ -807,21 +1188,14 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 	}
 
 	if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
-		OrganizationID:       t.organizationID,
-		ProjectID:            withdrawn.ProjectID,
-		Actor:                t.actor,
-		ActorDisplayName:     t.actorEmail,
-		ActorSlug:            nil,
-		AdmissionURN:         urn.NewWorkloadAdmission(withdrawn.ID),
-		AdmissionDisplayName: withdrawn.Subject,
-		AdmissionSnapshotBefore: &audit.WorkloadAdmissionSnapshot{
-			Issuer:          issuerRow.Issuer,
-			IssuerName:      issuerRow.Name,
-			Subject:         withdrawn.Subject,
-			MatchKind:       withdrawn.MatchKind,
-			AssignedAgentID: assignedAgent,
-			Tier:            tier(withdrawn.ProjectID),
-		},
+		OrganizationID:          t.organizationID,
+		ProjectID:               withdrawn.ProjectID,
+		Actor:                   t.actor,
+		ActorDisplayName:        t.actorEmail,
+		ActorSlug:               nil,
+		AdmissionURN:            urn.NewWorkloadAdmission(withdrawn.ID),
+		AdmissionDisplayName:    withdrawn.Subject,
+		AdmissionSnapshotBefore: admissionSnapshot(withdrawn, issuerRow, assignedAgent),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload withdrawal").LogError(ctx, s.logger)
 	}

@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -48,10 +49,29 @@ vi.mock("@/routes", () => ({
   }),
 }));
 
+const mocks = vi.hoisted(() => ({
+  invalidate: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+  updateIssuer: vi.fn(),
+  updateOptions: {} as {
+    onSuccess?: () => Promise<void> | void;
+    onError?: (error: unknown) => void;
+  },
+  updateSubject: vi.fn(),
+  updateSubjectOptions: {} as {
+    onSuccess?: () => Promise<void> | void;
+  },
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: mocks.toastSuccess, error: mocks.toastError },
+}));
+
 const ISSUER_ID = "11111111-1111-1111-1111-111111111111";
 const OTHER_ISSUER_ID = "33333333-3333-3333-3333-333333333333";
 
-const issuer = {
+const baseIssuer = {
   id: ISSUER_ID,
   organizationId: "example-org",
   projectId: "",
@@ -60,13 +80,15 @@ const issuer = {
   jwksUri: "https://ci-identity.example.com/jwks",
   description: "Deploy jobs for the main repository",
   allowWildcardAdmission: false,
-  tags: [],
+  tags: [] as string[],
   createdAt: new Date("2026-09-25T00:00:00Z"),
   updatedAt: new Date("2026-09-25T00:00:00Z"),
 };
 
+let issuer = baseIssuer;
+
 const otherIssuer = {
-  ...issuer,
+  ...baseIssuer,
   id: OTHER_ISSUER_ID,
   name: "Other CI",
   issuer: "https://other-ci-identity.example.com",
@@ -108,7 +130,7 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
     isError: false,
     refetch: vi.fn(),
   }),
-  invalidateAllWorkloadIdentities: vi.fn(),
+  invalidateAllWorkloadIdentities: mocks.invalidate,
 }));
 vi.mock("@gram/client/react-query/agents.js", () => ({
   useAgents: () => ({
@@ -129,6 +151,23 @@ vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({
     isPending: false,
   }),
 }));
+vi.mock("@gram/client/react-query/updateWorkloadIssuer.js", () => ({
+  useUpdateWorkloadIssuerMutation: (
+    options: typeof mocks.updateOptions = {},
+  ) => {
+    mocks.updateOptions = options;
+    return { mutate: mocks.updateIssuer, isPending: false };
+  },
+}));
+const updateSubject = mocks.updateSubject;
+vi.mock("@gram/client/react-query/updateWorkloadSubject.js", () => ({
+  useUpdateWorkloadSubjectMutation: (
+    options: typeof mocks.updateSubjectOptions = {},
+  ) => {
+    mocks.updateSubjectOptions = options;
+    return { mutate: mocks.updateSubject, isPending: false };
+  },
+}));
 vi.mock("@gram/client/react-query/withdrawWorkloadIssuer.js", () => ({
   useWithdrawWorkloadIssuerMutation: () => ({
     mutate: vi.fn(),
@@ -144,6 +183,14 @@ vi.mock("@gram/client/react-query/withdrawWorkloadSubject.js", () => ({
 
 beforeEach(() => {
   admissions = [];
+  issuer = baseIssuer;
+  mocks.updateIssuer.mockReset();
+  mocks.invalidate.mockReset();
+  mocks.toastSuccess.mockReset();
+  mocks.toastError.mockReset();
+  mocks.updateOptions = {};
+  mocks.updateSubjectOptions = {};
+  updateSubject.mockReset();
 });
 afterEach(cleanup);
 
@@ -151,7 +198,7 @@ function renderPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  render(
+  const page = () => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[`/access-hub/${ISSUER_ID}`]}>
         <Link to={`/access-hub/${OTHER_ISSUER_ID}`}>Other platform</Link>
@@ -162,8 +209,10 @@ function renderPage() {
           />
         </Routes>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const { rerender } = render(page());
+  return { rerender: () => rerender(page()) };
 }
 
 function visibleMachines(): string[] {
@@ -198,6 +247,16 @@ it("gives tags a column of their own", () => {
   expect(subject.parentElement?.contains(tag)).toBe(false);
 });
 
+// Opens a machine row's menu and picks one of its actions.
+function chooseMachineAction(action: "Edit" | "Remove", row = 0): void {
+  const trigger = screen.getAllByRole("button", { name: /^Actions for / })[row];
+  if (trigger === undefined) {
+    throw new Error(`no machine row ${row}`);
+  }
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+  fireEvent.click(screen.getByRole("menuitem", { name: action }));
+}
+
 it("offers to allow access and to remove a machine", () => {
   admissions = [admission(1)];
   renderPage();
@@ -205,8 +264,22 @@ it("offers to allow access and to remove a machine", () => {
   expect(screen.getByRole("button", { name: "Allow access" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Withdraw" })).toBeNull();
 
-  fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+  chooseMachineAction("Remove");
   expect(screen.getByText("Remove this machine's access?")).toBeTruthy();
+});
+
+it("puts a machine's Edit and Remove in its row menu", () => {
+  admissions = [admission(1)];
+  renderPage();
+
+  const trigger = screen.getByRole("button", {
+    name: "Actions for machine-01",
+  });
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+
+  expect(
+    screen.getAllByRole("menuitem").map((item) => item.textContent),
+  ).toEqual(["Edit", "Remove"]);
 });
 
 it("shows ten machines a page", () => {
@@ -273,4 +346,461 @@ it("puts stop trusting in its own section below the machines", () => {
 
   fireEvent.click(screen.getByRole("button", { name: "Stop trusting" }));
   expect(screen.getByText("Stop trusting this platform?")).toBeTruthy();
+});
+
+it("opens the edit sheet prefilled, with the issuer URL read-only", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+  expect(screen.getByText("Edit platform")).toBeTruthy();
+  expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+    "Example CI",
+  );
+  expect(
+    (screen.getByLabelText("Description") as HTMLTextAreaElement).value,
+  ).toBe("Deploy jobs for the main repository");
+  expect((screen.getByLabelText("JWKS URI") as HTMLInputElement).value).toBe(
+    "https://ci-identity.example.com/jwks",
+  );
+
+  const issuerUrl = screen.getByLabelText("Issuer") as HTMLInputElement;
+  expect(issuerUrl.value).toBe("https://ci-identity.example.com");
+  expect(issuerUrl.readOnly).toBe(true);
+});
+
+it("saves nothing until a field changes", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+  const save = screen.getByRole("button", {
+    name: "Save changes",
+  }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+});
+
+it("sends only the fields the edit changed", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "  Example deploys  " },
+  });
+  fireEvent.change(screen.getByLabelText("Description"), {
+    target: { value: "" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenCalledTimes(1);
+  expect(mocks.updateIssuer).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadIssuerForm: {
+        id: ISSUER_ID,
+        name: "Example deploys",
+        description: "",
+      },
+    },
+  });
+});
+
+it("opens the machine edit sheet prefilled, with the subject read-only", () => {
+  admissions = [admission(1, ["production"])];
+  renderPage();
+
+  chooseMachineAction("Edit");
+
+  expect(screen.getByText("Edit access")).toBeTruthy();
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-01");
+  // Once in the machine's row and once in the sheet's tag field.
+  expect(screen.getAllByText("production")).toHaveLength(2);
+
+  const subject = screen.getByLabelText("Subject") as HTMLInputElement;
+  expect(subject.value).toBe("repo:example/machine-01");
+  expect(subject.readOnly).toBe(true);
+});
+
+it("saves no machine edit until a field changes", () => {
+  admissions = [admission(1)];
+  renderPage();
+
+  chooseMachineAction("Edit");
+
+  const save = screen.getByRole("button", {
+    name: "Save changes",
+  }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+  expect(save.disabled).toBe(false);
+});
+
+it("sends only the machine fields the edit changed", () => {
+  admissions = [admission(1)];
+  renderPage();
+
+  chooseMachineAction("Edit");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "  Release bot  " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledTimes(1);
+  expect(updateSubject).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: `admission-${ISSUER_ID}-1`,
+        name: "Release bot",
+      },
+    },
+  });
+});
+
+it("repoints the JWKS URI and clears the tags", () => {
+  issuer = { ...baseIssuer, tags: ["deploys"] };
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("JWKS URI"), {
+    target: { value: " https://keys.example.com/jwks " },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Remove deploys" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadIssuerForm: {
+        id: ISSUER_ID,
+        jwksUri: "https://keys.example.com/jwks",
+        tags: [],
+      },
+    },
+  });
+});
+
+it("keeps the wildcard caution on a wildcard machine being edited", () => {
+  admissions = [
+    {
+      ...admission(1),
+      subject: "repo:example/*",
+      matchKind: "wildcard",
+      wildcardActive: false,
+    },
+  ];
+  renderPage();
+
+  chooseMachineAction("Edit");
+
+  expect(
+    screen.getByText("This rule admits more than one identity"),
+  ).toBeTruthy();
+  // The subject is fixed, so the inactive-wildcard refusal meant for a new rule
+  // does not block saving the label.
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Every repository" },
+  });
+  expect(
+    (screen.getByRole("button", { name: "Save changes" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(false);
+});
+
+it("opens each machine's own values when editing one after another", () => {
+  admissions = [admission(1), admission(2)];
+  renderPage();
+
+  chooseMachineAction("Edit", 0);
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-01");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+  chooseMachineAction("Edit", 1);
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-02");
+});
+
+it("reopens a machine on its saved values and diffs the next edit against them", async () => {
+  admissions = [admission(1, ["production"])];
+  const { rerender } = renderPage();
+  // The refresh that follows a save brings the stored machine back.
+  mocks.invalidate.mockImplementation(async () => {
+    admissions = [{ ...admission(1, ["production"]), name: "Release bot" }];
+    rerender();
+  });
+
+  chooseMachineAction("Edit");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await act(async () => {
+    await mocks.updateSubjectOptions.onSuccess?.();
+  });
+  await waitFor(() => expect(screen.queryByText("Edit access")).toBeNull());
+
+  chooseMachineAction("Edit");
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("Release bot");
+  fireEvent.click(screen.getByRole("button", { name: "Remove production" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledTimes(2);
+  expect(updateSubject).toHaveBeenLastCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: `admission-${ISSUER_ID}-1`,
+        tags: [],
+      },
+    },
+  });
+});
+
+it("diffs a machine edit against the machine as it stood when the sheet opened", () => {
+  admissions = [admission(1)];
+  const { rerender } = renderPage();
+
+  chooseMachineAction("Edit");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+
+  // Another operator's edit arrives through a refresh while the sheet is open.
+  admissions = [admission(1, ["production"])];
+  rerender();
+
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: `admission-${ISSUER_ID}-1`,
+        name: "Release bot",
+      },
+    },
+  });
+});
+
+it("diffs against the platform as it stood when the sheet opened", () => {
+  const { rerender } = renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+
+  // Another operator's edit arrives through a refresh while the sheet is open.
+  issuer = {
+    ...baseIssuer,
+    description: "Updated elsewhere",
+    jwksUri: "https://ci-identity.example.com/keys",
+  };
+  rerender();
+
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadIssuerForm: { id: ISSUER_ID, name: "Example deploys" },
+    },
+  });
+});
+
+it("refreshes, closes the sheet and confirms once the edit saves", async () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await act(async () => {
+    await mocks.updateOptions.onSuccess?.();
+  });
+
+  expect(mocks.invalidate).toHaveBeenCalledTimes(1);
+  expect(mocks.toastSuccess).toHaveBeenCalledWith("Platform updated");
+  await waitFor(() => expect(screen.queryByText("Edit platform")).toBeNull());
+});
+
+it("keeps the sheet open and shows the server's message when the edit fails", async () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  act(() => {
+    mocks.updateOptions.onError?.(
+      new Error('an issuer named "Example deploys" already exists'),
+    );
+  });
+
+  expect(mocks.toastError).toHaveBeenCalledWith(
+    'an issuer named "Example deploys" already exists',
+  );
+  expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  expect(screen.getByText("Edit platform")).toBeTruthy();
+});
+
+it("reopens on the saved values and diffs the next edit against them", async () => {
+  issuer = { ...baseIssuer, tags: ["deploys"] };
+  const { rerender } = renderPage();
+  // The refresh that follows a save brings the stored platform back.
+  mocks.invalidate.mockImplementation(async () => {
+    issuer = { ...baseIssuer, name: "Example deploys", tags: ["deploys"] };
+    rerender();
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await act(async () => {
+    await mocks.updateOptions.onSuccess?.();
+  });
+  await waitFor(() => expect(screen.queryByText("Edit platform")).toBeNull());
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+    "Example deploys",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Remove deploys" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenCalledTimes(2);
+  expect(mocks.updateIssuer).toHaveBeenLastCalledWith({
+    request: {
+      updateWorkloadIssuerForm: { id: ISSUER_ID, tags: [] },
+    },
+  });
+});
+
+it("reopens on values a refresh brought in after the sheet closed", async () => {
+  issuer = { ...baseIssuer, tags: ["deploys"] };
+  const { rerender } = renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  await act(async () => {
+    await mocks.updateOptions.onSuccess?.();
+  });
+  await waitFor(() => expect(screen.queryByText("Edit platform")).toBeNull());
+
+  issuer = { ...baseIssuer, name: "Example deploys", tags: ["deploys"] };
+  rerender();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+    "Example deploys",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Remove deploys" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenLastCalledWith({
+    request: {
+      updateWorkloadIssuerForm: { id: ISSUER_ID, tags: [] },
+    },
+  });
+});
+
+// Stands in for the browser's back and forward buttons, which still move the
+// page while a sheet or dialog is open. The dialog hides the link from the
+// accessibility tree, so it is found by its text.
+function goToOtherPlatform(): void {
+  fireEvent.click(screen.getByText("Other platform"));
+}
+
+it("drops an open platform edit when the page moves to another platform", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Example deploys" },
+  });
+
+  goToOtherPlatform();
+
+  // The edit was of the first platform, so it does not follow to the second.
+  expect(screen.queryByText("Edit platform")).toBeNull();
+  expect(mocks.updateIssuer).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+    "Other CI",
+  );
+  fireEvent.change(screen.getByLabelText("Description"), {
+    target: { value: "Nightly jobs" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(mocks.updateIssuer).toHaveBeenCalledTimes(1);
+  expect(mocks.updateIssuer).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadIssuerForm: {
+        id: OTHER_ISSUER_ID,
+        description: "Nightly jobs",
+      },
+    },
+  });
+});
+
+it("drops an open stop-trusting confirmation when the page moves to another platform", () => {
+  renderPage();
+
+  fireEvent.click(screen.getByRole("button", { name: "Stop trusting" }));
+  expect(screen.getByText("Stop trusting this platform?")).toBeTruthy();
+
+  goToOtherPlatform();
+
+  expect(screen.getByText("Other CI")).toBeTruthy();
+  expect(screen.queryByText("Stop trusting this platform?")).toBeNull();
+});
+
+it("drops an open machine edit when the page moves to another platform", () => {
+  admissions = [admission(1), admission(1, [], OTHER_ISSUER_ID)];
+  renderPage();
+
+  chooseMachineAction("Edit");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+
+  goToOtherPlatform();
+
+  expect(screen.getByText("Other CI")).toBeTruthy();
+  expect(screen.queryByText("Edit access")).toBeNull();
+  expect(updateSubject).not.toHaveBeenCalled();
+
+  chooseMachineAction("Edit");
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("machine-01");
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Nightly bot" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(updateSubject).toHaveBeenCalledTimes(1);
+  expect(updateSubject).toHaveBeenCalledWith({
+    request: {
+      updateWorkloadSubjectForm: {
+        id: `admission-${OTHER_ISSUER_ID}-1`,
+        name: "Nightly bot",
+      },
+    },
+  });
 });

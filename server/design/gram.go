@@ -28,7 +28,6 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/deviceintegrations"
 	_ "github.com/speakeasy-api/gram/server/design/domains"
 	_ "github.com/speakeasy-api/gram/server/design/environments"
-	_ "github.com/speakeasy-api/gram/server/design/explore"
 	_ "github.com/speakeasy-api/gram/server/design/external"
 	_ "github.com/speakeasy-api/gram/server/design/externalcredentials"
 	_ "github.com/speakeasy-api/gram/server/design/externalkeys"

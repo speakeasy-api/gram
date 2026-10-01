@@ -2993,6 +2993,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3055,6 +3056,7 @@ type GetPlatformMCPPluginInventoryItemRow struct {
 	Name                    string
 	Slug                    string
 	Description             pgtype.Text
+	AutoCreated             bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -3073,6 +3075,7 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 		&i.Name,
 		&i.Slug,
 		&i.Description,
+		&i.AutoCreated,
 		&i.IsDefault,
 		&i.ServerCount,
 		&i.SkillCount,
@@ -4710,6 +4713,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -4765,6 +4769,7 @@ type ListPlatformMCPAssignedPluginInventoryRow struct {
 	Name                string
 	Slug                string
 	Description         pgtype.Text
+	AutoCreated         bool
 	IsDefault           bool
 	ServerCount         int64
 	SkillCount          int64
@@ -4797,6 +4802,7 @@ func (q *Queries) ListPlatformMCPAssignedPluginInventory(ctx context.Context, ar
 			&i.Name,
 			&i.Slug,
 			&i.Description,
+			&i.AutoCreated,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,
@@ -5522,6 +5528,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -5588,6 +5595,7 @@ type ListPlatformMCPPluginInventoryRow struct {
 	Name                    string
 	Slug                    string
 	Description             pgtype.Text
+	AutoCreated             bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -5626,6 +5634,7 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 			&i.Name,
 			&i.Slug,
 			&i.Description,
+			&i.AutoCreated,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,
@@ -7199,6 +7208,7 @@ SELECT
     p.name,
     p.slug,
     p.description,
+    p.auto_created,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -7254,6 +7264,7 @@ type ResolvePlatformMCPAssignedPluginTargetRow struct {
 	Name        string
 	Slug        string
 	Description pgtype.Text
+	AutoCreated bool
 	IsDefault   bool
 	ServerCount int64
 	SkillCount  int64
@@ -7281,6 +7292,7 @@ func (q *Queries) ResolvePlatformMCPAssignedPluginTarget(ctx context.Context, ar
 			&i.Name,
 			&i.Slug,
 			&i.Description,
+			&i.AutoCreated,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,

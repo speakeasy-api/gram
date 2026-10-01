@@ -16,7 +16,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestFeatureWriteApprovalAndExecution(t *testing.T) {
@@ -56,13 +59,23 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 	approval.operations = map[WriteOperation]approvableOperation{OperationSetOrganizationFeature: writer} //nolint:exhaustive // Only selected write operations are enabled by this test.
 	handler := middleware.AdminOriginCheck(nil)(approval.Handler())
 
-	// Sequential, not subtests: the features share one organisation so each
+	// Sequential, not subtests: features share one organisation so each
 	// run can check that the other features are left alone.
-	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureRemoteSessionAutoRefresh}
+	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureAutomaticRoleDistribution}
+	// New organizations already enable role distribution by default. Start both
+	// exact targets from the same off state for this approval lifecycle test.
+	for _, orgID := range []string{f.orgA, f.orgB} {
+		for _, feature := range writable {
+			if !state(orgID, feature) {
+				continue
+			}
+			_, err := featurerepo.New(f.db).DeleteFeature(t.Context(), featurerepo.DeleteFeatureParams{OrganizationID: orgID, FeatureName: string(feature)})
+			require.NoError(t, err)
+		}
+	}
 	for _, feature := range writable {
 		func() {
 			t.Logf("feature %s", feature)
-
 			input := PrepareFeatureInput{OrganizationID: f.orgA, Feature: string(feature), Enabled: true, RetryKey: "feature-" + string(feature)}
 			prepared, err := writer.prepare(ctx, input)
 			require.NoError(t, err)
@@ -200,4 +213,130 @@ func TestFeatureWriteRejectsUnreviewedStoredFeature(t *testing.T) {
 	enabled, err := featurerepo.New(f.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: f.orgA, FeatureName: "sso"})
 	require.NoError(t, err)
 	require.False(t, enabled)
+}
+
+func TestFeatureWriteAutomaticRoleDistributionRequiresStaffWriteAuthority(t *testing.T) {
+	t.Parallel()
+	writer := &featureWriter{writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}} //nolint:exhaustive // Only feature writes are enabled.
+	for _, tc := range []struct {
+		name string
+		ctx  func(*testing.T) context.Context
+		want error
+	}{
+		{"unauthenticated", func(t *testing.T) context.Context { t.Helper(); return t.Context() }, ErrWriteIdentity},
+		{"read only staff", func(t *testing.T) context.Context { t.Helper(); return writePrincipalContext(t, []string{ScopeRead}) }, ErrWriteScope},
+		{"nonstaff principal", func(t *testing.T) context.Context {
+			t.Helper()
+			return context.WithValue(t.Context(), principalKey{}, Principal{Subject: "user:nonstaff", Scopes: []string{ScopeRead, ScopeWrite}})
+		}, ErrWriteIdentity},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := writer.prepare(tc.ctx(t), PrepareFeatureInput{OrganizationID: "org_role_rollout", Feature: string(productfeatures.FeatureAutomaticRoleDistribution), Enabled: true, RetryKey: "denied"})
+			require.ErrorIs(t, err, tc.want)
+		})
+	}
+}
+
+func TestFeatureWriteSerializesWithOrganizationBootstrap(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "admin_mcp_feature_lock_order")
+	redisContainer, newRedisClient, err := testenv.NewTestRedis(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, redisContainer.Terminate(context.Background())) })
+	redisClient, err := newRedisClient(t, 0)
+	require.NoError(t, err)
+	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), f.db, redisClient)
+	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
+	writer := &featureWriter{store: f.store, mutator: productfeatures.NewMutator(features, audit.NewLogger()), writes: writes, baseURL: "https://staff.example.test" + Path}
+	tools := newWriteTools(f.store, writes, writer.baseURL, map[WriteOperation]operationWriter{OperationSetOrganizationFeature: writer}) //nolint:exhaustive // Only the implemented operation is dispatched.
+	staff := &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: "staff@example.test"}
+	principal := Principal{Subject: f.owner.SubjectURN, Email: staff.Email, ClientID: "test-client", ClientRowID: f.owner.ClientRowID.String(), ConnectionID: f.owner.ConnectionID.String(), Generation: f.owner.Generation.String(), Scopes: []string{ScopeRead, ScopeWrite}, staff: staff}
+	ctx := contextvalues.SetAdminAuthContext(context.WithValue(t.Context(), principalKey{}, principal), staff)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	// New organizations have rollout enabled. Seed a pass for the real worker.
+	seed, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: Transaction boundary for production request helpers.
+	require.NoError(t, err)
+	defer func() { _ = seed.Rollback(context.WithoutCancel(ctx)) }()
+	require.NoError(t, requests.LockOrganization(ctx, seed, f.orgA))
+	require.NoError(t, requests.ResumeOrganization(ctx, seed, f.orgA))
+	require.NoError(t, seed.Commit(ctx))
+	prepared, err := writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgA, Feature: string(productfeatures.FeatureAutomaticRoleDistribution), Enabled: false, RetryKey: "disable-during-bootstrap"})
+	require.NoError(t, err)
+	id := uuid.MustParse(prepared.ProposalID)
+	proposal, err := f.store.GetForOwner(ctx, id, f.owner)
+	require.NoError(t, err)
+	_, err = f.store.Approve(ctx, id, f.owner.SubjectURN, proposal.ProposalDigest, time.Now(), allowProposalBrowser, writer.revalidate)
+	require.NoError(t, err)
+
+	barrier, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: Hold fixture row lock to coordinate real worker and MCP transactions.
+	require.NoError(t, err)
+	defer func() { _ = barrier.Rollback(context.WithoutCancel(ctx)) }()
+	_, err = featurerepo.New(barrier).LockOrganizationMetadata(ctx, f.orgA)
+	require.NoError(t, err)
+	type executionResult struct {
+		output ProposalOutput
+		err    error
+	}
+	workerDone := make(chan executionResult, 1)
+	go func() {
+		workerDone <- executionResult{output: ProposalOutput{}, err: roledistribution.ProcessOrganizationBootstrap(ctx, f.db, f.orgA, "")}
+	}()
+	waitForBlocker := func(pid int32, operation string, done <-chan executionResult) int32 {
+		t.Helper()
+		timeout := time.NewTimer(5 * time.Second)
+		defer timeout.Stop()
+		tick := time.NewTicker(10 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case result := <-done:
+				t.Fatalf("%s finished before reaching the lock wait: %v", operation, result.err)
+			case <-ctx.Done():
+				t.Fatalf("waiting for %s lock: %v", operation, ctx.Err())
+			case <-timeout.C:
+				t.Fatalf("%s did not reach the lock wait", operation)
+			case <-tick.C:
+				blocked, err := testrepo.New(f.db).RolloutBlockedBackends(ctx, pid)
+				require.NoError(t, err)
+				if len(blocked) == 1 {
+					return blocked[0].Int32
+				}
+			}
+		}
+	}
+	// Identify the worker by its dependency on our organization row barrier.
+	workerPID := waitForBlocker(int32(barrier.Conn().PgConn().PID()), "bootstrap", workerDone)
+	executed := make(chan executionResult, 1)
+	go func() {
+		output, err := tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+		executed <- executionResult{output: output, err: err}
+	}()
+	waitForBlocker(workerPID, "MCP execution", executed)
+	// MCP must wait for the worker advisory lock before taking organization
+	// row locks. Releasing the barrier lets bootstrap finish before the toggle.
+	require.NoError(t, barrier.Commit(ctx))
+	select {
+	case result := <-workerDone:
+		require.NoError(t, result.err)
+	case <-ctx.Done():
+		t.Fatal("bootstrap did not finish:", ctx.Err())
+	}
+	var result executionResult
+	select {
+	case result = <-executed:
+	case <-ctx.Done():
+		t.Fatal("MCP execution did not finish:", ctx.Err())
+	}
+	require.NoError(t, result.err)
+	require.Equal(t, string(ProposalSucceeded), result.output.Status)
+	require.JSONEq(t, `{"changed":true}`, string(result.output.Result))
+	enabled, err := features.IsFeatureEnabled(ctx, f.orgA, productfeatures.FeatureAutomaticRoleDistribution)
+	require.NoError(t, err)
+	require.False(t, enabled, "committed state is reflected in the cache")
+	replay, err := tools.execute(ctx, ProposalIDInput{ProposalID: prepared.ProposalID})
+	require.NoError(t, err)
+	require.True(t, replay.Replay)
+	require.Equal(t, 1, countWriteEvents(t, f.db, id, "executed"))
 }

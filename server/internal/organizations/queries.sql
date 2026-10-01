@@ -1,4 +1,5 @@
--- name: UpsertOrganizationMetadata :one
+-- name: UpsertOrganizationMetadataWithRequests :one
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
@@ -30,7 +31,35 @@ ON CONFLICT (id) DO UPDATE SET
     -- upsert from an unrelated path cannot erase the flow that created the row.
     creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
     updated_at = clock_timestamp()
-RETURNING *;
+RETURNING *, (xmax = 0) AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
 -- name: SetAccountType :exec
 UPDATE organization_metadata
@@ -387,9 +416,39 @@ SELECT *
 FROM organization_invitations
 WHERE token_hash = @token_hash;
 
--- name: CreateOrganizationMetadata :exec
+-- name: CreateOrganizationMetadataWithRequests :one
+WITH written AS (
 INSERT INTO organization_metadata (id, name, slug)
-VALUES (@id, @name, @slug);
+VALUES (@id, @name, @slug)
+RETURNING *, TRUE AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
 -- name: GetOrganizationByWorkosID :one
 SELECT *
@@ -733,10 +792,11 @@ ORDER BY role_urn;
 -- name: LockOrganizationSlug :exec
 SELECT pg_advisory_xact_lock(hashtext(@slug));
 
--- name: CreateOrganizationMetadataFromWorkOS :one
+-- name: CreateOrganizationMetadataFromWorkOSWithRequests :one
 -- Create a Gram organization row from a WorkOS organization event. The caller
 -- chooses the Gram org ID from WorkOS external_id or a deterministic fallback.
 -- Slug is a Gram-owned initial value and is never updated by WorkOS sync.
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
@@ -754,13 +814,42 @@ INSERT INTO organization_metadata (
     @workos_last_event_id,
     @verified_domains::text[]
 )
-RETURNING *;
+RETURNING *, (xmax = 0) AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
--- name: UpsertOrganizationMetadataFromWorkOS :one
+-- name: UpsertOrganizationMetadataFromWorkOSWithRequests :one
 -- Upsert a Gram organization row from a WorkOS organization event.
 -- The caller must only use this when WorkOS external_id is set and is the Gram
 -- org ID. Slug is a Gram-owned initial value chosen by the caller and is never
 -- updated by WorkOS sync after creation.
+WITH written AS (
 INSERT INTO organization_metadata (
     id,
     name,
@@ -782,7 +871,35 @@ ON CONFLICT (id) DO UPDATE SET
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
-RETURNING *;
+RETURNING *, (xmax = 0) AS inserted
+), enabled AS (
+    INSERT INTO organization_features (organization_id, feature_name)
+    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+)
+SELECT
+    (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
+    written.id,
+    written.name,
+    written.slug,
+    written.gram_account_type,
+    written.workos_id,
+    written.workos_updated_at,
+    written.workos_last_event_id,
+    written.svix_app_id,
+    written.webhooks_enabled,
+    written.whitelisted,
+    written.free_trial_started_at,
+    written.free_trial_ends_at,
+    written.scim_enabled,
+    written.sso_enabled,
+    written.verified_domains,
+    written.creation_source,
+    written.default_host,
+    written.created_at,
+    written.updated_at,
+    written.disabled_at
+FROM written;
 
 -- name: UpdateOrganizationMetadataFromWorkOS :one
 -- Update an existing organization row from a WorkOS organization event. Caller

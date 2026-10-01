@@ -1292,6 +1292,21 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    spec:
+      definition: |
+        edition = "2024";
+        message RoleDistributionSetupRequestedV1 {
+          string organization_id = 1;
+          string role_urn = 2;
+          string global_role_id = 3;
+          string bootstrap_organization_id = 4;
+          string cursor = 5;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-log-record
     spec:
@@ -1842,6 +1857,24 @@ pubsub:
         name: gram-risk-v1-prompt-policy-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-handler
+      topic_proto_message: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    name: gram-role-distribution-v1-role-distribution-setup-handler
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-role-distribution-v1-role-distribution-setup-handler-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-noop
       topic_proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-noop
@@ -2274,6 +2307,23 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      dlq_for: gram-role-distribution-v1-role-distribution-setup-handler
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-handler
+    name: gram-role-distribution-v1-role-distribution-setup-handler-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-role-distribution-v1-role-distribution-setup-requested-v1
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record

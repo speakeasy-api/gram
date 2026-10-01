@@ -48,7 +48,7 @@ func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, plug
 	}
 	var plugin pluginsrepo.Plugin
 	err := tx.QueryRow(ctx, `
-SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
@@ -62,6 +62,7 @@ FOR UPDATE`, pluginID, organizationID, projectID).Scan(
 		&plugin.Slug,
 		&plugin.Description,
 		&plugin.IsDefault,
+		&plugin.AutoCreated,
 		&plugin.CreatedAt,
 		&plugin.UpdatedAt,
 		&plugin.DeletedAt,

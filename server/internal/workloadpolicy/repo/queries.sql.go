@@ -778,6 +778,114 @@ func (q *Queries) SoftDeleteWorkloadIssuer(ctx context.Context, arg SoftDeleteWo
 	return i, err
 }
 
+const updateWorkloadAdmission = `-- name: UpdateWorkloadAdmission :one
+UPDATE workload_identity_admissions
+SET name = $1,
+    tags = $2,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND id = $4
+  AND (project_id IS NULL OR project_id = $5)
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateWorkloadAdmissionParams struct {
+	Name           pgtype.Text
+	Tags           []string
+	OrganizationID string
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+}
+
+// Writes every editable field, so the caller merges an edit into the row it
+// read under LockWorkloadIssuerForWrite. Scoped as GetWorkloadAdmission is: a
+// row the caller cannot list is a row it cannot edit. The subject, match kind,
+// issuer, and tier are deliberately absent.
+func (q *Queries) UpdateWorkloadAdmission(ctx context.Context, arg UpdateWorkloadAdmissionParams) (WorkloadIdentityAdmission, error) {
+	row := q.db.QueryRow(ctx, updateWorkloadAdmission,
+		arg.Name,
+		arg.Tags,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i WorkloadIdentityAdmission
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.WorkloadIssuerID,
+		&i.Subject,
+		&i.MatchKind,
+		&i.Name,
+		&i.Tags,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateWorkloadIssuer = `-- name: UpdateWorkloadIssuer :one
+UPDATE workload_issuers
+SET name = $1,
+    description = $2,
+    tags = $3,
+    jwks_uri = $4,
+    updated_at = clock_timestamp()
+WHERE organization_id = $5
+  AND (project_id IS NULL OR project_id = $6)
+  AND id = $7
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateWorkloadIssuerParams struct {
+	Name           string
+	Description    pgtype.Text
+	Tags           []string
+	JwksUri        string
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ID             uuid.UUID
+}
+
+// Writes every editable field, so the caller merges an edit into the row it
+// read under LockWorkloadIssuerForWrite. Scoped as GetWorkloadIssuer is: a row
+// the caller cannot list is a row it cannot edit. The issuer URL and the
+// wildcard setting are deliberately absent.
+func (q *Queries) UpdateWorkloadIssuer(ctx context.Context, arg UpdateWorkloadIssuerParams) (WorkloadIssuer, error) {
+	row := q.db.QueryRow(ctx, updateWorkloadIssuer,
+		arg.Name,
+		arg.Description,
+		arg.Tags,
+		arg.JwksUri,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ID,
+	)
+	var i WorkloadIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.Tags,
+		&i.Issuer,
+		&i.JwksUri,
+		&i.AllowWildcardAdmission,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const upsertWorkloadAgentAssignment = `-- name: UpsertWorkloadAgentAssignment :one
 INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
 VALUES ($1, $2, $3, $4, $5)

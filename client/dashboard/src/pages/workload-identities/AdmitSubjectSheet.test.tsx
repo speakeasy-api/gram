@@ -188,3 +188,118 @@ it("warns in the sheet about whitespace before the terminator", () => {
   expect(subjectWarning()?.textContent).toContain("whitespace before");
   expect(subjectField().getAttribute("aria-invalid")).toBe("true");
 });
+
+function renderEdit(agentId: string): { submitted: () => number } {
+  let submissions = 0;
+  render(
+    <AdmitSubjectSheet
+      open
+      onOpenChange={() => {}}
+      onSubmit={() => {
+        submissions += 1;
+      }}
+      isPending={false}
+      issuer={issuer()}
+      agents={[{ id: "22222222-2222-2222-2222-222222222222", name: "poc" }]}
+      initial={{
+        subject: "wimse://identity.example.com/org/acme/agent/a-1",
+        name: "Deploy bot",
+        tags: [],
+        agentId,
+        agentName: "",
+      }}
+    />,
+  );
+  return { submitted: () => submissions };
+}
+
+function saveButton(): HTMLButtonElement {
+  return screen.getByRole("button", { name: "Save changes" });
+}
+
+it("saves a label change on access that has no agent assigned", () => {
+  const { submitted } = renderEdit("");
+
+  expect(saveButton().disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+
+  expect(saveButton().disabled).toBe(false);
+  fireEvent.click(saveButton());
+  expect(submitted()).toBe(1);
+});
+
+it("saves a label change while the assigned agent is no longer active", () => {
+  renderEdit("33333333-3333-3333-3333-333333333333");
+
+  fireEvent.change(screen.getByLabelText("Label (optional)"), {
+    target: { value: "Release bot" },
+  });
+
+  expect(saveButton().disabled).toBe(false);
+});
+
+it("requires an agent before allowing new access", () => {
+  renderSheet(issuer());
+
+  fireEvent.change(subjectField(), {
+    target: { value: "wimse://identity.example.com/org/acme/agent/a-1" },
+  });
+
+  const allow = screen.getByRole<HTMLButtonElement>("button", {
+    name: "Allow access",
+  });
+  expect(allow.disabled).toBe(true);
+});
+
+it("starts a new admission empty each time the sheet opens", () => {
+  const sheet = (open: boolean) => (
+    <AdmitSubjectSheet
+      open={open}
+      onOpenChange={() => {}}
+      onSubmit={() => {}}
+      isPending={false}
+      issuer={issuer()}
+      agents={[{ id: "22222222-2222-2222-2222-222222222222", name: "poc" }]}
+    />
+  );
+  const { rerender } = render(sheet(true));
+  fireEvent.change(subjectField(), {
+    target: { value: "wimse://identity.example.com/org/acme/agent/a-1" },
+  });
+
+  rerender(sheet(false));
+  rerender(sheet(true));
+
+  expect((subjectField() as HTMLInputElement).value).toBe("");
+});
+
+it("takes the values handed over in the render that reopens it", () => {
+  const sheet = (open: boolean, name: string) => (
+    <AdmitSubjectSheet
+      open={open}
+      onOpenChange={() => {}}
+      onSubmit={() => {}}
+      isPending={false}
+      issuer={issuer()}
+      agents={[{ id: "22222222-2222-2222-2222-222222222222", name: "poc" }]}
+      initial={{
+        subject: "wimse://identity.example.com/org/acme/agent/a-1",
+        name,
+        tags: [],
+        agentId: "22222222-2222-2222-2222-222222222222",
+        agentName: "poc",
+      }}
+    />
+  );
+  const { rerender } = render(sheet(true, "Deploy bot"));
+
+  rerender(sheet(false, "Deploy bot"));
+  rerender(sheet(true, "Release bot"));
+
+  expect(
+    (screen.getByLabelText("Label (optional)") as HTMLInputElement).value,
+  ).toBe("Release bot");
+  expect(saveButton().disabled).toBe(true);
+});

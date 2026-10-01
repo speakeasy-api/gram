@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -130,8 +129,7 @@ func TestEngineFilter_logsSingleAggregateChallenge(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_allowed"}, resourceIDs)
 
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
@@ -160,8 +158,7 @@ func TestEngineFilter_logsDenyWhenNoMatches(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, resourceIDs)
 
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
@@ -184,9 +181,7 @@ func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, resourceIDs)
 
-	count, err := testrepo.New(conn).CountPublishOutboxRows(t.Context())
-	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
 func TestEngineRequire_projectWriteBlocklistBlocksAccess(t *testing.T) {
@@ -653,9 +648,7 @@ func TestEngineFindMatched_emptyInputReturnsEmptySlice(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, matched)
 
-	count, err := testrepo.New(conn).CountPublishOutboxRows(t.Context())
-	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
 func TestEngineFindMatched_missingGrantsReturnsError(t *testing.T) {
@@ -703,8 +696,7 @@ func TestEngineFindMatched_logsSingleAggregateChallenge(t *testing.T) {
 	// A batched FindMatched must emit exactly one challenge log entry for
 	// the whole input, not N per check — the per-check granularity lives in
 	// the returned slice, not in the outbox.
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
@@ -764,9 +756,7 @@ func TestEngineEvaluate_neverLogsChallenge(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, allowed)
 
-	count, err := testrepo.New(conn).CountPublishOutboxRows(t.Context())
-	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
 func enterpriseSessionCtx(t *testing.T) context.Context {

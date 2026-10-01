@@ -97,6 +97,7 @@ func TestListPluginsPagesAProjectsPluginsWithMembershipCounts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	marketing := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Marketing Tools", "marketing")
+	require.NoError(t, pluginsrepo.New(conn).SetPluginAutoCreatedFixture(ctx, pluginsrepo.SetPluginAutoCreatedFixtureParams{ProjectID: project.ID, ID: marketing.ID, AutoCreated: true}))
 
 	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
 		PluginID:       marketing.ID,
@@ -117,6 +118,20 @@ func TestListPluginsPagesAProjectsPluginsWithMembershipCounts(t *testing.T) {
 	}
 	require.True(t, byID[defaultPlugin.ID.String()].IsDefault)
 	require.False(t, byID[marketing.ID.String()].IsDefault)
+	for _, expected := range []struct {
+		id     uuid.UUID
+		marker string
+	}{{defaultPlugin.ID, `"auto_created":false`}, {marketing.ID, `"auto_created":true`}} {
+		encoded, err := json.Marshal(byID[expected.id.String()])
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), expected.marker)
+		detail, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: expected.id.String()})
+		require.NoError(t, err)
+		encoded, err = json.Marshal(detail.Plugin)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), expected.marker)
+	}
+
 	require.NotNil(t, byID[marketing.ID.String()].Assignments)
 	require.True(t, byID[marketing.ID.String()].Assignments.AllMembers)
 	require.Zero(t, byID[marketing.ID.String()].Assignments.Users)
@@ -195,6 +210,7 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	for _, assignment := range assignments {
 		plugin := seedPlugin(t, prepared, conn, principal.OrganizationID, project.ID, assignment.slug, assignment.slug)
 		pluginsBySlug[assignment.slug] = plugin
+		require.NoError(t, pluginsrepo.New(conn).SetPluginAutoCreatedFixture(prepared, pluginsrepo.SetPluginAutoCreatedFixtureParams{ProjectID: project.ID, ID: plugin.ID, AutoCreated: assignment.slug == "member-role"}))
 		_, err = pluginsrepo.New(conn).AddPluginAssignment(prepared, pluginsrepo.AddPluginAssignmentParams{
 			PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: assignment.principal,
 		})
@@ -233,6 +249,19 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	slugs := make([]string, 0, len(result.Plugins))
 	for _, plugin := range result.Plugins {
 		slugs = append(slugs, plugin.Slug)
+		marker := `"auto_created":false`
+		if plugin.Slug == "member-role" {
+			marker = `"auto_created":true`
+		}
+		encoded, err := json.Marshal(plugin)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), marker)
+		detail, err := service.GetAssignedPlugin(prepared, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID})
+		require.NoError(t, err)
+		encoded, err = json.Marshal(detail.Plugin)
+		require.NoError(t, err)
+		require.Contains(t, string(encoded), marker)
+
 		require.Nil(t, plugin.Assignments)
 		require.Equal(t, PluginPublicationPublished, plugin.Publication)
 		if plugin.Slug == "direct-user" {
