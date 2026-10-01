@@ -707,8 +707,8 @@ const ROUTE_STRUCTURE = {
     },
   },
 
-  // Legacy URLs: the Access Hub moved to the organization level, and the
-  // Workload Identities page before it. Old bookmarks and links redirect there.
+  // Legacy project-scoped URLs for the Access Hub and the Workload Identities
+  // page redirect to the organization-level Access Hub.
   legacyWorkloadIdentities: {
     title: "Workload Identities",
     url: "workload-identities",

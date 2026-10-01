@@ -3,9 +3,8 @@ import { Navigate, useLocation, useParams } from "react-router";
 
 /**
  * The Access Hub configures the organization's trust policy, so it lives at
- * the organization level. Old project-scoped links (including the Workload
- * Identities page it replaced) land on the same page, keeping any trusted
- * platform id, query and hash.
+ * the organization level. Project-scoped Access Hub and Workload Identities
+ * links land on that page, keeping any trusted platform id, query and hash.
  */
 export default function AccessHubRedirect(): JSX.Element {
   const orgRoutes = useOrgRoutes();
