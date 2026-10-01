@@ -30,7 +30,10 @@ import { useRestoreOktaServerSuggestionMutation } from "@gram/client/react-query
 
 import { SESSION_SECURITY } from "../../identityProviderQueries";
 import { humanizeOktaToken } from "./applicationsView";
-import { suggestionToCatalogServer } from "./suggestionToCatalogServer";
+import {
+  isSuggestionInstallable,
+  suggestionToCatalogServer,
+} from "./suggestionToCatalogServer";
 
 type Filter = "open" | "all";
 
@@ -167,7 +170,9 @@ export function OktaServerSuggestions(): JSX.Element {
               <SuggestionCard
                 suggestion={suggestion}
                 busy={busy}
-                canAdd={projectSlug !== ""}
+                canAdd={
+                  projectSlug !== "" && isSuggestionInstallable(suggestion)
+                }
                 onAdd={() => setAdding(suggestion)}
                 onDismiss={() => dismissEntry(suggestion.registryEntryId)}
                 onRestore={() => restoreEntry(suggestion.registryEntryId)}
@@ -257,6 +262,13 @@ function SuggestionCard({
               </code>
             ))}
           </div>
+          {suggestion.state === "open" &&
+            !isSuggestionInstallable(suggestion) && (
+              <Text muted small>
+                None of these endpoints use streamable HTTP over HTTPS, so this
+                server cannot be added from here yet.
+              </Text>
+            )}
           {suggestion.state === "dismissed" && suggestion.dismissedAt && (
             <Text muted small>
               Dismissed <HumanizeDateTime date={suggestion.dismissedAt} />.
