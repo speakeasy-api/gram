@@ -31,18 +31,37 @@ type ApplyStartupSeedArgs struct {
 	Version string
 }
 
+// ValidateStartupSeeds rejects a list that repeats a Name. Seeds are looked up
+// by name, so a repeat would shadow one of them.
+func ValidateStartupSeeds(seeds []StartupSeed) error {
+	seen := make(map[string]struct{}, len(seeds))
+	for _, seed := range seeds {
+		if _, ok := seen[seed.Name]; ok {
+			return fmt.Errorf("startup seed %q: declared more than once", seed.Name)
+		}
+		seen[seed.Name] = struct{}{}
+	}
+	return nil
+}
+
 // ApplyStartupSeed applies one startup seed from the set compiled into this
 // worker build.
 type ApplyStartupSeed struct {
 	seeds map[string]StartupSeed
+
+	// invalid is why the compiled-in set cannot be trusted; Do returns it.
+	invalid error
 }
 
 func NewApplyStartupSeed(seeds []StartupSeed) *ApplyStartupSeed {
+	if err := ValidateStartupSeeds(seeds); err != nil {
+		return &ApplyStartupSeed{seeds: nil, invalid: err}
+	}
 	byName := make(map[string]StartupSeed, len(seeds))
 	for _, seed := range seeds {
 		byName[seed.Name] = seed
 	}
-	return &ApplyStartupSeed{seeds: byName}
+	return &ApplyStartupSeed{seeds: byName, invalid: nil}
 }
 
 // Do refuses a version this build does not carry. During a rollout a worker
@@ -50,6 +69,9 @@ func NewApplyStartupSeed(seeds []StartupSeed) *ApplyStartupSeed {
 // would mark the new version done without writing it; the error sends the
 // task back for a current worker to take.
 func (a *ApplyStartupSeed) Do(ctx context.Context, args ApplyStartupSeedArgs) error {
+	if a.invalid != nil {
+		return a.invalid
+	}
 	seed, ok := a.seeds[args.Name]
 	if !ok {
 		return fmt.Errorf("startup seed %q: unknown to this worker build", args.Name)

@@ -24,15 +24,16 @@ const (
 	startupSeedActivityTimeout = 2 * time.Minute
 
 	// A worker from the previous build refuses the task while a rollout is
-	// in flight. Fifteen attempts backing off to two minutes retry for about
-	// 25 minutes, which outlasts a rollout.
-	startupSeedMaxAttempts          = 15
-	startupSeedRetryInitialInterval = 15 * time.Second
-	startupSeedRetryMaxInterval     = 2 * time.Minute
+	// in flight. Fifteen attempts backing off to two minutes wait 23m45s
+	// between attempts in total, which outlasts a rollout.
+	startupSeedMaxAttempts             = 15
+	startupSeedRetryInitialInterval    = 15 * time.Second
+	startupSeedRetryMaxInterval        = 2 * time.Minute
+	startupSeedRetryBackoffCoefficient = 2
 
-	// startupSeedWorkflowRunTimeout covers the full retry budget with room
-	// for the final attempt to finish.
-	startupSeedWorkflowRunTimeout = 45 * time.Minute
+	// startupSeedWorkflowRunTimeout covers the worst case, where every
+	// attempt runs to its timeout: 15 x 2m plus 23m45s of backoff is 53m45s.
+	startupSeedWorkflowRunTimeout = time.Hour
 )
 
 // StartupSeedWorkflow applies one version of one startup seed.
@@ -43,7 +44,7 @@ func StartupSeedWorkflow(ctx workflow.Context, args activities.ApplyStartupSeedA
 			MaximumAttempts:    startupSeedMaxAttempts,
 			InitialInterval:    startupSeedRetryInitialInterval,
 			MaximumInterval:    startupSeedRetryMaxInterval,
-			BackoffCoefficient: 2,
+			BackoffCoefficient: startupSeedRetryBackoffCoefficient,
 		},
 	})
 
@@ -61,8 +62,12 @@ func startupSeedWorkflowID(queue tenv.TaskQueueName, seed activities.StartupSeed
 // KickStartupSeeds starts one run per seed version on this task queue. The
 // workflow ID carries the version, so sibling replicas and later restarts on
 // the same build collapse into the run that already happened, and only a
-// version that failed is started again.
+// version that failed is started again. A list that repeats a name starts
+// nothing.
 func KickStartupSeeds(ctx context.Context, temporalEnv *tenv.Environment, seeds []activities.StartupSeed) error {
+	if err := activities.ValidateStartupSeeds(seeds); err != nil {
+		return fmt.Errorf("validate startup seeds: %w", err)
+	}
 	var errs []error
 	for _, seed := range seeds {
 		_, err := temporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
