@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/Tooltip";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { Info } from "lucide-react";
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import { AddRowButton, BuilderField, ClauseRow } from "./ClauseRow";
 import {
   CHART_TYPE_OPTIONS,
@@ -24,6 +24,7 @@ import {
   DEFAULT_LIMIT,
   dimensionFields,
   findDataset,
+  hasChartShape,
   MAX_DIMENSIONS,
   MAX_LIMIT,
   measureAlias,
@@ -63,6 +64,7 @@ export function QueryBuilder({
   onChange,
   onRun,
   changed,
+  actions,
 }: {
   datasets: AnalyticsDataset[];
   spec: ExploreSpec;
@@ -71,9 +73,12 @@ export function QueryBuilder({
   onRun: () => void;
   /** Whether the builder has moved on from the query the results answer. */
   changed: boolean;
+  /** Controls kept on the dataset row, right-aligned: the widget's save. */
+  actions?: ReactNode;
 }): JSX.Element {
   const dataset = findDataset(datasets, spec.dataset);
   const grouped = spec.chartType !== "number";
+  const timeseries = hasChartShape(spec);
   const dimensionOptions = dimensionFields(dataset).map((field) => ({
     label: field.name,
     value: field.name,
@@ -111,7 +116,7 @@ export function QueryBuilder({
   return (
     <div className="border-border bg-card flex flex-col gap-5 border p-5">
       <ClauseRow label="Dataset">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={spec.dataset} onValueChange={changeDataset}>
             <SelectTrigger className="w-64" aria-label="Dataset">
               <SelectValue />
@@ -139,6 +144,11 @@ export function QueryBuilder({
                 <DatasetSummary dataset={dataset} />
               </TooltipContent>
             </Tooltip>
+          ) : null}
+          {actions ? (
+            <div className="ml-auto flex min-w-0 items-center gap-2">
+              {actions}
+            </div>
           ) : null}
         </div>
       </ClauseRow>
@@ -262,38 +272,44 @@ export function QueryBuilder({
             </SelectContent>
           </Select>
         </BuilderField>
-        <BuilderField label="Order by">
-          <Select
-            value={spec.orderBy === "" ? GROUP_ORDER : spec.orderBy}
-            onValueChange={(value) =>
-              patch({ orderBy: value === GROUP_ORDER ? "" : value })
-            }
-          >
-            <SelectTrigger className="w-52" aria-label="Order by">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={GROUP_ORDER}>Group order</SelectItem>
-              {orderOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label} (desc)
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </BuilderField>
-        <BuilderField label="Limit">
-          <Input
-            type="number"
-            min={1}
-            max={MAX_LIMIT}
-            value={spec.limit === 0 ? "" : String(spec.limit)}
-            onChange={(raw) => patch({ limit: parseLimit(raw) })}
-            placeholder={`${DEFAULT_LIMIT} rows`}
-            aria-label="Limit"
-            className="w-32"
-          />
-        </BuilderField>
+        {/* A timeseries is drawn in time order up to the server's cap, so
+            order and limit only apply to whole-window charts. */}
+        {timeseries ? null : (
+          <>
+            <BuilderField label="Order by">
+              <Select
+                value={spec.orderBy === "" ? GROUP_ORDER : spec.orderBy}
+                onValueChange={(value) =>
+                  patch({ orderBy: value === GROUP_ORDER ? "" : value })
+                }
+              >
+                <SelectTrigger className="w-52" aria-label="Order by">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={GROUP_ORDER}>Group order</SelectItem>
+                  {orderOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label} (desc)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </BuilderField>
+            <BuilderField label="Limit">
+              <Input
+                type="number"
+                min={1}
+                max={MAX_LIMIT}
+                value={spec.limit === 0 ? "" : String(spec.limit)}
+                onChange={(raw) => patch({ limit: parseLimit(raw) })}
+                placeholder={`${DEFAULT_LIMIT} rows`}
+                aria-label="Limit"
+                className="w-32"
+              />
+            </BuilderField>
+          </>
+        )}
         <div className="ml-auto flex items-center gap-3">
           {changed ? (
             <span className="text-muted-foreground text-xs">
@@ -305,10 +321,6 @@ export function QueryBuilder({
           </Button>
         </div>
       </div>
-      <p className="text-muted-foreground text-xs">
-        Buckets are sized from the window. Order and limit shape the summary
-        table.
-      </p>
     </div>
   );
 }
